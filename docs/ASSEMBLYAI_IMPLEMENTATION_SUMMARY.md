@@ -31,7 +31,7 @@
 
 ### 5. Environment Configuration
 - ✅ Added `ASSEMBLYAI_API_KEY` to `.env.example`
-- ✅ Added `ASSEMBLYAI_API_KEY=8035de6d6af04f0f9608df53ad5b6943` to `.env` (development)
+- ✅ Added `ASSEMBLYAI_API_KEY` to `.env` (development) - **Note: Use your own API key from AssemblyAI dashboard**
 
 ### 6. Documentation Updates
 - ✅ Updated file header comments to reflect AssemblyAI usage
@@ -99,7 +99,7 @@
 
 2. **Set Environment Variable in Supabase**:
    - Go to Supabase Dashboard → Edge Functions → Settings → Environment Variables
-   - Add: `ASSEMBLYAI_API_KEY=8035de6d6af04f0f9608df53ad5b6943`
+   - Add: `ASSEMBLYAI_API_KEY=<your-assemblyai-api-key>` (get from https://www.assemblyai.com/app)
 
 3. **Deploy Edge Function**:
    ```bash

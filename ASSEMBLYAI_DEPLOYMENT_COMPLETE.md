@@ -13,8 +13,8 @@
 - ✅ Verified constraint: `CHECK (transcription_provider IN ('whisperx', 'gladia', 'deepgram', 'meetingbaas', 'assemblyai'))`
 
 ### 2. Environment Variable ✅
-- ✅ Set `ASSEMBLYAI_API_KEY=8035de6d6af04f0f9608df53ad5b6943` in Supabase Edge Functions secrets
-- ✅ Command used: `supabase secrets set ASSEMBLYAI_API_KEY=8035de6d6af04f0f9608df53ad5b6943 --project-ref wbgmnyekgqklggilgqag`
+- ✅ Set `ASSEMBLYAI_API_KEY` in Supabase Edge Functions secrets
+- ✅ Command used: `supabase secrets set ASSEMBLYAI_API_KEY=<your-api-key> --project-ref wbgmnyekgqklggilgqag`
 
 ### 3. Edge Function Deployment ✅
 - ✅ Deployed `process-recording` function with AssemblyAI integration

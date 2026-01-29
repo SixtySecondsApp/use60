@@ -49,7 +49,7 @@ The edge function needs `ASSEMBLYAI_API_KEY` to be set in Supabase.
 3. Click **Add Secret** or **Add Variable**
 4. Add:
    - **Name**: `ASSEMBLYAI_API_KEY`
-   - **Value**: `8035de6d6af04f0f9608df53ad5b6943`
+   - **Value**: `<your-assemblyai-api-key>` (get from https://www.assemblyai.com/app)
 5. Click **Save**
 
 **Important**: This must be set **before** deploying the edge function, or transcription will fail.

@@ -55,8 +55,9 @@ interface TranscriptUtterance {
 - **File**: `.env` and Supabase Edge Function secrets
 - **Variables**:
   ```bash
-  ASSEMBLYAI_API_KEY=8035de6d6af04f0f9608df53ad5b6943
+  ASSEMBLYAI_API_KEY=<your-assemblyai-api-key>
   ```
+  **Note**: Get your API key from https://www.assemblyai.com/app
 - **Action**: Add to `.env.example` and document in setup guide
 
 #### 1.3 Database Migration

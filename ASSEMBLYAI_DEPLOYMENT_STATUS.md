@@ -29,7 +29,7 @@
 2. Click **Settings** → **Secrets** (or **Environment Variables**)
 3. Add new secret:
    - **Name**: `ASSEMBLYAI_API_KEY`
-   - **Value**: `8035de6d6af04f0f9608df53ad5b6943`
+   - **Value**: `<your-assemblyai-api-key>` (get from https://www.assemblyai.com/app)
 4. Click **Save**
 
 **Without this, transcription will fail with**: `ASSEMBLYAI_API_KEY not configured`
