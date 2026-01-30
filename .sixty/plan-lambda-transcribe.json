@@ -1,0 +1,381 @@
+{
+  "project": {
+    "name": "Lambda Transcribe Pipeline with Gladia/Deepgram Fallback",
+    "description": "Self-hosted WhisperX + pyannote transcription via AWS Lambda as primary provider, with Gladia and Deepgram as fallback for failures or timeout. Mirrors lambda-compress-upload architecture: async invocation, HMAC-signed callback, cron fallback. Replaces edge function transcription which times out at ~60s. using our AWS keys and controlling lambda via the API",
+    "createdAt": "2026-01-27T22:45:00Z",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "storage": "aws-s3",
+      "functions": "edge-functions",
+      "compute": "aws-lambda",
+      "language": "python-3.12",
+      "transcription": "whisperx-medium-cpu"
+    }
+  },
+
+  "features": [
+    {
+      "id": "lambda-transcribe",
+      "name": "Lambda WhisperX Transcription Function",
+      "status": "pending",
+      "priority": 1,
+      "description": "Docker-based Lambda with WhisperX + pyannote that downloads audio from S3, transcribes with speaker diarization, and calls back with results"
+    },
+    {
+      "id": "schema-transcription",
+      "name": "Database Schema for Transcription Tracking",
+      "status": "pending",
+      "priority": 2,
+      "description": "Add transcription_status, transcription_provider, transcription_error, transcription_retry_count columns to recordings table"
+    },
+    {
+      "id": "callback-edge-fn",
+      "name": "Transcription Callback Edge Function",
+      "status": "pending",
+      "priority": 3,
+      "description": "process-transcription-callback: receives HMAC-signed results from Lambda, saves to DB, triggers AI analysis. On Lambda failure, triggers Gladia/Deepgram fallback"
+    },
+    {
+      "id": "compress-callback-mod",
+      "name": "Modify process-compress-callback to Invoke Lambda Transcribe",
+      "status": "pending",
+      "priority": 4,
+      "description": "Replace process-recording invocation with Lambda transcribe invocation when no transcript exists after compression"
+    },
+    {
+      "id": "cron-fallback",
+      "name": "Poll Transcription Queue Cron",
+      "status": "pending",
+      "priority": 5,
+      "description": "Cron edge function that finds stale/failed transcriptions and re-invokes Lambda with exponential backoff, or falls back to Gladia/Deepgram after max Lambda retries"
+    },
+    {
+      "id": "integration-test",
+      "name": "End-to-End Testing & Deployment",
+      "status": "pending",
+      "priority": 6,
+      "description": "Deploy all components, test with real 60 Notetaker recording, verify transcript format and AI analysis trigger"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "TXRB-001",
+      "feature": "schema-transcription",
+      "title": "Add transcription tracking columns to recordings table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["recordings"]
+      },
+      "blocks": ["TXRB-003", "TXRB-004", "TXRB-005", "TXRB-006", "TXRB-007", "TXRB-008"],
+      "parallelWith": ["TXRB-002"],
+      "acceptance": [
+        "transcription_status column added (pending|processing|complete|failed) with default 'pending'",
+        "transcription_provider column added (whisperx|gladia|deepgram|meetingbaas)",
+        "transcription_error, transcription_retry_count (default 0), transcription_started_at columns added",
+        "Partial index idx_recordings_transcription_queue created for efficient cron polling",
+        "Migration runs without errors on development environment"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260128000000_add_transcription_tracking.sql"
+      ]
+    },
+    {
+      "id": "TXRB-002",
+      "feature": "lambda-transcribe",
+      "title": "Create lambda-transcribe Python function with download and audio conversion",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": ["lambda-compress-upload/handler.py", "lambda-compress-upload/download.py"],
+        "schema": []
+      },
+      "blocks": ["TXRB-003"],
+      "parallelWith": ["TXRB-001"],
+      "acceptance": [
+        "handler.py entry point mirrors lambda-compress-upload pattern (event parsing, try/except/finally with callback)",
+        "download.py downloads audio from S3 URLs with 8MB streaming chunks and 10-minute timeout",
+        "convert_to_wav() converts input audio to WAV 16kHz mono using FFmpeg subprocess",
+        "HMAC-SHA256 callback sends success/error payload to callback_url with X-Callback-Signature header"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "lambda-transcribe/handler.py",
+        "lambda-transcribe/download.py"
+      ]
+    },
+    {
+      "id": "TXRB-003",
+      "feature": "lambda-transcribe",
+      "title": "Implement WhisperX transcription and pyannote diarization modules",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["TXRB-002"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["TXRB-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "transcribe.py loads WhisperX medium model with INT8 quantization on CPU (batch_size=16)",
+        "transcribe.py performs word-level alignment for precise timestamps",
+        "diarize.py uses pyannote DiarizationPipeline via WhisperX integration with HF_TOKEN",
+        "diarize.py supports optional num_speakers hint parameter",
+        "format_output.py produces transcript_text (Speaker N: text), transcript_json ({utterances}), and raw utterances array"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "lambda-transcribe/transcribe.py",
+        "lambda-transcribe/diarize.py",
+        "lambda-transcribe/format_output.py"
+      ]
+    },
+    {
+      "id": "TXRB-004",
+      "feature": "lambda-transcribe",
+      "title": "Create Dockerfile, requirements.txt, and deploy.sh for lambda-transcribe",
+      "type": "infrastructure",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["TXRB-003"],
+        "files": ["lambda-compress-upload/Dockerfile", "lambda-compress-upload/deploy.sh"],
+        "schema": []
+      },
+      "blocks": ["TXRB-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Dockerfile based on python:3.12-slim with FFmpeg, pre-downloads WhisperX medium model at build time",
+        "requirements.txt pins whisperx, torch, torchaudio, pyannote.audio, requests, boto3, ffmpeg-python",
+        "deploy.sh creates ECR repo, builds/pushes image, creates/updates Lambda with 4GB memory, 15min timeout, 5GB ephemeral storage",
+        "Lambda environment variables: HF_TOKEN, CALLBACK_SECRET",
+        "CLAUDE.md documents the function, its inputs/outputs, and deployment steps"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "lambda-transcribe/Dockerfile",
+        "lambda-transcribe/requirements.txt",
+        "lambda-transcribe/deploy.sh",
+        "lambda-transcribe/CLAUDE.md"
+      ]
+    },
+    {
+      "id": "TXRB-005",
+      "feature": "callback-edge-fn",
+      "title": "Create process-transcription-callback edge function with Gladia/Deepgram fallback",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["TXRB-001"],
+        "files": [
+          "supabase/functions/process-compress-callback/index.ts",
+          "supabase/functions/_shared/recordingCompleteSync.ts"
+        ],
+        "schema": ["recordings"]
+      },
+      "blocks": ["TXRB-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Verifies HMAC-SHA256 signature using X-Callback-Signature header (mirrors process-compress-callback pattern)",
+        "On success: saves transcript_text, transcript_json to recordings and meetings tables, sets transcription_provider='whisperx'",
+        "On error from Lambda: increments transcription_retry_count. If retry_count >= 2, triggers Gladia/Deepgram fallback via process-recording edge function",
+        "Calls syncRecordingToMeeting() to sync S3 URLs if upload is complete",
+        "Triggers process-ai-analysis for summary/coaching generation after transcript save"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/process-transcription-callback/index.ts"
+      ]
+    },
+    {
+      "id": "TXRB-006",
+      "feature": "compress-callback-mod",
+      "title": "Modify process-compress-callback to invoke lambda-transcribe instead of process-recording",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["TXRB-001", "TXRB-005"],
+        "files": [
+          "supabase/functions/process-compress-callback/index.ts"
+        ],
+        "schema": ["recordings"]
+      },
+      "blocks": ["TXRB-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "When no transcript_text exists after compression, invokes sixty-lambda-transcribe via AWS Lambda InvokeCommand (async/Event mode)",
+        "Sets transcription_status='processing' and transcription_started_at on the recording",
+        "Passes recording_id, s3_audio_url (preferred) or s3_video_url, callback_url, callback_secret, model_size='medium'",
+        "Removes the old process-recording fallback trigger (replaced by Lambda invoke)",
+        "Non-fatal error handling: if Lambda invoke fails, logs error but recording data is preserved"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/process-compress-callback/index.ts"
+      ]
+    },
+    {
+      "id": "TXRB-007",
+      "feature": "cron-fallback",
+      "title": "Create poll-transcription-queue cron edge function with tiered fallback",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["TXRB-001", "TXRB-005"],
+        "files": [
+          "supabase/functions/poll-s3-upload-queue/index.ts"
+        ],
+        "schema": ["recordings"]
+      },
+      "blocks": ["TXRB-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Queries recordings with s3_upload_status='complete', transcript_text IS NULL, transcription_retry_count < 5",
+        "Detects stale 'processing' records (updated_at > 30 min ago) and resets them",
+        "For retry_count < 3: re-invokes lambda-transcribe with exponential backoff (0, 5, 15 min delays)",
+        "For retry_count >= 3: falls back to process-recording (Gladia/Deepgram) as external API fallback",
+        "Processes max 5 recordings per cron run, with 500ms delay between invocations to avoid rate limiting"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/poll-transcription-queue/index.ts"
+      ]
+    },
+    {
+      "id": "TXRB-008",
+      "feature": "integration-test",
+      "title": "Deploy all components and validate end-to-end transcription flow",
+      "type": "testing",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["TXRB-004", "TXRB-005", "TXRB-006", "TXRB-007"],
+        "files": [],
+        "schema": ["recordings"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Lambda function deployed to ECR and accessible from Supabase edge functions",
+        "SQL migration applied to production with cron job scheduled",
+        "All edge functions deployed: process-transcription-callback, modified process-compress-callback, poll-transcription-queue",
+        "End-to-end test: new 60 Notetaker recording produces transcript_text in meetings table",
+        "Transcript format matches frontend expectations (Speaker N: text per line, newline-separated)"
+      ],
+      "estimatedMinutes": 30,
+      "files": []
+    }
+  ],
+
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 0,
+    "currentFeature": null,
+    "lastUpdated": "2026-01-27T22:45:00Z",
+    "parallelGroups": [
+      {
+        "name": "Foundation",
+        "stories": ["TXRB-001", "TXRB-002"],
+        "description": "Schema migration and Lambda handler foundation can be built in parallel"
+      },
+      {
+        "name": "Lambda Modules",
+        "stories": ["TXRB-003", "TXRB-004"],
+        "description": "Transcription modules then Docker/deploy (sequential within group)"
+      },
+      {
+        "name": "Edge Functions",
+        "stories": ["TXRB-005", "TXRB-006", "TXRB-007"],
+        "description": "Callback, compress-callback mod, and cron (sequential, shared patterns)"
+      },
+      {
+        "name": "Integration",
+        "stories": ["TXRB-008"],
+        "description": "Full deployment and E2E validation"
+      }
+    ]
+  },
+
+  "fallbackStrategy": {
+    "description": "Tiered transcription with cost optimization: WhisperX Lambda handles ~90% of transcriptions at ~$0.10/hr. Failures fall back to Gladia/Deepgram at ~$0.26-0.37/hr. This controls costs while ensuring 100% transcription success rate.",
+    "tiers": [
+      {
+        "tier": 1,
+        "provider": "whisperx-lambda",
+        "maxRetries": 3,
+        "triggerCondition": "Primary - invoked after S3 compression completes",
+        "costPerHour": "$0.05-0.13",
+        "maxDuration": "~60 min recordings (15 min Lambda timeout)"
+      },
+      {
+        "tier": 2,
+        "provider": "gladia-or-deepgram",
+        "maxRetries": 2,
+        "triggerCondition": "Fallback - after 3 Lambda failures OR Lambda timeout",
+        "costPerHour": "$0.26-0.37",
+        "maxDuration": "Unlimited (external API handles chunking)"
+      }
+    ],
+    "flowDiagram": "compress-callback → Lambda (tier 1, 3 retries) → [on failure] → process-recording (tier 2, Deepgram/Gladia) → [on failure] → mark permanently failed"
+  },
+
+  "environmentVariables": {
+    "lambda": {
+      "HF_TOKEN": "HuggingFace token for pyannote model access",
+      "CALLBACK_SECRET": "Shared HMAC secret matching LAMBDA_TRANSCRIBE_CALLBACK_SECRET"
+    },
+    "edgeFunctions": {
+      "LAMBDA_TRANSCRIBE_CALLBACK_SECRET": "Must match Lambda CALLBACK_SECRET",
+      "LAMBDA_TRANSCRIBE_FUNCTION_NAME": "sixty-lambda-transcribe",
+      "AWS_REGION": "ap-southeast-2 (or eu-west-2 matching existing Lambda)",
+      "AWS_ACCESS_KEY_ID": "Already configured for compress Lambda",
+      "AWS_SECRET_ACCESS_KEY": "Already configured for compress Lambda"
+    },
+    "cronJob": {
+      "schedule": "*/5 * * * *",
+      "functionName": "poll-transcription-queue",
+      "vaultSecret": "service_role_key (already exists)"
+    }
+  },
+
+  "risks": [
+    {
+      "risk": "Lambda 15-min timeout for >60 min recordings",
+      "severity": "medium",
+      "mitigation": "Tier 2 fallback to Gladia/Deepgram handles long recordings. Future: increase Lambda to 8-10GB memory or chunk audio."
+    },
+    {
+      "risk": "WhisperX model cold start ~30-60s",
+      "severity": "low",
+      "mitigation": "Pre-download model in Docker image. Acceptable for async workflow."
+    },
+    {
+      "risk": "Docker image size ~5-8GB with model",
+      "severity": "low",
+      "mitigation": "ECR storage cost negligible. Use layer caching for iterative deployments."
+    },
+    {
+      "risk": "pyannote HuggingFace token expiry",
+      "severity": "medium",
+      "mitigation": "Use long-lived token. Monitor for auth failures in Lambda CloudWatch logs."
+    },
+    {
+      "risk": "Gladia/Deepgram API keys may also fail (current issue)",
+      "severity": "high",
+      "mitigation": "Lambda as primary eliminates dependency on external APIs for ~90% of recordings. Only long recordings need external fallback."
+    }
+  ]
+}

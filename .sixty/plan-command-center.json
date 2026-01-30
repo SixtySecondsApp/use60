@@ -1,0 +1,199 @@
+{
+  "project": {
+    "name": "Command Center - Unified QuickAdd + Copilot Modal",
+    "description": "Replace AssistantOverlay with a progressive Command Center that auto-expands through 3 states: Compact (quick actions) → Medium (copilot chat) → Full (command center with right panel).",
+    "createdAt": "2026-01-27T21:45:00Z",
+    "designRef": "docs/commandcentre/commandcenter-design.md"
+  },
+
+  "features": [
+    {
+      "id": "command-center",
+      "name": "Command Center Progressive Modal",
+      "status": "pending",
+      "priority": 1,
+      "description": "Three-state progressive modal replacing AssistantOverlay"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "CC-001",
+      "feature": "command-center",
+      "title": "Create state machine hook and animation config",
+      "type": "foundation",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["src/lib/contexts/CopilotContext.tsx"], "schema": [] },
+      "blocks": ["CC-002", "CC-003", "CC-004", "CC-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "useCommandCenterState hook manages 4 states: closed | compact | medium | full",
+        "Transition methods: open, close, openChat, expandFull, collapseToMedium, returnToCompact",
+        "Auto-expand watches useCopilot().messages for structuredResponse and triggers medium→full",
+        "Escape key handler: clears quickAddAction first, then closes modal",
+        "Body overflow lock when open, cleanup on unmount"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-center/useCommandCenterState.ts",
+        "src/components/command-center/animations.ts"
+      ],
+      "notes": "animations.ts contains Framer Motion variants for modal (compact/medium/full), backdrop, content transitions, action grid stagger, right panel slide, and quick-add form slide. Follow existing spring patterns from ActionGrid.tsx (stiffness:400, damping:30). useCommandCenterState tracks: state, activeQuickAddAction, quickAddPrefill. Auto-expand logic: when state=medium and new assistant message has structuredResponse, transition to full (once per session via hasAutoExpandedRef). Closing resets to compact for next open."
+    },
+    {
+      "id": "CC-002",
+      "feature": "command-center",
+      "title": "Build CommandCenterCompact view",
+      "type": "component",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["CC-001"], "files": ["src/components/quick-add/index.tsx", "src/components/quick-add/ActionGrid.tsx"], "schema": [] },
+      "blocks": ["CC-005"],
+      "parallelWith": ["CC-003", "CC-004"],
+      "acceptance": [
+        "Header shows Brain icon + 'Command Center' title + close button",
+        "Reuses existing ActionGrid component (6 quick actions in 2x3 grid)",
+        "'Chat with Copilot' button below grid with violet gradient + animated chevron",
+        "When activeQuickAddAction set: renders QuickAdd in embedded mode with back button",
+        "AnimatePresence switches between action grid and quick-add form"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-center/CommandCenterCompact.tsx"
+      ],
+      "notes": "Reuse existing ActionGrid from src/components/quick-add/ActionGrid.tsx directly - do NOT recreate. Render QuickAdd component with renderMode='embedded' and hideHeader=true when action selected. Header switches between Brain icon (default) and ArrowLeft back button (when form shown). 'Chat with Copilot' button uses quickAddFormVariants for slide animation."
+    },
+    {
+      "id": "CC-003",
+      "feature": "command-center",
+      "title": "Build CommandCenterMedium view",
+      "type": "component",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["CC-001"], "files": ["src/components/assistant/AssistantShell.tsx"], "schema": [] },
+      "blocks": ["CC-005"],
+      "parallelWith": ["CC-002", "CC-004"],
+      "acceptance": [
+        "Header shows Brain icon + 'Sales Assistant' + back-to-compact button + close button",
+        "Embeds existing AssistantShell with mode='overlay'",
+        "onOpenQuickAdd from AssistantShell wired to transition back to compact with prefill",
+        "Full copilot chat experience with message history preserved"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/command-center/CommandCenterMedium.tsx"
+      ],
+      "notes": "This is a thin wrapper around AssistantShell - do NOT recreate chat UI, messages, input, or quick action chips. Just add the header with back/close buttons and embed AssistantShell directly. The design doc's CommandCenterMedium.tsx with its own message state is a VISUAL REFERENCE ONLY - the real implementation delegates entirely to AssistantShell which uses useCopilot() context."
+    },
+    {
+      "id": "CC-004",
+      "feature": "command-center",
+      "title": "Build CommandCenterFull view",
+      "type": "component",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["CC-001"], "files": ["src/components/assistant/AssistantShell.tsx", "src/components/copilot/CopilotRightPanel.tsx"], "schema": [] },
+      "blocks": ["CC-005"],
+      "parallelWith": ["CC-002", "CC-003"],
+      "acceptance": [
+        "Header shows Brain icon + 'Command Center' + collapse button + close button",
+        "Two-panel flex layout: left (flex-1 min-w-0) = AssistantShell, right (w-[380px] border-l) = CopilotRightPanel",
+        "Mobile: right panel hidden by default, toggle button shows as overlay",
+        "Desktop (lg+): right panel always visible with slide animation"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-center/CommandCenterFull.tsx"
+      ],
+      "notes": "Reuse existing CopilotRightPanel from src/components/copilot/CopilotRightPanel.tsx - do NOT recreate. The design doc's CopilotRightPanel.tsx with sample data is VISUAL REFERENCE ONLY. Embed real AssistantShell (mode='overlay') for left panel. Mobile overlay uses rightPanelVariants for slide-in animation. Toggle via lg:hidden / hidden lg:block pattern. Pass appropriate props to CopilotRightPanel from useCopilot() context (progressSteps, contextTypes, etc.)."
+    },
+    {
+      "id": "CC-005",
+      "feature": "command-center",
+      "title": "Build CommandCenter orchestrator and integrate into AppLayout",
+      "type": "integration",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["CC-002", "CC-003", "CC-004"], "files": ["src/components/AppLayout.tsx"], "schema": [] },
+      "blocks": ["CC-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "CommandCenter.tsx orchestrates backdrop + modal container with Framer Motion variants",
+        "AnimatePresence mode='wait' switches between Compact/Medium/Full content",
+        "index.ts barrel export for CommandCenter + types",
+        "AppLayout.tsx: replace AssistantOverlay import with CommandCenter",
+        "FAB button opens CommandCenter (same onClick behavior)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-center/CommandCenter.tsx",
+        "src/components/command-center/index.ts",
+        "src/components/AppLayout.tsx"
+      ],
+      "notes": "CommandCenter.tsx: fixed inset-0 z-50 container with backdrop (motion.div) + modal (motion.div animate={state} variants=modalVariants). Backdrop opacity varies: 0.3 compact, 0.5 medium/full. Modal uses modalVariants for width/height/borderRadius transitions. handleOpenQuickAdd: returnToCompact() then setTimeout(200) setActiveQuickAddAction. AppLayout: rename isAssistantOpen→isCommandCenterOpen, swap <AssistantOverlay> for <CommandCenter>. Keep AssistantOverlay.tsx file for reference but remove its import."
+    },
+    {
+      "id": "CC-006",
+      "feature": "command-center",
+      "title": "Polish animations, mobile breakpoints, and edge cases",
+      "type": "polish",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["CC-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "npx tsc --noEmit passes with zero errors",
+        "Full flow works: FAB → compact → action → form → back → chat → structured response → auto-expand → collapse → close",
+        "Reopen after close starts at compact state with fresh form state",
+        "Escape key works: clears form first, then closes modal",
+        "Mobile responsive: right panel toggleable in full state, sizes clamp to 95vw"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-center/animations.ts",
+        "src/components/command-center/useCommandCenterState.ts",
+        "src/components/command-center/CommandCenter.tsx",
+        "src/components/command-center/CommandCenterCompact.tsx",
+        "src/components/command-center/CommandCenterMedium.tsx",
+        "src/components/command-center/CommandCenterFull.tsx"
+      ],
+      "notes": "Spring tuning per state: compact(300,30), medium(280,28), full(260,26). Test animation feel and adjust. Verify mobile breakpoints with CSS min()/clamp(). Check edge cases: rapid state transitions, message preservation across state changes, body scroll lock cleanup. Verify no z-index conflicts with existing modals/toasts."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 0,
+    "currentFeature": "command-center",
+    "parallelGroups": [
+      ["CC-002", "CC-003", "CC-004"]
+    ],
+    "criticalPath": ["CC-001", "CC-002|CC-003|CC-004", "CC-005", "CC-006"],
+    "lastUpdated": "2026-01-27T21:45:00Z"
+  },
+
+  "architectureNotes": {
+    "keyDecision": "Reuse existing components (AssistantShell, ActionGrid, QuickAdd, CopilotRightPanel) as-is. The design doc contains VISUAL REFERENCE code with placeholder data - implementation must use real components that connect to CopilotContext and existing state management.",
+    "doNotRecreate": [
+      "ActionGrid - reuse from src/components/quick-add/ActionGrid.tsx",
+      "AssistantShell - reuse from src/components/assistant/AssistantShell.tsx (handles all chat logic)",
+      "CopilotRightPanel - reuse from src/components/copilot/CopilotRightPanel.tsx (1083 lines, 5 sections)",
+      "QuickAdd forms - reuse from src/components/quick-add/ (TaskForm, ActivityForms, RoadmapForm)",
+      "Chat UI / messages / input - handled by AssistantShell via useCopilot() context"
+    ],
+    "newFilesOnly": [
+      "src/components/command-center/useCommandCenterState.ts - State machine hook",
+      "src/components/command-center/animations.ts - Framer Motion variants",
+      "src/components/command-center/CommandCenter.tsx - Orchestrator with backdrop + modal",
+      "src/components/command-center/CommandCenterCompact.tsx - Action grid + chat button + inline QuickAdd",
+      "src/components/command-center/CommandCenterMedium.tsx - Thin wrapper around AssistantShell",
+      "src/components/command-center/CommandCenterFull.tsx - Two-panel with AssistantShell + CopilotRightPanel",
+      "src/components/command-center/index.ts - Barrel export"
+    ],
+    "modifiedFiles": [
+      "src/components/AppLayout.tsx - Swap AssistantOverlay for CommandCenter"
+    ]
+  }
+}

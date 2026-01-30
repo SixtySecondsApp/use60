@@ -173,45 +173,74 @@ async function processAIAnalysis(
     };
 
     // Update recording with analysis results
-    await supabase
+    // Core fields that always exist
+    const coreUpdate: Record<string, unknown> = {
+      status: 'ready',
+      summary: enhancedAnalysis.summary,
+      speakers: speakers,
+      speaker_identification_method: speakers[0]?.identification_method || 'unknown',
+      updated_at: new Date().toISOString(),
+    };
+
+    // Extended analysis fields (may not exist on all environments)
+    const extendedFields: Record<string, unknown> = {
+      sentiment_score: enhancedAnalysis.sentiment.score,
+      coach_rating: enhancedAnalysis.coaching.rating,
+      coach_summary: enhancedAnalysis.coaching.summary,
+      talk_time_rep_pct: enhancedAnalysis.talkTime.repPct,
+      talk_time_customer_pct: enhancedAnalysis.talkTime.customerPct,
+      talk_time_judgement: getTalkTimeJudgement(enhancedAnalysis.talkTime.repPct),
+    };
+
+    // Try full update first, fall back to core-only if columns don't exist
+    const { error: fullUpdateError } = await supabase
       .from('recordings')
-      .update({
-        status: 'ready',
-        summary: enhancedAnalysis.summary,
-        speakers: speakers,
-        speaker_identification_method: speakers[0]?.identification_method || 'unknown',
-        sentiment_score: enhancedAnalysis.sentiment.score,
-        coach_rating: enhancedAnalysis.coaching.rating * 10, // Convert 1-10 to 0-100 scale
-        coach_summary: enhancedAnalysis.coaching.summary,
-        talk_time_rep_pct: enhancedAnalysis.talkTime.repPct,
-        talk_time_customer_pct: enhancedAnalysis.talkTime.customerPct,
-        talk_time_judgement: getTalkTimeJudgement(enhancedAnalysis.talkTime.repPct),
-        updated_at: new Date().toISOString(),
-      })
+      .update({ ...coreUpdate, ...extendedFields })
       .eq('id', recordingId);
+
+    if (fullUpdateError?.code === 'PGRST204') {
+      console.warn('[ProcessAIAnalysis] Extended columns not available, updating core fields only');
+      await supabase
+        .from('recordings')
+        .update(coreUpdate)
+        .eq('id', recordingId);
+    } else if (fullUpdateError) {
+      console.error('[ProcessAIAnalysis] Recording update error:', fullUpdateError.message);
+    }
 
     // Sync to meetings table
     if (botId) {
-      const meetingUpdate = {
+      const coreMeetingUpdate: Record<string, unknown> = {
         summary: enhancedAnalysis.summary,
         speakers: speakers,
+        updated_at: new Date().toISOString(),
+      };
+
+      const extendedMeetingFields: Record<string, unknown> = {
         sentiment_score: enhancedAnalysis.sentiment.score,
-        coach_rating: enhancedAnalysis.coaching.rating * 10,
+        coach_rating: enhancedAnalysis.coaching.rating,
         coach_summary: enhancedAnalysis.coaching.summary,
         talk_time_rep_pct: enhancedAnalysis.talkTime.repPct,
         talk_time_customer_pct: enhancedAnalysis.talkTime.customerPct,
         talk_time_judgement: getTalkTimeJudgement(enhancedAnalysis.talkTime.repPct),
         processing_status: 'ready',
-        updated_at: new Date().toISOString(),
       };
 
+      // Try full update first, fall back to core-only
       const { error: meetingError } = await supabase
         .from('meetings')
-        .update(meetingUpdate)
+        .update({ ...coreMeetingUpdate, ...extendedMeetingFields })
         .eq('bot_id', botId)
         .eq('source_type', '60_notetaker');
 
-      if (meetingError) {
+      if (meetingError?.code === 'PGRST204') {
+        console.warn('[ProcessAIAnalysis] Extended meeting columns not available, updating core fields only');
+        await supabase
+          .from('meetings')
+          .update(coreMeetingUpdate)
+          .eq('bot_id', botId)
+          .eq('source_type', '60_notetaker');
+      } else if (meetingError) {
         console.warn('[ProcessAIAnalysis] Failed to sync to meetings table:', meetingError.message);
       }
 

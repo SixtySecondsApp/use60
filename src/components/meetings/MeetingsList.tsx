@@ -92,8 +92,8 @@ interface Meeting {
   next_actions_count: number | null
   meeting_type?: 'discovery' | 'demo' | 'negotiation' | 'closing' | 'follow_up' | 'general' | null
   classification_confidence?: number | null
-  // Source type for voice vs Fathom meetings
-  source_type?: 'fathom' | 'voice'
+  // Source type for voice, 60 Notetaker, or Fathom meetings
+  source_type?: 'fathom' | 'voice' | '60_notetaker'
   voice_recording_id?: string | null
   // Processing status columns for real-time UI updates
   thumbnail_status?: ProcessingStatus
@@ -1001,6 +1001,11 @@ const MeetingsList: React.FC = () => {
                                 <Mic className="h-3 w-3" />
                               </div>
                             )}
+                            {meeting.source_type === '60_notetaker' && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-500/20 rounded text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5">
+                                <Bot className="h-3 w-3" />
+                              </div>
+                            )}
                             <span className="break-words line-clamp-2">{meeting.title || 'Untitled'}</span>
                           </div>
                         </TableCell>
@@ -1094,7 +1099,33 @@ const MeetingsList: React.FC = () => {
                 >
                   {/* Media Thumbnail Area - Voice or Video */}
                   <div className="relative aspect-video bg-gray-100/80 dark:bg-gray-800/40 rounded-xl mb-3 sm:mb-4 overflow-hidden border border-gray-200/30 dark:border-gray-700/20">
-                    {meeting.source_type === 'voice' ? (
+                    {meeting.source_type === '60_notetaker' ? (
+                      /* 60 Notetaker Meeting - Video Thumbnail */
+                      <>
+                        {meeting.thumbnail_url && !meeting.thumbnail_url.includes('dummyimage.com') ? (
+                          <img
+                            src={meeting.thumbnail_url}
+                            alt={meeting.title}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-500/10 via-blue-600/5 to-indigo-500/10 dark:from-blue-500/20 dark:via-blue-600/10 dark:to-indigo-500/20">
+                            <Video className="h-10 w-10 text-blue-400/60" />
+                          </div>
+                        )}
+                        {/* 60 Notetaker badge - top left */}
+                        <div className="absolute top-2 left-2">
+                          <div className="px-2 py-1 bg-blue-500/90 backdrop-blur-sm rounded-md text-[10px] text-white flex items-center gap-1">
+                            <Bot className="h-3 w-3" />
+                            60 Notetaker
+                          </div>
+                        </div>
+                      </>
+                    ) : meeting.source_type === 'voice' ? (
                       /* Voice Meeting - Audio Waveform Display */
                       <>
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-emerald-500/10 via-emerald-600/5 to-teal-500/10 dark:from-emerald-500/20 dark:via-emerald-600/10 dark:to-teal-500/20">

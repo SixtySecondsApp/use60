@@ -3,7 +3,7 @@
  *
  * Processes a completed recording through the full analysis pipeline:
  * 1. Download recording from MeetingBaaS
- * 2. Transcribe using Gladia (or MeetingBaaS fallback)
+ * 2. Transcribe using AssemblyAI (or MeetingBaaS fallback)
  * 3. Identify speakers using email matching + AI inference
  * 4. Generate AI summary with highlights and action items
  * 5. Update recording with results
@@ -205,7 +205,7 @@ interface AttendeeInfo {
 }
 
 // =============================================================================
-// Transcription Services (Deepgram primary, Gladia fallback)
+// Transcription Services (AssemblyAI primary)
 // =============================================================================
 
 interface TranscriptResult {
@@ -379,31 +379,96 @@ async function transcribeWithGladia(audioUrl: string): Promise<TranscriptResult>
 }
 
 /**
- * Main transcription function - tries Deepgram first, then Gladia
+ * Transcribe audio using AssemblyAI (primary provider)
+ * Uses universal speech model with speaker diarization
+ */
+async function transcribeWithAssemblyAI(audioUrl: string): Promise<TranscriptResult> {
+  const assemblyAiApiKey = Deno.env.get('ASSEMBLYAI_API_KEY');
+  if (!assemblyAiApiKey) {
+    throw new Error('ASSEMBLYAI_API_KEY not configured');
+  }
+
+  console.log('[ProcessRecording] Starting AssemblyAI transcription...');
+
+  try {
+    // Import AssemblyAI SDK (using npm: specifier for Deno compatibility)
+    const { AssemblyAI } = await import('npm:assemblyai@^4.0.0');
+
+    const client = new AssemblyAI({
+      apiKey: assemblyAiApiKey,
+    });
+
+    const params = {
+      audio: audioUrl, // S3 URL or MeetingBaaS URL
+      speech_model: 'universal', // As per user's example
+      speaker_labels: true, // Enable speaker diarization
+      punctuate: true,
+      format_text: true,
+    };
+
+    const transcript = await client.transcripts.transcribe(params);
+
+    if (!transcript.text) {
+      throw new Error('AssemblyAI returned no transcription');
+    }
+
+    console.log('[ProcessRecording] AssemblyAI transcription complete');
+
+    // Convert AssemblyAI format to our standard format
+    // AssemblyAI utterances have start/end in milliseconds, convert to seconds
+    const utterances: TranscriptUtterance[] = (transcript.utterances || []).map((u: any) => ({
+      speaker: u.speaker ?? 0,
+      start: (u.start ?? 0) / 1000, // Convert ms to seconds
+      end: (u.end ?? 0) / 1000, // Convert ms to seconds
+      text: u.text || '',
+      confidence: u.confidence,
+    }));
+
+    // Extract speaker information if available
+    const speakers = transcript.speakers?.map((s: any, idx: number) => ({
+      id: idx,
+      count: 0, // Will be calculated from utterances
+    }));
+
+    // Count utterances per speaker
+    if (speakers) {
+      utterances.forEach((u) => {
+        const speaker = speakers.find((s) => s.id === u.speaker);
+        if (speaker) {
+          speaker.count++;
+        }
+      });
+    }
+
+    return {
+      text: transcript.text,
+      utterances,
+      speakers,
+    };
+  } catch (error) {
+    console.error('[ProcessRecording] AssemblyAI transcription error:', error);
+    throw new Error(
+      `AssemblyAI API error: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Main transcription function - uses AssemblyAI as primary provider
  */
 async function transcribeAudio(audioUrl: string): Promise<TranscriptResult> {
-  // Try Deepgram first (better free tier)
-  const deepgramKey = Deno.env.get('DEEPGRAM_API_KEY');
-  if (deepgramKey) {
+  // Use AssemblyAI as primary provider
+  const assemblyAiKey = Deno.env.get('ASSEMBLYAI_API_KEY');
+  if (assemblyAiKey) {
     try {
-      return await transcribeWithDeepgram(audioUrl);
+      return await transcribeWithAssemblyAI(audioUrl);
     } catch (error) {
-      console.warn('[ProcessRecording] Deepgram failed, trying Gladia:', error);
+      console.warn('[ProcessRecording] AssemblyAI failed:', error);
+      throw error; // Fail fast - no fallback for now
     }
   }
 
-  // Fall back to Gladia
-  const gladiaKey = Deno.env.get('GLADIA_API_KEY');
-  if (gladiaKey) {
-    try {
-      return await transcribeWithGladia(audioUrl);
-    } catch (error) {
-      console.warn('[ProcessRecording] Gladia failed:', error);
-      throw error;
-    }
-  }
-
-  throw new Error('No transcription API key configured (DEEPGRAM_API_KEY or GLADIA_API_KEY)');
+  throw new Error('ASSEMBLYAI_API_KEY not configured');
 }
 
 // =============================================================================
@@ -699,11 +764,11 @@ async function processRecording(
     const internalDomain = recording.organizations?.company_domain || null;
 
     // Step 1: Determine media URL for transcription
-    // Priority: 1) Already uploaded S3 URL, 2) Passed video/audio URL, 3) Fallback to MeetingBaaS API
+    // Priority: 1) Already uploaded S3 URL, 2) Compress-callback S3 URL, 3) Passed video/audio URL, 4) Fallback to MeetingBaaS API
     let mediaUrlForTranscription: string | null = null;
     let uploadResult: UploadRecordingResult = { success: false };
 
-    // Check if S3 upload already done by webhook handler
+    // Check if S3 upload already done by webhook handler (legacy field)
     if (recording.recording_s3_url) {
       console.log('[ProcessRecording] Step 1: Using existing S3 URL for transcription');
       mediaUrlForTranscription = recording.recording_s3_url;
@@ -711,6 +776,16 @@ async function processRecording(
         success: true,
         storageUrl: recording.recording_s3_url,
         storagePath: recording.recording_s3_key,
+      };
+    } else if (recording.s3_video_url || recording.s3_audio_url) {
+      // Use S3 URLs from compress-callback (permanent storage)
+      const s3Url = recording.s3_audio_url || recording.s3_video_url;
+      console.log('[ProcessRecording] Step 1: Using S3 URL from compress-callback for transcription');
+      mediaUrlForTranscription = s3Url!;
+      uploadResult = {
+        success: true,
+        storageUrl: recording.s3_video_url || null,
+        storagePath: null,
       };
     } else if (videoUrl || audioUrl) {
       // Use URLs passed from webhook
@@ -762,6 +837,16 @@ async function processRecording(
 
     // Step 2: Get transcript
     console.log('[ProcessRecording] Step 2: Getting transcript...');
+    
+    // Update transcription status to processing
+    await supabase
+      .from('recordings')
+      .update({
+        transcription_status: 'processing',
+        transcription_provider: 'assemblyai',
+      })
+      .eq('id', recordingId);
+
     let transcript: TranscriptData;
 
     // Use provided transcript if available (passed from transcript.ready webhook)
@@ -901,6 +986,9 @@ async function processRecording(
       recording_s3_key: uploadResult.storagePath || null,
       transcript_json: transcript,
       transcript_text: transcript.text,
+      transcription_provider: 'assemblyai',
+      transcription_status: 'complete',
+      transcription_error: null,
       summary: analysis.summary,
       highlights: analysis.highlights,
       action_items: analysis.action_items,
@@ -913,7 +1001,7 @@ async function processRecording(
     // Add enhanced AI analysis fields if available
     if (enhancedAnalysis) {
       recordingUpdate.sentiment_score = enhancedAnalysis.sentiment.score;
-      recordingUpdate.coach_rating = enhancedAnalysis.coaching.rating * 10; // Convert 1-10 to 0-100 scale
+      recordingUpdate.coach_rating = enhancedAnalysis.coaching.rating; // 1-10 scale (matches frontend display)
       recordingUpdate.coach_summary = enhancedAnalysis.coaching.summary;
       recordingUpdate.talk_time_rep_pct = enhancedAnalysis.talkTime.repPct;
       recordingUpdate.talk_time_customer_pct = enhancedAnalysis.talkTime.customerPct;
@@ -943,7 +1031,7 @@ async function processRecording(
     // Add enhanced AI analysis fields to meeting
     if (enhancedAnalysis) {
       meetingUpdate.sentiment_score = enhancedAnalysis.sentiment.score;
-      meetingUpdate.coach_rating = enhancedAnalysis.coaching.rating * 10; // Convert 1-10 to 0-100 scale
+      meetingUpdate.coach_rating = enhancedAnalysis.coaching.rating; // 1-10 scale (matches frontend display)
       meetingUpdate.coach_summary = enhancedAnalysis.coaching.summary;
       meetingUpdate.talk_time_rep_pct = enhancedAnalysis.talkTime.repPct;
       meetingUpdate.talk_time_customer_pct = enhancedAnalysis.talkTime.customerPct;
@@ -1073,11 +1161,14 @@ async function processRecording(
     console.error('[ProcessRecording] Pipeline error:', error);
 
     // Update recording with error status
+    const errorMessage = error instanceof Error ? error.message : 'Processing failed';
     await supabase
       .from('recordings')
       .update({
         status: 'failed',
-        error_message: error instanceof Error ? error.message : 'Processing failed',
+        error_message: errorMessage,
+        transcription_status: 'failed',
+        transcription_error: errorMessage,
       })
       .eq('id', recordingId);
 

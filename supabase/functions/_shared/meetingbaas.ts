@@ -83,6 +83,7 @@ export interface RecordingSettings {
   // Auto-join scheduler settings
   auto_record_lead_time_minutes?: number; // Minutes before meeting to join (default: 2)
   auto_record_external_only?: boolean; // Only record meetings with external attendees (default: true)
+  minimum_wait_minutes?: number; // Minimum time bot stays in empty meeting (default: 15)
   webhook_token?: string;
 }
 

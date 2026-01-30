@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Command Center Demo</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      darkMode: ['class', '[data-theme="dark"]'],
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+  
+  <style>
+    [data-theme="dark"] {
+      background-color: #030712;
+    }
+    
+    [data-theme="light"] {
+      background-color: #ffffff;
+    }
+    
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    /* Custom scrollbar */
+    [data-theme="dark"] ::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    [data-theme="dark"] ::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    
+    [data-theme="dark"] ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+    
+    [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+    
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .animate-fade-in {
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    .animate-slide-in {
+      animation: slideIn 0.3s ease-out forwards;
+    }
+
+    .animate-scale-in {
+      animation: scaleIn 0.2s ease-out forwards;
+    }
+
+    .animate-pulse-dot {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .stagger-1 { animation-delay: 0.05s; }
+    .stagger-2 { animation-delay: 0.1s; }
+    .stagger-3 { animation-delay: 0.15s; }
+    .stagger-4 { animation-delay: 0.2s; }
+    .stagger-5 { animation-delay: 0.25s; }
+    .stagger-6 { animation-delay: 0.3s; }
+
+    /* Modal transitions */
+    .modal-compact {
+      width: min(28rem, 95vw);
+      max-height: 85dvh;
+      border-radius: 1.5rem;
+    }
+
+    .modal-medium {
+      width: min(42rem, 95vw);
+      height: 70dvh;
+      border-radius: 1rem;
+    }
+
+    .modal-full {
+      width: min(95vw, 1400px);
+      height: 95dvh;
+      border-radius: 1rem;
+    }
+
+    .modal-base {
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* Hover effects */
+    .hover-lift {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .hover-lift:hover {
+      transform: translateY(-2px);
+    }
+
+    .btn-scale {
+      transition: transform 0.15s ease;
+    }
+
+    .btn-scale:hover {
+      transform: scale(1.02);
+    }
+
+    .btn-scale:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+    
+    // ============================================
+    // ICONS (SVG Components)
+    // ============================================
+    
+    const Icons = {
+      Brain: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+          <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+          <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+          <path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/>
+          <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/>
+          <path d="M3.477 10.896a4 4 0 0 1 .585-.396"/>
+          <path d="M19.938 10.5a4 4 0 0 1 .585.396"/>
+          <path d="M6 18a4 4 0 0 1-1.967-.516"/>
+          <path d="M19.967 17.484A4 4 0 0 1 18 18"/>
+        </svg>
+      ),
+      X: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+        </svg>
+      ),
+      ChevronRight: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m9 18 6-6-6-6"/>
+        </svg>
+      ),
+      ChevronLeft: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+      ),
+      ArrowLeft: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+        </svg>
+      ),
+      Phone: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+        </svg>
+      ),
+      Users: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      ),
+      FileText: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>
+        </svg>
+      ),
+      PoundSterling: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 7c0-5.333-8-5.333-8 0"/><path d="M10 7v14"/><path d="M6 21h12"/><path d="M6 13h10"/>
+        </svg>
+      ),
+      CheckSquare: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>
+        </svg>
+      ),
+      Map: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/>
+        </svg>
+      ),
+      Send: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
+        </svg>
+      ),
+      Sparkles: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
+        </svg>
+      ),
+      Minimize2: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" x2="21" y1="10" y2="3"/><line x1="3" x2="10" y1="21" y2="14"/>
+        </svg>
+      ),
+      PanelRightClose: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>
+        </svg>
+      ),
+      PanelRightOpen: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/>
+        </svg>
+      ),
+      Plus: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12h14"/><path d="M12 5v14"/>
+        </svg>
+      ),
+      Sun: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+        </svg>
+      ),
+      Moon: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+        </svg>
+      ),
+      TrendingUp: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+        </svg>
+      ),
+      Calendar: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>
+        </svg>
+      ),
+      AlertCircle: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+        </svg>
+      ),
+      Building2: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>
+        </svg>
+      ),
+      Mail: ({ className }) => (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+        </svg>
+      ),
+    };
+    
+    // ============================================
+    // ACTION GRID DATA
+    // ============================================
+    
+    const actions = [
+      {
+        id: 'outbound',
+        label: 'Add Outbound',
+        icon: Icons.Phone,
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/10',
+        borderColor: 'border-blue-500/20',
+        hoverBorderColor: 'hover:border-blue-500/40',
+      },
+      {
+        id: 'meeting',
+        label: 'Add Meeting',
+        icon: Icons.Users,
+        color: 'text-violet-400',
+        bgColor: 'bg-violet-500/10',
+        borderColor: 'border-violet-500/20',
+        hoverBorderColor: 'hover:border-violet-500/40',
+      },
+      {
+        id: 'proposal',
+        label: 'Add Proposal',
+        icon: Icons.FileText,
+        color: 'text-orange-400',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/20',
+        hoverBorderColor: 'hover:border-orange-500/40',
+      },
+      {
+        id: 'sale',
+        label: 'Add Sale',
+        icon: Icons.PoundSterling,
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/20',
+        hoverBorderColor: 'hover:border-emerald-500/40',
+      },
+      {
+        id: 'task',
+        label: 'Add Task',
+        icon: Icons.CheckSquare,
+        color: 'text-indigo-400',
+        bgColor: 'bg-indigo-500/10',
+        borderColor: 'border-indigo-500/20',
+        hoverBorderColor: 'hover:border-indigo-500/40',
+      },
+      {
+        id: 'roadmap',
+        label: 'Add Roadmap',
+        icon: Icons.Map,
+        color: 'text-purple-400',
+        bgColor: 'bg-purple-500/10',
+        borderColor: 'border-purple-500/20',
+        hoverBorderColor: 'hover:border-purple-500/40',
+      },
+    ];
+
+    const actionLabels = {
+      outbound: 'Outbound Call',
+      meeting: 'Meeting',
+      proposal: 'Proposal',
+      sale: 'Sale',
+      task: 'Task',
+      roadmap: 'Roadmap',
+    };
+
+    const quickActionChips = [
+      { id: 'task', label: 'Add Task', icon: Icons.CheckSquare },
+      { id: 'outbound', label: 'Add Outbound', icon: Icons.Phone },
+      { id: 'meeting', label: 'Add Meeting', icon: Icons.Users },
+      { id: 'proposal', label: 'Add Proposal', icon: Icons.FileText },
+      { id: 'sale', label: 'Add Sale', icon: Icons.PoundSterling },
+    ];
+
+    // ============================================
+    // ACTION GRID COMPONENT
+    // ============================================
+    
+    function ActionGrid({ onSelectAction }) {
+      return (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-1">
+          {actions.map((action, index) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.id}
+                onClick={() => onSelectAction(action.id)}
+                className={`
+                  relative flex flex-col items-center justify-center
+                  p-4 sm:p-5 rounded-xl
+                  bg-white dark:bg-gray-900/60
+                  backdrop-blur-sm
+                  border ${action.borderColor} ${action.hoverBorderColor}
+                  shadow-sm dark:shadow-none
+                  transition-all duration-300
+                  group cursor-pointer
+                  overflow-hidden
+                  hover-lift btn-scale
+                  animate-fade-in stagger-${index + 1}
+                  opacity-0
+                `}
+              >
+                <div className={`absolute inset-0 ${action.bgColor} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
+                <div className={`relative z-10 w-11 h-11 sm:w-12 sm:h-12 rounded-xl ${action.bgColor} flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform duration-300`}>
+                  <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${action.color}`} />
+                </div>
+                <span className="relative z-10 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors duration-300 text-center">
+                  {action.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    
+    // ============================================
+    // QUICK ADD FORM COMPONENT
+    // ============================================
+    
+    function QuickAddComponent({ action, onComplete, onCancel }) {
+      return (
+        <div className="space-y-4 animate-slide-in">
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Subject
+            </label>
+            <input
+              type="text"
+              placeholder={`Enter ${actionLabels[action]} subject...`}
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
+            />
+          </div>
+          
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Notes
+            </label>
+            <textarea
+              rows={3}
+              placeholder="Add any notes..."
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={onCancel}
+              className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-700/30 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600/30 rounded-lg font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all btn-scale"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onComplete}
+              className="flex-1 px-4 py-2.5 bg-violet-600 dark:bg-violet-500/20 text-white dark:text-violet-400 border border-violet-600 dark:border-violet-500/30 rounded-lg font-medium text-sm hover:bg-violet-700 dark:hover:bg-violet-500/30 transition-all btn-scale"
+            >
+              Save {actionLabels[action]}
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
+    // ============================================
+    // TYPING INDICATOR COMPONENT
+    // ============================================
+
+    function TypingIndicator() {
+      return (
+        <div className="flex justify-start animate-fade-in">
+          <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-gray-100 dark:bg-gray-800/80">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-pulse-dot" style={{ animationDelay: '0s' }} />
+              <span className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-pulse-dot" style={{ animationDelay: '0.2s' }} />
+              <span className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-pulse-dot" style={{ animationDelay: '0.4s' }} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // CHAT MESSAGE COMPONENT
+    // ============================================
+
+    function ChatMessage({ message, index }) {
+      return (
+        <div 
+          className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+          style={{ animationDelay: `${index * 0.1}s` }}
+        >
+          <div className={`max-w-[85%] px-4 py-3 rounded-2xl ${
+            message.role === 'user'
+              ? 'bg-violet-600 dark:bg-violet-500 text-white rounded-br-md'
+              : 'bg-gray-100 dark:bg-gray-800/80 text-gray-900 dark:text-gray-100 rounded-bl-md'
+          }`}>
+            {message.role === 'assistant' && (
+              <div className="flex items-center gap-2 mb-1.5">
+                <Icons.Sparkles className="w-3.5 h-3.5 text-violet-500 dark:text-violet-400" />
+                <span className="text-xs font-medium text-violet-600 dark:text-violet-400">Copilot</span>
+              </div>
+            )}
+            <p className="text-sm leading-relaxed">{message.content}</p>
+            
+            {message.structuredResponse && (
+              <div className="mt-3 pt-3 border-t border-gray-200/50 dark:border-gray-700/50">
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-500/10 dark:bg-violet-500/20 text-xs font-medium text-violet-600 dark:text-violet-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+                  Context panel updated
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // COMPACT STATE COMPONENT
+    // ============================================
+    
+    function CommandCenterCompact({ onClose, onOpenChat, activeQuickAddAction, onSelectAction, onClearAction }) {
+      return (
+        <div className="flex flex-col h-full animate-scale-in">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800/50">
+            <div className="flex items-center gap-3">
+              {activeQuickAddAction ? (
+                <button
+                  onClick={onClearAction}
+                  className="p-1.5 -ml-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg transition-all"
+                >
+                  <Icons.ArrowLeft className="w-5 h-5" />
+                </button>
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center">
+                  <Icons.Brain className="w-5 h-5 text-violet-500 dark:text-violet-400" />
+                </div>
+              )}
+              
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                  {activeQuickAddAction ? `Add ${actionLabels[activeQuickAddAction]}` : 'Command Center'}
+                </h2>
+                {!activeQuickAddAction && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Quick actions & AI assistant
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors btn-scale"
+            >
+              <Icons.X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-5">
+            {activeQuickAddAction ? (
+              <QuickAddComponent
+                action={activeQuickAddAction}
+                onComplete={onClearAction}
+                onCancel={onClearAction}
+              />
+            ) : (
+              <div className="space-y-5">
+                <ActionGrid onSelectAction={onSelectAction} />
+                
+                {/* Chat with Copilot button */}
+                <button
+                  onClick={onOpenChat}
+                  className="w-full flex items-center justify-between px-5 py-4 rounded-xl bg-gradient-to-r from-violet-500/10 to-purple-500/10 dark:from-violet-500/20 dark:to-purple-500/20 border border-violet-500/20 dark:border-violet-500/30 hover:border-violet-500/40 dark:hover:border-violet-500/50 group transition-all duration-300 btn-scale animate-fade-in opacity-0"
+                  style={{ animationDelay: '0.35s' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                      <Icons.Brain className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        Chat with Copilot
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Get AI-powered assistance
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <Icons.ChevronRight className="w-5 h-5 text-violet-500 dark:text-violet-400 group-hover:text-violet-600 dark:group-hover:text-violet-300 transition-colors group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // ============================================
+    // MEDIUM STATE COMPONENT (CHAT)
+    // ============================================
+    
+    function CommandCenterMedium({ onClose, onBack, onOpenQuickAdd, onTriggerFull }) {
+      const [inputValue, setInputValue] = useState('');
+      const [messages, setMessages] = useState([
+        {
+          id: '1',
+          role: 'assistant',
+          content: "Hey! I'm your Sales Assistant. Ask me to prep meetings, find deals/contacts/tasks, and create actions.",
+          timestamp: new Date(),
+        },
+      ]);
+      const [isTyping, setIsTyping] = useState(false);
+      const messagesEndRef = useRef(null);
+
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      };
+
+      useEffect(() => {
+        scrollToBottom();
+      }, [messages, isTyping]);
+
+      const handleSend = () => {
+        if (!inputValue.trim()) return;
+
+        const userMessage = {
+          id: Date.now().toString(),
+          role: 'user',
+          content: inputValue,
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, userMessage]);
+        setInputValue('');
+        setIsTyping(true);
+
+        // Simulate assistant response with structured data
+        setTimeout(() => {
+          const assistantMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: "I've found some relevant information for your request. Let me show you the details in an expanded view.",
+            timestamp: new Date(),
+            structuredResponse: { type: 'context', data: {} },
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+          setIsTyping(false);
+          
+          // Auto-expand to full after structured response
+          setTimeout(() => {
+            onTriggerFull();
+          }, 800);
+        }, 1500);
+      };
+
+      const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleSend();
+        }
+      };
+
+      return (
+        <div className="flex flex-col h-full animate-scale-in">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800/50 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onBack}
+                className="p-1.5 -ml-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg transition-all btn-scale"
+              >
+                <Icons.ChevronLeft className="w-5 h-5" />
+              </button>
+              
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md shadow-violet-500/20">
+                <Icons.Brain className="w-5 h-5 text-white" />
+              </div>
+              
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                  Sales Assistant
+                </h2>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Online</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors btn-scale"
+            >
+              <Icons.X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {messages.map((message, index) => (
+              <ChatMessage key={message.id} message={message} index={index} />
+            ))}
+            
+            {isTyping && <TypingIndicator />}
+
+            {/* Suggested prompts */}
+            {messages.length === 1 && !isTyping && (
+              <div className="space-y-2 mt-4">
+                {[
+                  'Prep me for my next meeting',
+                  'Show me deals that need attention',
+                  'What should I prioritize today?',
+                ].map((prompt, index) => (
+                  <button
+                    key={prompt}
+                    onClick={() => setInputValue(prompt)}
+                    className="w-full text-left px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/30 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:border-gray-300 dark:hover:border-gray-600/50 transition-all animate-fade-in opacity-0"
+                    style={{ animationDelay: `${0.3 + index * 0.1}s` }}
+                  >
+                    <span className="text-gray-400 dark:text-gray-500 mr-2">›</span>
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Quick action chips */}
+          <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-900/50">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {quickActionChips.map((chip) => {
+                const Icon = chip.icon;
+                return (
+                  <button
+                    key={chip.id}
+                    onClick={() => onOpenQuickAdd(chip.id)}
+                    className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/40 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:border-gray-300 dark:hover:border-gray-600/60 transition-all whitespace-nowrap btn-scale"
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Input */}
+          <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+            <div className="flex items-end gap-3 bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/40 rounded-xl px-4 py-3 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
+              <textarea
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Ask me to create, find, or prep anything..."
+                rows={1}
+                className="flex-1 bg-transparent resize-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none max-h-32"
+                style={{ minHeight: '24px' }}
+              />
+              
+              <button
+                onClick={handleSend}
+                disabled={!inputValue.trim()}
+                className="p-2 rounded-lg bg-violet-600 dark:bg-violet-500 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 dark:hover:bg-violet-600 transition-all btn-scale"
+              >
+                <Icons.Send className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // ============================================
+    // COPILOT RIGHT PANEL COMPONENT
+    // ============================================
+    
+    const sampleDeals = [
+      { id: '1', name: 'Enterprise Deal', company: 'Acme Corp', value: '£45,000', stage: 'Negotiation', priority: 'high' },
+      { id: '2', name: 'Mid-Market Expansion', company: 'TechStart Inc', value: '£22,500', stage: 'Proposal', priority: 'medium' },
+    ];
+
+    const sampleContacts = [
+      { id: '1', name: 'Sarah Johnson', company: 'Acme Corp', email: 'sarah@acme.com', phone: '+44 7911 123456' },
+      { id: '2', name: 'Michael Chen', company: 'TechStart Inc', email: 'michael@techstart.com', phone: '+44 7911 654321' },
+    ];
+
+    const sampleTasks = [
+      { id: '1', title: 'Follow up with Sarah', dueDate: 'Today', priority: 'high' },
+      { id: '2', title: 'Send proposal to TechStart', dueDate: 'Tomorrow', priority: 'medium' },
+      { id: '3', title: 'Review contract terms', dueDate: 'This week', priority: 'low' },
+    ];
+
+    const priorityColors = {
+      high: 'bg-red-500/10 text-red-500 border-red-500/20',
+      medium: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+      low: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+    };
+
+    function CopilotRightPanel() {
+      return (
+        <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-950/50 animate-slide-in">
+          {/* Header */}
+          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800/50">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Context Panel</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Related information from your request</p>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            {/* Deals Section */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center">
+                    <Icons.TrendingUp className="w-4 h-4 text-emerald-500" />
+                  </div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">Related Deals</h4>
+                </div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{sampleDeals.length} found</span>
+              </div>
+
+              <div className="space-y-2">
+                {sampleDeals.map((deal, index) => (
+                  <div
+                    key={deal.id}
+                    className="p-3 rounded-xl bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800/50 hover:border-emerald-500/30 dark:hover:border-emerald-500/30 cursor-pointer transition-all group animate-fade-in opacity-0"
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{deal.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <Icons.Building2 className="w-3 h-3 text-gray-400" />
+                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{deal.company}</span>
+                        </div>
+                      </div>
+                      <Icons.ChevronRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{deal.value}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${priorityColors[deal.priority]}`}>
+                        {deal.stage}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Contacts Section */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center">
+                    <Icons.Users className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">Key Contacts</h4>
+                </div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{sampleContacts.length} found</span>
+              </div>
+
+              <div className="space-y-2">
+                {sampleContacts.map((contact, index) => (
+                  <div
+                    key={contact.id}
+                    className="p-3 rounded-xl bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800/50 hover:border-blue-500/30 dark:hover:border-blue-500/30 cursor-pointer transition-all group animate-fade-in opacity-0"
+                    style={{ animationDelay: `${(index + 2) * 0.1}s` }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-white text-sm font-semibold">
+                        {contact.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{contact.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{contact.company}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 pl-12">
+                      <button className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
+                        <Icons.Mail className="w-3 h-3" />
+                        Email
+                      </button>
+                      <button className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors">
+                        <Icons.Phone className="w-3 h-3" />
+                        Call
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Tasks Section */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-violet-500/10 dark:bg-violet-500/20 flex items-center justify-center">
+                    <Icons.Calendar className="w-4 h-4 text-violet-500" />
+                  </div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">Related Tasks</h4>
+                </div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{sampleTasks.length} pending</span>
+              </div>
+
+              <div className="space-y-2">
+                {sampleTasks.map((task, index) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800/50 hover:border-violet-500/30 dark:hover:border-violet-500/30 cursor-pointer transition-all animate-fade-in opacity-0"
+                    style={{ animationDelay: `${(index + 4) * 0.1}s` }}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${
+                      task.priority === 'high' ? 'bg-red-500' :
+                      task.priority === 'medium' ? 'bg-yellow-500' : 'bg-emerald-500'
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{task.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Due: {task.dueDate}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Insights Section */}
+            <section className="animate-fade-in opacity-0" style={{ animationDelay: '0.7s' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center">
+                  <Icons.AlertCircle className="w-4 h-4 text-amber-500" />
+                </div>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">AI Insights</h4>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/5 to-orange-500/5 dark:from-amber-500/10 dark:to-orange-500/10 border border-amber-500/20 dark:border-amber-500/30">
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  Based on your recent activity, I recommend prioritizing the 
+                  <span className="font-medium text-amber-600 dark:text-amber-400"> Enterprise Deal </span>
+                  with Acme Corp. Sarah Johnson hasn't been contacted in 5 days, 
+                  and the deal is at a critical stage.
+                </p>
+              </div>
+            </section>
+          </div>
+        </div>
+      );
+    }
+    
+    // ============================================
+    // FULL STATE COMPONENT (TWO-PANEL)
+    // ============================================
+    
+    function CommandCenterFull({ onClose, onCollapse, onOpenQuickAdd }) {
+      const [inputValue, setInputValue] = useState('');
+      const [showRightPanel, setShowRightPanel] = useState(true);
+      const [messages, setMessages] = useState([
+        {
+          id: '1',
+          role: 'assistant',
+          content: "I've found some relevant information for your request. Check the context panel on the right for deals, contacts, and tasks related to your query.",
+          timestamp: new Date(),
+          structuredResponse: { type: 'context', data: {} },
+        },
+      ]);
+      const [isTyping, setIsTyping] = useState(false);
+      const messagesEndRef = useRef(null);
+
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      };
+
+      useEffect(() => {
+        scrollToBottom();
+      }, [messages, isTyping]);
+
+      const handleSend = () => {
+        if (!inputValue.trim()) return;
+
+        const userMessage = {
+          id: Date.now().toString(),
+          role: 'user',
+          content: inputValue,
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, userMessage]);
+        setInputValue('');
+        setIsTyping(true);
+
+        setTimeout(() => {
+          const assistantMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: "I've updated the context panel with the latest information based on your query.",
+            timestamp: new Date(),
+            structuredResponse: { type: 'context', data: {} },
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+          setIsTyping(false);
+        }, 1500);
+      };
+
+      const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleSend();
+        }
+      };
+
+      return (
+        <div className="flex flex-col h-full animate-scale-in">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                <Icons.Brain className="w-5 h-5 text-white" />
+              </div>
+              
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Command Center</h2>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Full workspace mode</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Toggle right panel (mobile) */}
+              <button
+                onClick={() => setShowRightPanel(!showRightPanel)}
+                className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors lg:hidden btn-scale"
+              >
+                {showRightPanel ? <Icons.PanelRightClose className="w-5 h-5" /> : <Icons.PanelRightOpen className="w-5 h-5" />}
+              </button>
+
+              {/* Collapse button */}
+              <button
+                onClick={onCollapse}
+                className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors btn-scale"
+              >
+                <Icons.Minimize2 className="w-5 h-5" />
+              </button>
+
+              {/* Close button */}
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors btn-scale"
+              >
+                <Icons.X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Main content area */}
+          <div className="flex-1 flex min-h-0">
+            {/* Left panel - Chat */}
+            <div className="flex-1 min-w-0 flex flex-col">
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {messages.map((message, index) => (
+                  <ChatMessage key={message.id} message={message} index={index} />
+                ))}
+                
+                {isTyping && <TypingIndicator />}
+                
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+                <div className="flex items-end gap-3 bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/40 rounded-xl px-4 py-3 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
+                  <textarea
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Continue the conversation..."
+                    rows={1}
+                    className="flex-1 bg-transparent resize-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none max-h-32"
+                    style={{ minHeight: '24px' }}
+                  />
+                  
+                  <button
+                    onClick={handleSend}
+                    disabled={!inputValue.trim()}
+                    className="p-2 rounded-lg bg-violet-600 dark:bg-violet-500 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 dark:hover:bg-violet-600 transition-all btn-scale"
+                  >
+                    <Icons.Send className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right panel - Context (desktop) */}
+            {showRightPanel && (
+              <div className="hidden lg:block w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-800/50">
+                <CopilotRightPanel />
+              </div>
+            )}
+          </div>
+
+          {/* Mobile right panel overlay */}
+          {showRightPanel && (
+            <div
+              className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowRightPanel(false)}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-0 bottom-0 w-[85vw] max-w-96 bg-white dark:bg-gray-900 shadow-2xl animate-slide-in"
+              >
+                <CopilotRightPanel />
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    // ============================================
+    // MAIN COMMAND CENTER COMPONENT
+    // ============================================
+    
+    function CommandCenter({ isOpen, onClose }) {
+      const [state, setState] = useState('closed');
+      const [activeQuickAddAction, setActiveQuickAddAction] = useState(null);
+
+      useEffect(() => {
+        if (isOpen && state === 'closed') {
+          setState('compact');
+        } else if (!isOpen && state !== 'closed') {
+          setState('closed');
+          setActiveQuickAddAction(null);
+        }
+      }, [isOpen]);
+
+      useEffect(() => {
+        const handleEscape = (e) => {
+          if (e.key === 'Escape' && state !== 'closed') {
+            if (activeQuickAddAction) {
+              setActiveQuickAddAction(null);
+            } else {
+              onClose();
+            }
+          }
+        };
+
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+      }, [state, activeQuickAddAction, onClose]);
+
+      useEffect(() => {
+        if (state !== 'closed') {
+          document.body.style.overflow = 'hidden';
+        } else {
+          document.body.style.overflow = '';
+        }
+        return () => { document.body.style.overflow = ''; };
+      }, [state]);
+
+      const openChat = () => { setState('medium'); setActiveQuickAddAction(null); };
+      const expandFull = () => setState('full');
+      const collapseToMedium = () => setState('medium');
+      const returnToCompact = () => setState('compact');
+
+      const handleOpenQuickAdd = (action) => {
+        returnToCompact();
+        setTimeout(() => setActiveQuickAddAction(action), 200);
+      };
+
+      if (state === 'closed') return null;
+
+      const getModalClass = () => {
+        switch (state) {
+          case 'compact': return 'modal-compact';
+          case 'medium': return 'modal-medium';
+          case 'full': return 'modal-full';
+          default: return 'modal-compact';
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            onClick={onClose}
+            className={`absolute inset-0 transition-all duration-300 ${
+              state === 'compact' 
+                ? 'bg-gray-900/30 dark:bg-black/50 backdrop-blur-sm' 
+                : 'bg-gray-900/50 dark:bg-black/70 backdrop-blur-md'
+            }`}
+          />
+
+          {/* Modal Container */}
+          <div
+            className={`relative z-10 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800/60 shadow-2xl dark:shadow-none overflow-hidden flex flex-col modal-base ${getModalClass()}`}
+          >
+            {state === 'compact' && (
+              <CommandCenterCompact
+                onClose={onClose}
+                onOpenChat={openChat}
+                activeQuickAddAction={activeQuickAddAction}
+                onSelectAction={setActiveQuickAddAction}
+                onClearAction={() => setActiveQuickAddAction(null)}
+              />
+            )}
+
+            {state === 'medium' && (
+              <CommandCenterMedium
+                onClose={onClose}
+                onBack={returnToCompact}
+                onOpenQuickAdd={handleOpenQuickAdd}
+                onTriggerFull={expandFull}
+              />
+            )}
+
+            {state === 'full' && (
+              <CommandCenterFull
+                onClose={onClose}
+                onCollapse={collapseToMedium}
+                onOpenQuickAdd={handleOpenQuickAdd}
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // ============================================
+    // THEME TOGGLE COMPONENT
+    // ============================================
+    
+    function ThemeToggle() {
+      const [theme, setTheme] = useState('dark');
+
+      const toggleTheme = () => {
+        const newTheme = theme === 'light' ? 'dark' : 'light';
+        setTheme(newTheme);
+        document.documentElement.setAttribute('data-theme', newTheme);
+      };
+
+      return (
+        <button
+          onClick={toggleTheme}
+          className="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50 transition-colors btn-scale"
+        >
+          {theme === 'light' ? <Icons.Moon className="w-5 h-5" /> : <Icons.Sun className="w-5 h-5" />}
+        </button>
+      );
+    }
+    
+    // ============================================
+    // APP COMPONENT
+    // ============================================
+    
+    function App() {
+      const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+
+      return (
+        <div className="min-h-screen bg-white dark:bg-gray-950">
+          {/* Header */}
+          <header className="border-b border-gray-200 dark:border-gray-800/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                  <Icons.Brain className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Sales Dashboard</h1>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Command Center Demo</p>
+                </div>
+              </div>
+              
+              <ThemeToggle />
+            </div>
+          </header>
+
+          {/* Main content */}
+          <main className="max-w-7xl mx-auto px-6 py-12">
+            <div className="text-center max-w-2xl mx-auto">
+              <div className="animate-fade-in">
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+                  Progressive Command Center
+                </h2>
+                <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">
+                  Click the green button in the bottom right corner to open the Command Center. 
+                  It features three progressive states: Compact, Medium (Chat), and Full (Two-Panel).
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+                  {[
+                    {
+                      title: 'Compact Mode',
+                      description: 'Quick actions grid with 6 action buttons and a "Chat with Copilot" button.',
+                      color: 'violet',
+                    },
+                    {
+                      title: 'Medium Mode',
+                      description: 'Full chat interface with AI assistant, suggested prompts, and quick action chips.',
+                      color: 'blue',
+                    },
+                    {
+                      title: 'Full Mode',
+                      description: 'Two-panel workspace with chat on the left and context panel on the right.',
+                      color: 'emerald',
+                    },
+                  ].map((item, index) => (
+                    <div
+                      key={item.title}
+                      className={`p-6 rounded-2xl bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800/50 shadow-sm dark:shadow-none animate-fade-in opacity-0`}
+                      style={{ animationDelay: `${0.2 + index * 0.1}s` }}
+                    >
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${
+                        item.color === 'violet' ? 'bg-violet-500/10 dark:bg-violet-500/20' :
+                        item.color === 'blue' ? 'bg-blue-500/10 dark:bg-blue-500/20' :
+                        'bg-emerald-500/10 dark:bg-emerald-500/20'
+                      }`}>
+                        <span className={`font-bold ${
+                          item.color === 'violet' ? 'text-violet-500' :
+                          item.color === 'blue' ? 'text-blue-500' :
+                          'text-emerald-500'
+                        }`}>{index + 1}</span>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                        {item.title}
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {item.description}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                
+                <div 
+                  className="mt-12 p-6 rounded-2xl bg-gradient-to-br from-violet-500/5 to-purple-500/5 dark:from-violet-500/10 dark:to-purple-500/10 border border-violet-500/20 animate-fade-in opacity-0"
+                  style={{ animationDelay: '0.6s' }}
+                >
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    <strong className="text-violet-600 dark:text-violet-400">Pro tip:</strong> In the chat view, send a message and watch it auto-expand to the full two-panel view when the AI returns structured data!
+                  </p>
+                </div>
+              </div>
+            </div>
+          </main>
+
+          {/* Floating Action Button */}
+          <button
+            onClick={() => setIsCommandCenterOpen(true)}
+            className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 transition-all flex items-center justify-center btn-scale"
+          >
+            <Icons.Plus className="w-6 h-6" />
+          </button>
+
+          {/* Command Center Modal */}
+          <CommandCenter
+            isOpen={isCommandCenterOpen}
+            onClose={() => setIsCommandCenterOpen(false)}
+          />
+        </div>
+      );
+    }
+    
+    // ============================================
+    // RENDER
+    // ============================================
+    
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

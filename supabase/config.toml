@@ -181,6 +181,11 @@ verify_jwt = false
 [functions.send-password-reset-email]
 verify_jwt = false
 
+# Process Lambda compression callback - receives HMAC-signed results from AWS Lambda
+# Uses X-Callback-Signature header for auth (not JWT)
+[functions.process-compress-callback]
+verify_jwt = false
+
 # Generate S3 video thumbnail - called internally by process-recording
 # Uses service role key for auth
 [functions.generate-s3-video-thumbnail]
@@ -189,6 +194,11 @@ verify_jwt = false
 # Sync recording to CRM - called internally by process-recording
 # Uses service role key for auth
 [functions.sync-recording-to-crm]
+verify_jwt = false
+
+# Stages API - called from browser with user JWT
+# Uses service role key internally (CORS preflight needs to work)
+[functions.stages]
 verify_jwt = false
 
 # Process Gladia webhook - receives async transcription results
@@ -206,4 +216,56 @@ verify_jwt = false
 # Called by Supabase cron scheduler - no JWT verification needed
 # The cron schedule is managed via SQL function: supabase/migrations/*_poll_gladia_cron.sql
 [functions.poll-gladia-jobs]
+verify_jwt = false
+
+# Fathom integration - all functions handle auth internally
+# OAuth callback is called by Fathom redirect (no JWT)
+[functions.fathom-oauth-callback]
+verify_jwt = false
+
+# OAuth initiate - called from browser with user JWT (CORS preflight needs to work)
+[functions.fathom-oauth-initiate]
+verify_jwt = false
+
+# Fathom sync - called from browser or cron, handles auth internally
+[functions.fathom-sync]
+verify_jwt = false
+
+# Fathom cron sync - triggered by scheduler
+[functions.fathom-cron-sync]
+verify_jwt = false
+
+# Fathom disconnect - called from browser with user JWT
+[functions.fathom-disconnect]
+verify_jwt = false
+
+# Fathom webhook - receives push notifications from Fathom API
+[functions.fathom-webhook]
+verify_jwt = false
+
+# Fathom token refresh - internal token management
+[functions.fathom-token-refresh]
+verify_jwt = false
+
+# Fathom user mapping - called from browser with user JWT
+[functions.fathom-update-user-mapping]
+verify_jwt = false
+
+# Fathom self-map - called from browser with user JWT
+[functions.fathom-self-map]
+verify_jwt = false
+
+# Fathom backfill companies - internal batch operation
+[functions.fathom-backfill-companies]
+verify_jwt = false
+
+# Fathom transcript retry - cron/internal retry mechanism
+[functions.fathom-transcript-retry]
+verify_jwt = false
+
+# Fathom test utilities - called from browser with user JWT
+[functions.test-fathom-token]
+verify_jwt = false
+
+[functions.test-fathom-api]
 verify_jwt = false

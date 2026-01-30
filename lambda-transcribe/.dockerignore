@@ -1,0 +1,5 @@
+CLAUDE.md
+deploy.sh
+__pycache__
+*.pyc
+.git

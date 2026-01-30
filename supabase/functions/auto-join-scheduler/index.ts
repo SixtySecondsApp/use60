@@ -170,6 +170,7 @@ async function deployBotForEvent(
         meeting_url: event.meeting_url,
         meeting_title: event.title,
         calendar_event_id: event.id,
+        scheduled_time: event.start_time, // Tell MeetingBaaS to wait until this time
         // Auto-join doesn't pass attendees - the webhook will handle this
       }),
     });

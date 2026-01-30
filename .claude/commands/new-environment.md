@@ -23,6 +23,7 @@ Act as an expert DevOps consultant. Ask me meaningful questions, one by one, unt
 - Which existing environment should it branch from? (staging or production)
 - Should edge functions be deployed to the branch?
 - Should integration keys be shared with an existing environment or use separate credentials?
+- Should auth users and/or public data be copied from the source environment?
 - Should a new git branch be created for this environment?
 - Should `npm run dev` default to this new environment?
 
@@ -157,7 +158,89 @@ Act as an expert DevOps consultant. Ask me meaningful questions, one by one, unt
    - `.env.example` — update template with new environment reference
    - `CLAUDE.md` — update project references table
 
-### Step 5: Create Git Branch (if requested)
+### Step 5: Migrate Auth & Data (if requested)
+
+If the user wants auth users and/or public data copied from the source environment:
+
+#### 5a: Push Schema Migrations
+
+New branches start with an empty public schema. Migrations must be applied first.
+
+1. **Enable citext extension** (required by baseline migration):
+   ```bash
+   psql "<branch-db-url>" -c "CREATE EXTENSION IF NOT EXISTS citext SCHEMA public;"
+   ```
+
+2. **Apply baseline migration directly via psql** (the CLI login role lacks the correct search_path for citext):
+   ```bash
+   psql "<branch-db-url>" -f supabase/migrations/00000000000000_baseline.sql
+   ```
+
+3. **Record baseline in migrations table**:
+   ```sql
+   INSERT INTO supabase_migrations.schema_migrations (version, statements, name)
+   VALUES ('00000000000000', '{}', 'baseline') ON CONFLICT DO NOTHING;
+   ```
+
+4. **Re-run baseline with correct search_path** to create any objects that failed due to citext:
+   ```bash
+   psql "<branch-db-url>" -c "SET search_path TO public, extensions;" \
+     -f supabase/migrations/00000000000000_baseline.sql
+   ```
+   (Existing objects will produce harmless "already exists" errors.)
+
+5. **Push remaining migrations via CLI**:
+   ```bash
+   echo "Y" | supabase db push --include-all
+   ```
+   If this fails due to duplicate migration timestamps (two files sharing the same prefix), apply remaining migrations directly via psql with `ON_ERROR_STOP=0` and record each in `supabase_migrations.schema_migrations`.
+
+#### 5b: Copy Auth Users
+
+1. **Dump auth data from source** (must use direct postgres connection, not CLI login role):
+   ```bash
+   supabase db dump --linked --data-only --schema auth > auth_dump.sql
+   ```
+
+2. **Find the branch pooler host** (branches may use a different pooler, e.g. `aws-1` instead of `aws-0`):
+   ```bash
+   supabase db dump --dry-run 2>&1  # reveals actual connection parameters
+   ```
+
+3. **Restore auth data to the branch**:
+   ```bash
+   psql "postgresql://postgres.<branch-ref>:<db-password>@<branch-pooler-host>:5432/postgres" \
+     -f auth_dump.sql
+   ```
+   Note: The CLI login role doesn't have INSERT permissions on `auth` schema — use the direct `postgres` user connection.
+
+#### 5c: Copy Public Data (optional)
+
+1. **Dump public data from source**:
+   ```bash
+   pg_dump "<source-db-url>" --data-only --schema=public > public_dump.sql
+   ```
+
+2. **Create a wrapper SQL file** to disable triggers during restore:
+   ```sql
+   SET session_replication_role = replica;
+   \i public_dump.sql
+   SET session_replication_role = DEFAULT;
+   ```
+
+3. **Restore public data** (tolerating errors for duplicate keys from partial loads):
+   ```bash
+   psql "<branch-db-url>" -v ON_ERROR_STOP=0 -f restore_wrapper.sql
+   ```
+
+**Important notes**:
+- Large dumps (>100MB) can take 15+ minutes over the network
+- Do NOT use `--single-transaction` — if any error occurs the entire restore rolls back
+- The dump inserts data in alphabetical table order; partial loads will populate early tables
+- `SET session_replication_role = replica` disables triggers/FK checks during restore
+- Circular foreign key dependencies require this approach over plain `psql -f`
+
+### Step 6: Create Git Branch (if requested)
 
 1. Create a new git branch from the source:
    ```bash
@@ -173,7 +256,7 @@ Act as an expert DevOps consultant. Ask me meaningful questions, one by one, unt
 
 3. **Do NOT commit automatically** — wait for user confirmation.
 
-### Step 6: Re-link to Original Project
+### Step 7: Re-link to Original Project
 
 After deploying to the branch, re-link back to the source project so local CLI commands still work against the expected environment:
 
@@ -181,7 +264,7 @@ After deploying to the branch, re-link back to the source project so local CLI c
 supabase link --project-ref <original-project-ref>
 ```
 
-### Step 7: Output Summary
+### Step 8: Output Summary
 
 Print:
 ```

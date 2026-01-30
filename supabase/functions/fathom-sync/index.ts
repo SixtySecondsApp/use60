@@ -1,5 +1,3 @@
-/// <reference path="../deno.d.ts" />
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { captureException } from '../_shared/sentryEdge.ts'
@@ -707,6 +705,47 @@ serve(async (req) => {
       }
     }
 
+    // Check for stale sync state and auto-reset before starting new sync
+    // Edge functions can timeout (60s limit) leaving sync_status stuck at 'syncing'
+    const STALE_SYNC_THRESHOLD_MS = 10 * 60 * 1000 // 10 minutes
+    if (integrationScope === 'org' && orgId) {
+      const { data: currentState } = await supabase
+        .from('fathom_org_sync_state')
+        .select('sync_status, last_sync_started_at')
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (currentState?.sync_status === 'syncing' && currentState.last_sync_started_at) {
+        const staleDuration = Date.now() - new Date(currentState.last_sync_started_at).getTime()
+        if (staleDuration > STALE_SYNC_THRESHOLD_MS) {
+          console.warn(`⚠️  Resetting stale org sync state (stuck for ${Math.round(staleDuration / 60000)}min)`)
+        } else {
+          console.log(`⏳ Sync already in progress for org (started ${Math.round(staleDuration / 1000)}s ago), skipping`)
+          return new Response(
+            JSON.stringify({ success: false, error: 'Sync already in progress', retry_after_seconds: Math.ceil((STALE_SYNC_THRESHOLD_MS - staleDuration) / 1000) }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+    } else if (userId) {
+      const { data: currentState } = await supabase
+        .from('fathom_sync_state')
+        .select('sync_status, last_sync_started_at')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (currentState?.sync_status === 'syncing' && currentState.last_sync_started_at) {
+        const staleDuration = Date.now() - new Date(currentState.last_sync_started_at).getTime()
+        if (staleDuration > STALE_SYNC_THRESHOLD_MS) {
+          console.warn(`⚠️  Resetting stale user sync state (stuck for ${Math.round(staleDuration / 60000)}min)`)
+        } else {
+          console.log(`⏳ Sync already in progress for user (started ${Math.round(staleDuration / 1000)}s ago), skipping`)
+          return new Response(
+            JSON.stringify({ success: false, error: 'Sync already in progress', retry_after_seconds: Math.ceil((STALE_SYNC_THRESHOLD_MS - staleDuration) / 1000) }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+    }
+
     // Update sync state to 'syncing'
     if (integrationScope === 'org') {
       await supabase
@@ -887,14 +926,29 @@ serve(async (req) => {
       // Fast mode is auto-enabled when:
       // - Processing more than 10 meetings AND
       // - Not a limited/onboarding sync (which should be quick by design)
+      // - OR elapsed time approaches edge function timeout (safety guard)
       const BULK_THRESHOLD = 10
       let useFastMode = false
       let fastModeSkipThumbnails = skip_thumbnails ?? false
       let fastModeSkipTranscripts = false
 
       // Track how many meetings have been fully processed (with thumbnails + transcripts)
-      const FULL_PROCESSING_LIMIT = 9
+      // For limited syncs, process ALL meetings fully (user explicitly chose a small batch)
+      // For open-ended syncs, cap at 9 to leave room for background processing
+      const FULL_PROCESSING_LIMIT = isLimitedSync ? 999 : 9
       let meetingsFullyProcessed = 0
+
+      // Elapsed time guard: switch to fast mode when approaching edge function timeout
+      // Supabase edge functions timeout at ~60s CPU (150s wall clock)
+      // For limited syncs (explicit limit or small count), we can use a higher threshold
+      // since we know the total scope and can afford to use more of the wall clock time
+      const syncStartTime = Date.now()
+      // Elapsed time guard threshold:
+      // - Limited syncs get more headroom (90s) since scope is bounded
+      // - Open-ended syncs switch to fast mode earlier (40s) to avoid timeout
+      // Note: Edge function wall clock timeout is ~150s, so we need buffer
+      const TIMEOUT_SAFETY_MS = isLimitedSync ? 90_000 : 40_000
+      console.log(`📊 Sync config: isLimitedSync=${isLimitedSync}, syncLimit=${syncLimit}, limit=${limit}, apiLimit=${apiLimit}, TIMEOUT_SAFETY_MS=${TIMEOUT_SAFETY_MS}ms, FULL_PROCESSING_LIMIT=${FULL_PROCESSING_LIMIT}`)
 
       while (hasMore && pageCount < maxPages) {
         pageCount++
@@ -906,6 +960,13 @@ serve(async (req) => {
         }, supabase)
 
         let calls = response.items
+
+        // Enforce limit on items if API returned more than requested
+        if (isLimitedSync && apiLimit && calls.length > apiLimit) {
+          console.log(`📊 API returned ${calls.length} items but limit is ${apiLimit}, truncating`)
+          calls = calls.slice(0, apiLimit)
+        }
+
         totalMeetingsFound += calls.length
 
         // Sort by newest first (recording_start_time or created_at descending)
@@ -930,10 +991,20 @@ serve(async (req) => {
             // Pass markAsHistorical flag for onboarding syncs
             if (!effectiveUserIdForOwnership) throw new Error('Cannot resolve user context for sync')
 
+            // Elapsed time guard: auto-switch to fast mode when approaching timeout
+            const elapsedMs = Date.now() - syncStartTime
+            console.log(`⏱️  Meeting ${meetingsFullyProcessed + 1}: elapsed=${Math.round(elapsedMs / 1000)}s, useFastMode=${useFastMode}, threshold=${TIMEOUT_SAFETY_MS / 1000}s`)
+            if (!useFastMode && elapsedMs > TIMEOUT_SAFETY_MS) {
+              useFastMode = true
+              bulkSyncFastMode = true
+              console.log(`⏱️  TIMEOUT GUARD: Elapsed ${Math.round(elapsedMs / 1000)}s > ${TIMEOUT_SAFETY_MS / 1000}s, switching to fast mode for remaining meetings`)
+            }
+
             // Determine if this meeting should be fully processed
             // First 9 meetings get full processing (thumbnails + transcripts)
             // After that, use fast mode for bulk syncs
-            const shouldProcessFully = meetingsFullyProcessed < FULL_PROCESSING_LIMIT
+            // Also skip full processing if we're running low on time
+            const shouldProcessFully = meetingsFullyProcessed < FULL_PROCESSING_LIMIT && !useFastMode
             const skipThumbsForThis = shouldProcessFully ? false : (useFastMode ? true : fastModeSkipThumbnails)
             const skipTranscriptsForThis = shouldProcessFully ? false : (useFastMode ? true : fastModeSkipTranscripts)
 
@@ -1180,6 +1251,7 @@ serve(async (req) => {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -1255,6 +1327,7 @@ serve(async (req) => {
           .update({
             sync_status: 'error',
             last_sync_error: message,
+            last_sync_completed_at: new Date().toISOString(),
           })
           .eq('user_id', syncStateUserId)
       }
@@ -1480,16 +1553,18 @@ async function syncSingleCall(
     // Compute derived fields prior to DB write
     const embedUrl = buildEmbedUrl(call.share_url, call.recording_id)
 
-    // Check for existing meeting with valid thumbnail (to preserve it during re-sync)
+    // Check for existing meeting to preserve completed processing statuses during re-sync
     const recordingIdForLookup = call?.recording_id ?? call?.id ?? call?.recordingId ?? null
     let existingThumbnailUrl: string | null = null
     let existingThumbnailStatus: string | null = null
+    let existingTranscriptStatus: string | null = null
+    let existingSummaryStatus: string | null = null
 
     if (recordingIdForLookup) {
       try {
         const lookupQuery = orgId
-          ? supabase.from('meetings').select('thumbnail_url, thumbnail_status').eq('org_id', orgId).eq('fathom_recording_id', String(recordingIdForLookup)).maybeSingle()
-          : supabase.from('meetings').select('thumbnail_url, thumbnail_status').eq('fathom_recording_id', String(recordingIdForLookup)).maybeSingle()
+          ? supabase.from('meetings').select('thumbnail_url, thumbnail_status, transcript_status, summary_status').eq('org_id', orgId).eq('fathom_recording_id', String(recordingIdForLookup)).maybeSingle()
+          : supabase.from('meetings').select('thumbnail_url, thumbnail_status, transcript_status, summary_status').eq('fathom_recording_id', String(recordingIdForLookup)).maybeSingle()
 
         const { data: existingMeeting } = await lookupQuery
 
@@ -1497,6 +1572,12 @@ async function syncSingleCall(
           existingThumbnailUrl = existingMeeting.thumbnail_url
           existingThumbnailStatus = existingMeeting.thumbnail_status
           console.log(`🖼️  Preserving existing thumbnail for recording ${recordingIdForLookup}: ${existingThumbnailUrl.substring(0, 60)}...`)
+        }
+        if (existingMeeting?.transcript_status === 'complete') {
+          existingTranscriptStatus = 'complete'
+        }
+        if (existingMeeting?.summary_status === 'complete') {
+          existingSummaryStatus = 'complete'
         }
       } catch (lookupErr) {
         // Non-fatal - continue with normal thumbnail generation
@@ -1531,9 +1612,8 @@ async function syncSingleCall(
       thumbnailUrl = `https://dummyimage.com/640x360/1a1a1a/10b981&text=${encodeURIComponent(firstLetter)}`
       console.log(`📝 Using placeholder thumbnail for meeting ${call.recording_id}`)
     }
-    // Resolve a stable recording identifier (used for DB uniqueness / upserts).
-    // Fathom payloads can vary; prefer recording_id, otherwise fall back to id.
-    const recordingIdRaw = call?.recording_id ?? call?.id ?? call?.recordingId ?? null
+    // NOTE: recordingIdRaw already resolved at top of function (line ~1435)
+    // Using the same value for DB uniqueness / upserts.
 
     // Use summary from bulk API response only (don't fetch separately)
     // Summary and transcript should be fetched on-demand via separate endpoint
@@ -1549,13 +1629,18 @@ async function syncSingleCall(
         ? 'pending'  // Queued for background thumbnail generation
         : (thumbnailUrl && !thumbnailUrl.includes('dummyimage.com') ? 'complete' : 'pending')
 
-    const initialTranscriptStatus = skipTranscriptFetch
-      ? 'pending'  // Queued for background transcript fetch
-      : 'processing'  // Will be updated after transcript fetch
+    // Preserve existing 'complete' status during re-sync to avoid losing processed transcripts
+    const initialTranscriptStatus = existingTranscriptStatus === 'complete'
+      ? 'complete'  // Preserve existing complete status
+      : skipTranscriptFetch
+        ? 'pending'  // Queued for background transcript fetch
+        : 'processing'  // Will be updated after transcript fetch
 
-    const initialSummaryStatus = skipTranscriptFetch
-      ? 'pending'  // Queued for background summary generation
-      : (summaryText ? 'complete' : 'processing')  // Will be updated after AI analysis
+    const initialSummaryStatus = existingSummaryStatus === 'complete'
+      ? 'complete'  // Preserve existing complete status
+      : skipTranscriptFetch
+        ? 'pending'  // Queued for background summary generation
+        : (summaryText ? 'complete' : 'processing')  // Will be updated after AI analysis
 
     // Map to meetings table schema using actual Fathom API fields
     const meetingData: Record<string, any> = {
@@ -1610,8 +1695,9 @@ async function syncSingleCall(
     const { meeting, error: meetingError } = await upsertMeeting(supabase, meetingData, orgId)
 
     if (meetingError) {
-      // Error message is already parsed by upsertMeeting for better user feedback
-      throw new Error(`Failed to upsert meeting: ${meetingError.message}`)
+      // Return error instead of throwing - prevents single meeting failure from killing entire sync
+      console.error(`❌ Failed to upsert meeting ${recordingIdRaw}: ${meetingError.message}`)
+      return { success: false, error: `Failed to upsert meeting: ${meetingError.message}` }
     }
 
     // Seed default call types for org on first sync (if org exists and has no call types)
@@ -1697,7 +1783,10 @@ async function syncSingleCall(
     // TRANSCRIPT/SUMMARY FETCHING
     // For bulk syncs (skipTranscriptFetch=true), skip immediate fetching to avoid timeout.
     // The meeting will be processed by the background fathom-transcript-retry job.
-    if (skipTranscriptFetch) {
+    // Skip entirely if meeting already has complete transcript (preserve during re-sync)
+    if (existingTranscriptStatus === 'complete' && skipTranscriptFetch) {
+      console.log(`✅ Meeting ${meeting.id} already has complete transcript - skipping re-processing`)
+    } else if (skipTranscriptFetch) {
       console.log(`⏭️  Skipping transcript fetch for meeting ${meeting.id} (bulk sync mode) - will process in background`)
 
       // Queue for background processing

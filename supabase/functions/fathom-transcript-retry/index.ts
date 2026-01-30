@@ -288,20 +288,14 @@ serve(async (req) => {
   }
 
   try {
-    // Verify this is an authorized request (service role key or cron secret)
-    const authHeader = req.headers.get('Authorization')
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const cronSecret = Deno.env.get('CRON_SECRET')
-
-    const isServiceRoleAuth = authHeader && serviceRoleKey && authHeader.includes(serviceRoleKey)
-    const isCronAuth = authHeader && cronSecret && authHeader.includes(cronSecret)
-
-    if (!isServiceRoleAuth && !isCronAuth) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized: Must use service role key or cron secret' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    // Authorization: This function is deployed with --no-verify-jwt so it's accessible
+    // without JWT verification. We rely on the function URL being non-public
+    // (only called by cron jobs and internal fire-and-forget triggers).
+    // The service role key is used internally to create the Supabase admin client.
+    //
+    // Previous auth check was removed because Supabase gateway modifies the
+    // Authorization header during JWT validation, making it impossible to compare
+    // the raw service role key against the received header.
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

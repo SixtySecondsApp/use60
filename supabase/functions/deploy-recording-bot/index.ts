@@ -72,6 +72,7 @@ interface MeetingInsert {
   processing_status: string;
   recording_id?: string;
   bot_id?: string;
+  meeting_start?: string;
 }
 
 interface BotDeploymentInsert {
@@ -572,6 +573,7 @@ serve(async (req) => {
       processing_status: 'bot_joining',
       recording_id: recording.id,
       bot_id: botResponse.id,
+      meeting_start: body.scheduled_time || new Date().toISOString(),
     };
 
     const { error: meetingError } = await supabase

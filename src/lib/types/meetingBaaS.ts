@@ -175,7 +175,7 @@ export interface Recording {
 
   // Enhanced AI Analysis (sentiment, talk time, coaching)
   sentiment_score?: number | null; // -1.0 to 1.0
-  coach_rating?: number | null; // 0-100 scale
+  coach_rating?: number | null; // 1-10 scale
   coach_summary?: string | null;
   talk_time_rep_pct?: number | null;
   talk_time_customer_pct?: number | null;

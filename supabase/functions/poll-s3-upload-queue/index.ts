@@ -1,10 +1,14 @@
 // Poll S3 Upload Queue
 // Cron job that runs every 5 minutes to process pending S3 uploads
-// Similar pattern to poll-gladia-jobs
+// Handles: pending uploads, failed retries, and stale processing detection
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+
+// If a recording has been in 'processing' state for longer than this,
+// it's considered stale (Lambda likely failed without callback)
+const STALE_PROCESSING_MINUTES = 20;
 
 serve(async (req) => {
   // Handle CORS
@@ -37,12 +41,72 @@ serve(async (req) => {
       .eq('s3_upload_status', 'failed')
       .lt('s3_upload_retry_count', 3);
 
+    // Count currently processing (for monitoring)
+    const { count: processingCount } = await supabase
+      .from('recordings')
+      .select('id', { count: 'exact', head: true })
+      .eq('s3_upload_status', 'processing');
+
+    console.log(
+      `[S3 Upload Queue] Status: ${pendingCount || 0} pending, ${retryCount || 0} retries, ${processingCount || 0} processing`
+    );
+
+    // Detect and reset stale processing recordings (Lambda failed without callback)
+    if (processingCount && processingCount > 0) {
+      const staleThreshold = new Date(now.getTime() - STALE_PROCESSING_MINUTES * 60 * 1000);
+
+      const { data: staleRecordings, error: staleError } = await supabase
+        .from('recordings')
+        .select('id, s3_upload_started_at, s3_upload_retry_count')
+        .eq('s3_upload_status', 'processing')
+        .lt('s3_upload_started_at', staleThreshold.toISOString());
+
+      if (!staleError && staleRecordings && staleRecordings.length > 0) {
+        console.warn(
+          `[S3 Upload Queue] Found ${staleRecordings.length} stale processing recordings (>${STALE_PROCESSING_MINUTES}min), resetting to pending`
+        );
+
+        for (const stale of staleRecordings) {
+          const retryCount = (stale.s3_upload_retry_count || 0) + 1;
+          if (retryCount >= 3) {
+            // Max retries exceeded, mark as permanently failed
+            await supabase
+              .from('recordings')
+              .update({
+                s3_upload_status: 'failed',
+                s3_upload_error_message: `Lambda processing timed out after ${STALE_PROCESSING_MINUTES} minutes (attempt ${retryCount}/3)`,
+                s3_upload_retry_count: retryCount,
+                s3_upload_last_retry_at: now.toISOString(),
+              })
+              .eq('id', stale.id);
+            console.warn(`[S3 Upload Queue] Recording ${stale.id} permanently failed after ${retryCount} attempts`);
+          } else {
+            // Reset to pending for retry
+            await supabase
+              .from('recordings')
+              .update({
+                s3_upload_status: 'pending',
+                s3_upload_error_message: `Lambda processing timed out after ${STALE_PROCESSING_MINUTES} minutes, retrying`,
+                s3_upload_retry_count: retryCount,
+                s3_upload_last_retry_at: now.toISOString(),
+              })
+              .eq('id', stale.id);
+            console.log(`[S3 Upload Queue] Recording ${stale.id} reset to pending (attempt ${retryCount}/3)`);
+          }
+        }
+      }
+    }
+
     const totalCount = (pendingCount || 0) + (retryCount || 0);
 
     if (totalCount === 0) {
       console.log('[S3 Upload Queue] No pending uploads or retries found');
       return new Response(
-        JSON.stringify({ message: 'No pending uploads', processed: 0 }),
+        JSON.stringify({
+          message: 'No pending uploads',
+          processed: 0,
+          processing: processingCount || 0,
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -77,7 +141,11 @@ serve(async (req) => {
 
     if (!recordings || recordings.length === 0) {
       return new Response(
-        JSON.stringify({ message: 'No recordings to process', processed: 0 }),
+        JSON.stringify({
+          message: 'No recordings to process',
+          processed: 0,
+          processing: processingCount || 0,
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -176,6 +244,7 @@ serve(async (req) => {
         processed: recordings.length,
         success: successCount,
         failed: failureCount,
+        processing: processingCount || 0,
         results,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

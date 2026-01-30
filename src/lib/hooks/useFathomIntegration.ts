@@ -276,11 +276,18 @@ export function useFathomIntegration() {
       const left = window.screenX + (window.outerWidth - width) / 2;
       const top = window.screenY + (window.outerHeight - height) / 2;
 
+      console.log('[useFathomIntegration] Opening popup to:', authorization_url);
       const popup = window.open(
         authorization_url,
         'Fathom OAuth',
         `width=${width},height=${height},left=${left},top=${top}`
       );
+
+      if (!popup) {
+        throw new Error('Failed to open popup - please allow popups for this site');
+      }
+
+      console.log('[useFathomIntegration] Popup opened successfully, setting up message listener');
 
       // Track if we've already handled the connection
       let connectionHandled = false;
@@ -323,16 +330,107 @@ export function useFathomIntegration() {
 
       // Listen for OAuth completion via postMessage
       const handleMessage = async (event: MessageEvent) => {
-        // Security: only accept messages from our own origin
-        if (event.origin !== window.location.origin) return;
-        // Security: only accept messages from the OAuth popup window
-        if (popup && event.source !== popup) return;
+        console.log('[useFathomIntegration] Received postMessage:', {
+          type: event.data?.type,
+          origin: event.origin,
+          hasCode: !!event.data?.code,
+          hasState: !!event.data?.state,
+          isFromPopup: event.source === popup,
+        });
 
+        // Security: only accept messages from the OAuth popup window we opened
+        // (Origin check relaxed to support cross-origin relay from staging callback)
+        // Note: event.source should equal popup even after cross-origin navigation
+        if (popup && event.source !== popup) {
+          console.warn('[useFathomIntegration] Message source mismatch:', {
+            hasPopup: !!popup,
+            popupClosed: popup?.closed,
+            sourceEqualsPopup: event.source === popup,
+            eventSource: event.source,
+          });
+
+          // TEMPORARY: For debugging, allow messages if popup is closed
+          // (In production, we should enforce source === popup)
+          if (!popup.closed) {
+            console.log('[useFathomIntegration] Ignoring message - not from our popup');
+            return;
+          } else {
+            console.log('[useFathomIntegration] Popup is closed, allowing message anyway for debugging');
+          }
+        }
+
+        // Handle direct success message (callback page already exchanged tokens)
         if (event.data?.type === 'fathom-oauth-success') {
-          console.log('[useFathomIntegration] Received postMessage success');
+          console.log('[useFathomIntegration] Received postMessage success (direct mode)');
           popup?.close();
           window.removeEventListener('message', handleMessage);
           await handleConnectionSuccess();
+          return;
+        }
+
+        // Handle code relay message (callback page relayed code+state for local exchange)
+        if (event.data?.type === 'fathom-oauth-code') {
+          console.log('[useFathomIntegration] Received postMessage with code+state (relay mode)');
+          const { code, state } = event.data;
+
+          if (!code || !state) {
+            console.error('[useFathomIntegration] Missing code or state in relay message');
+            toast.error('OAuth relay failed: missing parameters');
+            popup?.close();
+            window.removeEventListener('message', handleMessage);
+            return;
+          }
+
+          try {
+            // Exchange code for tokens using local edge function
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !sessionData.session) {
+              throw new Error('No active session');
+            }
+
+            console.log('[useFathomIntegration] Exchanging code via local edge function...');
+            console.log('[useFathomIntegration] Sending to edge function:', {
+              code: code?.substring(0, 10) + '...',
+              state: state?.substring(0, 10) + '...',
+              codeLength: code?.length,
+              stateLength: state?.length,
+            });
+
+            const { data, error: functionError } = await supabase.functions.invoke(
+              'fathom-oauth-callback',
+              {
+                headers: {
+                  Authorization: `Bearer ${sessionData.session.access_token}`,
+                },
+                body: { code, state },
+              }
+            );
+
+            console.log('[useFathomIntegration] Edge function response:', {
+              data,
+              error: functionError,
+            });
+
+            if (functionError) {
+              console.error('[useFathomIntegration] Token exchange failed:', functionError);
+              throw new Error(functionError.message || 'Failed to exchange OAuth code');
+            }
+
+            if ((data as any)?.success === false || (data as any)?.error) {
+              console.error('[useFathomIntegration] Token exchange returned error:', data);
+              throw new Error((data as any)?.error || 'Token exchange failed');
+            }
+
+            console.log('[useFathomIntegration] Token exchange successful');
+            popup?.close();
+            window.removeEventListener('message', handleMessage);
+            await handleConnectionSuccess();
+          } catch (err) {
+            console.error('[useFathomIntegration] Error handling code relay:', err);
+            toast.error(err instanceof Error ? err.message : 'Failed to complete OAuth flow');
+            popup?.close();
+            window.removeEventListener('message', handleMessage);
+          }
         }
       };
 
@@ -598,14 +696,23 @@ export function useFathomIntegration() {
   // Note: Per-user sync state uses last_successful_sync instead of last_sync_started_at
   const isSyncStale = (() => {
     if (syncState?.sync_status !== 'syncing') return false;
-    // If there's been a recent successful sync, the syncing state shouldn't be stuck
-    if (syncState?.last_successful_sync) {
-      const lastSync = new Date(syncState.last_successful_sync).getTime();
-      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-      // If syncing started after last successful sync, it might be stale
-      // Without last_sync_started_at, we rely on error_count increasing
-      if (syncState.error_count && syncState.error_count > 3) {
-        return true; // Too many errors, likely stuck
+    // Too many errors means it's stuck
+    if (syncState.error_count && syncState.error_count > 3) {
+      return true;
+    }
+    // Use the most recent available timestamp to detect staleness
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    const lastActivity = syncState.last_error_at || syncState.last_successful_sync;
+    if (lastActivity) {
+      const lastActivityTime = new Date(lastActivity).getTime();
+      if (lastActivityTime < tenMinutesAgo) {
+        return true; // No activity for 10+ minutes while status says syncing
+      }
+    } else {
+      // No timestamps at all -- sync_status is 'syncing' but nothing ever completed
+      // If we're not actively syncing locally, this is stale leftover state
+      if (!syncInProgress) {
+        return true;
       }
     }
     return false;

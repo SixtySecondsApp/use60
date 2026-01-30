@@ -67,7 +67,7 @@ import { useTaskNotifications } from '@/lib/hooks/useTaskNotifications';
 import { SmartSearch } from '@/components/SmartSearch';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { useNavigate } from 'react-router-dom';
-import { AssistantOverlay } from '@/components/assistant/AssistantOverlay';
+import { CommandCenter } from '@/components/command-center';
 // MeetingUsageIndicator moved to MeetingsList page
 import {
   DropdownMenu,
@@ -134,7 +134,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, toggleMobileMenu] = useCycle(false, true);
   const [hasMounted, setHasMounted] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
-  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
   const navigate = useNavigate();
   const { openCopilot } = useCopilot();
@@ -369,7 +369,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           type="button"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => setIsAssistantOpen(true)}
+          onClick={() => setIsCommandCenterOpen(true)}
           className="fixed bottom-6 right-6 p-4 rounded-full bg-[#37bd7e] hover:bg-[#2da76c] transition-colors shadow-lg shadow-[#37bd7e]/20 z-50"
         >
           <Plus className="w-6 h-6 text-white" />
@@ -959,7 +959,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       >
         {children}
         <QuickAdd isOpen={isQuickAddOpen} onClose={() => setIsQuickAddOpen(false)} />
-        <AssistantOverlay isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
+        <CommandCenter isOpen={isCommandCenterOpen} onClose={() => setIsCommandCenterOpen(false)} />
 
         {/* Password Setup Modal - shown for magic link users who haven't set a password */}
         <PasswordSetupModal
