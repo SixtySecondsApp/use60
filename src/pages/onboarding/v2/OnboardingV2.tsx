@@ -16,9 +16,10 @@
 import { useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { useOnboardingV2Store, type OnboardingV2Step } from '@/lib/stores/onboardingV2Store';
+import { useOnboardingV2Store, type OnboardingV2Step, restoreOnboardingState } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { toast } from 'sonner';
 import { WebsiteInputStep } from './WebsiteInputStep';
 import { ManualEnrichmentStep } from './ManualEnrichmentStep';
 import { OrganizationSelectionStep } from './OrganizationSelectionStep';
@@ -76,6 +77,20 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
   // 1. New users signing up won't have membership until after onboarding
   // 2. localStorage is already cleared in SetPassword to prevent cached org bypass
   // 3. This validation was breaking the onboarding flow by clearing valid organizationIds
+
+  // Restore state from localStorage on mount (session recovery)
+  useEffect(() => {
+    if (!user) return;
+
+    const restoredState = restoreOnboardingState(user.id);
+    if (restoredState) {
+      console.log('[OnboardingV2] Restored state from localStorage:', restoredState);
+      if (restoredState.currentStep) setStep(restoredState.currentStep);
+      if (restoredState.domain) setDomain(restoredState.domain);
+      if (restoredState.organizationId) setOrganizationId(restoredState.organizationId);
+      toast.info('Restored your progress');
+    }
+  }, [user]);
 
   // Read step from database on mount for resumption after logout
   useEffect(() => {
