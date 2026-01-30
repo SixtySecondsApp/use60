@@ -13,6 +13,70 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { Target, Database, MessageSquare, GitBranch, UserCheck, LucideIcon } from 'lucide-react';
 
 // ============================================================================
+// LocalStorage Persistence
+// ============================================================================
+
+const STORAGE_KEY_PREFIX = 'sixty_onboarding_';
+
+/**
+ * Save onboarding state to localStorage for session recovery
+ */
+export function persistOnboardingState(userId: string, state: Partial<OnboardingV2State>) {
+  try {
+    const key = `${STORAGE_KEY_PREFIX}${userId}`;
+    // Only persist safe, non-sensitive data
+    const persistData = {
+      currentStep: state.currentStep,
+      domain: state.domain,
+      website: state.website,
+      manualEnrichmentData: state.manualEnrichmentData,
+      organizationId: state.organizationId,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(key, JSON.stringify(persistData));
+  } catch (error) {
+    console.warn('Failed to persist onboarding state:', error);
+  }
+}
+
+/**
+ * Restore onboarding state from localStorage
+ */
+export function restoreOnboardingState(userId: string): Partial<OnboardingV2State> | null {
+  try {
+    const key = `${STORAGE_KEY_PREFIX}${userId}`;
+    const stored = localStorage.getItem(key);
+    if (!stored) return null;
+
+    const parsed = JSON.parse(stored);
+    // Check if state is recent (within 24 hours)
+    const savedAt = new Date(parsed.savedAt);
+    const ageHours = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60);
+    if (ageHours > 24) {
+      localStorage.removeItem(key);
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.warn('Failed to restore onboarding state:', error);
+    return null;
+  }
+}
+
+/**
+ * Clear persisted onboarding state
+ */
+export function clearOnboardingState(userId: string) {
+  try {
+    const key = `${STORAGE_KEY_PREFIX}${userId}`;
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.warn('Failed to clear onboarding state:', error);
+  }
+}
+
+// ============================================================================
 // Constants
 // ============================================================================
 

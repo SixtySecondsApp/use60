@@ -457,6 +457,25 @@ export function useUsers() {
     }
   };
 
+  const resendInvitation = async (userId: string, emailParams: any) => {
+    try {
+      logger.log('Resending invitation email for user:', userId);
+
+      const emailResult = await supabase.functions.invoke('encharge-send-email', {
+        body: emailParams,
+      });
+
+      if (emailResult.error) {
+        throw emailResult.error;
+      }
+
+      toast.success('Invitation email resent successfully');
+    } catch (error: any) {
+      logger.error('Resend email error:', error);
+      toast.error('Failed to resend invitation: ' + (error.message || 'Unknown error'));
+    }
+  };
+
   const inviteUser = async (email: string, firstName?: string, lastName?: string) => {
     try {
       // Trim and normalize names
@@ -493,26 +512,23 @@ export function useUsers() {
         throw new Error(data.error);
       }
 
-      // Send welcome email via edge function (frontend can authenticate successfully)
-      if (data.emailParams) {
-        try {
-          const emailResult = await supabase.functions.invoke('encharge-send-email', {
-            body: data.emailParams,
-          });
-
-          if (emailResult.error) {
-            logger.error('Failed to send welcome email:', emailResult.error);
-            toast.warning(`User created, but failed to send welcome email to ${email}`);
-            return;
+      // Check email delivery status from API
+      if (data.emailSent) {
+        toast.success(`Invitation sent to ${email}`);
+      } else {
+        // Email failed - show warning with resend option
+        logger.error('Email delivery failed:', data.emailError);
+        toast.warning(`User created, but email failed to send to ${email}. Click 'Resend' to try again.`, {
+          duration: 10000,
+          action: {
+            label: 'Resend',
+            onClick: () => resendInvitation(data.userId, data.emailParams)
           }
-        } catch (emailError) {
-          logger.error('Failed to send welcome email:', emailError);
-          toast.warning(`User created, but failed to send welcome email to ${email}`);
-          return;
-        }
+        });
       }
 
-      toast.success(`Invitation sent to ${email}`);
+      // Refresh user list
+      await fetchUsers();
     } catch (error: any) {
       logger.error('Invite error:', error);
       toast.error('Failed to invite user: ' + error.message);
@@ -527,5 +543,6 @@ export function useUsers() {
     deleteUser,
     impersonateUser,
     inviteUser,
+    resendInvitation,
   };
 }
