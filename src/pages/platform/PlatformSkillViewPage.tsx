@@ -1,8 +1,13 @@
 /**
  * PlatformSkillViewPage
  *
- * Full-page view for previewing and testing a platform skill.
+ * Full-page view for previewing, testing, and editing a platform skill.
  * URL: /platform/skills/:category/:skillKey
+ *
+ * Features:
+ * - Preview tab: View compiled skill content
+ * - Test tab: Test skill with sample inputs
+ * - Folders tab: Edit skill with folder structure (SkillDetailView)
  */
 
 import { useState } from 'react';
@@ -23,6 +28,7 @@ import {
   ToggleLeft,
   ToggleRight,
   RefreshCw,
+  FolderTree,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -36,14 +42,16 @@ import {
 } from '@/lib/hooks/usePlatformSkills';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { supabase } from '@/lib/supabase/clientV2';
+import { SkillDetailView } from '@/components/platform/SkillDetailView';
 
-const CATEGORY_ICONS: Record<SkillCategory, React.ElementType> = {
+const CATEGORY_ICONS: Record<SkillCategory | 'agent-sequence', React.ElementType> = {
   'sales-ai': Sparkles,
   writing: FileText,
   enrichment: Database,
   workflows: Workflow,
   'data-access': Server,
   'output-format': LayoutTemplate,
+  'agent-sequence': Workflow,
 };
 
 const CATEGORY_COLORS: Record<SkillCategory, string> = {
@@ -74,7 +82,7 @@ export default function PlatformSkillViewPage() {
   const { category, skillKey } = useParams<{ category: string; skillKey: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'preview' | 'test'>('preview');
+  const [activeTab, setActiveTab] = useState<'preview' | 'test' | 'folders'>('preview');
 
   const operations = usePlatformSkillOperations(user?.id || '');
 
@@ -247,27 +255,49 @@ export default function PlatformSkillViewPage() {
                 <Play className="w-4 h-4" />
                 Test
               </button>
+              <button
+                onClick={() => setActiveTab('folders')}
+                className={cn(
+                  'px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2',
+                  activeTab === 'folders'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                )}
+              >
+                <FolderTree className="w-4 h-4" />
+                Folders
+              </button>
             </div>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-6 py-6">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="min-h-[600px]"
-        >
-          {activeTab === 'preview' ? (
-            <SkillPreview skill={skill} />
-          ) : (
-            <SkillTestConsole skillKey={skill.skill_key} />
-          )}
-        </motion.div>
-      </div>
+      {activeTab === 'folders' ? (
+        // Full-height folders view with split pane
+        <div className="flex-1 h-[calc(100vh-260px)]">
+          <SkillDetailView
+            skillId={skill.id}
+            onBack={() => setActiveTab('preview')}
+          />
+        </div>
+      ) : (
+        <div className="max-w-6xl mx-auto px-6 py-6">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="min-h-[600px]"
+          >
+            {activeTab === 'preview' ? (
+              <SkillPreview skill={skill} />
+            ) : (
+              <SkillTestConsole skillKey={skill.skill_key} />
+            )}
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
