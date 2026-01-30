@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "framework": "vite",
+  "outputDirectory": "dist",
   "headers": [
     {
       "source": "/api/(.*)",

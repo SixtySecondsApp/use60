@@ -1,0 +1,705 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "environment": "staging",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "email": "aws-ses",
+      "deployment": "vercel"
+    },
+    "createdAt": "2025-01-30T10:00:00Z"
+  },
+  "features": [
+    {
+      "id": "onboard-fix",
+      "name": "Onboarding & User Management Production Hardening",
+      "status": "in_progress",
+      "priority": "critical",
+      "consultReport": ".sixty/consult/onboarding-production-ready.md",
+      "createdAt": "2025-01-30T10:00:00Z",
+      "requirements": {
+        "emailProvider": "AWS SES",
+        "approvalTimeline": "24 hours",
+        "rejectionUX": "automatic email notification",
+        "duplicateOrgPolicy": "require admin approval"
+      }
+    }
+  ],
+  "stories": [
+    {
+      "id": "ONBOARD-001",
+      "feature": "onboard-fix",
+      "title": "Deploy 404 fix to staging Vercel",
+      "type": "deployment",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["vercel.json"],
+        "schema": []
+      },
+      "blocks": ["ONBOARD-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "vercel.json deployed to staging",
+        "/api/admin/invite-user returns 200 (not 404)",
+        "Other API routes still functional",
+        "Cron jobs still running"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "vercel.json"
+      ],
+      "implementation": {
+        "steps": [
+          "Commit vercel.json change",
+          "Push to staging branch",
+          "Wait for Vercel deployment",
+          "Test /api/admin/invite-user with curl or Postman"
+        ]
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-002",
+      "feature": "onboard-fix",
+      "title": "Add email_status tracking to invitations table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["ONBOARD-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["ONBOARD-003", "ONBOARD-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration adds email_status enum column (pending, sent, failed, bounced)",
+        "Migration adds email_sent_at timestamp column",
+        "Migration adds email_error text column",
+        "Migration adds resend_count integer column (default 0)",
+        "All existing invitations default to 'sent' status"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_add_email_tracking_to_invitations.sql"
+      ],
+      "implementation": {
+        "sql": "ALTER TABLE organization_invitations ADD COLUMN email_status text CHECK (email_status IN ('pending', 'sent', 'failed', 'bounced')) DEFAULT 'pending';\nALTER TABLE organization_invitations ADD COLUMN email_sent_at timestamptz;\nALTER TABLE organization_invitations ADD COLUMN email_error text;\nALTER TABLE organization_invitations ADD COLUMN resend_count integer DEFAULT 0;\n-- Update existing rows\nUPDATE organization_invitations SET email_status = 'sent' WHERE email_sent_at IS NULL;"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-003",
+      "feature": "onboard-fix",
+      "title": "Add AWS SES error handling to invite-user API",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["ONBOARD-002"],
+        "files": ["api/admin/invite-user.ts"],
+        "schema": ["organization_invitations"]
+      },
+      "blocks": ["ONBOARD-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Catches AWS SES errors when sending email",
+        "Updates invitation email_status to 'failed' on error",
+        "Stores error message in email_error column",
+        "Returns email status in response payload",
+        "Logs detailed error for debugging"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "api/admin/invite-user.ts"
+      ],
+      "implementation": {
+        "changes": [
+          "Wrap email sending in try-catch",
+          "Check SES response for bounce/complaint",
+          "Update invitation record with status",
+          "Return { emailSent: boolean, emailError?: string } in response"
+        ]
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-004",
+      "feature": "onboard-fix",
+      "title": "Add email retry logic and resend UI to useUsers hook",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["ONBOARD-003"],
+        "files": ["src/lib/hooks/useUsers.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Shows 'Email sent successfully' toast when emailSent: true",
+        "Shows 'User created but email failed' warning toast when emailSent: false",
+        "Warning toast includes 'Resend Email' button",
+        "Resend button calls resendInvitation() function",
+        "resendInvitation increments resend_count and retries email",
+        "Maximum 3 resend attempts enforced"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/hooks/useUsers.ts"
+      ],
+      "implementation": {
+        "changes": [
+          "Check response.emailSent in inviteUser()",
+          "Show appropriate toast based on status",
+          "Add resendInvitation(invitationId) function",
+          "Call /api/admin/resend-invitation endpoint",
+          "Update admin UI to show email status"
+        ]
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-005",
+      "feature": "onboard-fix",
+      "title": "Create expired invitations cleanup migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["ONBOARD-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["ONBOARD-006"],
+      "parallelWith": ["ONBOARD-002"],
+      "acceptance": [
+        "Migration marks invitations >7 days old as 'expired' status",
+        "Adds status column if not exists (pending, accepted, expired, cancelled)",
+        "Only affects invitations with accepted_at = NULL",
+        "Does not delete data (soft expire)",
+        "Creates index on (status, created_at) for performance"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_expire_old_invitations.sql"
+      ],
+      "implementation": {
+        "sql": "-- Add status if not exists\nALTER TABLE organization_invitations ADD COLUMN IF NOT EXISTS status text CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')) DEFAULT 'pending';\n-- Expire old invitations\nUPDATE organization_invitations \nSET status = 'expired' \nWHERE accepted_at IS NULL \n  AND created_at < NOW() - INTERVAL '7 days' \n  AND status = 'pending';\n-- Add index\nCREATE INDEX IF NOT EXISTS idx_invitations_status_created ON organization_invitations(status, created_at);"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-006",
+      "feature": "onboard-fix",
+      "title": "Create cleanup-expired-invitations edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["ONBOARD-005"],
+        "files": [],
+        "schema": ["organization_invitations"]
+      },
+      "blocks": ["ONBOARD-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function at supabase/functions/cleanup-expired-invitations/",
+        "Marks invitations >7 days old as 'expired'",
+        "Returns count of expired invitations",
+        "Includes CRON_SECRET validation",
+        "Logs summary to console"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/cleanup-expired-invitations/index.ts"
+      ],
+      "implementation": {
+        "template": "Copy pattern from existing cron functions",
+        "logic": "UPDATE organization_invitations SET status = 'expired' WHERE accepted_at IS NULL AND created_at < NOW() - INTERVAL '7 days' AND status = 'pending' RETURNING id"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-007",
+      "feature": "onboard-fix",
+      "title": "Schedule daily cleanup cron in vercel.json",
+      "type": "config",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["ONBOARD-006"],
+        "files": ["vercel.json"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Added to vercel.json crons array",
+        "Runs at 3 AM daily (0 3 * * *)",
+        "Path: /api/cron/cleanup-expired-invitations",
+        "Deployed to staging and verified in Vercel dashboard"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "vercel.json"
+      ],
+      "implementation": {
+        "config": "{\n  \"path\": \"/api/cron/cleanup-expired-invitations\",\n  \"schedule\": \"0 3 * * *\"\n}"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-008",
+      "feature": "onboard-fix",
+      "title": "Add processing flag to organization_join_requests table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["ONBOARD-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["ONBOARD-009"],
+      "parallelWith": ["ONBOARD-002", "ONBOARD-005"],
+      "acceptance": [
+        "Migration adds is_processing boolean column (default false)",
+        "Migration adds processing_started_at timestamptz column",
+        "Creates partial index for active processing rows",
+        "All existing rows default to false"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_add_processing_flag_to_join_requests.sql"
+      ],
+      "implementation": {
+        "sql": "ALTER TABLE organization_join_requests ADD COLUMN is_processing boolean DEFAULT false;\nALTER TABLE organization_join_requests ADD COLUMN processing_started_at timestamptz;\nCREATE INDEX idx_join_requests_processing ON organization_join_requests(id) WHERE is_processing = true;"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-009",
+      "feature": "onboard-fix",
+      "title": "Update accept_join_request RPC with atomic processing check",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": {
+        "stories": ["ONBOARD-008"],
+        "files": [],
+        "schema": ["organization_join_requests"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "RPC atomically checks is_processing = false AND sets to true in single query",
+        "Returns error if already processing (concurrent request)",
+        "Sets processing_started_at timestamp",
+        "Resets is_processing to false on completion or error",
+        "Includes timeout protection (auto-reset after 5 minutes)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_update_accept_join_request_rpc.sql"
+      ],
+      "implementation": {
+        "pattern": "UPDATE organization_join_requests SET is_processing = true, processing_started_at = NOW() WHERE id = request_id AND is_processing = false RETURNING id",
+        "errorHandling": "IF NOT FOUND THEN RAISE EXCEPTION 'Request is already being processed or does not exist'"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-010",
+      "feature": "onboard-fix",
+      "title": "Add onboarding state persistence to localStorage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": {
+        "stories": ["ONBOARD-001"],
+        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "schema": []
+      },
+      "blocks": ["ONBOARD-011"],
+      "parallelWith": ["ONBOARD-003", "ONBOARD-006", "ONBOARD-009"],
+      "acceptance": [
+        "Saves onboarding state to localStorage on every step change",
+        "Key format: sixty_onboarding_{userId}",
+        "Stores: currentStep, domain, website, enrichment, skillConfigs",
+        "Does NOT store sensitive data (passwords, tokens)",
+        "Clears localStorage on onboarding completion"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts"
+      ],
+      "implementation": {
+        "changes": [
+          "Add persistToLocalStorage() helper function",
+          "Call after setCurrentStep(), setDomain(), etc.",
+          "Add clearLocalStorage() on completion",
+          "Handle JSON parse errors gracefully"
+        ]
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-011",
+      "feature": "onboard-fix",
+      "title": "Add state restoration on onboarding mount",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": {
+        "stories": ["ONBOARD-010"],
+        "files": ["src/pages/onboarding/v2/OnboardingV2.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "useEffect on mount checks for saved state in localStorage",
+        "Validates session is still active before restoring",
+        "Restores state to Zustand store if valid",
+        "Shows toast: 'Restored your progress' if restored",
+        "Clears stale state if session expired"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/OnboardingV2.tsx"
+      ],
+      "implementation": {
+        "logic": "const savedState = localStorage.getItem(`sixty_onboarding_${userId}`);\nif (savedState && session) {\n  const parsed = JSON.parse(savedState);\n  onboardingStore.restore(parsed);\n  toast.info('Restored your progress');\n}"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-012",
+      "feature": "onboard-fix",
+      "title": "Create AWS SES rejection email template",
+      "type": "backend",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": {
+        "stories": ["ONBOARD-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["ONBOARD-013"],
+      "parallelWith": ["ONBOARD-010"],
+      "acceptance": [
+        "HTML email template for join request rejection",
+        "Includes: organization name, rejection reason, support link",
+        "Suggests trying different organization",
+        "Professional tone matching brand",
+        "Template saved in supabase/functions/_shared/email-templates/"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/email-templates/rejection-notification.html"
+      ],
+      "implementation": {
+        "variables": ["organizationName", "rejectionReason", "userFirstName", "supportEmail"]
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-013",
+      "feature": "onboard-fix",
+      "title": "Add rejection email sending to reject_join_request RPC",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": {
+        "stories": ["ONBOARD-012"],
+        "files": [],
+        "schema": ["organization_join_requests"]
+      },
+      "blocks": ["ONBOARD-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "RPC calls encharge-send-email edge function on rejection",
+        "Uses rejection template from ONBOARD-012",
+        "Passes organization name and rejection reason",
+        "Non-blocking - continues if email fails",
+        "Logs email sending status"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_update_reject_join_request_email.sql",
+        "supabase/functions/encharge-send-email/index.ts"
+      ],
+      "implementation": {
+        "changes": [
+          "Add template_type: 'rejection' to encharge-send-email",
+          "Fetch user email and name from join request",
+          "Send email after marking request as rejected"
+        ]
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-014",
+      "feature": "onboard-fix",
+      "title": "Add rejection polling to PendingApprovalStep",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": {
+        "stories": ["ONBOARD-013"],
+        "files": ["src/pages/onboarding/v2/PendingApprovalStep.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "useEffect polls join request status every 10 seconds",
+        "Detects when status changes to 'rejected'",
+        "Shows rejection message with reason in UI",
+        "Displays 'Try Different Organization' button",
+        "Button redirects to /onboarding?step=website_input",
+        "Stops polling after rejection detected"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+      ],
+      "implementation": {
+        "polling": "useInterval(() => checkJoinRequestStatus(), 10000)",
+        "ui": "Show alert with rejection reason and action button"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-015",
+      "feature": "onboard-fix",
+      "title": "Add similar_to_org_id and pending_approval to organizations table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": {
+        "stories": ["ONBOARD-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["ONBOARD-016"],
+      "parallelWith": ["ONBOARD-008", "ONBOARD-012"],
+      "acceptance": [
+        "Migration adds similar_to_org_id UUID column (nullable, FK to organizations)",
+        "Migration adds requires_admin_approval boolean (default false)",
+        "Migration adds approval_status enum (pending, approved, rejected)",
+        "Migration adds approved_by UUID column (FK to profiles)",
+        "Creates index on approval_status for filtering"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_add_org_approval_fields.sql"
+      ],
+      "implementation": {
+        "sql": "ALTER TABLE organizations ADD COLUMN similar_to_org_id uuid REFERENCES organizations(id);\nALTER TABLE organizations ADD COLUMN requires_admin_approval boolean DEFAULT false;\nALTER TABLE organizations ADD COLUMN approval_status text CHECK (approval_status IN ('pending', 'approved', 'rejected'));\nALTER TABLE organizations ADD COLUMN approved_by uuid REFERENCES profiles(id);\nCREATE INDEX idx_orgs_approval_status ON organizations(approval_status) WHERE requires_admin_approval = true;"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-016",
+      "feature": "onboard-fix",
+      "title": "Update createOrganizationFromManualData to require approval for similar orgs",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": {
+        "stories": ["ONBOARD-015"],
+        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "schema": ["organizations"]
+      },
+      "blocks": ["ONBOARD-017"],
+      "parallelWith": [],
+      "acceptance": [
+        "When similar org found (similarity > 0.7), sets requires_admin_approval: true",
+        "Sets similar_to_org_id to matched organization ID",
+        "Sets approval_status to 'pending'",
+        "Creates organization in pending state",
+        "Shows user 'Pending admin review' message"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts"
+      ],
+      "implementation": {
+        "changes": [
+          "Add check after fuzzy org search",
+          "If match found, set approval fields",
+          "Show different UI for pending approval state"
+        ]
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-017",
+      "feature": "onboard-fix",
+      "title": "Create org approval notification email",
+      "type": "backend",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": {
+        "stories": ["ONBOARD-016"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Email template for notifying org admin of new org creation",
+        "Includes: new org name, similar org name, user details",
+        "Link to admin dashboard to approve/reject",
+        "Template saved in email-templates folder",
+        "Sent when org created with requires_admin_approval: true"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/email-templates/org-approval-request.html",
+        "src/lib/stores/onboardingV2Store.ts"
+      ],
+      "implementation": {
+        "trigger": "After organization insert, call encharge-send-email with template_type: 'org_approval'"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-018",
+      "feature": "onboard-fix",
+      "title": "Create invite_attempts tracking table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": {
+        "stories": ["ONBOARD-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["ONBOARD-019"],
+      "parallelWith": ["ONBOARD-015"],
+      "acceptance": [
+        "Table: invite_attempts (id, admin_id, invited_email, organization_id, attempted_at)",
+        "Creates index on (admin_id, attempted_at) for rate limiting queries",
+        "Creates index on (organization_id, attempted_at) for domain limits",
+        "Includes foreign keys to profiles and organizations"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_create_invite_attempts_table.sql"
+      ],
+      "implementation": {
+        "sql": "CREATE TABLE invite_attempts (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  admin_id uuid REFERENCES profiles(id) NOT NULL,\n  invited_email text NOT NULL,\n  organization_id uuid REFERENCES organizations(id),\n  attempted_at timestamptz DEFAULT NOW(),\n  success boolean DEFAULT false\n);\nCREATE INDEX idx_invite_attempts_admin ON invite_attempts(admin_id, attempted_at);\nCREATE INDEX idx_invite_attempts_org ON invite_attempts(organization_id, attempted_at);"
+      },
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ONBOARD-019",
+      "feature": "onboard-fix",
+      "title": "Add rate limiting to invite-user API",
+      "type": "backend",
+      "status": "pending",
+      "priority": 19,
+      "dependencies": {
+        "stories": ["ONBOARD-018"],
+        "files": ["api/admin/invite-user.ts"],
+        "schema": ["invite_attempts"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Checks invite_attempts for admin in last 24 hours",
+        "Returns 429 error if >10 invites per admin per day",
+        "Checks invite_attempts for organization in last 24 hours",
+        "Returns 429 error if >50 invites per org per day",
+        "Error message shows limit and reset time",
+        "Logs rate limit violations"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "api/admin/invite-user.ts"
+      ],
+      "implementation": {
+        "queries": [
+          "SELECT COUNT(*) FROM invite_attempts WHERE admin_id = $1 AND attempted_at > NOW() - INTERVAL '24 hours'",
+          "SELECT COUNT(*) FROM invite_attempts WHERE organization_id = $2 AND attempted_at > NOW() - INTERVAL '24 hours'"
+        ],
+        "errorResponse": "{ error: 'Rate limit exceeded. You can send 10 more invitations in 8 hours.' }"
+      },
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "execution": {
+    "totalStories": 19,
+    "completedStories": 0,
+    "currentFeature": "onboard-fix",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["ONBOARD-002", "ONBOARD-005", "ONBOARD-008"],
+        "reason": "Independent schema migrations, no conflicts",
+        "timeSaved": "30 minutes"
+      },
+      {
+        "group": 2,
+        "stories": ["ONBOARD-003", "ONBOARD-006", "ONBOARD-009", "ONBOARD-010"],
+        "reason": "Different files, all depend on ONBOARD-001 completion",
+        "timeSaved": "45 minutes"
+      },
+      {
+        "group": 3,
+        "stories": ["ONBOARD-012", "ONBOARD-015", "ONBOARD-018"],
+        "reason": "Independent schema + template work",
+        "timeSaved": "20 minutes"
+      }
+    ],
+    "estimatedTotalMinutes": 400,
+    "estimatedWithParallel": 305,
+    "lastUpdated": "2025-01-30T10:00:00Z"
+  }
+}
