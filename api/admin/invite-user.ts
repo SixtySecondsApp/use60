@@ -178,15 +178,62 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Return user info and action link - let frontend send the email
-    // (Frontend can successfully call the edge function with user JWT)
+    // 5) Send welcome email via edge function
+    let emailSent = false;
+    let emailError = null;
+
+    try {
+      const emailResp = await fetch(`${supabaseUrl}/functions/v1/encharge-send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
+        },
+        body: JSON.stringify({
+          template_type: 'welcome',
+          to_email: normalizedEmail,
+          to_name: firstName || normalizedEmail.split('@')[0],
+          user_id: newUserId,
+          variables: {
+            first_name: firstName || normalizedEmail.split('@')[0],
+            last_name: lastName || '',
+            action_url: actionLink,
+            invitation_link: actionLink,
+          },
+        }),
+      });
+
+      if (!emailResp.ok) {
+        const errorText = await emailResp.text().catch(() => '');
+        emailError = `Email service returned ${emailResp.status}: ${errorText}`;
+        console.error('[invite-user] Email sending failed:', emailError);
+      } else {
+        emailSent = true;
+        console.log('[invite-user] Welcome email sent successfully to:', normalizedEmail);
+      }
+    } catch (emailErr: any) {
+      emailError = emailErr?.message || 'Email sending exception';
+      console.error('[invite-user] Email sending error:', emailError);
+    }
+
+    // 6) Update invitation record with email status (if invitation was created)
+    // Note: This API creates auth users directly, not invitations
+    // Email tracking is for the audit trail only
+    if (!emailSent && emailError) {
+      console.warn('[invite-user] User created but email failed:', emailError);
+    }
+
+    // Return user info and email status
     return res.status(200).json({
       success: true,
       userId: newUserId,
       email: normalizedEmail,
       firstName: firstName || normalizedEmail.split('@')[0],
       actionLink: actionLink,
-      // Include email params so frontend can send it
+      emailSent,
+      emailError,
+      // Still include emailParams for frontend fallback/resend
       emailParams: {
         template_type: 'welcome',
         to_email: normalizedEmail,
