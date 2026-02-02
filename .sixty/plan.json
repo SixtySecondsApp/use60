@@ -488,7 +488,7 @@
       "feature": "onboard-fix",
       "title": "Create AWS SES rejection email template",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 12,
       "dependencies": {
         "stories": [
@@ -511,7 +511,7 @@
         "Template saved in supabase/functions/_shared/email-templates/"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 20,
       "files": [
         "supabase/functions/_shared/email-templates/rejection-notification.html"
       ],
@@ -523,8 +523,8 @@
           "supportEmail"
         ]
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-01-30T10:00:00Z",
+      "completedAt": "2026-01-30T10:20:00Z"
     },
     {
       "id": "ONBOARD-013",
@@ -2011,7 +2011,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 20,
+    "completedStories": 21,
     "currentFeature": "pending-approval-flow",
     "parallelGroups": [
       {
