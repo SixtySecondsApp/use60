@@ -35,6 +35,7 @@ export default function Profile() {
   const [showGoodbyeScreen, setShowGoodbyeScreen] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
+  const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,10 +79,16 @@ export default function Profile() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    const updates = {
+    const updates: any = {
       first_name: formData.firstName,
       last_name: formData.lastName
     };
+
+    // Include avatar URL if it was changed
+    if (pendingAvatarUrl !== null) {
+      updates.avatar_url = pendingAvatarUrl;
+      updates.updated_at = new Date().toISOString();
+    }
 
     try {
       // Update auth user metadata (email is not editable)
@@ -95,14 +102,17 @@ export default function Profile() {
       if (user?.id) {
         const { error: profileError } = await supabase
           .from('profiles')
-          .update({
-            first_name: formData.firstName,
-            last_name: formData.lastName
-          })
+          .update(updates)
           .eq('id', user.id);
 
         if (profileError) throw profileError;
       }
+
+      // Clear pending avatar once saved
+      setPendingAvatarUrl(null);
+
+      // Invalidate cache so changes show globally
+      queryClient.invalidateQueries({ queryKey: ['user'] });
 
       toast.success('Profile updated successfully');
     } catch (error: any) {
@@ -225,24 +235,10 @@ export default function Profile() {
 
       logger.log('[Profile] File uploaded, URL:', publicUrl);
 
-      // Update user profile with new avatar URL
-      if (user?.id) {
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
-          .eq('id', user.id);
-
-        if (updateError) {
-          logger.error('[Profile] Profile update error:', updateError);
-          throw updateError;
-        }
-      }
-
-      // Invalidate cache so new avatar shows immediately
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-
-      toast.success('Profile picture updated successfully');
-      logger.log('[Profile] Avatar upload completed successfully');
+      // Store the URL in local state for preview - don't save to database yet
+      setPendingAvatarUrl(publicUrl);
+      toast.success('Profile picture preview updated. Click "Save Changes" to confirm.');
+      logger.log('[Profile] Avatar preview set, waiting for save');
     } catch (error: any) {
       logger.error('[Profile] Avatar upload failed:', error);
       toast.error(error.message || 'Failed to upload image. Please try again.');
@@ -253,32 +249,11 @@ export default function Profile() {
     }
   };
 
-  const handleRemoveAvatar = async () => {
-    setUploading(true);
-    try {
-      if (user?.id) {
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ avatar_url: null, updated_at: new Date().toISOString() })
-          .eq('id', user.id);
-
-        if (updateError) {
-          logger.error('[Profile] Profile update error:', updateError);
-          throw updateError;
-        }
-      }
-
-      // Invalidate cache so avatar change shows immediately
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-
-      toast.success('Profile picture removed');
-      logger.log('[Profile] Avatar removed successfully');
-    } catch (error: any) {
-      logger.error('[Profile] Avatar removal failed:', error);
-      toast.error(error.message || 'Failed to remove profile picture. Please try again.');
-    } finally {
-      setUploading(false);
-    }
+  const handleRemoveAvatar = () => {
+    // Set pending avatar to empty string to indicate removal (different from null which means no change)
+    setPendingAvatarUrl('');
+    toast.success('Profile picture will be removed. Click "Save Changes" to confirm.');
+    logger.log('[Profile] Avatar removal queued, waiting for save');
   };
 
   // Show loading state while user data is loading
@@ -310,7 +285,13 @@ export default function Profile() {
             <div className="flex flex-col items-center gap-4">
               <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}>
                 <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#37bd7e]/20 border-2 border-[#37bd7e]/30 group-hover:border-[#37bd7e]/50 transition-all duration-300">
-                  {(userData?.avatar_url || userProfile?.avatar_url) ? (
+                  {pendingAvatarUrl !== null && pendingAvatarUrl !== '' ? (
+                    <img
+                      src={pendingAvatarUrl}
+                      alt="Profile"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (userData?.avatar_url || userProfile?.avatar_url) && pendingAvatarUrl === null ? (
                     <img
                       src={userData?.avatar_url || userProfile?.avatar_url}
                       alt="Profile"
@@ -350,7 +331,7 @@ export default function Profile() {
                 >
                   {uploading ? 'Uploading...' : 'Change Picture'}
                 </label>
-                {(userData?.avatar_url || userProfile?.avatar_url) && (
+                {(pendingAvatarUrl !== null && pendingAvatarUrl !== '') || (userData?.avatar_url || userProfile?.avatar_url) ? (
                   <button
                     type="button"
                     onClick={handleRemoveAvatar}
@@ -362,7 +343,7 @@ export default function Profile() {
                     <Trash2 className="w-4 h-4" />
                     Remove Picture
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
 
