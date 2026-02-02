@@ -28,8 +28,10 @@ export function persistOnboardingState(userId: string, state: Partial<Onboarding
     const persistData = {
       currentStep: state.currentStep,
       domain: state.domain,
-      website: state.website,
-      manualEnrichmentData: state.manualEnrichmentData,
+      websiteUrl: state.websiteUrl,
+      manualData: state.manualData,
+      enrichment: state.enrichment,
+      skillConfigs: state.skillConfigs,
       organizationId: state.organizationId,
       savedAt: new Date().toISOString(),
     };
@@ -442,7 +444,14 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
   // Context setters
   setOrganizationId: (id) => set({ organizationId: id }),
-  setDomain: (domain) => set({ domain }),
+  setDomain: (domain) => {
+    set({ domain });
+    // Persist state after domain change
+    const { userEmail } = get();
+    if (userEmail) {
+      persistOnboardingState(userEmail, get());
+    }
+  },
   setUserEmail: (email) => {
     const isPersonal = isPersonalEmailDomain(email);
     set({
@@ -451,14 +460,32 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // If personal email, start at website_input step
       currentStep: isPersonal ? 'website_input' : 'enrichment_loading',
     });
+    // Persist state after email is set
+    if (email) {
+      persistOnboardingState(email, get());
+    }
   },
 
   // Step management
-  setStep: (step) => set({ currentStep: step }),
+  setStep: (step) => {
+    set({ currentStep: step });
+    // Persist state after step change
+    const { userEmail } = get();
+    if (userEmail) {
+      persistOnboardingState(userEmail, get());
+    }
+  },
   setCurrentSkillIndex: (index) => set({ currentSkillIndex: index }),
 
   // Website input actions
-  setWebsiteUrl: (url) => set({ websiteUrl: url }),
+  setWebsiteUrl: (url) => {
+    set({ websiteUrl: url });
+    // Persist state after website URL change
+    const { userEmail } = get();
+    if (userEmail) {
+      persistOnboardingState(userEmail, get());
+    }
+  },
   setHasNoWebsite: (value) => set({ hasNoWebsite: value }),
 
   submitWebsite: async (organizationId) => {
@@ -635,7 +662,14 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   },
 
   // Manual enrichment actions
-  setManualData: (data) => set({ manualData: data }),
+  setManualData: (data) => {
+    set({ manualData: data });
+    // Persist state after manual data change
+    const { userEmail } = get();
+    if (userEmail) {
+      persistOnboardingState(userEmail, get());
+    }
+  },
 
   // Create organization from manual data (for personal email users without org)
   createOrganizationFromManualData: async (userId, manualData) => {
@@ -966,6 +1000,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       enrichment: data,
       skillConfigs: data.generated_skills || defaultSkillConfigs,
     });
+    // Persist state after enrichment is set
+    const { userEmail } = get();
+    if (userEmail) {
+      persistOnboardingState(userEmail, get());
+    }
   },
 
   // Update skill config
@@ -1051,6 +1090,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           }, {
             onConflict: 'user_id',
           });
+
+        // Clear localStorage on onboarding completion
+        const { userEmail } = get();
+        if (userEmail) {
+          clearOnboardingState(userEmail);
+        }
       }
 
       set({ isSaving: false, currentStep: 'complete' });
@@ -1201,6 +1246,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           }, {
             onConflict: 'user_id',
           });
+
+        // Clear localStorage on onboarding completion
+        const { userEmail } = get();
+        if (userEmail) {
+          clearOnboardingState(userEmail);
+        }
       }
 
       set({ isSaving: false, currentStep: 'complete' });

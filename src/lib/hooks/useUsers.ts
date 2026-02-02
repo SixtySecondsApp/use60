@@ -457,19 +457,59 @@ export function useUsers() {
     }
   };
 
-  const resendInvitation = async (userId: string, emailParams: any) => {
+  const resendInvitation = async (invitationId: string) => {
     try {
-      logger.log('Resending invitation email for user:', userId);
+      logger.log('Resending invitation email for invitation:', invitationId);
 
-      const emailResult = await supabase.functions.invoke('encharge-send-email', {
-        body: emailParams,
-      });
-
-      if (emailResult.error) {
-        throw emailResult.error;
+      // Get current session for auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Not authenticated');
       }
 
-      toast.success('Invitation email resent successfully');
+      // Call resend API endpoint
+      const response = await fetch('/api/admin/resend-invitation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          invitationId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to resend invitation (${response.status})`);
+      }
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Check if email was sent successfully
+      if (data.emailSent) {
+        toast.success(`Invitation resent successfully to ${data.email}. ${data.remainingAttempts} attempts remaining.`);
+      } else {
+        // Email failed again
+        logger.error('Email delivery failed on resend:', data.emailError);
+        if (data.remainingAttempts > 0) {
+          toast.error(`Failed to resend email: ${data.emailError}. ${data.remainingAttempts} attempts remaining.`, {
+            duration: 10000,
+            action: {
+              label: 'Retry',
+              onClick: () => resendInvitation(invitationId)
+            }
+          });
+        } else {
+          toast.error('Failed to resend email. Maximum attempts reached. Please create a new invitation.');
+        }
+      }
+
+      // Refresh user list to show updated status
+      await fetchUsers();
     } catch (error: any) {
       logger.error('Resend email error:', error);
       toast.error('Failed to resend invitation: ' + (error.message || 'Unknown error'));
@@ -514,17 +554,26 @@ export function useUsers() {
 
       // Check email delivery status from API
       if (data.emailSent) {
-        toast.success(`Invitation sent to ${email}`);
+        toast.success(`Invitation sent successfully to ${email}`);
       } else {
         // Email failed - show warning with resend option
         logger.error('Email delivery failed:', data.emailError);
-        toast.warning(`User created, but email failed to send to ${email}. Click 'Resend' to try again.`, {
-          duration: 10000,
-          action: {
-            label: 'Resend',
-            onClick: () => resendInvitation(data.userId, data.emailParams)
-          }
-        });
+
+        // Only show resend button if invitation ID exists and we haven't hit the limit
+        if (data.invitationId) {
+          toast.warning(
+            `User created, but email failed to send to ${email}.`,
+            {
+              duration: 10000,
+              action: {
+                label: 'Resend Email',
+                onClick: () => resendInvitation(data.invitationId)
+              }
+            }
+          );
+        } else {
+          toast.warning(`User created, but email failed to send to ${email}. Error: ${data.emailError || 'Unknown error'}`);
+        }
       }
 
       // Refresh user list

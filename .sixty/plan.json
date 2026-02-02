@@ -174,7 +174,7 @@
       "feature": "onboard-fix",
       "title": "Add email retry logic and resend UI to useUsers hook",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 4,
       "dependencies": {
         "stories": [
@@ -196,9 +196,10 @@
         "Maximum 3 resend attempts enforced"
       ],
       "estimatedMinutes": 30,
-      "actualMinutes": null,
+      "actualMinutes": 35,
       "files": [
-        "src/lib/hooks/useUsers.ts"
+        "src/lib/hooks/useUsers.ts",
+        "api/admin/resend-invitation.ts"
       ],
       "implementation": {
         "changes": [
@@ -209,8 +210,8 @@
           "Update admin UI to show email status"
         ]
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T16:00:00Z",
+      "completedAt": "2026-02-02T16:35:00Z"
     },
     {
       "id": "ONBOARD-005",
@@ -404,7 +405,7 @@
       "feature": "onboard-fix",
       "title": "Add onboarding state persistence to localStorage",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 10,
       "dependencies": {
         "stories": [
@@ -431,7 +432,7 @@
         "Clears localStorage on onboarding completion"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 25,
       "files": [
         "src/lib/stores/onboardingV2Store.ts"
       ],
@@ -443,8 +444,8 @@
           "Handle JSON parse errors gracefully"
         ]
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T16:00:00Z",
+      "completedAt": "2026-02-02T16:25:00Z"
     },
     {
       "id": "ONBOARD-011",
@@ -2112,6 +2113,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T09:55:22.423Z"
+    "lastUpdated": "2026-02-02T16:25:00Z"
   }
 }
