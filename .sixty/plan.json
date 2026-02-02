@@ -574,14 +574,15 @@
       "feature": "onboard-fix",
       "title": "Add rejection polling to PendingApprovalStep",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 14,
       "dependencies": {
         "stories": [
           "ONBOARD-013"
         ],
         "files": [
-          "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx",
+          "src/lib/hooks/useApprovalDetection.ts"
         ],
         "schema": []
       },
@@ -596,16 +597,17 @@
         "Stops polling after rejection detected"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 28,
       "files": [
-        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx",
+        "src/lib/hooks/useApprovalDetection.ts"
       ],
       "implementation": {
         "polling": "useInterval(() => checkJoinRequestStatus(), 10000)",
         "ui": "Show alert with rejection reason and action button"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T17:00:00Z",
+      "completedAt": "2026-02-02T17:28:00Z"
     },
     {
       "id": "ONBOARD-015",
@@ -2011,7 +2013,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 22,
+    "completedStories": 34,
     "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
@@ -2113,6 +2115,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T16:32:00Z"
+    "lastUpdated": "2026-02-02T17:28:00Z"
   }
 }
