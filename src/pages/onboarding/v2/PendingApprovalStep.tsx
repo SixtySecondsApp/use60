@@ -638,7 +638,7 @@ export function PendingApprovalStep() {
             <button
               onClick={() => setShowCancelDialog(true)}
               disabled={canceling || isLoadingDashboard || showApprovalSuccess}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 mb-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 mb-2 disabled:bg-gray-700 disabled:cursor-not-allowed"
             >
               {canceling ? (
                 <>
@@ -674,7 +674,7 @@ export function PendingApprovalStep() {
         description={`Are you sure you want to cancel your request to join ${orgName || 'this organization'}? You'll be able to create a new organization or request to join a different one.`}
         confirmText="Yes, Cancel Request"
         cancelText="No, Keep Request"
-        confirmVariant="warning"
+        confirmVariant="danger"
         loading={canceling}
       />
     </motion.div>
