@@ -68,6 +68,9 @@ export default function TeamMembersPage() {
   const [isJoinRequestsExpanded, setIsJoinRequestsExpanded] = useState(true);
   const [isRejoinRequestsExpanded, setIsRejoinRequestsExpanded] = useState(true);
 
+  // Filter state for showing removed members (ORGREM-016)
+  const [showRemovedMembers, setShowRemovedMembers] = useState(true);
+
   // Debug: Log component mount and context values
   useEffect(() => {
     console.log('[TeamMembersPage] ===== COMPONENT MOUNTED =====');
@@ -90,6 +93,16 @@ export default function TeamMembersPage() {
       }
       return roleComparison;
     });
+  };
+
+  // Filter members based on showRemovedMembers toggle (ORGREM-016)
+  const filteredMembers = showRemovedMembers
+    ? members
+    : members.filter((m) => m.member_status !== 'removed');
+
+  // Helper to check if a removed member has a pending rejoin request (ORGREM-016)
+  const hasPendingRejoin = (userId: string): boolean => {
+    return rejoinRequests.some((req: any) => req.user_id === userId && req.status === 'pending');
   };
 
   // Fetch join requests
@@ -213,9 +226,8 @@ export default function TeamMembersPage() {
     mutationFn: async (requestId: string) => {
       if (!user?.id) throw new Error('User ID not available');
 
-      const { data, error } = await supabase.rpc('approve_rejoin', {
+      const { data, error } = await supabase.rpc('approve_rejoin_request', {
         p_request_id: requestId,
-        p_admin_user_id: user.id,
         p_approved: true,
       });
 
@@ -240,12 +252,11 @@ export default function TeamMembersPage() {
 
   // Reject rejoin mutation (ORGREM-015)
   const rejectRejoinMutation = useMutation({
-    mutationFn: async ({ requestId, reason }: { requestId: string; reason?: string }) => {
+    mutationFn: async ({ requestId, reason, requestData }: { requestId: string; reason?: string; requestData: any }) => {
       if (!user?.id) throw new Error('User ID not available');
 
-      const { data, error } = await supabase.rpc('approve_rejoin', {
+      const { data, error } = await supabase.rpc('approve_rejoin_request', {
         p_request_id: requestId,
-        p_admin_user_id: user.id,
         p_approved: false,
         p_rejection_reason: reason || null,
       });
@@ -253,6 +264,40 @@ export default function TeamMembersPage() {
       if (error) throw error;
       if (!data?.success) {
         throw new Error(data?.error || 'Failed to reject rejoin request');
+      }
+
+      // Send rejection email (non-blocking)
+      if (requestData?.profiles?.email && activeOrgId) {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('name')
+          .eq('id', activeOrgId)
+          .single();
+
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/encharge-send-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            template_type: 'rejoin_rejected',
+            to_email: requestData.profiles.email,
+            to_name: requestData.profiles.first_name || requestData.profiles.email.split('@')[0],
+            user_id: requestData.user_id,
+            variables: {
+              user_first_name: requestData.profiles.first_name || requestData.profiles.email.split('@')[0],
+              org_name: orgData?.name || 'the organization',
+              rejection_reason: reason || 'No reason provided',
+              admin_name: user?.email || 'the organization admin',
+              onboarding_url: `${window.location.origin}/onboarding`,
+              support_email: 'support@use60.com',
+            },
+          }),
+        }).catch((err) => {
+          console.error('Failed to send rejection email:', err);
+          // Don't show error to user - email is non-blocking
+        });
       }
 
       return data;
@@ -572,10 +617,24 @@ export default function TeamMembersPage() {
       <div className="space-y-8">
         {/* Team Members List */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5 text-[#37bd7e]" />
-            Team Members
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-[#37bd7e]" />
+              Team Members
+            </h2>
+            {/* Filter toggle for removed members (ORGREM-016) */}
+            {members.some((m) => m.member_status === 'removed') && (
+              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showRemovedMembers}
+                  onChange={(e) => setShowRemovedMembers(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600 text-[#37bd7e] focus:ring-[#37bd7e] focus:ring-offset-0"
+                />
+                Show removed members
+              </label>
+            )}
+          </div>
           {isLoadingMembers ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-[#37bd7e] animate-spin" />
@@ -583,7 +642,7 @@ export default function TeamMembersPage() {
           ) : (
             <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
               <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                {members.map((member) => (
+                {filteredMembers.map((member) => (
                   <div
                     key={member.user_id}
                     className={`flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors ${
@@ -609,17 +668,20 @@ export default function TeamMembersPage() {
                             )}
                           </p>
                           {member.member_status === 'removed' && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-xs font-medium border border-red-300 dark:border-red-500/30">
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-xs font-medium border border-red-300 dark:border-red-500/30"
+                              title={member.removed_at ? `Removed on ${new Date(member.removed_at).toLocaleDateString()}` : 'Removed'}
+                            >
                               Removed
+                            </span>
+                          )}
+                          {member.member_status === 'removed' && hasPendingRejoin(member.user_id) && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-medium border border-blue-300 dark:border-blue-500/30">
+                              Pending Rejoin
                             </span>
                           )}
                         </div>
                         <p className="text-sm text-gray-600 dark:text-gray-400">{member.user?.email}</p>
-                        {member.member_status === 'removed' && member.removed_at && (
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-                            Removed {new Date(member.removed_at).toLocaleDateString()}
-                          </p>
-                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -889,7 +951,7 @@ export default function TeamMembersPage() {
                               );
                               if (reason !== null) {
                                 // User clicked OK (even if empty string)
-                                rejectRejoinMutation.mutate({ requestId: request.id, reason: reason || undefined });
+                                rejectRejoinMutation.mutate({ requestId: request.id, reason: reason || undefined, requestData: request });
                               }
                             }}
                             disabled={rejectRejoinMutation.isPending}

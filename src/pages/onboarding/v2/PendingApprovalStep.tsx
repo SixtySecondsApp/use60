@@ -50,17 +50,38 @@ export function PendingApprovalStep() {
         }
       }
 
-      // Fetch join request ID if we don't have it from store
+      // Fetch join request details if we don't have them from store
       if (user?.id && !pendingJoinRequest?.requestId) {
         const { data } = await supabase
           .from('organization_join_requests')
-          .select('id')
+          .select('id, org_id')
           .eq('user_id', user.id)
           .eq('status', 'pending')
           .maybeSingle();
 
         if (data?.id) {
           setJoinRequestId(data.id);
+
+          // If orgName is not in store but we have orgId, fetch organization name
+          if (data.org_id && !pendingJoinRequest?.orgName) {
+            const { data: org } = await supabase
+              .from('organizations')
+              .select('name')
+              .eq('id', data.org_id)
+              .maybeSingle();
+
+            if (org?.name) {
+              // Update the store with the org name for consistency
+              useOnboardingV2Store.setState({
+                pendingJoinRequest: {
+                  orgId: data.org_id,
+                  orgName: org.name,
+                  requestId: data.id,
+                  status: 'pending',
+                }
+              });
+            }
+          }
         }
       } else if (pendingJoinRequest?.requestId) {
         setJoinRequestId(pendingJoinRequest.requestId);
@@ -68,7 +89,7 @@ export function PendingApprovalStep() {
     };
 
     fetchData();
-  }, [userEmail, user?.id, pendingJoinRequest?.requestId]);
+  }, [userEmail, user?.id, pendingJoinRequest?.requestId, pendingJoinRequest?.orgName]);
 
   // Automatic polling for approval/rejection detection
   useEffect(() => {
@@ -139,7 +160,100 @@ export function PendingApprovalStep() {
       console.log('[PendingApprovalStep] Switching to organization:', membership.org_id);
       switchOrg(membership.org_id);
 
-      // 4. Mark onboarding as complete
+      // 4. Cleanup auto-created placeholder organizations
+      if (user?.id) {
+        console.log('[PendingApprovalStep] Cleaning up placeholder organizations');
+        try {
+          // Get user's profile to check their name
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('first_name')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          // Get all user's memberships where they are owner
+          const { data: allMemberships } = await supabase
+            .from('organization_memberships')
+            .select('org_id, role, organizations(id, name, created_by)')
+            .eq('user_id', user.id)
+            .eq('role', 'owner');
+
+          if (allMemberships && allMemberships.length > 0) {
+            // Define generic placeholder names
+            const firstName = profileData?.first_name || '';
+            const genericNames = [
+              'Test',
+              'test',
+              'My Organization',
+              'my organization',
+              `${firstName}'s Organization`,
+              `${firstName.toLowerCase()}'s organization`,
+            ];
+
+            // Filter to find placeholder orgs
+            const placeholderOrgs = allMemberships.filter(m => {
+              const org = m.organizations;
+              return (
+                org &&
+                org.id !== membership.org_id && // Not the newly joined org
+                org.created_by === user.id && // User created it
+                genericNames.some(name =>
+                  org.name?.toLowerCase().includes(name.toLowerCase()) ||
+                  org.name === name
+                )
+              );
+            });
+
+            console.log('[PendingApprovalStep] Found', placeholderOrgs.length, 'placeholder orgs to cleanup');
+
+            // Delete placeholder orgs
+            for (const placeholderMembership of placeholderOrgs) {
+              const orgId = placeholderMembership.org_id;
+              const orgName = placeholderMembership.organizations?.name;
+
+              console.log('[PendingApprovalStep] Deleting placeholder org:', orgName, orgId);
+
+              // Check if org has any other members
+              const { data: otherMembers, error: membersError } = await supabase
+                .from('organization_memberships')
+                .select('user_id')
+                .eq('org_id', orgId)
+                .neq('user_id', user.id);
+
+              if (membersError) {
+                console.error('[PendingApprovalStep] Error checking org members:', membersError);
+                continue;
+              }
+
+              // Only delete if user is sole member
+              if (otherMembers && otherMembers.length === 0) {
+                // Delete membership first
+                await supabase
+                  .from('organization_memberships')
+                  .delete()
+                  .eq('org_id', orgId)
+                  .eq('user_id', user.id);
+
+                // Delete the organization
+                await supabase
+                  .from('organizations')
+                  .delete()
+                  .eq('id', orgId)
+                  .eq('created_by', user.id);
+
+                console.log('[PendingApprovalStep] Deleted placeholder org:', orgName);
+              } else {
+                console.log('[PendingApprovalStep] Skipping org with other members:', orgName);
+              }
+            }
+          }
+        } catch (cleanupError) {
+          // Non-blocking - don't fail approval if cleanup fails
+          console.error('[PendingApprovalStep] Error cleaning up placeholder orgs:', cleanupError);
+        }
+      }
+
+      // 5. Mark onboarding as complete
       console.log('[PendingApprovalStep] Marking onboarding as complete');
       try {
         await supabase
@@ -154,7 +268,7 @@ export function PendingApprovalStep() {
         // Don't block navigation if onboarding update fails
       }
 
-      // 5. Show success message and navigate to dashboard
+      // 6. Show success message and navigate to dashboard
       toast.success('Welcome! Redirecting to your dashboard...');
       setTimeout(() => {
         navigate('/dashboard', { replace: true });

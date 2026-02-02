@@ -107,7 +107,7 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   const isPasswordRecovery = isResetPasswordPath && hasRecoveryTokens;
   const isOAuthCallback = location.pathname.includes('/oauth/') || location.pathname.includes('/callback');
   const isAuthRequiredRoute = authRequiredRoutes.some(route =>
-    location.pathname === route || location.pathname.startsWith(route + '/')
+    location.pathname === route || location.pathname.startsWith(`${route  }/`)
   );
   const isOnboardingExempt = isOnboardingExemptRoute(location.pathname);
 
@@ -193,11 +193,14 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       try {
         const { data, error } = await supabase
           .from('organization_memberships')
-          .select('org_id', { count: 'exact' })
-          .eq('user_id', user.id);
+          .select('org_id, member_status', { count: 'exact' })
+          .eq('user_id', user.id)
+          .eq('member_status', 'active'); // Only check for active memberships
 
         if (!error && data) {
-          setHasOrgMembership(data.length > 0);
+          const hasActiveMembership = data.length > 0;
+          console.log('[ProtectedRoute] Organization membership check:', { userId: user.id, hasActiveMembership, membershipCount: data.length });
+          setHasOrgMembership(hasActiveMembership);
         }
       } catch (err) {
         console.error('Error checking organization membership:', err);
@@ -223,10 +226,22 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
     if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership) return;
 
     // Check profile status for join request approval flow
-    // If user is pending approval, redirect to pending approval screen
+    // CRITICAL: Check memberships BEFORE checking profile_status
+    // If user has ANY active membership, allow dashboard access even if profile_status is pending
+    // Only redirect to pending approval if profile_status is pending AND no memberships exist
     if (isAuthenticated && profileStatus === 'pending_approval' && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute) {
-      console.log('[ProtectedRoute] User pending approval, redirecting to pending approval page', { userId: user?.id, currentPath: location.pathname });
-      navigate('/auth/pending-approval', { replace: true });
+      // If user has active membership, they were approved - allow access and don't redirect
+      if (hasOrgMembership === true) {
+        console.log('[ProtectedRoute] User has active membership despite pending status, allowing access', { userId: user?.id, currentPath: location.pathname });
+        // Don't redirect - user was approved and membership was created
+        // Profile status will be updated by the approval flow
+      } else if (hasOrgMembership === false) {
+        // User is truly pending approval with no memberships - redirect to pending page
+        console.log('[ProtectedRoute] User pending approval with no membership, redirecting to pending approval page', { userId: user?.id, currentPath: location.pathname });
+        navigate('/auth/pending-approval', { replace: true });
+        return;
+      }
+      // If hasOrgMembership is null (still checking), don't redirect yet
       return;
     }
 

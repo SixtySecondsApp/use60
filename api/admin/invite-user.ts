@@ -87,7 +87,99 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    // 2) Create user (auth)
+    // 2) Get caller's organization for rate limiting checks
+    const membershipResp = await fetch(
+      `${supabaseUrl}/rest/v1/organization_memberships?select=org_id&user_id=eq.${encodeURIComponent(caller.id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
+        },
+      }
+    );
+    const memberships = (await membershipResp.json().catch(() => [])) as Array<{ org_id: string }>;
+    const orgId = memberships?.[0]?.org_id;
+
+    // 3) Rate limiting checks - BEFORE creating user
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // Check admin rate limit (10 invites per 24 hours)
+    const adminCountResp = await fetch(
+      `${supabaseUrl}/rest/v1/invite_attempts?select=id&admin_id=eq.${encodeURIComponent(caller.id)}&attempted_at=gte.${encodeURIComponent(twentyFourHoursAgo)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
+          Prefer: 'count=exact',
+        },
+      }
+    );
+    const adminContentRange = adminCountResp.headers.get('content-range');
+    let adminInviteCount = 0;
+    if (adminContentRange) {
+      const match = adminContentRange.match(/\/(\d+)$/);
+      if (match) adminInviteCount = parseInt(match[1], 10);
+    }
+
+    const ADMIN_LIMIT = 10;
+    if (adminInviteCount >= ADMIN_LIMIT) {
+      const resetTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const hoursUntilReset = Math.ceil((resetTime.getTime() - Date.now()) / (1000 * 60 * 60));
+      console.warn('[invite-user] Admin rate limit exceeded:', {
+        adminId: caller.id,
+        adminEmail: caller.email,
+        count: adminInviteCount,
+        limit: ADMIN_LIMIT,
+      });
+      return res.status(429).json({
+        error: 'Rate limit exceeded',
+        message: `You have reached the limit of ${ADMIN_LIMIT} invitations per day. You can send more invitations in ${hoursUntilReset} hours.`,
+        limit: ADMIN_LIMIT,
+        current: adminInviteCount,
+        resetInHours: hoursUntilReset,
+      });
+    }
+
+    // Check organization rate limit (50 invites per 24 hours)
+    if (orgId) {
+      const orgCountResp = await fetch(
+        `${supabaseUrl}/rest/v1/invite_attempts?select=id&organization_id=eq.${encodeURIComponent(orgId)}&attempted_at=gte.${encodeURIComponent(twentyFourHoursAgo)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            apikey: serviceKey,
+            Prefer: 'count=exact',
+          },
+        }
+      );
+      const orgContentRange = orgCountResp.headers.get('content-range');
+      let orgInviteCount = 0;
+      if (orgContentRange) {
+        const match = orgContentRange.match(/\/(\d+)$/);
+        if (match) orgInviteCount = parseInt(match[1], 10);
+      }
+
+      const ORG_LIMIT = 50;
+      if (orgInviteCount >= ORG_LIMIT) {
+        const resetTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const hoursUntilReset = Math.ceil((resetTime.getTime() - Date.now()) / (1000 * 60 * 60));
+        console.warn('[invite-user] Organization rate limit exceeded:', {
+          orgId,
+          adminId: caller.id,
+          count: orgInviteCount,
+          limit: ORG_LIMIT,
+        });
+        return res.status(429).json({
+          error: 'Rate limit exceeded',
+          message: `Your organization has reached the limit of ${ORG_LIMIT} invitations per day. You can send more invitations in ${hoursUntilReset} hours.`,
+          limit: ORG_LIMIT,
+          current: orgInviteCount,
+          resetInHours: hoursUntilReset,
+        });
+      }
+    }
+
+    // 4) Create user (auth)
     const redirectTo = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}/auth/callback`;
 
     const createUserResp = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
@@ -111,15 +203,49 @@ async function handler(req: VercelRequest, res: VercelResponse) {
 
     const createdJson = await createUserResp.json().catch(() => null);
     if (!createUserResp.ok) {
+      // Track failed attempt
+      await fetch(`${supabaseUrl}/rest/v1/invite_attempts`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          admin_id: caller.id,
+          invited_email: normalizedEmail,
+          organization_id: orgId || null,
+          success: false,
+          error_message: JSON.stringify(createdJson),
+        }),
+      }).catch((err) => console.error('[invite-user] Failed to track failed attempt:', err));
+
       return res.status(400).json({ error: 'Failed to create user', details: createdJson });
     }
 
     const newUserId = createdJson?.id as string | undefined;
     if (!newUserId) {
+      // Track failed attempt
+      await fetch(`${supabaseUrl}/rest/v1/invite_attempts`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          admin_id: caller.id,
+          invited_email: normalizedEmail,
+          organization_id: orgId || null,
+          success: false,
+          error_message: 'User created but no id returned',
+        }),
+      }).catch((err) => console.error('[invite-user] Failed to track failed attempt:', err));
+
       return res.status(500).json({ error: 'User created but no id returned' });
     }
 
-    // 3) Ensure profiles row exists so admin panel shows the user immediately
+    // 5) Ensure profiles row exists so admin panel shows the user immediately
     await fetch(`${supabaseUrl}/rest/v1/profiles`, {
       method: 'POST',
       headers: {
@@ -136,20 +262,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       }),
     }).catch(() => undefined);
 
-    // 4) Get caller's organization(s) to create invitation record
-    const membershipResp = await fetch(
-      `${supabaseUrl}/rest/v1/organization_memberships?select=org_id&user_id=eq.${encodeURIComponent(caller.id)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${serviceKey}`,
-          apikey: serviceKey,
-        },
-      }
-    );
-    const memberships = (await membershipResp.json().catch(() => [])) as Array<{ org_id: string }>;
-    const orgId = memberships?.[0]?.org_id;
-
-    // 5) Create invitation record for tracking
+    // 6) Create invitation record for tracking
     let invitationId: string | null = null;
     if (orgId) {
       const inviteResp = await fetch(`${supabaseUrl}/rest/v1/organization_invitations`, {
@@ -174,7 +287,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 6) Generate password-setup link (recovery) and send email via encharge-send-email
+    // 7) Generate password-setup link (recovery) and send email via encharge-send-email
     // Build the correct redirect URL for staging/production
     // On staging, use the staging domain; on production, use the production domain
     const protocol = req.headers['x-forwarded-proto'] || 'https';
@@ -216,7 +329,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // 7) Send welcome email via edge function with AWS SES error handling
+    // 8) Send welcome email via edge function with AWS SES error handling
     let emailSent = false;
     let emailError: string | null = null;
 
@@ -280,7 +393,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // 8) Update invitation record with email status
+    // 9) Update invitation record with email status
     if (invitationId) {
       const statusUpdatePayload = emailSent
         ? {
@@ -326,6 +439,26 @@ async function handler(req: VercelRequest, res: VercelResponse) {
         invitationId,
       });
     }
+
+    // 10) Track successful invitation attempt
+    await fetch(`${supabaseUrl}/rest/v1/invite_attempts`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        admin_id: caller.id,
+        invited_email: normalizedEmail,
+        organization_id: orgId || null,
+        success: true,
+        error_message: null,
+      }),
+    }).catch((err) => {
+      console.error('[invite-user] Failed to track successful attempt:', err);
+      // Non-blocking - don't fail the invitation if tracking fails
+    });
 
     // Return user info and email status
     return res.status(200).json({

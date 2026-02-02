@@ -62,17 +62,15 @@ export function useApprovalDetection(
   } = useQuery({
     queryKey: ['approval-detection', 'membership', userId, orgId],
     queryFn: async () => {
-      if (!userId) return null;
+      if (!userId || !orgId) return null;
 
       let query = supabase
         .from('organization_memberships')
         .select('org_id, user_id, role, created_at')
         .eq('user_id', userId);
 
-      // If orgId is provided, filter by it
-      if (orgId) {
-        query = query.eq('org_id', orgId);
-      }
+      // Filter by orgId (required to get exactly 1 row or 0)
+      query = query.eq('org_id', orgId);
 
       const { data, error } = await query.maybeSingle();
 
@@ -83,7 +81,7 @@ export function useApprovalDetection(
 
       return data as OrganizationMembership | null;
     },
-    enabled: enabled && !!userId,
+    enabled: enabled && !!userId && !!orgId,
     staleTime: 1000, // 1 second - frequently refetch for real-time detection
     refetchOnWindowFocus: true,
   });
