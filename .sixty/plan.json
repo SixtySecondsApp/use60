@@ -25,6 +25,25 @@
         "rejectionUX": "automatic email notification",
         "duplicateOrgPolicy": "require admin approval"
       }
+    },
+    {
+      "id": "pending-approval-flow",
+      "name": "Auto-detect Approval & Dashboard Redirect",
+      "status": "pending",
+      "priority": "high",
+      "prd": null,
+      "consultReport": ".sixty/consult/pending-approval-flow.md",
+      "createdAt": "2026-02-02T10:30:00Z",
+      "description": "Automatically detect when a user's join request is approved and seamlessly redirect them to the dashboard with proper organization context loaded"
+    },
+    {
+      "id": "org-user-removal",
+      "name": "Organization User Removal with Rejoin Flow",
+      "status": "pending",
+      "priority": "high",
+      "consultReport": ".sixty/consult/org-user-removal.md",
+      "createdAt": "2026-02-02T14:00:00Z",
+      "description": "Remove users from org while preserving account/data, redirect to onboarding, rejoin with approval"
     }
   ],
   "stories": [
@@ -37,10 +56,14 @@
       "priority": 1,
       "dependencies": {
         "stories": [],
-        "files": ["vercel.json"],
+        "files": [
+          "vercel.json"
+        ],
         "schema": []
       },
-      "blocks": ["ONBOARD-002"],
+      "blocks": [
+        "ONBOARD-002"
+      ],
       "parallelWith": [],
       "acceptance": [
         "vercel.json deployed to staging",
@@ -72,11 +95,16 @@
       "status": "pending",
       "priority": 2,
       "dependencies": {
-        "stories": ["ONBOARD-001"],
+        "stories": [
+          "ONBOARD-001"
+        ],
         "files": [],
         "schema": []
       },
-      "blocks": ["ONBOARD-003", "ONBOARD-004"],
+      "blocks": [
+        "ONBOARD-003",
+        "ONBOARD-004"
+      ],
       "parallelWith": [],
       "acceptance": [
         "Migration adds email_status enum column (pending, sent, failed, bounced)",
@@ -104,11 +132,19 @@
       "status": "pending",
       "priority": 3,
       "dependencies": {
-        "stories": ["ONBOARD-002"],
-        "files": ["api/admin/invite-user.ts"],
-        "schema": ["organization_invitations"]
+        "stories": [
+          "ONBOARD-002"
+        ],
+        "files": [
+          "api/admin/invite-user.ts"
+        ],
+        "schema": [
+          "organization_invitations"
+        ]
       },
-      "blocks": ["ONBOARD-004"],
+      "blocks": [
+        "ONBOARD-004"
+      ],
       "parallelWith": [],
       "acceptance": [
         "Catches AWS SES errors when sending email",
@@ -141,8 +177,12 @@
       "status": "pending",
       "priority": 4,
       "dependencies": {
-        "stories": ["ONBOARD-003"],
-        "files": ["src/lib/hooks/useUsers.ts"],
+        "stories": [
+          "ONBOARD-003"
+        ],
+        "files": [
+          "src/lib/hooks/useUsers.ts"
+        ],
         "schema": []
       },
       "blocks": [],
@@ -180,12 +220,18 @@
       "status": "pending",
       "priority": 5,
       "dependencies": {
-        "stories": ["ONBOARD-001"],
+        "stories": [
+          "ONBOARD-001"
+        ],
         "files": [],
         "schema": []
       },
-      "blocks": ["ONBOARD-006"],
-      "parallelWith": ["ONBOARD-002"],
+      "blocks": [
+        "ONBOARD-006"
+      ],
+      "parallelWith": [
+        "ONBOARD-002"
+      ],
       "acceptance": [
         "Migration marks invitations >7 days old as 'expired' status",
         "Adds status column if not exists (pending, accepted, expired, cancelled)",
@@ -212,11 +258,17 @@
       "status": "pending",
       "priority": 6,
       "dependencies": {
-        "stories": ["ONBOARD-005"],
+        "stories": [
+          "ONBOARD-005"
+        ],
         "files": [],
-        "schema": ["organization_invitations"]
+        "schema": [
+          "organization_invitations"
+        ]
       },
-      "blocks": ["ONBOARD-007"],
+      "blocks": [
+        "ONBOARD-007"
+      ],
       "parallelWith": [],
       "acceptance": [
         "Edge function at supabase/functions/cleanup-expired-invitations/",
@@ -245,8 +297,12 @@
       "status": "pending",
       "priority": 7,
       "dependencies": {
-        "stories": ["ONBOARD-006"],
-        "files": ["vercel.json"],
+        "stories": [
+          "ONBOARD-006"
+        ],
+        "files": [
+          "vercel.json"
+        ],
         "schema": []
       },
       "blocks": [],
@@ -273,15 +329,22 @@
       "feature": "onboard-fix",
       "title": "Add processing flag to organization_join_requests table",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 8,
       "dependencies": {
-        "stories": ["ONBOARD-001"],
+        "stories": [
+          "ONBOARD-001"
+        ],
         "files": [],
         "schema": []
       },
-      "blocks": ["ONBOARD-009"],
-      "parallelWith": ["ONBOARD-002", "ONBOARD-005"],
+      "blocks": [
+        "ONBOARD-009"
+      ],
+      "parallelWith": [
+        "ONBOARD-002",
+        "ONBOARD-005"
+      ],
       "acceptance": [
         "Migration adds is_processing boolean column (default false)",
         "Migration adds processing_started_at timestamptz column",
@@ -289,15 +352,15 @@
         "All existing rows default to false"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 15,
       "files": [
-        "supabase/migrations/YYYYMMDD_add_processing_flag_to_join_requests.sql"
+        "supabase/migrations/20260130110200_add_processing_flag_to_join_requests.sql"
       ],
       "implementation": {
         "sql": "ALTER TABLE organization_join_requests ADD COLUMN is_processing boolean DEFAULT false;\nALTER TABLE organization_join_requests ADD COLUMN processing_started_at timestamptz;\nCREATE INDEX idx_join_requests_processing ON organization_join_requests(id) WHERE is_processing = true;"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T14:30:00Z",
+      "completedAt": "2026-02-02T14:45:00Z"
     },
     {
       "id": "ONBOARD-009",
@@ -307,9 +370,13 @@
       "status": "pending",
       "priority": 9,
       "dependencies": {
-        "stories": ["ONBOARD-008"],
+        "stories": [
+          "ONBOARD-008"
+        ],
         "files": [],
-        "schema": ["organization_join_requests"]
+        "schema": [
+          "organization_join_requests"
+        ]
       },
       "blocks": [],
       "parallelWith": [],
@@ -340,12 +407,22 @@
       "status": "pending",
       "priority": 10,
       "dependencies": {
-        "stories": ["ONBOARD-001"],
-        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "stories": [
+          "ONBOARD-001"
+        ],
+        "files": [
+          "src/lib/stores/onboardingV2Store.ts"
+        ],
         "schema": []
       },
-      "blocks": ["ONBOARD-011"],
-      "parallelWith": ["ONBOARD-003", "ONBOARD-006", "ONBOARD-009"],
+      "blocks": [
+        "ONBOARD-011"
+      ],
+      "parallelWith": [
+        "ONBOARD-003",
+        "ONBOARD-006",
+        "ONBOARD-009"
+      ],
       "acceptance": [
         "Saves onboarding state to localStorage on every step change",
         "Key format: sixty_onboarding_{userId}",
@@ -377,8 +454,12 @@
       "status": "pending",
       "priority": 11,
       "dependencies": {
-        "stories": ["ONBOARD-010"],
-        "files": ["src/pages/onboarding/v2/OnboardingV2.tsx"],
+        "stories": [
+          "ONBOARD-010"
+        ],
+        "files": [
+          "src/pages/onboarding/v2/OnboardingV2.tsx"
+        ],
         "schema": []
       },
       "blocks": [],
@@ -409,12 +490,18 @@
       "status": "pending",
       "priority": 12,
       "dependencies": {
-        "stories": ["ONBOARD-001"],
+        "stories": [
+          "ONBOARD-001"
+        ],
         "files": [],
         "schema": []
       },
-      "blocks": ["ONBOARD-013"],
-      "parallelWith": ["ONBOARD-010"],
+      "blocks": [
+        "ONBOARD-013"
+      ],
+      "parallelWith": [
+        "ONBOARD-010"
+      ],
       "acceptance": [
         "HTML email template for join request rejection",
         "Includes: organization name, rejection reason, support link",
@@ -428,7 +515,12 @@
         "supabase/functions/_shared/email-templates/rejection-notification.html"
       ],
       "implementation": {
-        "variables": ["organizationName", "rejectionReason", "userFirstName", "supportEmail"]
+        "variables": [
+          "organizationName",
+          "rejectionReason",
+          "userFirstName",
+          "supportEmail"
+        ]
       },
       "startedAt": null,
       "completedAt": null
@@ -441,11 +533,17 @@
       "status": "pending",
       "priority": 13,
       "dependencies": {
-        "stories": ["ONBOARD-012"],
+        "stories": [
+          "ONBOARD-012"
+        ],
         "files": [],
-        "schema": ["organization_join_requests"]
+        "schema": [
+          "organization_join_requests"
+        ]
       },
-      "blocks": ["ONBOARD-014"],
+      "blocks": [
+        "ONBOARD-014"
+      ],
       "parallelWith": [],
       "acceptance": [
         "RPC calls encharge-send-email edge function on rejection",
@@ -478,8 +576,12 @@
       "status": "pending",
       "priority": 14,
       "dependencies": {
-        "stories": ["ONBOARD-013"],
-        "files": ["src/pages/onboarding/v2/PendingApprovalStep.tsx"],
+        "stories": [
+          "ONBOARD-013"
+        ],
+        "files": [
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+        ],
         "schema": []
       },
       "blocks": [],
@@ -512,12 +614,19 @@
       "status": "pending",
       "priority": 15,
       "dependencies": {
-        "stories": ["ONBOARD-001"],
+        "stories": [
+          "ONBOARD-001"
+        ],
         "files": [],
         "schema": []
       },
-      "blocks": ["ONBOARD-016"],
-      "parallelWith": ["ONBOARD-008", "ONBOARD-012"],
+      "blocks": [
+        "ONBOARD-016"
+      ],
+      "parallelWith": [
+        "ONBOARD-008",
+        "ONBOARD-012"
+      ],
       "acceptance": [
         "Migration adds similar_to_org_id UUID column (nullable, FK to organizations)",
         "Migration adds requires_admin_approval boolean (default false)",
@@ -544,11 +653,19 @@
       "status": "pending",
       "priority": 16,
       "dependencies": {
-        "stories": ["ONBOARD-015"],
-        "files": ["src/lib/stores/onboardingV2Store.ts"],
-        "schema": ["organizations"]
+        "stories": [
+          "ONBOARD-015"
+        ],
+        "files": [
+          "src/lib/stores/onboardingV2Store.ts"
+        ],
+        "schema": [
+          "organizations"
+        ]
       },
-      "blocks": ["ONBOARD-017"],
+      "blocks": [
+        "ONBOARD-017"
+      ],
       "parallelWith": [],
       "acceptance": [
         "When similar org found (similarity > 0.7), sets requires_admin_approval: true",
@@ -580,7 +697,9 @@
       "status": "pending",
       "priority": 17,
       "dependencies": {
-        "stories": ["ONBOARD-016"],
+        "stories": [
+          "ONBOARD-016"
+        ],
         "files": [],
         "schema": []
       },
@@ -613,12 +732,18 @@
       "status": "pending",
       "priority": 18,
       "dependencies": {
-        "stories": ["ONBOARD-001"],
+        "stories": [
+          "ONBOARD-001"
+        ],
         "files": [],
         "schema": []
       },
-      "blocks": ["ONBOARD-019"],
-      "parallelWith": ["ONBOARD-015"],
+      "blocks": [
+        "ONBOARD-019"
+      ],
+      "parallelWith": [
+        "ONBOARD-015"
+      ],
       "acceptance": [
         "Table: invite_attempts (id, admin_id, invited_email, organization_id, attempted_at)",
         "Creates index on (admin_id, attempted_at) for rate limiting queries",
@@ -644,9 +769,15 @@
       "status": "pending",
       "priority": 19,
       "dependencies": {
-        "stories": ["ONBOARD-018"],
-        "files": ["api/admin/invite-user.ts"],
-        "schema": ["invite_attempts"]
+        "stories": [
+          "ONBOARD-018"
+        ],
+        "files": [
+          "api/admin/invite-user.ts"
+        ],
+        "schema": [
+          "invite_attempts"
+        ]
       },
       "blocks": [],
       "parallelWith": [],
@@ -672,34 +803,1315 @@
       },
       "startedAt": null,
       "completedAt": null
+    },
+    {
+      "id": "PEND-001",
+      "feature": "pending-approval-flow",
+      "title": "Create useApprovalDetection hook for centralized approval checking",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/lib/supabase/clientV2.ts"
+        ],
+        "schema": [
+          "organization_join_requests",
+          "organization_memberships"
+        ]
+      },
+      "blocks": [
+        "PEND-002",
+        "PEND-003",
+        "PEND-006"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Hook queries organization_join_requests for pending request",
+        "Hook queries organization_memberships to detect if user was added",
+        "Returns { isApproved, membership, isPending, error }",
+        "Hook is reusable across multiple components"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/hooks/useApprovalDetection.ts"
+      ],
+      "implementation": {
+        "approach": "Create React Query hook that checks both tables",
+        "keyDecisions": [
+          "Use React Query for automatic caching and refetching",
+          "Check organization_memberships first (source of truth)",
+          "Fall back to organization_join_requests check",
+          "Return clear status object"
+        ],
+        "references": [
+          "src/lib/services/joinRequestService.ts (existing patterns)",
+          "src/lib/hooks/queries/ (query patterns)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PEND-002",
+      "feature": "pending-approval-flow",
+      "title": "Add automatic polling to PendingApprovalStep component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 21,
+      "dependencies": {
+        "stories": [
+          "PEND-001"
+        ],
+        "files": [
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx",
+          "src/lib/hooks/useApprovalDetection.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "PEND-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Polls every 5 seconds using useApprovalDetection hook",
+        "Shows subtle 'Checking status...' indicator during polls",
+        "Clears interval on component unmount",
+        "Clears interval when approval detected or request cancelled"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+      ],
+      "implementation": {
+        "approach": "Add useEffect with setInterval for polling",
+        "keyDecisions": [
+          "5-second interval balances UX and server load",
+          "Use React Query's refetch capability",
+          "Clean up interval properly to prevent memory leaks",
+          "Show non-intrusive polling indicator"
+        ],
+        "references": [
+          "src/lib/stores/onboardingV2Store.ts:870-961 (enrichment polling pattern)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PEND-003",
+      "feature": "pending-approval-flow",
+      "title": "Implement organization context refresh on approval detection",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 22,
+      "dependencies": {
+        "stories": [
+          "PEND-001",
+          "PEND-002"
+        ],
+        "files": [
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx",
+          "src/lib/contexts/OrgContext.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "PEND-004"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Calls loadOrganizations() from OrgContext when approval detected",
+        "Waits for organizations to load before navigation",
+        "Automatically switches to newly joined organization using switchOrg()",
+        "Updates profile_status to 'active' in profiles table"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+      ],
+      "implementation": {
+        "approach": "Use OrgContext methods to refresh and switch organization",
+        "keyDecisions": [
+          "Use existing loadOrganizations() from OrgContext (line 95-196)",
+          "Wait for load completion before redirect to avoid race condition",
+          "Auto-select the newly joined org (from pendingJoinRequest.orgId)",
+          "Update profile_status to prevent future redirects"
+        ],
+        "references": [
+          "src/lib/contexts/OrgContext.tsx:95-196 (loadOrganizations)",
+          "src/pages/auth/AcceptJoinRequest.tsx:80-91 (org refresh pattern)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PEND-004",
+      "feature": "pending-approval-flow",
+      "title": "Mark onboarding complete on approval",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 23,
+      "dependencies": {
+        "stories": [
+          "PEND-003"
+        ],
+        "files": [
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+        ],
+        "schema": [
+          "user_onboarding_progress"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PEND-005"
+      ],
+      "acceptance": [
+        "Updates user_onboarding_progress.onboarding_step to 'complete'",
+        "Sets onboarding_completed_at timestamp",
+        "Uses upsert with onConflict: 'user_id'",
+        "Prevents redirect back to onboarding after dashboard loads"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+      ],
+      "implementation": {
+        "approach": "Copy pattern from AcceptJoinRequest page",
+        "keyDecisions": [
+          "Mark complete BEFORE navigation to dashboard",
+          "Use same upsert pattern as AcceptJoinRequest (lines 92-101)",
+          "Handle errors gracefully (log but don't block navigation)"
+        ],
+        "references": [
+          "src/pages/auth/AcceptJoinRequest.tsx:92-101"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PEND-005",
+      "feature": "pending-approval-flow",
+      "title": "Add visual feedback during approval detection and dashboard loading",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 24,
+      "dependencies": {
+        "stories": [
+          "PEND-003"
+        ],
+        "files": [
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PEND-004"
+      ],
+      "acceptance": [
+        "Shows 'Checking approval status...' with spinner during polls",
+        "Shows success animation when approval detected",
+        "Shows 'Loading your dashboard...' during org context refresh",
+        "Smooth transition to dashboard with no error messages"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+      ],
+      "implementation": {
+        "approach": "Add state-based UI feedback components",
+        "keyDecisions": [
+          "Use existing Loader2 component from lucide-react",
+          "Show subtle indicator (not intrusive)",
+          "Success animation using Framer Motion (if time permits)",
+          "Clear messaging for each state"
+        ],
+        "references": [
+          "src/pages/onboarding/v2/ (existing loading patterns)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PEND-006",
+      "feature": "pending-approval-flow",
+      "title": "Fix error handling to distinguish approved vs cancelled requests",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 25,
+      "dependencies": {
+        "stories": [
+          "PEND-001"
+        ],
+        "files": [
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "When join request not found, checks organization_memberships first",
+        "If membership exists → user was approved → proceed to dashboard flow",
+        "If no membership → request was cancelled → show cancellation message",
+        "Removes confusing 'log in' prompt for approved users"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+      ],
+      "implementation": {
+        "approach": "Update checkApprovalStatus logic to check memberships",
+        "keyDecisions": [
+          "Check organization_memberships BEFORE showing error",
+          "Use useApprovalDetection hook for consistent logic",
+          "Different error messages for different scenarios",
+          "Remove 'Please log in' message (user is already authenticated)"
+        ],
+        "references": [
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx:60-106 (current checkApprovalStatus)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PEND-007",
+      "feature": "pending-approval-flow",
+      "title": "Apply same polling logic to PendingApprovalPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 26,
+      "dependencies": {
+        "stories": [
+          "PEND-001",
+          "PEND-002",
+          "PEND-003",
+          "PEND-004"
+        ],
+        "files": [
+          "src/pages/auth/PendingApprovalPage.tsx",
+          "src/lib/hooks/useApprovalDetection.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Uses same useApprovalDetection hook",
+        "Same polling interval (5 seconds)",
+        "Same approval detection and redirect logic",
+        "Redirects to /dashboard (not /onboarding) since user completed onboarding"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/auth/PendingApprovalPage.tsx"
+      ],
+      "implementation": {
+        "approach": "Copy patterns from PendingApprovalStep to PendingApprovalPage",
+        "keyDecisions": [
+          "Reuse all logic from PEND-001 through PEND-004",
+          "Key difference: redirect to /dashboard not /onboarding/complete",
+          "Skip onboarding completion step (already completed)",
+          "Maintain consistency in UX between both pages"
+        ],
+        "references": [
+          "src/pages/auth/PendingApprovalPage.tsx (current implementation)",
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx (after previous stories)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PEND-008",
+      "feature": "pending-approval-flow",
+      "title": "Update onboarding progress when join request is approved",
+      "type": "backend",
+      "status": "complete",
+      "priority": 27,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "organization_join_requests",
+          "user_onboarding_progress"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PEND-009"
+      ],
+      "acceptance": [
+        "approve_join_request RPC updates user_onboarding_progress atomically",
+        "Sets onboarding_step to 'complete' when membership is created",
+        "Sets onboarding_completed_at timestamp",
+        "Uses upsert with onConflict: 'user_id'",
+        "Prevents approved users from being redirected back to onboarding"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 15,
+      "files": [
+        "supabase/migrations/20260202093644_update_approve_join_request_complete_onboarding.sql"
+      ],
+      "implementation": {
+        "approach": "Modify approve_join_request RPC to update both tables atomically",
+        "keyDecisions": [
+          "Update happens in same transaction as membership creation",
+          "Mark onboarding complete BEFORE deleting join request",
+          "Handle case where user_onboarding_progress doesn't exist yet",
+          "Don't fail approval if onboarding update fails (log warning)"
+        ],
+        "sql": "-- Inside approve_join_request RPC, after creating membership:\nINSERT INTO user_onboarding_progress (user_id, onboarding_step, onboarding_completed_at)\nVALUES (p_user_id, 'complete', NOW())\nON CONFLICT (user_id) DO UPDATE\nSET onboarding_step = 'complete', onboarding_completed_at = NOW();",
+        "references": [
+          "supabase/migrations/20260117000002_add_organization_join_requests.sql (current approve_join_request RPC)",
+          "src/pages/auth/AcceptJoinRequest.tsx:92-101 (onboarding completion pattern)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-02T09:36:00Z",
+      "completedAt": "2026-02-02T09:37:24Z"
+    },
+    {
+      "id": "PEND-009",
+      "feature": "pending-approval-flow",
+      "title": "Cleanup auto-created placeholder organizations",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 28,
+      "dependencies": {
+        "stories": [
+          "PEND-003"
+        ],
+        "files": [
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx",
+          "src/lib/stores/onboardingV2Store.ts"
+        ],
+        "schema": [
+          "organizations",
+          "organization_memberships"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PEND-008"
+      ],
+      "acceptance": [
+        "When user joins existing org, deletes auto-created placeholder orgs",
+        "Only deletes orgs where user is sole owner",
+        "Only deletes orgs with generic names like 'Test' or '{firstName}'s Organization'",
+        "Checks that org has no other members before deletion",
+        "Logs deletion for debugging"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+      ],
+      "implementation": {
+        "approach": "Add cleanup logic to approval detection handler",
+        "keyDecisions": [
+          "Run cleanup after successful org switch but before navigation",
+          "Use existing pattern from onboardingV2Store.ts lines 748-776",
+          "Delete organization_memberships first, then organizations",
+          "Non-blocking - don't fail approval if cleanup fails"
+        ],
+        "logic": "// 1. Query user's organizations where they are owner\n// 2. Filter to orgs with <=1 members and generic names\n// 3. Delete memberships then delete organization\n// 4. Log results to console",
+        "references": [
+          "src/lib/stores/onboardingV2Store.ts:748-776 (existing cleanup pattern)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PEND-010",
+      "feature": "pending-approval-flow",
+      "title": "Fix ProtectedRoute to check membership status",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 29,
+      "dependencies": {
+        "stories": [
+          "PEND-008"
+        ],
+        "files": [
+          "src/components/routing/ProtectedRoute.tsx"
+        ],
+        "schema": [
+          "organization_memberships"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "ProtectedRoute queries organization_memberships when checking access",
+        "Allows dashboard access if user has ANY active membership",
+        "Only redirects to pending_approval if profile_status is pending AND no memberships exist",
+        "Improves UX for users with multiple orgs",
+        "Prevents approved members from seeing pending screen"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/routing/ProtectedRoute.tsx"
+      ],
+      "implementation": {
+        "approach": "Add membership check to routing logic",
+        "keyDecisions": [
+          "Check memberships BEFORE checking profile_status",
+          "Cache membership query result to avoid repeated calls",
+          "Trust organization_memberships as source of truth",
+          "Profile_status becomes fallback check only"
+        ],
+        "pseudocode": "// 1. Query organization_memberships for current user\n// 2. If any memberships exist -> allow access\n// 3. Else if profile_status === 'pending_approval' -> redirect to pending\n// 4. Else -> allow access (default)",
+        "references": [
+          "src/components/routing/ProtectedRoute.tsx (current implementation)",
+          "src/lib/contexts/OrgContext.tsx (membership loading patterns)"
+        ]
+      },
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-001",
+      "feature": "org-user-removal",
+      "title": "Add member_status column to organization_memberships",
+      "type": "schema",
+      "status": "pending",
+      "priority": 27,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "ORGREM-003",
+        "ORGREM-007",
+        "ORGREM-009"
+      ],
+      "parallelWith": [
+        "ORGREM-002",
+        "ORGREM-008"
+      ],
+      "acceptance": [
+        "Migration adds member_status enum ('active', 'removed') column",
+        "Migration adds removed_at timestamptz column",
+        "Migration adds removed_by UUID column (FK to profiles)",
+        "All existing memberships default to 'active' status",
+        "Creates index on (org_id, member_status) for filtering"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_add_member_status_to_memberships.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-002",
+      "feature": "org-user-removal",
+      "title": "Create rejoin_requests table schema",
+      "type": "schema",
+      "status": "pending",
+      "priority": 28,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "organization_memberships"
+        ]
+      },
+      "blocks": [
+        "ORGREM-005",
+        "ORGREM-006"
+      ],
+      "parallelWith": [
+        "ORGREM-001",
+        "ORGREM-008"
+      ],
+      "acceptance": [
+        "Table: rejoin_requests (id, org_id, user_id, status, requested_at, actioned_by, actioned_at)",
+        "Status enum: 'pending', 'approved', 'rejected'",
+        "Unique index on (org_id, user_id) WHERE status='pending'",
+        "Foreign keys to organizations and profiles tables",
+        "RLS policies: users see own requests, org admins see org requests"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_create_rejoin_requests_table.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-003",
+      "feature": "org-user-removal",
+      "title": "Create remove_user_from_org RPC function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 29,
+      "dependencies": {
+        "stories": [
+          "ORGREM-001"
+        ],
+        "files": [],
+        "schema": [
+          "organization_memberships"
+        ]
+      },
+      "blocks": [
+        "ORGREM-004",
+        "ORGREM-013"
+      ],
+      "parallelWith": [
+        "ORGREM-005"
+      ],
+      "acceptance": [
+        "RPC validates caller is org admin or owner",
+        "RPC checks user is not the last owner (prevents orphan org)",
+        "Updates member_status to 'removed' (no deletion)",
+        "Sets removed_at timestamp and removed_by to caller ID",
+        "Returns success with { success: true, userId }",
+        "Returns error if last owner or not admin"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_create_remove_user_from_org_rpc.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-004",
+      "feature": "org-user-removal",
+      "title": "Create send_user_removal_email edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 30,
+      "dependencies": {
+        "stories": [
+          "ORGREM-003",
+          "ORGREM-011"
+        ],
+        "files": [
+          "supabase/functions/encharge-send-email/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-012"
+      ],
+      "acceptance": [
+        "Edge function at supabase/functions/send-removal-email/",
+        "Calls encharge-send-email with template_type: 'member_removed'",
+        "Includes org name, admin contact, rejoin URL in variables",
+        "Non-blocking - logs error but doesn't throw",
+        "Returns { emailSent: boolean, error?: string }"
+      ],
+      "estimatedMinutes": 35,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/send-removal-email/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-005",
+      "feature": "org-user-removal",
+      "title": "Create request_rejoin RPC function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 31,
+      "dependencies": {
+        "stories": [
+          "ORGREM-002"
+        ],
+        "files": [],
+        "schema": [
+          "rejoin_requests",
+          "organization_memberships"
+        ]
+      },
+      "blocks": [
+        "ORGREM-014"
+      ],
+      "parallelWith": [
+        "ORGREM-003"
+      ],
+      "acceptance": [
+        "RPC checks member_status='removed' for caller in org",
+        "Prevents duplicate pending requests (unique constraint)",
+        "Inserts rejoin_request with status='pending'",
+        "Returns request ID and success status",
+        "Returns error if user not removed or already has pending request"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_create_request_rejoin_rpc.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-006",
+      "feature": "org-user-removal",
+      "title": "Create approve_rejoin_request RPC function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 32,
+      "dependencies": {
+        "stories": [
+          "ORGREM-002",
+          "ORGREM-005"
+        ],
+        "files": [],
+        "schema": [
+          "rejoin_requests",
+          "organization_memberships"
+        ]
+      },
+      "blocks": [
+        "ORGREM-015"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "RPC validates caller is org admin",
+        "Updates member_status='active' in organization_memberships",
+        "Marks rejoin_request as 'approved' with actioned_by/actioned_at",
+        "Sends confirmation email (optional, non-blocking)",
+        "Returns success with user_id and org_id",
+        "Handles race conditions (request already processed)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_create_approve_rejoin_rpc.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-007",
+      "feature": "org-user-removal",
+      "title": "Update RLS policies for removed members",
+      "type": "backend",
+      "status": "pending",
+      "priority": 33,
+      "dependencies": {
+        "stories": [
+          "ORGREM-001"
+        ],
+        "files": [],
+        "schema": [
+          "deals",
+          "contacts",
+          "activities",
+          "meetings",
+          "tasks"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-008"
+      ],
+      "acceptance": [
+        "RLS policies on deals/contacts/activities allow SELECT for removed members",
+        "RLS policies PREVENT UPDATE/DELETE for removed members",
+        "Test: Removed user can view their old records but not edit"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_update_rls_for_removed_users.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-008",
+      "feature": "org-user-removal",
+      "title": "Add removed_user_redirect flag to profiles",
+      "type": "schema",
+      "status": "pending",
+      "priority": 34,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "profiles"
+        ]
+      },
+      "blocks": [
+        "ORGREM-009"
+      ],
+      "parallelWith": [
+        "ORGREM-001",
+        "ORGREM-002",
+        "ORGREM-007"
+      ],
+      "acceptance": [
+        "Migration adds redirect_to_onboarding boolean column (default false)",
+        "Used by auth middleware to detect removed users",
+        "Set to true when user removed from last/only org",
+        "Cleared when user completes onboarding flow"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_add_removed_redirect_flag.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-009",
+      "feature": "org-user-removal",
+      "title": "Implement removal detection in auth middleware",
+      "type": "backend",
+      "status": "pending",
+      "priority": 35,
+      "dependencies": {
+        "stories": [
+          "ORGREM-008",
+          "ORGREM-001"
+        ],
+        "files": [
+          "src/lib/contexts/AuthContext.tsx"
+        ],
+        "schema": [
+          "organization_memberships",
+          "profiles"
+        ]
+      },
+      "blocks": [
+        "ORGREM-010"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Auth context checks redirect_to_onboarding flag on load",
+        "If true, redirects to /onboarding/removed-user route",
+        "Also checks if user has NO active memberships",
+        "Returns { user, isRemoved: boolean, hasActiveOrg: boolean }",
+        "Runs on every auth state change"
+      ],
+      "estimatedMinutes": 35,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/contexts/AuthContext.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-010",
+      "feature": "org-user-removal",
+      "title": "Add redirect handler for removed users",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 36,
+      "dependencies": {
+        "stories": [
+          "ORGREM-009"
+        ],
+        "files": [
+          "src/App.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "ORGREM-014"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Route: /onboarding/removed-user added to router",
+        "useEffect detects isRemoved flag from auth",
+        "Redirects to route on detection",
+        "Route shows removal message and rejoin option",
+        "Clears redirect_to_onboarding after user sees page"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/App.tsx",
+        "src/pages/onboarding/v2/RemovedUserStep.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-011",
+      "feature": "org-user-removal",
+      "title": "Create member_removed email template in DB",
+      "type": "backend",
+      "status": "pending",
+      "priority": 37,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "waitlist_email_templates"
+        ]
+      },
+      "blocks": [
+        "ORGREM-004"
+      ],
+      "parallelWith": [
+        "ORGREM-012"
+      ],
+      "acceptance": [
+        "Insert into waitlist_email_templates with type='member_removed'",
+        "Subject: 'You have been removed from {{org_name}}'",
+        "HTML body with: org_name, admin_email, rejoin_url variables",
+        "Professional tone matching brand",
+        "Suggests rejoin or join different org"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_add_member_removed_template.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-012",
+      "feature": "org-user-removal",
+      "title": "Create rejection email template for rejoin requests",
+      "type": "backend",
+      "status": "pending",
+      "priority": 38,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "waitlist_email_templates"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-011",
+        "ORGREM-004"
+      ],
+      "acceptance": [
+        "Insert template with type='rejoin_rejected'",
+        "Subject: 'Your request to rejoin {{org_name}} was declined'",
+        "HTML body with: org_name, rejection_reason, support_link",
+        "Suggests trying different organization",
+        "Professional, empathetic tone"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_add_rejoin_rejected_template.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-013",
+      "feature": "org-user-removal",
+      "title": "Add Remove User button/modal in TeamMembersPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 39,
+      "dependencies": {
+        "stories": [
+          "ORGREM-003",
+          "ORGREM-004"
+        ],
+        "files": [
+          "src/pages/settings/TeamMembersPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-014"
+      ],
+      "acceptance": [
+        "Update existing removal code (lines 298-328) to call RPC",
+        "ConfirmDialog variant='destructive' with clear warning",
+        "Dialog explains: keeps account & data, user can rejoin",
+        "Calls remove_user_from_org RPC on confirm",
+        "Triggers send_user_removal_email edge function after success",
+        "Toast: 'User removed successfully. They will be notified via email.'",
+        "Invalidates org-members query cache"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/settings/TeamMembersPage.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-014",
+      "feature": "org-user-removal",
+      "title": "Build You were removed onboarding screen",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 40,
+      "dependencies": {
+        "stories": [
+          "ORGREM-010",
+          "ORGREM-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-013"
+      ],
+      "acceptance": [
+        "Page: /onboarding/removed-user (RemovedUserStep.tsx)",
+        "Shows: 'You were removed from [OrgName]'",
+        "Displays: Admin contact info (if available)",
+        "CTA: 'Request to Rejoin' button → calls request_rejoin RPC",
+        "Secondary: 'Choose Different Organization' → /onboarding?step=org_selection",
+        "Toast on successful rejoin request submission",
+        "Explains admin must approve before access restored"
+      ],
+      "estimatedMinutes": 35,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/onboarding/v2/RemovedUserStep.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-015",
+      "feature": "org-user-removal",
+      "title": "Create admin rejoin approval interface",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 41,
+      "dependencies": {
+        "stories": [
+          "ORGREM-006",
+          "ORGREM-002"
+        ],
+        "files": [
+          "src/pages/settings/TeamMembersPage.tsx"
+        ],
+        "schema": [
+          "rejoin_requests"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-016"
+      ],
+      "acceptance": [
+        "New tab: 'Rejoin Requests' in TeamMembersPage",
+        "Table showing: user email, requested_at, status",
+        "Action buttons: Approve (green), Reject (red) with reason textarea",
+        "Badge showing count of pending requests",
+        "Approve calls approve_rejoin_request RPC",
+        "Reject sends rejection email with optional admin notes",
+        "Real-time updates via React Query refetch"
+      ],
+      "estimatedMinutes": 45,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/settings/TeamMembersPage.tsx",
+        "src/components/settings/RejoinRequestsTab.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-016",
+      "feature": "org-user-removal",
+      "title": "Add member status badge in org members list",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 42,
+      "dependencies": {
+        "stories": [
+          "ORGREM-001"
+        ],
+        "files": [
+          "src/pages/settings/TeamMembersPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-015"
+      ],
+      "acceptance": [
+        "Member list shows member_status badge next to each user",
+        "Badge: 'Removed' in red for member_status='removed'",
+        "Shows removed_at date on hover tooltip",
+        "Filter/sort options: 'Show removed members' toggle",
+        "Removed members appear dimmed/grayed out in list",
+        "Shows 'Pending rejoin' indicator if request exists"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/settings/TeamMembersPage.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-017",
+      "feature": "org-user-removal",
+      "title": "Write integration tests for removal flow",
+      "type": "test",
+      "status": "pending",
+      "priority": 43,
+      "dependencies": {
+        "stories": [
+          "ORGREM-003",
+          "ORGREM-009",
+          "ORGREM-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-018",
+        "ORGREM-019"
+      ],
+      "acceptance": [
+        "Playwright test: Admin removes user from org",
+        "Test: Removed user sees removal screen on next login",
+        "Test: Removed user can view but not edit their old records (RLS)",
+        "Test: Data shows 'created by removed user' label",
+        "Test: Removed user receives email notification",
+        "Uses test org with 2+ admins to avoid last-owner issue"
+      ],
+      "estimatedMinutes": 40,
+      "actualMinutes": null,
+      "files": [
+        "tests/e2e/org-user-removal.spec.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-018",
+      "feature": "org-user-removal",
+      "title": "Write tests for rejoin request flow",
+      "type": "test",
+      "status": "pending",
+      "priority": 44,
+      "dependencies": {
+        "stories": [
+          "ORGREM-005",
+          "ORGREM-006",
+          "ORGREM-015"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-017",
+        "ORGREM-019"
+      ],
+      "acceptance": [
+        "Test: Removed user creates rejoin request",
+        "Test: Admin approves rejoin request",
+        "Test: User regains access after approval",
+        "Test: Admin rejects with reason → user receives email",
+        "Test: Duplicate request prevention (unique constraint)",
+        "Test: Rejoin request appears in admin UI"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "tests/e2e/rejoin-request-flow.spec.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ORGREM-019",
+      "feature": "org-user-removal",
+      "title": "Test edge cases and error handling",
+      "type": "test",
+      "status": "pending",
+      "priority": 45,
+      "dependencies": {
+        "stories": [
+          "ORGREM-003",
+          "ORGREM-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ORGREM-017",
+        "ORGREM-018"
+      ],
+      "acceptance": [
+        "Test: Cannot remove last owner (RPC returns error)",
+        "Test: Cannot remove self (frontend prevents)",
+        "Test: Concurrent removal/rejoin requests handled gracefully",
+        "Test: RLS edge cases with removed users in shared deals",
+        "Test: Email delivery failures logged but don't block flow",
+        "Test: Network timeouts during RPC calls handled"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "tests/e2e/removal-edge-cases.spec.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
     }
   ],
   "execution": {
-    "totalStories": 19,
-    "completedStories": 0,
-    "currentFeature": "onboard-fix",
+    "totalStories": 48,
+    "completedStories": 1,
+    "currentFeature": "pending-approval-flow",
     "parallelGroups": [
       {
         "group": 1,
-        "stories": ["ONBOARD-002", "ONBOARD-005", "ONBOARD-008"],
+        "stories": [
+          "ONBOARD-002",
+          "ONBOARD-005",
+          "ONBOARD-008"
+        ],
         "reason": "Independent schema migrations, no conflicts",
         "timeSaved": "30 minutes"
       },
       {
         "group": 2,
-        "stories": ["ONBOARD-003", "ONBOARD-006", "ONBOARD-009", "ONBOARD-010"],
+        "stories": [
+          "ONBOARD-003",
+          "ONBOARD-006",
+          "ONBOARD-009",
+          "ONBOARD-010"
+        ],
         "reason": "Different files, all depend on ONBOARD-001 completion",
         "timeSaved": "45 minutes"
       },
       {
         "group": 3,
-        "stories": ["ONBOARD-012", "ONBOARD-015", "ONBOARD-018"],
+        "stories": [
+          "ONBOARD-012",
+          "ONBOARD-015",
+          "ONBOARD-018"
+        ],
         "reason": "Independent schema + template work",
         "timeSaved": "20 minutes"
+      },
+      {
+        "group": 4,
+        "stories": [
+          "PEND-008",
+          "PEND-009"
+        ],
+        "reason": "Backend RPC update and frontend cleanup can run in parallel",
+        "timeSaved": "20 minutes"
+      },
+      {
+        "group": 4,
+        "stories": [
+          "ORGREM-001",
+          "ORGREM-002",
+          "ORGREM-008"
+        ],
+        "reason": "Independent schema migrations, no conflicts",
+        "timeSaved": "20 minutes"
+      },
+      {
+        "group": 5,
+        "stories": [
+          "ORGREM-011",
+          "ORGREM-012"
+        ],
+        "reason": "Email template insertions, can run in parallel",
+        "timeSaved": "15 minutes"
+      },
+      {
+        "group": 6,
+        "stories": [
+          "ORGREM-003",
+          "ORGREM-005"
+        ],
+        "reason": "Independent RPC functions, no file overlap",
+        "timeSaved": "10 minutes"
+      },
+      {
+        "group": 7,
+        "stories": [
+          "ORGREM-013",
+          "ORGREM-014"
+        ],
+        "reason": "Frontend components with no file conflicts",
+        "timeSaved": "15 minutes"
+      },
+      {
+        "group": 8,
+        "stories": [
+          "ORGREM-015",
+          "ORGREM-016"
+        ],
+        "reason": "Both UI updates to TeamMembersPage, different sections",
+        "timeSaved": "10 minutes"
+      },
+      {
+        "group": 9,
+        "stories": [
+          "ORGREM-017",
+          "ORGREM-018",
+          "ORGREM-019"
+        ],
+        "reason": "Independent test suites, can run in parallel",
+        "timeSaved": "10 minutes"
       }
     ],
-    "estimatedTotalMinutes": 400,
-    "estimatedWithParallel": 305,
-    "lastUpdated": "2025-01-30T10:00:00Z"
+    "estimatedTotalMinutes": 1065,
+    "estimatedWithParallel": 805,
+    "lastUpdated": "2026-02-02T14:00:00Z"
   }
 }
