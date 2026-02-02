@@ -225,8 +225,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
     <>
       <IntelligentPreloader />
       <RecoveryTokenDetector />
+      <ScrollToTop />
       <Routes>
-        <ScrollToTop />
         {/* ========== PUBLIC ROUTES (No Auth Required) ========== */}
         {/* Public pages for screenshot automation - MUST be outside ProtectedRoute */}
         <Route path="/meetings/thumbnail/:meetingId" element={<MeetingThumbnail />} />
