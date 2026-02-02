@@ -653,7 +653,7 @@
       "feature": "onboard-fix",
       "title": "Update createOrganizationFromManualData to require approval for similar orgs",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 16,
       "dependencies": {
         "stories": [
@@ -678,7 +678,7 @@
         "Shows user 'Pending admin review' message"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 28,
       "files": [
         "src/lib/stores/onboardingV2Store.ts"
       ],
@@ -689,8 +689,8 @@
           "Show different UI for pending approval state"
         ]
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T18:00:00Z",
+      "completedAt": "2026-02-02T18:28:00Z"
     },
     {
       "id": "ONBOARD-017",
@@ -2013,7 +2013,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 35,
+    "completedStories": 36,
     "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
@@ -2115,6 +2115,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T18:12:00Z"
+    "lastUpdated": "2026-02-02T18:28:00Z"
   }
 }
