@@ -690,8 +690,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         p_limit: 5,
       });
 
+      // Check if we found a high-confidence match (similarity > 0.7)
+      const highConfidenceMatch = similarOrgs && similarOrgs.length > 0 && similarOrgs[0].similarity_score > 0.7;
+
       // If we found similar orgs, show selection step
-      if (similarOrgs && similarOrgs.length > 0) {
+      if (similarOrgs && similarOrgs.length > 0 && !highConfidenceMatch) {
         set({
           organizationCreationInProgress: false,
           currentStep: 'organization_selection',
@@ -753,6 +756,10 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         return existingOrg.id;
       }
 
+      // Determine if we need admin approval (high confidence match exists)
+      const requiresApproval = highConfidenceMatch;
+      const similarOrgId = requiresApproval ? similarOrgs![0].id : null;
+
       // Create organization with manual data company_name
       const { data: newOrg, error: createError } = await supabase
         .from('organizations')
@@ -760,6 +767,10 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           name: organizationName,
           created_by: userId,
           is_active: true,
+          // Set approval fields if similar org found
+          requires_admin_approval: requiresApproval,
+          approval_status: requiresApproval ? 'pending' : null,
+          similar_to_org_id: similarOrgId,
         })
         .select('id')
         .single();
@@ -778,6 +789,49 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         });
 
       if (memberError) throw memberError;
+
+      // If org requires admin approval, send notification email
+      if (requiresApproval && similarOrgId) {
+        try {
+          // Get user profile for email
+          const { data: userProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, email')
+            .eq('id', userId)
+            .maybeSingle();
+
+          // Get similar org name
+          const { data: similarOrg } = await supabase
+            .from('organizations')
+            .select('name')
+            .eq('id', similarOrgId)
+            .maybeSingle();
+
+          if (userProfile && similarOrg) {
+            const userName = `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'User';
+
+            // Send notification email to admins via edge function
+            await supabase.functions.invoke('encharge-send-email', {
+              body: {
+                template_type: 'org_approval',
+                to_email: 'app@use60.com', // TODO: Replace with actual admin email or admin list
+                variables: {
+                  newOrgName: organizationName,
+                  similarOrgName: similarOrg.name,
+                  userName,
+                  userEmail: userProfile.email || session.user.email,
+                  dashboardUrl: window.location.origin,
+                },
+              },
+            });
+
+            console.log('[onboardingV2] Sent org approval notification email');
+          }
+        } catch (emailError) {
+          // Non-blocking - log but don't fail org creation
+          console.error('[onboardingV2] Failed to send org approval email:', emailError);
+        }
+      }
 
       // After creating new org, cleanup old auto-created orgs
       try {
@@ -809,10 +863,31 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         console.error('[onboardingV2] Failed to cleanup old org:', cleanupErr);
       }
 
-      set({
-        organizationCreationInProgress: false,
-        organizationId: newOrg.id,
-      });
+      // If requires approval, set pending approval state
+      if (requiresApproval) {
+        // Update user profile status to pending_approval
+        await supabase
+          .from('profiles')
+          .update({ profile_status: 'pending_approval' })
+          .eq('id', userId);
+
+        set({
+          organizationCreationInProgress: false,
+          organizationId: newOrg.id,
+          currentStep: 'pending_approval',
+          pendingJoinRequest: {
+            requestId: newOrg.id, // Use org id as placeholder
+            orgId: newOrg.id,
+            orgName: organizationName,
+            status: 'pending',
+          },
+        });
+      } else {
+        set({
+          organizationCreationInProgress: false,
+          organizationId: newOrg.id,
+        });
+      }
 
       return newOrg.id;
 

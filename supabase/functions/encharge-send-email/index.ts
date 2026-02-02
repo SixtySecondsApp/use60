@@ -602,6 +602,7 @@ serve(async (req) => {
       first_meeting_synced: 'First Meeting Synced',
       join_request_approved: 'Join Request Approved',
       join_request_rejected: 'Join Request Rejected',
+      org_approval: 'Organization Approval Required',
     };
 
     const eventName = eventNameMap[request.template_type] || 'Email Sent';
