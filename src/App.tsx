@@ -524,7 +524,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/email-sync" element={<AppLayout><EmailSyncPage /></AppLayout>} />
                 <Route path="/settings/task-sync" element={<AppLayout><TaskSyncPage /></AppLayout>} />
                 <Route path="/settings/meeting-sync" element={<AppLayout><MeetingSyncPage /></AppLayout>} />
-                <Route path="/settings/team-members" element={<OrgAdminRouteGuard><AppLayout><TeamMembersPage /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><TeamMembersPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/organization" element={<OrgAdminRouteGuard><AppLayout><OrganizationSettingsPage /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/branding" element={<OrgAdminRouteGuard><AppLayout><OrgBranding /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><OrgBilling /></AppLayout></OrgAdminRouteGuard>} />
