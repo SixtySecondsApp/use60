@@ -16,7 +16,7 @@
 import { useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { useOnboardingV2Store, type OnboardingV2Step, restoreOnboardingState } from '@/lib/stores/onboardingV2Store';
+import { useOnboardingV2Store, type OnboardingV2Step } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -80,16 +80,46 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
 
   // Restore state from localStorage on mount (session recovery)
   useEffect(() => {
-    if (!user) return;
+    const restoreState = async () => {
+      if (!user) return;
 
-    const restoredState = restoreOnboardingState(user.id);
-    if (restoredState) {
-      console.log('[OnboardingV2] Restored state from localStorage:', restoredState);
-      if (restoredState.currentStep) setStep(restoredState.currentStep);
-      if (restoredState.domain) setDomain(restoredState.domain);
-      if (restoredState.organizationId) setOrganizationId(restoredState.organizationId);
-      toast.info('Restored your progress');
-    }
+      // Check for saved state in localStorage
+      const savedState = localStorage.getItem(`sixty_onboarding_${user.id}`);
+
+      if (savedState) {
+        // Validate session is still active before restoring
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session) {
+          // Session is active - restore state
+          try {
+            const parsed = JSON.parse(savedState);
+            console.log('[OnboardingV2] Restored state from localStorage:', parsed);
+
+            // Restore state to Zustand store
+            if (parsed.currentStep) setStep(parsed.currentStep);
+            if (parsed.domain) setDomain(parsed.domain);
+            if (parsed.organizationId) setOrganizationId(parsed.organizationId);
+            if (parsed.websiteUrl) useOnboardingV2Store.setState({ websiteUrl: parsed.websiteUrl });
+            if (parsed.manualData) useOnboardingV2Store.setState({ manualData: parsed.manualData });
+            if (parsed.enrichment) useOnboardingV2Store.setState({ enrichment: parsed.enrichment });
+            if (parsed.skillConfigs) useOnboardingV2Store.setState({ skillConfigs: parsed.skillConfigs });
+
+            toast.info('Restored your progress');
+          } catch (error) {
+            console.error('[OnboardingV2] Failed to parse saved state:', error);
+            // Clear invalid state
+            localStorage.removeItem(`sixty_onboarding_${user.id}`);
+          }
+        } else {
+          // Session expired - clear stale state
+          console.log('[OnboardingV2] Session expired, clearing stale state');
+          localStorage.removeItem(`sixty_onboarding_${user.id}`);
+        }
+      }
+    };
+
+    restoreState();
   }, [user]);
 
   // Read step from database on mount for resumption after logout
