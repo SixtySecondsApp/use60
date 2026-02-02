@@ -38,7 +38,7 @@
     "test:intelligence": "vitest run tests/unit/intelligence",
     "test:unit:watch": "vitest tests/unit",
     "test:unit:coverage": "vitest run tests/unit --coverage",
-    "test:integration": "vitest run tests/integration",
+    "test:integration": "vitest run --config vitest.config.integration.ts",
     "test:e2e": "vitest run --config=vitest.config.e2e.ts",
     "test:e2e:headed": "vitest run --config=vitest.config.e2e.ts --reporter=verbose",
     "test:e2e:ui": "vitest --ui --config=vitest.config.e2e.ts",

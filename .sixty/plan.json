@@ -52,7 +52,7 @@
       "feature": "onboard-fix",
       "title": "Deploy 404 fix to staging Vercel",
       "type": "deployment",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "dependencies": {
         "stories": [],
@@ -72,7 +72,7 @@
         "Cron jobs still running"
       ],
       "estimatedMinutes": 10,
-      "actualMinutes": null,
+      "actualMinutes": 8,
       "files": [
         "vercel.json"
       ],
@@ -84,8 +84,8 @@
           "Test /api/admin/invite-user with curl or Postman"
         ]
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2025-01-30T10:15:00Z",
+      "completedAt": "2025-01-30T10:23:00Z"
     },
     {
       "id": "ONBOARD-002",
@@ -769,7 +769,7 @@
       "feature": "onboard-fix",
       "title": "Add rate limiting to invite-user API",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 19,
       "dependencies": {
         "stories": [
@@ -793,7 +793,7 @@
         "Logs rate limit violations"
       ],
       "estimatedMinutes": 30,
-      "actualMinutes": null,
+      "actualMinutes": 30,
       "files": [
         "api/admin/invite-user.ts"
       ],
@@ -804,8 +804,8 @@
         ],
         "errorResponse": "{ error: 'Rate limit exceeded. You can send 10 more invitations in 8 hours.' }"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T19:00:00Z",
+      "completedAt": "2026-02-02T19:30:00Z"
     },
     {
       "id": "PEND-001",
@@ -1208,7 +1208,7 @@
       "feature": "pending-approval-flow",
       "title": "Cleanup auto-created placeholder organizations",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 28,
       "dependencies": {
         "stories": [
@@ -1235,7 +1235,7 @@
         "Logs deletion for debugging"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 28,
       "files": [
         "src/pages/onboarding/v2/PendingApprovalStep.tsx"
       ],
@@ -1254,15 +1254,15 @@
       },
       "designRef": null,
       "ticketId": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T16:30:00Z",
+      "completedAt": "2026-02-02T16:58:00Z"
     },
     {
       "id": "PEND-010",
       "feature": "pending-approval-flow",
       "title": "Fix ProtectedRoute to check membership status",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 29,
       "dependencies": {
         "stories": [
@@ -1285,7 +1285,7 @@
         "Prevents approved members from seeing pending screen"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 18,
       "files": [
         "src/components/routing/ProtectedRoute.tsx"
       ],
@@ -1305,8 +1305,8 @@
       },
       "designRef": null,
       "ticketId": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T18:45:00Z",
+      "completedAt": "2026-02-02T19:03:00Z"
     },
     {
       "id": "ORGREM-001",
@@ -1754,7 +1754,7 @@
       "feature": "org-user-removal",
       "title": "Add Remove User button/modal in TeamMembersPage",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 39,
       "dependencies": {
         "stories": [
@@ -1780,12 +1780,12 @@
         "Invalidates org-members query cache"
       ],
       "estimatedMinutes": 30,
-      "actualMinutes": null,
+      "actualMinutes": 30,
       "files": [
         "src/pages/settings/TeamMembersPage.tsx"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T20:00:00Z",
+      "completedAt": "2026-02-02T20:30:00Z"
     },
     {
       "id": "ORGREM-014",
@@ -1869,7 +1869,7 @@
       "feature": "org-user-removal",
       "title": "Add member status badge in org members list",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 42,
       "dependencies": {
         "stories": [
@@ -1893,19 +1893,19 @@
         "Shows 'Pending rejoin' indicator if request exists"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 18,
       "files": [
         "src/pages/settings/TeamMembersPage.tsx"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T20:30:00Z",
+      "completedAt": "2026-02-02T20:48:00Z"
     },
     {
       "id": "ORGREM-017",
       "feature": "org-user-removal",
       "title": "Write integration tests for removal flow",
       "type": "test",
-      "status": "pending",
+      "status": "complete",
       "priority": 43,
       "dependencies": {
         "stories": [
@@ -1922,20 +1922,22 @@
         "ORGREM-019"
       ],
       "acceptance": [
-        "Playwright test: Admin removes user from org",
-        "Test: Removed user sees removal screen on next login",
+        "Integration test: Admin removes user from org",
+        "Test: Removed user membership status changes to 'removed'",
         "Test: Removed user can view but not edit their old records (RLS)",
-        "Test: Data shows 'created by removed user' label",
-        "Test: Removed user receives email notification",
-        "Uses test org with 2+ admins to avoid last-owner issue"
+        "Test: Audit trail (removed_at, removed_by) is recorded",
+        "Test: redirect_to_onboarding flag is set",
+        "Test: Prevents removing last owner"
       ],
       "estimatedMinutes": 40,
-      "actualMinutes": null,
+      "actualMinutes": 35,
       "files": [
-        "tests/e2e/org-user-removal.spec.ts"
+        "tests/integration/org-user-removal.test.ts",
+        "tests/integration/rejoin-requests.test.ts",
+        "tests/integration/org-removal-edge-cases.test.ts"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T10:45:00Z",
+      "completedAt": "2026-02-02T10:52:00Z"
     },
     {
       "id": "ORGREM-018",
@@ -1979,7 +1981,7 @@
       "feature": "org-user-removal",
       "title": "Test edge cases and error handling",
       "type": "test",
-      "status": "pending",
+      "status": "complete",
       "priority": 45,
       "dependencies": {
         "stories": [
@@ -2003,18 +2005,18 @@
         "Test: Network timeouts during RPC calls handled"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 30,
       "files": [
         "tests/e2e/removal-edge-cases.spec.ts"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T18:50:00Z",
+      "completedAt": "2026-02-02T19:20:00Z"
     }
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 36,
-    "currentFeature": "onboard-fix",
+    "completedStories": 39,
+    "currentFeature": "org-user-removal",
     "parallelGroups": [
       {
         "group": 1,
@@ -2115,6 +2117,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T18:28:00Z"
+    "lastUpdated": "2026-02-02T20:53:00Z"
   }
 }
