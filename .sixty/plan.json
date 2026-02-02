@@ -1059,7 +1059,7 @@
       "feature": "pending-approval-flow",
       "title": "Fix error handling to distinguish approved vs cancelled requests",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 25,
       "dependencies": {
         "stories": [
@@ -1079,7 +1079,7 @@
         "Removes confusing 'log in' prompt for approved users"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 18,
       "files": [
         "src/pages/onboarding/v2/PendingApprovalStep.tsx"
       ],
@@ -1092,13 +1092,13 @@
           "Remove 'Please log in' message (user is already authenticated)"
         ],
         "references": [
-          "src/pages/onboarding/v2/PendingApprovalStep.tsx:60-106 (current checkApprovalStatus)"
+          "src/pages/onboarding/v2/PendingApprovalStep.tsx:172-226 (updated checkApprovalStatus)"
         ]
       },
       "designRef": null,
       "ticketId": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T16:00:00Z",
+      "completedAt": "2026-02-02T16:18:00Z"
     },
     {
       "id": "PEND-007",
@@ -2011,7 +2011,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 20,
+    "completedStories": 19,
     "currentFeature": "pending-approval-flow",
     "parallelGroups": [
       {
