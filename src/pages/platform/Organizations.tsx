@@ -6,7 +6,7 @@ import {
   Edit2,
   Trash2,
   Users,
-  Toggle2,
+  ToggleRight,
   ChevronRight,
   Loader2,
   Shield,
@@ -327,7 +327,7 @@ export default function Organizations() {
                         )}
                         title={org.is_active ? 'Deactivate' : 'Activate'}
                       >
-                        <Toggle2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                        <ToggleRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                       </button>
 
                       <AlertDialog>
