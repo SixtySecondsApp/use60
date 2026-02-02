@@ -268,6 +268,30 @@ export async function removeOrganizationMember(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Validation: Check if user is the last owner
+    const { count: ownerCount } = await supabase
+      .from('organization_memberships')
+      .select('*', { count: 'exact' })
+      .eq('org_id', orgId)
+      .eq('role', 'owner')
+      .eq('member_status', 'active');
+
+    if ((ownerCount || 0) <= 1) {
+      const { data: member } = await supabase
+        .from('organization_memberships')
+        .select('role')
+        .eq('org_id', orgId)
+        .eq('user_id', userId)
+        .single();
+
+      if (member?.role === 'owner') {
+        return {
+          success: false,
+          error: 'Cannot remove the last owner. Promote another member to owner first.',
+        };
+      }
+    }
+
     // Use the RPC function if available
     try {
       const { data, error: rpcError } = await supabase.rpc('remove_user_from_org', {
@@ -275,32 +299,44 @@ export async function removeOrganizationMember(
         p_user_id: userId,
       });
 
-      if (rpcError) throw rpcError;
+      if (rpcError) {
+        console.warn('RPC error, attempting fallback:', rpcError);
+        throw rpcError; // Fall through to fallback
+      }
+
       if (!data?.success) {
         throw new Error(data?.error || 'Failed to remove member');
       }
 
       return { success: true };
     } catch (rpcError: any) {
-      // Fallback to manual update if RPC fails
-      console.warn('RPC failed, using fallback:', rpcError.message);
+      // Fallback to manual update if RPC fails (schema cache issue)
+      console.warn('RPC unavailable, using direct database update:', rpcError.message);
 
       const { error } = await supabase
         .from('organization_memberships')
         .update({
           member_status: 'removed',
           removed_at: new Date().toISOString(),
+          removed_by: (await supabase.auth.getUser()).data.user?.id || null,
           updated_at: new Date().toISOString(),
         })
         .eq('org_id', orgId)
         .eq('user_id', userId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Fallback update failed:', error);
+        throw error;
+      }
+
       return { success: true };
     }
   } catch (error: any) {
     console.error('Error removing member:', error);
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error.message || 'Failed to remove member from organization',
+    };
   }
 }
 
