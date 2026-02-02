@@ -667,21 +667,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           'fixed left-0 bottom-0 bg-white dark:bg-gray-900/50 backdrop-blur-xl p-6',
           'border-r border-[#E2E8F0] dark:border-gray-800/50 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.04)] dark:shadow-none',
           'transition-all duration-300 ease-in-out flex-shrink-0',
-          'overflow-hidden',
+          'overflow-y-auto overflow-x-hidden',
           isCollapsed ? 'w-[96px]' : 'w-[256px]',
           'hidden lg:block z-[100]',
           isImpersonating ? 'top-[44px] h-[calc(100vh-44px)]' : 'top-0 h-screen'
         )}
+        style={{ overscrollBehavior: 'contain' }}
       >
         {/* Small Circular Toggle Button - Positioned on Edge, Inline with Logo */}
         <div
           className={cn(
-            'absolute z-50',
+            'absolute z-[200]',
             // Align with logo: p-6 (24px) + half logo height
             // Collapsed: 24px + 24px = 48px (logo is now w-12 h-12), Expanded: 24px + 24px = 48px
             'top-[48px]',
             // Position on edge with transform to center button on edge
-            'right-0 translate-x-1/2',
+            'right-[-12px]',
             'w-6 h-6'
           )}
         >
@@ -738,7 +739,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           
-          <div className="flex-1 overflow-y-auto pr-2 -mr-2 scrollbar-accent">
+          <div className={cn(
+            'flex-1 overflow-y-auto scrollbar-accent',
+            !isCollapsed ? 'pr-2 -mr-2' : 'pr-0'
+          )}>
             <nav className={cn(
               'pb-6',
               isCollapsed ? 'space-y-3' : 'space-y-2'
