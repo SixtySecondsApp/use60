@@ -1383,7 +1383,7 @@
       "feature": "org-user-removal",
       "title": "Create remove_user_from_org RPC function",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 29,
       "dependencies": {
         "stories": [
@@ -1410,12 +1410,12 @@
         "Returns error if last owner or not admin"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 20,
       "files": [
         "supabase/migrations/YYYYMMDD_create_remove_user_from_org_rpc.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:40:26.103Z",
+      "completedAt": "2026-02-02T09:40:26.103Z"
     },
     {
       "id": "ORGREM-004",
@@ -1682,7 +1682,7 @@
       "feature": "org-user-removal",
       "title": "Create member_removed email template in DB",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 37,
       "dependencies": {
         "stories": [],
@@ -1705,19 +1705,19 @@
         "Suggests rejoin or join different org"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 15,
       "files": [
         "supabase/migrations/YYYYMMDD_add_member_removed_template.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:40:26.103Z",
+      "completedAt": "2026-02-02T09:40:26.103Z"
     },
     {
       "id": "ORGREM-012",
       "feature": "org-user-removal",
       "title": "Create rejection email template for rejoin requests",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 38,
       "dependencies": {
         "stories": [],
@@ -1739,12 +1739,12 @@
         "Professional, empathetic tone"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 15,
       "files": [
         "supabase/migrations/YYYYMMDD_add_rejoin_rejected_template.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:40:26.103Z",
+      "completedAt": "2026-02-02T09:40:26.103Z"
     },
     {
       "id": "ORGREM-013",
@@ -2010,7 +2010,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 8,
+    "completedStories": 11,
     "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
@@ -2112,6 +2112,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T15:30:00Z"
+    "lastUpdated": "2026-02-02T09:40:26.103Z"
   }
 }
