@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { logger } from '@/lib/utils/logger';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

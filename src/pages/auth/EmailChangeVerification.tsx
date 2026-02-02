@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { logger } from '@/lib/utils/logger';
 import { Button } from '@/components/ui/button';
