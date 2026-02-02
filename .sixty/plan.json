@@ -614,7 +614,7 @@
       "feature": "onboard-fix",
       "title": "Add similar_to_org_id and pending_approval to organizations table",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 15,
       "dependencies": {
         "stories": [
@@ -638,15 +638,15 @@
         "Creates index on approval_status for filtering"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 15,
       "files": [
-        "supabase/migrations/YYYYMMDD_add_org_approval_fields.sql"
+        "supabase/migrations/20260130110400_add_org_approval_fields.sql"
       ],
       "implementation": {
         "sql": "ALTER TABLE organizations ADD COLUMN similar_to_org_id uuid REFERENCES organizations(id);\nALTER TABLE organizations ADD COLUMN requires_admin_approval boolean DEFAULT false;\nALTER TABLE organizations ADD COLUMN approval_status text CHECK (approval_status IN ('pending', 'approved', 'rejected'));\nALTER TABLE organizations ADD COLUMN approved_by uuid REFERENCES profiles(id);\nCREATE INDEX idx_orgs_approval_status ON organizations(approval_status) WHERE requires_admin_approval = true;"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-01-30T10:00:00Z",
+      "completedAt": "2026-01-30T10:15:00Z"
     },
     {
       "id": "ONBOARD-016",
@@ -2013,7 +2013,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 34,
+    "completedStories": 35,
     "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
@@ -2115,6 +2115,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T17:28:00Z"
+    "lastUpdated": "2026-02-02T18:00:00Z"
   }
 }
