@@ -439,7 +439,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           className={cn(
                             'w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] sm:min-h-[64px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]',
                             location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
-                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-gray-800/40 dark:text-gray-100 dark:border-gray-700/30'
+                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                               : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                           )}
                         >
@@ -461,7 +461,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                                 className={cn(
                                   'w-full flex items-center gap-3 px-4 py-3 min-h-[48px] rounded-xl text-sm font-medium transition-colors',
                                   location.pathname === subItem.href
-                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-gray-800/40 dark:text-gray-100 dark:border-gray-700/30'
+                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                                     : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                                 )}
                               >
@@ -485,7 +485,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   className={cn(
                     "flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]",
                     location.pathname.startsWith('/settings')
-                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-gray-800/40 dark:text-gray-100 dark:border-gray-700/30'
+                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                       : 'text-[#64748B] dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-gray-800/50'
                   )}
                 >
@@ -667,7 +667,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           'fixed left-0 bottom-0 bg-white dark:bg-gray-900/50 backdrop-blur-xl p-6',
           'border-r border-[#E2E8F0] dark:border-gray-800/50 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.04)] dark:shadow-none',
           'transition-all duration-300 ease-in-out flex-shrink-0',
-          'overflow-visible',
+          'overflow-hidden',
           isCollapsed ? 'w-[96px]' : 'w-[256px]',
           'hidden lg:block z-[100]',
           isImpersonating ? 'top-[44px] h-[calc(100vh-44px)]' : 'top-0 h-screen'
@@ -764,7 +764,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           ? 'w-12 h-12 mx-auto rounded-xl justify-center'
                           : 'w-full gap-3 px-2 py-2.5 rounded-xl',
                         location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
-                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-gray-800/40 dark:text-gray-100 dark:border-gray-700/30'
+                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                           : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                       )}
                     >
@@ -805,7 +805,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                             className={cn(
                               'w-full flex items-center gap-3 px-2 py-2 rounded-xl text-xs font-medium transition-colors',
                               location.pathname === subItem.href
-                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-gray-800/40 dark:text-gray-100 dark:border-gray-700/30'
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                                 : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                             )}
                           >
@@ -834,7 +834,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   ? 'w-12 h-12 mx-auto rounded-xl justify-center mb-0' 
                   : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
                 location.pathname.startsWith('/settings')
-                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-gray-800/40 dark:text-gray-100 dark:border-gray-700/30'
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                   : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
               )}
             >
