@@ -11,6 +11,7 @@ import { Clock, CheckCircle2, Loader2 } from 'lucide-react';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrg } from '@/lib/contexts/OrgContext';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -21,6 +22,7 @@ import { useApprovalDetection } from '@/lib/hooks/useApprovalDetection';
 export function PendingApprovalStep() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refreshOrgs, switchOrg } = useOrg();
   const { pendingJoinRequest, userEmail } = useOnboardingV2Store();
   const [profileEmail, setProfileEmail] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -28,6 +30,7 @@ export function PendingApprovalStep() {
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [joinRequestId, setJoinRequestId] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
 
   // Use approval detection hook
   const { isApproved, membership, refetch } = useApprovalDetection(
@@ -92,17 +95,56 @@ export function PendingApprovalStep() {
     };
   }, [user?.id, pendingJoinRequest?.orgId, refetch]);
 
-  // Handle approval detection
-  useEffect(() => {
-    if (isApproved && membership) {
-      console.log('[PendingApprovalStep] Approval detected!', membership);
+  // Handler for when approval is detected
+  const handleApprovalDetected = async (membership: { org_id: string }) => {
+    try {
+      setIsLoadingDashboard(true);
       setIsPolling(false);
-      toast.success('Approved! Redirecting to your dashboard...');
+
+      console.log('[PendingApprovalStep] Starting approval flow for org:', membership.org_id);
+
+      // 1. Update profile status to active
+      if (user?.id) {
+        console.log('[PendingApprovalStep] Updating profile status to active');
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ profile_status: 'active' })
+          .eq('id', user.id);
+
+        if (profileError) {
+          console.error('[PendingApprovalStep] Error updating profile status:', profileError);
+          // Don't fail the flow if profile update fails - continue anyway
+        }
+      }
+
+      // 2. Reload organizations to get the newly added membership
+      console.log('[PendingApprovalStep] Refreshing organizations');
+      await refreshOrgs();
+
+      // 3. Switch to the newly joined organization
+      console.log('[PendingApprovalStep] Switching to organization:', membership.org_id);
+      switchOrg(membership.org_id);
+
+      // 4. Show success message and navigate to dashboard
+      toast.success('Welcome! Redirecting to your dashboard...');
       setTimeout(() => {
         navigate('/dashboard', { replace: true });
       }, 1000);
+    } catch (error) {
+      console.error('[PendingApprovalStep] Error handling approval:', error);
+      toast.error('Failed to load dashboard. Please try refreshing the page.');
+      setIsLoadingDashboard(false);
     }
-  }, [isApproved, membership, navigate]);
+  };
+
+  // Handle approval detection
+  useEffect(() => {
+    if (isApproved && membership && !isLoadingDashboard) {
+      console.log('[PendingApprovalStep] Approval detected!', membership);
+      handleApprovalDetected(membership);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApproved, membership, isLoadingDashboard]);
 
   const checkApprovalStatus = async () => {
     if (!user) return;
@@ -241,12 +283,20 @@ export function PendingApprovalStep() {
                 </p>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                  <p className="font-medium text-white">Awaiting Admin Review</p>
+                  <p className="font-medium text-white">
+                    {isLoadingDashboard ? 'Loading your dashboard...' : 'Awaiting Admin Review'}
+                  </p>
                 </div>
-                {isPolling && (
+                {isPolling && !isLoadingDashboard && (
                   <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     <span>Checking status...</span>
+                  </div>
+                )}
+                {isLoadingDashboard && (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-green-400">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Preparing your workspace...</span>
                   </div>
                 )}
               </div>
@@ -270,7 +320,7 @@ export function PendingApprovalStep() {
             {/* Check status button */}
             <button
               onClick={checkApprovalStatus}
-              disabled={checking}
+              disabled={checking || isLoadingDashboard}
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 mb-4"
             >
               {checking ? (
@@ -286,7 +336,7 @@ export function PendingApprovalStep() {
             {/* Cancel and restart onboarding button */}
             <button
               onClick={() => setShowCancelDialog(true)}
-              disabled={canceling || !joinRequestId}
+              disabled={canceling || !joinRequestId || isLoadingDashboard}
               className="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 mb-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
             >
               {canceling ? (
