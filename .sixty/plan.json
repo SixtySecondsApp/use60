@@ -732,7 +732,7 @@
       "feature": "onboard-fix",
       "title": "Create invite_attempts tracking table",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 18,
       "dependencies": {
         "stories": [
@@ -754,15 +754,15 @@
         "Includes foreign keys to profiles and organizations"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 12,
       "files": [
-        "supabase/migrations/YYYYMMDD_create_invite_attempts_table.sql"
+        "supabase/migrations/20260202110000_create_invite_attempts_table.sql"
       ],
       "implementation": {
         "sql": "CREATE TABLE invite_attempts (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  admin_id uuid REFERENCES profiles(id) NOT NULL,\n  invited_email text NOT NULL,\n  organization_id uuid REFERENCES organizations(id),\n  attempted_at timestamptz DEFAULT NOW(),\n  success boolean DEFAULT false\n);\nCREATE INDEX idx_invite_attempts_admin ON invite_attempts(admin_id, attempted_at);\nCREATE INDEX idx_invite_attempts_org ON invite_attempts(organization_id, attempted_at);"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T18:00:00Z",
+      "completedAt": "2026-02-02T18:12:00Z"
     },
     {
       "id": "ONBOARD-019",
@@ -2115,6 +2115,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T18:00:00Z"
+    "lastUpdated": "2026-02-02T18:12:00Z"
   }
 }
