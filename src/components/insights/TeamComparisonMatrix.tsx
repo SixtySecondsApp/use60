@@ -25,7 +25,7 @@ interface TeamComparisonMatrixProps {
   className?: string;
 }
 
-type SortField = 'name' | 'meetings' | 'sentiment' | 'talkTime' | 'forwardMovement' | 'positiveOutcome';
+type SortField = 'name' | 'meetings' | 'sentiment' | 'talkTime';
 type SortDirection = 'asc' | 'desc';
 
 // Get initials from name
@@ -174,17 +174,7 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
       ? withTalkTime.reduce((sum, r) => sum + (r.avgTalkTime || 0), 0) / withTalkTime.length
       : null;
 
-    const withFM = withMeetings.filter((r) => r.forwardMovementRate !== null);
-    const avgFM = withFM.length > 0
-      ? withFM.reduce((sum, r) => sum + (r.forwardMovementRate || 0), 0) / withFM.length
-      : null;
-
-    const withPO = withMeetings.filter((r) => r.positiveOutcomeRate !== null);
-    const avgPO = withPO.length > 0
-      ? withPO.reduce((sum, r) => sum + (r.positiveOutcomeRate || 0), 0) / withPO.length
-      : null;
-
-    return { avgMeetings, avgSentiment, avgTalkTime, avgFM, avgPO };
+    return { avgMeetings, avgSentiment, avgTalkTime };
   }, [data]);
 
   // Sort data
@@ -211,14 +201,6 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
         case 'talkTime':
           aVal = a.avgTalkTime ?? -999;
           bVal = b.avgTalkTime ?? -999;
-          break;
-        case 'forwardMovement':
-          aVal = a.forwardMovementRate ?? -999;
-          bVal = b.forwardMovementRate ?? -999;
-          break;
-        case 'positiveOutcome':
-          aVal = a.positiveOutcomeRate ?? -999;
-          bVal = b.positiveOutcomeRate ?? -999;
           break;
         default:
           aVal = 0;
@@ -342,22 +324,6 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                 onSort={handleSort}
                 className="min-w-[60px]"
               />
-              <SortableHeader
-                label="Forward"
-                field="forwardMovement"
-                currentSort={sortField}
-                currentDirection={sortDirection}
-                onSort={handleSort}
-                className="min-w-[70px]"
-              />
-              <SortableHeader
-                label="Positive"
-                field="positiveOutcome"
-                currentSort={sortField}
-                currentDirection={sortDirection}
-                onSort={handleSort}
-                className="min-w-[70px]"
-              />
               <th className="hidden sm:table-cell px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[60px]">
                 Trend
               </th>
@@ -439,34 +405,6 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                   </span>
                 </td>
 
-                {/* Forward Movement */}
-                <td className="px-3 py-3 sm:px-4 sm:py-4">
-                  <span
-                    className={cn(
-                      'font-medium text-sm',
-                      getValueColor(rep.forwardMovementRate, teamAverages?.avgFM ?? null)
-                    )}
-                  >
-                    {rep.forwardMovementRate !== null
-                      ? `${rep.forwardMovementRate.toFixed(1)}%`
-                      : '—'}
-                  </span>
-                </td>
-
-                {/* Positive Outcome */}
-                <td className="px-3 py-3 sm:px-4 sm:py-4">
-                  <span
-                    className={cn(
-                      'font-medium text-sm',
-                      getValueColor(rep.positiveOutcomeRate, teamAverages?.avgPO ?? null)
-                    )}
-                  >
-                    {rep.positiveOutcomeRate !== null
-                      ? `${rep.positiveOutcomeRate.toFixed(1)}%`
-                      : '—'}
-                  </span>
-                </td>
-
                 {/* Mini Sparkline - Hidden on Mobile */}
                 <td className="hidden sm:table-cell px-3 py-3 sm:px-4 sm:py-4">
                   <MiniSparkline data={rep.trendData} />
@@ -487,7 +425,7 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
       {/* Team Average Footer */}
       {teamAverages && (
         <div className="px-3 sm:px-5 py-2 sm:py-3 border-t border-gray-200 dark:border-gray-700/30 bg-gray-50 dark:bg-gray-800/30">
-          <div className="flex items-center gap-2 sm:gap-4 text-xs overflow-x-auto">
+          <div className="flex items-center gap-2 sm:gap-4 text-xs">
             <span className="font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">Avg:</span>
             <span className="text-gray-700 dark:text-gray-300 flex-shrink-0">
               {teamAverages.avgMeetings.toFixed(1)} meet
@@ -501,16 +439,6 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
             {teamAverages.avgTalkTime !== null && (
               <span className="text-gray-700 dark:text-gray-300">
                 {teamAverages.avgTalkTime.toFixed(1)}% talk time
-              </span>
-            )}
-            {teamAverages.avgFM !== null && (
-              <span className="text-gray-700 dark:text-gray-300">
-                {teamAverages.avgFM.toFixed(1)}% forward
-              </span>
-            )}
-            {teamAverages.avgPO !== null && (
-              <span className="text-gray-700 dark:text-gray-300">
-                {teamAverages.avgPO.toFixed(1)}% positive
               </span>
             )}
           </div>
