@@ -259,7 +259,7 @@ export function PendingApprovalStep() {
                 <div>
                   <p className="font-medium text-amber-100 mb-1">What Happens Next</p>
                   <p className="text-sm text-amber-200/80">
-                    Once approved (usually within 24 hours), you'll receive an email with a link to activate
+                    Once approved (usually within 24 hours), you&apos;ll receive an email with a link to activate
                     your account and access the dashboard. The admin can approve your request from their
                     Team Members settings page.
                   </p>
