@@ -1422,7 +1422,7 @@
       "feature": "org-user-removal",
       "title": "Create send_user_removal_email edge function",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 30,
       "dependencies": {
         "stories": [
@@ -1446,12 +1446,12 @@
         "Returns { emailSent: boolean, error?: string }"
       ],
       "estimatedMinutes": 35,
-      "actualMinutes": null,
+      "actualMinutes": 25,
       "files": [
         "supabase/functions/send-removal-email/index.ts"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:55:22.423Z",
+      "completedAt": "2026-02-02T09:55:22.423Z"
     },
     {
       "id": "ORGREM-005",
@@ -1607,7 +1607,7 @@
       "feature": "org-user-removal",
       "title": "Implement removal detection in auth middleware",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 35,
       "dependencies": {
         "stories": [
@@ -1634,19 +1634,19 @@
         "Runs on every auth state change"
       ],
       "estimatedMinutes": 35,
-      "actualMinutes": null,
+      "actualMinutes": 30,
       "files": [
         "src/lib/contexts/AuthContext.tsx"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:55:22.423Z",
+      "completedAt": "2026-02-02T09:55:22.423Z"
     },
     {
       "id": "ORGREM-010",
       "feature": "org-user-removal",
       "title": "Add redirect handler for removed users",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 36,
       "dependencies": {
         "stories": [
@@ -1669,13 +1669,13 @@
         "Clears redirect_to_onboarding after user sees page"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 15,
       "files": [
         "src/App.tsx",
         "src/pages/onboarding/v2/RemovedUserStep.tsx"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:55:22.423Z",
+      "completedAt": "2026-02-02T09:55:22.423Z"
     },
     {
       "id": "ORGREM-011",
@@ -1789,7 +1789,7 @@
       "feature": "org-user-removal",
       "title": "Build You were removed onboarding screen",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 40,
       "dependencies": {
         "stories": [
@@ -1813,12 +1813,12 @@
         "Explains admin must approve before access restored"
       ],
       "estimatedMinutes": 35,
-      "actualMinutes": null,
+      "actualMinutes": 30,
       "files": [
         "src/pages/onboarding/v2/RemovedUserStep.tsx"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:55:22.423Z",
+      "completedAt": "2026-02-02T09:55:22.423Z"
     },
     {
       "id": "ORGREM-015",
@@ -2010,7 +2010,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 12,
+    "completedStories": 16,
     "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
@@ -2112,6 +2112,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T15:28:00Z"
+    "lastUpdated": "2026-02-02T09:55:22.423Z"
   }
 }

@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cancelJoinRequest } from '@/lib/services/joinRequestService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useApprovalDetection } from '@/lib/hooks/useApprovalDetection';
 
 export function PendingApprovalStep() {
   const navigate = useNavigate();
@@ -26,6 +27,14 @@ export function PendingApprovalStep() {
   const [canceling, setCanceling] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [joinRequestId, setJoinRequestId] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+
+  // Use approval detection hook
+  const { isApproved, membership, refetch } = useApprovalDetection(
+    user?.id,
+    pendingJoinRequest?.orgId,
+    true
+  );
 
   useEffect(() => {
     // Fetch the user's profile email and join request ID
@@ -56,6 +65,44 @@ export function PendingApprovalStep() {
 
     fetchData();
   }, [userEmail, user?.id, pendingJoinRequest?.requestId]);
+
+  // Automatic polling for approval detection
+  useEffect(() => {
+    if (!user?.id || !pendingJoinRequest?.orgId) {
+      return;
+    }
+
+    const POLL_INTERVAL = 5000; // 5 seconds
+    setIsPolling(true);
+
+    // Polling function
+    const pollForApproval = () => {
+      console.log('[PendingApprovalStep] Polling for approval...');
+      refetch();
+    };
+
+    // Set up interval
+    const intervalId = setInterval(pollForApproval, POLL_INTERVAL);
+
+    // Clean up interval on unmount
+    return () => {
+      console.log('[PendingApprovalStep] Clearing polling interval');
+      clearInterval(intervalId);
+      setIsPolling(false);
+    };
+  }, [user?.id, pendingJoinRequest?.orgId, refetch]);
+
+  // Handle approval detection
+  useEffect(() => {
+    if (isApproved && membership) {
+      console.log('[PendingApprovalStep] Approval detected!', membership);
+      setIsPolling(false);
+      toast.success('Approved! Redirecting to your dashboard...');
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 1000);
+    }
+  }, [isApproved, membership, navigate]);
 
   const checkApprovalStatus = async () => {
     if (!user) return;
@@ -196,6 +243,12 @@ export function PendingApprovalStep() {
                   <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
                   <p className="font-medium text-white">Awaiting Admin Review</p>
                 </div>
+                {isPolling && (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Checking status...</span>
+                  </div>
+                )}
               </div>
             </div>
 
