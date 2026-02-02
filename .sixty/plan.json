@@ -129,7 +129,7 @@
       "feature": "onboard-fix",
       "title": "Add AWS SES error handling to invite-user API",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 3,
       "dependencies": {
         "stories": [
@@ -154,7 +154,7 @@
         "Logs detailed error for debugging"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 28,
       "files": [
         "api/admin/invite-user.ts"
       ],
@@ -166,8 +166,8 @@
           "Return { emailSent: boolean, emailError?: string } in response"
         ]
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T15:00:00Z",
+      "completedAt": "2026-02-02T15:28:00Z"
     },
     {
       "id": "ONBOARD-004",
@@ -367,7 +367,7 @@
       "feature": "onboard-fix",
       "title": "Update accept_join_request RPC with atomic processing check",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 9,
       "dependencies": {
         "stories": [
@@ -388,16 +388,16 @@
         "Includes timeout protection (auto-reset after 5 minutes)"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 20,
       "files": [
-        "supabase/migrations/YYYYMMDD_update_accept_join_request_rpc.sql"
+        "supabase/migrations/20260202095239_update_accept_join_request_with_timeout.sql"
       ],
       "implementation": {
-        "pattern": "UPDATE organization_join_requests SET is_processing = true, processing_started_at = NOW() WHERE id = request_id AND is_processing = false RETURNING id",
+        "pattern": "UPDATE organization_join_requests SET is_processing = true, processing_started_at = NOW() WHERE id = request_id AND (is_processing = false OR processing_started_at < NOW() - INTERVAL '5 minutes') RETURNING id",
         "errorHandling": "IF NOT FOUND THEN RAISE EXCEPTION 'Request is already being processed or does not exist'"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:52:00Z",
+      "completedAt": "2026-02-02T10:12:00Z"
     },
     {
       "id": "ONBOARD-010",
@@ -2010,7 +2010,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 15,
+    "completedStories": 12,
     "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
@@ -2112,6 +2112,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T09:55:00Z"
+    "lastUpdated": "2026-02-02T15:28:00Z"
   }
 }
