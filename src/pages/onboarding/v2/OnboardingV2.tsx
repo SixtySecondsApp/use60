@@ -226,6 +226,11 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
   // Check for existing organization when business email signs up
   useEffect(() => {
     const checkBusinessEmailOrg = async () => {
+      // Only run this check in early stages of onboarding (before pending approval)
+      // Skip if user is past organization selection or in pending approval
+      const stepsToSkip = ['pending_approval', 'enrichment_loading', 'enrichment_result', 'skills_config', 'complete'];
+      if (stepsToSkip.includes(currentStep)) return;
+
       // Only run this check once when component mounts with business email
       if (!userEmail || !domain) return;
 
@@ -262,7 +267,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
     };
 
     checkBusinessEmailOrg();
-  }, [userEmail, domain]);
+  }, [userEmail, domain, currentStep];
 
   // Auto-start enrichment for corporate email path (if no existing org found)
   useEffect(() => {
