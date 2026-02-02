@@ -64,7 +64,7 @@ export default function Profile() {
   useEffect(() => {
     // Use userProfile from AuthContext if userData from useUser is not available
     const profileData = userData || userProfile;
-    
+
     if (profileData) {
       logger.log('Setting form data from profile:', profileData);
       setFormData(prev => ({
@@ -74,6 +74,8 @@ export default function Profile() {
         email: profileData.email || ''
       }));
     }
+    // Reset pending avatar when user data changes (to sync with global state)
+    setPendingAvatarUrl(null);
   }, [userData, userProfile]);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -108,11 +110,9 @@ export default function Profile() {
         if (profileError) throw profileError;
       }
 
-      // Clear pending avatar once saved
-      setPendingAvatarUrl(null);
-
       // Invalidate cache so changes show globally
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      // The useEffect will clear pendingAvatarUrl when userData updates
+      await queryClient.invalidateQueries({ queryKey: ['user'] });
 
       toast.success('Profile updated successfully');
     } catch (error: any) {
@@ -285,25 +285,28 @@ export default function Profile() {
             <div className="flex flex-col items-center gap-4">
               <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}>
                 <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#37bd7e]/20 border-2 border-[#37bd7e]/30 group-hover:border-[#37bd7e]/50 transition-all duration-300">
-                  {pendingAvatarUrl !== null && pendingAvatarUrl !== '' ? (
-                    <img
-                      src={pendingAvatarUrl}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (userData?.avatar_url || userProfile?.avatar_url) && pendingAvatarUrl === null ? (
-                    <img
-                      src={userData?.avatar_url || userProfile?.avatar_url}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-2xl font-medium text-[#37bd7e]">
-                        {formData.firstName?.[0] || 'A'}{formData.lastName?.[0] || 'B'}
-                      </span>
-                    </div>
-                  )}
+                  {(() => {
+                    // Use pending avatar if set, otherwise use current avatar
+                    const displayAvatarUrl = pendingAvatarUrl !== null ? pendingAvatarUrl : (userData?.avatar_url || userProfile?.avatar_url);
+
+                    if (displayAvatarUrl) {
+                      return (
+                        <img
+                          src={displayAvatarUrl}
+                          alt="Profile"
+                          className="w-full h-full object-cover"
+                        />
+                      );
+                    } else {
+                      return (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <span className="text-2xl font-medium text-[#37bd7e]">
+                            {formData.firstName?.[0] || 'A'}{formData.lastName?.[0] || 'B'}
+                          </span>
+                        </div>
+                      );
+                    }
+                  })()}
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     {uploading ? (
                       <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -331,19 +334,23 @@ export default function Profile() {
                 >
                   {uploading ? 'Uploading...' : 'Change Picture'}
                 </label>
-                {(pendingAvatarUrl !== null && pendingAvatarUrl !== '') || (userData?.avatar_url || userProfile?.avatar_url) ? (
-                  <button
-                    type="button"
-                    onClick={handleRemoveAvatar}
-                    disabled={uploading}
-                    className={`text-sm text-red-500 hover:text-red-600 cursor-pointer flex items-center gap-1 ${
-                      uploading ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Remove Picture
-                  </button>
-                ) : null}
+                {(() => {
+                  // Show remove button if there's a pending avatar or current avatar
+                  const displayAvatarUrl = pendingAvatarUrl !== null ? pendingAvatarUrl : (userData?.avatar_url || userProfile?.avatar_url);
+                  return displayAvatarUrl ? (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAvatar}
+                      disabled={uploading}
+                      className={`text-sm text-red-500 hover:text-red-600 cursor-pointer flex items-center gap-1 ${
+                        uploading ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Remove Picture
+                    </button>
+                  ) : null;
+                })()}
               </div>
             </div>
 
