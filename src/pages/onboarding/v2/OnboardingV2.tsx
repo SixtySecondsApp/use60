@@ -267,7 +267,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
     };
 
     checkBusinessEmailOrg();
-  }, [userEmail, domain, currentStep];
+  }, [userEmail, domain, currentStep]);
 
   // Auto-start enrichment for corporate email path (if no existing org found)
   useEffect(() => {

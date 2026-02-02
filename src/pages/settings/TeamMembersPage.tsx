@@ -318,17 +318,39 @@ export default function TeamMembersPage() {
     const loadMembers = async () => {
       setIsLoadingMembers(true);
       try {
-        // Fetch memberships first - ORGREM-016: include member_status
-        const { data: memberships, error: membershipError } = await supabase
+        // Fetch memberships - try with optional columns first (ORGREM-016)
+        // If migration hasn't been applied, fall back to basic columns
+        let memberships: any[] = [];
+        let membershipError = null;
+
+        // Try with ORGREM columns first
+        const { data: dataWithOrgrem, error: errorWithOrgrem } = await supabase
           .from('organization_memberships')
           .select('user_id, role, created_at, member_status, removed_at, removed_by')
           .eq('org_id', activeOrgId)
           .order('created_at', { ascending: true });
 
-        if (membershipError) {
-          console.error('[TeamMembersPage] Membership query error:', membershipError);
-          throw membershipError;
+        if (!errorWithOrgrem && dataWithOrgrem) {
+          memberships = dataWithOrgrem;
+          console.log('[TeamMembersPage] Loaded with ORGREM columns');
+        } else if (errorWithOrgrem?.code === '42703') {
+          // Column doesn't exist - fall back to basic columns
+          console.log('[TeamMembersPage] ORGREM columns not available, using basic query');
+          const { data: basicData, error: basicError } = await supabase
+            .from('organization_memberships')
+            .select('user_id, role, created_at')
+            .eq('org_id', activeOrgId)
+            .order('created_at', { ascending: true });
+
+          if (basicError) {
+            console.error('[TeamMembersPage] Membership query error:', basicError);
+            throw basicError;
+          }
+          memberships = basicData || [];
+        } else {
+          throw errorWithOrgrem;
         }
+
         if (!memberships?.length) {
           console.log('[TeamMembersPage] No memberships found for org:', activeOrgId);
           setMembers([]);
@@ -366,13 +388,14 @@ export default function TeamMembersPage() {
         );
 
         // Transform to expected format with user object - ORGREM-016
+        // Handle both old (no member_status) and new (with member_status) schema
         const membersWithProfiles = memberships.map((m) => ({
           user_id: m.user_id,
           role: m.role as 'owner' | 'admin' | 'member' | 'readonly',
           created_at: m.created_at,
-          member_status: m.member_status as 'active' | 'removed' | undefined,
-          removed_at: m.removed_at,
-          removed_by: m.removed_by,
+          member_status: (m.member_status || 'active') as 'active' | 'removed' | undefined,
+          removed_at: m.removed_at || null,
+          removed_by: m.removed_by || null,
           user: profileMap.get(m.user_id) || null,
         }));
 
