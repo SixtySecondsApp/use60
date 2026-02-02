@@ -861,7 +861,7 @@
       "feature": "pending-approval-flow",
       "title": "Add automatic polling to PendingApprovalStep component",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 21,
       "dependencies": {
         "stories": [
@@ -884,7 +884,7 @@
         "Clears interval when approval detected or request cancelled"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 18,
       "files": [
         "src/pages/onboarding/v2/PendingApprovalStep.tsx"
       ],
@@ -902,8 +902,8 @@
       },
       "designRef": null,
       "ticketId": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T15:00:00Z",
+      "completedAt": "2026-02-02T15:18:00Z"
     },
     {
       "id": "PEND-003",
