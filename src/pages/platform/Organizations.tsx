@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2,
@@ -72,7 +72,6 @@ export default function Organizations() {
 
   // Multi-select state
   const [selectedOrgs, setSelectedOrgs] = useState<Set<string>>(new Set());
-  const [isSelectModeActive, setIsSelectModeActive] = useState(false);
   const [isSelectAllChecked, setIsSelectAllChecked] = useState(false);
 
   // Bulk action dialogs
@@ -83,6 +82,10 @@ export default function Organizations() {
   // Sorting
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Load organizations
   useEffect(() => {
@@ -143,6 +146,19 @@ export default function Organizations() {
 
     return filtered;
   }, [organizations, searchQuery, sortField, sortDirection]);
+
+  // Paginated organizations
+  const totalPages = Math.ceil(filteredOrgs.length / itemsPerPage);
+  const paginatedOrgs = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredOrgs.slice(startIndex, endIndex);
+  }, [filteredOrgs, currentPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, sortField, sortDirection]);
 
   async function handleRename(orgId: string, newName: string) {
     if (!newName.trim()) {
@@ -258,20 +274,12 @@ export default function Organizations() {
 
   const handleSelectAll = (isSelected: boolean) => {
     if (isSelected) {
-      const allIds = new Set(filteredOrgs.map((org) => org.id));
+      const allIds = new Set(paginatedOrgs.map((org) => org.id));
       setSelectedOrgs(allIds);
     } else {
       setSelectedOrgs(new Set());
     }
     setIsSelectAllChecked(isSelected);
-  };
-
-  const toggleSelectMode = () => {
-    setIsSelectModeActive(!isSelectModeActive);
-    if (isSelectModeActive) {
-      setSelectedOrgs(new Set());
-      setIsSelectAllChecked(false);
-    }
   };
 
   // Bulk operations
@@ -353,9 +361,9 @@ export default function Organizations() {
   // Update select all checkbox state
   useEffect(() => {
     setIsSelectAllChecked(
-      selectedOrgs.size > 0 && selectedOrgs.size === filteredOrgs.length && filteredOrgs.length > 0
+      selectedOrgs.size > 0 && selectedOrgs.size === paginatedOrgs.length && paginatedOrgs.length > 0
     );
-  }, [selectedOrgs.size, filteredOrgs.length]);
+  }, [selectedOrgs.size, paginatedOrgs.length]);
 
   if (isLoading) {
     return (
@@ -370,7 +378,7 @@ export default function Organizations() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 sm:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Back Button */}
         <BackToPlatform />
 
@@ -380,7 +388,10 @@ export default function Organizations() {
             <Building2 className="w-8 h-8 text-[#37bd7e]" />
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Organizations</h1>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">Manage all organizations and their members</p>
+          <p className="text-gray-600 dark:text-gray-400">
+            Manage all organizations and their members • {filteredOrgs.length} organization{filteredOrgs.length !== 1 ? 's' : ''}
+            {filteredOrgs.length > itemsPerPage && ` • Page ${currentPage} of ${totalPages}`}
+          </p>
         </div>
 
         {/* Search */}
@@ -395,10 +406,62 @@ export default function Organizations() {
           />
         </div>
 
-        {/* Organizations List */}
-        <div className="space-y-3">
+        {/* Bulk Actions Bar */}
+        <AnimatePresence>
+          {selectedOrgs.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              transition={{
+                duration: 0.2,
+                ease: [0.23, 1, 0.32, 1],
+              }}
+              className="bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-violet-600/10 backdrop-blur-xl border border-violet-500/20 rounded-xl p-4 shadow-2xl shadow-violet-500/10"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/30">
+                    <CheckSquare className="w-4 h-4 text-violet-400" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {selectedOrgs.size} selected
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => setBulkToggleDialogOpen(true)}
+                    variant="tertiary"
+                    size="sm"
+                  >
+                    <ToggleRight className="w-4 h-4 mr-2" />
+                    Toggle Status
+                  </Button>
+                  <Button onClick={() => setBulkDeleteDialogOpen(true)} variant="destructive" size="sm">
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Deactivate
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setSelectedOrgs(new Set());
+                      setIsSelectAllChecked(false);
+                    }}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Table */}
+        <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
           {filteredOrgs.length === 0 ? (
-            <div className="text-center py-12 bg-white dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800">
+            <div className="text-center py-12">
               <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 No organizations found
@@ -408,238 +471,466 @@ export default function Organizations() {
               </p>
             </div>
           ) : (
-            filteredOrgs.map((org) => (
-              <motion.div
-                key={org.id}
-                layout
-                className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden hover:shadow-md transition-shadow"
-              >
-                {/* Org Header */}
-                <div className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        {editingState?.orgId === org.id && editingState.field === 'name' ? (
-                          <input
-                            type="text"
-                            defaultValue={org.name}
-                            autoFocus
-                            className="text-xl font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded"
-                            onBlur={(e) => {
-                              if (e.target.value !== org.name) {
-                                handleRename(org.id, e.target.value);
-                              } else {
-                                setEditingState(null);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleRename(org.id, e.currentTarget.value);
-                              } else if (e.key === 'Escape') {
-                                setEditingState(null);
-                              }
-                            }}
-                          />
-                        ) : (
-                          <>
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white">{org.name}</h3>
-                            {!org.is_active && (
-                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                                Inactive
-                              </span>
-                            )}
-                          </>
-                        )}
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                <TableHeader>
+                  <TableRow className="border-gray-200 dark:border-gray-800">
+                    {/* Checkbox Column */}
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={isSelectAllChecked}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="w-4 h-4 text-violet-500 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded transition-all duration-200 hover:border-violet-400 dark:hover:border-violet-400 checked:bg-violet-500 checked:border-violet-500 cursor-pointer"
+                      />
+                    </TableHead>
+
+                    {/* Sortable Columns */}
+                    <TableHead
+                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Organization Name {getSortIcon('name')}
                       </div>
+                    </TableHead>
 
-                      <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
-                        {org.company_domain && (
-                          <div>Domain: {org.company_domain}</div>
-                        )}
-                        <div className="flex items-center gap-1">
-                          <Users className="w-4 h-4" />
-                          {org.member_count} members
-                        </div>
-                        {org.owner && (
-                          <div>
-                            Owner: {org.owner.first_name} {org.owner.last_name || org.owner.email}
-                          </div>
-                        )}
+                    <TableHead
+                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300"
+                      onClick={() => handleSort('company_domain')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Domain {getSortIcon('company_domain')}
                       </div>
-                    </div>
+                    </TableHead>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setEditingState({ orgId: org.id, field: 'name' })}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                        title="Edit name"
-                      >
-                        <Edit2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                      </button>
+                    <TableHead
+                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300"
+                      onClick={() => handleSort('member_count')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Members {getSortIcon('member_count')}
+                      </div>
+                    </TableHead>
 
-                      <button
-                        onClick={() => handleToggleStatus(org.id, !org.is_active)}
-                        className={cn(
-                          'p-2 rounded-lg transition-colors',
-                          org.is_active
-                            ? 'hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
-                            : 'hover:bg-green-100 dark:hover:bg-green-900/30'
-                        )}
-                        title={org.is_active ? 'Deactivate' : 'Activate'}
-                      >
-                        <ToggleRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                      </button>
+                    <TableHead className="text-gray-600 dark:text-gray-300">Owner</TableHead>
 
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <button className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors">
-                            <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Organization</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete "{org.name}"? This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction className="bg-red-600 hover:bg-red-700">
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                    <TableHead className="text-gray-600 dark:text-gray-300">Status</TableHead>
 
-                      <button
+                    <TableHead className="text-center text-gray-600 dark:text-gray-300">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {paginatedOrgs.map((org) => (
+                    <React.Fragment key={org.id}>
+                      <TableRow
                         onClick={() => {
                           setExpandedOrg(expandedOrg === org.id ? null : org.id);
                           if (expandedOrg !== org.id) {
                             loadOrgMembers(org.id);
                           }
                         }}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        className={cn(
+                          'border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer',
+                          selectedOrgs.has(org.id) && isSelectModeActive
+                            ? 'border-violet-500/40 bg-gradient-to-r from-violet-500/10 via-purple-500/5 to-violet-500/10 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/20'
+                            : ''
+                        )}
                       >
-                        <ChevronRight
-                          className={cn(
-                            'w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform',
-                            expandedOrg === org.id && 'rotate-90'
-                          )}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expanded Members Section */}
-                <AnimatePresence>
-                  {expandedOrg === org.id && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-gray-200 dark:border-gray-800 p-6 space-y-4"
-                    >
-                      {/* Add Member Form */}
-                      <div className="space-y-3">
-                        <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                          <UserPlus className="w-4 h-4" />
-                          Add Member
-                        </h4>
-                        <div className="flex gap-2">
-                          <input
-                            type="email"
-                            placeholder="user@example.com"
-                            value={newMemberEmail}
-                            onChange={(e) => setNewMemberEmail(e.target.value)}
-                            className="flex-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
-                          />
-                          <select
-                            value={newMemberRole}
-                            onChange={(e) =>
-                              setNewMemberRole(e.target.value as 'admin' | 'member' | 'readonly')
-                            }
-                            className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
+                        {/* Checkbox */}
+                        <TableCell
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <motion.div
+                            initial={false}
+                            animate={{
+                              scale: selectedOrgs.has(org.id) ? [1, 1.1, 1] : 1,
+                              opacity: selectedOrgs.has(org.id) ? 1 : 0.7,
+                            }}
+                            transition={{ duration: 0.2 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                            }}
                           >
-                            <option value="member">Member</option>
-                            <option value="admin">Admin</option>
-                            <option value="readonly">Read-only</option>
-                          </select>
-                          <Button
-                            onClick={() => handleAddMember(org.id)}
-                            className="bg-[#37bd7e] hover:bg-[#2da76c]"
-                            size="sm"
-                          >
-                            Add
-                          </Button>
-                        </div>
-                      </div>
+                            <input
+                              type="checkbox"
+                              checked={selectedOrgs.has(org.id)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                handleSelectOrg(org.id, e.target.checked);
+                              }}
+                              className="w-4 h-4 text-violet-500 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded transition-all duration-200 hover:border-violet-400 dark:hover:border-violet-400 checked:bg-violet-500 checked:border-violet-500 cursor-pointer"
+                            />
+                          </motion.div>
+                        </TableCell>
 
-                      {/* Members List */}
-                      {loadingMembers[org.id] ? (
-                        <div className="text-center py-8">
-                          <Loader2 className="w-5 h-5 text-[#37bd7e] animate-spin mx-auto" />
-                        </div>
-                      ) : (orgMembers[org.id] || []).length === 0 ? (
-                        <p className="text-sm text-gray-600 dark:text-gray-400">No members in this organization</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {(orgMembers[org.id] || []).map((member) => (
-                            <div
-                              key={member.user_id}
-                              className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 rounded-lg"
-                            >
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-900 dark:text-white text-sm">
-                                  {member.profiles?.first_name} {member.profiles?.last_name}
-                                </p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400">
-                                  {member.profiles?.email}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={member.role}
-                                  onChange={(e) =>
-                                    handleChangeRole(
-                                      org.id,
-                                      member.user_id,
-                                      e.target.value as 'owner' | 'admin' | 'member' | 'readonly'
-                                    )
-                                  }
-                                  className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs"
-                                >
-                                  <option value="readonly">Read-only</option>
-                                  <option value="member">Member</option>
-                                  <option value="admin">Admin</option>
-                                  <option value="owner">Owner</option>
-                                </select>
-                                {member.role !== 'owner' && (
-                                  <button
-                                    onClick={() => handleRemoveMember(org.id, member.user_id)}
-                                    className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
-                                    title="Remove member"
-                                  >
-                                    <X className="w-4 h-4 text-red-600 dark:text-red-400" />
-                                  </button>
-                                )}
-                                {member.role === 'owner' && (
-                                  <Shield className="w-4 h-4 text-yellow-600 dark:text-yellow-400" title="Organization owner" />
-                                )}
-                              </div>
+                        {/* Name */}
+                        <TableCell
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-[#37bd7e]" />
+                            <div>
+                              {editingState?.orgId === org.id && editingState.field === 'name' ? (
+                                <input
+                                  type="text"
+                                  defaultValue={org.name}
+                                  autoFocus
+                                  className="font-medium text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded"
+                                  onBlur={(e) => {
+                                    if (e.target.value !== org.name) {
+                                      handleRename(org.id, e.target.value);
+                                    } else {
+                                      setEditingState(null);
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleRename(org.id, e.currentTarget.value);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingState(null);
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <span className="font-medium text-gray-900 dark:text-white">{org.name}</span>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            ))
+                          </div>
+                        </TableCell>
+
+                        {/* Domain */}
+                        <TableCell>
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {org.company_domain || '—'}
+                          </span>
+                        </TableCell>
+
+                        {/* Member Count */}
+                        <TableCell>
+                          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                            <Users className="w-4 h-4" />
+                            {org.member_count}
+                          </div>
+                        </TableCell>
+
+                        {/* Owner */}
+                        <TableCell>
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {org.owner
+                              ? `${org.owner.first_name} ${org.owner.last_name || org.owner.email}`
+                              : '—'}
+                          </span>
+                        </TableCell>
+
+                        {/* Status Badge */}
+                        <TableCell>
+                          <Badge
+                            variant={org.is_active ? 'success' : 'destructive'}
+                            className="text-xs"
+                          >
+                            {org.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Actions */}
+                        <TableCell
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingState({ orgId: org.id, field: 'name' });
+                              }}
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                              title="Edit name"
+                            >
+                              <Edit2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                            </button>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleStatus(org.id, !org.is_active);
+                              }}
+                              className={cn(
+                                'p-2 rounded-lg transition-colors',
+                                org.is_active
+                                  ? 'hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
+                                  : 'hover:bg-green-100 dark:hover:bg-green-900/30'
+                              )}
+                              title={org.is_active ? 'Deactivate' : 'Activate'}
+                            >
+                              <ToggleRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                            </button>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedOrg(expandedOrg === org.id ? null : org.id);
+                                if (expandedOrg !== org.id) {
+                                  loadOrgMembers(org.id);
+                                }
+                              }}
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                              title="Manage members"
+                            >
+                              <ChevronRight
+                                className={cn(
+                                  'w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform',
+                                  expandedOrg === org.id && 'rotate-90'
+                                )}
+                              />
+                            </button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+
+                      {/* Expanded Member Management Row */}
+                      <AnimatePresence>
+                        {expandedOrg === org.id && (
+                          <motion.tr
+                            initial={{ height: 0 }}
+                            animate={{ height: 'auto' }}
+                            exit={{ height: 0 }}
+                            transition={{ duration: 0.3, ease: 'easeInOut' }}
+                            className="border-gray-200 dark:border-gray-800 overflow-hidden"
+                          >
+                            <TableCell
+                              colSpan={isSelectModeActive ? 7 : 6}
+                              className="border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/20 p-6"
+                            >
+                              <div className="space-y-4">
+                                {/* Add Member Form */}
+                                <div className="space-y-3">
+                                  <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                    <UserPlus className="w-4 h-4" />
+                                    Add Member
+                                  </h4>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="email"
+                                      placeholder="user@example.com"
+                                      value={newMemberEmail}
+                                      onChange={(e) => setNewMemberEmail(e.target.value)}
+                                      className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
+                                    />
+                                    <select
+                                      value={newMemberRole}
+                                      onChange={(e) =>
+                                        setNewMemberRole(e.target.value as 'admin' | 'member' | 'readonly')
+                                      }
+                                      className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
+                                    >
+                                      <option value="member">Member</option>
+                                      <option value="admin">Admin</option>
+                                      <option value="readonly">Read-only</option>
+                                    </select>
+                                    <Button
+                                      onClick={() => handleAddMember(org.id)}
+                                      className="bg-[#37bd7e] hover:bg-[#2da76c]"
+                                      size="sm"
+                                    >
+                                      Add
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {/* Members List */}
+                                {loadingMembers[org.id] ? (
+                                  <div className="text-center py-8">
+                                    <Loader2 className="w-5 h-5 text-[#37bd7e] animate-spin mx-auto" />
+                                  </div>
+                                ) : (orgMembers[org.id] || []).length === 0 ? (
+                                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    No members in this organization
+                                  </p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {(orgMembers[org.id] || []).map((member) => (
+                                      <div
+                                        key={member.user_id}
+                                        className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                                      >
+                                        <div className="flex-1">
+                                          <p className="font-medium text-gray-900 dark:text-white text-sm">
+                                            {member.profiles?.first_name} {member.profiles?.last_name}
+                                          </p>
+                                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                                            {member.profiles?.email}
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <select
+                                            value={member.role}
+                                            onChange={(e) =>
+                                              handleChangeRole(
+                                                org.id,
+                                                member.user_id,
+                                                e.target.value as
+                                                  | 'owner'
+                                                  | 'admin'
+                                                  | 'member'
+                                                  | 'readonly'
+                                              )
+                                            }
+                                            className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs text-gray-900 dark:text-white"
+                                          >
+                                            <option value="readonly">Read-only</option>
+                                            <option value="member">Member</option>
+                                            <option value="admin">Admin</option>
+                                            <option value="owner">Owner</option>
+                                          </select>
+                                          {member.role !== 'owner' && (
+                                            <button
+                                              onClick={() => handleRemoveMember(org.id, member.user_id)}
+                                              className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+                                              title="Remove member"
+                                            >
+                                              <X className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                            </button>
+                                          )}
+                                          {member.role === 'owner' && (
+                                            <Shield
+                                              className="w-4 h-4 text-yellow-600 dark:text-yellow-400"
+                                              title="Organization owner"
+                                            />
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                          </motion.tr>
+                        )}
+                      </AnimatePresence>
+                    </React.Fragment>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Pagination Controls */}
+            {filteredOrgs.length > itemsPerPage && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredOrgs.length)} of {filteredOrgs.length} organizations
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    variant="tertiary"
+                    size="sm"
+                  >
+                    Previous
+                  </Button>
+
+                  <div className="flex gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={cn(
+                          'px-3 py-2 rounded text-sm font-medium transition-colors',
+                          currentPage === page
+                            ? 'bg-[#37bd7e] text-white'
+                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        )}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+
+                  <Button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    variant="tertiary"
+                    size="sm"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
+
+        {/* Bulk Delete Dialog */}
+        <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+            <DialogHeader>
+              <DialogTitle className="text-red-600 dark:text-red-400">Deactivate Organizations</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to deactivate{' '}
+                <strong>{selectedOrgs.size}</strong> selected organizations? This action can be
+                undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="secondary" onClick={() => setBulkDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleBulkDelete}
+              >
+                Deactivate {selectedOrgs.size} Organizations
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Toggle Status Dialog */}
+        <Dialog open={bulkToggleDialogOpen} onOpenChange={setBulkToggleDialogOpen}>
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+            <DialogHeader>
+              <DialogTitle>Change Organization Status</DialogTitle>
+              <DialogDescription>
+                What would you like to do with the {selectedOrgs.size} selected organization(s)?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-3">
+              <Button
+                onClick={() => {
+                  handleBulkToggle(true);
+                }}
+                variant="success"
+                className="w-full"
+              >
+                Activate All
+              </Button>
+              <Button
+                onClick={() => {
+                  handleBulkToggle(false);
+                }}
+                variant="destructive"
+                className="w-full"
+              >
+                Deactivate All
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setBulkToggleDialogOpen(false)}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
