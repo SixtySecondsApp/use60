@@ -173,12 +173,12 @@ function CategorySection({
   sixtyLogoUrl?: string | null;
 }) {
   const [isExpanded, setIsExpanded] = useState(() => {
-    // Load from localStorage, default to expanded
+    // Load from localStorage, default to collapsed
     try {
       const stored = localStorage.getItem(`integrations-section-${category.id}`);
-      return stored ? JSON.parse(stored) : true;
+      return stored ? JSON.parse(stored) : false;
     } catch {
-      return true;
+      return false;
     }
   });
 

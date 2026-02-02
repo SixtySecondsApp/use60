@@ -69,17 +69,18 @@ export async function getAllOrganizations(): Promise<OrganizationWithMemberCount
           .select('user_id, profiles!user_id(id, email, first_name, last_name)')
           .eq('org_id', org.id)
           .eq('role', 'owner')
-          .eq('member_status', 'active');
+          .neq('member_status', 'removed');
 
         let { data: owner, error: ownerError } = await ownerQuery.single();
 
-        // If member_status column doesn't exist, retry without it
-        if (ownerError && ownerError.code === '42703') {
+        // If relationship lookup fails, retry without the join
+        if (ownerError && ownerError.code === 'PGRST200') {
           const result = await supabase
             .from('organization_memberships')
-            .select('user_id, profiles!user_id(id, email, first_name, last_name)')
+            .select('user_id')
             .eq('org_id', org.id)
             .eq('role', 'owner')
+            .neq('member_status', 'removed')
             .single();
           owner = result.data;
           ownerError = result.error;
@@ -146,27 +147,15 @@ export async function getOrganization(orgId: string): Promise<OrganizationWithMe
       count = fallbackCount;
     }
 
-    // Get org owner (with fallback for older schema without member_status)
+    // Get org owner (with fallback for relationship failures)
     let ownerQuery = supabase
       .from('organization_memberships')
       .select('user_id, profiles!user_id(id, email, first_name, last_name)')
       .eq('org_id', orgId)
       .eq('role', 'owner')
-      .eq('member_status', 'active');
+      .neq('member_status', 'removed');
 
     let { data: owner, error: ownerError } = await ownerQuery.single();
-
-    // If member_status column doesn't exist, retry without it
-    if (ownerError && ownerError.code === '42703') {
-      const result = await supabase
-        .from('organization_memberships')
-        .select('user_id, profiles!user_id(id, email, first_name, last_name)')
-        .eq('org_id', orgId)
-        .eq('role', 'owner')
-        .single();
-      owner = result.data;
-      ownerError = result.error;
-    }
 
     // If relationship lookup fails, try fetching just the user_id
     if (ownerError && ownerError.code === 'PGRST200') {
@@ -175,6 +164,7 @@ export async function getOrganization(orgId: string): Promise<OrganizationWithMe
         .select('user_id')
         .eq('org_id', orgId)
         .eq('role', 'owner')
+        .neq('member_status', 'removed')
         .single();
       // We have user_id but no profile data, so skip owner display
       owner = ownerData ? undefined : undefined;
@@ -259,11 +249,11 @@ export async function updateOrganization(
  */
 export async function getOrganizationMembers(orgId: string) {
   try {
-    // Try with member_status column first
-    let query = supabase
+    // Fetch all active members (including those with NULL status for backwards compatibility)
+    // Note: member_status was added in recent migration, so pre-migration records have NULL
+    const { data, error } = await supabase
       .from('organization_memberships')
       .select(`
-        id,
         user_id,
         role,
         member_status,
@@ -276,33 +266,10 @@ export async function getOrganizationMembers(orgId: string) {
         )
       `)
       .eq('org_id', orgId)
-      .eq('member_status', 'active')
+      .neq('member_status', 'removed')  // Exclude removed members
       .order('created_at', { ascending: true });
 
-    let { data, error } = await query;
-
-    // If member_status column doesn't exist, retry without it
-    if (error && error.code === '42703') {
-      const { data: fallbackData } = await supabase
-        .from('organization_memberships')
-        .select(`
-          id,
-          user_id,
-          role,
-          created_at,
-          profiles!user_id (
-            id,
-            email,
-            first_name,
-            last_name
-          )
-        `)
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: true });
-      data = fallbackData;
-    }
-
-    if (error && error.code !== '42703') throw error;
+    if (error) throw error;
     return data || [];
   } catch (error: any) {
     console.error('Error fetching organization members:', error);
@@ -326,7 +293,7 @@ export async function changeOrganizationMemberRole(
         .select('*', { count: 'exact' })
         .eq('org_id', orgId)
         .eq('role', 'owner')
-        .eq('member_status', 'active');
+        .neq('member_status', 'removed');  // Include active and NULL status members
 
       let { count: ownerCount, error: ownerCountError } = await query;
 
@@ -386,7 +353,7 @@ export async function removeOrganizationMember(
       .select('*', { count: 'exact' })
       .eq('org_id', orgId)
       .eq('role', 'owner')
-      .eq('member_status', 'active');
+      .neq('member_status', 'removed');  // Include active and NULL status members
 
     let { count: ownerCount, error: ownerCountError } = await ownerQuery;
 

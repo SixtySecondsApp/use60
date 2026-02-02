@@ -15,22 +15,30 @@ import {
   X,
   Check,
   Lock,
+  ArrowUpDown,
+  CheckSquare,
 } from 'lucide-react';
 import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   getAllOrganizations,
   renameOrganization,
@@ -48,6 +56,9 @@ interface EditingState {
   value?: string;
 }
 
+type SortField = 'name' | 'company_domain' | 'member_count' | 'created_at';
+type SortDirection = 'asc' | 'desc';
+
 export default function Organizations() {
   const [organizations, setOrganizations] = useState<OrganizationWithMemberCount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,6 +69,20 @@ export default function Organizations() {
   const [loadingMembers, setLoadingMembers] = useState<Record<string, boolean>>({});
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'admin' | 'member' | 'readonly'>('member');
+
+  // Multi-select state
+  const [selectedOrgs, setSelectedOrgs] = useState<Set<string>>(new Set());
+  const [isSelectModeActive, setIsSelectModeActive] = useState(false);
+  const [isSelectAllChecked, setIsSelectAllChecked] = useState(false);
+
+  // Bulk action dialogs
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkToggleDialogOpen, setBulkToggleDialogOpen] = useState(false);
+  const [bulkToggleTargetStatus, setBulkToggleTargetStatus] = useState<boolean | null>(null);
+
+  // Sorting
+  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Load organizations
   useEffect(() => {
@@ -93,11 +118,31 @@ export default function Organizations() {
   }
 
   const filteredOrgs = useMemo(() => {
-    return organizations.filter((org) =>
+    let filtered = organizations.filter((org) =>
       org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       org.company_domain?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [organizations, searchQuery]);
+
+    // Sort
+    filtered.sort((a, b) => {
+      let aValue: any = a[sortField];
+      let bValue: any = b[sortField];
+
+      // Handle null/undefined values
+      if (aValue == null) aValue = '';
+      if (bValue == null) bValue = '';
+
+      // Convert to string for comparison if needed
+      if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+      if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [organizations, searchQuery, sortField, sortDirection]);
 
   async function handleRename(orgId: string, newName: string) {
     if (!newName.trim()) {
@@ -199,6 +244,118 @@ export default function Organizations() {
       toast.error(error.message);
     }
   }
+
+  // Multi-select handlers
+  const handleSelectOrg = (orgId: string, isSelected: boolean) => {
+    const newSelected = new Set(selectedOrgs);
+    if (isSelected) {
+      newSelected.add(orgId);
+    } else {
+      newSelected.delete(orgId);
+    }
+    setSelectedOrgs(newSelected);
+  };
+
+  const handleSelectAll = (isSelected: boolean) => {
+    if (isSelected) {
+      const allIds = new Set(filteredOrgs.map((org) => org.id));
+      setSelectedOrgs(allIds);
+    } else {
+      setSelectedOrgs(new Set());
+    }
+    setIsSelectAllChecked(isSelected);
+  };
+
+  const toggleSelectMode = () => {
+    setIsSelectModeActive(!isSelectModeActive);
+    if (isSelectModeActive) {
+      setSelectedOrgs(new Set());
+      setIsSelectAllChecked(false);
+    }
+  };
+
+  // Bulk operations
+  const handleBulkDelete = async () => {
+    try {
+      const selectedIds = Array.from(selectedOrgs);
+
+      // Delete each org by toggling (deactivating) them
+      const deletePromises = selectedIds.map(async (id) => {
+        const org = organizations.find((o) => o.id === id);
+        if (org) {
+          return toggleOrganizationStatus(id, false);
+        }
+      });
+
+      await Promise.all(deletePromises);
+
+      // Update state
+      setOrganizations((prev) =>
+        prev.map((org) =>
+          selectedIds.includes(org.id) ? { ...org, is_active: false } : org
+        )
+      );
+
+      setSelectedOrgs(new Set());
+      setIsSelectAllChecked(false);
+      setBulkDeleteDialogOpen(false);
+
+      toast.success(`Successfully deactivated ${selectedIds.length} organizations`);
+    } catch (error) {
+      toast.error('Failed to deactivate selected organizations');
+    }
+  };
+
+  const handleBulkToggle = async (newStatus: boolean) => {
+    try {
+      const selectedIds = Array.from(selectedOrgs);
+
+      const togglePromises = selectedIds.map((id) => toggleOrganizationStatus(id, newStatus));
+      await Promise.all(togglePromises);
+
+      setOrganizations((prev) =>
+        prev.map((org) =>
+          selectedIds.includes(org.id) ? { ...org, is_active: newStatus } : org
+        )
+      );
+
+      setSelectedOrgs(new Set());
+      setIsSelectAllChecked(false);
+      setBulkToggleDialogOpen(false);
+
+      toast.success(
+        `Successfully ${newStatus ? 'activated' : 'deactivated'} ${selectedIds.length} organizations`
+      );
+    } catch (error) {
+      toast.error('Failed to update organization status');
+    }
+  };
+
+  // Sorting
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="w-4 h-4 text-gray-400" />;
+    return (
+      <ArrowUpDown
+        className={`w-4 h-4 ${sortDirection === 'asc' ? 'text-emerald-400' : 'text-emerald-400 rotate-180'}`}
+      />
+    );
+  };
+
+  // Update select all checkbox state
+  useEffect(() => {
+    setIsSelectAllChecked(
+      selectedOrgs.size > 0 && selectedOrgs.size === filteredOrgs.length && filteredOrgs.length > 0
+    );
+  }, [selectedOrgs.size, filteredOrgs.length]);
 
   if (isLoading) {
     return (
