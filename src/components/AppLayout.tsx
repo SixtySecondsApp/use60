@@ -421,7 +421,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
 
               {/* Scrollable Navigation */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto scrollbar-accent">
                 <nav className="p-4 sm:p-6 space-y-1 sm:space-y-2">
                   {menuItems.map((item) => {
                     // Handle dividers
@@ -738,7 +738,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           
-          <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+          <div className="flex-1 overflow-y-auto pr-2 -mr-2 scrollbar-accent">
             <nav className={cn(
               'pb-6',
               isCollapsed ? 'space-y-3' : 'space-y-2'
