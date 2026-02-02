@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { useEffect, Suspense } from 'react';
+import { ScrollToTop } from '@/components/ScrollToTop';
 import { Toaster } from '@/components/ui/sonner';
 import { createApiMonitor } from '@/lib/utils/apiUtils';
 import { API_BASE_URL } from '@/lib/config';
@@ -225,6 +226,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
       <IntelligentPreloader />
       <RecoveryTokenDetector />
       <Routes>
+        <ScrollToTop />
         {/* ========== PUBLIC ROUTES (No Auth Required) ========== */}
         {/* Public pages for screenshot automation - MUST be outside ProtectedRoute */}
         <Route path="/meetings/thumbnail/:meetingId" element={<MeetingThumbnail />} />
