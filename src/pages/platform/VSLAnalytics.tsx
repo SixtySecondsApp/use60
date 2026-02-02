@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -121,6 +122,7 @@ export function VSLAnalytics() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <BackToPlatform />
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>

@@ -27,6 +27,7 @@ import {
   GitBranch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -141,6 +142,7 @@ export default function SkillsAdmin() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950">
+      <BackToPlatform />
       {/* Header */}
       <div className="border-b border-gray-200 dark:border-gray-700/50 px-6 py-6">
         <div className="max-w-7xl mx-auto">

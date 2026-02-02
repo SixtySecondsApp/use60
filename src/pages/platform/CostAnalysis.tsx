@@ -24,6 +24,7 @@ import {
   Calculator,
   AlertCircle,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -125,12 +126,12 @@ export default function CostAnalysis() {
 
   return (
     <div className="container mx-auto px-6 py-6 space-y-6 max-w-7xl">
+      {/* Back Button */}
+      <BackToPlatform />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/platform')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
           <div>
             <h1 className="text-2xl font-bold">Cost Analysis</h1>
             <p className="text-muted-foreground">

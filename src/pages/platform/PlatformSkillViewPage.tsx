@@ -25,6 +25,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SkillPreview } from '@/components/platform/SkillPreview';
@@ -135,6 +136,7 @@ export default function PlatformSkillViewPage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950">
+      <BackToPlatform />
       {/* Header */}
       <div className="border-b border-gray-200 dark:border-gray-700/50">
         <div className="max-w-6xl mx-auto px-6 py-6">

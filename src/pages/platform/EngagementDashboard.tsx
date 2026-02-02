@@ -26,6 +26,7 @@ import {
   UserX,
   Sparkles,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { supabase } from '@/lib/supabase/clientV2';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -217,6 +218,9 @@ export default function EngagementDashboard() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Back Button */}
+      <BackToPlatform />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

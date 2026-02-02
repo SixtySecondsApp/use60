@@ -25,6 +25,7 @@ import {
   BarChart3,
   Mail,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { supabase } from '@/lib/supabase/clientV2';
 import { Button } from '@/components/ui/button';
 import { format, subDays } from 'date-fns';
@@ -213,6 +214,9 @@ export default function ActivationDashboard() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
+        {/* Back Button */}
+        <BackToPlatform />
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>

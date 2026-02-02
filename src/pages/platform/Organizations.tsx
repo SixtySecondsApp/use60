@@ -16,6 +16,7 @@ import {
   Check,
   Lock,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -213,6 +214,9 @@ export default function Organizations() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 sm:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
+        {/* Back Button */}
+        <BackToPlatform />
+
         {/* Header */}
         <div>
           <div className="flex items-center gap-3 mb-2">

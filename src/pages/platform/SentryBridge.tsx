@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -474,6 +475,7 @@ export default function SentryBridge() {
 
   return (
     <div className="space-y-6 p-6">
+      <BackToPlatform />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

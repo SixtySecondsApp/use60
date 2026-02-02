@@ -3,6 +3,7 @@
  * Platform admin tool to preview and control the Quick Add experience.
  */
 import React from 'react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { QuickAddSimulatorWrapper } from '@/components/platform/simulator/QuickAddSimulatorWrapper';
 import { QuickAddVersionControl } from '@/components/platform/simulator/QuickAddVersionControl';
 
@@ -10,6 +11,7 @@ export default function QuickAddSimulator() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <BackToPlatform />
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>

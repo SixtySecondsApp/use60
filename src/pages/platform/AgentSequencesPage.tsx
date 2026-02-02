@@ -25,6 +25,7 @@ import {
   AlertCircle,
   FileCode,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -284,7 +285,8 @@ export default function AgentSequencesPage() {
       {/* Header */}
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
+          <BackToPlatform />
+          <div className="flex items-center justify-between gap-4 mt-2">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
                 <GitBranch className="h-6 w-6 text-primary" />
