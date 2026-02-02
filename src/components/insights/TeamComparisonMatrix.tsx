@@ -316,7 +316,7 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                 currentSort={sortField}
                 currentDirection={sortDirection}
                 onSort={handleSort}
-                className="min-w-[180px]"
+                className="min-w-[100px] sm:min-w-[140px]"
               />
               <SortableHeader
                 label="Meetings"
@@ -324,6 +324,7 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                 currentSort={sortField}
                 currentDirection={sortDirection}
                 onSort={handleSort}
+                className="min-w-[70px]"
               />
               <SortableHeader
                 label="Sentiment"
@@ -331,32 +332,36 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                 currentSort={sortField}
                 currentDirection={sortDirection}
                 onSort={handleSort}
+                className="min-w-[70px]"
               />
               <SortableHeader
-                label="Talk Time"
+                label="Talk"
                 field="talkTime"
                 currentSort={sortField}
                 currentDirection={sortDirection}
                 onSort={handleSort}
+                className="min-w-[60px]"
               />
               <SortableHeader
-                label="Forward %"
+                label="Forward"
                 field="forwardMovement"
                 currentSort={sortField}
                 currentDirection={sortDirection}
                 onSort={handleSort}
+                className="min-w-[70px]"
               />
               <SortableHeader
-                label="Positive %"
+                label="Positive"
                 field="positiveOutcome"
                 currentSort={sortField}
                 currentDirection={sortDirection}
                 onSort={handleSort}
+                className="min-w-[70px]"
               />
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <th className="hidden sm:table-cell px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[60px]">
                 Trend
               </th>
-              <th className="px-4 py-3 w-10" />
+              <th className="px-3 py-3 w-8" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800/30">
@@ -372,31 +377,28 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                   onRepClick && 'cursor-pointer'
                 )}
               >
-                {/* Rep */}
-                <td className="px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9 border border-gray-200 dark:border-gray-700">
+                {/* Rep - First Name Only */}
+                <td className="px-3 py-3 sm:px-4 sm:py-4">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <Avatar className="h-8 w-8 sm:h-9 sm:w-9 border border-gray-200 dark:border-gray-700 flex-shrink-0">
                       <AvatarImage src={rep.avatarUrl || undefined} alt={rep.userName} />
                       <AvatarFallback className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                         {getInitials(rep.userName)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="font-medium text-gray-900 dark:text-white truncate">
-                        {rep.userName}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {rep.userEmail}
+                      <p className="font-medium text-gray-900 dark:text-white truncate text-sm">
+                        {rep.userName.split(' ')[0]}
                       </p>
                     </div>
                   </div>
                 </td>
 
                 {/* Meetings */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-3 sm:px-4 sm:py-4">
                   <span
                     className={cn(
-                      'font-medium',
+                      'font-medium text-sm',
                       getValueColor(rep.totalMeetings, teamAverages?.avgMeetings ?? null)
                     )}
                   >
@@ -405,10 +407,10 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                 </td>
 
                 {/* Sentiment */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-3 sm:px-4 sm:py-4">
                   <span
                     className={cn(
-                      'font-medium',
+                      'font-medium text-sm',
                       getValueColor(rep.avgSentiment, teamAverages?.avgSentiment ?? null)
                     )}
                   >
@@ -419,10 +421,10 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                 </td>
 
                 {/* Talk Time */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-3 sm:px-4 sm:py-4">
                   <span
                     className={cn(
-                      'font-medium',
+                      'font-medium text-sm',
                       // Talk time: ideal is 45-55%, so we use special coloring
                       rep.avgTalkTime !== null
                         ? rep.avgTalkTime >= 45 && rep.avgTalkTime <= 55
@@ -438,10 +440,10 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                 </td>
 
                 {/* Forward Movement */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-3 sm:px-4 sm:py-4">
                   <span
                     className={cn(
-                      'font-medium',
+                      'font-medium text-sm',
                       getValueColor(rep.forwardMovementRate, teamAverages?.avgFM ?? null)
                     )}
                   >
@@ -452,10 +454,10 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                 </td>
 
                 {/* Positive Outcome */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-3 sm:px-4 sm:py-4">
                   <span
                     className={cn(
-                      'font-medium',
+                      'font-medium text-sm',
                       getValueColor(rep.positiveOutcomeRate, teamAverages?.avgPO ?? null)
                     )}
                   >
@@ -465,13 +467,13 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
                   </span>
                 </td>
 
-                {/* Mini Sparkline */}
-                <td className="px-4 py-4">
+                {/* Mini Sparkline - Hidden on Mobile */}
+                <td className="hidden sm:table-cell px-3 py-3 sm:px-4 sm:py-4">
                   <MiniSparkline data={rep.trendData} />
                 </td>
 
                 {/* Action */}
-                <td className="px-4 py-4">
+                <td className="px-3 py-3 sm:px-4 sm:py-4 text-center">
                   {onRepClick && (
                     <ChevronRight className="w-4 h-4 text-gray-400" />
                   )}
@@ -484,16 +486,16 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
 
       {/* Team Average Footer */}
       {teamAverages && (
-        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700/30 bg-gray-50 dark:bg-gray-800/30">
-          <div className="flex items-center gap-6 text-xs">
-            <span className="font-medium text-gray-600 dark:text-gray-400">Team Avg:</span>
-            <span className="text-gray-700 dark:text-gray-300">
-              {teamAverages.avgMeetings.toFixed(1)} meetings
+        <div className="px-3 sm:px-5 py-2 sm:py-3 border-t border-gray-200 dark:border-gray-700/30 bg-gray-50 dark:bg-gray-800/30">
+          <div className="flex items-center gap-2 sm:gap-4 text-xs overflow-x-auto">
+            <span className="font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">Avg:</span>
+            <span className="text-gray-700 dark:text-gray-300 flex-shrink-0">
+              {teamAverages.avgMeetings.toFixed(1)} meet
             </span>
             {teamAverages.avgSentiment !== null && (
-              <span className="text-gray-700 dark:text-gray-300">
+              <span className="text-gray-700 dark:text-gray-300 flex-shrink-0">
                 {teamAverages.avgSentiment > 0 ? '+' : ''}
-                {teamAverages.avgSentiment.toFixed(2)} sentiment
+                {teamAverages.avgSentiment.toFixed(2)} sent
               </span>
             )}
             {teamAverages.avgTalkTime !== null && (
