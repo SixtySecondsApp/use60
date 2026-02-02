@@ -204,8 +204,9 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
 
         if (!errorWithStatus && dataWithStatus) {
           hasActiveMembership = dataWithStatus.length > 0;
-        } else if (errorWithStatus?.code === '42703') {
-          // Column doesn't exist - check all memberships (assume all are active)
+        } else if (errorWithStatus) {
+          // Column doesn't exist (42703 or 400 Bad Request) - check all memberships (assume all are active)
+          console.log('[ProtectedRoute] member_status column not available, falling back to basic query');
           const { data: basicData, error: basicError } = await supabase
             .from('organization_memberships')
             .select('org_id', { count: 'exact' })
@@ -213,6 +214,8 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
 
           if (!basicError && basicData) {
             hasActiveMembership = basicData.length > 0;
+          } else if (basicError) {
+            console.error('[ProtectedRoute] Basic membership query also failed:', basicError);
           }
         }
 

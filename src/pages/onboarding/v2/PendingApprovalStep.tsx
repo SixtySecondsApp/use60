@@ -357,8 +357,8 @@ export function PendingApprovalStep() {
   };
 
   const handleCancelRequest = async () => {
-    if (!user?.id || !joinRequestId) {
-      console.error('[PendingApprovalStep] Missing required data:', { userId: user?.id, joinRequestId });
+    if (!user?.id) {
+      console.error('[PendingApprovalStep] Missing user ID');
       toast.error('Unable to cancel request. Please refresh the page and try again.');
       return;
     }
@@ -367,25 +367,30 @@ export function PendingApprovalStep() {
     setShowCancelDialog(false);
 
     try {
-      console.log('[PendingApprovalStep] Cancelling join request:', joinRequestId);
-      const result = await cancelJoinRequest(joinRequestId, user.id);
+      // Only call cancelJoinRequest if we have a joinRequestId
+      if (joinRequestId) {
+        console.log('[PendingApprovalStep] Cancelling join request:', joinRequestId);
+        const result = await cancelJoinRequest(joinRequestId, user.id);
 
-      if (result.success) {
-        toast.success('Join request cancelled. Restarting onboarding...');
-        // Reset store state
-        useOnboardingV2Store.getState().reset();
-        // Redirect to website input
-        setTimeout(() => {
-          navigate('/onboarding?step=website_input', { replace: true });
-        }, 1000);
+        if (!result.success) {
+          console.error('[PendingApprovalStep] Cancel failed:', result.error);
+          toast.error(result.error || 'Failed to cancel request');
+          setCanceling(false);
+          return;
+        }
       } else {
-        console.error('[PendingApprovalStep] Cancel failed:', result.error);
-        toast.error(result.error || 'Failed to cancel request');
+        console.log('[PendingApprovalStep] No join request ID, skipping cancel API call');
       }
+
+      // Reset store state and redirect regardless
+      toast.success('Restarting onboarding...');
+      useOnboardingV2Store.getState().reset();
+      setTimeout(() => {
+        navigate('/onboarding?step=website_input', { replace: true });
+      }, 1000);
     } catch (error) {
       console.error('[PendingApprovalStep] Error cancelling request:', error);
       toast.error('Failed to cancel request. Please try again.');
-    } finally {
       setCanceling(false);
     }
   };
@@ -399,7 +404,8 @@ export function PendingApprovalStep() {
   };
 
   const displayEmail = userEmail || profileEmail;
-  const orgName = pendingJoinRequest?.orgName || 'the organization';
+  const orgName = pendingJoinRequest?.orgName;
+  const showOrgLoadError = !orgName;
 
   // Render rejection UI if request was rejected
   if (isRejected) {
@@ -504,9 +510,29 @@ export function PendingApprovalStep() {
         <div className="p-8">
           <div className="mb-8">
             <p className="text-gray-300 text-center leading-relaxed mb-6">
-              Your request to join <span className="font-semibold text-white">{orgName}</span> has been submitted.
+              Your request to join{' '}
+              {showOrgLoadError ? (
+                <span className="font-semibold text-amber-300">the requested organization</span>
+              ) : (
+                <span className="font-semibold text-white">{orgName}</span>
+              )}
+              {' '}has been submitted.
               An organization administrator will review and approve your request, typically within 24 hours.
             </p>
+
+            {showOrgLoadError && (
+              <div className="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4 mb-6">
+                <div className="flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-amber-100 mb-1">Organization Name Unavailable</p>
+                    <p className="text-sm text-amber-200/80">
+                      We couldn&apos;t load the organization name. You can still wait for approval or restart onboarding.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4 mb-8">
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4">
@@ -611,7 +637,7 @@ export function PendingApprovalStep() {
             {/* Cancel and restart onboarding button */}
             <button
               onClick={() => setShowCancelDialog(true)}
-              disabled={canceling || !joinRequestId || isLoadingDashboard || showApprovalSuccess}
+              disabled={canceling || isLoadingDashboard || showApprovalSuccess}
               className="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 mb-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
             >
               {canceling ? (
@@ -645,7 +671,7 @@ export function PendingApprovalStep() {
         onClose={() => setShowCancelDialog(false)}
         onConfirm={handleCancelRequest}
         title="Cancel Join Request?"
-        description={`Are you sure you want to cancel your request to join ${orgName}? You'll be able to create a new organization or request to join a different one.`}
+        description={`Are you sure you want to cancel your request to join ${orgName || 'this organization'}? You'll be able to create a new organization or request to join a different one.`}
         confirmText="Yes, Cancel Request"
         cancelText="No, Keep Request"
         confirmVariant="warning"
