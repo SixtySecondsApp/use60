@@ -1105,7 +1105,7 @@
       "feature": "pending-approval-flow",
       "title": "Apply same polling logic to PendingApprovalPage",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 26,
       "dependencies": {
         "stories": [
@@ -1129,7 +1129,7 @@
         "Redirects to /dashboard (not /onboarding) since user completed onboarding"
       ],
       "estimatedMinutes": 10,
-      "actualMinutes": null,
+      "actualMinutes": 12,
       "files": [
         "src/pages/auth/PendingApprovalPage.tsx"
       ],
