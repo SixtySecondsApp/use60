@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/lib/hooks/useUser';
@@ -36,6 +36,7 @@ export default function Profile() {
   const [isOwner, setIsOwner] = useState(false);
   const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Check if user is owner of current organization
   useEffect(() => {
@@ -279,7 +280,7 @@ export default function Profile() {
           <form onSubmit={handleSave} className="p-6 space-y-6">
             {/* Profile Picture */}
             <div className="flex flex-col items-center gap-4">
-              <div className="relative group">
+              <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}>
                 <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#37bd7e]/20 border-2 border-[#37bd7e]/30 group-hover:border-[#37bd7e]/50 transition-all duration-300">
                   {(userData?.avatar_url || userProfile?.avatar_url) ? (
                     <img
@@ -303,6 +304,7 @@ export default function Profile() {
                   </div>
                 </div>
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   className="hidden"
