@@ -325,21 +325,33 @@ export default function TeamMembersPage() {
           .eq('org_id', activeOrgId)
           .order('created_at', { ascending: true });
 
-        if (membershipError) throw membershipError;
+        if (membershipError) {
+          console.error('[TeamMembersPage] Membership query error:', membershipError);
+          throw membershipError;
+        }
         if (!memberships?.length) {
+          console.log('[TeamMembersPage] No memberships found for org:', activeOrgId);
           setMembers([]);
           return;
         }
 
+        console.log('[TeamMembersPage] Loaded', memberships.length, 'memberships');
+
         // Fetch profiles for all member user_ids
         // Note: profiles table has first_name and last_name, NOT full_name
         const userIds = memberships.map((m) => m.user_id);
+        console.log('[TeamMembersPage] Fetching profiles for user IDs:', userIds);
+
         const { data: profiles, error: profileError } = await supabase
           .from('profiles')
           .select('id, email, first_name, last_name')
           .in('id', userIds);
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('[TeamMembersPage] Profile query error:', profileError);
+          throw profileError;
+        }
+        console.log('[TeamMembersPage] Loaded', profiles?.length || 0, 'profiles');
 
         // Create a lookup map for profiles with constructed full_name
         const profileMap = new Map(
