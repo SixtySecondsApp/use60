@@ -45,10 +45,11 @@ export interface ApprovalDetectionResult {
  * @param orgId - Optional organization ID to check (if known)
  * @param enabled - Whether to run the query (default: true)
  */
+// eslint-disable-next-line max-lines-per-function
 export function useApprovalDetection(
   userId: string | undefined,
   orgId?: string,
-  enabled: boolean = true
+  enabled = true
 ): ApprovalDetectionResult & { isLoading: boolean; refetch: () => void } {
   // Query for organization memberships (source of truth)
   const {
@@ -122,7 +123,7 @@ export function useApprovalDetection(
   });
 
   // Refetch both queries
-  const refetch = () => {
+  const refetch = (): void => {
     refetchMembership();
     refetchJoinRequest();
   };
