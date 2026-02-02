@@ -92,7 +92,7 @@
       "feature": "onboard-fix",
       "title": "Add email_status tracking to invitations table",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 2,
       "dependencies": {
         "stories": [
@@ -114,15 +114,15 @@
         "All existing invitations default to 'sent' status"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 15,
       "files": [
-        "supabase/migrations/YYYYMMDD_add_email_tracking_to_invitations.sql"
+        "supabase/migrations/20260130110000_add_email_tracking_to_invitations.sql"
       ],
       "implementation": {
         "sql": "ALTER TABLE organization_invitations ADD COLUMN email_status text CHECK (email_status IN ('pending', 'sent', 'failed', 'bounced')) DEFAULT 'pending';\nALTER TABLE organization_invitations ADD COLUMN email_sent_at timestamptz;\nALTER TABLE organization_invitations ADD COLUMN email_error text;\nALTER TABLE organization_invitations ADD COLUMN resend_count integer DEFAULT 0;\n-- Update existing rows\nUPDATE organization_invitations SET email_status = 'sent' WHERE email_sent_at IS NULL;"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-01-30T12:53:00Z",
+      "completedAt": "2026-01-30T13:08:00Z"
     },
     {
       "id": "ONBOARD-003",
@@ -217,7 +217,7 @@
       "feature": "onboard-fix",
       "title": "Create expired invitations cleanup migration",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 5,
       "dependencies": {
         "stories": [
@@ -240,9 +240,9 @@
         "Creates index on (status, created_at) for performance"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 10,
       "files": [
-        "supabase/migrations/YYYYMMDD_expire_old_invitations.sql"
+        "supabase/migrations/20260202093639_expire_old_invitations.sql"
       ],
       "implementation": {
         "sql": "-- Add status if not exists\nALTER TABLE organization_invitations ADD COLUMN IF NOT EXISTS status text CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')) DEFAULT 'pending';\n-- Expire old invitations\nUPDATE organization_invitations \nSET status = 'expired' \nWHERE accepted_at IS NULL \n  AND created_at < NOW() - INTERVAL '7 days' \n  AND status = 'pending';\n-- Add index\nCREATE INDEX IF NOT EXISTS idx_invitations_status_created ON organization_invitations(status, created_at);"
@@ -809,7 +809,7 @@
       "feature": "pending-approval-flow",
       "title": "Create useApprovalDetection hook for centralized approval checking",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 20,
       "dependencies": {
         "stories": [],
@@ -834,7 +834,7 @@
         "Hook is reusable across multiple components"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 12,
       "files": [
         "src/lib/hooks/useApprovalDetection.ts"
       ],
@@ -853,8 +853,8 @@
       },
       "designRef": null,
       "ticketId": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T14:30:00Z",
+      "completedAt": "2026-02-02T14:42:00Z"
     },
     {
       "id": "PEND-002",
@@ -1310,7 +1310,7 @@
       "feature": "org-user-removal",
       "title": "Add member_status column to organization_memberships",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 27,
       "dependencies": {
         "stories": [],
@@ -1334,19 +1334,19 @@
         "Creates index on (org_id, member_status) for filtering"
       ],
       "estimatedMinutes": 30,
-      "actualMinutes": null,
+      "actualMinutes": 12,
       "files": [
         "supabase/migrations/YYYYMMDD_add_member_status_to_memberships.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:38:57.644Z",
+      "completedAt": "2026-02-02T09:50:57.644Z"
     },
     {
       "id": "ORGREM-002",
       "feature": "org-user-removal",
       "title": "Create rejoin_requests table schema",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 28,
       "dependencies": {
         "stories": [],
@@ -1371,12 +1371,12 @@
         "RLS policies: users see own requests, org admins see org requests"
       ],
       "estimatedMinutes": 30,
-      "actualMinutes": null,
+      "actualMinutes": 15,
       "files": [
         "supabase/migrations/YYYYMMDD_create_rejoin_requests_table.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:39:31.746Z",
+      "completedAt": "2026-02-02T09:39:31.746Z"
     },
     {
       "id": "ORGREM-003",
@@ -1571,7 +1571,7 @@
       "feature": "org-user-removal",
       "title": "Add removed_user_redirect flag to profiles",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 34,
       "dependencies": {
         "stories": [],
@@ -1595,12 +1595,12 @@
         "Cleared when user completes onboarding flow"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 10,
       "files": [
         "supabase/migrations/YYYYMMDD_add_removed_redirect_flag.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:39:31.746Z",
+      "completedAt": "2026-02-02T09:39:31.746Z"
     },
     {
       "id": "ORGREM-009",
@@ -2010,8 +2010,8 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 1,
-    "currentFeature": "pending-approval-flow",
+    "completedStories": 7,
+    "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
         "group": 1,
@@ -2112,6 +2112,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T14:00:00Z"
+    "lastUpdated": "2026-02-02T15:30:00Z"
   }
 }
