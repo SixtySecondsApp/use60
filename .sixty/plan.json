@@ -294,7 +294,7 @@
       "feature": "onboard-fix",
       "title": "Schedule daily cleanup cron in vercel.json",
       "type": "config",
-      "status": "pending",
+      "status": "complete",
       "priority": 7,
       "dependencies": {
         "stories": [
@@ -314,15 +314,15 @@
         "Deployed to staging and verified in Vercel dashboard"
       ],
       "estimatedMinutes": 10,
-      "actualMinutes": null,
+      "actualMinutes": 5,
       "files": [
         "vercel.json"
       ],
       "implementation": {
         "config": "{\n  \"path\": \"/api/cron/cleanup-expired-invitations\",\n  \"schedule\": \"0 3 * * *\"\n}"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:55:00Z",
+      "completedAt": "2026-02-02T10:00:00Z"
     },
     {
       "id": "ONBOARD-008",
@@ -2010,7 +2010,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 16,
+    "completedStories": 17,
     "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
