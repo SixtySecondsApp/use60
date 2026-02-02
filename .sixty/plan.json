@@ -962,7 +962,7 @@
       "feature": "pending-approval-flow",
       "title": "Mark onboarding complete on approval",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 23,
       "dependencies": {
         "stories": [
@@ -986,7 +986,7 @@
         "Prevents redirect back to onboarding after dashboard loads"
       ],
       "estimatedMinutes": 10,
-      "actualMinutes": null,
+      "actualMinutes": 8,
       "files": [
         "src/pages/onboarding/v2/PendingApprovalStep.tsx"
       ],
@@ -1003,8 +1003,8 @@
       },
       "designRef": null,
       "ticketId": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T16:00:00Z",
+      "completedAt": "2026-02-02T16:08:00Z"
     },
     {
       "id": "PEND-005",
@@ -2011,7 +2011,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 18,
+    "completedStories": 19,
     "currentFeature": "pending-approval-flow",
     "parallelGroups": [
       {

@@ -31,6 +31,7 @@ export function PendingApprovalStep() {
   const [joinRequestId, setJoinRequestId] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+  const [showApprovalSuccess, setShowApprovalSuccess] = useState(false);
 
   // Use approval detection hook
   const { isApproved, membership, refetch } = useApprovalDetection(
@@ -98,8 +99,15 @@ export function PendingApprovalStep() {
   // Handler for when approval is detected
   const handleApprovalDetected = async (membership: { org_id: string }) => {
     try {
-      setIsLoadingDashboard(true);
+      // Show success state briefly before loading dashboard
+      setShowApprovalSuccess(true);
       setIsPolling(false);
+
+      // Wait for success animation to be visible
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      setIsLoadingDashboard(true);
+      setShowApprovalSuccess(false);
 
       console.log('[PendingApprovalStep] Starting approval flow for org:', membership.org_id);
 
@@ -125,7 +133,22 @@ export function PendingApprovalStep() {
       console.log('[PendingApprovalStep] Switching to organization:', membership.org_id);
       switchOrg(membership.org_id);
 
-      // 4. Show success message and navigate to dashboard
+      // 4. Mark onboarding as complete
+      console.log('[PendingApprovalStep] Marking onboarding as complete');
+      try {
+        await supabase
+          .from('user_onboarding_progress')
+          .upsert({
+            user_id: user.id,
+            onboarding_step: 'complete',
+            onboarding_completed_at: new Date().toISOString()
+          }, { onConflict: 'user_id' });
+      } catch (error) {
+        console.error('[PendingApprovalStep] Error marking onboarding complete:', error);
+        // Don't block navigation if onboarding update fails
+      }
+
+      // 5. Show success message and navigate to dashboard
       toast.success('Welcome! Redirecting to your dashboard...');
       setTimeout(() => {
         navigate('/dashboard', { replace: true });
@@ -151,41 +174,49 @@ export function PendingApprovalStep() {
 
     setChecking(true);
     try {
-      // First check if there's any pending request at all
-      const { data: pendingRequests } = await supabase
+      // Step 1: Check organization_memberships FIRST (source of truth)
+      const { data: membership } = await supabase
+        .from('organization_memberships')
+        .select('org_id, role, id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      // If membership exists, user was approved - trigger dashboard flow
+      if (membership) {
+        console.log('[PendingApprovalStep] User has been approved, triggering approval flow');
+        await handleApprovalDetected(membership);
+        return;
+      }
+
+      // Step 2: Check if there's still a pending request
+      const { data: pendingRequest } = await supabase
         .from('organization_join_requests')
         .select('status, org_id, organizations(name)')
         .eq('user_id', user.id)
         .eq('status', 'pending')
         .maybeSingle();
 
-      if (!pendingRequests) {
-        // Request not found - may have been deleted or org was deleted
-        toast.warning('Join request not found. The organization may have been removed. Please restart onboarding.');
-        // Auto-reset profile status to allow restart
-        await supabase
-          .from('profiles')
-          .update({ profile_status: 'active' })
-          .eq('id', user.id);
+      if (pendingRequest) {
+        // Request is still pending
+        toast.info('Still waiting for admin approval. We\'ll notify you when approved!');
         return;
       }
 
-      // Now check if join request was approved
-      const { data: approvedRequests } = await supabase
-        .from('organization_join_requests')
-        .select('status, org_id')
-        .eq('user_id', user.id)
-        .eq('status', 'approved')
-        .maybeSingle();
+      // Step 3: No membership and no pending request - request was cancelled/rejected
+      toast.warning('Your request was cancelled or the organization was removed. Restarting onboarding...');
 
-      if (approvedRequests) {
-        toast.success('Approved! Redirecting to your dashboard...');
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 1000);
-      } else {
-        toast.info('Still waiting for admin approval. We\'ll email you when approved!');
-      }
+      // Auto-reset profile status to allow restart
+      await supabase
+        .from('profiles')
+        .update({ profile_status: 'active' })
+        .eq('id', user.id);
+
+      // Reset store and redirect to start
+      useOnboardingV2Store.getState().reset();
+      setTimeout(() => {
+        navigate('/onboarding?step=website_input', { replace: true });
+      }, 1500);
+
     } catch (error) {
       console.error('[PendingApprovalStep] Error checking approval status:', error);
       toast.error('Failed to check status. Please try again.');
@@ -281,22 +312,51 @@ export function PendingApprovalStep() {
                 <p className="text-xs font-medium uppercase tracking-wide mb-1 text-gray-400">
                   Status
                 </p>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                  <p className="font-medium text-white">
-                    {isLoadingDashboard ? 'Loading your dashboard...' : 'Awaiting Admin Review'}
-                  </p>
-                </div>
-                {isPolling && !isLoadingDashboard && (
-                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Checking status...</span>
+
+                {/* Success state - approval detected */}
+                {showApprovalSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <p className="font-medium text-green-400">
+                      Approved! Setting up your account...
+                    </p>
+                  </motion.div>
+                )}
+
+                {/* Loading dashboard state */}
+                {isLoadingDashboard && !showApprovalSuccess && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
+                      <p className="font-medium text-white">
+                        Loading your dashboard...
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-400 pl-7">
+                      Preparing your workspace and loading data
+                    </p>
                   </div>
                 )}
-                {isLoadingDashboard && (
-                  <div className="flex items-center gap-2 mt-2 text-xs text-green-400">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Preparing your workspace...</span>
+
+                {/* Waiting state with polling indicator */}
+                {!showApprovalSuccess && !isLoadingDashboard && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                      <p className="font-medium text-white">
+                        Awaiting Admin Review
+                      </p>
+                    </div>
+                    {isPolling && (
+                      <div className="flex items-center gap-2 text-xs text-gray-400 pl-4">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Checking approval status...</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -320,7 +380,7 @@ export function PendingApprovalStep() {
             {/* Check status button */}
             <button
               onClick={checkApprovalStatus}
-              disabled={checking || isLoadingDashboard}
+              disabled={checking || isLoadingDashboard || showApprovalSuccess}
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 mb-4"
             >
               {checking ? (
@@ -336,7 +396,7 @@ export function PendingApprovalStep() {
             {/* Cancel and restart onboarding button */}
             <button
               onClick={() => setShowCancelDialog(true)}
-              disabled={canceling || !joinRequestId || isLoadingDashboard}
+              disabled={canceling || !joinRequestId || isLoadingDashboard || showApprovalSuccess}
               className="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 mb-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
             >
               {canceling ? (
