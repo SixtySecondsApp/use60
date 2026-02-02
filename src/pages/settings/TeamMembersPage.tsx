@@ -1,6 +1,6 @@
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Loader2, AlertCircle, UserPlus, Mail, RefreshCw, X, Check, Clock, Crown, ChevronDown, ChevronUp, UserCog } from 'lucide-react';
+import { Users, Trash2, Loader2, AlertCircle, UserPlus, Mail, RefreshCw, X, Check, Clock, Crown, ChevronDown, ChevronUp, UserCog, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -19,6 +19,7 @@ import {
   rejectJoinRequest,
   type JoinRequest,
 } from '@/lib/services/joinRequestService';
+import { leaveOrganization, isLastOwner } from '@/lib/services/leaveOrganizationService';
 import { toast } from 'sonner';
 
 interface TeamMember {
@@ -66,10 +67,13 @@ export default function TeamMembersPage() {
 
   // Join requests section collapse state
   const [isJoinRequestsExpanded, setIsJoinRequestsExpanded] = useState(true);
-  const [isRejoinRequestsExpanded, setIsRejoinRequestsExpanded] = useState(true);
 
   // Filter state for showing removed members (ORGREM-016)
   const [showRemovedMembers, setShowRemovedMembers] = useState(true);
+
+  // Leave team state
+  const [isLeavingTeam, setIsLeavingTeam] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
 
   // Debug: Log component mount and context values
   useEffect(() => {
@@ -137,7 +141,7 @@ export default function TeamMembersPage() {
       return requests;
     },
     enabled: !!activeOrgId && !!user?.id,
-    refetchInterval: 10000, // Auto-refresh every 10 seconds to catch new requests
+    // Only fetch once on component mount - user can manually refresh page for new requests
     retry: 2,
   });
 
@@ -177,7 +181,7 @@ export default function TeamMembersPage() {
       return data || [];
     },
     enabled: !!activeOrgId && !!user?.id && permissions.canManageTeam,
-    refetchInterval: 10000, // Auto-refresh every 10 seconds
+    // Only fetch once on component mount - no auto-refresh
     retry: 2,
   });
 
@@ -435,6 +439,17 @@ export default function TeamMembersPage() {
     loadInvitations();
   }, [activeOrgId]);
 
+  // Check if user is owner
+  useEffect(() => {
+    const checkOwnerStatus = async () => {
+      if (activeOrgId && user?.id) {
+        const ownerStatus = await isLastOwner(activeOrgId, user.id);
+        setIsOwner(ownerStatus);
+      }
+    };
+    checkOwnerStatus();
+  }, [activeOrgId, user?.id]);
+
   // Handle sending invitation
   const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -577,6 +592,37 @@ export default function TeamMembersPage() {
     }
   };
 
+  // Handle leaving the team
+  const handleLeaveTeam = async () => {
+    if (!activeOrgId || !user?.id) return;
+
+    // Check if owner
+    if (isOwner) {
+      toast.error(
+        'You are the last owner of this organization. Please transfer ownership to another member before leaving.'
+      );
+      return;
+    }
+
+    // Confirmation dialog
+    const confirmMessage = `Are you sure you want to leave this organization?\n\nYou will no longer have access to this organization's data. You can request to join again later if needed.`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setIsLeavingTeam(true);
+    const result = await leaveOrganization(activeOrgId, user.id);
+
+    if (result.success) {
+      toast.success('You have left the organization');
+      // Refresh page to reset organization context
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } else {
+      toast.error(result.error || 'Failed to leave organization');
+      setIsLeavingTeam(false);
+    }
+  };
+
   // Handle ownership transfer (owner only)
   const handleTransferOwnership = async (newOwnerId: string) => {
     if (!activeOrgId || !user?.id) return;
@@ -663,18 +709,32 @@ export default function TeamMembersPage() {
               <Users className="w-5 h-5 text-[#37bd7e]" />
               Team Members
             </h2>
-            {/* Filter toggle for removed members (ORGREM-016) */}
-            {members.some((m) => m.member_status === 'removed') && (
-              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showRemovedMembers}
-                  onChange={(e) => setShowRemovedMembers(e.target.checked)}
-                  className="rounded border-gray-300 dark:border-gray-600 text-[#37bd7e] focus:ring-[#37bd7e] focus:ring-offset-0"
-                />
-                Show removed members
-              </label>
-            )}
+            <div className="flex items-center gap-4">
+              {/* Leave Team Button (for non-owners) */}
+              {!isOwner && (
+                <button
+                  onClick={handleLeaveTeam}
+                  disabled={isLeavingTeam}
+                  className="px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-300 border border-red-300 dark:border-red-700/50 font-medium text-sm flex items-center gap-2 disabled:opacity-50"
+                  title="Leave this organization"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Leave Team
+                </button>
+              )}
+              {/* Filter toggle for removed members (ORGREM-016) */}
+              {members.some((m) => m.member_status === 'removed') && (
+                <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showRemovedMembers}
+                    onChange={(e) => setShowRemovedMembers(e.target.checked)}
+                    className="rounded border-gray-300 dark:border-gray-600 text-[#37bd7e] focus:ring-[#37bd7e] focus:ring-offset-0"
+                  />
+                  Show removed members
+                </label>
+              )}
+            </div>
           </div>
           {isLoadingMembers ? (
             <div className="flex items-center justify-center py-12">
@@ -808,7 +868,7 @@ export default function TeamMembersPage() {
           )}
         </div>
 
-        {/* Pending Join Requests - Always Visible */}
+        {/* Pending Join & Rejoin Requests - Merged Section */}
         <div>
           <button
             onClick={() => setIsJoinRequestsExpanded(!isJoinRequestsExpanded)}
@@ -817,10 +877,10 @@ export default function TeamMembersPage() {
             <div className="flex items-center gap-2">
               <UserCog className="w-5 h-5 text-yellow-500" />
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Pending Join Requests
-                {joinRequests.length > 0 && (
+                Pending Requests
+                {(joinRequests.length + rejoinRequests.length) > 0 && (
                   <span className="ml-2 text-sm font-normal text-yellow-600 dark:text-yellow-400">
-                    ({joinRequests.length})
+                    ({joinRequests.length + rejoinRequests.length})
                   </span>
                 )}
               </h2>
@@ -834,11 +894,11 @@ export default function TeamMembersPage() {
 
           {isJoinRequestsExpanded && (
             <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-              {isLoadingJoinRequests ? (
+              {isLoadingJoinRequests || isLoadingRejoinRequests ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 text-[#37bd7e] animate-spin" />
                 </div>
-              ) : joinRequests.length === 0 ? (
+              ) : joinRequests.length === 0 && rejoinRequests.length === 0 ? (
                 <div className="text-center py-12 px-6">
                   <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
                     <UserCog className="w-8 h-8 text-gray-400" />
@@ -847,14 +907,15 @@ export default function TeamMembersPage() {
                     No Pending Requests
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm mx-auto">
-                    When users request to join your organization, they'll appear here for approval.
+                    When users request to join or rejoin your organization, they'll appear here for approval.
                   </p>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {/* Join Requests */}
                   {joinRequests.map((request: JoinRequest) => (
                     <div
-                      key={request.id}
+                      key={`join-${request.id}`}
                       className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                     >
                       <div className="flex items-center gap-4">
@@ -897,119 +958,69 @@ export default function TeamMembersPage() {
                       </div>
                     </div>
                   ))}
+
+                  {/* Rejoin Requests */}
+                  {rejoinRequests.map((request: any) => (
+                    <div
+                      key={`rejoin-${request.id}`}
+                      className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-blue-200 dark:bg-blue-500/20 flex items-center justify-center">
+                          <span className="text-blue-900 dark:text-blue-400 font-medium">
+                            {request.profiles?.first_name?.[0]?.toUpperCase() ||
+                              request.profiles?.email?.[0].toUpperCase() || '?'}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-gray-900 dark:text-white font-medium">
+                            {request.profiles?.first_name && request.profiles?.last_name
+                              ? `${request.profiles.first_name} ${request.profiles.last_name}`
+                              : request.profiles?.first_name || request.profiles?.last_name || request.profiles?.email?.split('@')[0]}
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{request.profiles?.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-medium">
+                          Rejoin
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs">
+                          <Clock className="w-3 h-3" />
+                          Awaiting Approval
+                        </span>
+                        <button
+                          onClick={() => approveRejoinMutation.mutate(request.id)}
+                          disabled={approveRejoinMutation.isPending}
+                          className="p-2 text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-50"
+                          title="Approve and re-add to organization"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            const reason = window.prompt(
+                              'Optional: Provide a reason for rejection (will be included in email to user)'
+                            );
+                            if (reason !== null) {
+                              rejectRejoinMutation.mutate({ requestId: request.id, reason: reason || undefined, requestData: request });
+                            }
+                          }}
+                          disabled={rejectRejoinMutation.isPending}
+                          className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+                          title="Reject request"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Rejoin Requests (ORGREM-015) */}
-        {permissions.canManageTeam && (
-          <div>
-            <button
-              onClick={() => setIsRejoinRequestsExpanded(!isRejoinRequestsExpanded)}
-              className="w-full flex items-center justify-between mb-4 group"
-            >
-              <div className="flex items-center gap-2">
-                <RefreshCw className="w-5 h-5 text-blue-500" />
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Rejoin Requests
-                  {rejoinRequests.length > 0 && (
-                    <span className="ml-2 text-sm font-normal text-blue-600 dark:text-blue-400">
-                      ({rejoinRequests.length})
-                    </span>
-                  )}
-                </h2>
-              </div>
-              {isRejoinRequestsExpanded ? (
-                <ChevronUp className="w-5 h-5 text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors" />
-              )}
-            </button>
-
-            {isRejoinRequestsExpanded && (
-              <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-                {isLoadingRejoinRequests ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 text-[#37bd7e] animate-spin" />
-                  </div>
-                ) : rejoinRequests.length === 0 ? (
-                  <div className="text-center py-12 px-6">
-                    <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
-                      <RefreshCw className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-base font-medium text-gray-900 dark:text-white mb-2">
-                      No Rejoin Requests
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm mx-auto">
-                      When removed users request to rejoin your organization, they'll appear here for approval.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {rejoinRequests.map((request: any) => (
-                      <div
-                        key={request.id}
-                        className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-blue-200 dark:bg-blue-500/20 flex items-center justify-center">
-                            <span className="text-blue-900 dark:text-blue-400 font-medium">
-                              {request.profiles?.first_name?.[0]?.toUpperCase() ||
-                                request.profiles?.email?.[0].toUpperCase() || '?'}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="text-gray-900 dark:text-white font-medium">
-                              {request.profiles?.first_name && request.profiles?.last_name
-                                ? `${request.profiles.first_name} ${request.profiles.last_name}`
-                                : request.profiles?.first_name || request.profiles?.last_name || request.profiles?.email?.split('@')[0]}
-                            </p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">{request.profiles?.email}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-                              Requested {new Date(request.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs">
-                            <Clock className="w-3 h-3" />
-                            Awaiting Approval
-                          </span>
-                          <button
-                            onClick={() => approveRejoinMutation.mutate(request.id)}
-                            disabled={approveRejoinMutation.isPending}
-                            className="p-2 text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-50"
-                            title="Approve and re-add to organization"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const reason = window.prompt(
-                                'Optional: Provide a reason for rejection (will be included in email to user)'
-                              );
-                              if (reason !== null) {
-                                // User clicked OK (even if empty string)
-                                rejectRejoinMutation.mutate({ requestId: request.id, reason: reason || undefined, requestData: request });
-                              }
-                            }}
-                            disabled={rejectRejoinMutation.isPending}
-                            className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-                            title="Reject request"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Invite New Members */}
         {permissions.canManageTeam && (

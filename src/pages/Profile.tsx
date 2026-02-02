@@ -3,17 +3,21 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/lib/hooks/useUser';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrg } from '@/lib/contexts/OrgContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-import { Camera, Save, Lock, UserCog, Link2, History, ChevronRight, Mail } from 'lucide-react';
+import { Camera, Save, Lock, UserCog, Link2, History, ChevronRight, Mail, Building2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 import { EmailChangeModal } from '@/components/EmailChangeModal';
+import { leaveOrganization, isLastOwner } from '@/lib/services/leaveOrganizationService';
+import { GoodbyeScreen } from '@/components/GoodbyeScreen';
 
 export default function Profile() {
   const navigate = useNavigate();
   const { userData, isLoading: userLoading } = useUser();
   const { user, userProfile, updatePassword } = useAuth();
+  const { activeOrgId, orgName, permissions } = useOrg();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -26,7 +30,21 @@ export default function Profile() {
   const [isEmailChangeModalOpen, setIsEmailChangeModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isLeavingOrg, setIsLeavingOrg] = useState(false);
+  const [showGoodbyeScreen, setShowGoodbyeScreen] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const queryClient = useQueryClient();
+
+  // Check if user is owner of current organization
+  useEffect(() => {
+    const checkOwnerStatus = async () => {
+      if (activeOrgId && user?.id) {
+        const ownerStatus = await isLastOwner(activeOrgId, user.id);
+        setIsOwner(ownerStatus);
+      }
+    };
+    checkOwnerStatus();
+  }, [activeOrgId, user?.id]);
 
   // Debug logging
   useEffect(() => {
@@ -90,6 +108,44 @@ export default function Profile() {
       setIsLoading(false);
     }
   };
+
+  const handleLeaveOrganization = async () => {
+    if (!activeOrgId || !user?.id) return;
+
+    // Check if owner
+    if (isOwner) {
+      toast.error(
+        'You are the last owner of this organization. Please transfer ownership to another member or delete the organization before leaving.'
+      );
+      return;
+    }
+
+    // Confirmation dialog
+    const confirmMessage = `Are you sure you want to leave "${orgName || 'this organization'}"?\n\nYou will no longer have access to this organization's data. You can request to join again later if needed.`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setIsLeavingOrg(true);
+    const result = await leaveOrganization(activeOrgId, user.id);
+
+    if (result.success) {
+      toast.success('You have left the organization');
+      setShowGoodbyeScreen(true);
+    } else {
+      toast.error(result.error || 'Failed to leave organization');
+      setIsLeavingOrg(false);
+    }
+  };
+
+  const handleRedirectFromGoodbye = () => {
+    // Clear org context and redirect
+    queryClient.invalidateQueries({ queryKey: ['organizations'] });
+    window.location.href = '/learnmore';
+  };
+
+  // Show goodbye screen if user just left organization
+  if (showGoodbyeScreen) {
+    return <GoodbyeScreen organizationName={orgName} onRedirectComplete={handleRedirectFromGoodbye} />;
+  }
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -304,6 +360,45 @@ export default function Profile() {
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Click "Change" to request a new email address</p>
               </div>
+
+              {/* Organization Info */}
+              {activeOrgId && orgName && (
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-400 flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    Current Organization
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={orgName}
+                      disabled={true}
+                      className="flex-1 bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/30 rounded-xl px-4 py-2.5 text-gray-900 dark:text-gray-400 placeholder-gray-400 cursor-not-allowed opacity-60"
+                    />
+                    {!isOwner && (
+                      <button
+                        type="button"
+                        onClick={handleLeaveOrganization}
+                        disabled={isLeavingOrg}
+                        className="px-4 py-2.5 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-300 border border-red-300 dark:border-red-700/50 font-medium text-sm flex items-center gap-2 whitespace-nowrap disabled:opacity-50"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        {isLeavingOrg ? 'Leaving...' : 'Leave'}
+                      </button>
+                    )}
+                    {isOwner && (
+                      <div className="px-4 py-2.5 rounded-xl bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700/50 font-medium text-xs flex items-center gap-2 whitespace-nowrap">
+                        You are the owner
+                      </div>
+                    )}
+                  </div>
+                  {isOwner && (
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                      As owner, you must transfer ownership or delete the organization before leaving.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Password Section */}
