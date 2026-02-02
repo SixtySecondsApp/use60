@@ -255,7 +255,7 @@
       "feature": "onboard-fix",
       "title": "Create cleanup-expired-invitations edge function",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 6,
       "dependencies": {
         "stories": [
@@ -278,7 +278,7 @@
         "Logs summary to console"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 5,
       "files": [
         "supabase/functions/cleanup-expired-invitations/index.ts"
       ],
@@ -286,8 +286,8 @@
         "template": "Copy pattern from existing cron functions",
         "logic": "UPDATE organization_invitations SET status = 'expired' WHERE accepted_at IS NULL AND created_at < NOW() - INTERVAL '7 days' AND status = 'pending' RETURNING id"
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:50:00Z",
+      "completedAt": "2026-02-02T09:55:00Z"
     },
     {
       "id": "ONBOARD-007",
@@ -1458,7 +1458,7 @@
       "feature": "org-user-removal",
       "title": "Create request_rejoin RPC function",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 31,
       "dependencies": {
         "stories": [
@@ -1484,19 +1484,19 @@
         "Returns error if user not removed or already has pending request"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 20,
       "files": [
         "supabase/migrations/YYYYMMDD_create_request_rejoin_rpc.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:52:29.683Z",
+      "completedAt": "2026-02-02T09:52:29.683Z"
     },
     {
       "id": "ORGREM-006",
       "feature": "org-user-removal",
       "title": "Create approve_rejoin_request RPC function",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 32,
       "dependencies": {
         "stories": [
@@ -1522,19 +1522,19 @@
         "Handles race conditions (request already processed)"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 20,
       "files": [
         "supabase/migrations/YYYYMMDD_create_approve_rejoin_rpc.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:52:29.683Z",
+      "completedAt": "2026-02-02T09:52:29.683Z"
     },
     {
       "id": "ORGREM-007",
       "feature": "org-user-removal",
       "title": "Update RLS policies for removed members",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 33,
       "dependencies": {
         "stories": [
@@ -1559,12 +1559,12 @@
         "Test: Removed user can view their old records but not edit"
       ],
       "estimatedMinutes": 30,
-      "actualMinutes": null,
+      "actualMinutes": 25,
       "files": [
         "supabase/migrations/YYYYMMDD_update_rls_for_removed_users.sql"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T09:52:29.683Z",
+      "completedAt": "2026-02-02T09:52:29.683Z"
     },
     {
       "id": "ORGREM-008",
@@ -2010,7 +2010,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 11,
+    "completedStories": 15,
     "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
@@ -2112,6 +2112,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T09:40:26.103Z"
+    "lastUpdated": "2026-02-02T09:55:00Z"
   }
 }
