@@ -191,17 +191,33 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
 
     const checkOrgMembership = async () => {
       try {
-        const { data, error } = await supabase
+        // Try query with member_status first (ORGREM-016)
+        // If migration hasn't been applied, fall back to basic query
+        let hasActiveMembership = false;
+
+        // Try with member_status column
+        const { data: dataWithStatus, error: errorWithStatus } = await supabase
           .from('organization_memberships')
-          .select('org_id, member_status', { count: 'exact' })
+          .select('org_id', { count: 'exact' })
           .eq('user_id', user.id)
           .eq('member_status', 'active'); // Only check for active memberships
 
-        if (!error && data) {
-          const hasActiveMembership = data.length > 0;
-          console.log('[ProtectedRoute] Organization membership check:', { userId: user.id, hasActiveMembership, membershipCount: data.length });
-          setHasOrgMembership(hasActiveMembership);
+        if (!errorWithStatus && dataWithStatus) {
+          hasActiveMembership = dataWithStatus.length > 0;
+        } else if (errorWithStatus?.code === '42703') {
+          // Column doesn't exist - check all memberships (assume all are active)
+          const { data: basicData, error: basicError } = await supabase
+            .from('organization_memberships')
+            .select('org_id', { count: 'exact' })
+            .eq('user_id', user.id);
+
+          if (!basicError && basicData) {
+            hasActiveMembership = basicData.length > 0;
+          }
         }
+
+        console.log('[ProtectedRoute] Organization membership check:', { userId: user.id, hasActiveMembership });
+        setHasOrgMembership(hasActiveMembership);
       } catch (err) {
         console.error('Error checking organization membership:', err);
       } finally {
