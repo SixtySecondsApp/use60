@@ -279,7 +279,7 @@ export async function acceptJoinRequest(
     // Check if user is already a member (shouldn't happen, but be safe)
     const { data: existingMembership } = await supabase
       .from('organization_memberships')
-      .select('id')
+      .select('org_id, user_id')
       .eq('org_id', orgId)
       .eq('user_id', joinRequest.user_id)
       .maybeSingle();

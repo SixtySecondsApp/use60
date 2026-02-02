@@ -1398,7 +1398,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         pendingJoinRequest: {
           orgId,
           orgName,
-          requestId: data?.[0]?.request_id,
+          requestId: data?.[0]?.join_request_id,
           status: 'pending',
         },
         currentStep: 'pending_approval',

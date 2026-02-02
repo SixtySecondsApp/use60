@@ -15,7 +15,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 
 export interface OrganizationMembership {
-  id: string;
   org_id: string;
   user_id: string;
   role: 'owner' | 'admin' | 'member';
@@ -67,7 +66,7 @@ export function useApprovalDetection(
 
       let query = supabase
         .from('organization_memberships')
-        .select('id, org_id, user_id, role, created_at')
+        .select('org_id, user_id, role, created_at')
         .eq('user_id', userId);
 
       // If orgId is provided, filter by it
