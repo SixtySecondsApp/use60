@@ -5,9 +5,10 @@ import { useUser } from '@/lib/hooks/useUser';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-import { Camera, Save, Lock, UserCog, Link2, History, ChevronRight } from 'lucide-react';
+import { Camera, Save, Lock, UserCog, Link2, History, ChevronRight, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
+import { EmailChangeModal } from '@/components/EmailChangeModal';
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function Profile() {
     confirmPassword: '',
   });
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isEmailChangeModalOpen, setIsEmailChangeModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const queryClient = useQueryClient();
@@ -284,13 +286,23 @@ export default function Profile() {
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-400">
                   Email Address
                 </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  disabled={true}
-                  className="w-full bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/30 rounded-xl px-4 py-2.5 text-gray-600 dark:text-gray-500 placeholder-gray-400 cursor-not-allowed opacity-60"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Email address cannot be changed</p>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={formData.email}
+                    disabled={true}
+                    className="flex-1 bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/30 rounded-xl px-4 py-2.5 text-gray-600 dark:text-gray-500 placeholder-gray-400 cursor-not-allowed opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsEmailChangeModalOpen(true)}
+                    className="px-4 py-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all duration-300 border border-blue-300 dark:border-blue-700/50 font-medium text-sm flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <Mail className="w-4 h-4" />
+                    Change
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Click "Change" to request a new email address</p>
               </div>
             </div>
 
@@ -392,6 +404,18 @@ export default function Profile() {
             </motion.div>
           </motion.div>
         )}
+
+      {/* Email Change Modal */}
+      <EmailChangeModal
+        isOpen={isEmailChangeModalOpen}
+        onOpenChange={setIsEmailChangeModalOpen}
+        currentEmail={formData.email}
+        pendingEmail={userProfile?.pending_email}
+        onSuccess={() => {
+          // Refresh user data after email change request
+          queryClient.invalidateQueries({ queryKey: ['user'] });
+        }}
+      />
       </div>
     </div>
   );
