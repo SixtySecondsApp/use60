@@ -777,7 +777,7 @@ export default function PlatformDashboard() {
                             </p>
                           </div>
                           <Badge variant="outline" className="text-xs">
-                            {customer.subscription_status || 'Unknown'}
+                            {customer.subscription?.status || 'Unknown'}
                           </Badge>
                         </div>
                       ))}

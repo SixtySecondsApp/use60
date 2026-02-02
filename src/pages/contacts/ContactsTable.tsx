@@ -549,11 +549,11 @@ export default function ContactsTable() {
   }
 
   return (
-    <div>
+    <div className="overflow-x-hidden">
       {/* CRM Navigation */}
       <CRMNavigation />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -689,8 +689,9 @@ export default function ContactsTable() {
       </AnimatePresence>
 
       {/* Table */}
-      <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-[#E2E8F0] dark:border-gray-800 overflow-hidden shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
-        <Table>
+      <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-[#E2E8F0] dark:border-gray-800 overflow-x-auto scrollbar-accent shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
+        <div className="min-w-[900px]">
+          <Table>
           <TableHeader>
             <TableRow className="border-[#E2E8F0] dark:border-gray-800 hover:bg-slate-50 dark:hover:bg-gray-800/50">
               {/* Select All Checkbox - Only show when in select mode */}
@@ -889,7 +890,8 @@ export default function ContactsTable() {
             ))}
           </TableBody>
         </Table>
-        
+        </div>
+
         {filteredAndSortedContacts.length === 0 && (
           <div className="text-center py-12">
             <Users className="w-12 h-12 text-gray-600 mx-auto mb-4" />

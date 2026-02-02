@@ -674,44 +674,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         )}
         style={{ overscrollBehavior: 'contain' }}
       >
-        {/* Small Circular Toggle Button - Positioned on Edge, Inline with Logo */}
-        <div
-          className={cn(
-            'absolute z-[200]',
-            // Align with logo: p-6 (24px) + half logo height
-            // Collapsed: 24px + 24px = 48px (logo is now w-12 h-12), Expanded: 24px + 24px = 48px
-            'top-[48px]',
-            // Position on edge with transform to center button on edge
-            'right-[-12px]',
-            'w-6 h-6'
-          )}
-        >
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className={cn(
-              'w-full h-full rounded-full',
-              'bg-white dark:bg-gray-800',
-              'border border-gray-200 dark:border-gray-700/50',
-              'text-gray-500 dark:text-gray-400',
-              'hover:text-gray-700 dark:hover:text-gray-200',
-              'hover:bg-gray-50 dark:hover:bg-gray-700',
-              'shadow-md dark:shadow-lg dark:shadow-black/20',
-              'flex items-center justify-center',
-              'transition-colors duration-200'
-            )}
-            style={{ transformOrigin: 'center center' }}
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {isCollapsed ? (
-              <ChevronRight className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronLeft className="w-3.5 h-3.5" />
-            )}
-          </motion.button>
-        </div>
-
         <div className="flex h-full flex-col">
           {/* Logo Header */}
           <div className={cn(
@@ -936,6 +898,36 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </motion.div>
+
+      {/* Sidebar Toggle Button - Positioned on Edge Outside Sidebar */}
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className={cn(
+          'fixed z-[200] hidden lg:flex',
+          'top-[48px]',
+          isCollapsed ? 'left-[84px]' : 'left-[244px]',
+          'w-6 h-6 rounded-full',
+          'bg-white dark:bg-gray-800',
+          'border border-gray-200 dark:border-gray-700/50',
+          'text-gray-500 dark:text-gray-400',
+          'hover:text-gray-700 dark:hover:text-gray-200',
+          'hover:bg-gray-50 dark:hover:bg-gray-700',
+          'shadow-md dark:shadow-lg dark:shadow-black/20',
+          'items-center justify-center',
+          'transition-all duration-300 ease-in-out'
+        )}
+        style={{ transformOrigin: 'center center' }}
+        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {isCollapsed ? (
+          <ChevronRight className="w-3.5 h-3.5" />
+        ) : (
+          <ChevronLeft className="w-3.5 h-3.5" />
+        )}
+      </motion.button>
+
       <main
         style={
           {

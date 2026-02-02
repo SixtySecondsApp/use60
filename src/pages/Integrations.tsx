@@ -16,7 +16,9 @@ import {
   Sparkles,
   Info,
   ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import {
   Tooltip,
   TooltipContent,
@@ -170,53 +172,112 @@ function CategorySection({
   toggleUpvote: (args: { integrationId: string; integrationName: string; description?: string }) => Promise<void>;
   sixtyLogoUrl?: string | null;
 }) {
+  const [isExpanded, setIsExpanded] = useState(() => {
+    // Load from localStorage, default to expanded
+    try {
+      const stored = localStorage.getItem(`integrations-section-${category.id}`);
+      return stored ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggle = () => {
+    const newState = !isExpanded;
+    setIsExpanded(newState);
+    try {
+      localStorage.setItem(`integrations-section-${category.id}`, JSON.stringify(newState));
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="mb-12">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-          {category.icon}
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{category.name}</h2>
-            {category.tooltip && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                      <Info className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-xs text-sm">
-                    <p className="font-medium mb-1">How it works with Sixty:</p>
-                    <p className="text-gray-600 dark:text-gray-300">{category.tooltip}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
+      {/* Collapsible Header */}
+      <motion.button
+        onClick={handleToggle}
+        className="w-full flex items-center justify-between mb-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
+      >
+        <div className="flex items-center gap-3 flex-1 text-left">
+          <div className="p-2 rounded-lg bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors">
+            {category.icon}
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{category.description}</p>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {category.name}
+              </h2>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {category.integrations.length} items
+              </span>
+              {category.tooltip && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="max-w-xs text-sm bg-gray-900 dark:bg-white text-white dark:text-gray-900 border border-gray-700 dark:border-gray-200"
+                    >
+                      <p className="font-medium mb-1">How it works with Sixty:</p>
+                      <p className="text-gray-100 dark:text-gray-800">{category.tooltip}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{category.description}</p>
+          </div>
         </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {category.integrations.map((integration) => {
-          const status = isBuilt ? getIntegrationStatus(integration.id) : 'coming_soon';
-          const vote = !isBuilt ? getVoteState(integration.id) : null;
-          return (
-            <IntegrationCardWithLogo
-              key={integration.id}
-              config={integration}
-              isBuilt={isBuilt}
-              status={status}
-              onAction={isBuilt ? () => onBuiltAction(integration.id) : undefined}
-              actionLoading={builtActionLoadingById[integration.id]}
-              vote={vote}
-              onToggleUpvote={!isBuilt ? toggleUpvote : undefined}
-              sixtyLogoUrl={sixtyLogoUrl}
-            />
-          );
-        })}
-      </div>
+
+        {/* Chevron Icon */}
+        <motion.div
+          initial={false}
+          animate={{ rotate: isExpanded ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          className="flex-shrink-0 ml-2"
+        >
+          <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
+        </motion.div>
+      </motion.button>
+
+      {/* Expandable Cards Section */}
+      {isExpanded && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2 }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        >
+          {category.integrations.map((integration) => {
+            const status = isBuilt ? getIntegrationStatus(integration.id) : 'coming_soon';
+            const vote = !isBuilt ? getVoteState(integration.id) : null;
+            return (
+              <IntegrationCardWithLogo
+                key={integration.id}
+                config={integration}
+                isBuilt={isBuilt}
+                status={status}
+                onAction={isBuilt ? () => onBuiltAction(integration.id) : undefined}
+                actionLoading={builtActionLoadingById[integration.id]}
+                vote={vote}
+                onToggleUpvote={!isBuilt ? toggleUpvote : undefined}
+                sixtyLogoUrl={sixtyLogoUrl}
+              />
+            );
+          })}
+        </motion.div>
+      )}
     </div>
   );
 }

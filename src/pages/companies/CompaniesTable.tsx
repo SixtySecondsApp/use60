@@ -1,19 +1,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Building2, 
-  Search, 
-  Plus, 
-  Users, 
+import {
+  Building2,
+  Search,
+  Plus,
+  Users,
   Globe,
   Edit,
   Trash2,
   ExternalLink,
-  Filter,
   Download,
   ArrowUpDown,
   CheckSquare,
-  Square,
   X
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -81,6 +79,7 @@ export default function CompaniesTable() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sizeFilter, setSizeFilter] = useState<string>('all');
   const [industryFilter, setIndustryFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('all');
   const [selectedOwnerId, setSelectedOwnerId] = useState<string | undefined>(userData?.id);
   const [sortField, setSortField] = useState<SortField>('updated_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -337,11 +336,12 @@ export default function CompaniesTable() {
     let filtered = companies.filter(company => {
       const matchesSize = sizeFilter === 'all' || company.size === sizeFilter;
       const matchesIndustry = industryFilter === 'all' || company.industry === industryFilter;
-      
+      const matchesLocation = locationFilter === 'all' || company.address === locationFilter;
+
       // Owner filtering
       const matchesOwner = !selectedOwnerId || company.owner_id === selectedOwnerId;
-      
-      return matchesSize && matchesIndustry && matchesOwner;
+
+      return matchesSize && matchesIndustry && matchesLocation && matchesOwner;
     });
 
     // Sort companies
@@ -363,7 +363,7 @@ export default function CompaniesTable() {
     });
 
     return filtered;
-  }, [companies, sizeFilter, industryFilter, selectedOwnerId, sortField, sortDirection]);
+  }, [companies, sizeFilter, industryFilter, locationFilter, selectedOwnerId, sortField, sortDirection]);
 
   // Update select all checkbox state
   useEffect(() => {
@@ -377,6 +377,7 @@ export default function CompaniesTable() {
   // Get unique values for filters
   const uniqueSizes = [...new Set(companies.map(c => c.size).filter(Boolean))];
   const uniqueIndustries = [...new Set(companies.map(c => c.industry).filter(Boolean))];
+  const uniqueLocations = [...new Set(companies.map(c => c.address).filter(Boolean))];
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -504,11 +505,11 @@ export default function CompaniesTable() {
   }
 
   return (
-    <div>
+    <div className="overflow-x-hidden">
       {/* CRM Navigation */}
       <CRMNavigation />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -571,6 +572,18 @@ export default function CompaniesTable() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <Select value={locationFilter} onValueChange={setLocationFilter}>
+                <SelectTrigger className="w-full sm:w-[180px] bg-slate-50 dark:bg-gray-800/50 border-[#E2E8F0] dark:border-gray-700 text-[#1E293B] dark:text-white">
+                  <SelectValue placeholder="All Locations" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-gray-800 border-[#E2E8F0] dark:border-gray-700">
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {uniqueLocations.map(location => (
+                    <SelectItem key={location} value={location}>{location}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Actions */}
@@ -582,14 +595,6 @@ export default function CompaniesTable() {
               >
                 <Download className="w-4 h-4 mr-2" />
                 Export
-              </Button>
-              <Button
-                onClick={toggleSelectMode}
-                variant="tertiary"
-                size="sm"
-              >
-                {isSelectModeActive ? <CheckSquare className="w-4 h-4 mr-2" /> : <Square className="w-4 h-4 mr-2" />}
-                {isSelectModeActive ? 'Exit Select' : 'Select Mode'}
               </Button>
               <Button
                 onClick={handleAddCompany}
@@ -653,8 +658,9 @@ export default function CompaniesTable() {
       </AnimatePresence>
 
       {/* Table */}
-      <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-[#E2E8F0] dark:border-gray-800 overflow-hidden shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
-        <Table>
+      <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-[#E2E8F0] dark:border-gray-800 overflow-x-auto scrollbar-accent shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
+        <div className="min-w-[900px]">
+          <Table>
           <TableHeader>
             <TableRow className="border-[#E2E8F0] dark:border-gray-800 hover:bg-slate-50 dark:hover:bg-gray-800/50">
               {/* Select All Checkbox - Only show when in select mode */}
@@ -847,13 +853,14 @@ export default function CompaniesTable() {
             ))}
           </TableBody>
         </Table>
-        
+        </div>
+
         {filteredAndSortedCompanies.length === 0 && (
           <div className="text-center py-12">
             <Building2 className="w-12 h-12 text-gray-600 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-[#64748B] dark:text-gray-400 mb-2">No companies found</h3>
             <p className="text-[#94A3B8] dark:text-gray-500 text-sm">
-              {searchTerm || sizeFilter !== 'all' || industryFilter !== 'all' 
+              {searchTerm || sizeFilter !== 'all' || industryFilter !== 'all' || locationFilter !== 'all'
                 ? 'Try adjusting your search criteria or filters'
                 : 'Get started by adding your first company'
               }
