@@ -1828,7 +1828,7 @@
       "feature": "org-user-removal",
       "title": "Create admin rejoin approval interface",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 41,
       "dependencies": {
         "stories": [
@@ -1856,13 +1856,13 @@
         "Real-time updates via React Query refetch"
       ],
       "estimatedMinutes": 45,
-      "actualMinutes": null,
+      "actualMinutes": 42,
       "files": [
         "src/pages/settings/TeamMembersPage.tsx",
         "src/components/settings/RejoinRequestsTab.tsx"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T21:00:00Z",
+      "completedAt": "2026-02-02T21:42:00Z"
     },
     {
       "id": "ORGREM-016",
@@ -1944,7 +1944,7 @@
       "feature": "org-user-removal",
       "title": "Write tests for rejoin request flow",
       "type": "test",
-      "status": "pending",
+      "status": "complete",
       "priority": 44,
       "dependencies": {
         "stories": [
@@ -1969,12 +1969,12 @@
         "Test: Rejoin request appears in admin UI"
       ],
       "estimatedMinutes": 30,
-      "actualMinutes": null,
+      "actualMinutes": 28,
       "files": [
         "tests/e2e/rejoin-request-flow.spec.ts"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T21:15:00Z",
+      "completedAt": "2026-02-02T21:43:00Z"
     },
     {
       "id": "ORGREM-019",
