@@ -12,22 +12,35 @@ import { motion } from 'framer-motion';
 import { Clock, LogOut, Mail, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrg } from '@/lib/contexts/OrgContext';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { cancelJoinRequest } from '@/lib/services/joinRequestService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useApprovalDetection } from '@/lib/hooks/useApprovalDetection';
 
 export default function PendingApprovalPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { refreshOrgs, switchOrg } = useOrg();
   const [joinRequest, setJoinRequest] = useState<{
     orgName: string;
     email: string;
     requestId: string;
+    orgId: string;
   } | null>(null);
   const [checking, setChecking] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+
+  // Use approval detection hook
+  const { isApproved, membership, refetch } = useApprovalDetection(
+    user?.id,
+    joinRequest?.orgId,
+    true
+  );
 
   useEffect(() => {
     // Fetch join request details
@@ -46,6 +59,7 @@ export default function PendingApprovalPage() {
           console.log('[PendingApprovalPage] Join request data:', data);
           setJoinRequest({
             requestId: data.id,
+            orgId: data.org_id,
             orgName: data.organizations?.name || 'the organization',
             email: data.email,
           });
@@ -72,6 +86,85 @@ export default function PendingApprovalPage() {
 
     fetchJoinRequest();
   }, [user?.id, navigate]);
+
+  // Automatic polling for approval detection (5 seconds)
+  useEffect(() => {
+    if (!user?.id || !joinRequest?.orgId) {
+      return;
+    }
+
+    const POLL_INTERVAL = 5000; // 5 seconds
+    setIsPolling(true);
+
+    // Polling function
+    const pollForApproval = () => {
+      console.log('[PendingApprovalPage] Polling for approval...');
+      refetch();
+    };
+
+    // Set up interval
+    const intervalId = setInterval(pollForApproval, POLL_INTERVAL);
+
+    // Clean up interval on unmount
+    return () => {
+      console.log('[PendingApprovalPage] Clearing polling interval');
+      clearInterval(intervalId);
+      setIsPolling(false);
+    };
+  }, [user?.id, joinRequest?.orgId, refetch]);
+
+  // Handler for when approval is detected
+  const handleApprovalDetected = async (membership: { org_id: string }) => {
+    try {
+      setIsLoadingDashboard(true);
+      setIsPolling(false);
+
+      console.log('[PendingApprovalPage] Starting approval flow for org:', membership.org_id);
+
+      // 1. Update profile status to active
+      if (user?.id) {
+        console.log('[PendingApprovalPage] Updating profile status to active');
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ profile_status: 'active' })
+          .eq('id', user.id);
+
+        if (profileError) {
+          console.error('[PendingApprovalPage] Error updating profile status:', profileError);
+          // Don't fail the flow if profile update fails - continue anyway
+        }
+      }
+
+      // 2. Reload organizations to get the newly added membership
+      console.log('[PendingApprovalPage] Refreshing organizations');
+      await refreshOrgs();
+
+      // 3. Switch to the newly joined organization
+      console.log('[PendingApprovalPage] Switching to organization:', membership.org_id);
+      switchOrg(membership.org_id);
+
+      // 4. Show success message and navigate to dashboard
+      // Note: We skip marking onboarding as complete because the user already completed onboarding
+      // This page is for users who completed onboarding but are waiting for approval
+      toast.success('Welcome! Redirecting to your dashboard...');
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 1000);
+    } catch (error) {
+      console.error('[PendingApprovalPage] Error handling approval:', error);
+      toast.error('Failed to load dashboard. Please try refreshing the page.');
+      setIsLoadingDashboard(false);
+    }
+  };
+
+  // Handle approval detection
+  useEffect(() => {
+    if (isApproved && membership && !isLoadingDashboard) {
+      console.log('[PendingApprovalPage] Approval detected!', membership);
+      handleApprovalDetected(membership);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApproved, membership, isLoadingDashboard]);
 
   const handleLogout = async () => {
     try {
@@ -206,6 +299,30 @@ export default function PendingApprovalPage() {
               <p className="font-medium text-white">{joinRequest?.email || user?.email}</p>
             </div>
 
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4">
+              <p className="text-xs font-medium uppercase tracking-wide mb-1 text-gray-400">
+                Status
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                <p className="font-medium text-white">
+                  {isLoadingDashboard ? 'Loading your dashboard...' : 'Awaiting Admin Review'}
+                </p>
+              </div>
+              {isPolling && !isLoadingDashboard && (
+                <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Checking status...</span>
+                </div>
+              )}
+              {isLoadingDashboard && (
+                <div className="flex items-center gap-2 mt-2 text-xs text-green-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Preparing your workspace...</span>
+                </div>
+              )}
+            </div>
+
             <div className="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4">
               <div className="flex gap-3">
                 <Clock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
@@ -232,7 +349,7 @@ export default function PendingApprovalPage() {
           <div className="space-y-3">
             <Button
               onClick={checkApprovalStatus}
-              disabled={checking}
+              disabled={checking || isLoadingDashboard}
               className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2"
             >
               {checking ? (
@@ -248,7 +365,7 @@ export default function PendingApprovalPage() {
               <>
                 <Button
                   onClick={() => setShowCancelDialog(true)}
-                  disabled={canceling}
+                  disabled={canceling || isLoadingDashboard}
                   className="w-full bg-gray-700 hover:bg-gray-600 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
                 >
                   {canceling ? (
