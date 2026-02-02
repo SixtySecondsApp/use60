@@ -322,7 +322,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               />
             ) : (
               <div className="w-full h-full bg-gray-700/30 flex items-center justify-center">
-                <span className="text-sm font-medium text-gray-400">
+                <span className="text-sm font-medium text-[#37bd7e]">
                   {userData?.first_name?.[0] || ''}{userData?.last_name?.[0] || ''}
                 </span>
               </div>
@@ -586,7 +586,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     />
                   ) : (
                     <div className="w-full h-full bg-gray-700/30 flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-400">
+                      <span className="text-sm font-medium text-[#37bd7e]">
                         {userData?.first_name?.[0] || ''}{userData?.last_name?.[0] || ''}
                       </span>
                     </div>
