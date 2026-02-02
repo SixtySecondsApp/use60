@@ -1011,7 +1011,7 @@
       "feature": "pending-approval-flow",
       "title": "Add visual feedback during approval detection and dashboard loading",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 24,
       "dependencies": {
         "stories": [
@@ -1033,7 +1033,7 @@
         "Smooth transition to dashboard with no error messages"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 18,
       "files": [
         "src/pages/onboarding/v2/PendingApprovalStep.tsx"
       ],
@@ -1051,8 +1051,8 @@
       },
       "designRef": null,
       "ticketId": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T16:00:00Z",
+      "completedAt": "2026-02-02T16:18:00Z"
     },
     {
       "id": "PEND-006",
@@ -2011,7 +2011,7 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 19,
+    "completedStories": 20,
     "currentFeature": "pending-approval-flow",
     "parallelGroups": [
       {
@@ -2113,6 +2113,6 @@
     ],
     "estimatedTotalMinutes": 1065,
     "estimatedWithParallel": 805,
-    "lastUpdated": "2026-02-02T15:58:00Z"
+    "lastUpdated": "2026-02-02T16:18:00Z"
   }
 }
