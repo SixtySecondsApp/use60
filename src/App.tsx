@@ -49,6 +49,7 @@ import PublicMeetingShare from '@/pages/PublicMeetingShare';
 import DrueLanding from '@/pages/DrueLanding';
 import FathomCallback from '@/pages/auth/FathomCallback';
 import RemovedUserStep from '@/pages/onboarding/v2/RemovedUserStep';
+import Organizations from '@/pages/platform/Organizations';
 
 // Landing pages wrapper (dev-only for local preview)
 import { LandingWrapper, WaitlistPageWrapper, LeaderboardPageWrapper, WaitlistStatusPage, IntroductionPageWrapper, IntroPageWrapper, IntroducingPageWrapper, LearnMorePageWrapper } from '@/components/LandingWrapper';
@@ -63,7 +64,7 @@ const FathomCallbackWrapper = () => <FathomCallback />;
 import {
   // Platform Admin
   MeetingsWaitlist, WaitlistSlackSettings, OnboardingSimulator, TrialTimelineSimulator, PricingControl, CostAnalysis, LaunchChecklist,
-  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, Users, PipelineSettings, Organizations,
+  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, Users, PipelineSettings,
   AuditLogs, SmartTasksAdmin, PipelineAutomationAdmin, EmailTemplates, FunctionTesting,
   AIProviderSettings, GoogleIntegrationTestsLegacy, GoogleIntegrationTests, SettingsSavvyCal,
   SettingsBookingSources, HealthRules, EmailCategorizationSettings, AdminModelSettings,
@@ -375,6 +376,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/pricing" element={<PlatformAdminRouteGuard><AppLayout><PricingControl /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/cost-analysis" element={<PlatformAdminRouteGuard><AppLayout><CostAnalysis /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/users" element={<PlatformAdminRouteGuard><AppLayout><Users /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/organizations" element={<PlatformAdminRouteGuard><AppLayout><Organizations /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - CRM Configuration */}
                 <Route path="/platform/crm/pipeline" element={<PlatformAdminRouteGuard><AppLayout><PipelineSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/crm/smart-tasks" element={<PlatformAdminRouteGuard><AppLayout><SmartTasksAdmin /></AppLayout></PlatformAdminRouteGuard>} />
