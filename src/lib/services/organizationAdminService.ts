@@ -191,7 +191,7 @@ export async function getOrganizationMembers(orgId: string) {
         role,
         member_status,
         created_at,
-        profiles:user_id (
+        profiles!user_id (
           id,
           email,
           first_name,

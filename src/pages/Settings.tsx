@@ -187,9 +187,9 @@ export default function Settings() {
       id: 'team-members',
       label: 'Team Members',
       icon: Users,
-      description: 'Manage team members and invitations',
+      description: 'View team members and leave organization',
       path: '/settings/team-members',
-      requiresOrgAdmin: true,
+      requiresOrgAdmin: false,
     },
     {
       id: 'organization',

@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-import { Camera, Save, Lock, UserCog, Link2, History, ChevronRight, Mail, Building2, LogOut } from 'lucide-react';
+import { Camera, Save, Lock, UserCog, Link2, History, ChevronRight, Mail, Building2, LogOut, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 import { EmailChangeModal } from '@/components/EmailChangeModal';
@@ -253,6 +253,34 @@ export default function Profile() {
     }
   };
 
+  const handleRemoveAvatar = async () => {
+    setUploading(true);
+    try {
+      if (user?.id) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ avatar_url: null, updated_at: new Date().toISOString() })
+          .eq('id', user.id);
+
+        if (updateError) {
+          logger.error('[Profile] Profile update error:', updateError);
+          throw updateError;
+        }
+      }
+
+      // Invalidate cache so avatar change shows immediately
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+
+      toast.success('Profile picture removed');
+      logger.log('[Profile] Avatar removed successfully');
+    } catch (error: any) {
+      logger.error('[Profile] Avatar removal failed:', error);
+      toast.error(error.message || 'Failed to remove profile picture. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // Show loading state while user data is loading
   if (userLoading) {
     return (
@@ -313,14 +341,29 @@ export default function Profile() {
                   disabled={uploading}
                 />
               </div>
-              <label
-                htmlFor="profile-picture"
-                className={`text-sm text-[#37bd7e] hover:text-[#2da76c] cursor-pointer ${
-                  uploading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {uploading ? 'Uploading...' : 'Change Picture'}
-              </label>
+              <div className="flex gap-3">
+                <label
+                  htmlFor="profile-picture"
+                  className={`text-sm text-[#37bd7e] hover:text-[#2da76c] cursor-pointer ${
+                    uploading ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {uploading ? 'Uploading...' : 'Change Picture'}
+                </label>
+                {(userData?.avatar_url || userProfile?.avatar_url) && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAvatar}
+                    disabled={uploading}
+                    className={`text-sm text-red-500 hover:text-red-600 cursor-pointer flex items-center gap-1 ${
+                      uploading ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Remove Picture
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Form Fields */}

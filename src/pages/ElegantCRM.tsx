@@ -133,8 +133,8 @@ export default function ElegantCRM() {
   const [sortField, setSortField] = useState<SortField>('updated_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   
-  // Sidebar state - start open to prevent animation on load
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Sidebar state - start closed
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   // Multi-select functionality

@@ -920,7 +920,8 @@ export default function TeamMembersPage() {
           )}
         </div>
 
-        {/* Pending Join & Rejoin Requests - Merged Section */}
+        {/* Pending Join & Rejoin Requests - Merged Section (Admins Only) */}
+        {permissions.canManageTeam && (
         <div>
           <button
             onClick={() => setIsJoinRequestsExpanded(!isJoinRequestsExpanded)}
@@ -1072,6 +1073,7 @@ export default function TeamMembersPage() {
             </div>
           )}
         </div>
+        )}
 
 
 
