@@ -29,12 +29,15 @@ export interface JoinRequest {
   email: string;
   status: 'pending' | 'approved' | 'rejected';
   requested_at: string;
+  rejection_reason?: string | null;
 }
 
 export interface ApprovalDetectionResult {
   isApproved: boolean;
   membership: OrganizationMembership | null;
   isPending: boolean;
+  isRejected: boolean;
+  rejectionReason: string | null;
   error: string | null;
 }
 
@@ -86,7 +89,7 @@ export function useApprovalDetection(
     refetchOnWindowFocus: true,
   });
 
-  // Query for join requests (fallback check)
+  // Query for join requests (fallback check - now also checks for rejections)
   const {
     data: joinRequestData,
     error: joinRequestError,
@@ -99,9 +102,9 @@ export function useApprovalDetection(
 
       let query = supabase
         .from('organization_join_requests')
-        .select('id, org_id, user_id, email, status, requested_at')
+        .select('id, org_id, user_id, email, status, requested_at, rejection_reason')
         .eq('user_id', userId)
-        .eq('status', 'pending');
+        .in('status', ['pending', 'rejected']);
 
       // If orgId is provided, filter by it
       if (orgId) {
@@ -130,7 +133,8 @@ export function useApprovalDetection(
 
   // Determine approval status
   const isApproved = !!membershipData;
-  const isPending = !isApproved && !!joinRequestData;
+  const isRejected = !isApproved && joinRequestData?.status === 'rejected';
+  const isPending = !isApproved && !isRejected && !!joinRequestData;
   const isLoading = membershipLoading || joinRequestLoading;
   const error =
     membershipError?.message || joinRequestError?.message || null;
@@ -139,6 +143,8 @@ export function useApprovalDetection(
     isApproved,
     membership: membershipData || null,
     isPending,
+    isRejected,
+    rejectionReason: joinRequestData?.rejection_reason || null,
     error,
     isLoading,
     refetch,

@@ -48,6 +48,7 @@ import PublicVoiceRecording from '@/pages/PublicVoiceRecording';
 import PublicMeetingShare from '@/pages/PublicMeetingShare';
 import DrueLanding from '@/pages/DrueLanding';
 import FathomCallback from '@/pages/auth/FathomCallback';
+import RemovedUserStep from '@/pages/onboarding/v2/RemovedUserStep';
 
 // Landing pages wrapper (dev-only for local preview)
 import { LandingWrapper, WaitlistPageWrapper, LeaderboardPageWrapper, WaitlistStatusPage, IntroductionPageWrapper, IntroPageWrapper, IntroducingPageWrapper, LearnMorePageWrapper } from '@/components/LandingWrapper';
@@ -208,6 +209,16 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
     trackSessionDuration: true,
   });
 
+  // ORGREM-010: Redirect removed users to onboarding
+  useEffect(() => {
+    const checkRemovedUserRedirect = sessionStorage.getItem('user_removed_redirect');
+    if (checkRemovedUserRedirect === 'true' && !window.location.pathname.includes('/onboarding/removed-user')) {
+      logger.log('🔄 Redirecting removed user to onboarding');
+      sessionStorage.removeItem('user_removed_redirect');
+      window.location.href = '/onboarding/removed-user';
+    }
+  }, []);
+
   return (
     <>
       <IntelligentPreloader />
@@ -295,6 +306,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
             <Suspense fallback={<RouteLoader />}>
               <Routes>
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/onboarding/removed-user" element={<RemovedUserStep />} />
                 <Route path="/debug-auth" element={<DebugAuth />} />
                 <Route path="/debug/auth" element={<AuthDebug />} />
                 <Route path="/debug-permissions" element={<DebugPermissions />} />

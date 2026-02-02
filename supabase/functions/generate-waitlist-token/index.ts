@@ -44,6 +44,57 @@ serve(async (req) => {
   }
 
   try {
+    // Authenticate the request - require service role OR valid user JWT with admin access
+    const authHeader = req.headers.get('Authorization');
+    const apikeyHeader = req.headers.get('apikey');
+
+    // Allow service role (for backend calls)
+    const isServiceRole = authHeader?.replace(/^Bearer\s+/i, '') === SUPABASE_SERVICE_ROLE_KEY ||
+                          apikeyHeader === SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!isServiceRole) {
+      // If not service role, validate as user JWT and check admin status
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized: authentication required' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Unauthorized: invalid authentication',
+            details: { message: authError?.message || 'User not found' }
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if user is an admin
+      const { data: profile, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.is_admin) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Unauthorized: admin access required',
+            details: { message: 'Only administrators can generate waitlist tokens' }
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     const request: GenerateTokenRequest = await req.json();
 
     if (!request.waitlist_entry_id || !request.email) {

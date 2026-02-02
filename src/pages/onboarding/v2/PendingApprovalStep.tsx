@@ -7,7 +7,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { Clock, CheckCircle2, Loader2 } from 'lucide-react';
+import { Clock, CheckCircle2, Loader2, XCircle, AlertTriangle } from 'lucide-react';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -34,7 +34,7 @@ export function PendingApprovalStep() {
   const [showApprovalSuccess, setShowApprovalSuccess] = useState(false);
 
   // Use approval detection hook
-  const { isApproved, membership, refetch } = useApprovalDetection(
+  const { isApproved, membership, isRejected, rejectionReason, refetch } = useApprovalDetection(
     user?.id,
     pendingJoinRequest?.orgId,
     true
@@ -70,23 +70,29 @@ export function PendingApprovalStep() {
     fetchData();
   }, [userEmail, user?.id, pendingJoinRequest?.requestId]);
 
-  // Automatic polling for approval detection
+  // Automatic polling for approval/rejection detection
   useEffect(() => {
     if (!user?.id || !pendingJoinRequest?.orgId) {
       return;
     }
 
-    const POLL_INTERVAL = 5000; // 5 seconds
+    // Don't poll if already approved or rejected
+    if (isApproved || isRejected) {
+      setIsPolling(false);
+      return;
+    }
+
+    const POLL_INTERVAL = 10000; // 10 seconds (as per acceptance criteria)
     setIsPolling(true);
 
     // Polling function
-    const pollForApproval = () => {
-      console.log('[PendingApprovalStep] Polling for approval...');
+    const pollForStatus = () => {
+      console.log('[PendingApprovalStep] Polling for approval/rejection status...');
       refetch();
     };
 
     // Set up interval
-    const intervalId = setInterval(pollForApproval, POLL_INTERVAL);
+    const intervalId = setInterval(pollForStatus, POLL_INTERVAL);
 
     // Clean up interval on unmount
     return () => {
@@ -94,7 +100,7 @@ export function PendingApprovalStep() {
       clearInterval(intervalId);
       setIsPolling(false);
     };
-  }, [user?.id, pendingJoinRequest?.orgId, refetch]);
+  }, [user?.id, pendingJoinRequest?.orgId, isApproved, isRejected, refetch]);
 
   // Handler for when approval is detected
   const handleApprovalDetected = async (membership: { org_id: string }) => {
@@ -168,6 +174,17 @@ export function PendingApprovalStep() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isApproved, membership, isLoadingDashboard]);
+
+  // Handle rejection detection
+  useEffect(() => {
+    if (isRejected) {
+      console.log('[PendingApprovalStep] Rejection detected!', { rejectionReason });
+      // Stop polling
+      setIsPolling(false);
+      // Show toast notification
+      toast.error('Your join request was rejected by an administrator');
+    }
+  }, [isRejected, rejectionReason]);
 
   const checkApprovalStatus = async () => {
     if (!user) return;
@@ -259,8 +276,92 @@ export function PendingApprovalStep() {
     }
   };
 
+  const handleTryDifferentOrg = () => {
+    console.log('[PendingApprovalStep] User choosing different organization');
+    // Reset store state
+    useOnboardingV2Store.getState().reset();
+    // Redirect to website input step
+    navigate('/onboarding?step=website_input', { replace: true });
+  };
+
   const displayEmail = userEmail || profileEmail;
   const orgName = pendingJoinRequest?.orgName || 'the organization';
+
+  // Render rejection UI if request was rejected
+  if (isRejected) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="w-full max-w-2xl mx-auto px-4"
+      >
+        <div className="rounded-2xl shadow-xl border border-red-800 bg-gray-900 overflow-hidden">
+          {/* Header */}
+          <div className="bg-red-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                <XCircle className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h2 className="font-bold text-white">
+                  Request Rejected
+                </h2>
+                <p className="text-red-100 text-sm">Your join request was not approved</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-8">
+            <div className="mb-8">
+              <p className="text-gray-300 text-center leading-relaxed mb-6">
+                Your request to join <span className="font-semibold text-white">{orgName}</span> has been rejected by an administrator.
+              </p>
+
+              {/* Rejection reason alert */}
+              {rejectionReason && (
+                <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-4 mb-6">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-red-100 mb-1">Reason for Rejection</p>
+                      <p className="text-sm text-red-200/80">
+                        {rejectionReason}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* What to do next */}
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 mb-6">
+                <p className="text-sm text-gray-300 mb-4">
+                  You can try joining a different organization or contact the administrator of{' '}
+                  <span className="font-semibold text-white">{orgName}</span> for more information.
+                </p>
+              </div>
+
+              {/* Try Different Organization button */}
+              <button
+                onClick={handleTryDifferentOrg}
+                className="w-full bg-violet-600 hover:bg-violet-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 mb-4"
+              >
+                Try Different Organization
+              </button>
+            </div>
+
+            {/* Support note */}
+            <div className="text-center">
+              <p className="text-sm text-gray-400">
+                Questions? <a href="mailto:support@use60.com" className="text-red-400 hover:text-red-300 transition-colors">Contact support</a> for assistance.
+              </p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

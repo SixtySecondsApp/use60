@@ -531,7 +531,7 @@
       "feature": "onboard-fix",
       "title": "Add rejection email sending to reject_join_request RPC",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 13,
       "dependencies": {
         "stories": [
@@ -554,9 +554,9 @@
         "Logs email sending status"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 25,
       "files": [
-        "supabase/migrations/YYYYMMDD_update_reject_join_request_email.sql",
+        "supabase/migrations/20260202102718_update_reject_join_request_email.sql",
         "supabase/functions/encharge-send-email/index.ts"
       ],
       "implementation": {
@@ -566,8 +566,8 @@
           "Send email after marking request as rejected"
         ]
       },
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-02T10:27:00Z",
+      "completedAt": "2026-02-02T10:52:00Z"
     },
     {
       "id": "ONBOARD-014",
@@ -2011,8 +2011,8 @@
   ],
   "execution": {
     "totalStories": 48,
-    "completedStories": 21,
-    "currentFeature": "pending-approval-flow",
+    "completedStories": 22,
+    "currentFeature": "onboard-fix",
     "parallelGroups": [
       {
         "group": 1,

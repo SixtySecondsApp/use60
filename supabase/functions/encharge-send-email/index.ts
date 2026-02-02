@@ -451,6 +451,7 @@ serve(async (req) => {
       console.log('[encharge-send-email] JWT validation result:', {
         error: error?.message,
         hasUser: !!user,
+        userId: user?.id,
       });
       if (error || !user) {
         return new Response(
@@ -459,11 +460,35 @@ serve(async (req) => {
             error: 'Unauthorized: invalid authentication',
             details: {
               message: error?.message || 'User not found',
+              hint: 'Please ensure you are logged in and your session is valid'
             }
           }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      // Verify user is an admin (check profiles table)
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.is_admin) {
+        console.log('[encharge-send-email] User is not an admin:', { userId: user.id, profileError: profileError?.message });
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Unauthorized: admin access required',
+            details: {
+              message: 'Only administrators can send waitlist invitations'
+            }
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('[encharge-send-email] Authenticated as admin user - proceeding');
     } catch (authError) {
       console.log('[encharge-send-email] Auth exception:', authError);
       return new Response(
@@ -575,6 +600,8 @@ serve(async (req) => {
       first_summary_viewed: 'First Summary Viewed',
       fathom_connected: 'Fathom Connected',
       first_meeting_synced: 'First Meeting Synced',
+      join_request_approved: 'Join Request Approved',
+      join_request_rejected: 'Join Request Rejected',
     };
 
     const eventName = eventNameMap[request.template_type] || 'Email Sent';
