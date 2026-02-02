@@ -2,6 +2,7 @@ import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useState, useEffect } from 'react';
 import { Users, Trash2, Loader2, AlertCircle, UserPlus, Mail, RefreshCw, X, Check, Clock, Crown, ChevronDown, ChevronUp, UserCog, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -74,6 +75,7 @@ export default function TeamMembersPage() {
   // Leave team state
   const [isLeavingTeam, setIsLeavingTeam] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
 
   // Debug: Log component mount and context values
   useEffect(() => {
@@ -592,8 +594,8 @@ export default function TeamMembersPage() {
     }
   };
 
-  // Handle leaving the team
-  const handleLeaveTeam = async () => {
+  // Handle leaving the team (show confirmation dialog)
+  const handleLeaveTeam = () => {
     if (!activeOrgId || !user?.id) return;
 
     // Check if owner
@@ -604,14 +606,19 @@ export default function TeamMembersPage() {
       return;
     }
 
-    // Confirmation dialog
-    const confirmMessage = `Are you sure you want to leave this organization?\n\nYou will no longer have access to this organization's data. You can request to join again later if needed.`;
-    if (!window.confirm(confirmMessage)) return;
+    // Show confirmation dialog
+    setShowLeaveConfirmation(true);
+  };
+
+  // Confirm leaving the team
+  const handleConfirmLeaveTeam = async () => {
+    if (!activeOrgId || !user?.id) return;
 
     setIsLeavingTeam(true);
     const result = await leaveOrganization(activeOrgId, user.id);
 
     if (result.success) {
+      setShowLeaveConfirmation(false);
       toast.success('You have left the organization');
       // Refresh page to reset organization context
       setTimeout(() => {
@@ -620,6 +627,7 @@ export default function TeamMembersPage() {
     } else {
       toast.error(result.error || 'Failed to leave organization');
       setIsLeavingTeam(false);
+      setShowLeaveConfirmation(false);
     }
   };
 
@@ -1120,6 +1128,22 @@ export default function TeamMembersPage() {
           </div>
         )}
       </div>
+
+      {/* Leave Organization Confirmation Dialog */}
+      <ConfirmDialog
+        open={showLeaveConfirmation}
+        onClose={() => {
+          setShowLeaveConfirmation(false);
+          setIsLeavingTeam(false);
+        }}
+        onConfirm={handleConfirmLeaveTeam}
+        title="Leave Organization?"
+        description="You will no longer have access to this organization's data and all its resources. You can request to join again later if needed."
+        confirmText="Leave Organization"
+        cancelText="Cancel"
+        confirmVariant="destructive"
+        loading={isLeavingTeam}
+      />
     </SettingsPageWrapper>
   );
 }

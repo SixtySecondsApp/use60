@@ -63,7 +63,7 @@ const FathomCallbackWrapper = () => <FathomCallback />;
 import {
   // Platform Admin
   MeetingsWaitlist, WaitlistSlackSettings, OnboardingSimulator, TrialTimelineSimulator, PricingControl, CostAnalysis, LaunchChecklist,
-  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, Users, PipelineSettings,
+  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, Users, PipelineSettings, Organizations,
   AuditLogs, SmartTasksAdmin, PipelineAutomationAdmin, EmailTemplates, FunctionTesting,
   AIProviderSettings, GoogleIntegrationTestsLegacy, GoogleIntegrationTests, SettingsSavvyCal,
   SettingsBookingSources, HealthRules, EmailCategorizationSettings, AdminModelSettings,

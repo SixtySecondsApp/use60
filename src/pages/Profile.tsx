@@ -10,6 +10,7 @@ import { Camera, Save, Lock, UserCog, Link2, History, ChevronRight, Mail, Buildi
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 import { EmailChangeModal } from '@/components/EmailChangeModal';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { leaveOrganization, isLastOwner } from '@/lib/services/leaveOrganizationService';
 import { GoodbyeScreen } from '@/components/GoodbyeScreen';
 
@@ -33,6 +34,7 @@ export default function Profile() {
   const [isLeavingOrg, setIsLeavingOrg] = useState(false);
   const [showGoodbyeScreen, setShowGoodbyeScreen] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
   const queryClient = useQueryClient();
 
   // Check if user is owner of current organization
@@ -109,30 +111,35 @@ export default function Profile() {
     }
   };
 
-  const handleLeaveOrganization = async () => {
+  const handleLeaveOrganization = () => {
     if (!activeOrgId || !user?.id) return;
 
     // Check if owner
     if (isOwner) {
       toast.error(
-        'You are the last owner of this organization. Please transfer ownership to another member or delete the organization before leaving.'
+        'You are the last owner of this organization. Please transfer ownership to another member before leaving.'
       );
       return;
     }
 
-    // Confirmation dialog
-    const confirmMessage = `Are you sure you want to leave "${orgName || 'this organization'}"?\n\nYou will no longer have access to this organization's data. You can request to join again later if needed.`;
-    if (!window.confirm(confirmMessage)) return;
+    // Show confirmation dialog
+    setShowLeaveConfirmation(true);
+  };
+
+  const handleConfirmLeaveOrganization = async () => {
+    if (!activeOrgId || !user?.id) return;
 
     setIsLeavingOrg(true);
     const result = await leaveOrganization(activeOrgId, user.id);
 
     if (result.success) {
+      setShowLeaveConfirmation(false);
       toast.success('You have left the organization');
       setShowGoodbyeScreen(true);
     } else {
       toast.error(result.error || 'Failed to leave organization');
       setIsLeavingOrg(false);
+      setShowLeaveConfirmation(false);
     }
   };
 
@@ -510,6 +517,22 @@ export default function Profile() {
           // Refresh user data after email change request
           queryClient.invalidateQueries({ queryKey: ['user'] });
         }}
+      />
+
+      {/* Leave Organization Confirmation Dialog */}
+      <ConfirmDialog
+        open={showLeaveConfirmation}
+        onClose={() => {
+          setShowLeaveConfirmation(false);
+          setIsLeavingOrg(false);
+        }}
+        onConfirm={handleConfirmLeaveOrganization}
+        title="Leave Organization?"
+        description={`You will no longer have access to ${orgName || 'this organization'}'s data and all its resources. You can request to join again later if needed.`}
+        confirmText="Leave Organization"
+        cancelText="Cancel"
+        confirmVariant="destructive"
+        loading={isLeavingOrg}
       />
       </div>
     </div>
