@@ -757,6 +757,59 @@ export default function TeamMembersPage() {
           </div>
         )}
 
+        {/* Pending Invitations - MOVED TO TOP */}
+        {permissions.canManageTeam && invitations.length > 0 && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Mail className="w-5 h-5 text-[#37bd7e]" />
+              Pending Invitations
+            </h2>
+            <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+              <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                {invitations.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700/50 flex items-center justify-center">
+                        <Mail className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                      </div>
+                      <div>
+                        <p className="text-gray-900 dark:text-white">{invite.email}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Expires {new Date(invite.expires_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[invite.role]}`}
+                      >
+                        {roleLabels[invite.role]}
+                      </span>
+                      <button
+                        onClick={() => handleResendInvite(invite.id)}
+                        className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#37bd7e] transition-colors"
+                        title="Resend invitation"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRevokeInvite(invite.id)}
+                        className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                        title="Revoke invitation"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Team Members List */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -1076,61 +1129,6 @@ export default function TeamMembersPage() {
             </div>
           )}
         </div>
-        )}
-
-
-
-        {/* Pending Invitations */}
-        {permissions.canManageTeam && invitations.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Mail className="w-5 h-5 text-[#37bd7e]" />
-              Pending Invitations
-            </h2>
-            <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-              <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                {invitations.map((invite) => (
-                  <div
-                    key={invite.id}
-                    className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700/50 flex items-center justify-center">
-                        <Mail className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                      </div>
-                      <div>
-                        <p className="text-gray-900 dark:text-white">{invite.email}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Expires {new Date(invite.expires_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[invite.role]}`}
-                      >
-                        {roleLabels[invite.role]}
-                      </span>
-                      <button
-                        onClick={() => handleResendInvite(invite.id)}
-                        className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#37bd7e] transition-colors"
-                        title="Resend invitation"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleRevokeInvite(invite.id)}
-                        className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                        title="Revoke invitation"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
         )}
       </div>
 
