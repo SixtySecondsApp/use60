@@ -64,9 +64,9 @@ interface SkillContentEditorProps {
   title: string;
   description: string;
   content: string;
-  onTitleChange: (title: string) => void;
-  onDescriptionChange: (description: string) => void;
-  onContentChange: (content: string) => void;
+  onTitleChange?: (title: string) => void;
+  onDescriptionChange?: (description: string) => void;
+  onContentChange?: (content: string) => void;
   documentSuggestions: DocumentSuggestion[];
   skillSuggestions: SkillSuggestion[];
   onSearchDocuments?: (query: string) => void;
@@ -77,6 +77,8 @@ interface SkillContentEditorProps {
   defaultShowPreview?: boolean;
   /** Hide the preview toggle button (for read-only views) */
   hidePreviewToggle?: boolean;
+  /** Make the editor read-only (no editing allowed) */
+  readOnly?: boolean;
 }
 
 // =============================================================================
@@ -382,9 +384,11 @@ export function SkillContentEditor({
   className,
   defaultShowPreview = false,
   hidePreviewToggle = false,
+  readOnly = false,
 }: SkillContentEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [showPreview, setShowPreview] = useState(defaultShowPreview);
+  // In read-only mode, always show preview
+  const [showPreview, setShowPreview] = useState(defaultShowPreview || readOnly);
 
   // Autocomplete state
   const [autocomplete, setAutocomplete] = useState<{
@@ -397,6 +401,8 @@ export function SkillContentEditor({
   // Handle content change and detect autocomplete triggers
   const handleContentChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      if (readOnly || !onContentChange) return;
+
       const value = e.target.value;
       const cursorPos = e.target.selectionStart;
       onContentChange(value);
@@ -434,7 +440,7 @@ export function SkillContentEditor({
         setAutocomplete(null);
       }
     },
-    [onContentChange, onSearchDocuments, onSearchSkills]
+    [readOnly, onContentChange, onSearchDocuments, onSearchSkills]
   );
 
   // Handle autocomplete selection
@@ -637,7 +643,7 @@ export function SkillContentEditor({
   }), [HighlightedText]);
 
   // In preview mode (read-only), we show only the rendered content
-  const isReadOnly = hidePreviewToggle && defaultShowPreview;
+  const isReadOnly = readOnly || (hidePreviewToggle && defaultShowPreview);
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
@@ -651,9 +657,13 @@ export function SkillContentEditor({
             <Input
               id="title"
               value={title}
-              onChange={(e) => onTitleChange(e.target.value)}
+              onChange={(e) => onTitleChange?.(e.target.value)}
               placeholder="Document title..."
-              className="mt-2 bg-white/5 border-white/10 focus:border-blue-500/50 focus:ring-blue-500/20"
+              readOnly={isReadOnly}
+              className={cn(
+                "mt-2 bg-white/5 border-white/10 focus:border-blue-500/50 focus:ring-blue-500/20",
+                isReadOnly && "cursor-default opacity-80"
+              )}
             />
           </div>
           <div>
@@ -663,9 +673,13 @@ export function SkillContentEditor({
             <Input
               id="description"
               value={description}
-              onChange={(e) => onDescriptionChange(e.target.value)}
+              onChange={(e) => onDescriptionChange?.(e.target.value)}
               placeholder="Brief description..."
-              className="mt-2 bg-white/5 border-white/10 focus:border-blue-500/50 focus:ring-blue-500/20"
+              readOnly={isReadOnly}
+              className={cn(
+                "mt-2 bg-white/5 border-white/10 focus:border-blue-500/50 focus:ring-blue-500/20",
+                isReadOnly && "cursor-default opacity-80"
+              )}
             />
           </div>
         </div>

@@ -18,6 +18,13 @@ import type {
   ParsedReference,
   buildSkillTree,
   parseReferences,
+  // Skill link types
+  SkillLink,
+  LinkedSkillPreview,
+  LinkingSkill,
+  SkillSearchResult,
+  CreateSkillLinkInput,
+  UpdateSkillLinkInput,
 } from '../types/skills';
 
 // =============================================================================
@@ -462,11 +469,12 @@ export async function getSkillWithFolders(skillId: string): Promise<SkillWithFol
     throw new Error(`Failed to get skill: ${skillError.message}`);
   }
 
-  // Get folders, documents, and references in parallel
-  const [folders, documents, references] = await Promise.all([
+  // Get folders, documents, references, and linked skills in parallel
+  const [folders, documents, references, linkedSkills] = await Promise.all([
     getSkillFolderTree(skillId),
     getAllDocuments(skillId),
     getSkillReferences(skillId),
+    getSkillLinksInternal(skillId),
   ]);
 
   return {
@@ -483,7 +491,53 @@ export async function getSkillWithFolders(skillId: string): Promise<SkillWithFol
     folders,
     documents,
     references,
+    linked_skills: linkedSkills.length > 0 ? linkedSkills : undefined,
   };
+}
+
+/**
+ * Internal helper to get skill links without throwing on error
+ * Returns empty array if no links or error
+ */
+async function getSkillLinksInternal(parentSkillId: string): Promise<LinkedSkillPreview[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_skill_links', {
+      p_parent_skill_id: parentSkillId,
+    });
+
+    if (error) {
+      // Don't throw - links are optional
+      console.warn('[skillFolderService.getSkillLinksInternal] Warning:', error.message);
+      return [];
+    }
+
+    return (data || []).map((row: {
+      id: string;
+      linked_skill_id: string;
+      linked_skill_key: string;
+      linked_skill_name: string;
+      linked_skill_description: string | null;
+      linked_skill_category: string;
+      folder_id: string | null;
+      folder_name: string | null;
+      display_order: number;
+      created_at: string;
+    }) => ({
+      id: row.linked_skill_id,
+      link_id: row.id,
+      skill_key: row.linked_skill_key,
+      name: row.linked_skill_name,
+      description: row.linked_skill_description || undefined,
+      category: row.linked_skill_category,
+      folder_id: row.folder_id,
+      folder_name: row.folder_name || undefined,
+      display_order: row.display_order,
+      created_at: row.created_at,
+    }));
+  } catch {
+    // Silently return empty - links may not be set up yet
+    return [];
+  }
 }
 
 /**
@@ -661,6 +715,227 @@ export async function duplicateDocument(
 }
 
 // =============================================================================
+// Skill Link Operations (for Sequences / Mega Skills)
+// =============================================================================
+
+/**
+ * Get linked skills for a parent skill
+ * Uses the database function for efficient fetching with preview data
+ */
+export async function getSkillLinks(parentSkillId: string): Promise<LinkedSkillPreview[]> {
+  const { data, error } = await supabase.rpc('get_skill_links', {
+    p_parent_skill_id: parentSkillId,
+  });
+
+  if (error) {
+    console.error('[skillFolderService.getSkillLinks] Error:', error);
+    throw new Error(`Failed to get skill links: ${error.message}`);
+  }
+
+  // Map database result to LinkedSkillPreview type
+  return (data || []).map((row: {
+    id: string;
+    linked_skill_id: string;
+    linked_skill_key: string;
+    linked_skill_name: string;
+    linked_skill_description: string | null;
+    linked_skill_category: string;
+    folder_id: string | null;
+    folder_name: string | null;
+    display_order: number;
+    created_at: string;
+  }) => ({
+    id: row.linked_skill_id,
+    link_id: row.id,
+    skill_key: row.linked_skill_key,
+    name: row.linked_skill_name,
+    description: row.linked_skill_description || undefined,
+    category: row.linked_skill_category,
+    folder_id: row.folder_id,
+    folder_name: row.folder_name || undefined,
+    display_order: row.display_order,
+    created_at: row.created_at,
+  }));
+}
+
+/**
+ * Get skills that link to a given skill (reverse lookup)
+ * Useful for showing "used by" information
+ */
+export async function getSkillsLinkingTo(linkedSkillId: string): Promise<LinkingSkill[]> {
+  const { data, error } = await supabase.rpc('get_skills_linking_to', {
+    p_linked_skill_id: linkedSkillId,
+  });
+
+  if (error) {
+    console.error('[skillFolderService.getSkillsLinkingTo] Error:', error);
+    throw new Error(`Failed to get linking skills: ${error.message}`);
+  }
+
+  // Map database result to LinkingSkill type
+  return (data || []).map((row: {
+    id: string;
+    parent_skill_id: string;
+    parent_skill_key: string;
+    parent_skill_name: string;
+    parent_skill_category: string;
+    created_at: string;
+  }) => ({
+    id: row.parent_skill_id,
+    link_id: row.id,
+    skill_key: row.parent_skill_key,
+    name: row.parent_skill_name,
+    category: row.parent_skill_category,
+    created_at: row.created_at,
+  }));
+}
+
+/**
+ * Add a skill link (link one skill to another)
+ */
+export async function addSkillLink(input: CreateSkillLinkInput): Promise<SkillLink> {
+  // First check for circular references
+  const { data: isCircular, error: circularError } = await supabase.rpc('check_skill_link_circular', {
+    p_parent_skill_id: input.parent_skill_id,
+    p_linked_skill_id: input.linked_skill_id,
+  });
+
+  if (circularError) {
+    console.error('[skillFolderService.addSkillLink] Circular check error:', circularError);
+    throw new Error(`Failed to check for circular references: ${circularError.message}`);
+  }
+
+  if (isCircular) {
+    throw new Error('Cannot create link: this would create a circular reference');
+  }
+
+  // Create the link
+  const { data, error } = await supabase
+    .from('skill_links')
+    .insert({
+      parent_skill_id: input.parent_skill_id,
+      linked_skill_id: input.linked_skill_id,
+      folder_id: input.folder_id || null,
+      display_order: input.display_order ?? 0,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    // Handle unique constraint violation
+    if (error.code === '23505') {
+      throw new Error('This skill is already linked');
+    }
+    console.error('[skillFolderService.addSkillLink] Error:', error);
+    throw new Error(`Failed to add skill link: ${error.message}`);
+  }
+
+  return data;
+}
+
+/**
+ * Remove a skill link
+ */
+export async function removeSkillLink(linkId: string): Promise<void> {
+  const { error } = await supabase.from('skill_links').delete().eq('id', linkId);
+
+  if (error) {
+    console.error('[skillFolderService.removeSkillLink] Error:', error);
+    throw new Error(`Failed to remove skill link: ${error.message}`);
+  }
+}
+
+/**
+ * Update a skill link (move to different folder, change order)
+ */
+export async function updateSkillLink(linkId: string, updates: UpdateSkillLinkInput): Promise<SkillLink> {
+  const { data, error } = await supabase
+    .from('skill_links')
+    .update({
+      folder_id: updates.folder_id,
+      display_order: updates.display_order,
+    })
+    .eq('id', linkId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[skillFolderService.updateSkillLink] Error:', error);
+    throw new Error(`Failed to update skill link: ${error.message}`);
+  }
+
+  return data;
+}
+
+/**
+ * Get preview data for a linked skill
+ * Returns full skill data for read-only preview in the editor
+ */
+export async function getLinkedSkillPreview(skillId: string): Promise<SkillWithFolders | null> {
+  // Use the existing getSkillWithFolders function
+  return getSkillWithFolders(skillId);
+}
+
+/**
+ * Search skills available for linking
+ * Excludes already-linked skills and the parent skill itself
+ */
+export async function searchSkillsForLinking(
+  parentSkillId: string,
+  query: string = '',
+  category?: string,
+  limit: number = 20
+): Promise<SkillSearchResult[]> {
+  const { data, error } = await supabase.rpc('search_skills_for_linking', {
+    p_parent_skill_id: parentSkillId,
+    p_query: query,
+    p_category: category || null,
+    p_limit: limit,
+  });
+
+  if (error) {
+    console.error('[skillFolderService.searchSkillsForLinking] Error:', error);
+    throw new Error(`Failed to search skills for linking: ${error.message}`);
+  }
+
+  // Map database result to SkillSearchResult type
+  return (data || []).map((row: {
+    id: string;
+    skill_key: string;
+    name: string;
+    description: string | null;
+    category: string;
+    is_already_linked: boolean;
+  }) => ({
+    id: row.id,
+    skill_key: row.skill_key,
+    name: row.name,
+    description: row.description || undefined,
+    category: row.category,
+    is_already_linked: row.is_already_linked,
+  }));
+}
+
+/**
+ * Reorder skill links within a folder (or root)
+ */
+export async function reorderSkillLinks(
+  items: Array<{ id: string; display_order: number }>
+): Promise<void> {
+  const updates = items.map((item) =>
+    supabase.from('skill_links').update({ display_order: item.display_order }).eq('id', item.id)
+  );
+
+  const results = await Promise.all(updates);
+  const errors = results.filter((r) => r.error);
+
+  if (errors.length > 0) {
+    console.error('[skillFolderService.reorderSkillLinks] Errors:', errors);
+    throw new Error('Failed to reorder some skill links');
+  }
+}
+
+// =============================================================================
 // Export Service Object
 // =============================================================================
 
@@ -691,6 +966,16 @@ export const skillFolderService = {
   // Skills with folders
   getSkillWithFolders,
   getSkillByKeyWithFolders,
+
+  // Skill Links (for Sequences / Mega Skills)
+  getSkillLinks,
+  getSkillsLinkingTo,
+  addSkillLink,
+  removeSkillLink,
+  updateSkillLink,
+  getLinkedSkillPreview,
+  searchSkillsForLinking,
+  reorderSkillLinks,
 
   // Autocomplete
   searchDocumentsForAutocomplete,

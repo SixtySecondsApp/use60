@@ -214,6 +214,85 @@ export interface SkillFrontmatterV1 {
 export type SkillFrontmatter = SkillFrontmatterV1 | SkillFrontmatterV2;
 
 // =============================================================================
+// Skill Link Types (for Sequences / Mega Skills)
+// =============================================================================
+
+/**
+ * Dynamic link from one skill (parent/sequence) to another skill
+ * Used for sequences that orchestrate multiple skills via @skill-name references
+ */
+export interface SkillLink {
+  id: string;
+  parent_skill_id: string;
+  linked_skill_id: string;
+  folder_id: string | null;
+  display_order: number;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Linked skill preview data (for displaying in folder tree)
+ * Contains minimal data needed to render the link
+ */
+export interface LinkedSkillPreview {
+  id: string;
+  link_id: string;
+  skill_key: string;
+  name: string;
+  description?: string;
+  category: SkillCategory | string;
+  folder_id: string | null;
+  folder_name?: string;
+  display_order: number;
+  created_at: string;
+}
+
+/**
+ * Skill that links to a given skill (reverse lookup)
+ * For showing "used by" information
+ */
+export interface LinkingSkill {
+  id: string;
+  link_id: string;
+  skill_key: string;
+  name: string;
+  category: SkillCategory | string;
+  created_at: string;
+}
+
+/**
+ * Search result for skills available to link
+ */
+export interface SkillSearchResult {
+  id: string;
+  skill_key: string;
+  name: string;
+  description?: string;
+  category: SkillCategory | string;
+  is_already_linked: boolean;
+}
+
+/**
+ * Input for creating a skill link
+ */
+export interface CreateSkillLinkInput {
+  parent_skill_id: string;
+  linked_skill_id: string;
+  folder_id?: string;
+  display_order?: number;
+}
+
+/**
+ * Input for updating a skill link
+ */
+export interface UpdateSkillLinkInput {
+  folder_id?: string | null;
+  display_order?: number;
+}
+
+// =============================================================================
 // Skill Types
 // =============================================================================
 
@@ -235,6 +314,8 @@ export interface SkillWithFolders {
   folders: SkillFolder[];
   documents: SkillDocument[];
   references: SkillReference[];
+  // Linked skills (for sequences/mega skills)
+  linked_skills?: LinkedSkillPreview[];
 }
 
 /**
@@ -259,13 +340,18 @@ export interface Skill {
 export interface SkillTreeNode {
   id: string;
   name: string;
-  type: 'folder' | 'document' | 'skill';
+  type: 'folder' | 'document' | 'skill' | 'linked-skill';
   path: string;
   depth: number;
   parent_id: string | null;
   sort_order: number;
   // For documents
   doc_type?: SkillDocumentType;
+  // For linked skills
+  linked_skill_id?: string;
+  linked_skill_key?: string;
+  linked_skill_category?: string;
+  link_id?: string;
   // For rendering
   isExpanded?: boolean;
   isSelected?: boolean;
@@ -273,12 +359,13 @@ export interface SkillTreeNode {
 }
 
 /**
- * Build tree structure from flat folder/document lists
+ * Build tree structure from flat folder/document/linked skill lists
  */
 export function buildSkillTree(
   folders: SkillFolder[],
   documents: SkillDocument[],
-  skillKey: string
+  skillKey: string,
+  linkedSkills?: LinkedSkillPreview[]
 ): SkillTreeNode[] {
   const tree: SkillTreeNode[] = [];
   const folderMap = new Map<string, SkillTreeNode>();
@@ -336,12 +423,43 @@ export function buildSkillTree(
     }
   }
 
+  // Add linked skills to their folders (displayed with @ prefix)
+  if (linkedSkills) {
+    for (const link of linkedSkills) {
+      const linkNode: SkillTreeNode = {
+        id: link.link_id, // Use link_id as the node id for tree operations
+        name: `@${link.skill_key}`, // Display with @ prefix
+        type: 'linked-skill',
+        path: link.folder_name ? `${link.folder_name}/@${link.skill_key}` : `@${link.skill_key}`,
+        depth: link.folder_name ? 1 : 0,
+        parent_id: link.folder_id,
+        sort_order: link.display_order,
+        linked_skill_id: link.id,
+        linked_skill_key: link.skill_key,
+        linked_skill_category: link.category,
+        link_id: link.link_id,
+      };
+
+      if (link.folder_id) {
+        const parent = folderMap.get(link.folder_id);
+        if (parent) {
+          parent.children = parent.children || [];
+          parent.children.push(linkNode);
+        }
+      } else {
+        tree.push(linkNode);
+      }
+    }
+  }
+
   // Sort children by sort_order then name
   const sortNodes = (nodes: SkillTreeNode[]) => {
     nodes.sort((a, b) => {
-      // Folders before documents
-      if (a.type === 'folder' && b.type !== 'folder') return -1;
-      if (a.type !== 'folder' && b.type === 'folder') return 1;
+      // Folders first, then linked-skills, then documents
+      const typeOrder = { folder: 0, 'linked-skill': 1, document: 2, skill: 3 };
+      const aOrder = typeOrder[a.type] ?? 4;
+      const bOrder = typeOrder[b.type] ?? 4;
+      if (aOrder !== bOrder) return aOrder - bOrder;
       // Then by sort_order
       if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
       // Then by name

@@ -1,8 +1,14 @@
 /**
  * AgentSequencesPage
  *
- * Platform admin page for managing agent sequences - skills that chain
- * multiple other skills together with context passing.
+ * Platform admin page for managing agent sequences - "mega skills" that
+ * orchestrate multiple other skills via @skill-name links in the folder tree.
+ *
+ * Sequences use the same editor UI as regular skills (PlatformSkillViewPage),
+ * but with category: 'agent-sequence'. They can link to other skills which
+ * appear as read-only previews in the folder tree.
+ *
+ * Copilot checks sequences first before falling back to individual skills.
  */
 
 import { useState, useMemo } from 'react';
@@ -24,6 +30,7 @@ import {
   ArrowRight,
   AlertCircle,
   FileCode,
+  Link2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -118,7 +125,7 @@ function SequenceCard({
         {steps.slice(0, 4).map((step, idx) => (
           <div key={idx} className="flex items-center">
             <Badge variant="outline" className="text-xs shrink-0">
-              {step.skill_key.split('-')[0]}
+              {step.skill_key?.split('-')[0] || `Step ${idx + 1}`}
             </Badge>
             {idx < Math.min(steps.length - 1, 3) && (
               <ArrowRight className="h-3 w-3 text-muted-foreground mx-0.5 shrink-0" />
@@ -132,10 +139,20 @@ function SequenceCard({
 
       {/* Stats */}
       <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
-        <span className="flex items-center gap-1">
-          <GitBranch className="h-3 w-3" />
-          {steps.length} steps
-        </span>
+        {/* Show steps count if using old step-based sequences */}
+        {steps.length > 0 && (
+          <span className="flex items-center gap-1">
+            <GitBranch className="h-3 w-3" />
+            {steps.length} steps
+          </span>
+        )}
+        {/* Show linked skills count for new link-based sequences */}
+        {frontmatter.linked_skills_count !== undefined && (
+          <span className="flex items-center gap-1">
+            <Link2 className="h-3 w-3" />
+            {frontmatter.linked_skills_count} linked skills
+          </span>
+        )}
         {testStatus && (
           <span
             className={cn(
@@ -239,15 +256,18 @@ export default function AgentSequencesPage() {
 
   // Handlers
   const handleCreateNew = () => {
-    navigate('/platform/agent-sequences/new');
+    // Navigate to skills page with category preset for agent-sequence
+    navigate('/platform/skills/new?category=agent-sequence');
   };
 
   const handleEdit = (sequence: AgentSequence) => {
-    navigate(`/platform/agent-sequences/${sequence.skill_key}`);
+    // Use the standard skill view page (same editor as skills)
+    navigate(`/platform/skills/${sequence.skill_key}`);
   };
 
   const handleTest = (sequence: AgentSequence) => {
-    navigate(`/platform/agent-sequences/${sequence.skill_key}?simulate=true`);
+    // Use the standard skill view page with simulate mode
+    navigate(`/platform/skills/${sequence.skill_key}?tab=test`);
   };
 
   const handleClone = async (sequence: AgentSequence) => {
