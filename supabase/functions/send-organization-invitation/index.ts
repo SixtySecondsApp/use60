@@ -63,6 +63,7 @@ interface SendInvitationRequest {
   to_name?: string;
   organization_name: string;
   inviter_name: string;
+  inviter_avatar_url?: string;
   invitation_url: string;
   expiry_time?: string;
 }
@@ -104,6 +105,7 @@ serve(async (req) => {
       to_name,
       organization_name,
       inviter_name,
+      inviter_avatar_url,
       invitation_url,
       expiry_time = '7 days',
     }: SendInvitationRequest = await req.json();
@@ -126,12 +128,18 @@ serve(async (req) => {
 
     const recipientName = to_name || to_email.split('@')[0];
 
+    // Generate fallback avatar if not provided
+    const avatarUrl = inviter_avatar_url ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(inviter_name)}&size=96&background=3b82f6&color=ffffff&rounded=true`;
+
     // Prepare standardized variables per EMAIL_VARIABLES_SCHEMA.md
     const emailVariables = {
       recipient_name: recipientName,
       organization_name: organization_name,
       inviter_name: inviter_name,
+      inviter_avatar_url: avatarUrl,
       action_url: invitation_url,
+      invitation_url: invitation_url, // Support both standardized and legacy variable names
       expiry_time: expiry_time,
       support_email: 'support@use60.com',
     };
@@ -139,13 +147,49 @@ serve(async (req) => {
     console.log('[send-organization-invitation] Delegating to encharge-send-email dispatcher');
 
     // Call encharge-send-email dispatcher with template type
+    // Use the EDGE_FUNCTION_SECRET for inter-function communication (more reliable)
+    const edgeFunctionSecret = Deno.env.get('EDGE_FUNCTION_SECRET');
+
+    const dispatcherHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Try EDGE_FUNCTION_SECRET first, fall back to service role key
+    if (edgeFunctionSecret) {
+      dispatcherHeaders['x-edge-function-secret'] = edgeFunctionSecret;
+      console.log('[send-organization-invitation] Using EDGE_FUNCTION_SECRET for dispatcher auth', {
+        secretLength: edgeFunctionSecret.length,
+      });
+    } else if (SUPABASE_SERVICE_ROLE_KEY) {
+      dispatcherHeaders['Authorization'] = `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
+      dispatcherHeaders['apikey'] = SUPABASE_SERVICE_ROLE_KEY;
+      console.log('[send-organization-invitation] Using SUPABASE_SERVICE_ROLE_KEY for dispatcher auth', {
+        keyLength: SUPABASE_SERVICE_ROLE_KEY.length,
+      });
+    } else {
+      console.error('[send-organization-invitation] No authentication credentials available!', {
+        edgeFunctionSecretAvailable: !!edgeFunctionSecret,
+        supabaseServiceRoleKeyAvailable: !!SUPABASE_SERVICE_ROLE_KEY,
+      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Failed to send invitation email',
+          details: JSON.stringify({
+            code: 500,
+            message: 'Server configuration error: missing authentication credentials',
+          }),
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const dispatcherResponse = await fetch(`${SUPABASE_URL}/functions/v1/encharge-send-email`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': SUPABASE_SERVICE_ROLE_KEY,
-      },
+      headers: dispatcherHeaders,
       body: JSON.stringify({
         template_type: 'organization_invitation',
         to_email: to_email,

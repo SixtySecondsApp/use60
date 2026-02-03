@@ -68,6 +68,33 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
       inviteeName = emailName.charAt(0).toUpperCase() + emailName.slice(1);
     }
 
+    // Get inviter's avatar URL (for email display)
+    let inviterAvatarUrl: string | null = null;
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      const { data: inviterProfile } = await supabase
+        .from('profiles')
+        .select('avatar_url, first_name, last_name')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (inviterProfile?.avatar_url) {
+        inviterAvatarUrl = inviterProfile.avatar_url;
+      }
+
+      // Use profile name if inviterName not provided
+      if (!inviterName && inviterProfile) {
+        const firstName = inviterProfile.first_name || '';
+        const lastName = inviterProfile.last_name || '';
+        inviterName = `${firstName} ${lastName}`.trim() || 'A team member';
+      }
+    }
+
+    // Generate fallback avatar using UI Avatars service if no avatar_url
+    const avatarUrl = inviterAvatarUrl ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(inviterName || 'User')}&size=96&background=3b82f6&color=ffffff&rounded=true`;
+
     // Build invitation URL
     // Use environment variable for base URL to prevent localhost links in staging
     const baseUrl = typeof window !== 'undefined'
@@ -86,7 +113,9 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
         to_name: inviteeName,
         organization_name: organizationName,
         inviter_name: inviterName || 'A team member',
+        inviter_avatar_url: avatarUrl,
         invitation_url: invitationUrl,
+        expiry_time: '7 days',
       },
       // Use Authorization header instead of custom header to avoid CORS preflight blocking
       headers: edgeFunctionSecret
