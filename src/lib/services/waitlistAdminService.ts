@@ -131,6 +131,8 @@ export async function grantAccess(
           variables: {
             recipient_name: firstName,
             action_url: invitationUrl,
+            company_name: entry.company || '',
+            expiry_time: '7 days',
           },
         },
         headers: edgeFunctionSecret
@@ -326,6 +328,7 @@ export async function bulkGrantAccess(
                   recipient_name: firstName,
                   action_url: link.magicLink,
                   user_email: entry.email,
+                  company_name: entry.company || '',
                 },
               },
               headers: edgeFunctionSecret

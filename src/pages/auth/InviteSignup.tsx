@@ -16,6 +16,8 @@ import { Building2, Lock, User, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getInvitationByToken, completeInviteSignup, type Invitation } from '@/lib/services/invitationService';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
 
 type SignupStatus = 'loading' | 'ready' | 'signing-up' | 'complete' | 'verify-email' | 'error';
@@ -104,7 +106,33 @@ export default function InviteSignup() {
         return;
       }
 
-      // Step 2: Complete the invite signup (create membership, mark onboarding complete)
+      // Step 2: Explicitly save first_name and last_name to profile
+      // The DB trigger may not extract names from auth metadata, and this flow
+      // skips AuthCallback which normally handles the profile upsert
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: user.id,
+              email: invitation.email,
+              first_name: formData.firstName.trim(),
+              last_name: formData.lastName.trim(),
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'id',
+            });
+
+          if (profileError) {
+            console.warn('[InviteSignup] Failed to save profile names:', profileError);
+          }
+        }
+      } catch (profileErr) {
+        console.warn('[InviteSignup] Error saving profile names:', profileErr);
+      }
+
+      // Step 3: Complete the invite signup (create membership, mark onboarding complete)
       // This doesn't require a session since it's a SECURITY DEFINER RPC
       const result = await completeInviteSignup(token);
 
@@ -113,6 +141,12 @@ export default function InviteSignup() {
         setError(result.error_message || 'Failed to set up organization membership');
         toast.error(result.error_message || 'Failed to set up organization');
         return;
+      }
+
+      // Step 4: Set the invited org as the active organization
+      // This ensures the dashboard loads the correct org, not an auto-created one
+      if (result.org_id) {
+        useOrgStore.getState().setActiveOrg(result.org_id);
       }
 
       // Success! Redirect straight to dashboard

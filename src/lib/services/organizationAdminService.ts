@@ -477,30 +477,83 @@ export async function addOrganizationMember(
  * This will cascade delete all related data:
  * - All 94 organization-linked tables (integrations, meetings, calls, recordings, etc.)
  * - All organization memberships (soft-deleted with member_status = 'removed')
- * - Users can re-onboard with their existing accounts to a different organization
+ * - Users are reset to onboarding state so they can join/create a new organization
  */
 export async function deleteOrganization(orgId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    // First, soft-delete all members to preserve audit trail
+    const currentUserId = (await supabase.auth.getUser()).data.user?.id || null;
+
+    // Step 1: Get all active member user IDs before deletion
+    // We need these to reset their onboarding state after the org is gone
+    const { data: members, error: membersQueryError } = await supabase
+      .from('organization_memberships')
+      .select('user_id')
+      .eq('org_id', orgId)
+      .neq('member_status', 'removed');
+
+    if (membersQueryError) {
+      console.warn('Error fetching members for cleanup, continuing with deletion:', membersQueryError);
+    }
+
+    const memberUserIds = (members || []).map((m) => m.user_id);
+
+    // Step 2: Soft-delete all members to preserve audit trail
     const { error: memberError } = await supabase
       .from('organization_memberships')
       .update({
         member_status: 'removed',
         removed_at: new Date().toISOString(),
-        removed_by: (await supabase.auth.getUser()).data.user?.id || null,
+        removed_by: currentUserId,
         updated_at: new Date().toISOString(),
       })
       .eq('org_id', orgId);
 
     if (memberError) throw memberError;
 
-    // Then hard-delete the organization
-    // CASCADE DELETE constraints will automatically remove all 94 organization-linked tables:
+    // Step 3: Reset user state for members who have NO other active org memberships
+    // This ensures they go through onboarding to join/create a new org
+    if (memberUserIds.length > 0) {
+      for (const userId of memberUserIds) {
+        // Check if user has any OTHER active org membership
+        const { data: otherMemberships } = await supabase
+          .from('organization_memberships')
+          .select('org_id')
+          .eq('user_id', userId)
+          .eq('member_status', 'active')
+          .neq('org_id', orgId)
+          .limit(1);
+
+        const hasOtherOrg = (otherMemberships || []).length > 0;
+
+        if (!hasOtherOrg) {
+          // User will have no org after deletion — reset their onboarding progress
+          // so they go through the full onboarding flow again
+          await supabase
+            .from('user_onboarding_progress')
+            .update({
+              onboarding_step: 'website_input',
+              onboarding_completed_at: null,
+              skipped_onboarding: false,
+            })
+            .eq('user_id', userId);
+
+          // Set redirect flag so the app knows to route them to onboarding
+          await supabase
+            .from('profiles')
+            .update({ redirect_to_onboarding: true })
+            .eq('id', userId);
+        }
+      }
+    }
+
+    // Step 4: Hard-delete the organization
+    // CASCADE DELETE constraints will automatically remove all organization-linked tables:
     // - Fathom, HubSpot, JustCall, Savvycal, Gmail, Slack, Sentry integrations
     // - Meetings, calls, recordings, meeting data
     // - Organization settings, preferences, feature flags
     // - Billing, usage, notification data
     // - AI conversations, sequences, automation rules
+    // - All pending invitations to this organization
     const { error: orgError } = await supabase
       .from('organizations')
       .delete()

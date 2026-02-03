@@ -24,30 +24,20 @@ interface Logger {
   clear: () => void;
 }
 
+const noop = () => {};
+
 export const logger: Logger = {
-  log: () => {},
-  
-  warn: () => {},
-  
-  error: () => {
-    // Silently ignore errors to prevent memory leaks and performance issues
-  },
-  
-  info: () => {},
-  
-  debug: () => {},
-  
-  table: () => {},
-  
-  time: () => {},
-  
-  timeEnd: () => {},
-  
-  group: () => {},
-  
-  groupEnd: () => {},
-  
-  clear: () => {}
+  log: isDevelopment ? (...args: LogArgs) => console.log(...args) : noop,
+  warn: isDevelopment ? (...args: LogArgs) => console.warn(...args) : noop,
+  error: isDevelopment ? (...args: LogArgs) => console.error(...args) : noop,
+  info: isDevelopment ? (...args: LogArgs) => console.info(...args) : noop,
+  debug: isDevelopment ? (...args: LogArgs) => console.debug(...args) : noop,
+  table: isDevelopment ? (data: TableData) => console.table(data) : noop,
+  time: isDevelopment ? (label: string) => console.time(label) : noop,
+  timeEnd: isDevelopment ? (label: string) => console.timeEnd(label) : noop,
+  group: isDevelopment ? (label?: string) => console.group(label) : noop,
+  groupEnd: isDevelopment ? () => console.groupEnd() : noop,
+  clear: isDevelopment ? () => console.clear() : noop,
 };
 
 export default logger;

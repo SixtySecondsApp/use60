@@ -19,6 +19,10 @@ export interface Organization {
   updated_at: string;
   is_active: boolean;
 
+  // Organization branding
+  logo_url?: string | null;
+  remove_logo?: boolean;
+
   // Org-level preferences / enrichment (nullable in DB, optional here for backwards compatibility)
   currency_code?: string | null;
   currency_locale?: string | null;

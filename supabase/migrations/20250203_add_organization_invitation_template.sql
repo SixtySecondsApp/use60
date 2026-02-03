@@ -22,47 +22,31 @@ INSERT INTO encharge_email_templates (
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #4b5563; background: #f9fafb; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; }
-        .email-wrapper { background: white; border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        h1 { color: #1f2937; margin-bottom: 20px; font-size: 28px; font-weight: 700; }
-        p { color: #4b5563; margin-bottom: 16px; line-height: 1.6; }
-        a { color: #3b82f6; text-decoration: none; }
-        .button { display: inline-block; padding: 12px 28px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; }
-        .button:hover { background: #2563eb; }
-        code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #374151; }
-        .footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af; }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div class="email-wrapper">
-            <h1>Join {{organization_name}} on Sixty</h1>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, ''Segoe UI'', Roboto, sans-serif; background-color: #f9fafb; line-height: 1.6; color: #4b5563;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <h1 style="color: #1f2937; margin: 0 0 20px 0; font-size: 28px; font-weight: 700; line-height: 1.3;">Join {{organization_name}} on Sixty</h1>
 
-            <p>Hi {{recipient_name}},</p>
+            <p style="color: #4b5563; margin: 0 0 16px 0; line-height: 1.6;">Hi {{recipient_name}},</p>
 
-            <p>{{inviter_name}} has invited you to join <strong>{{organization_name}}</strong> on Sixty.
-            Accept the invitation below to get started collaborating with your team.</p>
+            <p style="color: #4b5563; margin: 0 0 24px 0; line-height: 1.6;">{{inviter_name}} has invited you to join <strong style="color: #1f2937;">{{organization_name}}</strong> on Sixty. Accept the invitation below to get started collaborating with your team.</p>
 
-            <p style="text-align: center; margin-top: 32px;">
-                <a href="{{invitation_url}}" class="button">Accept Invitation</a>
+            <div style="text-align: center; margin: 32px 0;">
+                <a href="{{invitation_url}}" style="display: inline-block; padding: 12px 32px; background-color: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; cursor: pointer;">Accept Invitation</a>
+            </div>
+
+            <p style="color: #6b7280; margin: 0 0 16px 0; font-size: 14px; line-height: 1.6;">
+                Or copy and paste this link in your browser:<br style="display: block; margin: 8px 0;">
+                <code style="background-color: #f3f4f6; padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #374151; display: block; word-break: break-all; margin-top: 8px;">{{invitation_url}}</code>
             </p>
 
-            <p style="font-size: 14px; color: #6b7280;">
-                Or copy and paste this link in your browser:<br>
-                <code style="background: #f3f4f6; padding: 8px; border-radius: 4px; display: block; margin-top: 8px; word-break: break-all;">
-                    {{invitation_url}}
-                </code>
-            </p>
-
-            <p style="font-size: 14px; color: #6b7280;">
+            <p style="color: #6b7280; margin: 0 0 24px 0; font-size: 14px; line-height: 1.6;">
                 This invitation will expire in {{expiry_time}}.
             </p>
 
-            <div class="footer">
-                <p>This is an automated message. If you have any questions, please contact us at support@use60.com</p>
+            <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">
+                <p style="margin: 0; line-height: 1.6;">This is an automated message. If you have any questions, please contact us at <a href="mailto:support@use60.com" style="color: #3b82f6; text-decoration: none;">support@use60.com</a></p>
             </div>
         </div>
     </div>
@@ -85,4 +69,9 @@ This is an automated message. If you have any questions, please contact us at su
   '[{"name": "recipient_name", "description": "Recipient''s first name or email name"}, {"name": "organization_name", "description": "Name of the organization"}, {"name": "inviter_name", "description": "Name of person who sent the invite"}, {"name": "invitation_url", "description": "Full URL to accept invitation"}, {"name": "expiry_time", "description": "When invitation expires (e.g., 7 days)"}]'::jsonb,
   NOW(),
   NOW()
-);
+)
+ON CONFLICT (template_name) DO UPDATE SET
+  html_body = EXCLUDED.html_body,
+  text_body = EXCLUDED.text_body,
+  subject_line = EXCLUDED.subject_line,
+  updated_at = NOW();

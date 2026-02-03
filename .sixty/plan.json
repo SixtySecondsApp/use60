@@ -1,155 +1,738 @@
 {
   "project": {
-    "name": "use60 - Team Members & Organization Management",
-    "description": "Feature set for organization member management, leave organization, and profile enhancements",
-    "stack": {
-      "framework": "react-vite",
-      "database": "supabase",
-      "auth": "supabase-auth",
-      "styling": "tailwind",
-      "testing": "vitest"
-    },
-    "createdAt": "2025-02-02T12:00:00Z"
+    "name": "use60-email-system-fix",
+    "description": "Fix email sending across all critical flows (invitations, waitlist, early access)",
+    "createdAt": "2025-02-03T00:00:00Z",
+    "branch": "fix/go-live-bug-fixes"
   },
   "features": [
     {
-      "id": "orgmem",
-      "name": "Organization Member Management",
-      "status": "in_progress",
-      "description": "Complete overhaul of team members page with new access controls, leave organization feature, and rejoin request improvements",
-      "createdAt": "2025-02-02T12:00:00Z"
+      "id": "email-fix",
+      "name": "Email System Standardization & Bug Fixes",
+      "status": "complete",
+      "priority": 1,
+      "createdAt": "2025-02-03T00:00:00Z"
+    },
+    {
+      "id": "org-photos",
+      "name": "Organization Profile Photos",
+      "status": "complete",
+      "priority": 2,
+      "createdAt": "2026-02-03T16:00:00Z",
+      "completedAt": "2026-02-03T18:00:00Z",
+      "description": "Enable organization owners to upload and manage company profile photos, visible to all organization members"
+    },
+    {
+      "id": "invite-fix",
+      "name": "Organization Invitation Magic Link Fix",
+      "status": "complete",
+      "priority": 1,
+      "createdAt": "2026-02-03T19:00:00Z",
+      "completedAt": "2026-02-03T20:05:00Z",
+      "description": "Fix PGRST116 error when users click invitation magic links - ensure proper base URL generation, RLS policies, and error handling",
+      "consultReport": ".sixty/consult/magic-link-fix.md"
+    },
+    {
+      "id": "email-auth-standardization",
+      "name": "Email Authentication Standardization - Complete System Audit & Fix",
+      "status": "pending",
+      "priority": 1,
+      "createdAt": "2026-02-03T21:00:00Z",
+      "description": "Comprehensive audit and fix of authentication inconsistencies across all email functions and client services."
+    },
+    {
+      "id": "invite-signup-bugs",
+      "name": "Invite Signup Bug Fixes (Names, Phantom Org, Wrong Active Org)",
+      "status": "complete",
+      "completedAt": "2026-02-03T23:25:00Z",
+      "priority": 1,
+      "createdAt": "2026-02-03T23:00:00Z",
+      "description": "Fix 3 bugs in invite signup flow: (1) first_name/last_name not saved to profile, (2) phantom organization created from email domain, (3) user loaded into wrong org instead of invited org.",
+      "consultReport": ".sixty/consult/invite-signup-bugs.md"
+    },
+    {
+      "id": "onboarding-audit",
+      "name": "Onboarding Flow Bug Fixes - Waitlist to Dashboard",
+      "status": "pending",
+      "priority": 1,
+      "createdAt": "2026-02-03T23:30:00Z",
+      "description": "Fix 11 bugs and 3 logic gaps in the onboarding flow from waitlist release to dashboard access. Covers business email domain matching, org selection, approval flow, template consistency, and data field errors.",
+      "consultReport": ".sixty/consult/onboarding-audit.md"
     }
   ],
   "stories": [
     {
-      "id": "ORGMEM-001",
-      "feature": "orgmem",
-      "title": "Deploy ORGREM infrastructure to staging database",
-      "type": "backend",
-      "status": "in_progress",
+      "id": "EMAIL-001",
+      "feature": "email-fix",
+      "title": "Fix waitlist-welcome-email column name bug",
+      "type": "bugfix",
+      "status": "complete",
       "priority": 1,
-      "description": "Deploy all ORGREM migrations to staging Supabase database",
-      "estimatedMinutes": 15,
-      "actualMinutes": null,
-      "files": ["supabase/migrations/20260202093839_*.sql"]
+      "description": "Fix critical bug: html_template → html_body in line 247",
+      "estimatedMinutes": 5,
+      "files": ["supabase/functions/waitlist-welcome-email/index.ts"],
+      "blocks": ["EMAIL-004"],
+      "parallelWith": ["EMAIL-002"]
     },
     {
-      "id": "ORGMEM-002",
-      "feature": "orgmem",
-      "title": "Create leave organization service layer",
+      "id": "EMAIL-002",
+      "feature": "email-fix",
+      "title": "Add missing authentication to waitlist-welcome-email",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 1,
+      "description": "Add EDGE_FUNCTION_SECRET verification before line 164",
+      "estimatedMinutes": 10,
+      "files": ["supabase/functions/waitlist-welcome-email/index.ts"],
+      "blocks": ["EMAIL-004"],
+      "parallelWith": ["EMAIL-001"]
+    },
+    {
+      "id": "EMAIL-003",
+      "feature": "email-fix",
+      "title": "Consolidate AWS SES code - remove duplication",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 2,
+      "description": "Remove inline implementation, use _shared/ses.ts instead",
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/waitlist-welcome-email/index.ts"],
+      "blocks": ["EMAIL-004"]
+    },
+    {
+      "id": "EMAIL-004",
+      "feature": "email-fix",
+      "title": "Eliminate duplicate send-waitlist-welcome function",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 2,
+      "description": "Deprecate and delete send-waitlist-welcome, update all callers",
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/send-waitlist-welcome/"],
+      "blocks": ["EMAIL-005"]
+    },
+    {
+      "id": "EMAIL-005",
+      "feature": "email-fix",
+      "title": "Standardize authentication across all email functions",
+      "type": "standardization",
+      "status": "complete",
+      "priority": 2,
+      "description": "Use EDGE_FUNCTION_SECRET pattern everywhere",
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/encharge-send-email/index.ts", "supabase/functions/send-removal-email/index.ts"],
+      "blocks": ["EMAIL-006"]
+    },
+    {
+      "id": "EMAIL-006",
+      "feature": "email-fix",
+      "title": "Standardize template variable names",
+      "type": "standardization",
+      "status": "complete",
+      "priority": 2,
+      "description": "Use consistent names: recipient_name, action_url, organization_name, etc.",
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/encharge-send-email/index.ts"],
+      "blocks": ["EMAIL-007"]
+    },
+    {
+      "id": "EMAIL-007",
+      "feature": "email-fix",
+      "title": "Standardize email logging across all functions",
+      "type": "standardization",
+      "status": "complete",
+      "priority": 2,
+      "description": "All functions log to email_logs table consistently",
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/encharge-send-email/index.ts"],
+      "blocks": ["EMAIL-008"]
+    },
+    {
+      "id": "EMAIL-008",
+      "feature": "email-fix",
+      "title": "Integration test - verify all three email flows work",
+      "type": "test",
+      "status": "complete",
+      "priority": 1,
+      "description": "Test invitations, waitlist_welcome, and waitlist_invite with AWS SES",
+      "estimatedMinutes": 20,
+      "files": ["test/email-integration.test.ts"]
+    },
+    {
+      "id": "ORG-001",
+      "feature": "org-photos",
+      "title": "Add logo_url columns to organizations table",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "description": "Add logo_url (text) and remove_logo (boolean) columns to organizations table",
+      "estimatedMinutes": 15,
+      "files": ["supabase/migrations/20260203160000_add_org_logo_columns.sql"]
+    },
+    {
+      "id": "ORG-002",
+      "feature": "org-photos",
+      "title": "Create org-logos storage bucket with RLS policies",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "description": "Create dedicated org-logos bucket in Supabase Storage with appropriate RLS policies",
+      "estimatedMinutes": 20,
+      "files": ["supabase/migrations/20260203160100_setup_org_logos_bucket_rls.sql"]
+    },
+    {
+      "id": "ORG-003",
+      "feature": "org-photos",
+      "title": "Build OrgLogoUpload component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Create reusable OrgLogoUpload component adapted from AvatarUpload.tsx",
+      "estimatedMinutes": 30,
+      "files": ["src/components/OrgLogoUpload.tsx"]
+    },
+    {
+      "id": "ORG-004",
+      "feature": "org-photos",
+      "title": "Add logo upload UI to OrganizationManagementPage",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Integrate OrgLogoUpload into Settings tab gated behind permissions",
+      "estimatedMinutes": 25,
+      "files": ["src/pages/settings/OrganizationManagementPage.tsx"]
+    },
+    {
+      "id": "ORG-005",
+      "feature": "org-photos",
+      "title": "Update organization context to include logo_url",
       "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Ensure logo_url and remove_logo are fetched in organization queries",
+      "estimatedMinutes": 15,
+      "files": ["src/lib/contexts/OrgContext.tsx", "src/lib/supabase/database.types.ts"]
+    },
+    {
+      "id": "ORG-006",
+      "feature": "org-photos",
+      "title": "Add logo display to organization selector/header",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "description": "Display organization logo in AppLayout header organization switcher",
+      "estimatedMinutes": 20,
+      "files": ["src/components/AppLayout.tsx"]
+    },
+    {
+      "id": "ORG-007",
+      "feature": "org-photos",
+      "title": "Test organization photo upload/remove flow end-to-end",
+      "type": "test",
+      "status": "complete",
+      "priority": 1,
+      "description": "Manual and automated testing of complete org photo feature",
+      "estimatedMinutes": 25,
+      "files": []
+    },
+    {
+      "id": "INVITE-001",
+      "feature": "invite-fix",
+      "title": "Verify staging database state and investigate existing invitations",
+      "type": "investigation",
+      "status": "complete",
+      "priority": 1,
+      "description": "Query staging database to check invitations, verify token format, confirm base URL",
+      "estimatedMinutes": 15,
+      "files": [".sixty/consult/magic-link-fix.md"]
+    },
+    {
+      "id": "INVITE-002",
+      "feature": "invite-fix",
+      "title": "Add RLS policy for public invitation token lookup",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "description": "Create RLS policy allowing unauthenticated users to look up invitations by token",
+      "estimatedMinutes": 20,
+      "files": ["supabase/migrations/20260203200000_allow_public_invitation_lookup.sql"]
+    },
+    {
+      "id": "INVITE-003",
+      "feature": "invite-fix",
+      "title": "Fix base URL detection to use environment variable",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 1,
+      "description": "Update invitationService.ts to use VITE_PUBLIC_URL env var",
+      "estimatedMinutes": 10,
+      "files": ["src/lib/services/invitationService.ts"]
+    },
+    {
+      "id": "INVITE-004",
+      "feature": "invite-fix",
+      "title": "Change .single() to .maybeSingle() for better error handling",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 2,
+      "description": "Update getInvitationByToken() to use .maybeSingle()",
+      "estimatedMinutes": 15,
+      "files": ["src/lib/services/invitationService.ts"]
+    },
+    {
+      "id": "INVITE-005",
+      "feature": "invite-fix",
+      "title": "End-to-end test of invitation magic link flow",
+      "type": "test",
+      "status": "complete",
+      "priority": 1,
+      "description": "Comprehensive testing of invitation creation, email sending, magic link acceptance",
+      "estimatedMinutes": 30,
+      "files": ["test/invitation-magic-link.test.ts"]
+    },
+    {
+      "id": "AUTH-001",
+      "feature": "email-auth-standardization",
+      "title": "Audit and document current authentication patterns in all edge functions",
+      "type": "investigation",
+      "status": "complete",
+      "priority": 1,
+      "description": "Document authentication patterns in all 11 email functions, identify inconsistencies",
+      "estimatedMinutes": 20,
+      "files": [".sixty/consult/email-auth-audit.md"],
+      "blocks": ["AUTH-002", "AUTH-003"]
+    },
+    {
+      "id": "AUTH-002",
+      "feature": "email-auth-standardization",
+      "title": "Create unified verifySecret utility function in _shared/edgeAuth.ts",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 1,
+      "description": "Create consistent, reusable verifySecret function to eliminate duplication",
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/_shared/edgeAuth.ts"],
+      "blocks": ["AUTH-004", "AUTH-005", "AUTH-006"]
+    },
+    {
+      "id": "AUTH-003",
+      "feature": "email-auth-standardization",
+      "title": "Add authentication headers to waitlistAdminService and other client services",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 1,
+      "description": "Fix 4 client services that call edge functions without authentication headers",
+      "estimatedMinutes": 30,
+      "files": ["src/lib/services/waitlistAdminService.ts", "src/lib/services/enchargeEmailService.ts", "src/lib/services/emailInviteService.ts", "src/lib/services/testEmailService.ts"],
+      "blocks": ["AUTH-007"]
+    },
+    {
+      "id": "AUTH-004",
+      "feature": "email-auth-standardization",
+      "title": "Update send-organization-invitation to use unified verifySecret",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 1,
+      "description": "Replace custom verifySecret with shared utility function",
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/send-organization-invitation/index.ts"],
+      "blocks": ["AUTH-008"]
+    },
+    {
+      "id": "AUTH-005",
+      "feature": "email-auth-standardization",
+      "title": "Update send-removal-email to use unified verifySecret",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 1,
+      "description": "Replace custom verifySecret with shared utility, remove service role key fallback",
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/send-removal-email/index.ts"],
+      "blocks": ["AUTH-008"]
+    },
+    {
+      "id": "AUTH-006",
+      "feature": "email-auth-standardization",
+      "title": "Update all remaining email functions (7 total) to use unified verifySecret",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 1,
+      "description": "Standardize auth in 7 remaining email edge functions",
+      "estimatedMinutes": 35,
+      "files": ["supabase/functions/waitlist-welcome-email/index.ts", "supabase/functions/org-approval-email/index.ts", "supabase/functions/fathom-connected-email/index.ts", "supabase/functions/first-meeting-synced-email/index.ts", "supabase/functions/subscription-confirmed-email/index.ts", "supabase/functions/meeting-limit-warning-email/index.ts", "supabase/functions/permission-to-close-email/index.ts"],
+      "blocks": ["AUTH-008"]
+    },
+    {
+      "id": "AUTH-007",
+      "feature": "email-auth-standardization",
+      "title": "Simplify encharge-send-email dispatcher auth to only use EDGE_FUNCTION_SECRET",
+      "type": "refactor",
       "status": "pending",
       "priority": 2,
+      "description": "Remove service role key fallback from encharge-send-email dispatcher",
       "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": ["src/lib/services/leaveOrganizationService.ts"]
+      "files": ["supabase/functions/encharge-send-email/index.ts"],
+      "blocks": ["AUTH-009"]
     },
     {
-      "id": "ORGMEM-003",
-      "feature": "orgmem",
-      "title": "Build GoodbyeScreen component",
-      "type": "frontend",
+      "id": "AUTH-008",
+      "feature": "email-auth-standardization",
+      "title": "Update inter-function calls from email functions to dispatcher",
+      "type": "refactor",
       "status": "pending",
-      "priority": 3,
+      "priority": 1,
+      "description": "Ensure all email functions pass EDGE_FUNCTION_SECRET when calling dispatcher",
+      "estimatedMinutes": 20,
+      "blocks": ["AUTH-009"]
+    },
+    {
+      "id": "AUTH-009",
+      "feature": "email-auth-standardization",
+      "title": "Fix dev mode logic and add comprehensive auth logging",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 2,
+      "description": "Fix dev mode fallback in verifySecret, add detailed auth logging",
       "estimatedMinutes": 15,
-      "actualMinutes": null,
-      "files": ["src/components/GoodbyeScreen.tsx"]
+      "files": ["supabase/functions/_shared/edgeAuth.ts"],
+      "blocks": ["AUTH-010"]
     },
     {
-      "id": "ORGMEM-004",
-      "feature": "orgmem",
-      "title": "Update access control for team members page",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 4,
-      "estimatedMinutes": 12,
-      "actualMinutes": null,
-      "files": ["src/pages/settings/TeamMembersPage.tsx"]
-    },
-    {
-      "id": "ORGMEM-005",
-      "feature": "orgmem",
-      "title": "Restructure team members page layout",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 5,
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": ["src/pages/settings/TeamMembersPage.tsx"]
-    },
-    {
-      "id": "ORGMEM-006",
-      "feature": "orgmem",
-      "title": "Remove auto-refresh from rejoin requests",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 6,
-      "estimatedMinutes": 8,
-      "actualMinutes": null,
-      "files": ["src/pages/settings/TeamMembersPage.tsx"]
-    },
-    {
-      "id": "ORGMEM-007",
-      "feature": "orgmem",
-      "title": "Add organization display to profile tab",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 7,
-      "estimatedMinutes": 12,
-      "actualMinutes": null,
-      "files": ["src/pages/Profile.tsx"]
-    },
-    {
-      "id": "ORGMEM-008",
-      "feature": "orgmem",
-      "title": "Add leave button to profile tab",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 8,
-      "estimatedMinutes": 18,
-      "actualMinutes": null,
-      "files": ["src/pages/Profile.tsx"]
-    },
-    {
-      "id": "ORGMEM-009",
-      "feature": "orgmem",
-      "title": "Add leave team button to team members page",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 9,
-      "estimatedMinutes": 16,
-      "actualMinutes": null,
-      "files": ["src/pages/settings/TeamMembersPage.tsx"]
-    },
-    {
-      "id": "ORGMEM-010",
-      "feature": "orgmem",
-      "title": "Write unit tests for new features",
+      "id": "AUTH-010",
+      "feature": "email-auth-standardization",
+      "title": "Integration test all email functions with new auth system",
       "type": "test",
       "status": "pending",
-      "priority": 10,
-      "estimatedMinutes": 25,
-      "actualMinutes": null,
-      "files": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+      "priority": 1,
+      "description": "Comprehensive test of all 11 email functions with standardized authentication",
+      "estimatedMinutes": 45,
+      "files": ["test/email-auth-integration.test.ts"]
     },
     {
-      "id": "ORGMEM-011",
-      "feature": "orgmem",
-      "title": "Manual QA and bug fixes",
-      "type": "qa",
+      "id": "SIGNUP-001",
+      "feature": "invite-signup-bugs",
+      "title": "Fix first_name/last_name not saved during invite signup",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 1,
+      "completedAt": "2026-02-03T23:15:00Z",
+      "description": "Add explicit profile update after signup in InviteSignup.tsx",
+      "estimatedMinutes": 15,
+      "files": ["src/pages/auth/InviteSignup.tsx"],
+      "blocks": ["SIGNUP-004"]
+    },
+    {
+      "id": "SIGNUP-002",
+      "feature": "invite-signup-bugs",
+      "title": "Verify auto-org-creation trigger is disabled in production",
+      "type": "investigation",
+      "status": "complete",
+      "priority": 1,
+      "completedAt": "2026-02-03T23:15:00Z",
+      "description": "Confirm auto_create_org_for_new_user trigger is removed",
+      "estimatedMinutes": 10,
+      "blocks": ["SIGNUP-003"]
+    },
+    {
+      "id": "SIGNUP-003",
+      "feature": "invite-signup-bugs",
+      "title": "Update complete_invite_signup RPC to clean up auto-created personal-email orgs",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 1,
+      "completedAt": "2026-02-03T23:20:00Z",
+      "description": "Detect and remove auto-created organizations from personal email domains",
+      "estimatedMinutes": 25,
+      "files": ["supabase/migrations/new_fix_complete_invite_signup_cleanup.sql"],
+      "blocks": ["SIGNUP-004"]
+    },
+    {
+      "id": "SIGNUP-004",
+      "feature": "invite-signup-bugs",
+      "title": "Set active org to invited org after invite signup completes",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 1,
+      "completedAt": "2026-02-03T23:15:00Z",
+      "description": "Explicitly set active organization in orgStore to the invited org",
+      "estimatedMinutes": 10,
+      "files": ["src/pages/auth/InviteSignup.tsx", "src/lib/stores/orgStore.ts"],
+      "blocks": ["SIGNUP-005"]
+    },
+    {
+      "id": "SIGNUP-005",
+      "feature": "invite-signup-bugs",
+      "title": "End-to-end test of invite signup flow",
+      "type": "test",
+      "status": "complete",
+      "priority": 1,
+      "completedAt": "2026-02-03T23:25:00Z",
+      "description": "Test complete invite signup flow: names saved, no phantom org, correct active org",
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "OB-001",
+      "feature": "onboarding-audit",
+      "title": "Add domain check for business email users before enrichment",
+      "type": "bugfix",
       "status": "pending",
-      "priority": 11,
+      "priority": 1,
+      "description": "CRITICAL (Bug 1 + Gap 1): When setUserEmail() is called with a business email (e.g. @acme.com), it currently sets currentStep='enrichment_loading' without checking if an organization already exists for that domain. This causes duplicate orgs for every business email user. Fix: In setUserEmail() at onboardingV2Store.ts:455-467, when isPersonal is false, extract domain from email, query organizations by company_domain (exact match first, then fuzzy via find_similar_organizations_by_domain RPC). If single match found: auto-join the org (create membership directly). If multiple matches found: set currentStep='organization_selection' with the matches. If no match: proceed to enrichment_loading as before.",
       "estimatedMinutes": 30,
-      "actualMinutes": null,
-      "files": []
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "schema": ["organizations", "organization_memberships"]
+      },
+      "blocks": ["OB-004", "OB-009"],
+      "parallelWith": ["OB-002"],
+      "acceptance": [
+        "Business email user with domain matching existing org is auto-joined to that org",
+        "Business email user with domain matching multiple orgs sees organization_selection step",
+        "Business email user with no matching domain proceeds to enrichment_loading as before",
+        "setUserEmail() becomes async or triggers a follow-up async action for domain check",
+        "Domain extraction uses same extractDomain() utility as submitWebsite()",
+        "Exact match via organizations.company_domain checked first, then fuzzy RPC"
+      ],
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts"
+      ],
+      "technicalNotes": "The setUserEmail action at line 455 needs to become async. After setting email, extract domain, run the same org-matching logic from submitWebsite() lines 506-530. Reuse the exact match (line 509-514) and fuzzy match (line 520-528) patterns. For auto-join: create organization_memberships row directly (or use submitJoinRequest with auto-approve for business email). For multi-match: populate similarOrganizations and set step to organization_selection."
+    },
+    {
+      "id": "OB-002",
+      "feature": "onboarding-audit",
+      "title": "Fix PendingApprovalPage to mark onboarding complete on approval",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 1,
+      "description": "CRITICAL (Bug 8): When PendingApprovalPage detects approval (line 147-152), it navigates to /dashboard without marking onboarding as complete. The comment says 'user already completed onboarding' but this is wrong - users who went through personal email → join request flow never completed enrichment/skills steps. When ProtectedRoute checks needsOnboarding, it redirects back to /onboarding, creating an infinite loop. Fix: After approval is detected at line 146, upsert user_onboarding_progress with onboarding_step='complete' and completed_at=now() before navigating to dashboard.",
+      "estimatedMinutes": 15,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/auth/PendingApprovalPage.tsx"],
+        "schema": ["user_onboarding_progress"]
+      },
+      "blocks": ["OB-009"],
+      "parallelWith": ["OB-001"],
+      "acceptance": [
+        "After approval detected, user_onboarding_progress is upserted with onboarding_step='complete'",
+        "User is not redirected back to /onboarding after approval",
+        "Dashboard loads successfully after approval redirect",
+        "ProtectedRoute's needsOnboarding check returns false after approval",
+        "No redirect loop between /onboarding and /dashboard"
+      ],
+      "files": [
+        "src/pages/auth/PendingApprovalPage.tsx"
+      ],
+      "technicalNotes": "Add before line 149 (toast.success): await supabase.from('user_onboarding_progress').upsert({ user_id: user.id, onboarding_step: 'complete', completed_at: new Date().toISOString() }, { onConflict: 'user_id' }). Also clear the onboarding store localStorage: localStorage.removeItem(`sixty_onboarding_${user.id}`)."
+    },
+    {
+      "id": "OB-003",
+      "feature": "onboarding-audit",
+      "title": "Fix entry.company → entry.company_name in grantAccess and bulkGrantAccess",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 2,
+      "description": "MEDIUM (Bugs 3 + 11): In grantAccess() line 134, `company_name: entry.company || ''` references `entry.company` which doesn't exist. The select at line 71 only fetches `id, email, full_name, status` - missing company_name. In bulkGrantAccess() line 331, same issue: `entry.company` should be `entry.company_name` (the select at line 236 correctly includes company_name). Fix both: (1) Add company_name to the grantAccess select query, (2) Change entry.company to entry.company_name in both functions.",
+      "estimatedMinutes": 10,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/services/waitlistAdminService.ts"],
+        "schema": ["meetings_waitlist"]
+      },
+      "blocks": ["OB-009"],
+      "parallelWith": ["OB-004", "OB-005"],
+      "acceptance": [
+        "grantAccess select query includes company_name column",
+        "grantAccess line 134 uses entry.company_name instead of entry.company",
+        "bulkGrantAccess line 331 uses entry.company_name instead of entry.company",
+        "TypeScript types updated to include company_name in both query result types",
+        "Email variables correctly pass company_name to templates"
+      ],
+      "files": [
+        "src/lib/services/waitlistAdminService.ts"
+      ],
+      "technicalNotes": "Line 71: change select to 'id, email, full_name, status, company_name'. Line 74 type: add company_name: string | null. Line 134: change entry.company to entry.company_name. Line 331: change entry.company to entry.company_name."
+    },
+    {
+      "id": "OB-004",
+      "feature": "onboarding-audit",
+      "title": "Fix submitWebsite to handle multiple org matches with selection UI",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 2,
+      "description": "HIGH (Bug 6): submitWebsite() at line 526 only takes the top fuzzy match (fuzzyMatches[0]) when score > 0.7 and auto-creates a join request. Per requirements, if multiple orgs match a domain with score > 0.7, the user should see a list to choose from. Fix: When fuzzyMatches has 2+ results with score > 0.7, set currentStep='organization_selection' with those matches instead of auto-joining the first one.",
+      "estimatedMinutes": 15,
+      "dependencies": {
+        "stories": ["OB-001"],
+        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "schema": []
+      },
+      "blocks": ["OB-009"],
+      "parallelWith": ["OB-005"],
+      "acceptance": [
+        "When fuzzy match returns 1 result with score > 0.7: auto-join (existing behavior)",
+        "When fuzzy match returns 2+ results with score > 0.7: show organization_selection step",
+        "similarOrganizations store state populated with the multiple matches",
+        "matchSearchTerm set to the domain for reference",
+        "OrganizationSelectionStep renders correctly with the domain-matched orgs"
+      ],
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts"
+      ],
+      "technicalNotes": "At line 526, add: const highScoreMatches = fuzzyMatches.filter(m => m.similarity_score > 0.7); if (highScoreMatches.length > 1) { set({ currentStep: 'organization_selection', similarOrganizations: highScoreMatches, matchSearchTerm: domain }); return; } // else proceed with single match as before"
+    },
+    {
+      "id": "OB-005",
+      "feature": "onboarding-audit",
+      "title": "Fix createOrganizationFromManualData return value on selection step",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 2,
+      "description": "HIGH (Bug 7): At line 704, createOrganizationFromManualData returns `organizationName` (a string like 'Acme Corp') when routing to organization_selection. The caller submitManualEnrichment stores this as organizationId via `set({ organizationId: finalOrgId })`, corrupting the org ID state with a company name string. Fix: Return null when routing to selection step, and guard against setting null as organizationId in the caller.",
+      "estimatedMinutes": 10,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "schema": []
+      },
+      "blocks": ["OB-009"],
+      "parallelWith": ["OB-004"],
+      "acceptance": [
+        "createOrganizationFromManualData returns null when routing to organization_selection",
+        "submitManualEnrichment does not set organizationId when return value is null",
+        "Organization selection step works correctly without corrupted org ID",
+        "Existing flows (no match, high confidence match) still work correctly"
+      ],
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts"
+      ],
+      "technicalNotes": "Line 704: change `return organizationName;` to `return null;`. In submitManualEnrichment (around line 930-940), guard: `const finalOrgId = await createOrganizationFromManualData(manualData); if (finalOrgId) { set({ organizationId: finalOrgId }); }`"
+    },
+    {
+      "id": "OB-006",
+      "feature": "onboarding-audit",
+      "title": "Fix RequestRejectedPage query to use correct column names",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 2,
+      "description": "MEDIUM (Bug 4): RequestRejectedPage.tsx line 34 uses `.select('organization_id, rejection_reason, organization_id(name)')`. The actual column is `org_id` (not `organization_id`), and the Supabase FK relation join syntax should reference the table name `organizations(name)`, not the column name. This causes the query to fail silently and the rejection page shows 'the organization' as fallback. Fix: Change to `.select('org_id, rejection_reason, organizations(name)')` and update the data access at lines 42-44.",
+      "estimatedMinutes": 10,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/auth/RequestRejectedPage.tsx"],
+        "schema": ["organization_join_requests"]
+      },
+      "blocks": ["OB-009"],
+      "parallelWith": ["OB-003"],
+      "acceptance": [
+        "Query uses org_id instead of organization_id",
+        "FK join uses organizations(name) syntax",
+        "Rejection page displays actual organization name",
+        "Fallback to 'the organization' only when org name truly unavailable",
+        "Data access updated: data.organizations?.name instead of data.organization_id?.name"
+      ],
+      "files": [
+        "src/pages/auth/RequestRejectedPage.tsx"
+      ],
+      "technicalNotes": "Line 34: change to `.select('org_id, rejection_reason, organizations(name)')`. Lines 42-44: change to `orgName: data.organizations?.name || 'the organization'`."
+    },
+    {
+      "id": "OB-007",
+      "feature": "onboarding-audit",
+      "title": "Unify template type in single vs bulk grant access",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 3,
+      "description": "LOW (Bug 2): grantAccess() at line 128 uses template_type 'waitlist_invite', but bulkGrantAccess() at line 324 uses 'waitlist_welcome'. Both functions send the same type of email (grant access with setup link), so they should use the same template. The 'waitlist_invite' template is the correct one since it contains the setup link and action_url variable.",
+      "estimatedMinutes": 5,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/services/waitlistAdminService.ts"],
+        "schema": []
+      },
+      "blocks": ["OB-009"],
+      "parallelWith": ["OB-008"],
+      "acceptance": [
+        "bulkGrantAccess uses template_type 'waitlist_invite' instead of 'waitlist_welcome'",
+        "Both single and bulk grant send identical email templates",
+        "Email variables match between single and bulk (recipient_name, action_url, company_name, expiry_time)"
+      ],
+      "files": [
+        "src/lib/services/waitlistAdminService.ts"
+      ],
+      "technicalNotes": "Line 324: change template_type from 'waitlist_welcome' to 'waitlist_invite'. Also add expiry_time: '7 days' to the variables at line 327 to match the single grant format."
+    },
+    {
+      "id": "OB-008",
+      "feature": "onboarding-audit",
+      "title": "Add restart/back option during enrichment and skills steps",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 3,
+      "description": "LOW (Gap 2): Users stuck in enrichment_loading, enrichment_result, or skills_config steps have no way to go back or restart onboarding. Add a 'Start Over' or back button to these steps that calls the store's reset() action and returns to the initial step.",
+      "estimatedMinutes": 15,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/pages/onboarding/v2/OnboardingV2.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["OB-009"],
+      "parallelWith": ["OB-007"],
+      "acceptance": [
+        "Enrichment loading step shows a subtle 'Start Over' link/button",
+        "Enrichment result step shows a back/restart option",
+        "Skills config step shows a back/restart option",
+        "Clicking restart clears onboarding state and returns to initial step (website_input or email check)",
+        "Restart clears localStorage persisted state for the user"
+      ],
+      "files": [
+        "src/pages/onboarding/v2/OnboardingV2.tsx",
+        "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx",
+        "src/pages/onboarding/v2/EnrichmentResultStep.tsx",
+        "src/pages/onboarding/v2/SkillsConfigStep.tsx"
+      ],
+      "technicalNotes": "Add a small 'Start Over' link at bottom of each step. On click: call onboardingV2Store.reset(), which clears all state. The OnboardingV2 page will re-detect the user's email and set the initial step."
+    },
+    {
+      "id": "OB-009",
+      "feature": "onboarding-audit",
+      "title": "End-to-end test of complete onboarding flow",
+      "type": "test",
+      "status": "pending",
+      "priority": 1,
+      "description": "Test all onboarding paths: (1) Business email with existing org domain → auto-join, (2) Business email with new domain → enrichment flow, (3) Personal email → website input → existing org → join request → approval → dashboard, (4) Personal email → no website → manual enrichment → similar org → selection, (5) Join request denied → restart or create own org. Verify no redirect loops, correct org state, and complete onboarding marking.",
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": ["OB-001", "OB-002", "OB-003", "OB-004", "OB-005", "OB-006", "OB-007", "OB-008"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Business email auto-join: user@acme.com joins existing Acme org, redirected to dashboard",
+        "Business email new org: user@newco.com completes enrichment + skills, reaches dashboard",
+        "Business email multi-match: user@shared-domain.com sees org selection, can choose",
+        "Personal email + website match: join request created, pending approval page shown",
+        "Approval flow: approved user reaches dashboard without redirect loop",
+        "Rejection flow: rejected user can restart onboarding or create own org",
+        "Manual enrichment + similar org: selection step renders with correct orgs",
+        "Template consistency: single and bulk grant send same email template",
+        "Data fields: company_name passed correctly in all email templates",
+        "RequestRejectedPage shows actual organization name"
+      ],
+      "files": [],
+      "technicalNotes": "Test in staging. Create test orgs with known domains. Test with business email accounts and personal email accounts. Verify user_onboarding_progress is set to 'complete' after each successful path."
     }
   ],
   "execution": {
-    "totalStories": 11,
-    "completedStories": 0,
-    "currentFeature": "orgmem",
-    "lastUpdated": "2025-02-02T12:00:00Z",
-    "estimatedTotalMinutes": 191,
-    "estimatedTotalHours": 3.2
+    "totalStories": 44,
+    "completedStories": 25,
+    "currentFeature": "onboarding-audit",
+    "lastUpdated": "2026-02-03T23:30:00Z"
   }
 }

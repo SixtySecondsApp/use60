@@ -96,6 +96,26 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
             const parsed = JSON.parse(savedState);
             console.log('[OnboardingV2] Restored state from localStorage:', parsed);
 
+            // Validate that the saved organizationId still exists before restoring
+            // (org may have been deleted by an admin)
+            let orgStillExists = false;
+            if (parsed.organizationId) {
+              const { data: orgCheck } = await supabase
+                .from('organizations')
+                .select('id')
+                .eq('id', parsed.organizationId)
+                .maybeSingle();
+              orgStillExists = !!orgCheck;
+            }
+
+            if (parsed.organizationId && !orgStillExists) {
+              // Organization was deleted — clear stale state and start fresh
+              console.log('[OnboardingV2] Saved organization no longer exists, starting fresh');
+              localStorage.removeItem(`sixty_onboarding_${user.id}`);
+              setStep('website_input');
+              return;
+            }
+
             // Restore state to Zustand store
             if (parsed.currentStep) setStep(parsed.currentStep);
             if (parsed.domain) setDomain(parsed.domain);

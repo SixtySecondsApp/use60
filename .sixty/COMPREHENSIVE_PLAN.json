@@ -1,0 +1,388 @@
+{
+  "project": {
+    "name": "Comprehensive Email Template Standardization",
+    "id": "email-standardization-complete",
+    "status": "ready_for_approval",
+    "createdAt": "2026-02-03T00:00:00Z",
+    "branch": "fix/go-live-bug-fixes"
+  },
+
+  "overview": {
+    "totalStories": 25,
+    "estimatedHours": "6-8",
+    "parallelizationPotential": "High",
+    "emailTypesInScope": 18,
+    "phases": 8
+  },
+
+  "emailTypes": {
+    "organization_membership": [
+      "organization_invitation",
+      "member_removed",
+      "org_approval"
+    ],
+    "waitlist_and_access": [
+      "waitlist_invite",
+      "waitlist_welcome"
+    ],
+    "onboarding": [
+      "welcome"
+    ],
+    "integrations": [
+      "fathom_connected",
+      "first_meeting_synced"
+    ],
+    "subscription_trial": [
+      "trial_ending",
+      "trial_expired",
+      "subscription_confirmed",
+      "meeting_limit_warning",
+      "upgrade_prompt"
+    ],
+    "account_management": [
+      "email_change_verification",
+      "password_reset",
+      "join_request_approved"
+    ],
+    "admin_moderation": [
+      "join_request_rejected",
+      "permission_to_close"
+    ]
+  },
+
+  "standardizedVariables": {
+    "universal": [
+      "recipient_name",
+      "action_url",
+      "support_email",
+      "expiry_time"
+    ],
+    "contextual": [
+      "organization_name",
+      "inviter_name",
+      "admin_name",
+      "company_name",
+      "user_name",
+      "trial_days",
+      "feature_name",
+      "reason",
+      "current_meetings",
+      "meeting_limit",
+      "new_email"
+    ]
+  },
+
+  "phases": [
+    {
+      "name": "Phase 1: Audit & Analysis",
+      "duration": "2 hours",
+      "stories": ["EMAIL-001", "EMAIL-002", "EMAIL-003"],
+      "type": "Discovery"
+    },
+    {
+      "name": "Phase 2: Database Migration",
+      "duration": "1 hour",
+      "stories": ["EMAIL-004"],
+      "type": "Schema",
+      "blocking": true
+    },
+    {
+      "name": "Phase 3: Backend Function Updates",
+      "duration": "3 hours (parallelizable)",
+      "stories": ["EMAIL-005", "EMAIL-006", "EMAIL-007", "EMAIL-008", "EMAIL-009", "EMAIL-010", "EMAIL-011", "EMAIL-012", "EMAIL-013", "EMAIL-014", "EMAIL-015"],
+      "type": "Backend",
+      "parallelizable": true
+    },
+    {
+      "name": "Phase 4: Testing Setup",
+      "duration": "2 hours",
+      "stories": ["EMAIL-016", "EMAIL-017"],
+      "type": "Testing"
+    },
+    {
+      "name": "Phase 5: Documentation",
+      "duration": "1 hour",
+      "stories": ["EMAIL-018", "EMAIL-019"],
+      "type": "Documentation"
+    },
+    {
+      "name": "Phase 6: Deployment",
+      "duration": "1.5 hours",
+      "stories": ["EMAIL-020", "EMAIL-021", "EMAIL-022"],
+      "type": "Deployment"
+    },
+    {
+      "name": "Phase 7: Testing & Validation",
+      "duration": "1.5 hours",
+      "stories": ["EMAIL-023", "EMAIL-024"],
+      "type": "Testing"
+    },
+    {
+      "name": "Phase 8: Verification & Closure",
+      "duration": "0.5 hours",
+      "stories": ["EMAIL-025"],
+      "type": "Verification"
+    }
+  ],
+
+  "storyGroups": {
+    "analysis": [
+      {
+        "id": "EMAIL-001",
+        "title": "Audit Existing Email Templates",
+        "type": "Discovery",
+        "priority": 1,
+        "estimatedMinutes": 30,
+        "blockedBy": [],
+        "blocks": ["EMAIL-002", "EMAIL-003"]
+      },
+      {
+        "id": "EMAIL-002",
+        "title": "Design Standardized Email Template",
+        "type": "Design",
+        "priority": 1,
+        "estimatedMinutes": 45,
+        "blockedBy": ["EMAIL-001"],
+        "blocks": ["EMAIL-004"]
+      },
+      {
+        "id": "EMAIL-003",
+        "title": "Create Variables Configuration Reference",
+        "type": "Documentation",
+        "priority": 1,
+        "estimatedMinutes": 30,
+        "blockedBy": ["EMAIL-001"],
+        "blocks": ["EMAIL-004"]
+      }
+    ],
+    "migration": [
+      {
+        "id": "EMAIL-004",
+        "title": "Create Migration for All 18 Templates",
+        "type": "Schema",
+        "priority": 2,
+        "estimatedMinutes": 60,
+        "blockedBy": ["EMAIL-002", "EMAIL-003"],
+        "blocks": ["EMAIL-005", "EMAIL-006", "EMAIL-007", "EMAIL-008", "EMAIL-009", "EMAIL-010", "EMAIL-011", "EMAIL-012", "EMAIL-013", "EMAIL-014", "EMAIL-015"]
+      }
+    ],
+    "backend": [
+      {
+        "id": "EMAIL-005",
+        "title": "Update send-organization-invitation",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 20,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"],
+        "files": ["supabase/functions/send-organization-invitation/index.ts"]
+      },
+      {
+        "id": "EMAIL-006",
+        "title": "Update send-removal-email",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 20,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"]
+      },
+      {
+        "id": "EMAIL-007",
+        "title": "Create org_approval email function",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 25,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"]
+      },
+      {
+        "id": "EMAIL-008",
+        "title": "Standardize waitlist invitation service",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 20,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"]
+      },
+      {
+        "id": "EMAIL-009",
+        "title": "Verify waitlist-welcome compliance",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 15,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"]
+      },
+      {
+        "id": "EMAIL-010",
+        "title": "Create/update fathom_connected email",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 20,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"]
+      },
+      {
+        "id": "EMAIL-011",
+        "title": "Create/update first_meeting_synced email",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 20,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"]
+      },
+      {
+        "id": "EMAIL-012",
+        "title": "Create subscription email functions (4 types)",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 45,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"],
+        "description": "trial_ending, trial_expired, subscription_confirmed, upgrade_prompt"
+      },
+      {
+        "id": "EMAIL-013",
+        "title": "Create account management email functions (4 types)",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 45,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"],
+        "description": "email_change_verification, password_reset, join_request_approved, meeting_limit_warning"
+      },
+      {
+        "id": "EMAIL-014",
+        "title": "Create admin moderation email functions (3 types)",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 40,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"],
+        "description": "join_request_rejected, permission_to_close, welcome"
+      },
+      {
+        "id": "EMAIL-015",
+        "title": "Update encharge-send-email dispatcher",
+        "type": "Backend",
+        "priority": 2,
+        "estimatedMinutes": 30,
+        "blockedBy": ["EMAIL-004"],
+        "blocks": ["EMAIL-022"]
+      }
+    ],
+    "testing": [
+      {
+        "id": "EMAIL-016",
+        "title": "Create Automated Test Suite",
+        "type": "Test",
+        "priority": 3,
+        "estimatedMinutes": 60,
+        "blockedBy": ["EMAIL-004", "EMAIL-005", "EMAIL-006", "EMAIL-007", "EMAIL-008", "EMAIL-009", "EMAIL-010", "EMAIL-011", "EMAIL-012", "EMAIL-013", "EMAIL-014", "EMAIL-015"],
+        "blocks": ["EMAIL-023"]
+      },
+      {
+        "id": "EMAIL-017",
+        "title": "Create Manual Testing Checklist",
+        "type": "Documentation",
+        "priority": 3,
+        "estimatedMinutes": 60,
+        "blockedBy": ["EMAIL-004", "EMAIL-005", "EMAIL-006", "EMAIL-007", "EMAIL-008", "EMAIL-009", "EMAIL-010", "EMAIL-011", "EMAIL-012", "EMAIL-013", "EMAIL-014", "EMAIL-015"],
+        "blocks": ["EMAIL-024"]
+      }
+    ],
+    "documentation": [
+      {
+        "id": "EMAIL-018",
+        "title": "Create Comprehensive Variable Reference",
+        "type": "Documentation",
+        "priority": 3,
+        "estimatedMinutes": 30,
+        "blockedBy": ["EMAIL-016", "EMAIL-017"],
+        "blocks": ["EMAIL-025"]
+      },
+      {
+        "id": "EMAIL-019",
+        "title": "Create Email Architecture Guide",
+        "type": "Documentation",
+        "priority": 3,
+        "estimatedMinutes": 30,
+        "blockedBy": ["EMAIL-016", "EMAIL-017"],
+        "blocks": ["EMAIL-025"]
+      }
+    ],
+    "deployment": [
+      {
+        "id": "EMAIL-020",
+        "title": "Verify Environment Configuration",
+        "type": "Deployment",
+        "priority": 4,
+        "estimatedMinutes": 20,
+        "blockedBy": [],
+        "blocks": ["EMAIL-021"]
+      },
+      {
+        "id": "EMAIL-021",
+        "title": "Deploy All Email Functions to Staging",
+        "type": "Deployment",
+        "priority": 4,
+        "estimatedMinutes": 40,
+        "blockedBy": ["EMAIL-004", "EMAIL-005", "EMAIL-006", "EMAIL-007", "EMAIL-008", "EMAIL-009", "EMAIL-010", "EMAIL-011", "EMAIL-012", "EMAIL-013", "EMAIL-014", "EMAIL-015", "EMAIL-020"],
+        "blocks": ["EMAIL-022"]
+      },
+      {
+        "id": "EMAIL-022",
+        "title": "Redeploy Core Functions with Updates",
+        "type": "Deployment",
+        "priority": 4,
+        "estimatedMinutes": 20,
+        "blockedBy": ["EMAIL-021"],
+        "blocks": ["EMAIL-023"]
+      }
+    ],
+    "validation": [
+      {
+        "id": "EMAIL-023",
+        "title": "Run Automated Test Suite",
+        "type": "Testing",
+        "priority": 4,
+        "estimatedMinutes": 30,
+        "blockedBy": ["EMAIL-022", "EMAIL-016"],
+        "blocks": ["EMAIL-024"]
+      },
+      {
+        "id": "EMAIL-024",
+        "title": "Execute Manual Testing Checklist",
+        "type": "Testing",
+        "priority": 4,
+        "estimatedMinutes": 60,
+        "blockedBy": ["EMAIL-023", "EMAIL-017"],
+        "blocks": ["EMAIL-025"]
+      },
+      {
+        "id": "EMAIL-025",
+        "title": "Final Verification & Documentation",
+        "type": "Verification",
+        "priority": 4,
+        "estimatedMinutes": 30,
+        "blockedBy": ["EMAIL-024", "EMAIL-018", "EMAIL-019"],
+        "blocks": []
+      }
+    ]
+  },
+
+  "successCriteria": [
+    "All 18 email types have database templates",
+    "All templates use standardized HTML design",
+    "All variables standardized across 18 types",
+    "All email functions updated/created",
+    "All functions use database templates",
+    "All functions use Bearer token auth",
+    "All functions log to email_logs",
+    "Automated test suite: 100% pass rate",
+    "Manual testing: All 18 scenarios completed",
+    "All emails styled consistently",
+    "All documentation complete",
+    "No customer-facing email issues"
+  ]
+}

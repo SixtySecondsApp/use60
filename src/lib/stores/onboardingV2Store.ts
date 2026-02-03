@@ -814,13 +814,15 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             await supabase.functions.invoke('encharge-send-email', {
               body: {
                 template_type: 'org_approval',
-                to_email: 'app@use60.com', // TODO: Replace with actual admin email or admin list
+                to_email: 'app@use60.com',
+                to_name: 'Admin',
                 variables: {
-                  newOrgName: organizationName,
-                  similarOrgName: similarOrg.name,
-                  userName,
-                  userEmail: userProfile.email || session.user.email,
-                  dashboardUrl: window.location.origin,
+                  recipient_name: 'Admin',
+                  organization_name: organizationName,
+                  action_url: window.location.origin,
+                  similar_org_name: similarOrg.name,
+                  user_name: userName,
+                  user_email: userProfile.email || session.user.email,
                 },
               },
             });

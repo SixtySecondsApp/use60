@@ -89,8 +89,35 @@ export default function Organizations() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // Member pagination per org
+  const [memberPages, setMemberPages] = useState<Record<string, number>>({});
+  const membersPerPage = 5;
+
   // Select mode state
   const isSelectModeActive = selectedOrgs.size > 0;
+
+  // Helper to sort members by role hierarchy
+  const sortMembersByRole = (members: any[]): any[] => {
+    const roleOrder = { owner: 0, admin: 1, member: 2, readonly: 3 };
+    return [...members].sort(
+      (a, b) => roleOrder[a.role as keyof typeof roleOrder] - roleOrder[b.role as keyof typeof roleOrder]
+    );
+  };
+
+  // Helper to get paginated members for an org
+  const getPaginatedMembers = (orgId: string) => {
+    const members = orgMembers[orgId] || [];
+    const sortedMembers = sortMembersByRole(members);
+    const currentPage = memberPages[orgId] || 1;
+    const startIndex = (currentPage - 1) * membersPerPage;
+    const endIndex = startIndex + membersPerPage;
+    return {
+      members: sortedMembers.slice(startIndex, endIndex),
+      currentPage,
+      totalPages: Math.ceil(sortedMembers.length / membersPerPage),
+      totalMembers: sortedMembers.length,
+    };
+  };
 
   // Load organizations
   useEffect(() => {
@@ -474,11 +501,11 @@ export default function Organizations() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <Table>
+                <Table className="w-full">
                 <TableHeader>
                   <TableRow className="border-gray-200 dark:border-gray-800">
                     {/* Checkbox Column */}
-                    <TableHead className="w-10">
+                    <TableHead className="w-12 px-2">
                       <input
                         type="checkbox"
                         checked={isSelectAllChecked}
@@ -489,7 +516,7 @@ export default function Organizations() {
 
                     {/* Sortable Columns */}
                     <TableHead
-                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300"
+                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300 min-w-[150px]"
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center gap-2">
@@ -498,7 +525,7 @@ export default function Organizations() {
                     </TableHead>
 
                     <TableHead
-                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300"
+                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300 hidden sm:table-cell min-w-[120px]"
                       onClick={() => handleSort('company_domain')}
                     >
                       <div className="flex items-center gap-2">
@@ -507,7 +534,7 @@ export default function Organizations() {
                     </TableHead>
 
                     <TableHead
-                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300"
+                      className="cursor-pointer hover:text-gray-900 dark:hover:text-white text-gray-600 dark:text-gray-300 min-w-[100px]"
                       onClick={() => handleSort('member_count')}
                     >
                       <div className="flex items-center gap-2">
@@ -515,11 +542,11 @@ export default function Organizations() {
                       </div>
                     </TableHead>
 
-                    <TableHead className="text-gray-600 dark:text-gray-300">Owner</TableHead>
+                    <TableHead className="text-gray-600 dark:text-gray-300 hidden md:table-cell min-w-[120px]">Owner</TableHead>
 
-                    <TableHead className="text-gray-600 dark:text-gray-300">Status</TableHead>
+                    <TableHead className="text-gray-600 dark:text-gray-300 min-w-[80px]">Status</TableHead>
 
-                    <TableHead className="text-center text-gray-600 dark:text-gray-300">Actions</TableHead>
+                    <TableHead className="text-right text-gray-600 dark:text-gray-300 min-w-[110px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -534,7 +561,7 @@ export default function Organizations() {
                           }
                         }}
                         className={cn(
-                          'border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer',
+                          'border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer h-16',
                           selectedOrgs.has(org.id) && isSelectModeActive
                             ? 'border-violet-500/40 bg-gradient-to-r from-violet-500/10 via-purple-500/5 to-violet-500/10 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/20'
                             : ''
@@ -569,14 +596,30 @@ export default function Organizations() {
                           </motion.div>
                         </TableCell>
 
-                        {/* Name */}
-                        <TableCell
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-[#37bd7e]" />
+                        {/* Name with Logo */}
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            {/* Organization Logo */}
+                            <div className="w-12 h-12 rounded-lg flex-shrink-0 overflow-hidden border border-gray-200 dark:border-gray-700/50 flex items-center justify-center">
+                              {org.logo_url && !org.remove_logo ? (
+                                <img
+                                  src={org.logo_url}
+                                  alt={org.name}
+                                  className="w-full h-full object-cover aspect-square"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
+                                  <span className="text-xs font-bold text-white">
+                                    {org.name
+                                      .split(' ')
+                                      .map((w) => w[0])
+                                      .join('')
+                                      .toUpperCase()
+                                      .slice(0, 2)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                             <div>
                               {editingState?.orgId === org.id && editingState.field === 'name' ? (
                                 <input
@@ -607,7 +650,7 @@ export default function Organizations() {
                         </TableCell>
 
                         {/* Domain */}
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <span className="text-gray-600 dark:text-gray-400">
                             {org.company_domain || '—'}
                           </span>
@@ -622,7 +665,7 @@ export default function Organizations() {
                         </TableCell>
 
                         {/* Owner */}
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           <span className="text-gray-600 dark:text-gray-400">
                             {org.owner
                               ? `${org.owner.first_name} ${org.owner.last_name || org.owner.email}`
@@ -645,8 +688,9 @@ export default function Organizations() {
                           onClick={(e) => {
                             e.stopPropagation();
                           }}
+                          className="text-right"
                         >
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -700,24 +744,29 @@ export default function Organizations() {
                       <AnimatePresence>
                         {expandedOrg === org.id && (
                           <motion.tr
-                            initial={{ height: 0 }}
-                            animate={{ height: 'auto' }}
-                            exit={{ height: 0 }}
-                            transition={{ duration: 0.3, ease: 'easeInOut' }}
+                            initial={{ maxHeight: 0 }}
+                            animate={{ maxHeight: 1000 }}
+                            exit={{ maxHeight: 0 }}
+                            transition={{
+                              type: 'spring',
+                              damping: 15,
+                              stiffness: 400,
+                              mass: 0.5
+                            }}
                             className="border-gray-200 dark:border-gray-800 overflow-hidden"
                           >
                             <TableCell
-                              colSpan={isSelectModeActive ? 7 : 6}
-                              className="border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/20 p-6"
+                              colSpan={7}
+                              className="border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/20 p-4 sm:p-6"
                             >
-                              <div className="space-y-4">
+                              <div className="space-y-4 max-h-[calc(100vh-300px)] flex flex-col">
                                 {/* Add Member Form */}
-                                <div className="space-y-3">
+                                <div className="space-y-3 flex-shrink-0">
                                   <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                                     <UserPlus className="w-4 h-4" />
                                     Add Member
                                   </h4>
-                                  <div className="flex gap-2">
+                                  <div className="flex flex-col sm:flex-row gap-2">
                                     <input
                                       type="email"
                                       placeholder="user@example.com"
@@ -738,7 +787,7 @@ export default function Organizations() {
                                     </select>
                                     <Button
                                       onClick={() => handleAddMember(org.id)}
-                                      className="bg-[#37bd7e] hover:bg-[#2da76c]"
+                                      className="bg-[#37bd7e] hover:bg-[#2da76c] w-full sm:w-auto"
                                       size="sm"
                                     >
                                       Add
@@ -747,81 +796,116 @@ export default function Organizations() {
                                 </div>
 
                                 {/* Members List */}
-                                {loadingMembers[org.id] ? (
-                                  <div className="text-center py-8">
-                                    <Loader2 className="w-5 h-5 text-[#37bd7e] animate-spin mx-auto" />
-                                  </div>
-                                ) : (orgMembers[org.id] || []).length === 0 ? (
-                                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    No members in this organization
-                                  </p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {(orgMembers[org.id] || []).map((member) => (
-                                      <div
-                                        key={member.user_id}
-                                        className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                                      >
-                                        <div className="flex items-center gap-3 flex-1">
-                                          <Avatar className="h-8 w-8">
-                                            {member.profiles?.avatar_url && (
-                                              <AvatarImage src={member.profiles.avatar_url} />
+                                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                                  {loadingMembers[org.id] ? (
+                                    <div className="flex items-center justify-center py-8">
+                                      <Loader2 className="w-5 h-5 text-[#37bd7e] animate-spin" />
+                                    </div>
+                                  ) : (orgMembers[org.id] || []).length === 0 ? (
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                      No members in this organization
+                                    </p>
+                                  ) : (() => {
+                                    const { members: paginatedMembers, currentPage: memberPage, totalPages, totalMembers } = getPaginatedMembers(org.id);
+                                    return (
+                                    <div className="flex flex-col flex-1 min-h-0">
+                                      <div className="space-y-2 overflow-y-auto pr-2">
+                                        {paginatedMembers.map((member) => (
+                                        <div
+                                          key={member.user_id}
+                                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                                        >
+                                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <Avatar className="h-8 w-8 flex-shrink-0">
+                                              {member.profiles?.avatar_url && (
+                                                <AvatarImage src={member.profiles.avatar_url} />
+                                              )}
+                                              <AvatarFallback>
+                                                {member.profiles?.first_name?.[0]}
+                                                {member.profiles?.last_name?.[0]}
+                                              </AvatarFallback>
+                                            </Avatar>
+                                            <div className="min-w-0">
+                                              <p className="font-medium text-gray-900 dark:text-white text-sm truncate">
+                                                {member.profiles?.first_name} {member.profiles?.last_name}
+                                              </p>
+                                              <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                                                {member.profiles?.email}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2 flex-shrink-0">
+                                            <select
+                                              value={member.role}
+                                              onChange={(e) =>
+                                                handleChangeRole(
+                                                  org.id,
+                                                  member.user_id,
+                                                  e.target.value as
+                                                    | 'owner'
+                                                    | 'admin'
+                                                    | 'member'
+                                                    | 'readonly'
+                                                )
+                                              }
+                                              className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs text-gray-900 dark:text-white"
+                                            >
+                                              <option value="readonly">Read-only</option>
+                                              <option value="member">Member</option>
+                                              <option value="admin">Admin</option>
+                                              <option value="owner">Owner</option>
+                                            </select>
+                                            {member.role !== 'owner' && (
+                                              <button
+                                                onClick={() => handleRemoveMember(org.id, member.user_id)}
+                                                className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors flex-shrink-0"
+                                                title="Remove member"
+                                              >
+                                                <X className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                              </button>
                                             )}
-                                            <AvatarFallback>
-                                              {member.profiles?.first_name?.[0]}
-                                              {member.profiles?.last_name?.[0]}
-                                            </AvatarFallback>
-                                          </Avatar>
-                                          <div className="min-w-0">
-                                            <p className="font-medium text-gray-900 dark:text-white text-sm truncate">
-                                              {member.profiles?.first_name} {member.profiles?.last_name}
-                                            </p>
-                                            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                                              {member.profiles?.email}
-                                            </p>
+                                            {member.role === 'owner' && (
+                                              <Shield
+                                                className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0"
+                                                title="Organization owner"
+                                              />
+                                            )}
                                           </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                          <select
-                                            value={member.role}
-                                            onChange={(e) =>
-                                              handleChangeRole(
-                                                org.id,
-                                                member.user_id,
-                                                e.target.value as
-                                                  | 'owner'
-                                                  | 'admin'
-                                                  | 'member'
-                                                  | 'readonly'
-                                              )
-                                            }
-                                            className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs text-gray-900 dark:text-white"
-                                          >
-                                            <option value="readonly">Read-only</option>
-                                            <option value="member">Member</option>
-                                            <option value="admin">Admin</option>
-                                            <option value="owner">Owner</option>
-                                          </select>
-                                          {member.role !== 'owner' && (
-                                            <button
-                                              onClick={() => handleRemoveMember(org.id, member.user_id)}
-                                              className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
-                                              title="Remove member"
-                                            >
-                                              <X className="w-4 h-4 text-red-600 dark:text-red-400" />
-                                            </button>
-                                          )}
-                                          {member.role === 'owner' && (
-                                            <Shield
-                                              className="w-4 h-4 text-yellow-600 dark:text-yellow-400"
-                                              title="Organization owner"
-                                            />
-                                          )}
-                                        </div>
+                                      ))}
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
+
+                                      {/* Member Pagination */}
+                                      {totalPages > 1 && (
+                                        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                                            Showing {((memberPage - 1) * membersPerPage) + 1} to {Math.min(memberPage * membersPerPage, totalMembers)} of {totalMembers} members
+                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              onClick={() => setMemberPages(prev => ({ ...prev, [org.id]: Math.max(memberPage - 1, 1) }))}
+                                              disabled={memberPage === 1}
+                                              className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                              Previous
+                                            </button>
+                                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                                              Page {memberPage} of {totalPages}
+                                            </span>
+                                            <button
+                                              onClick={() => setMemberPages(prev => ({ ...prev, [org.id]: Math.min(memberPage + 1, totalPages) }))}
+                                              disabled={memberPage === totalPages}
+                                              className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                              Next
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                    );
+                                  })()}
+                                </div>
                               </div>
                             </TableCell>
                           </motion.tr>

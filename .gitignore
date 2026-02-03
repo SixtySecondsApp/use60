@@ -164,3 +164,4 @@ production-data.sql
 *.sql.dump
 check-staging-*.mjs
 setup-staging-*.mjs
+nul

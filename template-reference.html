@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>{{subject_line}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style type="text/css">
+    /* Reset */
+    body, table, td, p, a, li, blockquote { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    html { color-scheme: light !important; background-color: #030712 !important; }
+    body { color-scheme: light !important; background-color: #030712 !important; -webkit-text-fill-color: #F3F4F6 !important; }
+    * { color-scheme: light !important; forced-color-adjust: none !important; }
+    @media only screen and (max-width: 600px) {
+      html, body { background-color: #111827 !important; color: #FFFFFF !important; }
+      .email-container { width: 100% !important; border-radius: 0 !important; }
+      .email-header { padding: 32px 20px 24px !important; }
+      .email-logo { width: 64px !important; height: 64px !important; }
+      .email-title { font-size: 24px !important; }
+      .email-content { padding: 24px 20px !important; }
+      .email-button { padding: 12px 24px !important; font-size: 15px !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #030712; color: #FFFFFF;">
+  <div style="background-color: #111827; min-height: 100vh;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #030712;">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" class="email-container" style="max-width: 600px; background-color: #111827; border-radius: 16px; border: 1px solid #374151;">
+          <tr>
+            <td class="email-header" style="padding: 48px 40px 32px; text-align: center; background: linear-gradient(135deg, #111827 0%, #1F2937 100%);">
+              <img src="https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Icon.png" alt="Sixty" width="80" height="80" class="email-logo" style="display: block; margin: 0 auto 24px;" />
+              <h1 class="email-title" style="color: #FFFFFF; font-size: 28px; font-weight: 700; margin: 0 0 12px 0; line-height: 1.2; letter-spacing: -0.02em;">inviter name invited you to join organization name</h1>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-content" style="padding: 40px; background-color: #111827; color: #F3F4F6;">
+<p style="color: #F3F4F6; font-size: 16px; line-height: 1.7; margin: 0 0 16px 0;">Hi {{recipient_name}},</p>
+<p style="color: #F3F4F6; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">{{inviter_name}} has invited you to join <strong style="color: #FFFFFF; font-weight: 600;">{{organization_name}}</strong> on Sixty. Accept the invitation below to get started collaborating with your team.</p>
+<div style="text-align: center; margin: 32px 0;">
+  <a href="{{invitation_url}}" class="email-button" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: #FFFFFF; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Accept Invitation</a>
+</div>
+<p style="color: #9CA3AF; font-size: 14px; margin: 24px 0 0 0; text-align: center;">This invitation expires in {{expiry_time}}</p>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-footer" style="padding: 24px 40px; text-align: center; background-color: #111827; border-top: 1px solid #374151;">
+              <p style="color: #D1D5DB; font-size: 14px; margin: 0 0 8px 0; font-weight: 500;">Sent by Sixty</p>
+              <p style="color: #9CA3AF; font-size: 12px; margin: 0;">If you have questions, contact <a href="mailto:app@sixtyseconds.ai" style="color: #10B981; text-decoration: none;">app@sixtyseconds.ai</a></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+  </div>
+</body>
+</html>

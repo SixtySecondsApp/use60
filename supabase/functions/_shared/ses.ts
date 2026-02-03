@@ -9,7 +9,7 @@ const AWS_REGION = Deno.env.get("AWS_REGION") || "eu-west-2";
 const AWS_ACCESS_KEY_ID = Deno.env.get("AWS_ACCESS_KEY_ID") || "";
 const AWS_SECRET_ACCESS_KEY = Deno.env.get("AWS_SECRET_ACCESS_KEY") || "";
 const SES_FROM_EMAIL = Deno.env.get("SES_FROM_EMAIL") || "app@sixtyseconds.ai";
-const SES_FROM_NAME = Deno.env.get("SES_FROM_NAME") || "Sixty Seconds";
+const SES_FROM_NAME = Deno.env.get("SES_FROM_NAME") || "60";
 
 interface SendEmailParams {
   to: string | string[];

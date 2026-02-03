@@ -85,7 +85,7 @@ import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
   const { signOut } = useAuth();
-  const { activeOrgId } = useOrg();
+  const { activeOrgId, activeOrg } = useOrg();
   const trialStatus = useTrialStatus(activeOrgId);
   const location = useLocation();
 
@@ -332,7 +332,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               {userData?.first_name} {userData?.last_name}
             </span>
-            <span className="text-xs text-gray-700 dark:text-gray-300">{userData?.stage}</span>
+            <span className="text-xs text-gray-700 dark:text-gray-300">
+              {activeOrg?.name || userData?.stage}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -596,7 +598,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <span className="text-sm font-semibold text-[#1E293B] dark:text-gray-100">
                     {userData?.first_name} {userData?.last_name}
                   </span>
-                  <span className="text-xs text-[#64748B] dark:text-gray-400">{userData?.stage}</span>
+                  <span className="text-xs text-[#64748B] dark:text-gray-400">
+                    {activeOrg?.name || userData?.stage}
+                  </span>
                 </div>
                 <ChevronDown className="w-4 h-4 text-gray-400 hidden xl:block" />
               </button>

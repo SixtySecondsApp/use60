@@ -11,7 +11,6 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { crypto } from 'https://deno.land/std@0.190.0/crypto/mod.ts';
-import { verifySecret } from '../_shared/edgeAuth.ts';
 
 const ENCHARGE_WRITE_KEY = Deno.env.get('ENCHARGE_WRITE_KEY');
 const AWS_REGION = Deno.env.get('AWS_REGION') || 'eu-west-2';
@@ -22,7 +21,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-edge-function-secret',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -405,22 +404,76 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Verify authentication using unified edge function secret verification
-  const auth = verifySecret(req);
-  if (!auth.authenticated) {
-    console.error('[encharge-send-email] Authentication failed');
+  // Check authentication - allow service role key or user JWT
+  const authHeader = req.headers.get('Authorization');
+  const apikeyHeader = req.headers.get('apikey');
+
+  console.log('[encharge-send-email] Auth check:', {
+    hasAuthHeader: !!authHeader,
+    hasApiKeyHeader: !!apikeyHeader,
+    authHeaderPreview: authHeader ? authHeader.substring(0, 20) + '...' : null,
+    serviceRoleKeySet: !!SUPABASE_SERVICE_ROLE_KEY,
+    serviceRoleKeyLength: SUPABASE_SERVICE_ROLE_KEY?.length,
+  });
+
+  // Allow service role authentication (for service-to-service calls)
+  const isServiceRoleAuth = (() => {
+    if (!authHeader || !SUPABASE_SERVICE_ROLE_KEY) return false;
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    return token === SUPABASE_SERVICE_ROLE_KEY;
+  })();
+  const isServiceRole = isServiceRoleAuth || (apikeyHeader === SUPABASE_SERVICE_ROLE_KEY);
+
+  console.log('[encharge-send-email] Service role check result:', { isServiceRole });
+
+  // If we have a service role key match, skip further auth checks
+  if (isServiceRole) {
+    console.log('[encharge-send-email] Authenticated as service role - proceeding');
+  } else if (authHeader) {
+    // If not service role, try to validate as user JWT
+    try {
+      const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
+      console.log('[encharge-send-email] JWT validation result:', {
+        error: error?.message,
+        hasUser: !!user,
+      });
+      if (error || !user) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Unauthorized: invalid authentication',
+            details: {
+              message: error?.message || 'User not found',
+            }
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (authError) {
+      console.log('[encharge-send-email] Auth exception:', authError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Unauthorized: authentication failed',
+          details: {
+            message: authError instanceof Error ? authError.message : 'Unknown error'
+          }
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  } else {
+    // No auth headers provided
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'Unauthorized: authentication required',
-        code: 401,
-        message: 'Missing authorization header'
+        error: 'Unauthorized: no authentication provided'
       }),
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-
-  console.log(`[encharge-send-email] Authenticated via ${auth.method} - proceeding`);
 
   // Handle test endpoint
   const url = new URL(req.url);
@@ -453,14 +506,37 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // 1. Get template from database
-    const { data: template, error: templateError } = await supabase
+    // Try by template_type first, then fall back to template_name
+    // (some templates like organization_invitation have template_type='transactional'
+    //  but template_name='organization_invitation')
+    let template = null;
+    let templateError = null;
+
+    const { data: t1, error: e1 } = await supabase
       .from('encharge_email_templates')
       .select('*')
       .eq('template_type', request.template_type)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
-    if (templateError || !template) {
+    if (t1) {
+      template = t1;
+    } else {
+      // Fallback: try by template_name
+      console.log(`[encharge-send-email] No template with type '${request.template_type}', trying by name...`);
+      const { data: t2, error: e2 } = await supabase
+        .from('encharge_email_templates')
+        .select('*')
+        .eq('template_name', request.template_type)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      template = t2;
+      templateError = !t2 ? (e1 || e2) : null;
+    }
+
+    if (!template) {
+      console.error(`[encharge-send-email] Template not found for type or name: ${request.template_type}`);
       return new Response(
         JSON.stringify({
           success: false,
@@ -470,9 +546,13 @@ serve(async (req) => {
       );
     }
 
-    // 2. Process template variables (standardized names)
+    // 2. Process template variables
+    // Set common aliases so templates can use any naming convention
+    const derivedName = request.to_name || request.to_email.split('@')[0];
     const variables = {
-      recipient_name: request.to_name || request.to_email.split('@')[0],
+      user_name: derivedName,
+      recipient_name: derivedName,
+      first_name: derivedName,
       user_email: request.to_email,
       ...request.variables,
     };
@@ -484,7 +564,7 @@ serve(async (req) => {
     // 3. Send email via AWS SES (using REST API directly, not SDK)
     const sesResult = await sendEmailViaSES(
       request.to_email,
-      'Sixty Seconds <app@use60.com>',
+      '60 <app@use60.com>',
       subject,
       htmlBody,
       textBody

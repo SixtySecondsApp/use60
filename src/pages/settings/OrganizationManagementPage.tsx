@@ -13,13 +13,12 @@ import {
   RefreshCw,
   Clock,
   Crown,
-  ChevronDown,
-  ChevronUp,
   UserCog,
   LogOut,
   Globe,
   DollarSign,
   Edit2,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -44,6 +43,7 @@ import {
 import { leaveOrganization, isLastOwner } from '@/lib/services/leaveOrganizationService';
 import { toast } from 'sonner';
 import { CURRENCIES, type CurrencyCode } from '@/lib/services/currencyService';
+import { OrgLogoUpload } from '@/components/OrgLogoUpload';
 
 interface TeamMember {
   user_id: string;
@@ -80,7 +80,7 @@ export default function OrganizationManagementPage() {
   const queryClient = useQueryClient();
 
   // Active tab state
-  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'settings'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'requests' | 'settings'>('members');
 
   // Organization name editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -106,9 +106,6 @@ export default function OrganizationManagementPage() {
   const [newInviteEmail, setNewInviteEmail] = useState('');
   const [newInviteRole, setNewInviteRole] = useState<'admin' | 'member'>('member');
   const [isSendingInvite, setIsSendingInvite] = useState(false);
-
-  // Join requests section collapse state
-  const [isJoinRequestsExpanded, setIsJoinRequestsExpanded] = useState(true);
 
   // Leave team state
   const [isLeavingTeam, setIsLeavingTeam] = useState(false);
@@ -726,16 +723,26 @@ export default function OrganizationManagementPage() {
         {/* Organization Header */}
         <div className="relative overflow-hidden bg-gradient-to-br from-gray-900/50 to-gray-800/30 dark:from-gray-800/50 dark:to-gray-900/30 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 backdrop-blur-xl">
           {/* Accent gradient bar at top */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#37bd7e] via-purple-500 to-[#37bd7e]" />
+          <div className="absolute top-0 left-0 right-0 h-1 bg-[#37bd7e]" />
 
           <div className="flex items-start justify-between gap-6 flex-wrap">
             {/* Organization Identity */}
             <div className="flex items-center gap-5">
               {/* Organization Logo */}
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-[#37bd7e] to-[#2da76c] rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#37bd7e]/20">
-                <span className="text-2xl sm:text-3xl font-bold text-white">
-                  {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'ORG'}
-                </span>
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex-shrink-0 overflow-hidden shadow-lg shadow-[#37bd7e]/20 border border-gray-200 dark:border-gray-700/50">
+                {activeOrg?.logo_url && !activeOrg?.remove_logo ? (
+                  <img
+                    src={activeOrg.logo_url}
+                    alt={activeOrg?.name}
+                    className="w-full h-full object-cover aspect-square"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
+                    <span className="text-2xl sm:text-3xl font-bold text-white">
+                      {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'ORG'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Organization Info */}
@@ -875,6 +882,28 @@ export default function OrganizationManagementPage() {
               </div>
             </button>
             <button
+              onClick={() => setActiveTab('requests')}
+              className={`flex-1 min-w-[140px] px-5 py-3 rounded-xl font-medium text-sm transition-all ${
+                activeTab === 'requests'
+                  ? 'bg-gradient-to-r from-[#37bd7e] to-[#2da76c] text-white shadow-lg shadow-[#37bd7e]/30'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <UserCog className="w-4 h-4" />
+                Requests
+                {(joinRequests.length + rejoinRequests.length) > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    activeTab === 'requests'
+                      ? 'bg-white/20'
+                      : 'bg-yellow-200 dark:bg-yellow-700 text-yellow-900 dark:text-yellow-300'
+                  }`}>
+                    {joinRequests.length + rejoinRequests.length}
+                  </span>
+                )}
+              </div>
+            </button>
+            <button
               onClick={() => setActiveTab('settings')}
               className={`flex-1 min-w-[140px] px-5 py-3 rounded-xl font-medium text-sm transition-all ${
                 activeTab === 'settings'
@@ -883,7 +912,7 @@ export default function OrganizationManagementPage() {
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <Building2 className="w-4 h-4" />
+                <Settings className="w-4 h-4" />
                 Settings
               </div>
             </button>
@@ -1096,159 +1125,6 @@ export default function OrganizationManagementPage() {
                 </div>
               )}
             </div>
-
-            {/* Pending Join & Rejoin Requests */}
-            {permissions.canManageTeam && (
-              <div className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden backdrop-blur-xl">
-                <button
-                  onClick={() => setIsJoinRequestsExpanded(!isJoinRequestsExpanded)}
-                  className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <UserCog className="w-5 h-5 text-yellow-500" />
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      Pending Requests
-                      {(joinRequests.length + rejoinRequests.length) > 0 && (
-                        <span className="ml-2 text-sm font-normal text-yellow-600 dark:text-yellow-400">
-                          ({joinRequests.length + rejoinRequests.length})
-                        </span>
-                      )}
-                    </h2>
-                  </div>
-                  {isJoinRequestsExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-500" />
-                  )}
-                </button>
-
-                {isJoinRequestsExpanded && (
-                  <div className="border-t border-gray-200 dark:border-gray-800">
-                    {isLoadingJoinRequests || isLoadingRejoinRequests ? (
-                      <div className="flex items-center justify-center py-12">
-                        <Loader2 className="w-8 h-8 text-[#37bd7e] animate-spin" />
-                      </div>
-                    ) : joinRequests.length === 0 && rejoinRequests.length === 0 ? (
-                      <div className="text-center py-12 px-6">
-                        <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
-                          <UserCog className="w-8 h-8 text-gray-400" />
-                        </div>
-                        <h3 className="text-base font-medium text-gray-900 dark:text-white mb-2">
-                          No Pending Requests
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm mx-auto">
-                          When users request to join or rejoin your organization, they'll appear here for approval.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                        {joinRequests.map((request: JoinRequest) => (
-                          <div
-                            key={`join-${request.id}`}
-                            className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                          >
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-yellow-200 dark:bg-yellow-500/20 flex items-center justify-center">
-                                <span className="text-yellow-900 dark:text-yellow-400 font-medium">
-                                  {request.user_profile?.first_name?.[0]?.toUpperCase() ||
-                                    request.email[0].toUpperCase()}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="text-gray-900 dark:text-white font-medium">
-                                  {request.user_profile?.first_name && request.user_profile?.last_name
-                                    ? `${request.user_profile.first_name} ${request.user_profile.last_name}`
-                                    : request.user_profile?.first_name || request.user_profile?.last_name || request.email.split('@')[0]}
-                                </p>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">{request.email}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs">
-                                <Clock className="w-3 h-3" />
-                                Awaiting Approval
-                              </span>
-                              <button
-                                onClick={() => approveMutation.mutate(request.id)}
-                                disabled={approveMutation.isPending}
-                                className="p-2 text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-50 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20"
-                                title="Approve request and grant immediate access"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => rejectMutation.mutate({ requestId: request.id })}
-                                disabled={rejectMutation.isPending}
-                                className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                                title="Reject request"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-
-                        {rejoinRequests.map((request: any) => (
-                          <div
-                            key={`rejoin-${request.id}`}
-                            className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                          >
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-blue-200 dark:bg-blue-500/20 flex items-center justify-center">
-                                <span className="text-blue-900 dark:text-blue-400 font-medium">
-                                  {request.profiles?.first_name?.[0]?.toUpperCase() ||
-                                    request.profiles?.email?.[0].toUpperCase() || '?'}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="text-gray-900 dark:text-white font-medium">
-                                  {request.profiles?.first_name && request.profiles?.last_name
-                                    ? `${request.profiles.first_name} ${request.profiles.last_name}`
-                                    : request.profiles?.first_name || request.profiles?.last_name || request.profiles?.email?.split('@')[0]}
-                                </p>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">{request.profiles?.email}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-medium">
-                                Rejoin
-                              </span>
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs">
-                                <Clock className="w-3 h-3" />
-                                Awaiting Approval
-                              </span>
-                              <button
-                                onClick={() => approveRejoinMutation.mutate(request.id)}
-                                disabled={approveRejoinMutation.isPending}
-                                className="p-2 text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-50 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20"
-                                title="Approve and re-add to organization"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const reason = window.prompt(
-                                    'Optional: Provide a reason for rejection (will be included in email to user)'
-                                  );
-                                  if (reason !== null) {
-                                    rejectRejoinMutation.mutate({ requestId: request.id, reason: reason || undefined, requestData: request });
-                                  }
-                                }}
-                                disabled={rejectRejoinMutation.isPending}
-                                className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                                title="Reject request"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
 
@@ -1326,9 +1202,182 @@ export default function OrganizationManagementPage() {
           </div>
         )}
 
+        {/* Tab Content - Requests */}
+        {activeTab === 'requests' && (
+          <div className="space-y-6">
+            {/* Pending Requests */}
+            <div className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden backdrop-blur-xl">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <UserCog className="w-5 h-5 text-[#37bd7e]" />
+                  Pending Requests
+                </h2>
+              </div>
+              {isLoadingJoinRequests || isLoadingRejoinRequests ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-[#37bd7e] animate-spin" />
+                </div>
+              ) : joinRequests.length === 0 && rejoinRequests.length === 0 ? (
+                <div className="text-center py-12 px-6">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                    <UserCog className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-base font-medium text-gray-900 dark:text-white mb-2">
+                    No Pending Requests
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm mx-auto">
+                    When users request to join or rejoin your organization, they'll appear here for approval.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {/* Join Requests Section */}
+                  {joinRequests.length > 0 && (
+                    <>
+                      <div className="px-6 py-3 bg-gray-50 dark:bg-gray-800/30">
+                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide flex items-center gap-2">
+                          <Clock className="w-4 h-4" />
+                          Join Requests ({joinRequests.length})
+                        </h3>
+                      </div>
+                      {joinRequests.map((request: JoinRequest) => (
+                        <div
+                          key={`join-${request.id}`}
+                          className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-yellow-200 dark:bg-yellow-500/20 flex items-center justify-center">
+                              <span className="text-yellow-900 dark:text-yellow-400 font-medium">
+                                {request.user_profile?.first_name?.[0]?.toUpperCase() ||
+                                  request.email[0].toUpperCase()}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-gray-900 dark:text-white font-medium">
+                                {request.user_profile?.first_name && request.user_profile?.last_name
+                                  ? `${request.user_profile.first_name} ${request.user_profile.last_name}`
+                                  : request.user_profile?.first_name || request.user_profile?.last_name || request.email.split('@')[0]}
+                              </p>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">{request.email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs">
+                              <Clock className="w-3 h-3" />
+                              Awaiting Approval
+                            </span>
+                            <button
+                              onClick={() => approveMutation.mutate(request.id)}
+                              disabled={approveMutation.isPending}
+                              className="p-2 text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-50 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20"
+                              title="Approve request and grant immediate access"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => rejectMutation.mutate({ requestId: request.id })}
+                              disabled={rejectMutation.isPending}
+                              className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                              title="Reject request"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Rejoin Requests Section */}
+                  {rejoinRequests.length > 0 && (
+                    <>
+                      <div className="px-6 py-3 bg-gray-50 dark:bg-gray-800/30">
+                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide flex items-center gap-2">
+                          <UserCog className="w-4 h-4" />
+                          Rejoin Requests ({rejoinRequests.length})
+                        </h3>
+                      </div>
+                      {rejoinRequests.map((request: any) => (
+                        <div
+                          key={`rejoin-${request.id}`}
+                          className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-blue-200 dark:bg-blue-500/20 flex items-center justify-center">
+                              <span className="text-blue-900 dark:text-blue-400 font-medium">
+                                {request.profiles?.first_name?.[0]?.toUpperCase() ||
+                                  request.profiles?.email?.[0].toUpperCase() || '?'}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-gray-900 dark:text-white font-medium">
+                                {request.profiles?.first_name && request.profiles?.last_name
+                                  ? `${request.profiles.first_name} ${request.profiles.last_name}`
+                                  : request.profiles?.first_name || request.profiles?.last_name || request.profiles?.email?.split('@')[0]}
+                              </p>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">{request.profiles?.email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-medium">
+                              Rejoin Request
+                            </span>
+                            <button
+                              onClick={() => approveRejoinMutation.mutate(request.id)}
+                              disabled={approveRejoinMutation.isPending}
+                              className="p-2 text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-50 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20"
+                              title="Approve and re-add to organization"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const reason = window.prompt(
+                                  'Optional: Provide a reason for rejection (will be included in email to user)'
+                                );
+                                if (reason !== null) {
+                                  rejectRejoinMutation.mutate({ requestId: request.id, reason: reason || undefined, requestData: request });
+                                }
+                              }}
+                              disabled={rejectRejoinMutation.isPending}
+                              className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                              title="Reject request"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Tab Content - Settings */}
         {activeTab === 'settings' && (
           <div className="space-y-6">
+            {/* Organization Logo */}
+            {permissions.canManageSettings && (
+              <div className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 space-y-4 backdrop-blur-xl">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-[#37bd7e]" />
+                  Organization Logo
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Upload a logo for your organization. This will be visible to all members.
+                </p>
+                <OrgLogoUpload
+                  orgId={activeOrgId!}
+                  currentLogoUrl={activeOrg?.logo_url}
+                  orgName={activeOrg?.name || 'Organization'}
+                  size="lg"
+                />
+              </div>
+            )}
+
             {/* Currency & Company Profile */}
             <div className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 space-y-6 backdrop-blur-xl">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
