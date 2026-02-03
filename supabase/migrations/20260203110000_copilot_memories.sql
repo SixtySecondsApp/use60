@@ -35,8 +35,11 @@ CREATE TABLE IF NOT EXISTS copilot_memories (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ,               -- Optional TTL for temporary memories
 
-  -- Search (prepared for future embedding-based search)
-  embedding VECTOR(1536)
+  -- Search: embedding column added later when pgvector is enabled
+  -- embedding VECTOR(1536)
+
+  -- Placeholder for future search
+  search_text TSVECTOR
 );
 
 -- =============================================================================

@@ -164,3 +164,7 @@ production-data.sql
 *.sql.dump
 check-staging-*.mjs
 setup-staging-*.mjs
+
+# Quick-add model (design drafts)
+docs/quick-add-model/
+src/components/quick-add/CLAUDE.md
