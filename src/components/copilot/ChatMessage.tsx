@@ -1,6 +1,10 @@
 /**
  * Chat Message Component
  * Displays individual user/AI messages in the conversation
+ *
+ * Supports two tool display modes:
+ * 1. Legacy toolCall (ToolCallIndicator) - for pattern-matched routing
+ * 2. toolCalls array (ToolCallCard) - for autonomous executor tool use
  */
 
 import React, { useState } from 'react';
@@ -9,18 +13,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { PriorityCard } from './PriorityCard';
 import { ToolCallIndicator } from './ToolCallIndicator';
+import { ToolCallCard } from './ToolCallCard';
 import { CopilotResponse } from './CopilotResponse';
 import { EntityDisambiguationResponse } from './responses/EntityDisambiguationResponse';
 import type { CopilotMessage } from './types';
+import type { ToolCall as AutonomousToolCall } from '@/lib/hooks/useCopilotChat';
 import { useUser } from '@/lib/hooks/useUser';
 import ReactMarkdown from 'react-markdown';
 
 interface ChatMessageProps {
   message: CopilotMessage;
+  /** Autonomous tool calls from useCopilotChat (new format) */
+  toolCalls?: AutonomousToolCall[];
   onActionClick?: (action: any) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, onActionClick }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, toolCalls, onActionClick }) => {
   const isUser = message.role === 'user';
   const { userData } = useUser();
   // US-009: Track if icon failed to load to show Sparkles fallback
@@ -52,7 +60,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
           </div>
         ) : (
           <div className="w-full relative">
-            {/* Tool Call Indicator - Show until response is ready */}
+            {/* Legacy Tool Call Indicator - Show until response is ready */}
             <AnimatePresence mode="wait">
               {message.toolCall && !message.structuredResponse && !message.content && (
                 <motion.div
@@ -64,6 +72,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                   className="mb-4"
                 >
                   <ToolCallIndicator toolCall={message.toolCall} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Autonomous Tool Calls - Show when using useCopilotChat */}
+            <AnimatePresence>
+              {toolCalls && toolCalls.length > 0 && (
+                <motion.div
+                  key="autonomous-tool-calls"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-2 mb-4"
+                >
+                  {toolCalls.map((tc) => (
+                    <ToolCallCard
+                      key={tc.id}
+                      toolCall={tc}
+                      isSequence={tc.name.includes('sequence')}
+                    />
+                  ))}
                 </motion.div>
               )}
             </AnimatePresence>

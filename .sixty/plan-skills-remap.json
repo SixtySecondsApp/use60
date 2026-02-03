@@ -1,0 +1,462 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "feature": "skills-remap",
+    "createdAt": "2025-01-30T00:00:00Z",
+    "branch": "improve/skills-remap-andrew"
+  },
+
+  "features": [
+    {
+      "id": "skills-remap",
+      "name": "Skills Folder Structure & Editor",
+      "status": "pending",
+      "description": "Restructure skills system to support folder-based organization with child documents, @ mentions for referencing files/skills, and {variable} interpolation for organization context. Update UI with split-pane detail view.",
+      "createdAt": "2025-01-30T00:00:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "SKILL-001",
+      "feature": "skills-remap",
+      "title": "Create skill_folders database table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["platform_skills"]
+      },
+      "blocks": ["SKILL-002", "SKILL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "skill_folders table with id, skill_id, name, parent_folder_id, created_at",
+        "Foreign key to platform_skills table",
+        "Self-referential FK for nested folders",
+        "RLS policies matching platform_skills patterns"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/YYYYMMDD_skill_folders.sql"
+      ]
+    },
+    {
+      "id": "SKILL-002",
+      "feature": "skills-remap",
+      "title": "Create skill_documents database table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["SKILL-001"],
+        "files": [],
+        "schema": ["skill_folders"]
+      },
+      "blocks": ["SKILL-004", "SKILL-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "skill_documents table with id, skill_id, folder_id, title, description, content, doc_type, created_at",
+        "Foreign keys to platform_skills and skill_folders",
+        "doc_type enum: prompt, example, asset, reference",
+        "RLS policies for platform admins"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/YYYYMMDD_skill_documents.sql"
+      ]
+    },
+    {
+      "id": "SKILL-003",
+      "feature": "skills-remap",
+      "title": "Create skill_references database table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["SKILL-001"],
+        "files": [],
+        "schema": ["skill_folders"]
+      },
+      "blocks": ["SKILL-006"],
+      "parallelWith": ["SKILL-002"],
+      "acceptance": [
+        "skill_references table with id, source_doc_id, target_type, target_id, reference_text",
+        "target_type enum: document, skill, variable",
+        "Indexes on source_doc_id and target_id",
+        "RLS policies matching document access"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/YYYYMMDD_skill_references.sql"
+      ]
+    },
+    {
+      "id": "SKILL-004",
+      "feature": "skills-remap",
+      "title": "Create database functions for skill folder operations",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["SKILL-002"],
+        "files": [],
+        "schema": ["skill_documents", "skill_folders"]
+      },
+      "blocks": ["SKILL-007"],
+      "parallelWith": ["SKILL-003"],
+      "acceptance": [
+        "get_skill_folder_tree(skill_id) returns nested folder structure",
+        "get_skill_documents(skill_id, folder_id) returns documents in folder",
+        "get_document_references(doc_id) returns all @ mentions",
+        "resolve_skill_references(skill_id) returns compiled content with resolved refs"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_skill_folder_functions.sql"
+      ]
+    },
+    {
+      "id": "SKILL-005",
+      "feature": "skills-remap",
+      "title": "Update frontmatter YAML structure for better AI matching",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["SKILL-002"],
+        "files": [],
+        "schema": ["platform_skills"]
+      },
+      "blocks": ["SKILL-008"],
+      "parallelWith": ["SKILL-004"],
+      "acceptance": [
+        "Add structured triggers array with intent patterns",
+        "Add inputs/outputs schema definition",
+        "Add skill_type: atomic | sequence | composite",
+        "Add required_context array for variable requirements",
+        "Migration to update existing skills frontmatter"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/YYYYMMDD_skill_frontmatter_v2.sql"
+      ]
+    },
+    {
+      "id": "SKILL-006",
+      "feature": "skills-remap",
+      "title": "Create TypeScript types for folder structure",
+      "type": "types",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["SKILL-003"],
+        "files": [],
+        "schema": ["skill_references"]
+      },
+      "blocks": ["SKILL-007", "SKILL-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "SkillFolder interface with nested children",
+        "SkillDocument interface with references",
+        "SkillReference interface with target types",
+        "SkillFrontmatterV2 interface with new fields",
+        "Types exported from src/lib/types/skills.ts"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/types/skills.ts"
+      ]
+    },
+    {
+      "id": "SKILL-007",
+      "feature": "skills-remap",
+      "title": "Create skill folder service",
+      "type": "service",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["SKILL-004", "SKILL-006"],
+        "files": ["src/lib/types/skills.ts"],
+        "schema": ["skill_folders", "skill_documents"]
+      },
+      "blocks": ["SKILL-009", "SKILL-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "getSkillFolderTree(skillId) - fetch nested folder structure",
+        "createFolder(skillId, name, parentId?) - create new folder",
+        "deleteFolder(folderId) - delete folder and contents",
+        "getDocuments(skillId, folderId?) - fetch documents",
+        "createDocument(skillId, folderId, data) - create document",
+        "updateDocument(docId, data) - update document",
+        "deleteDocument(docId) - delete document"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/skillFolderService.ts"
+      ]
+    },
+    {
+      "id": "SKILL-008",
+      "feature": "skills-remap",
+      "title": "Update skillCompiler to resolve @ references",
+      "type": "service",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["SKILL-005"],
+        "files": ["src/lib/utils/skillCompiler.ts"],
+        "schema": ["skill_references"]
+      },
+      "blocks": ["SKILL-012"],
+      "parallelWith": ["SKILL-007"],
+      "acceptance": [
+        "Parse @folder/document.md references in content",
+        "Parse @skill-key references for sequences",
+        "Resolve references to actual content",
+        "Track unresolved references as warnings",
+        "Maintain existing ${variable} interpolation"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/utils/skillCompiler.ts"
+      ]
+    },
+    {
+      "id": "SKILL-009",
+      "feature": "skills-remap",
+      "title": "Create SkillFolderTree component",
+      "type": "component",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["SKILL-006", "SKILL-007"],
+        "files": ["src/lib/services/skillFolderService.ts"],
+        "schema": []
+      },
+      "blocks": ["SKILL-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "Tree view with expandable folders",
+        "File icons based on doc_type",
+        "Click to select document",
+        "Right-click context menu for rename/delete",
+        "Drag-and-drop reordering (stretch goal)",
+        "Selected item highlight state"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/platform/SkillFolderTree.tsx"
+      ]
+    },
+    {
+      "id": "SKILL-010",
+      "feature": "skills-remap",
+      "title": "Create folder/document creation modals",
+      "type": "component",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["SKILL-007"],
+        "files": ["src/lib/services/skillFolderService.ts"],
+        "schema": []
+      },
+      "blocks": ["SKILL-011"],
+      "parallelWith": ["SKILL-009"],
+      "acceptance": [
+        "CreateFolderModal with name input and parent selector",
+        "CreateDocumentModal with title, description, content fields",
+        "Document type selector (prompt, example, asset, reference)",
+        "Folder location selector",
+        "Form validation and error handling"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/platform/CreateFolderModal.tsx",
+        "src/components/platform/CreateDocumentModal.tsx"
+      ]
+    },
+    {
+      "id": "SKILL-011",
+      "feature": "skills-remap",
+      "title": "Create SkillDetailView split-pane layout",
+      "type": "component",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["SKILL-009", "SKILL-010"],
+        "files": [
+          "src/components/platform/SkillFolderTree.tsx",
+          "src/components/platform/CreateFolderModal.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["SKILL-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "Split pane: folder tree left (30%), content right (70%)",
+        "Resizable divider between panes",
+        "Back button to return to skills list",
+        "Save button in header",
+        "Breadcrumb showing current location",
+        "Loading and empty states"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/platform/SkillDetailView.tsx"
+      ]
+    },
+    {
+      "id": "SKILL-012",
+      "feature": "skills-remap",
+      "title": "Create content editor with @ and {variable} autocomplete",
+      "type": "component",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["SKILL-008"],
+        "files": ["src/lib/utils/skillCompiler.ts"],
+        "schema": []
+      },
+      "blocks": ["SKILL-013"],
+      "parallelWith": ["SKILL-011"],
+      "acceptance": [
+        "Markdown textarea with syntax highlighting",
+        "@ triggers autocomplete for documents/skills",
+        "{ triggers autocomplete for org variables",
+        "Autocomplete dropdown with search filtering",
+        "Insert buttons for @ and {variable}",
+        "Variable picker modal for browsing all variables",
+        "Preview mode showing compiled output"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/platform/SkillContentEditor.tsx",
+        "src/components/platform/MentionAutocomplete.tsx",
+        "src/components/platform/VariableAutocomplete.tsx"
+      ]
+    },
+    {
+      "id": "SKILL-013",
+      "feature": "skills-remap",
+      "title": "Integrate detail view into skills page",
+      "type": "integration",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["SKILL-011", "SKILL-012"],
+        "files": [
+          "src/components/platform/SkillDetailView.tsx",
+          "src/components/platform/SkillContentEditor.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["SKILL-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "Skills list view unchanged",
+        "Click skill opens SkillDetailView",
+        "URL updates to /platform/skills/:category/:skillId",
+        "Browser back button works correctly",
+        "Changes auto-save or prompt on unsaved exit"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/Skills.tsx",
+        "src/lib/routes/routeConfig.ts"
+      ]
+    },
+    {
+      "id": "SKILL-014",
+      "feature": "skills-remap",
+      "title": "Update get-agent-skills to include folder documents",
+      "type": "api",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": {
+        "stories": ["SKILL-013"],
+        "files": [],
+        "schema": ["skill_documents", "skill_references"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Agent receives compiled skill with resolved references",
+        "Folder structure available in metadata",
+        "Referenced documents inlined or available separately",
+        "Backward compatible with existing agent calls",
+        "Performance: <200ms response time"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/get-agent-skills/index.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 0,
+    "currentFeature": "skills-remap",
+    "estimatedHours": 5.5,
+    "parallelGroups": [
+      {
+        "name": "Schema Foundation",
+        "stories": ["SKILL-001"]
+      },
+      {
+        "name": "Schema Tables",
+        "stories": ["SKILL-002", "SKILL-003"]
+      },
+      {
+        "name": "Schema Functions & Frontmatter",
+        "stories": ["SKILL-004", "SKILL-005"]
+      },
+      {
+        "name": "Types",
+        "stories": ["SKILL-006"]
+      },
+      {
+        "name": "Services",
+        "stories": ["SKILL-007", "SKILL-008"]
+      },
+      {
+        "name": "UI Components",
+        "stories": ["SKILL-009", "SKILL-010"]
+      },
+      {
+        "name": "UI Integration",
+        "stories": ["SKILL-011", "SKILL-012"]
+      },
+      {
+        "name": "Page Integration",
+        "stories": ["SKILL-013"]
+      },
+      {
+        "name": "API Update",
+        "stories": ["SKILL-014"]
+      }
+    ]
+  },
+
+  "variables": {
+    "organizationContext": [
+      "company_name",
+      "tagline",
+      "description",
+      "industry",
+      "products",
+      "value_propositions",
+      "competitors",
+      "target_market",
+      "ideal_customer_profile",
+      "ICP_profile",
+      "pain_points",
+      "buying_signals",
+      "tech_stack",
+      "case_studies",
+      "customer_logos"
+    ]
+  }
+}

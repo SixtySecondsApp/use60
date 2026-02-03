@@ -241,7 +241,7 @@ export default function SkillsAdmin() {
                 </Button>
               </Link>
               <Link to={`/platform/skills/${selectedCategory}/new`}>
-                <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+                <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white">
                   <Plus className="w-4 h-4" />
                   New Skill
                 </Button>

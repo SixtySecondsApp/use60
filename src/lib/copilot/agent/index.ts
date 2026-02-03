@@ -18,8 +18,27 @@
  * ```
  */
 
-// Main Agent
+// Main Agent (pattern-matching orchestrator)
 export { AutonomousAgent, createAutonomousAgent } from './agent';
+
+// Autonomous Executor (Claude decides which tools to use)
+export {
+  AutonomousExecutor,
+  createAutonomousExecutor,
+} from './autonomousExecutor';
+export type {
+  SkillToolDefinition,
+  ExecutorConfig,
+  ExecutorMessage,
+  ExecutorResult,
+} from './autonomousExecutor';
+
+// Autonomous Executor Hook
+export { useAutonomousExecutor } from './useAutonomousExecutor';
+export type {
+  UseAutonomousExecutorOptions,
+  UseAutonomousExecutorReturn,
+} from './useAutonomousExecutor';
 
 // Understanding Engine
 export { UnderstandingEngine, createUnderstandingEngine } from './understand';

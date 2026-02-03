@@ -398,22 +398,47 @@ async function testSESConnection(): Promise<{ success: boolean; message: string;
 }
 
 /**
+ * Decode JWT payload without verification (for role checking only)
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = parts[1];
+    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if request is authenticated with service role key
  */
 function isServiceRoleAuth(authHeader: string | null, serviceRoleKey: string): boolean {
   if (!authHeader) return false;
-  if (!serviceRoleKey) {
-    console.warn('[encharge-send-email] Service role key not configured');
-    return false;
-  }
+
   const token = authHeader.replace(/^Bearer\s+/i, '');
-  const match = token === serviceRoleKey;
-  console.log('[encharge-send-email] Service role comparison:', {
+
+  // First try: exact string match with env var
+  if (serviceRoleKey && token === serviceRoleKey) {
+    console.log('[encharge-send-email] Service role auth via exact match');
+    return true;
+  }
+
+  // Second try: decode JWT and check role claim
+  const payload = decodeJwtPayload(token);
+  if (payload && payload.role === 'service_role') {
+    console.log('[encharge-send-email] Service role auth via JWT role claim');
+    return true;
+  }
+
+  console.log('[encharge-send-email] Service role auth failed:', {
     tokenLength: token.length,
-    keyLength: serviceRoleKey.length,
-    match,
+    keyLength: serviceRoleKey?.length,
+    jwtRole: payload?.role,
   });
-  return match;
+  return false;
 }
 
 serve(async (req) => {

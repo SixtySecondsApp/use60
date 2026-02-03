@@ -82,6 +82,8 @@ import { useTrialStatus } from '@/lib/hooks/useSubscription';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
+import { IntegrationReconnectBanner } from '@/components/IntegrationReconnectBanner';
+import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
@@ -90,6 +92,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const trialStatus = useTrialStatus(activeOrgId);
   const hasIntegrationAlerts = useHasIntegrationAlerts(userData?.id);
   const location = useLocation();
+
+  // Check if user has integration that needs reconnection (must be before isIntegrationBannerVisible)
+  const { needsReconnect: integrationNeedsReconnect } = useIntegrationReconnectNeeded();
 
   // Check if trial banner should be showing (same logic as TrialBanner component)
   const isTrialBannerVisible = useMemo(() => {
@@ -111,14 +116,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, [trialStatus.isTrialing, trialStatus.isLoading]);
 
   // Check if integration reconnect banner should be showing
-  const isIntegrationBannerVisible = hasIntegrationAlerts;
+  const isIntegrationBannerVisible = hasIntegrationAlerts || !!integrationNeedsReconnect;
 
   // AppLayout uses top padding to make room for the fixed top bars/banners.
   // Some pages (e.g. Copilot chat) need a reliable way to compute the remaining viewport height
   // without hard-coding "4rem" and accidentally creating extra scroll space.
   const topOffsetPx = useMemo(() => {
     // Base top bar is 64px (pt-16). Impersonation adds 44px. Trial banner adds ~50px. Integration banner adds ~50px.
-    let offset = 64; // Base
+    let offset = 64; // Base top bar
     if (isImpersonating) offset += 44;
     if (isTrialBannerVisible) offset += 50;
     if (isIntegrationBannerVisible) offset += 50;
@@ -130,6 +135,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     // TrialBanner is at top-[65px] and is ~50px tall
     return isTrialBannerVisible ? 50 : 0;
   }, [isTrialBannerVisible]);
+
+  // Note: topOffsetPx is used for inline paddingTop style since dynamic Tailwind classes
+  // like pt-[${px}px] don't work at runtime (Tailwind JIT needs to see them at build time)
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, toggleMobileMenu] = useCycle(false, true);
   const [hasMounted, setHasMounted] = useState(false);
@@ -311,8 +319,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Trial Banner - shown when organization is in trial period */}
       <TrialBanner />
 
-      {/* Integration Reconnect Banner - shown when user has integration alerts */}
-      <IntegrationReconnectBanner additionalTopOffset={integrationBannerTopOffset} />
+      {/* Integration Reconnect Banner - shown when user has integration alerts or needs reconnection */}
+      <IntegrationReconnectBanner
+        additionalTopOffset={integrationBannerTopOffset}
+        hasTrialBannerAbove={isTrialBannerVisible}
+        hasImpersonationBannerAbove={isImpersonating}
+        isSidebarCollapsed={isCollapsed}
+      />
 
       {/* Main app content */}
       <div className="flex">
@@ -946,6 +959,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {
             // Used by full-height pages to avoid double-counting the top padding.
             '--app-top-offset': `${topOffsetPx}px`,
+            // Dynamic padding for banners - inline style because dynamic Tailwind classes don't work at runtime
             paddingTop: `${topOffsetPx}px`,
           } as React.CSSProperties
         }

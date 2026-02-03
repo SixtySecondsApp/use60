@@ -27,7 +27,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, ArrowDown } from 'lucide-react';
+import { Plus, ArrowDown, Zap, GitBranch, GitMerge } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SequenceStep } from './SequenceStep';
@@ -95,13 +95,104 @@ function SortableStep({
 // Step Connector
 // =============================================================================
 
-function StepConnector() {
+interface StepConnectorProps {
+  /** Previous step (if any) */
+  prevStep?: SequenceStepType;
+  /** Current step */
+  currentStep: SequenceStepType;
+}
+
+function StepConnector({ prevStep, currentStep }: StepConnectorProps) {
+  const prevIsParallel = prevStep?.execution_mode === 'parallel';
+  const currentIsParallel = currentStep?.execution_mode === 'parallel';
+  const sameGroup = prevStep?.parallel_group && prevStep.parallel_group === currentStep?.parallel_group;
+
+  // Determine connector type
+  const isStartingParallel = !prevIsParallel && currentIsParallel;
+  const isEndingParallel = prevIsParallel && !currentIsParallel;
+  const isContinuingParallel = prevIsParallel && currentIsParallel && sameGroup;
+
+  if (isStartingParallel) {
+    // Fork: sequential → parallel
+    return (
+      <div className="flex justify-center py-1">
+        <div className="flex flex-col items-center">
+          <div className="w-px h-2 bg-border" />
+          <div className="flex items-center gap-1 text-blue-500">
+            <GitBranch className="h-4 w-4" />
+            <span className="text-[10px] font-medium">PARALLEL</span>
+          </div>
+          <div className="w-px h-2 bg-blue-300" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isEndingParallel) {
+    // Merge: parallel → sequential
+    return (
+      <div className="flex justify-center py-1">
+        <div className="flex flex-col items-center">
+          <div className="w-px h-2 bg-blue-300" />
+          <div className="flex items-center gap-1 text-blue-500">
+            <GitMerge className="h-4 w-4" />
+            <span className="text-[10px] font-medium">JOIN</span>
+          </div>
+          <div className="w-px h-2 bg-border" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isContinuingParallel) {
+    // Continuing in same parallel group
+    return (
+      <div className="flex justify-center py-1">
+        <div className="flex flex-col items-center">
+          <div className="w-px h-2 bg-blue-300" />
+          <Zap className="h-4 w-4 text-blue-400" />
+          <div className="w-px h-2 bg-blue-300" />
+        </div>
+      </div>
+    );
+  }
+
+  // Default sequential connector
   return (
     <div className="flex justify-center py-1">
       <div className="flex flex-col items-center">
         <div className="w-px h-2 bg-border" />
         <ArrowDown className="h-4 w-4 text-muted-foreground" />
         <div className="w-px h-2 bg-border" />
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Parallel Group Wrapper
+// =============================================================================
+
+interface ParallelGroupWrapperProps {
+  groupName: string;
+  children: React.ReactNode;
+}
+
+function ParallelGroupWrapper({ groupName, children }: ParallelGroupWrapperProps) {
+  return (
+    <div className="relative">
+      {/* Group indicator bar on the left */}
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-400 rounded-full" />
+      {/* Group label */}
+      <div className="absolute -left-1 top-0 transform -translate-x-full">
+        <div className="flex items-center gap-1 text-blue-600 text-[10px] font-medium whitespace-nowrap">
+          <Zap className="h-3 w-3" />
+          {groupName}
+        </div>
+      </div>
+      {/* Content with left padding */}
+      <div className="pl-4">
+        {children}
       </div>
     </div>
   );
@@ -219,9 +310,13 @@ export function SequenceBuilder({
           items={steps.map((s) => `step-${s.order}`)}
           strategy={verticalListSortingStrategy}
         >
-          {steps.map((step, index) => (
-            <div key={`step-${step.order}`}>
-              {index > 0 && <StepConnector />}
+          {steps.map((step, index) => {
+            const prevStep = index > 0 ? steps[index - 1] : undefined;
+            const isInParallelGroup = step.execution_mode === 'parallel' && step.parallel_group;
+            const isFirstInGroup = isInParallelGroup && prevStep?.parallel_group !== step.parallel_group;
+            const isLastInGroup = isInParallelGroup && steps[index + 1]?.parallel_group !== step.parallel_group;
+
+            const stepContent = (
               <SortableStep
                 step={step}
                 index={index}
@@ -229,8 +324,32 @@ export function SequenceBuilder({
                 onChange={(updated) => handleStepChange(index, updated)}
                 onDelete={() => handleStepDelete(index)}
               />
-            </div>
-          ))}
+            );
+
+            return (
+              <div key={`step-${step.order}`}>
+                {index > 0 && <StepConnector prevStep={prevStep} currentStep={step} />}
+                {isInParallelGroup ? (
+                  <div className={cn(
+                    'relative border-l-2 border-blue-400 pl-3 ml-2',
+                    isFirstInGroup && 'pt-2 rounded-tl-lg',
+                    isLastInGroup && 'pb-2 rounded-bl-lg'
+                  )}>
+                    {isFirstInGroup && step.parallel_group && (
+                      <div className="absolute -top-1 left-2 bg-blue-100 text-blue-700 text-[10px] font-medium px-2 py-0.5 rounded-full">
+                        {step.parallel_group}
+                      </div>
+                    )}
+                    <div className={isFirstInGroup ? 'pt-4' : ''}>
+                      {stepContent}
+                    </div>
+                  </div>
+                ) : (
+                  stepContent
+                )}
+              </div>
+            );
+          })}
         </SortableContext>
 
         {/* Drag Overlay */}

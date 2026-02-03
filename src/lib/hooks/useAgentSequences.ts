@@ -27,6 +27,13 @@ export interface HITLConfig {
   timeout_action: 'fail' | 'continue' | 'use_default'; // What to do on timeout
 }
 
+/**
+ * Execution mode for sequence steps
+ * - sequential: Run one at a time (default)
+ * - parallel: Run concurrently with other parallel steps in same group
+ */
+export type StepExecutionMode = 'sequential' | 'parallel';
+
 export interface SequenceStep {
   order: number;
   // Either a skill_key (runs an AI skill document) OR an action (execute_action capability call)
@@ -39,6 +46,13 @@ export interface SequenceStep {
   // HITL configuration - pause and ask user before/after this step
   hitl_before?: HITLConfig; // Ask user BEFORE executing this step
   hitl_after?: HITLConfig; // Ask user AFTER executing this step (e.g., to approve output)
+  // Parallel execution support
+  execution_mode?: StepExecutionMode; // Default: 'sequential'
+  parallel_group?: string; // Group ID for parallel steps (steps with same group run together)
+  // Conditional execution
+  condition?: string; // Expression like "${previous_step.success}" to conditionally skip
+  // Timeout for this specific step
+  timeout_ms?: number;
 }
 
 export interface SequenceFrontmatter extends PlatformSkillFrontmatter {
@@ -128,6 +142,10 @@ export interface StepResult {
     responded_at: string;
     channel: 'slack' | 'in_app';
   };
+  // Parallel execution tracking
+  execution_mode?: StepExecutionMode;
+  parallel_group?: string;
+  parallel_batch_index?: number; // Which parallel batch this step was in
 }
 
 export interface CreateSequenceInput {
