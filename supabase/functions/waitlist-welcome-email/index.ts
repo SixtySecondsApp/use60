@@ -15,10 +15,17 @@ interface WelcomeEmailRequest {
 }
 
 /**
- * Base64 encode string
+ * Base64 encode string (UTF-8 safe)
  */
 function base64Encode(str: string): string {
-  return btoa(str);
+  // Convert string to UTF-8 bytes, then to base64
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 /**
@@ -122,7 +129,7 @@ async function sendEmailViaSES(
   }
 
   const url = new URL(`https://email.${AWS_REGION}.amazonaws.com/`);
-  const fromEmail = 'noreply@use60.com';
+  const fromEmail = Deno.env.get('SES_FROM_EMAIL') || 'app@use60.com';
 
   // Build raw MIME message
   const message = `From: ${fromEmail}\r\nTo: ${toEmail}\r\nSubject: ${subject}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${htmlBody}`;
@@ -244,7 +251,7 @@ serve(async (req) => {
     }
 
     // Replace template variables
-    let htmlBody = template.html_template || '';
+    let htmlBody = template.html_body || '';
 
     const variables = {
       user_name: firstName,
