@@ -69,9 +69,10 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     }
 
     // Build invitation URL
+    // Use environment variable for base URL to prevent localhost links in staging
     const baseUrl = typeof window !== 'undefined'
       ? window.location.origin
-      : 'https://app.use60.com'; // Default to production URL
+      : (import.meta.env.VITE_PUBLIC_URL || 'https://app.use60.com');
 
     const invitationUrl = `${baseUrl}/invite/${invitation.token}`;
 
@@ -367,6 +368,7 @@ export async function getInvitationByToken(
 ): Promise<{ data: Invitation | null; error: string | null }> {
   try {
     // Note: excluding invited_by to avoid auth.users permission error (FK constraint)
+    // Using maybeSingle() instead of single() to handle 0 rows gracefully without PGRST116 error
     const { data, error } = await supabase
       .from('organization_invitations')
       .select(`
@@ -382,31 +384,29 @@ export async function getInvitationByToken(
       .eq('token', token)
       .is('accepted_at', null)
       .gt('expires_at', new Date().toISOString())
-      .single();
+      .maybeSingle();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return { data: null, error: 'Invitation not found or has expired' };
-      }
       logger.error('[InvitationService] Error fetching invitation:', error);
       return { data: null, error: error.message };
     }
 
-    // Fetch organization details separately to avoid ambiguity
-    if (data) {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('id, name')
-        .eq('id', (data as any).org_id)
-        .single();
-
-      return { data: {
-        ...data,
-        organization: org || undefined,
-      } as Invitation, error: null };
+    // If no data found, return user-friendly error
+    if (!data) {
+      return { data: null, error: 'Invitation not found, expired, or already used' };
     }
 
-    return { data: null, error: null };
+    // Fetch organization details separately to avoid ambiguity
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('id, name')
+      .eq('id', (data as any).org_id)
+      .maybeSingle();
+
+    return { data: {
+      ...data,
+      organization: org || undefined,
+    } as Invitation, error: null };
   } catch (err: any) {
     logger.error('[InvitationService] Exception fetching invitation:', err);
     return { data: null, error: err.message || 'Failed to fetch invitation' };
