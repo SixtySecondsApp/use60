@@ -1,12 +1,56 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
-export type AuthMode = 'service_role' | 'user' | 'cron';
+export type AuthMode = 'service_role' | 'user' | 'cron' | 'edge_function_secret';
 
 export type AuthContext = {
   mode: AuthMode;
   userId: string | null;
   isPlatformAdmin: boolean;
 };
+
+export type VerifySecretResult = {
+  authenticated: boolean;
+  method: 'bearer' | 'header' | 'dev' | 'none';
+};
+
+/**
+ * Verify custom edge function secret
+ * Used for inter-function communication and controlled API access
+ *
+ * Checks in order:
+ * 1. Authorization: Bearer {secret} header (preferred for CORS compatibility)
+ * 2. x-edge-function-secret header (custom header fallback)
+ * 3. Dev mode: if no secret configured, returns true with console log
+ */
+export function verifySecret(req: Request, secret?: string): VerifySecretResult {
+  const envSecret = secret || Deno.env.get('EDGE_FUNCTION_SECRET');
+
+  // Check Authorization header for Bearer token (avoids CORS preflight issues)
+  const authHeader = req.headers.get('authorization');
+  if (authHeader?.toLowerCase().startsWith('bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (envSecret && token === envSecret) {
+      console.log('[edgeAuth.verifySecret] ✅ Authentication successful via Bearer token');
+      return { authenticated: true, method: 'bearer' };
+    }
+  }
+
+  // Fallback: Check for custom header if Authorization not used
+  const headerSecret = req.headers.get('x-edge-function-secret');
+  if (headerSecret && envSecret && headerSecret === envSecret) {
+    console.log('[edgeAuth.verifySecret] ✅ Authentication successful via custom header');
+    return { authenticated: true, method: 'header' };
+  }
+
+  // If running locally (no secret configured), allow requests for development
+  if (!envSecret) {
+    console.log('[edgeAuth.verifySecret] ℹ️ Dev mode - no EDGE_FUNCTION_SECRET configured, allowing request');
+    return { authenticated: true, method: 'dev' };
+  }
+
+  console.warn('[edgeAuth.verifySecret] ❌ Authentication failed: invalid or missing credentials');
+  return { authenticated: false, method: 'none' };
+}
 
 /**
  * Extract bearer token from Authorization header
