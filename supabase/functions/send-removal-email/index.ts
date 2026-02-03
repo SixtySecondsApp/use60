@@ -11,6 +11,7 @@
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verifySecret } from '../_shared/edgeAuth.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -20,40 +21,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-edge-function-secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-
-/**
- * Verify custom edge function secret
- */
-function verifySecret(req: Request): boolean {
-  const secret = Deno.env.get('EDGE_FUNCTION_SECRET');
-  if (!secret) {
-    console.warn('[send-removal-email] No EDGE_FUNCTION_SECRET configured');
-    return true;  // Dev mode
-  }
-
-  // Check Authorization header for Bearer token (avoids CORS preflight issues)
-  const authHeader = req.headers.get('authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7); // Remove "Bearer " prefix
-    if (token === secret) {
-      return true;
-    }
-  }
-
-  // Fallback: Check for custom header if Authorization not used
-  const headerSecret = req.headers.get('x-edge-function-secret');
-  if (headerSecret && headerSecret === secret) {
-    return true;
-  }
-
-  // Check API key header for service role (additional fallback)
-  const apiKeyHeader = req.headers.get('apikey');
-  if (apiKeyHeader === SUPABASE_SERVICE_ROLE_KEY) {
-    return true;
-  }
-
-  return false;
-}
 
 interface RemovalEmailRequest {
   user_id: string;
@@ -71,8 +38,9 @@ serve(async (req) => {
   }
 
   // Verify authentication
-  if (!verifySecret(req)) {
-    console.error('[send-removal-email] Authentication failed: invalid secret');
+  const auth = verifySecret(req);
+  if (!auth.authenticated) {
+    console.error('[send-removal-email] Authentication failed');
     return new Response(
       JSON.stringify({ success: false, error: 'Unauthorized: invalid credentials' }),
       {

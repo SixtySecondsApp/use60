@@ -13,6 +13,7 @@
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { verifySecret } from '../_shared/edgeAuth.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -23,39 +24,6 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Credentials': 'true',
 };
-
-/**
- * Verify custom edge function secret
- */
-function verifySecret(req: Request): boolean {
-  const secret = Deno.env.get('EDGE_FUNCTION_SECRET');
-
-  // Check Authorization header for Bearer token (avoids CORS preflight issues)
-  const authHeader = req.headers.get('authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7); // Remove "Bearer " prefix
-    if (secret && token === secret) {
-      console.log('[send-organization-invitation] Authentication successful via Bearer token');
-      return true;
-    }
-  }
-
-  // Fallback: Check for custom header if Authorization not used
-  const headerSecret = req.headers.get('x-edge-function-secret');
-  if (headerSecret && secret && headerSecret === secret) {
-    console.log('[send-organization-invitation] Authentication successful via custom header');
-    return true;
-  }
-
-  // If running locally (no secret configured), allow requests for development
-  if (!secret) {
-    console.log('[send-organization-invitation] Running in development mode (no EDGE_FUNCTION_SECRET configured)');
-    return true;
-  }
-
-  console.warn('[send-organization-invitation] Authentication failed: invalid or missing credentials');
-  return false;
-}
 
 interface SendInvitationRequest {
   to_email: string;
@@ -89,8 +57,9 @@ serve(async (req) => {
   }
 
   // Verify custom authentication
-  if (!verifySecret(req)) {
-    console.error('[send-organization-invitation] Authentication failed: invalid secret or missing authorization');
+  const auth = verifySecret(req);
+  if (!auth.authenticated) {
+    console.error('[send-organization-invitation] Authentication failed');
     return new Response(JSON.stringify({ error: 'Unauthorized: invalid credentials' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
