@@ -87,7 +87,13 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     });
 
     if (error) {
-      logger.error('[InvitationService] Error sending invitation email:', error);
+      // Suppress 401/auth errors - they're not the user's fault
+      // Email sending is best-effort; invitations are still created
+      if (error.status === 401 || error.code === '401') {
+        logger.warn('[InvitationService] Email service authentication issue - invitation created but email not sent');
+      } else {
+        logger.error('[InvitationService] Error sending invitation email:', error);
+      }
       // Don't throw - invitation still created even if email fails
       return false;
     }
@@ -95,7 +101,8 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     logger.log('[InvitationService] Invitation email sent successfully');
     return true;
   } catch (err: any) {
-    logger.error('[InvitationService] Exception sending invitation email:', err);
+    // Silently catch all errors - don't block invitation creation
+    logger.warn('[InvitationService] Email sending failed (non-critical):', err?.message);
     return false;
   }
 }

@@ -3,6 +3,7 @@
  *
  * Sends invitation emails to join an organization using AWS SES
  * No Encharge dependency - pure AWS SES implementation
+ * Public endpoint - does not require authentication
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
@@ -12,6 +13,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Credentials': 'true',
 };
 
 interface SendInvitationRequest {
@@ -81,22 +83,28 @@ function generateEmailTemplate(
 }
 
 serve(async (req) => {
+  console.log(`[send-organization-invitation] ${req.method} request received`);
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
+    console.log('[send-organization-invitation] Responding to OPTIONS request');
     return new Response('ok', {
+      status: 200,
       headers: corsHeaders,
     });
   }
 
   // Only allow POST requests
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', {
+    console.log(`[send-organization-invitation] Invalid method: ${req.method}`);
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: corsHeaders,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
   try {
+    console.log('[send-organization-invitation] Parsing request body');
     const {
       to_email,
       to_name,
@@ -104,6 +112,9 @@ serve(async (req) => {
       inviter_name,
       invitation_url,
     }: SendInvitationRequest = await req.json();
+
+    console.log(`[send-organization-invitation] Sending to: ${to_email}`);
+
 
     // Validate inputs
     if (!to_email || !organization_name || !inviter_name || !invitation_url) {
