@@ -35,6 +35,7 @@ import { SkillContentEditor } from './SkillContentEditor';
 import { CreateFolderModal } from './CreateFolderModal';
 import { CreateDocumentModal } from './CreateDocumentModal';
 import { skillFolderService } from '@/lib/services/skillFolderService';
+import { updatePlatformSkill } from '@/lib/services/platformSkillService';
 import type {
   SkillFolder,
   SkillDocument,
@@ -208,8 +209,18 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
         });
         toast.success('Document saved');
       } else {
-        // Update main skill - would need to call platform skill service
-        // For now, just show success
+        // Update main skill content and frontmatter
+        const result = await updatePlatformSkill(skill.id, {
+          content_template: editedContent,
+          frontmatter: {
+            ...skill.frontmatter,
+            name: editedTitle,
+            description: editedDescription,
+          },
+        });
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to save skill');
+        }
         toast.success('Skill saved');
       }
       setHasChanges(false);
@@ -370,7 +381,7 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
             <Button
               onClick={handleSave}
               disabled={!hasChanges || isSaving}
-              className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0 shadow-lg shadow-blue-500/20"
+              className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0 shadow-lg shadow-blue-500/20 !text-white"
             >
               {isSaving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -406,7 +417,7 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
             size="sm"
             onClick={handleSave}
             disabled={!hasChanges || isSaving}
-            className="gap-2 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0"
+            className="gap-2 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0 !text-white"
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" />

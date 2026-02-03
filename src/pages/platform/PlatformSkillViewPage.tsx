@@ -16,7 +16,6 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
-  Edit2,
   Eye,
   Play,
   Sparkles,
@@ -61,7 +60,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
+import { organizationContextService } from '@/lib/services/organizationContextService';
+import { Loader2 } from 'lucide-react';
 
 const CATEGORY_ICONS: Record<SkillCategory | 'agent-sequence', React.ElementType> = {
   'sales-ai': Sparkles,
@@ -102,7 +110,8 @@ export default function PlatformSkillViewPage() {
   const { category, skillKey } = useParams<{ category: string; skillKey: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'folders' | 'edit' | 'test'>('folders');
+  const [activeTab, setActiveTab] = useState<'folders' | 'test'>('folders');
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // Modal state
   const [showTriggersModal, setShowTriggersModal] = useState(false);
@@ -285,12 +294,6 @@ export default function PlatformSkillViewPage() {
                   <ToggleLeft className="w-4 h-4 text-gray-400" />
                 )}
               </Button>
-              <Link to={`/platform/skills/${category || skill.category}/${skillKey}/edit`}>
-                <Button className="gap-2 h-9 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0 shadow-lg shadow-blue-500/25 text-white">
-                  <Edit2 className="w-4 h-4" />
-                  Edit Skill
-                </Button>
-              </Link>
             </div>
           </div>
 
@@ -306,10 +309,10 @@ export default function PlatformSkillViewPage() {
       {/* Tab Navigation */}
       <div className="border-b border-white/5 bg-gray-900/30">
         <div className="max-w-7xl mx-auto px-6 py-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
             <div className="inline-flex bg-white/5 rounded-xl p-1 border border-white/5">
               <button
-                onClick={() => setActiveTab('folders')}
+                onClick={() => { setActiveTab('folders'); setIsEditMode(false); }}
                 className={cn(
                   'px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2',
                   activeTab === 'folders'
@@ -319,18 +322,6 @@ export default function PlatformSkillViewPage() {
               >
                 <FolderTree className={cn('w-4 h-4', activeTab === 'folders' && 'text-blue-400')} />
                 Folders
-              </button>
-              <button
-                onClick={() => setActiveTab('edit')}
-                className={cn(
-                  'px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2',
-                  activeTab === 'edit'
-                    ? 'bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-white shadow-sm ring-1 ring-white/10'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                )}
-              >
-                <Code2 className={cn('w-4 h-4', activeTab === 'edit' && 'text-blue-400')} />
-                Edit
               </button>
               <button
                 onClick={() => setActiveTab('test')}
@@ -345,29 +336,46 @@ export default function PlatformSkillViewPage() {
                 Test
               </button>
             </div>
+
+            {/* Edit toggle - only show on folders tab */}
+            {activeTab === 'folders' && (
+              <Button
+                variant={isEditMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setIsEditMode(!isEditMode)}
+                className={cn(
+                  'gap-2 h-9 transition-all duration-200 !text-white',
+                  isEditMode
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0 shadow-lg shadow-blue-500/25'
+                    : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                )}
+              >
+                {isEditMode ? (
+                  <>
+                    <Eye className="w-4 h-4" />
+                    Done Editing
+                  </>
+                ) : (
+                  <>
+                    <Code2 className="w-4 h-4" />
+                    Edit Content
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Content */}
       {activeTab === 'folders' ? (
-        // Folders view - markdown preview with folder tree
+        // Folders view - toggleable between preview and edit mode
         <div className="max-w-7xl mx-auto px-6 h-[calc(100vh-240px)] overflow-hidden">
           <SkillDetailView
             skillId={skill.id}
             onBack={() => {}}
             hideHeader
-            previewMode
-          />
-        </div>
-      ) : activeTab === 'edit' ? (
-        // Edit view - raw markdown editor
-        <div className="max-w-7xl mx-auto px-6 h-[calc(100vh-240px)] overflow-hidden">
-          <SkillDetailView
-            skillId={skill.id}
-            onBack={() => setActiveTab('folders')}
-            hideHeader
-            previewMode={false}
+            previewMode={!isEditMode}
           />
         </div>
       ) : (
@@ -647,186 +655,202 @@ interface SimulateModalProps {
   optionalContext: string[];
 }
 
-// Sample data templates for simulation
-const SAMPLE_ORG_DATA: Record<string, string> = {
-  company_name: 'Acme Corporation',
-  company_description: 'A leading provider of innovative software solutions for enterprise businesses.',
-  industry: 'Technology / SaaS',
-  ICP_profile: 'Mid-market B2B SaaS companies with 50-500 employees, focused on digital transformation',
-  customer_logos: 'Stripe, Notion, Figma, Linear',
-  testimonials: '"Acme helped us increase productivity by 40%" - Jane Smith, CEO of TechCorp',
-  value_proposition: 'Streamline your workflows and boost team productivity with our AI-powered platform',
-  tone_preference: 'Professional yet approachable, confident but not arrogant',
-  target_audience: 'CTOs, VPs of Engineering, and technical decision-makers',
-  pain_points: 'Manual processes, siloed data, lack of visibility into team performance',
-  competitive_advantage: 'AI-first approach, seamless integrations, world-class support',
-  pricing_model: 'Per-seat pricing starting at $29/month with volume discounts',
-};
-
-const SAMPLE_USER_DATA: Record<string, string> = {
-  user_name: 'John Smith',
-  user_role: 'Account Executive',
-  user_email: 'john.smith@acme.com',
-  user_signature: 'John Smith | Account Executive | Acme Corporation',
-  manager_name: 'Sarah Johnson',
-  team_name: 'Enterprise Sales',
-};
-
-const SAMPLE_CONTACT_DATA: Record<string, string> = {
-  contact_name: 'Alex Chen',
-  contact_first_name: 'Alex',
-  contact_title: 'VP of Engineering',
-  contact_company: 'TechStartup Inc.',
-  contact_email: 'alex.chen@techstartup.com',
-  contact_industry: 'Software Development',
-  contact_company_size: '150 employees',
-};
+interface Organization {
+  id: string;
+  name: string;
+}
 
 function SimulateModal({ open, onOpenChange, skillContent, requiredContext, optionalContext }: SimulateModalProps) {
-  const [variables, setVariables] = useState<Record<string, string>>({});
-  const [previewContent, setPreviewContent] = useState('');
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [variables, setVariables] = useState<Record<string, unknown>>({});
+  const [isLoadingOrgs, setIsLoadingOrgs] = useState(false);
+  const [isLoadingContext, setIsLoadingContext] = useState(false);
 
-  // Get all variables from the skill content
-  const extractedVariables = useMemo(() => {
-    const matches = skillContent.match(/\{[\w_]+\}|\$\{[\w_\.]+\}/g) || [];
-    const uniqueVars = [...new Set(matches.map(m => m.replace(/[\{\}\$]/g, '')))];
-    return uniqueVars;
-  }, [skillContent]);
-
-  // All context variables (required + optional + extracted)
-  const allVariables = useMemo(() => {
-    const vars = new Set([...requiredContext, ...optionalContext, ...extractedVariables]);
-    return Array.from(vars);
-  }, [requiredContext, optionalContext, extractedVariables]);
-
-  // Initialize with sample data when modal opens
+  // Fetch organizations when modal opens
   useEffect(() => {
-    if (open) {
-      const initialVars: Record<string, string> = {};
-      allVariables.forEach(varName => {
-        // Try to find matching sample data
-        const sampleValue = SAMPLE_ORG_DATA[varName] || SAMPLE_USER_DATA[varName] || SAMPLE_CONTACT_DATA[varName] || '';
-        initialVars[varName] = sampleValue;
-      });
-      setVariables(initialVars);
+    if (open && organizations.length === 0) {
+      setIsLoadingOrgs(true);
+      supabase
+        .from('organizations')
+        .select('id, name')
+        .order('name')
+        .then(({ data, error }) => {
+          if (error) {
+            toast.error('Failed to load organizations');
+            console.error(error);
+          } else {
+            setOrganizations(data || []);
+          }
+          setIsLoadingOrgs(false);
+        });
     }
-  }, [open, allVariables]);
+  }, [open, organizations.length]);
 
-  // Generate preview when variables change
+  // Fetch org context when selection changes
   useEffect(() => {
+    if (!selectedOrgId) {
+      setVariables({});
+      return;
+    }
+
+    setIsLoadingContext(true);
+    organizationContextService
+      .getContext(selectedOrgId)
+      .then((context) => {
+        setVariables(context);
+      })
+      .catch((err) => {
+        toast.error('Failed to load organization context');
+        console.error(err);
+        setVariables({});
+      })
+      .finally(() => {
+        setIsLoadingContext(false);
+      });
+  }, [selectedOrgId]);
+
+  // Generate preview content
+  const previewContent = useMemo(() => {
+    if (!skillContent) return '';
+
     let content = skillContent;
     Object.entries(variables).forEach(([key, value]) => {
+      const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
       // Replace both {var} and ${var} formats
-      content = content.replace(new RegExp(`\\{${key}\\}`, 'g'), value || `{${key}}`);
-      content = content.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), value || `\${${key}}`);
+      content = content.replace(new RegExp(`\\{${key}\\}`, 'g'), stringValue || `{${key}}`);
+      content = content.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), stringValue || `\${${key}}`);
     });
-    setPreviewContent(content);
+    return content;
   }, [skillContent, variables]);
 
-  const updateVariable = (key: string, value: string) => {
-    setVariables(prev => ({ ...prev, [key]: value }));
-  };
+  // Get list of variables used in the skill
+  const extractedVariables = useMemo(() => {
+    const matches = skillContent.match(/\{[\w_]+\}|\$\{[\w_\.]+\}/g) || [];
+    return [...new Set(matches.map(m => m.replace(/[\{\}\$]/g, '')))];
+  }, [skillContent]);
 
-  const loadSampleData = (type: 'org' | 'user' | 'contact') => {
-    const sampleData = type === 'org' ? SAMPLE_ORG_DATA : type === 'user' ? SAMPLE_USER_DATA : SAMPLE_CONTACT_DATA;
-    setVariables(prev => {
-      const updated = { ...prev };
-      Object.entries(sampleData).forEach(([key, value]) => {
-        if (allVariables.includes(key)) {
-          updated[key] = value;
-        }
-      });
-      return updated;
-    });
-    toast.success(`Loaded ${type === 'org' ? 'organization' : type === 'user' ? 'user' : 'contact'} sample data`);
-  };
+  const selectedOrg = organizations.find(o => o.id === selectedOrgId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden bg-gray-900 border-white/10">
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden bg-gray-900 border-white/10">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <div className="p-2 rounded-lg bg-cyan-500/15">
               <FlaskConical className="w-5 h-5 text-cyan-400" />
             </div>
-            Simulate Variables
+            Simulate with Organization Context
           </DialogTitle>
           <DialogDescription className="text-gray-400">
-            Preview how your skill looks with real organization and user data.
+            Select an organization to preview how this skill renders with their context variables.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-4 h-[60vh]">
-          {/* Left side - Variable inputs */}
-          <div className="w-1/2 flex flex-col">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Variables</span>
-              <div className="flex-1" />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadSampleData('org')}
-                className="h-7 text-xs bg-white/5 border-white/10 hover:bg-white/10 gap-1"
-              >
-                <Building2 className="w-3 h-3" />
-                Org
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadSampleData('user')}
-                className="h-7 text-xs bg-white/5 border-white/10 hover:bg-white/10 gap-1"
-              >
-                <User className="w-3 h-3" />
-                User
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadSampleData('contact')}
-                className="h-7 text-xs bg-white/5 border-white/10 hover:bg-white/10 gap-1"
-              >
-                <User className="w-3 h-3" />
-                Contact
-              </Button>
+        {/* Organization Selector */}
+        <div className="py-4 border-b border-white/5">
+          <Label className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 block">
+            Organization
+          </Label>
+          <Select value={selectedOrgId} onValueChange={setSelectedOrgId} disabled={isLoadingOrgs}>
+            <SelectTrigger className="w-full bg-white/5 border-white/10 focus:ring-cyan-500/30">
+              {isLoadingOrgs ? (
+                <span className="flex items-center gap-2 text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading organizations...
+                </span>
+              ) : (
+                <SelectValue placeholder="Select an organization..." />
+              )}
+            </SelectTrigger>
+            <SelectContent className="bg-gray-900 border-white/10 max-h-[300px]">
+              {organizations.map((org) => (
+                <SelectItem
+                  key={org.id}
+                  value={org.id}
+                  className="hover:bg-white/10 focus:bg-white/10"
+                >
+                  {org.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex gap-4 h-[50vh]">
+          {/* Left side - Context Variables */}
+          <div className="w-2/5 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                Context Variables
+              </span>
+              {isLoadingContext && (
+                <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+              )}
             </div>
             <ScrollArea className="flex-1 pr-4">
-              <div className="space-y-3">
-                {allVariables.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-gray-400">No variables found in this skill</p>
-                  </div>
-                ) : (
-                  allVariables.map(varName => (
-                    <div key={varName} className="p-3 rounded-lg bg-white/5 border border-white/5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs font-mono text-cyan-400">{`{${varName}}`}</span>
-                        {requiredContext.includes(varName) && (
-                          <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-medium">Required</span>
+              {!selectedOrgId ? (
+                <div className="text-center py-12">
+                  <Building2 className="w-10 h-10 mx-auto mb-3 text-gray-600" />
+                  <p className="text-sm text-gray-400">Select an organization</p>
+                  <p className="text-xs text-gray-500 mt-1">to view their context variables</p>
+                </div>
+              ) : Object.keys(variables).length === 0 && !isLoadingContext ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-gray-400">No context variables found</p>
+                  <p className="text-xs text-gray-500 mt-1">for {selectedOrg?.name}</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(variables).map(([key, value]) => {
+                    const isUsed = extractedVariables.includes(key);
+                    const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+                    return (
+                      <div
+                        key={key}
+                        className={cn(
+                          "p-3 rounded-lg border transition-colors",
+                          isUsed
+                            ? "bg-cyan-500/10 border-cyan-500/20"
+                            : "bg-white/5 border-white/5 opacity-60"
                         )}
-                        {optionalContext.includes(varName) && (
-                          <span className="text-[10px] bg-gray-500/20 text-gray-400 px-1.5 py-0.5 rounded font-medium">Optional</span>
-                        )}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={cn(
+                            "text-xs font-mono",
+                            isUsed ? "text-cyan-400" : "text-gray-500"
+                          )}>
+                            {`{${key}}`}
+                          </span>
+                          {isUsed && (
+                            <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-medium">
+                              Used
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-300 line-clamp-2">
+                          {stringValue || <span className="text-gray-500 italic">empty</span>}
+                        </p>
                       </div>
-                      <Textarea
-                        value={variables[varName] || ''}
-                        onChange={(e) => updateVariable(varName, e.target.value)}
-                        placeholder={`Enter value for ${varName}...`}
-                        className="h-16 text-sm bg-white/5 border-white/10 focus:border-cyan-500/50 resize-none"
-                      />
-                    </div>
-                  ))
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </ScrollArea>
           </div>
 
           {/* Right side - Preview */}
-          <div className="w-1/2 flex flex-col border-l border-white/10 pl-4">
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Preview</span>
-            <ScrollArea className="flex-1 rounded-lg bg-gray-950 border border-white/5 p-4">
-              <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">
-                {previewContent || 'No content to preview'}
+          <div className="w-3/5 flex flex-col border-l border-white/10 pl-4">
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
+              Rendered Preview
+            </span>
+            <ScrollArea className="flex-1 rounded-lg bg-gray-950 border border-white/5">
+              <pre className="p-4 text-sm text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">
+                {selectedOrgId ? (
+                  previewContent || 'No content to preview'
+                ) : (
+                  <span className="text-gray-500 italic">Select an organization to see the rendered preview</span>
+                )}
               </pre>
             </ScrollArea>
           </div>
