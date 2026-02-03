@@ -9,11 +9,12 @@
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { sendEmail } from '../_shared/ses.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-edge-function-secret',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-edge-function-secret, x-custom-auth',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Credentials': 'true',
 };
@@ -28,16 +29,18 @@ function verifySecret(req: Request): boolean {
     return false;
   }
 
-  // Check for secret in headers (preferred method)
-  const headerSecret = req.headers.get('x-edge-function-secret');
-  if (headerSecret && headerSecret === secret) {
-    return true;
-  }
-
-  // Check for JWT in Authorization header (fallback for old code)
+  // Check Authorization header for Bearer token (avoids CORS preflight issues)
   const authHeader = req.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
-    // If JWT is provided, accept it (allows transitional period)
+    const token = authHeader.slice(7); // Remove "Bearer " prefix
+    if (token === secret) {
+      return true;
+    }
+  }
+
+  // Fallback: Check for custom header if Authorization not used
+  const headerSecret = req.headers.get('x-edge-function-secret');
+  if (headerSecret && headerSecret === secret) {
     return true;
   }
 
@@ -112,7 +115,7 @@ async function getEmailTemplate(
  * Fallback template if database template not found
  */
 function getFallbackTemplate(variables: Record<string, string>): { html: string; text: string } {
-  const { recipient_name, organization_name, inviter_name, invitation_url, expiry_time } = variables;
+  const { recipient_name, organization_name, inviter_name, action_url, expiry_time } = variables;
 
   const html = `<!DOCTYPE html>
 <html>
@@ -140,13 +143,13 @@ function getFallbackTemplate(variables: Record<string, string>): { html: string;
             Accept the invitation below to get started collaborating with your team.</p>
 
             <p style="text-align: center; margin-top: 32px;">
-                <a href="${invitation_url}" class="button">Accept Invitation</a>
+                <a href="${action_url}" class="button">Accept Invitation</a>
             </p>
 
             <p style="font-size: 14px; color: #6b7280;">
                 Or copy and paste this link in your browser:<br>
                 <code style="background: #f3f4f6; padding: 8px; border-radius: 4px; display: block; margin-top: 8px; word-break: break-all;">
-                    ${invitation_url}
+                    ${action_url}
                 </code>
             </p>
 
@@ -162,7 +165,7 @@ function getFallbackTemplate(variables: Record<string, string>): { html: string;
 </body>
 </html>`;
 
-  const text = `Hi ${recipient_name},\n\n${inviter_name} has invited you to join ${organization_name} on Sixty.\n\nAccept the invitation by clicking:\n${invitation_url}\n\nThis invitation will expire in ${expiry_time || '7 days'}.`;
+  const text = `Hi ${recipient_name},\n\n${inviter_name} has invited you to join ${organization_name} on Sixty.\n\nAccept the invitation by clicking:\n${action_url}\n\nThis invitation will expire in ${expiry_time || '7 days'}.`;
 
   return { html, text };
 }
@@ -233,7 +236,7 @@ serve(async (req) => {
       recipient_name: recipientName,
       organization_name: organization_name,
       inviter_name: inviter_name,
-      invitation_url: invitation_url,
+      action_url: invitation_url,
       expiry_time: '7 days',
     };
 
@@ -267,6 +270,31 @@ serve(async (req) => {
     }
 
     console.log(`Invitation email sent to ${to_email} for organization ${organization_name}`);
+
+    // Log email send to database (non-blocking)
+    try {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') || '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+      );
+
+      await supabase.from('email_logs').insert({
+        email_type: 'organization_invitation',
+        to_email: to_email,
+        user_id: null,
+        status: 'sent',
+        metadata: {
+          organization_name: organization_name,
+          inviter_name: inviter_name,
+          message_id: result.messageId,
+        },
+        sent_via: 'aws_ses',
+      });
+    } catch (logError) {
+      console.warn('[send-organization-invitation] Failed to log email:', logError);
+      // Non-blocking - continue even if logging fails
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

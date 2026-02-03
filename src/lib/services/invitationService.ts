@@ -76,7 +76,7 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     const invitationUrl = `${baseUrl}/invite/${invitation.token}`;
 
     // Call send-organization-invitation edge function (uses AWS SES directly)
-    // Uses custom secret for authentication instead of JWT verification
+    // Uses Authorization header with custom secret to avoid CORS issues with custom headers
     const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
 
     const { error } = await supabase.functions.invoke('send-organization-invitation', {
@@ -87,10 +87,10 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
         inviter_name: inviterName || 'A team member',
         invitation_url: invitationUrl,
       },
-      // Pass secret header for custom authentication
+      // Use Authorization header instead of custom header to avoid CORS preflight blocking
       headers: edgeFunctionSecret
-        ? { 'x-edge-function-secret': edgeFunctionSecret }
-        : undefined,
+        ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+        : {},
     });
 
     if (error) {

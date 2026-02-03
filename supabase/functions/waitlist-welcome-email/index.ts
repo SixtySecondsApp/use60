@@ -1,12 +1,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { crypto } from 'https://deno.land/std@0.190.0/crypto/mod.ts';
+import { sendEmail } from '../_shared/ses.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const AWS_REGION = Deno.env.get('AWS_REGION') || 'eu-west-2';
-const AWS_ACCESS_KEY_ID = Deno.env.get('AWS_ACCESS_KEY_ID');
-const AWS_SECRET_ACCESS_KEY = Deno.env.get('AWS_SECRET_ACCESS_KEY');
 
 interface WelcomeEmailRequest {
   email: string;
@@ -15,150 +12,31 @@ interface WelcomeEmailRequest {
 }
 
 /**
- * Base64 encode string
+ * Verify custom edge function secret
  */
-function base64Encode(str: string): string {
-  return btoa(str);
-}
-
-/**
- * Create HMAC-SHA256 signature
- */
-async function hmacSha256(key: Uint8Array, data: string): Promise<Uint8Array> {
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    cryptoKey,
-    new TextEncoder().encode(data)
-  );
-  return new Uint8Array(signature);
-}
-
-/**
- * Create SHA-256 hash
- */
-async function sha256(data: string): Promise<string> {
-  const hash = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(data)
-  );
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
- * Convert bytes to hex string
- */
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
- * AWS Signature V4 signing for SES
- */
-async function signAWSRequest(
-  method: string,
-  url: URL,
-  body: string
-): Promise<Headers> {
-  if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
-    throw new Error('AWS credentials not configured');
+function verifySecret(req: Request): boolean {
+  const secret = Deno.env.get('EDGE_FUNCTION_SECRET');
+  if (!secret) {
+    console.warn('[waitlist-welcome-email] No EDGE_FUNCTION_SECRET configured');
+    return true;  // Dev mode
   }
 
-  const amzdate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
-  const datestamp = amzdate.substring(0, 8);
-  const host = url.host;
-  const canonicalUri = '/';
-  const canonicalQuerystring = '';
-  const payloadHash = await sha256(body);
-
-  const canonicalHeaders = `host:${host}\nx-amz-date:${amzdate}\n`;
-  const signedHeaders = 'host;x-amz-date';
-
-  const canonicalRequest = `${method}\n${canonicalUri}\n${canonicalQuerystring}\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
-
-  const scope = `${datestamp}/${AWS_REGION}/ses/aws4_request`;
-  const stringToSign = `AWS4-HMAC-SHA256\n${amzdate}\n${scope}\n${await sha256(canonicalRequest)}`;
-
-  const kDate = await hmacSha256(
-    new TextEncoder().encode(`AWS4${AWS_SECRET_ACCESS_KEY}`),
-    datestamp
-  );
-  const kRegion = await hmacSha256(kDate, AWS_REGION);
-  const kService = await hmacSha256(kRegion, 'ses');
-  const kSigning = await hmacSha256(kService, 'aws4_request');
-  const signature = toHex(await hmacSha256(kSigning, stringToSign));
-
-  const authorizationHeader = `AWS4-HMAC-SHA256 Credential=${AWS_ACCESS_KEY_ID}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-  const headers = new Headers({
-    'Host': host,
-    'X-Amz-Date': amzdate,
-    'Authorization': authorizationHeader,
-  });
-
-  return headers;
-}
-
-/**
- * Send email via AWS SES
- */
-async function sendEmailViaSES(
-  toEmail: string,
-  subject: string,
-  htmlBody: string
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
-    return { success: false, error: 'AWS credentials not configured' };
-  }
-
-  const url = new URL(`https://email.${AWS_REGION}.amazonaws.com/`);
-  const fromEmail = 'noreply@use60.com';
-
-  // Build raw MIME message
-  const message = `From: ${fromEmail}\r\nTo: ${toEmail}\r\nSubject: ${subject}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${htmlBody}`;
-  const encodedMessage = base64Encode(message);
-
-  const params = new URLSearchParams();
-  params.set('Action', 'SendRawEmail');
-  params.set('Version', '2010-12-01');
-  params.set('RawMessage.Data', encodedMessage);
-
-  const body = params.toString();
-  const headers = await signAWSRequest('POST', url, body);
-  headers.set('Content-Type', 'application/x-www-form-urlencoded');
-
-  try {
-    const response = await fetch(url.toString(), {
-      method: 'POST',
-      headers,
-      body,
-    });
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-      console.error('[waitlist-welcome-email] SES error:', responseText);
-      return { success: false, error: `SES error: ${response.status}` };
+  // Check Authorization header for Bearer token (avoids CORS preflight issues)
+  const authHeader = req.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7); // Remove "Bearer " prefix
+    if (token === secret) {
+      return true;
     }
-
-    const messageIdMatch = responseText.match(/<MessageId>([^<]+)<\/MessageId>/);
-    const messageId = messageIdMatch ? messageIdMatch[1] : undefined;
-
-    return { success: true, messageId };
-  } catch (error) {
-    console.error('[waitlist-welcome-email] SES fetch error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Fetch failed' };
   }
+
+  // Fallback: Check for custom header if Authorization not used
+  const headerSecret = req.headers.get('x-edge-function-secret');
+  if (headerSecret && headerSecret === secret) {
+    return true;
+  }
+
+  return false;
 }
 
 serve(async (req) => {
@@ -169,10 +47,25 @@ serve(async (req) => {
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-edge-function-secret',
         'Access-Control-Max-Age': '86400',
       },
     });
+  }
+
+  // Verify authentication
+  if (!verifySecret(req)) {
+    console.error('[waitlist-welcome-email] Authentication failed: invalid secret');
+    return new Response(
+      JSON.stringify({ success: false, error: 'Unauthorized: invalid credentials' }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      }
+    );
   }
 
   try {
@@ -209,10 +102,8 @@ serve(async (req) => {
 
     console.log('[waitlist-welcome-email] Sending email via AWS SES:', {
       toEmail: email,
-      hasAWSCredentials: !!(AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY),
       hasSupabaseUrl: !!SUPABASE_URL,
       hasServiceRoleKey: !!SUPABASE_SERVICE_ROLE_KEY,
-      awsRegion: AWS_REGION,
     });
 
     // Get template from database
@@ -243,15 +134,13 @@ serve(async (req) => {
       );
     }
 
-    // Replace template variables
-    let htmlBody = template.html_template || '';
+    // Replace template variables (standardized names)
+    let htmlBody = template.html_body || '';
 
     const variables = {
-      user_name: firstName,
-      full_name: full_name,
-      company_name: company_name || '',
-      first_name: firstName,
-      email: email,
+      recipient_name: firstName,
+      user_email: email,
+      organization_name: company_name || '',
     };
 
     for (const [key, value] of Object.entries(variables)) {
@@ -259,12 +148,14 @@ serve(async (req) => {
       htmlBody = htmlBody.replace(regex, String(value || ''));
     }
 
-    // Send via SES
-    const emailResult = await sendEmailViaSES(
-      email,
-      template.subject_line || 'Welcome to use60!',
-      htmlBody
-    );
+    // Send via SES using shared function
+    const emailResult = await sendEmail({
+      to: email,
+      subject: template.subject_line || 'Welcome to use60!',
+      html: htmlBody,
+      from: 'noreply@use60.com',
+      fromName: 'use60',
+    });
 
     if (!emailResult.success) {
       console.error('[waitlist-welcome-email] SES email sending failed:', emailResult);
@@ -282,6 +173,25 @@ serve(async (req) => {
           },
         }
       );
+    }
+
+    // Log email send to database (non-blocking)
+    try {
+      await supabase.from('email_logs').insert({
+        email_type: 'waitlist_welcome',
+        to_email: email,
+        user_id: null,
+        status: 'sent',
+        metadata: {
+          template_id: template.id,
+          template_name: template.template_name,
+          message_id: emailResult.messageId,
+        },
+        sent_via: 'aws_ses',
+      });
+    } catch (logError) {
+      console.warn('[waitlist-welcome-email] Failed to log email:', logError);
+      // Non-blocking - continue even if logging fails
     }
 
     return new Response(

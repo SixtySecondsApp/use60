@@ -21,7 +21,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-edge-function-secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -43,6 +43,48 @@ function processTemplate(template: string, variables: Record<string, any>): stri
     processed = processed.replace(regex, String(value || ''));
   }
   return processed;
+}
+
+/**
+ * Verify custom edge function secret (preferred) or service role key
+ */
+function verifySecret(req: Request): boolean {
+  const secret = Deno.env.get('EDGE_FUNCTION_SECRET');
+
+  // Check Authorization header for Bearer token (avoids CORS preflight issues)
+  if (secret) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7); // Remove "Bearer " prefix
+      if (token === secret) {
+        return true;
+      }
+    }
+  }
+
+  // Fallback: Check for custom edge function secret header
+  if (secret) {
+    const headerSecret = req.headers.get('x-edge-function-secret');
+    if (headerSecret && headerSecret === secret) {
+      return true;
+    }
+  }
+
+  // Fall back to service role key check (for backward compatibility)
+  const authHeader = req.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    if (token === SUPABASE_SERVICE_ROLE_KEY) {
+      return true;
+    }
+  }
+
+  const apiKeyHeader = req.headers.get('apikey');
+  if (apiKeyHeader === SUPABASE_SERVICE_ROLE_KEY) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -421,6 +463,19 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // Check custom edge function secret first (preferred authentication method)
+  const edgeFunctionSecret = Deno.env.get('EDGE_FUNCTION_SECRET');
+  if (edgeFunctionSecret) {
+    const headerSecret = req.headers.get('x-edge-function-secret');
+    if (headerSecret && headerSecret === edgeFunctionSecret) {
+      console.log('[encharge-send-email] Authenticated with edge function secret');
+      // Proceed directly to email sending
+    } else {
+      console.log('[encharge-send-email] Custom secret header not provided or invalid');
+      // Fall back to service role/JWT authentication below
+    }
+  }
+
   // Check authentication - allow service role key or user JWT
   const authHeader = req.headers.get('Authorization');
   const apikeyHeader = req.headers.get('apikey');
@@ -561,9 +616,9 @@ serve(async (req) => {
       );
     }
 
-    // 2. Process template variables
+    // 2. Process template variables (standardized names)
     const variables = {
-      user_name: request.to_name || request.to_email.split('@')[0],
+      recipient_name: request.to_name || request.to_email.split('@')[0],
       user_email: request.to_email,
       ...request.variables,
     };
