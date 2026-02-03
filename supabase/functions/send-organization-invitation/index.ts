@@ -25,15 +25,62 @@ interface SendInvitationRequest {
 }
 
 /**
- * Generate HTML email template for organization invitation
+ * Fetch and format email template from database
  */
-function generateEmailTemplate(
-  recipientName: string,
-  organizationName: string,
-  inviterName: string,
-  invitationUrl: string
-): string {
-  return `<!DOCTYPE html>
+async function getEmailTemplate(
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+  variables: Record<string, string>
+): Promise<{ html: string; text: string }> {
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/encharge_email_templates?template_name=eq.organization_invitation&select=html_body,text_body`,
+      {
+        headers: {
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'apikey': supabaseServiceKey,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn('[send-organization-invitation] Failed to fetch template from database, using fallback');
+      return getFallbackTemplate(variables);
+    }
+
+    const templates = await response.json();
+    if (!templates || templates.length === 0) {
+      console.warn('[send-organization-invitation] Template not found in database, using fallback');
+      return getFallbackTemplate(variables);
+    }
+
+    const template = templates[0];
+    let html = template.html_body || '';
+    let text = template.text_body || '';
+
+    // Replace variables in template
+    Object.entries(variables).forEach(([key, value]) => {
+      const placeholder = `{{${key}}}`;
+      html = html.replace(new RegExp(placeholder, 'g'), value);
+      text = text.replace(new RegExp(placeholder, 'g'), value);
+    });
+
+    console.log('[send-organization-invitation] Successfully fetched and formatted template from database');
+    return { html, text };
+  } catch (error) {
+    console.error('[send-organization-invitation] Error fetching template:', error);
+    return getFallbackTemplate(variables);
+  }
+}
+
+/**
+ * Fallback template if database template not found
+ */
+function getFallbackTemplate(variables: Record<string, string>): { html: string; text: string } {
+  const { recipient_name, organization_name, inviter_name, invitation_url, expiry_time } = variables;
+
+  const html = `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -51,26 +98,26 @@ function generateEmailTemplate(
 <body>
     <div class="container">
         <div class="email-wrapper">
-            <h1>Join ${organizationName} on Sixty</h1>
+            <h1>Join ${organization_name} on Sixty</h1>
 
-            <p>Hi ${recipientName || 'there'},</p>
+            <p>Hi ${recipient_name},</p>
 
-            <p>${inviterName} has invited you to join <strong>${organizationName}</strong> on Sixty.
+            <p>${inviter_name} has invited you to join <strong>${organization_name}</strong> on Sixty.
             Accept the invitation below to get started collaborating with your team.</p>
 
             <p style="text-align: center; margin-top: 32px;">
-                <a href="${invitationUrl}" class="button">Accept Invitation</a>
+                <a href="${invitation_url}" class="button">Accept Invitation</a>
             </p>
 
             <p style="font-size: 14px; color: #6b7280;">
                 Or copy and paste this link in your browser:<br>
                 <code style="background: #f3f4f6; padding: 8px; border-radius: 4px; display: block; margin-top: 8px; word-break: break-all;">
-                    ${invitationUrl}
+                    ${invitation_url}
                 </code>
             </p>
 
             <p style="font-size: 14px; color: #6b7280;">
-                This invitation will expire in 7 days.
+                This invitation will expire in ${expiry_time || '7 days'}.
             </p>
 
             <div class="footer">
@@ -80,6 +127,10 @@ function generateEmailTemplate(
     </div>
 </body>
 </html>`;
+
+  const text = `Hi ${recipient_name},\n\n${inviter_name} has invited you to join ${organization_name} on Sixty.\n\nAccept the invitation by clicking:\n${invitation_url}\n\nThis invitation will expire in ${expiry_time || '7 days'}.`;
+
+  return { html, text };
 }
 
 serve(async (req) => {
@@ -131,18 +182,29 @@ serve(async (req) => {
     }
 
     const recipientName = to_name || to_email.split('@')[0];
-    const emailHtml = generateEmailTemplate(
-      recipientName,
-      organization_name,
-      inviter_name,
-      invitation_url
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+    const variables = {
+      recipient_name: recipientName,
+      organization_name: organization_name,
+      inviter_name: inviter_name,
+      invitation_url: invitation_url,
+      expiry_time: '7 days',
+    };
+
+    const { html: emailHtml, text: emailText } = await getEmailTemplate(
+      supabaseUrl,
+      supabaseServiceKey,
+      variables
     );
 
     const result = await sendEmail({
       to: to_email,
       subject: `${inviter_name} invited you to join ${organization_name}`,
       html: emailHtml,
-      text: `${inviter_name} invited you to join ${organization_name}. Click the link below to accept:\n\n${invitation_url}`,
+      text: emailText,
       from: 'invites@use60.com',
       fromName: 'Sixty',
     });

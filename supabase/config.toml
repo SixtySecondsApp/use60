@@ -132,3 +132,8 @@ verify_jwt = false
 # We handle auth verification manually inside the function (CORS preflight needs to work)
 [functions.send-password-reset-email]
 verify_jwt = false
+
+# Organization invitations - called from frontend with user JWT
+# Public endpoint that handles auth internally (CORS preflight needs to work)
+[functions.send-organization-invitation]
+verify_jwt = false
