@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Users, Trash2, Loader2, AlertCircle, UserPlus, Mail, RefreshCw, X, Check, Clock, Crown, ChevronDown, ChevronUp, UserCog, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -805,15 +806,15 @@ export default function TeamMembersPage() {
                     }`}
                   >
                     <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        member.member_status === 'removed'
-                          ? 'bg-gray-300 dark:bg-gray-600'
-                          : 'bg-gray-200 dark:bg-gray-700'
-                      }`}>
-                        <span className="text-gray-900 dark:text-white font-medium">
-                          {member.user?.full_name?.[0] || member.user?.email?.[0] || '?'}
-                        </span>
-                      </div>
+                      <Avatar className={`h-10 w-10 ${member.member_status === 'removed' ? 'opacity-60' : ''}`}>
+                        {member.user?.avatar_url && (
+                          <AvatarImage src={member.user.avatar_url} />
+                        )}
+                        <AvatarFallback>
+                          {member.user?.full_name?.[0]}
+                          {member.user?.full_name?.split(' ')[1]?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="text-gray-900 dark:text-white font-medium">

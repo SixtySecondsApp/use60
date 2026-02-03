@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -761,13 +762,24 @@ export default function Organizations() {
                                         key={member.user_id}
                                         className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
                                       >
-                                        <div className="flex-1">
-                                          <p className="font-medium text-gray-900 dark:text-white text-sm">
-                                            {member.profiles?.first_name} {member.profiles?.last_name}
-                                          </p>
-                                          <p className="text-xs text-gray-600 dark:text-gray-400">
-                                            {member.profiles?.email}
-                                          </p>
+                                        <div className="flex items-center gap-3 flex-1">
+                                          <Avatar className="h-8 w-8">
+                                            {member.profiles?.avatar_url && (
+                                              <AvatarImage src={member.profiles.avatar_url} />
+                                            )}
+                                            <AvatarFallback>
+                                              {member.profiles?.first_name?.[0]}
+                                              {member.profiles?.last_name?.[0]}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <div className="min-w-0">
+                                            <p className="font-medium text-gray-900 dark:text-white text-sm truncate">
+                                              {member.profiles?.first_name} {member.profiles?.last_name}
+                                            </p>
+                                            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                                              {member.profiles?.email}
+                                            </p>
+                                          </div>
                                         </div>
                                         <div className="flex items-center gap-2">
                                           <select
