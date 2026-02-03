@@ -75,32 +75,14 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
 
     const invitationUrl = `${baseUrl}/invite/${invitation.token}`;
 
-    // Generate inviter initials from name
-    const name = inviterName || 'A team member';
-    const initials = name
-      .split(' ')
-      .filter((part) => part.length > 0)
-      .slice(0, 2)
-      .map((part) => part[0].toUpperCase())
-      .join('');
-
-    // Call encharge-send-email edge function
-    const { error } = await supabase.functions.invoke('encharge-send-email', {
+    // Call send-organization-invitation edge function (uses AWS SES directly)
+    const { error } = await supabase.functions.invoke('send-organization-invitation', {
       body: {
         to_email: invitation.email,
-        template_type: 'organization_invitation',
-        variables: {
-          first_name: inviteeName,
-          organization_name: organizationName,
-          inviter_name: name,
-          inviter_initials: initials || 'SS',
-          invitation_url: invitationUrl,
-        },
-        user_id: null, // No user_id yet since invitee may not have account
-        metadata: {
-          invitation_id: invitation.id,
-          org_id: invitation.org_id,
-        },
+        to_name: inviteeName,
+        organization_name: organizationName,
+        inviter_name: inviterName || 'A team member',
+        invitation_url: invitationUrl,
       },
     });
 
