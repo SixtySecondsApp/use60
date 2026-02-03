@@ -147,11 +147,10 @@ export const APIKeysPage = lazyWithRetry(() => import('@/pages/settings/APIKeysP
 export const EmailSyncPage = lazyWithRetry(() => import('@/pages/settings/EmailSyncPage'));
 export const TaskSyncPage = lazyWithRetry(() => import('@/pages/settings/TaskSyncPage'));
 export const MeetingSyncPage = lazyWithRetry(() => import('@/pages/settings/MeetingSyncPage'));
-export const TeamMembersPage = lazyWithRetry(() => import('@/pages/settings/TeamMembersPage'));
+export const OrganizationManagementPage = lazyWithRetry(() => import('@/pages/settings/OrganizationManagementPage'));
 export const CallTypeSettings = lazyWithRetry(() => import('@/pages/settings/CallTypeSettings'));
 export const PipelineAutomationSettings = lazyWithRetry(() => import('@/pages/settings/PipelineAutomationSettings'));
 export const FollowUpSettings = lazyWithRetry(() => import('@/pages/settings/FollowUpSettings'));
-export const OrganizationSettingsPage = lazyWithRetry(() => import('@/pages/settings/OrganizationSettingsPage'));
 export const LogoSettings = lazyWithRetry(() => import('@/pages/settings/LogoSettings'));
 export const SlackSettings = lazyWithRetry(() => import('@/pages/settings/SlackSettings'));
 export const JustCallSettings = lazyWithRetry(() => import('@/pages/settings/JustCallSettings'));

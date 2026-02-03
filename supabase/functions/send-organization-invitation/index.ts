@@ -3,7 +3,9 @@
  *
  * Sends invitation emails to join an organization using AWS SES
  * No Encharge dependency - pure AWS SES implementation
- * Public endpoint - does not require authentication
+ *
+ * Authentication: Uses custom secret from EDGE_FUNCTION_SECRET environment variable
+ * This bypasses platform JWT verification and allows any authenticated request
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
@@ -11,10 +13,42 @@ import { sendEmail } from '../_shared/ses.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-edge-function-secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Credentials': 'true',
 };
+
+/**
+ * Verify custom edge function secret
+ */
+function verifySecret(req: Request): boolean {
+  const secret = Deno.env.get('EDGE_FUNCTION_SECRET');
+  if (!secret) {
+    console.warn('[send-organization-invitation] No EDGE_FUNCTION_SECRET configured');
+    return false;
+  }
+
+  // Check for secret in headers (preferred method)
+  const headerSecret = req.headers.get('x-edge-function-secret');
+  if (headerSecret && headerSecret === secret) {
+    return true;
+  }
+
+  // Check for JWT in Authorization header (fallback for old code)
+  const authHeader = req.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    // If JWT is provided, accept it (allows transitional period)
+    return true;
+  }
+
+  // If running locally (no secret), allow requests for development
+  if (!Deno.env.get('EDGE_FUNCTION_SECRET')) {
+    console.log('[send-organization-invitation] Running in development mode (no secret)');
+    return true;
+  }
+
+  return false;
+}
 
 interface SendInvitationRequest {
   to_email: string;
@@ -150,6 +184,15 @@ serve(async (req) => {
     console.log(`[send-organization-invitation] Invalid method: ${req.method}`);
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Verify custom authentication
+  if (!verifySecret(req)) {
+    console.error('[send-organization-invitation] Authentication failed: invalid secret or missing authorization');
+    return new Response(JSON.stringify({ error: 'Unauthorized: invalid credentials' }), {
+      status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

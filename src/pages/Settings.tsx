@@ -184,20 +184,12 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
-      id: 'team-members',
-      label: 'Team Members',
-      icon: Users,
-      description: 'View team members and leave organization',
-      path: '/settings/team-members',
-      requiresOrgAdmin: false,
-    },
-    {
-      id: 'organization',
-      label: 'Organization',
+      id: 'organization-management',
+      label: 'Organization Management',
       icon: Building2,
-      description: 'Manage organization name and details',
-      path: '/settings/organization',
-      requiresOrgAdmin: true,
+      description: 'Manage organization, team members, and invitations',
+      path: '/settings/organization-management',
+      requiresOrgAdmin: false,
     },
     {
       id: 'branding',
@@ -261,7 +253,7 @@ export default function Settings() {
       ['email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'meeting-sync'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
-      ['team-members', 'organization', 'branding', 'billing'].includes(s.id)
+      ['organization-management', 'branding', 'billing'].includes(s.id)
     );
 
     const cats = [

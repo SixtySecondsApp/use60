@@ -90,8 +90,8 @@ import {
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
-  APIKeysPage, EmailSyncPage, TaskSyncPage, MeetingSyncPage, TeamMembersPage,
-  CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
+  APIKeysPage, EmailSyncPage, TaskSyncPage, MeetingSyncPage, OrganizationManagementPage,
+  CallTypeSettings, PipelineAutomationSettings, FollowUpSettings,
   LogoSettings, SlackSettings, JustCallSettings, HubSpotSettings, BullhornSettings, OrgBranding, OrgBilling,
   // Insights
   Insights, Heatmap, SalesFunnel, TeamAnalytics, ContentTopics,
@@ -532,8 +532,10 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/email-sync" element={<AppLayout><EmailSyncPage /></AppLayout>} />
                 <Route path="/settings/task-sync" element={<AppLayout><TaskSyncPage /></AppLayout>} />
                 <Route path="/settings/meeting-sync" element={<AppLayout><MeetingSyncPage /></AppLayout>} />
-                <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><TeamMembersPage /></AppLayout></ProtectedRoute>} />
-                <Route path="/settings/organization" element={<OrgAdminRouteGuard><AppLayout><OrganizationSettingsPage /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/organization-management" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
+                {/* Legacy routes for backwards compatibility */}
+                <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
+                <Route path="/settings/organization" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/branding" element={<OrgAdminRouteGuard><AppLayout><OrgBranding /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><OrgBilling /></AppLayout></OrgAdminRouteGuard>} />
                 {/* Slack Settings - visible only when Slack is connected (enforced inside page) */}

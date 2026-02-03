@@ -76,10 +76,8 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     const invitationUrl = `${baseUrl}/invite/${invitation.token}`;
 
     // Call send-organization-invitation edge function (uses AWS SES directly)
-    // Note: The function requires verify_jwt=false in supabase/config.toml
-    // Get current user's session for auth headers
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData?.session?.access_token || '';
+    // Uses custom secret for authentication instead of JWT verification
+    const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
 
     const { error } = await supabase.functions.invoke('send-organization-invitation', {
       body: {
@@ -89,10 +87,10 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
         inviter_name: inviterName || 'A team member',
         invitation_url: invitationUrl,
       },
-      // Pass JWT token for authentication
-      // If config.toml has verify_jwt=false, this is ignored
-      // If not deployed, this JWT is used for verification
-      headers: accessToken ? { 'Authorization': `Bearer ${accessToken}` } : undefined,
+      // Pass secret header for custom authentication
+      headers: edgeFunctionSecret
+        ? { 'x-edge-function-secret': edgeFunctionSecret }
+        : undefined,
     });
 
     if (error) {
