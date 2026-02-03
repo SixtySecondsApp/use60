@@ -29,32 +29,31 @@ const corsHeaders = {
  */
 function verifySecret(req: Request): boolean {
   const secret = Deno.env.get('EDGE_FUNCTION_SECRET');
-  if (!secret) {
-    console.warn('[send-organization-invitation] No EDGE_FUNCTION_SECRET configured');
-    return false;
-  }
 
   // Check Authorization header for Bearer token (avoids CORS preflight issues)
   const authHeader = req.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7); // Remove "Bearer " prefix
-    if (token === secret) {
+    if (secret && token === secret) {
+      console.log('[send-organization-invitation] Authentication successful via Bearer token');
       return true;
     }
   }
 
   // Fallback: Check for custom header if Authorization not used
   const headerSecret = req.headers.get('x-edge-function-secret');
-  if (headerSecret && headerSecret === secret) {
+  if (headerSecret && secret && headerSecret === secret) {
+    console.log('[send-organization-invitation] Authentication successful via custom header');
     return true;
   }
 
-  // If running locally (no secret), allow requests for development
-  if (!Deno.env.get('EDGE_FUNCTION_SECRET')) {
-    console.log('[send-organization-invitation] Running in development mode (no secret)');
+  // If running locally (no secret configured), allow requests for development
+  if (!secret) {
+    console.log('[send-organization-invitation] Running in development mode (no EDGE_FUNCTION_SECRET configured)');
     return true;
   }
 
+  console.warn('[send-organization-invitation] Authentication failed: invalid or missing credentials');
   return false;
 }
 
