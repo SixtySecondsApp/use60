@@ -163,6 +163,21 @@ export function SkillDetailView({
     loadSkill();
   }, [loadSkill]);
 
+  // Initialize skill suggestions for sequences (linked skills only)
+  useEffect(() => {
+    if (skill && skill.category === 'agent-sequence' && skill.linked_skills) {
+      setSkillSuggestions(
+        skill.linked_skills.map((ls) => ({
+          skill_key: ls.skill_key,
+          name: ls.name,
+          category: ls.category,
+        }))
+      );
+    } else {
+      setSkillSuggestions([]);
+    }
+  }, [skill]);
+
   // Get selected document
   const selectedDocument = useMemo(
     () =>
@@ -352,10 +367,40 @@ export function SkillDetailView({
     [skill]
   );
 
-  const handleSearchSkills = useCallback(async (query: string) => {
-    const results = await skillFolderService.searchSkillsForAutocomplete(query);
-    setSkillSuggestions(results);
-  }, []);
+  // For sequences: @ mention can reference linked skills
+  // For regular skills: @ mention only references documents (no external skills)
+  const handleSearchSkills = useCallback(
+    async (query: string) => {
+      if (!skill) {
+        setSkillSuggestions([]);
+        return;
+      }
+
+      // Only sequences (agent-sequence category) can reference linked skills
+      if (skill.category !== 'agent-sequence') {
+        setSkillSuggestions([]);
+        return;
+      }
+
+      // Filter linked skills by query
+      const linkedSkills = skill.linked_skills || [];
+      const lowerQuery = query.toLowerCase();
+      const filtered = linkedSkills
+        .filter(
+          (ls) =>
+            ls.skill_key.toLowerCase().includes(lowerQuery) ||
+            ls.name.toLowerCase().includes(lowerQuery)
+        )
+        .map((ls) => ({
+          skill_key: ls.skill_key,
+          name: ls.name,
+          category: ls.category,
+        }));
+
+      setSkillSuggestions(filtered);
+    },
+    [skill]
+  );
 
   // Handle back navigation
   const handleBack = useCallback(() => {

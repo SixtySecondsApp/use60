@@ -35,6 +35,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { SkillFolder, SkillSearchResult } from '@/lib/types/skills';
 import { searchSkillsForLinking } from '@/lib/services/skillFolderService';
+import { supabase } from '@/lib/supabase/clientV2';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 
 // =============================================================================
@@ -156,17 +157,82 @@ export function AddSkillLinkModal({
     }
   }, [open, targetFolderId]);
 
+  // Fallback search using direct query (for when database function isn't deployed)
+  const fallbackSearch = async (
+    parentId: string,
+    query: string,
+    limit: number = 20
+  ): Promise<SkillSearchResult[]> => {
+    // Get existing links for this parent (may fail if table doesn't exist)
+    let linkedIds = new Set<string>();
+    try {
+      const { data: existingLinks, error: linksError } = await supabase
+        .from('skill_links')
+        .select('linked_skill_id')
+        .eq('parent_skill_id', parentId);
+      if (!linksError && existingLinks) {
+        linkedIds = new Set(existingLinks.map((l) => l.linked_skill_id));
+      }
+    } catch {
+      // Table may not exist yet
+      console.log('[AddSkillLinkModal] skill_links table not found');
+    }
+
+    // Search for skills - use simple ilike on skill_key only for reliability
+    let skillQuery = supabase
+      .from('platform_skills')
+      .select('id, skill_key, frontmatter, category')
+      .eq('is_active', true)
+      .neq('id', parentId)
+      .limit(limit)
+      .order('skill_key');
+
+    if (query.trim()) {
+      // Use simple ilike on skill_key - more reliable than JSON operators
+      skillQuery = skillQuery.ilike('skill_key', `%${query}%`);
+    }
+
+    const { data: skills, error } = await skillQuery;
+
+    if (error) {
+      console.error('[AddSkillLinkModal] Fallback query error:', error);
+      throw error;
+    }
+
+    return (skills || []).map((skill) => ({
+      id: skill.id,
+      skill_key: skill.skill_key,
+      name: skill.frontmatter?.name || skill.skill_key,
+      description: skill.frontmatter?.description,
+      category: skill.category,
+      is_already_linked: linkedIds.has(skill.id),
+    }));
+  };
+
   // Search for skills when query changes
   useEffect(() => {
     const search = async () => {
       setIsSearching(true);
       setError(null);
+
+      console.log('[AddSkillLinkModal] Searching with parentSkillId:', parentSkillId, 'query:', debouncedQuery);
+
       try {
-        const results = await searchSkillsForLinking(parentSkillId, debouncedQuery, undefined, 20);
+        // Try the database function first, fall back to direct query
+        let results: SkillSearchResult[];
+        try {
+          results = await searchSkillsForLinking(parentSkillId, debouncedQuery, undefined, 20);
+          console.log('[AddSkillLinkModal] DB function returned', results.length, 'results');
+        } catch (dbErr) {
+          // Database function may not exist yet, use fallback
+          console.log('[AddSkillLinkModal] DB function failed, using fallback:', dbErr);
+          results = await fallbackSearch(parentSkillId, debouncedQuery, 20);
+          console.log('[AddSkillLinkModal] Fallback returned', results.length, 'results');
+        }
         setSearchResults(results);
       } catch (err) {
+        console.error('[AddSkillLinkModal] Both searches failed:', err);
         setError('Failed to search skills');
-        console.error('[AddSkillLinkModal] Search error:', err);
       } finally {
         setIsSearching(false);
       }
@@ -342,7 +408,7 @@ export function AddSkillLinkModal({
             <Button
               type="submit"
               disabled={isLinking || !selectedSkill}
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500"
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white"
             >
               {isLinking && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Link Skill
