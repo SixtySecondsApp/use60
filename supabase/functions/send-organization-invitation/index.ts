@@ -100,12 +100,17 @@ serve(async (req) => {
     const avatarUrl = inviter_avatar_url ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(inviter_name)}&size=96&background=3b82f6&color=ffffff&rounded=true`;
 
+    // Get system-wide email logo from environment
+    const emailLogoUrl = Deno.env.get('EMAIL_LOGO_URL') ||
+      'https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Icon.png';
+
     // Prepare standardized variables per EMAIL_VARIABLES_SCHEMA.md
     const emailVariables = {
       recipient_name: recipientName,
       organization_name: organization_name,
       inviter_name: inviter_name,
       inviter_avatar_url: avatarUrl,
+      app_logo_url: emailLogoUrl,
       action_url: invitation_url,
       invitation_url: invitation_url, // Support both standardized and legacy variable names
       expiry_time: expiry_time,
