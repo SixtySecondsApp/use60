@@ -1,0 +1,176 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "feature": "declarative-skills",
+    "createdAt": "2026-02-03T00:00:00Z",
+    "branch": "improve/skills-remap-andrew"
+  },
+
+  "features": [
+    {
+      "id": "declarative-skills",
+      "name": "Fully Declarative Skill System",
+      "status": "pending",
+      "description": "Eliminate hardcoded model routing arrays in skillsRuntime.ts by adding execution config to frontmatter. Create a Zod schema as single source of truth for skill validation. Enforce schema at DB level via Postgres trigger. Wire Zod into the skill editor UI for client-side validation. Add annotated cookbook examples.",
+      "createdAt": "2026-02-03T00:00:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "DECL-001",
+      "feature": "declarative-skills",
+      "title": "Define Zod schema for PlatformSkillFrontmatter",
+      "type": "types",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/types/skills.ts"],
+        "schema": []
+      },
+      "blocks": ["DECL-002", "DECL-003", "DECL-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Zod schema covers all SkillFrontmatterV2 fields plus new execution block",
+        "execution block: { provider: 'anthropic' | 'gemini' | 'gemini-imagen', model?: string, grounding?: boolean }",
+        "Schema exports inferred TypeScript type that replaces existing SkillFrontmatterV2 interface",
+        "V1-to-V2 migration helper updated to populate default execution config",
+        "JSON Schema export function (zodToJsonSchema or manual) for Postgres consumption"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/types/skills.ts"
+      ]
+    },
+    {
+      "id": "DECL-002",
+      "feature": "declarative-skills",
+      "title": "Extend Postgres validate_skill_frontmatter trigger to enforce execution config",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["DECL-001"],
+        "files": [],
+        "schema": ["platform_skills"]
+      },
+      "blocks": ["DECL-005"],
+      "parallelWith": ["DECL-003"],
+      "acceptance": [
+        "validate_skill_frontmatter checks execution.provider is one of: anthropic, gemini, gemini-imagen",
+        "Validates execution.model is string if present",
+        "Validates execution.grounding is boolean if present",
+        "Rejects inserts/updates with invalid frontmatter via trigger",
+        "Existing skills without execution block default to { provider: 'anthropic' } on migration",
+        "Migration backfills execution config for known web-search and image-generation skills"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260203120000_skill_execution_config.sql"
+      ]
+    },
+    {
+      "id": "DECL-003",
+      "feature": "declarative-skills",
+      "title": "Wire Zod schema into SkillDocumentEditor for client-side validation",
+      "type": "component",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["DECL-001"],
+        "files": ["src/components/platform/SkillDocumentEditor.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["DECL-002"],
+      "acceptance": [
+        "SkillDocumentEditor validates frontmatter against Zod schema before save",
+        "Validation errors displayed inline next to relevant form fields",
+        "Execution config section added to editor: provider dropdown, model input, grounding toggle",
+        "Form prevents submission when Zod validation fails"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/platform/SkillDocumentEditor.tsx"
+      ]
+    },
+    {
+      "id": "DECL-004",
+      "feature": "declarative-skills",
+      "title": "Remove hardcoded arrays from skillsRuntime.ts — route from frontmatter",
+      "type": "service",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["DECL-001"],
+        "files": ["supabase/functions/_shared/skillsRuntime.ts"],
+        "schema": []
+      },
+      "blocks": ["DECL-005"],
+      "parallelWith": ["DECL-002", "DECL-003"],
+      "acceptance": [
+        "WEB_SEARCH_SKILLS and IMAGE_GENERATION_SKILLS arrays deleted",
+        "runSkill() loads skill frontmatter from DB to determine provider routing",
+        "Routes to runSkillWithGemini when execution.provider is 'gemini'",
+        "Routes to runSkillWithImagen when execution.provider is 'gemini-imagen'",
+        "Falls back to Claude (anthropic) when no execution block or provider is 'anthropic'",
+        "Passes execution.model to override default model when specified",
+        "Passes execution.grounding to enable/disable Google Search grounding"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/skillsRuntime.ts",
+        "supabase/functions/_shared/promptLoader.ts"
+      ]
+    },
+    {
+      "id": "DECL-005",
+      "feature": "declarative-skills",
+      "title": "Add cookbook examples to docs",
+      "type": "docs",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["DECL-002", "DECL-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "2-3 annotated frontmatter examples covering: atomic Claude skill, Gemini web-search skill, Imagen image-generation skill",
+        "Each example shows all required and relevant optional fields",
+        "Notes on what the DB trigger validates and common rejection reasons",
+        "Placed in docs/SKILL_COOKBOOK.md or appended to existing SKILL_FRONTMATTER_GUIDE.md"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "docs/SKILL_FRONTMATTER_GUIDE.md"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 0,
+    "currentFeature": "declarative-skills",
+    "parallelGroups": [
+      {
+        "name": "Foundation",
+        "stories": ["DECL-001"],
+        "description": "Zod schema — single source of truth"
+      },
+      {
+        "name": "Enforcement + Runtime",
+        "stories": ["DECL-002", "DECL-003", "DECL-004"],
+        "description": "DB trigger, UI validation, and runtime routing — all depend on DECL-001 but are independent of each other"
+      },
+      {
+        "name": "Documentation",
+        "stories": ["DECL-005"],
+        "description": "Cookbook examples after schema and runtime are settled"
+      }
+    ]
+  }
+}
