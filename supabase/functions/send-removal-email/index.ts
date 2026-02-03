@@ -97,14 +97,23 @@ serve(async (req) => {
 
     console.log('[send-removal-email] Delegating to encharge-send-email dispatcher');
 
-    // Call encharge-send-email dispatcher
+    // Call encharge-send-email dispatcher with EDGE_FUNCTION_SECRET
+    const edgeFunctionSecret = Deno.env.get('EDGE_FUNCTION_SECRET');
+
+    const dispatcherHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (edgeFunctionSecret) {
+      dispatcherHeaders['x-edge-function-secret'] = edgeFunctionSecret;
+    } else if (SUPABASE_SERVICE_ROLE_KEY) {
+      dispatcherHeaders['Authorization'] = `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
+      dispatcherHeaders['apikey'] = SUPABASE_SERVICE_ROLE_KEY;
+    }
+
     const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/encharge-send-email`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': SUPABASE_SERVICE_ROLE_KEY,
-      },
+      headers: dispatcherHeaders,
       body: JSON.stringify({
         template_type: 'member_removed',
         to_email: profile.email,

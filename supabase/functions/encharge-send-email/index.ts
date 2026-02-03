@@ -11,6 +11,7 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { crypto } from 'https://deno.land/std@0.190.0/crypto/mod.ts';
+import { verifySecret } from '../_shared/edgeAuth.ts';
 
 const ENCHARGE_WRITE_KEY = Deno.env.get('ENCHARGE_WRITE_KEY');
 const AWS_REGION = Deno.env.get('AWS_REGION') || 'eu-west-2';
@@ -45,47 +46,6 @@ function processTemplate(template: string, variables: Record<string, any>): stri
   return processed;
 }
 
-/**
- * Verify custom edge function secret (preferred) or service role key
- */
-function verifySecret(req: Request): boolean {
-  const secret = Deno.env.get('EDGE_FUNCTION_SECRET');
-
-  // Check Authorization header for Bearer token (avoids CORS preflight issues)
-  if (secret) {
-    const authHeader = req.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7); // Remove "Bearer " prefix
-      if (token === secret) {
-        return true;
-      }
-    }
-  }
-
-  // Fallback: Check for custom edge function secret header
-  if (secret) {
-    const headerSecret = req.headers.get('x-edge-function-secret');
-    if (headerSecret && headerSecret === secret) {
-      return true;
-    }
-  }
-
-  // Fall back to service role key check (for backward compatibility)
-  const authHeader = req.headers.get('authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    if (token === SUPABASE_SERVICE_ROLE_KEY) {
-      return true;
-    }
-  }
-
-  const apiKeyHeader = req.headers.get('apikey');
-  if (apiKeyHeader === SUPABASE_SERVICE_ROLE_KEY) {
-    return true;
-  }
-
-  return false;
-}
 
 /**
  * Create HMAC-SHA256 signature
@@ -439,134 +399,28 @@ async function testSESConnection(): Promise<{ success: boolean; message: string;
   }
 }
 
-/**
- * Check if request is authenticated with service role key
- */
-function isServiceRoleAuth(authHeader: string | null, serviceRoleKey: string): boolean {
-  if (!authHeader) return false;
-  if (!serviceRoleKey) {
-    console.warn('[encharge-send-email] Service role key not configured');
-    return false;
-  }
-  const token = authHeader.replace(/^Bearer\s+/i, '');
-  const match = token === serviceRoleKey;
-  console.log('[encharge-send-email] Service role comparison:', {
-    tokenLength: token.length,
-    keyLength: serviceRoleKey.length,
-    match,
-  });
-  return match;
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Check custom edge function secret first (preferred authentication method)
-  const edgeFunctionSecret = Deno.env.get('EDGE_FUNCTION_SECRET');
-  if (edgeFunctionSecret) {
-    const headerSecret = req.headers.get('x-edge-function-secret');
-    if (headerSecret && headerSecret === edgeFunctionSecret) {
-      console.log('[encharge-send-email] Authenticated with edge function secret');
-      // Proceed directly to email sending
-    } else {
-      console.log('[encharge-send-email] Custom secret header not provided or invalid');
-      // Fall back to service role/JWT authentication below
-    }
-  }
-
-  // Check authentication - allow service role key or user JWT
-  const authHeader = req.headers.get('Authorization');
-  const apikeyHeader = req.headers.get('apikey');
-
-  console.log('[encharge-send-email] Auth check:', {
-    hasAuthHeader: !!authHeader,
-    hasApiKeyHeader: !!apikeyHeader,
-    authHeaderPreview: authHeader ? authHeader.substring(0, 20) + '...' : null,
-    serviceRoleKeySet: !!SUPABASE_SERVICE_ROLE_KEY,
-    serviceRoleKeyLength: SUPABASE_SERVICE_ROLE_KEY?.length,
-  });
-
-  // Allow service role authentication (for service-to-service calls)
-  const isServiceRole = isServiceRoleAuth(authHeader, SUPABASE_SERVICE_ROLE_KEY) ||
-                        (apikeyHeader === SUPABASE_SERVICE_ROLE_KEY);
-
-  console.log('[encharge-send-email] Service role check result:', { isServiceRole });
-
-  // If we have a service role key match, skip further auth checks
-  if (isServiceRole) {
-    console.log('[encharge-send-email] Authenticated as service role - proceeding');
-  } else if (authHeader) {
-    // If not service role, try to validate as user JWT (optional - for direct calls)
-    try {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      const token = authHeader.replace(/^Bearer\s+/i, '');
-      const { data: { user }, error } = await supabase.auth.getUser(token);
-      console.log('[encharge-send-email] JWT validation result:', {
-        error: error?.message,
-        hasUser: !!user,
-        userId: user?.id,
-      });
-      if (error || !user) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Unauthorized: invalid authentication',
-            details: {
-              message: error?.message || 'User not found',
-              hint: 'Please ensure you are logged in and your session is valid'
-            }
-          }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Verify user is an admin (check profiles table)
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError || !profile?.is_admin) {
-        console.log('[encharge-send-email] User is not an admin:', { userId: user.id, profileError: profileError?.message });
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Unauthorized: admin access required',
-            details: {
-              message: 'Only administrators can send waitlist invitations'
-            }
-          }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      console.log('[encharge-send-email] Authenticated as admin user - proceeding');
-    } catch (authError) {
-      console.log('[encharge-send-email] Auth exception:', authError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Unauthorized: authentication failed',
-          details: {
-            message: authError instanceof Error ? authError.message : 'Unknown error'
-          }
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-  } else {
-    // No auth headers provided
+  // Verify authentication using unified edge function secret verification
+  const auth = verifySecret(req);
+  if (!auth.authenticated) {
+    console.error('[encharge-send-email] Authentication failed');
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'Unauthorized: no authentication provided'
+        error: 'Unauthorized: authentication required',
+        code: 401,
+        message: 'Missing authorization header'
       }),
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+
+  console.log(`[encharge-send-email] Authenticated via ${auth.method} - proceeding`);
 
   // Handle test endpoint
   const url = new URL(req.url);
