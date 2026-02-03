@@ -13,6 +13,8 @@
  */
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   AtSign,
   Braces,
@@ -71,6 +73,10 @@ interface SkillContentEditorProps {
   onSearchSkills?: (query: string) => void;
   isLoading?: boolean;
   className?: string;
+  /** Start in preview mode */
+  defaultShowPreview?: boolean;
+  /** Hide the preview toggle button (for read-only views) */
+  hidePreviewToggle?: boolean;
 }
 
 // =============================================================================
@@ -374,9 +380,11 @@ export function SkillContentEditor({
   onSearchSkills,
   isLoading,
   className,
+  defaultShowPreview = false,
+  hidePreviewToggle = false,
 }: SkillContentEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(defaultShowPreview);
 
   // Autocomplete state
   const [autocomplete, setAutocomplete] = useState<{
@@ -493,101 +501,240 @@ export function SkillContentEditor({
     [content, onContentChange]
   );
 
-  // Syntax highlighting for preview
-  const highlightedContent = useMemo(() => {
-    if (!content) return '';
+  // Custom component to highlight @ mentions and {variables} within text
+  const HighlightedText = useCallback(({ children }: { children: React.ReactNode }) => {
+    if (typeof children !== 'string') return <>{children}</>;
 
-    return content
-      .replace(
-        /@([\w\-\/\.]+)/g,
-        '<span class="text-blue-400 bg-blue-400/10 px-1 rounded">@$1</span>'
-      )
-      .replace(
-        /\{([\w_]+)\}/g,
-        '<span class="text-green-400 bg-green-400/10 px-1 rounded">{$1}</span>'
-      )
-      .replace(
-        /\$\{([\w_\.]+)\}/g,
-        '<span class="text-green-400 bg-green-400/10 px-1 rounded">${$1}</span>'
+    // Split text by @ mentions and {variables}
+    const parts = children.split(/(@[\w\-\/\.]+|\{[\w_]+\}|\$\{[\w_\.]+\})/g);
+
+    return (
+      <>
+        {parts.map((part, i) => {
+          if (part.startsWith('@')) {
+            return (
+              <span key={i} className="text-blue-400 bg-blue-400/10 px-1 rounded font-mono text-sm">
+                {part}
+              </span>
+            );
+          }
+          if (part.startsWith('{') || part.startsWith('${')) {
+            return (
+              <span key={i} className="text-green-400 bg-green-400/10 px-1 rounded font-mono text-sm">
+                {part}
+              </span>
+            );
+          }
+          return part;
+        })}
+      </>
+    );
+  }, []);
+
+  // Custom markdown components with reference highlighting
+  const markdownComponents = useMemo(() => ({
+    p: ({ children }: { children: React.ReactNode }) => (
+      <p className="mb-4 last:mb-0 leading-relaxed">
+        <HighlightedText>{children}</HighlightedText>
+      </p>
+    ),
+    h1: ({ children }: { children: React.ReactNode }) => (
+      <h1 className="text-2xl font-bold mb-4 mt-8 first:mt-0 text-white border-b border-white/10 pb-3 tracking-tight">
+        {children}
+      </h1>
+    ),
+    h2: ({ children }: { children: React.ReactNode }) => (
+      <h2 className="text-xl font-semibold mb-3 mt-6 first:mt-0 text-white tracking-tight flex items-center gap-2">
+        <span className="w-1 h-5 bg-gradient-to-b from-blue-500 to-indigo-500 rounded-full" />
+        {children}
+      </h2>
+    ),
+    h3: ({ children }: { children: React.ReactNode }) => (
+      <h3 className="text-lg font-medium mb-2 mt-5 first:mt-0 text-gray-100 tracking-tight">
+        {children}
+      </h3>
+    ),
+    h4: ({ children }: { children: React.ReactNode }) => (
+      <h4 className="text-base font-medium mb-2 mt-4 first:mt-0 text-gray-200">
+        {children}
+      </h4>
+    ),
+    ul: ({ children }: { children: React.ReactNode }) => (
+      <ul className="mb-4 space-y-2 text-gray-300 ml-1">
+        {children}
+      </ul>
+    ),
+    ol: ({ children }: { children: React.ReactNode }) => (
+      <ol className="list-decimal list-inside mb-4 space-y-2 text-gray-300 ml-1">
+        {children}
+      </ol>
+    ),
+    li: ({ children }: { children: React.ReactNode }) => (
+      <li className="text-gray-300 flex items-start gap-2">
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mt-2.5 flex-shrink-0" />
+        <span className="flex-1">
+          <HighlightedText>{children}</HighlightedText>
+        </span>
+      </li>
+    ),
+    code: ({ children, className }: { children: React.ReactNode; className?: string }) => {
+      const isBlock = className?.includes('language-');
+      if (isBlock) {
+        return (
+          <code className={cn(
+            "block bg-gray-900/80 rounded-xl p-4 my-4 overflow-x-auto text-sm font-mono border border-white/5",
+            className
+          )}>
+            {children}
+          </code>
+        );
+      }
+      return (
+        <code className="bg-white/10 px-1.5 py-0.5 rounded-md text-sm font-mono text-pink-400 border border-white/5">
+          {children}
+        </code>
       );
-  }, [content]);
+    },
+    pre: ({ children }: { children: React.ReactNode }) => (
+      <pre className="bg-gray-900/80 rounded-xl overflow-hidden my-4 border border-white/5">
+        {children}
+      </pre>
+    ),
+    blockquote: ({ children }: { children: React.ReactNode }) => (
+      <blockquote className="border-l-4 border-blue-500/50 pl-4 my-4 py-2 bg-blue-500/5 rounded-r-lg italic text-gray-400">
+        {children}
+      </blockquote>
+    ),
+    strong: ({ children }: { children: React.ReactNode }) => (
+      <strong className="font-semibold text-white">{children}</strong>
+    ),
+    em: ({ children }: { children: React.ReactNode }) => (
+      <em className="italic text-gray-300">{children}</em>
+    ),
+    a: ({ href, children }: { href?: string; children: React.ReactNode }) => (
+      <a href={href} className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/30 hover:decoration-blue-300/50 transition-colors" target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    ),
+    hr: () => <hr className="my-8 border-white/5" />,
+    table: ({ children }: { children: React.ReactNode }) => (
+      <div className="overflow-x-auto my-6 rounded-xl border border-white/10">
+        <table className="min-w-full">
+          {children}
+        </table>
+      </div>
+    ),
+    th: ({ children }: { children: React.ReactNode }) => (
+      <th className="bg-white/5 px-4 py-3 text-left font-semibold text-white text-sm border-b border-white/10">
+        {children}
+      </th>
+    ),
+    td: ({ children }: { children: React.ReactNode }) => (
+      <td className="px-4 py-3 border-b border-white/5 text-sm">
+        <HighlightedText>{children}</HighlightedText>
+      </td>
+    ),
+  }), [HighlightedText]);
+
+  // In preview mode (read-only), we show only the rendered content
+  const isReadOnly = hidePreviewToggle && defaultShowPreview;
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
-      {/* Title and Description */}
-      <div className="space-y-4 p-4 border-b border-white/10">
-        <div>
-          <Label htmlFor="title" className="text-sm text-gray-400">
-            Title
-          </Label>
-          <Input
-            id="title"
-            value={title}
-            onChange={(e) => onTitleChange(e.target.value)}
-            placeholder="Document title..."
-            className="mt-1"
-          />
+      {/* Title and Description - only show in edit mode */}
+      {!isReadOnly && (
+        <div className="space-y-4 p-5 border-b border-white/5 bg-gray-900/30">
+          <div>
+            <Label htmlFor="title" className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Title
+            </Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => onTitleChange(e.target.value)}
+              placeholder="Document title..."
+              className="mt-2 bg-white/5 border-white/10 focus:border-blue-500/50 focus:ring-blue-500/20"
+            />
+          </div>
+          <div>
+            <Label htmlFor="description" className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Description
+            </Label>
+            <Input
+              id="description"
+              value={description}
+              onChange={(e) => onDescriptionChange(e.target.value)}
+              placeholder="Brief description..."
+              className="mt-2 bg-white/5 border-white/10 focus:border-blue-500/50 focus:ring-blue-500/20"
+            />
+          </div>
         </div>
-        <div>
-          <Label htmlFor="description" className="text-sm text-gray-400">
-            Description
-          </Label>
-          <Input
-            id="description"
-            value={description}
-            onChange={(e) => onDescriptionChange(e.target.value)}
-            placeholder="Brief description..."
-            className="mt-1"
-          />
-        </div>
-      </div>
+      )}
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-white/5">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={insertMention}
-          className="h-8 gap-1.5"
-          title="Insert @ mention"
-        >
-          <AtSign className="h-4 w-4" />
-          <span className="text-xs">Mention</span>
-        </Button>
+      {/* Toolbar - only show in edit mode */}
+      {!isReadOnly && (
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-gray-900/20">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={insertMention}
+            className="h-8 gap-1.5 hover:bg-white/10 rounded-lg"
+            title="Insert @ mention"
+          >
+            <AtSign className="h-4 w-4 text-blue-400" />
+            <span className="text-xs">Mention</span>
+          </Button>
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5" title="Insert variable">
-              <Braces className="h-4 w-4" />
-              <span className="text-xs">Variable</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 hover:bg-white/10 rounded-lg" title="Insert variable">
+                <Braces className="h-4 w-4 text-green-400" />
+                <span className="text-xs">Variable</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 bg-gray-900 border-white/10" align="start">
+              <VariablePicker onSelect={insertVariable} />
+            </PopoverContent>
+          </Popover>
+
+          <div className="flex-1" />
+
+          {!hidePreviewToggle && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+              className={cn('h-8 gap-1.5 rounded-lg', showPreview ? 'bg-white/10 text-white' : 'hover:bg-white/10')}
+            >
+              {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              <span className="text-xs">{showPreview ? 'Edit' : 'Preview'}</span>
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="p-0" align="start">
-            <VariablePicker onSelect={insertVariable} />
-          </PopoverContent>
-        </Popover>
-
-        <div className="flex-1" />
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowPreview(!showPreview)}
-          className={cn('h-8 gap-1.5', showPreview && 'bg-white/10')}
-        >
-          {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          <span className="text-xs">{showPreview ? 'Edit' : 'Preview'}</span>
-        </Button>
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Content Area */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative overflow-hidden">
         {showPreview ? (
           <ScrollArea className="h-full">
-            <div
-              className="p-4 prose prose-invert prose-sm max-w-none whitespace-pre-wrap"
-              dangerouslySetInnerHTML={{ __html: highlightedContent }}
-            />
+            <div className="py-6 pr-4 text-gray-300">
+              {!content ? (
+                <div className="text-center py-16">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-white/5 flex items-center justify-center">
+                    <FileText className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <p className="text-gray-400 font-medium">No content yet</p>
+                  <p className="text-sm text-gray-500 mt-1">Switch to edit mode to add content</p>
+                </div>
+              ) : (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={markdownComponents as any}
+                >
+                  {content}
+                </ReactMarkdown>
+              )}
+            </div>
           </ScrollArea>
         ) : (
           <>

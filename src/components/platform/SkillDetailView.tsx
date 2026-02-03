@@ -20,11 +20,6 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from '@/components/ui/resizable';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -55,13 +50,17 @@ interface SkillDetailViewProps {
   skillId: string;
   onBack?: () => void;
   className?: string;
+  /** Hide the header (use when parent provides navigation) */
+  hideHeader?: boolean;
+  /** Show preview mode (rendered markdown) instead of edit mode */
+  previewMode?: boolean;
 }
 
 // =============================================================================
 // Main Component
 // =============================================================================
 
-export function SkillDetailView({ skillId, onBack, className }: SkillDetailViewProps) {
+export function SkillDetailView({ skillId, onBack, className, hideHeader = false, previewMode = false }: SkillDetailViewProps) {
   const navigate = useNavigate();
 
   // Data state
@@ -334,41 +333,80 @@ export function SkillDetailView({ skillId, onBack, className }: SkillDetailViewP
   }
 
   return (
-    <div className={cn('flex flex-col h-full bg-gray-950', className)}>
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-gray-900/50">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
+    <div className={cn('flex flex-col h-full bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950', className)}>
+      {/* Header - conditionally rendered */}
+      {!hideHeader && (
+        <header className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-gray-900/50 backdrop-blur-sm">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 hover:bg-white/10 rounded-lg">
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+
+            <div className="flex items-center gap-3">
+              <h1 className="font-semibold text-lg text-white">{skill.skill_key}</h1>
+              <Badge variant="outline" className="bg-white/5 border-white/10 text-gray-300">{skill.category}</Badge>
+              {hasChanges && (
+                <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block animate-pulse" />
+                  Unsaved
+                </Badge>
+              )}
+            </div>
+          </div>
 
           <div className="flex items-center gap-2">
-            <h1 className="font-semibold text-lg">{skill.skill_key}</h1>
-            <Badge variant="outline">{skill.category}</Badge>
-            {hasChanges && (
-              <Badge variant="secondary" className="bg-yellow-600/20 text-yellow-400">
-                Unsaved
-              </Badge>
-            )}
-          </div>
-        </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadSkill}
+              disabled={isLoading}
+              title="Refresh"
+              className="h-9 w-9 p-0 hover:bg-white/10 rounded-lg"
+            >
+              <RefreshCw className={cn('h-4 w-4 text-gray-400', isLoading && 'animate-spin')} />
+            </Button>
 
-        <div className="flex items-center gap-2">
+            <Button
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0 shadow-lg shadow-blue-500/20"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Save
+            </Button>
+          </div>
+        </header>
+      )}
+
+      {/* Compact toolbar when header is hidden */}
+      {hideHeader && !previewMode && (
+        <div className="flex items-center justify-end gap-2 px-4 py-2.5 border-b border-white/5 bg-gray-900/30 backdrop-blur-sm">
+          {hasChanges && (
+            <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 mr-2 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block animate-pulse" />
+              Unsaved changes
+            </Badge>
+          )}
           <Button
             variant="ghost"
             size="sm"
             onClick={loadSkill}
             disabled={isLoading}
             title="Refresh"
+            className="h-8 w-8 p-0 hover:bg-white/10 rounded-lg"
           >
-            <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+            <RefreshCw className={cn('h-4 w-4 text-gray-400', isLoading && 'animate-spin')} />
           </Button>
-
           <Button
+            size="sm"
             onClick={handleSave}
             disabled={!hasChanges || isSaving}
-            className="gap-2"
+            className="gap-2 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0"
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -378,12 +416,31 @@ export function SkillDetailView({ skillId, onBack, className }: SkillDetailViewP
             Save
           </Button>
         </div>
-      </header>
+      )}
 
-      {/* Main content - split pane */}
-      <ResizablePanelGroup direction="horizontal" className="flex-1">
-        {/* Left pane - folder tree */}
-        <ResizablePanel defaultSize={30} minSize={20} maxSize={40}>
+      {/* Main content - flex layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left pane - content editor (main content aligned with header) */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <SkillContentEditor
+            title={editedTitle}
+            description={editedDescription}
+            content={editedContent}
+            onTitleChange={setEditedTitle}
+            onDescriptionChange={setEditedDescription}
+            onContentChange={setEditedContent}
+            documentSuggestions={documentSuggestions}
+            skillSuggestions={skillSuggestions}
+            onSearchDocuments={handleSearchDocuments}
+            onSearchSkills={handleSearchSkills}
+            className="h-full"
+            defaultShowPreview={previewMode}
+            hidePreviewToggle={previewMode}
+          />
+        </div>
+
+        {/* Right sidebar - folder tree (fixed 280px width) */}
+        <div className="w-[280px] flex-shrink-0 border-l border-white/10 bg-gray-900/40">
           <SkillFolderTree
             skillKey={skill.skill_key}
             folders={skill.folders}
@@ -419,29 +476,10 @@ export function SkillDetailView({ skillId, onBack, className }: SkillDetailViewP
               toast.success('Document duplicated');
               await loadSkill();
             }}
-            className="h-full border-r border-white/10"
-          />
-        </ResizablePanel>
-
-        <ResizableHandle withHandle />
-
-        {/* Right pane - content editor */}
-        <ResizablePanel defaultSize={70}>
-          <SkillContentEditor
-            title={editedTitle}
-            description={editedDescription}
-            content={editedContent}
-            onTitleChange={setEditedTitle}
-            onDescriptionChange={setEditedDescription}
-            onContentChange={setEditedContent}
-            documentSuggestions={documentSuggestions}
-            skillSuggestions={skillSuggestions}
-            onSearchDocuments={handleSearchDocuments}
-            onSearchSkills={handleSearchSkills}
             className="h-full"
           />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        </div>
+      </div>
 
       {/* Modals */}
       <CreateFolderModal

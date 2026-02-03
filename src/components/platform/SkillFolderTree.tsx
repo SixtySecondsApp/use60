@@ -178,9 +178,9 @@ function TreeNode({
     <div>
       <div
         className={cn(
-          'group flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer transition-colors',
+          'group flex items-center gap-1.5 px-2 py-2 mx-2 rounded-lg cursor-pointer transition-all duration-200',
           'hover:bg-white/5',
-          isSelected && 'bg-white/10 border border-white/20'
+          isSelected && 'bg-gradient-to-r from-blue-600/15 to-indigo-600/15 ring-1 ring-blue-500/30'
         )}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
@@ -188,27 +188,32 @@ function TreeNode({
         {/* Expand/collapse chevron for folders */}
         {isFolder ? (
           <button
-            className="p-0.5 hover:bg-white/10 rounded"
+            className="p-1 hover:bg-white/10 rounded-md transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               onToggleExpand(node.id);
             }}
           >
             {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+              <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+              <ChevronRight className="h-3.5 w-3.5 text-gray-500" />
             )}
           </button>
         ) : (
-          <span className="w-5" /> // Spacer for alignment
+          <span className="w-6" /> // Spacer for alignment
         )}
 
         {/* Icon */}
-        <Icon className={cn('h-4 w-4 flex-shrink-0', iconColor)} />
+        <Icon className={cn('h-4 w-4 flex-shrink-0 transition-transform duration-200', iconColor, isSelected && 'scale-110')} />
 
         {/* Name */}
-        <span className="flex-1 truncate text-sm text-gray-200">{node.name}</span>
+        <span className={cn(
+          'flex-1 truncate text-sm transition-colors',
+          isSelected ? 'text-white font-medium' : 'text-gray-300'
+        )}>
+          {node.name}
+        </span>
 
         {/* Context menu */}
         <DropdownMenu>
@@ -216,40 +221,40 @@ function TreeNode({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-white/10 rounded-md"
               onClick={(e) => e.stopPropagation()}
             >
-              <MoreVertical className="h-3.5 w-3.5" />
+              <MoreVertical className="h-3.5 w-3.5 text-gray-400" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-48 bg-gray-900 border-white/10">
             {isFolder && (
               <>
-                <DropdownMenuItem onClick={() => handleContextAction('add-folder')}>
-                  <FolderPlus className="h-4 w-4 mr-2" />
+                <DropdownMenuItem onClick={() => handleContextAction('add-folder')} className="hover:bg-white/10">
+                  <FolderPlus className="h-4 w-4 mr-2 text-amber-400" />
                   New Folder
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleContextAction('add-document')}>
-                  <FilePlus className="h-4 w-4 mr-2" />
+                <DropdownMenuItem onClick={() => handleContextAction('add-document')} className="hover:bg-white/10">
+                  <FilePlus className="h-4 w-4 mr-2 text-blue-400" />
                   New Document
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="bg-white/10" />
               </>
             )}
-            <DropdownMenuItem onClick={() => handleContextAction('rename')}>
-              <Pencil className="h-4 w-4 mr-2" />
+            <DropdownMenuItem onClick={() => handleContextAction('rename')} className="hover:bg-white/10">
+              <Pencil className="h-4 w-4 mr-2 text-gray-400" />
               Rename
             </DropdownMenuItem>
             {onDuplicate && (
-              <DropdownMenuItem onClick={() => handleContextAction('duplicate')}>
-                <Copy className="h-4 w-4 mr-2" />
+              <DropdownMenuItem onClick={() => handleContextAction('duplicate')} className="hover:bg-white/10">
+                <Copy className="h-4 w-4 mr-2 text-gray-400" />
                 Duplicate
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="bg-white/10" />
             <DropdownMenuItem
               onClick={() => handleContextAction('delete')}
-              className="text-red-400 focus:text-red-400"
+              className="text-red-400 focus:text-red-400 hover:bg-red-500/10"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete
@@ -260,7 +265,12 @@ function TreeNode({
 
       {/* Children */}
       {isFolder && isExpanded && node.children && node.children.length > 0 && (
-        <div>
+        <div className="relative">
+          {/* Vertical connection line */}
+          <div
+            className="absolute left-0 top-0 bottom-0 border-l border-white/5"
+            style={{ marginLeft: `${level * 16 + 20}px` }}
+          />
           {node.children.map((child) => (
             <TreeNode
               key={child.id}
@@ -375,32 +385,32 @@ export function SkillFolderTree({
   return (
     <div className={cn('flex flex-col h-full', className)}>
       {/* Header with skill root and actions */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+      <div className="flex items-center justify-between px-3 py-3 border-b border-white/5 bg-gray-900/50">
         <button
           className={cn(
-            'flex items-center gap-2 px-2 py-1 rounded-md transition-colors flex-1 text-left',
+            'flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-200 flex-1 text-left',
             'hover:bg-white/5',
-            isSkillSelected && 'bg-white/10 border border-white/20'
+            isSkillSelected && 'bg-gradient-to-r from-blue-600/15 to-indigo-600/15 ring-1 ring-blue-500/30'
           )}
           onClick={() => onSelect(null, 'skill')}
         >
-          <FileCode className="h-4 w-4 text-blue-400" />
-          <span className="font-medium text-sm text-gray-100">SKILL.md</span>
+          <FileCode className={cn('h-4 w-4 transition-transform duration-200', isSkillSelected ? 'text-blue-400 scale-110' : 'text-blue-400/70')} />
+          <span className={cn('font-medium text-sm', isSkillSelected ? 'text-white' : 'text-gray-300')}>SKILL.md</span>
         </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <Plus className="h-4 w-4" />
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-white/10 rounded-lg ml-2">
+              <Plus className="h-4 w-4 text-gray-400" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onCreateFolder()}>
-              <FolderPlus className="h-4 w-4 mr-2" />
+          <DropdownMenuContent align="end" className="bg-gray-900 border-white/10">
+            <DropdownMenuItem onClick={() => onCreateFolder()} className="hover:bg-white/10">
+              <FolderPlus className="h-4 w-4 mr-2 text-amber-400" />
               New Folder
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onCreateDocument()}>
-              <FilePlus className="h-4 w-4 mr-2" />
+            <DropdownMenuItem onClick={() => onCreateDocument()} className="hover:bg-white/10">
+              <FilePlus className="h-4 w-4 mr-2 text-blue-400" />
               New Document
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -409,11 +419,14 @@ export function SkillFolderTree({
 
       {/* Tree content */}
       <ScrollArea className="flex-1">
-        <div className="py-2">
+        <div className="py-3">
           {tree.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-gray-500">
-              <p>No folders or documents yet.</p>
-              <p className="mt-1">Click + to add content.</p>
+            <div className="px-4 py-12 text-center">
+              <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-white/5 flex items-center justify-center">
+                <Folder className="w-6 h-6 text-gray-500" />
+              </div>
+              <p className="text-sm text-gray-400 font-medium">No content yet</p>
+              <p className="text-xs text-gray-500 mt-1">Click + to add folders or documents</p>
             </div>
           ) : (
             tree.map((node) => (
