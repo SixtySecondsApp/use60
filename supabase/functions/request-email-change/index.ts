@@ -215,9 +215,35 @@ serve(async (req) => {
 
     const subject = template.subject_line.replace(/{{first_name}}/g, firstName);
 
-    // Send email using AWS SES via edge function
-    // For now, return success - actual email sending would be configured separately
-    console.log('Email change verification email would be sent to:', newEmail);
+    // Send email via encharge-send-email function
+    try {
+      const { data: emailResult, error: emailError } = await supabase.functions.invoke(
+        'encharge-send-email',
+        {
+          body: {
+            template_type: 'email_change_verification',
+            to_email: newEmail,
+            to_name: firstName,
+            user_id: user.id,
+            variables: {
+              first_name: firstName,
+              old_email: user.email || '',
+              new_email: newEmail,
+              verification_link: verificationLink,
+              expiry_time: `${expiryTime} UTC`,
+            },
+          },
+        }
+      );
+
+      if (emailError) {
+        console.warn('Email send error (non-blocking):', emailError);
+        // Continue with token creation even if email fails - user can see it in pending email section
+      }
+    } catch (emailSendError) {
+      console.warn('Email send exception (non-blocking):', emailSendError);
+      // Continue - email sending is best-effort
+    }
 
     return new Response(
       JSON.stringify({

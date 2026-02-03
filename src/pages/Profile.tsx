@@ -225,7 +225,10 @@ export default function Profile() {
       // Upload file to storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          upsert: false,
+          contentType: file.type,
+        });
 
       if (uploadError) {
         logger.error('[Profile] Upload error:', uploadError);
