@@ -88,6 +88,14 @@ serve(async (req) => {
     });
   }
 
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', {
+      status: 405,
+      headers: corsHeaders,
+    });
+  }
+
   try {
     const {
       to_email,

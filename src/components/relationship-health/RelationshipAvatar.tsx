@@ -79,7 +79,7 @@ export function RelationshipAvatar({
           <img
             src={logoUrl}
             alt={`${name} logo`}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover aspect-square"
             onError={() => setLogoError(true)}
           />
         ) : (

@@ -106,11 +106,12 @@ export function AvatarUpload({
 
       logger.log('[AvatarUpload] File uploaded, URL:', publicUrl);
 
-      // Update user profile with new avatar URL and clear remove_avatar flag
+      // Update user profile with new avatar URL (with cache-busting timestamp) and clear remove_avatar flag
+      const avatarUrlWithTimestamp = `${publicUrl}?v=${Date.now()}`;
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
-          avatar_url: publicUrl,
+          avatar_url: avatarUrlWithTimestamp,
           remove_avatar: false,
           updated_at: new Date().toISOString(),
         })
@@ -122,14 +123,15 @@ export function AvatarUpload({
       }
 
       // Invalidate cache so new avatar shows immediately
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
       queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+      queryClient.invalidateQueries({ queryKey: ['user-profile', 'by-id', userId] });
 
       toast.success('Profile picture updated successfully');
       logger.log('[AvatarUpload] Avatar upload completed successfully');
 
       if (onUploadComplete) {
-        onUploadComplete(publicUrl);
+        onUploadComplete(avatarUrlWithTimestamp);
       }
     } catch (error: any) {
       logger.error('[AvatarUpload] Avatar upload failed:', error);
@@ -160,8 +162,9 @@ export function AvatarUpload({
       }
 
       // Invalidate cache
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
       queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+      queryClient.invalidateQueries({ queryKey: ['user-profile', 'by-id', userId] });
 
       toast.success('Profile picture removed');
       logger.log('[AvatarUpload] Avatar removed successfully');

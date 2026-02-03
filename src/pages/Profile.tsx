@@ -112,7 +112,11 @@ export default function Profile() {
 
       // Invalidate cache so changes show globally
       // The useEffect will clear pendingAvatarUrl when userData updates
-      await queryClient.invalidateQueries({ queryKey: ['user'] });
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+      if (user?.id) {
+        await queryClient.invalidateQueries({ queryKey: ['user-profile', 'by-id', user.id] });
+      }
 
       toast.success('Profile updated successfully');
     } catch (error: any) {

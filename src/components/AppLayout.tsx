@@ -318,7 +318,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <img
                 src={userData.avatar_url}
                 alt="Profile"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover aspect-square"
               />
             ) : (
               <div className="w-full h-full bg-gray-700/30 flex items-center justify-center">
@@ -394,7 +394,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         <img
                           src={userData.avatar_url}
                           alt="Profile"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover aspect-square"
                         />
                       ) : (
                         <div className="w-full h-full bg-gray-700/30 flex items-center justify-center">
@@ -582,7 +582,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     <img
                       src={userData.avatar_url}
                       alt="Profile"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover aspect-square"
                     />
                   ) : (
                     <div className="w-full h-full bg-gray-700/30 flex items-center justify-center">

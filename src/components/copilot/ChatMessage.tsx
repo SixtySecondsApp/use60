@@ -133,7 +133,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
             <img
               src={userData.avatar_url}
               alt={userData.first_name || 'User'}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover aspect-square"
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
