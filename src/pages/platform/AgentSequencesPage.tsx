@@ -257,17 +257,18 @@ export default function AgentSequencesPage() {
   // Handlers
   const handleCreateNew = () => {
     // Navigate to skills page with category preset for agent-sequence
-    navigate('/platform/skills/new?category=agent-sequence');
+    navigate('/platform/skills/agent-sequence/new');
   };
 
   const handleEdit = (sequence: AgentSequence) => {
     // Use the standard skill view page (same editor as skills)
-    navigate(`/platform/skills/${sequence.skill_key}`);
+    // Route format: /platform/skills/:category/:skillKey
+    navigate(`/platform/skills/agent-sequence/${sequence.skill_key}`);
   };
 
   const handleTest = (sequence: AgentSequence) => {
     // Use the standard skill view page with simulate mode
-    navigate(`/platform/skills/${sequence.skill_key}?tab=test`);
+    navigate(`/platform/skills/agent-sequence/${sequence.skill_key}?tab=test`);
   };
 
   const handleClone = async (sequence: AgentSequence) => {
