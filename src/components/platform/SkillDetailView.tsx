@@ -15,6 +15,8 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  Link2,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -41,7 +43,9 @@ import type {
   SkillDocument,
   SkillWithFolders,
   SkillDocumentType,
+  LinkedSkillPreview,
 } from '@/lib/types/skills';
+import { AddSkillLinkModal } from './AddSkillLinkModal';
 
 // =============================================================================
 // Types
@@ -55,14 +59,37 @@ interface SkillDetailViewProps {
   hideHeader?: boolean;
   /** Show preview mode (rendered markdown) instead of edit mode */
   previewMode?: boolean;
+  /** This skill is being viewed as a linked skill (read-only) */
+  isLinkedSkill?: boolean;
+  /** Parent skill info when viewing as linked skill */
+  linkedFrom?: {
+    skillId: string;
+    skillKey: string;
+    skillName: string;
+  };
+  /** Callback when user wants to edit the original skill */
+  onEditOriginal?: () => void;
 }
 
 // =============================================================================
 // Main Component
 // =============================================================================
 
-export function SkillDetailView({ skillId, onBack, className, hideHeader = false, previewMode = false }: SkillDetailViewProps) {
+export function SkillDetailView({
+  skillId,
+  onBack,
+  className,
+  hideHeader = false,
+  previewMode = false,
+  isLinkedSkill = false,
+  linkedFrom,
+  onEditOriginal,
+}: SkillDetailViewProps) {
   const navigate = useNavigate();
+
+  // When viewing as linked skill, force preview mode and disable editing
+  const effectivePreviewMode = previewMode || isLinkedSkill;
+  const isReadOnly = isLinkedSkill;
 
   // Data state
   const [skill, setSkill] = useState<SkillWithFolders | null>(null);
@@ -71,7 +98,14 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
 
   // Selection state
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<'folder' | 'document' | 'skill'>('skill');
+  const [selectedType, setSelectedType] = useState<'folder' | 'document' | 'skill' | 'linked-skill'>('skill');
+
+  // Skill link modal state
+  const [showAddSkillLink, setShowAddSkillLink] = useState(false);
+  const [addSkillLinkFolderId, setAddSkillLinkFolderId] = useState<string | undefined>();
+
+  // For viewing linked skills within this skill
+  const [viewingLinkedSkill, setViewingLinkedSkill] = useState<LinkedSkillPreview | null>(null);
 
   // Edit state
   const [editedTitle, setEditedTitle] = useState('');
@@ -140,15 +174,27 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
 
   // Handle selection change
   const handleSelect = useCallback(
-    (id: string | null, type: 'folder' | 'document' | 'skill') => {
-      // Check for unsaved changes
-      if (hasChanges) {
+    (id: string | null, type: 'folder' | 'document' | 'skill' | 'linked-skill') => {
+      // Check for unsaved changes (only if not read-only)
+      if (hasChanges && !isReadOnly) {
         // For now, just warn - could prompt to save
         toast.warning('You have unsaved changes');
       }
 
       setSelectedId(id);
       setSelectedType(type);
+
+      // Handle linked skill selection - show preview
+      if (type === 'linked-skill' && id && skill?.linked_skills) {
+        const linkedSkill = skill.linked_skills.find((l) => l.link_id === id);
+        if (linkedSkill) {
+          setViewingLinkedSkill(linkedSkill);
+          return;
+        }
+      }
+
+      // Clear linked skill view when selecting something else
+      setViewingLinkedSkill(null);
 
       if (type === 'skill' || !id) {
         // Selected main skill
@@ -165,7 +211,7 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
       }
       setHasChanges(false);
     },
-    [skill, hasChanges]
+    [skill, hasChanges, isReadOnly]
   );
 
   // Track changes
@@ -320,6 +366,44 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
     }
   }, [onBack, navigate]);
 
+  // Handle adding a skill link
+  const handleAddSkillLink = useCallback(
+    async (linkedSkillId: string, folderId?: string) => {
+      if (!skill) return;
+      await skillFolderService.addSkillLink({
+        parent_skill_id: skill.id,
+        linked_skill_id: linkedSkillId,
+        folder_id: folderId,
+      });
+      toast.success('Skill linked');
+      await loadSkill();
+    },
+    [skill, loadSkill]
+  );
+
+  // Handle removing a skill link
+  const handleRemoveSkillLink = useCallback(
+    async (link: LinkedSkillPreview) => {
+      await skillFolderService.removeSkillLink(link.link_id);
+      toast.success('Skill unlinked');
+      // If we were viewing this linked skill, clear the view
+      if (viewingLinkedSkill?.link_id === link.link_id) {
+        setViewingLinkedSkill(null);
+        handleSelect(null, 'skill');
+      }
+      await loadSkill();
+    },
+    [viewingLinkedSkill, handleSelect, loadSkill]
+  );
+
+  // Handle editing original skill (for linked skills)
+  const handleEditOriginalSkill = useCallback(
+    (link: LinkedSkillPreview) => {
+      navigate(`/platform/skills/${link.skill_key}`);
+    },
+    [navigate]
+  );
+
   // Loading state
   if (isLoading) {
     return (
@@ -345,6 +429,34 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
 
   return (
     <div className={cn('flex flex-col h-full bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950', className)}>
+      {/* Linked skill banner - shown when viewing a linked skill */}
+      {isLinkedSkill && linkedFrom && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border-b border-indigo-500/30">
+          <div className="flex items-center gap-2 text-sm">
+            <Link2 className="h-4 w-4 text-indigo-400" />
+            <span className="text-indigo-200">Linked from:</span>
+            <code className="px-1.5 py-0.5 bg-indigo-500/20 rounded font-mono text-xs text-indigo-300">
+              {linkedFrom.skillKey}
+            </code>
+            <span className="text-gray-400">({linkedFrom.skillName})</span>
+            <Badge className="ml-2 bg-amber-500/15 text-amber-400 border-amber-500/30 text-[10px]">
+              Read-only
+            </Badge>
+          </div>
+          {onEditOriginal && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onEditOriginal}
+              className="gap-1.5 h-7 text-xs border-indigo-500/30 hover:bg-indigo-500/20 text-indigo-300"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Edit Original
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Header - conditionally rendered */}
       {!hideHeader && (
         <header className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-gray-900/50 backdrop-blur-sm">
@@ -433,63 +545,93 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
       <div className="flex flex-1 overflow-hidden">
         {/* Left pane - content editor (main content aligned with header) */}
         <div className="flex-1 min-w-0 overflow-hidden">
-          <SkillContentEditor
-            title={editedTitle}
-            description={editedDescription}
-            content={editedContent}
-            onTitleChange={setEditedTitle}
-            onDescriptionChange={setEditedDescription}
-            onContentChange={setEditedContent}
-            documentSuggestions={documentSuggestions}
-            skillSuggestions={skillSuggestions}
-            onSearchDocuments={handleSearchDocuments}
-            onSearchSkills={handleSearchSkills}
-            className="h-full"
-            defaultShowPreview={previewMode}
-            hidePreviewToggle={previewMode}
-          />
+          {/* If viewing a linked skill from this skill, show nested SkillDetailView */}
+          {viewingLinkedSkill ? (
+            <SkillDetailView
+              skillId={viewingLinkedSkill.id}
+              isLinkedSkill={true}
+              linkedFrom={{
+                skillId: skill.id,
+                skillKey: skill.skill_key,
+                skillName: skill.frontmatter?.name || skill.skill_key,
+              }}
+              onEditOriginal={() => handleEditOriginalSkill(viewingLinkedSkill)}
+              onBack={() => {
+                setViewingLinkedSkill(null);
+                handleSelect(null, 'skill');
+              }}
+              hideHeader={true}
+              className="h-full"
+            />
+          ) : (
+            <SkillContentEditor
+              title={editedTitle}
+              description={editedDescription}
+              content={editedContent}
+              onTitleChange={isReadOnly ? undefined : setEditedTitle}
+              onDescriptionChange={isReadOnly ? undefined : setEditedDescription}
+              onContentChange={isReadOnly ? undefined : setEditedContent}
+              documentSuggestions={documentSuggestions}
+              skillSuggestions={skillSuggestions}
+              onSearchDocuments={handleSearchDocuments}
+              onSearchSkills={handleSearchSkills}
+              className="h-full"
+              defaultShowPreview={effectivePreviewMode}
+              hidePreviewToggle={effectivePreviewMode}
+              readOnly={isReadOnly}
+            />
+          )}
         </div>
 
-        {/* Right sidebar - folder tree (fixed 280px width) */}
-        <div className="w-[280px] flex-shrink-0 border-l border-white/10 bg-gray-900/40">
-          <SkillFolderTree
-            skillKey={skill.skill_key}
-            folders={skill.folders}
-            documents={skill.documents}
-            selectedId={selectedId}
-            selectedType={selectedType}
-            onSelect={handleSelect}
-            onCreateFolder={(parentId) => {
-              setCreateInFolderId(parentId);
-              setShowCreateFolder(true);
-            }}
-            onCreateDocument={(folderId) => {
-              setCreateInFolderId(folderId);
-              setShowCreateDocument(true);
-            }}
-            onRenameFolder={(folder) => {
-              // TODO: Implement rename modal
-              toast.info('Rename coming soon');
-            }}
-            onRenameDocument={(doc) => {
-              // TODO: Implement rename modal
-              toast.info('Rename coming soon');
-            }}
-            onDeleteFolder={handleDeleteFolder}
-            onDeleteDocument={handleDeleteDocument}
-            onDuplicateFolder={async (folder) => {
-              await skillFolderService.duplicateFolder(folder.id);
-              toast.success('Folder duplicated');
-              await loadSkill();
-            }}
-            onDuplicateDocument={async (doc) => {
-              await skillFolderService.duplicateDocument(doc.id);
-              toast.success('Document duplicated');
-              await loadSkill();
-            }}
-            className="h-full"
-          />
-        </div>
+        {/* Right sidebar - folder tree (fixed 280px width) - hidden when viewing linked skill */}
+        {!viewingLinkedSkill && (
+          <div className="w-[280px] flex-shrink-0 border-l border-white/10 bg-gray-900/40">
+            <SkillFolderTree
+              skillKey={skill.skill_key}
+              folders={skill.folders}
+              documents={skill.documents}
+              linkedSkills={skill.linked_skills}
+              selectedId={selectedId}
+              selectedType={selectedType}
+              onSelect={handleSelect}
+              onCreateFolder={isReadOnly ? undefined : (parentId) => {
+                setCreateInFolderId(parentId);
+                setShowCreateFolder(true);
+              }}
+              onCreateDocument={isReadOnly ? undefined : (folderId) => {
+                setCreateInFolderId(folderId);
+                setShowCreateDocument(true);
+              }}
+              onAddSkillLink={isReadOnly ? undefined : (folderId) => {
+                setAddSkillLinkFolderId(folderId);
+                setShowAddSkillLink(true);
+              }}
+              onRenameFolder={isReadOnly ? () => {} : (folder) => {
+                // TODO: Implement rename modal
+                toast.info('Rename coming soon');
+              }}
+              onRenameDocument={isReadOnly ? () => {} : (doc) => {
+                // TODO: Implement rename modal
+                toast.info('Rename coming soon');
+              }}
+              onDeleteFolder={isReadOnly ? () => {} : handleDeleteFolder}
+              onDeleteDocument={isReadOnly ? () => {} : handleDeleteDocument}
+              onDuplicateFolder={isReadOnly ? undefined : async (folder) => {
+                await skillFolderService.duplicateFolder(folder.id);
+                toast.success('Folder duplicated');
+                await loadSkill();
+              }}
+              onDuplicateDocument={isReadOnly ? undefined : async (doc) => {
+                await skillFolderService.duplicateDocument(doc.id);
+                toast.success('Document duplicated');
+                await loadSkill();
+              }}
+              onRemoveSkillLink={isReadOnly ? undefined : handleRemoveSkillLink}
+              onEditOriginalSkill={handleEditOriginalSkill}
+              className="h-full"
+            />
+          </div>
+        )}
       </div>
 
       {/* Modals */}
@@ -507,6 +649,16 @@ export function SkillDetailView({ skillId, onBack, className, hideHeader = false
         folders={skill.folders}
         folderId={createInFolderId}
         onCreate={handleCreateDocument}
+      />
+
+      <AddSkillLinkModal
+        open={showAddSkillLink}
+        onOpenChange={setShowAddSkillLink}
+        parentSkillId={skill.id}
+        parentSkillKey={skill.skill_key}
+        folders={skill.folders}
+        targetFolderId={addSkillLinkFolderId}
+        onAddLink={handleAddSkillLink}
       />
 
       {/* Delete confirmation */}
