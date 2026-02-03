@@ -648,16 +648,37 @@ serve(async (req) => {
 
     // 4. Track event in Encharge
     const eventNameMap: Record<string, string> = {
-      welcome: 'Account Created',
+      // Organization & Membership (4)
+      organization_invitation: 'Organization Invitation Sent',
+      member_removed: 'Member Removed',
+      org_approval: 'Organization Approval',
+      join_request_approved: 'Join Request Approved',
+
+      // Waitlist & Access (2)
       waitlist_invite: 'Waitlist Invite Sent',
-      trial_ending: 'Trial Ending Soon',
-      trial_expired: 'Trial Expired',
-      first_summary_viewed: 'First Summary Viewed',
+      waitlist_welcome: 'Waitlist Welcome Sent',
+
+      // Onboarding (1)
+      welcome: 'Account Created',
+
+      // Integrations (2)
       fathom_connected: 'Fathom Connected',
       first_meeting_synced: 'First Meeting Synced',
-      join_request_approved: 'Join Request Approved',
+
+      // Subscription & Trial (5)
+      trial_ending: 'Trial Ending Soon',
+      trial_expired: 'Trial Expired',
+      subscription_confirmed: 'Subscription Confirmed',
+      meeting_limit_warning: 'Meeting Limit Warning',
+      upgrade_prompt: 'Upgrade Prompt Sent',
+
+      // Account Management (3)
+      email_change_verification: 'Email Change Verification',
+      password_reset: 'Password Reset Requested',
       join_request_rejected: 'Join Request Rejected',
-      org_approval: 'Organization Approval Required',
+
+      // Admin/Moderation (1)
+      permission_to_close: 'Permission to Close Requested',
     };
 
     const eventName = eventNameMap[request.template_type] || 'Email Sent';

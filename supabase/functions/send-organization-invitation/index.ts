@@ -1,16 +1,21 @@
 /**
  * Send Organization Invitation Email Edge Function
  *
- * Sends invitation emails to join an organization using AWS SES
- * No Encharge dependency - pure AWS SES implementation
+ * Sends invitation emails to join an organization using encharge-send-email dispatcher
+ * Uses database-driven email templates with standardized variables
+ *
+ * Story: EMAIL-005
+ * Template Type: organization_invitation
+ * Variables Schema: recipient_name, organization_name, inviter_name, action_url, expiry_time
  *
  * Authentication: Uses custom secret from EDGE_FUNCTION_SECRET environment variable
- * This bypasses platform JWT verification and allows any authenticated request
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { sendEmail } from '../_shared/ses.ts';
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,115 +64,7 @@ interface SendInvitationRequest {
   organization_name: string;
   inviter_name: string;
   invitation_url: string;
-}
-
-/**
- * Fetch and format email template from database
- */
-async function getEmailTemplate(
-  supabaseUrl: string,
-  supabaseServiceKey: string,
-  variables: Record<string, string>
-): Promise<{ html: string; text: string }> {
-  try {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/encharge_email_templates?template_name=eq.organization_invitation&select=html_body,text_body`,
-      {
-        headers: {
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'apikey': supabaseServiceKey,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.warn('[send-organization-invitation] Failed to fetch template from database, using fallback');
-      return getFallbackTemplate(variables);
-    }
-
-    const templates = await response.json();
-    if (!templates || templates.length === 0) {
-      console.warn('[send-organization-invitation] Template not found in database, using fallback');
-      return getFallbackTemplate(variables);
-    }
-
-    const template = templates[0];
-    let html = template.html_body || '';
-    let text = template.text_body || '';
-
-    // Replace variables in template
-    Object.entries(variables).forEach(([key, value]) => {
-      const placeholder = `{{${key}}}`;
-      html = html.replace(new RegExp(placeholder, 'g'), value);
-      text = text.replace(new RegExp(placeholder, 'g'), value);
-    });
-
-    console.log('[send-organization-invitation] Successfully fetched and formatted template from database');
-    return { html, text };
-  } catch (error) {
-    console.error('[send-organization-invitation] Error fetching template:', error);
-    return getFallbackTemplate(variables);
-  }
-}
-
-/**
- * Fallback template if database template not found
- */
-function getFallbackTemplate(variables: Record<string, string>): { html: string; text: string } {
-  const { recipient_name, organization_name, inviter_name, action_url, expiry_time } = variables;
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; }
-        .email-wrapper { background: white; border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        h1 { color: #1f2937; margin-bottom: 16px; font-size: 24px; }
-        p { color: #4b5563; margin-bottom: 16px; }
-        .button { display: inline-block; padding: 12px 24px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-weight: 500; }
-        .footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="email-wrapper">
-            <h1>Join ${organization_name} on Sixty</h1>
-
-            <p>Hi ${recipient_name},</p>
-
-            <p>${inviter_name} has invited you to join <strong>${organization_name}</strong> on Sixty.
-            Accept the invitation below to get started collaborating with your team.</p>
-
-            <p style="text-align: center; margin-top: 32px;">
-                <a href="${action_url}" class="button">Accept Invitation</a>
-            </p>
-
-            <p style="font-size: 14px; color: #6b7280;">
-                Or copy and paste this link in your browser:<br>
-                <code style="background: #f3f4f6; padding: 8px; border-radius: 4px; display: block; margin-top: 8px; word-break: break-all;">
-                    ${action_url}
-                </code>
-            </p>
-
-            <p style="font-size: 14px; color: #6b7280;">
-                This invitation will expire in ${expiry_time || '7 days'}.
-            </p>
-
-            <div class="footer">
-                <p>This is an automated message. If you have any questions, please contact us at support@use60.com</p>
-            </div>
-        </div>
-    </div>
-</body>
-</html>`;
-
-  const text = `Hi ${recipient_name},\n\n${inviter_name} has invited you to join ${organization_name} on Sixty.\n\nAccept the invitation by clicking:\n${action_url}\n\nThis invitation will expire in ${expiry_time || '7 days'}.`;
-
-  return { html, text };
+  expiry_time?: string;
 }
 
 serve(async (req) => {
@@ -208,10 +105,10 @@ serve(async (req) => {
       organization_name,
       inviter_name,
       invitation_url,
+      expiry_time = '7 days',
     }: SendInvitationRequest = await req.json();
 
     console.log(`[send-organization-invitation] Sending to: ${to_email}`);
-
 
     // Validate inputs
     if (!to_email || !organization_name || !inviter_name || !invitation_url) {
@@ -229,77 +126,58 @@ serve(async (req) => {
 
     const recipientName = to_name || to_email.split('@')[0];
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-
-    const variables = {
+    // Prepare standardized variables per EMAIL_VARIABLES_SCHEMA.md
+    const emailVariables = {
       recipient_name: recipientName,
       organization_name: organization_name,
       inviter_name: inviter_name,
-      action_url: invitation_url,        // Used by fallback template
-      invitation_url: invitation_url,    // Used by database template
-      expiry_time: '7 days',
+      action_url: invitation_url,
+      expiry_time: expiry_time,
+      support_email: 'support@use60.com',
     };
 
-    const { html: emailHtml, text: emailText } = await getEmailTemplate(
-      supabaseUrl,
-      supabaseServiceKey,
-      variables
-    );
+    console.log('[send-organization-invitation] Delegating to encharge-send-email dispatcher');
 
-    const result = await sendEmail({
-      to: to_email,
-      subject: `${inviter_name} invited you to join ${organization_name}`,
-      html: emailHtml,
-      text: emailText,
-      from: 'invites@use60.com',
-      fromName: 'Sixty',
+    // Call encharge-send-email dispatcher with template type
+    const dispatcherResponse = await fetch(`${SUPABASE_URL}/functions/v1/encharge-send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+      },
+      body: JSON.stringify({
+        template_type: 'organization_invitation',
+        to_email: to_email,
+        to_name: recipientName,
+        variables: emailVariables,
+      }),
     });
 
-    if (!result.success) {
-      console.error('Failed to send invitation email:', result.error);
+    if (!dispatcherResponse.ok) {
+      const errorText = await dispatcherResponse.text();
+      console.error('[send-organization-invitation] Dispatcher error:', errorText);
       return new Response(
         JSON.stringify({
           success: false,
-          error: result.error || 'Failed to send invitation email',
+          error: 'Failed to send invitation email',
+          details: errorText,
         }),
         {
-          status: 500,
+          status: dispatcherResponse.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
-    console.log(`Invitation email sent to ${to_email} for organization ${organization_name}`);
-
-    // Log email send to database (non-blocking)
-    try {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') || '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-      );
-
-      await supabase.from('email_logs').insert({
-        email_type: 'organization_invitation',
-        to_email: to_email,
-        user_id: null,
-        status: 'sent',
-        metadata: {
-          organization_name: organization_name,
-          inviter_name: inviter_name,
-          message_id: result.messageId,
-        },
-        sent_via: 'aws_ses',
-      });
-    } catch (logError) {
-      console.warn('[send-organization-invitation] Failed to log email:', logError);
-      // Non-blocking - continue even if logging fails
-    }
+    const dispatcherResult = await dispatcherResponse.json();
+    console.log(`[send-organization-invitation] Email sent successfully - Message ID: ${dispatcherResult.message_id}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        messageId: result.messageId,
+        message_id: dispatcherResult.message_id,
+        template_type: 'organization_invitation',
       }),
       {
         status: 200,
@@ -307,7 +185,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error in send-organization-invitation:', error);
+    console.error('[send-organization-invitation] Error:', error);
     return new Response(
       JSON.stringify({
         success: false,

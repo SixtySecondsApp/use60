@@ -1,6 +1,16 @@
+/**
+ * Waitlist Welcome Email Edge Function
+ *
+ * Sends welcome email after user is granted access from waitlist
+ * Uses database templates with standardized variable names
+ *
+ * Story: EMAIL-008
+ * Template Type: waitlist_welcome
+ * Variables Schema: recipient_name, company_name, action_url, getting_started_url
+ */
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { sendEmail } from '../_shared/ses.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -8,7 +18,8 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 interface WelcomeEmailRequest {
   email: string;
   full_name: string;
-  company_name: string;
+  company_name?: string;
+  action_url?: string;
 }
 
 /**
@@ -90,83 +101,68 @@ serve(async (req) => {
       );
     }
 
-    const { email, full_name, company_name } = requestData;
+    const { email, full_name, company_name, action_url } = requestData;
 
     // Validate inputs
     if (!email || !full_name) {
-      throw new Error('Missing required parameters: email and full_name');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Missing required parameters: email and full_name',
+          email_sent: false,
+        }),
+        {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
-    // Send email via AWS SES
     const firstName = full_name.split(' ')[0];
-
-    console.log('[waitlist-welcome-email] Sending email via AWS SES:', {
-      toEmail: email,
-      hasSupabaseUrl: !!SUPABASE_URL,
-      hasServiceRoleKey: !!SUPABASE_SERVICE_ROLE_KEY,
-    });
-
-    // Get template from database
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { data: template, error: templateError } = await supabase
-      .from('encharge_email_templates')
-      .select('*')
-      .eq('template_type', 'waitlist_welcome')
-      .eq('is_active', true)
-      .maybeSingle();
+    console.log('[waitlist-welcome-email] Delegating to encharge-send-email dispatcher');
 
-    if (templateError || !template) {
-      console.error('[waitlist-welcome-email] Template not found:', templateError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Email template not found',
-          email_sent: false,
-        }),
-        {
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        }
-      );
-    }
-
-    // Replace template variables (standardized names)
-    let htmlBody = template.html_body || '';
-
-    const variables = {
+    // Prepare standardized variables per EMAIL_VARIABLES_SCHEMA.md
+    const emailVariables = {
       recipient_name: firstName,
+      company_name: company_name || 'Sixty',
       user_email: email,
-      organization_name: company_name || '',
+      action_url: action_url || 'https://app.use60.com',
+      getting_started_url: 'https://use60.com/getting-started',
     };
 
-    for (const [key, value] of Object.entries(variables)) {
-      const regex = new RegExp(`{{${key}}}`, 'g');
-      htmlBody = htmlBody.replace(regex, String(value || ''));
-    }
-
-    // Send via SES using shared function
-    const emailResult = await sendEmail({
-      to: email,
-      subject: template.subject_line || 'Welcome to use60!',
-      html: htmlBody,
-      from: 'noreply@use60.com',
-      fromName: 'use60',
+    // Call encharge-send-email dispatcher
+    const dispatcherResponse = await fetch(`${SUPABASE_URL}/functions/v1/encharge-send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+      },
+      body: JSON.stringify({
+        template_type: 'waitlist_welcome',
+        to_email: email,
+        to_name: firstName,
+        variables: emailVariables,
+      }),
     });
 
-    if (!emailResult.success) {
-      console.error('[waitlist-welcome-email] SES email sending failed:', emailResult);
+    if (!dispatcherResponse.ok) {
+      const errorText = await dispatcherResponse.text();
+      console.error('[waitlist-welcome-email] Dispatcher error:', errorText);
       return new Response(
         JSON.stringify({
           success: false,
-          error: emailResult.error || 'Failed to send email',
+          error: 'Failed to send email',
           email_sent: false,
+          details: errorText,
         }),
         {
-          status: 400,
+          status: dispatcherResponse.status,
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
@@ -175,33 +171,19 @@ serve(async (req) => {
       );
     }
 
-    // Log email send to database (non-blocking)
-    try {
-      await supabase.from('email_logs').insert({
-        email_type: 'waitlist_welcome',
-        to_email: email,
-        user_id: null,
-        status: 'sent',
-        metadata: {
-          template_id: template.id,
-          template_name: template.template_name,
-          message_id: emailResult.messageId,
-        },
-        sent_via: 'aws_ses',
-      });
-    } catch (logError) {
-      console.warn('[waitlist-welcome-email] Failed to log email:', logError);
-      // Non-blocking - continue even if logging fails
-    }
+    const dispatcherResult = await dispatcherResponse.json();
+    console.log('[waitlist-welcome-email] Email sent successfully - Message ID:', dispatcherResult.message_id);
 
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Welcome email sent successfully',
         email_sent: true,
-        message_id: emailResult.messageId,
+        message_id: dispatcherResult.message_id,
+        template_type: 'waitlist_welcome',
       }),
       {
+        status: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
@@ -221,7 +203,7 @@ serve(async (req) => {
         email_sent: false,
       }),
       {
-        status: 400,
+        status: 500,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',

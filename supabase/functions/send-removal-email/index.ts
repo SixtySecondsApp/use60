@@ -2,9 +2,11 @@
  * Send User Removal Email Edge Function
  *
  * Sends notification email when a user is removed from an organization
- * Calls the encharge-send-email function with member_removed template
+ * Delegates to encharge-send-email dispatcher with standardized variables
  *
- * Story: ORGREM-004
+ * Story: EMAIL-006
+ * Template Type: member_removed
+ * Variables Schema: recipient_name, organization_name, admin_name, action_url, support_email
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
@@ -57,6 +59,7 @@ interface RemovalEmailRequest {
   user_id: string;
   org_id: string;
   org_name: string;
+  admin_name?: string;
   admin_email?: string;
   rejoin_url?: string;
 }
@@ -84,7 +87,7 @@ serve(async (req) => {
 
   try {
     // Parse request body
-    const { user_id, org_id, org_name, admin_email, rejoin_url }: RemovalEmailRequest = await req.json();
+    const { user_id, org_id, org_name, admin_name, admin_email, rejoin_url }: RemovalEmailRequest = await req.json();
 
     if (!user_id || !org_id || !org_name) {
       return new Response(
@@ -101,7 +104,7 @@ serve(async (req) => {
       .from('profiles')
       .select('email, first_name, last_name')
       .eq('id', user_id)
-      .single();
+      .maybeSingle();
 
     if (profileError || !profile) {
       console.error('[send-removal-email] Profile not found:', profileError);
@@ -111,18 +114,22 @@ serve(async (req) => {
       );
     }
 
-    // Prepare email variables (standardized names)
+    // Build action URL - default to support contact if not provided
+    const actionUrl = rejoin_url || 'mailto:support@use60.com';
+
+    // Prepare email variables per EMAIL_VARIABLES_SCHEMA.md
     const emailVariables = {
       recipient_name: profile.first_name || 'there',
       organization_name: org_name,
-      admin_email: admin_email || 'support@use60.com',
-      action_url: rejoin_url || `${SUPABASE_URL.replace('https://', 'https://app.')}/onboarding/removed-user`,
+      admin_name: admin_name || 'An administrator',
+      admin_email: admin_email,
+      action_url: actionUrl,
       support_email: 'support@use60.com',
     };
 
-    console.log('[send-removal-email] Sending email to:', profile.email);
+    console.log('[send-removal-email] Delegating to encharge-send-email dispatcher');
 
-    // Call encharge-send-email function
+    // Call encharge-send-email dispatcher
     const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/encharge-send-email`, {
       method: 'POST',
       headers: {
@@ -141,9 +148,9 @@ serve(async (req) => {
 
     if (!emailResponse.ok) {
       const errorText = await emailResponse.text();
-      console.error('[send-removal-email] Email sending failed:', errorText);
+      console.error('[send-removal-email] Dispatcher error:', errorText);
 
-      // Don't throw - log error but return success (non-blocking)
+      // Non-blocking - email is best-effort
       return new Response(
         JSON.stringify({
           emailSent: false,
@@ -155,13 +162,14 @@ serve(async (req) => {
     }
 
     const emailResult = await emailResponse.json();
-    console.log('[send-removal-email] Email sent successfully');
+    console.log('[send-removal-email] Email sent successfully - Message ID:', emailResult.message_id);
 
     return new Response(
       JSON.stringify({
         emailSent: true,
         to: profile.email,
-        result: emailResult
+        message_id: emailResult.message_id,
+        template_type: 'member_removed',
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -173,7 +181,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         emailSent: false,
-        error: error.message
+        error: error instanceof Error ? error.message : 'Unknown error'
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
