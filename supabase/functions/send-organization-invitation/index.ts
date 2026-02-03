@@ -236,7 +236,8 @@ serve(async (req) => {
       recipient_name: recipientName,
       organization_name: organization_name,
       inviter_name: inviter_name,
-      action_url: invitation_url,
+      action_url: invitation_url,        // Used by fallback template
+      invitation_url: invitation_url,    // Used by database template
       expiry_time: '7 days',
     };
 
