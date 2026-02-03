@@ -1,0 +1,498 @@
+/**
+ * useCopilotChat Hook
+ *
+ * UI-friendly hook for the autonomous copilot.
+ * Wraps the edge function with streaming support, message formatting,
+ * and state management compatible with the existing chat UI.
+ *
+ * Features:
+ * - Persistent session loading on mount
+ * - Message persistence to database
+ * - Integration with memory system
+ */
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { supabase } from '@/lib/supabase/clientV2';
+import { CopilotSessionService } from '@/lib/services/copilotSessionService';
+import type { CopilotMessage as PersistedMessage, CopilotMessageMetadata } from '@/lib/types/copilot';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export type MessageRole = 'user' | 'assistant' | 'system';
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  status: 'running' | 'completed' | 'error';
+  result?: unknown;
+  error?: string;
+  startedAt: Date;
+  completedAt?: Date;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: MessageRole;
+  content: string;
+  timestamp: Date;
+  toolCalls?: ToolCall[];
+  isStreaming?: boolean;
+}
+
+export interface UseCopilotChatOptions {
+  organizationId: string;
+  userId: string;
+  /** Initial context to pass to every request */
+  initialContext?: Record<string, unknown>;
+  /** Callback when a tool call starts */
+  onToolStart?: (toolCall: ToolCall) => void;
+  /** Callback when a tool call completes */
+  onToolComplete?: (toolCall: ToolCall) => void;
+  /** Callback when response is complete */
+  onComplete?: (response: string, toolsUsed: string[]) => void;
+  /** Callback on error */
+  onError?: (error: string) => void;
+  /** Enable session persistence (default: true) */
+  persistSession?: boolean;
+  /** Number of historical messages to load (default: 50) */
+  historyLimit?: number;
+}
+
+export interface UseCopilotChatReturn {
+  /** Send a message to the copilot */
+  sendMessage: (message: string) => Promise<void>;
+  /** All messages in the conversation */
+  messages: ChatMessage[];
+  /** Whether the copilot is currently processing */
+  isThinking: boolean;
+  /** Whether we're streaming a response */
+  isStreaming: boolean;
+  /** Current tool being executed (if any) */
+  currentTool: ToolCall | null;
+  /** All tools used in this session */
+  toolsUsed: string[];
+  /** Last error (if any) */
+  error: string | null;
+  /** Clear all messages */
+  clearMessages: () => void;
+  /** Stop the current request */
+  stopGeneration: () => void;
+  /** Current conversation ID */
+  conversationId: string | null;
+  /** Whether session is loading */
+  isLoadingSession: boolean;
+}
+
+// =============================================================================
+// Hook Implementation
+// =============================================================================
+
+export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatReturn {
+  const {
+    persistSession = true,
+    historyLimit = 50,
+  } = options;
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isThinking, setIsThinking] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [currentTool, setCurrentTool] = useState<ToolCall | null>(null);
+  const [toolsUsed, setToolsUsed] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isLoadingSession, setIsLoadingSession] = useState(persistSession);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentMessageIdRef = useRef<string | null>(null);
+  const sessionServiceRef = useRef<CopilotSessionService | null>(null);
+
+  // Initialize session service
+  if (!sessionServiceRef.current) {
+    sessionServiceRef.current = new CopilotSessionService(supabase);
+  }
+
+  /**
+   * Generate a unique message ID
+   */
+  const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  /**
+   * Send a message to the autonomous copilot
+   */
+  const sendMessage = useCallback(
+    async (message: string) => {
+      if (!message.trim()) return;
+
+      // Add user message
+      const userMessage: ChatMessage = {
+        id: generateId(),
+        role: 'user',
+        content: message,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, userMessage]);
+      setIsThinking(true);
+      setError(null);
+
+      // Persist user message to database (non-blocking)
+      if (persistSession && conversationId && sessionServiceRef.current) {
+        sessionServiceRef.current.addMessage({
+          conversation_id: conversationId,
+          role: 'user',
+          content: message,
+        }).catch((err) => console.warn('[useCopilotChat] Error persisting user message:', err));
+      }
+
+      // Create placeholder assistant message
+      const assistantMessageId = generateId();
+      currentMessageIdRef.current = assistantMessageId;
+
+      const assistantMessage: ChatMessage = {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+        toolCalls: [],
+        isStreaming: true,
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      // Set up abort controller
+      abortControllerRef.current = new AbortController();
+
+      try {
+        // Get auth token
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        console.log('[useCopilotChat] Auth token present:', !!token);
+        console.log('[useCopilotChat] Calling copilot-autonomous with org:', options.organizationId);
+
+        // Call the edge function
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/copilot-autonomous`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              message,
+              organizationId: options.organizationId,
+              context: {
+                ...options.initialContext,
+                user_id: options.userId,
+              },
+              stream: true,
+            }),
+            signal: abortControllerRef.current.signal,
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Request failed');
+        }
+
+        // Process SSE stream
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No response body');
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulatedContent = '';
+        const currentToolCalls: ToolCall[] = [];
+
+        setIsStreaming(true);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete SSE events
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            if (line.startsWith('event: ')) {
+              const eventType = line.slice(7);
+              const dataLine = lines[i + 1];
+
+              if (dataLine?.startsWith('data: ')) {
+                const data = JSON.parse(dataLine.slice(6));
+
+                switch (eventType) {
+                  case 'token':
+                    // Handle streaming tokens
+                    accumulatedContent += data.text || '';
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, content: accumulatedContent }
+                          : m
+                      )
+                    );
+                    break;
+
+                  case 'message':
+                  case 'message_complete':
+                    // Handle complete message (legacy or completion marker)
+                    if (data.content && !accumulatedContent) {
+                      // Only use if we haven't accumulated tokens
+                      accumulatedContent = data.content;
+                    }
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, content: accumulatedContent || data.content }
+                          : m
+                      )
+                    );
+                    break;
+
+                  case 'tool_start':
+                    const newToolCall: ToolCall = {
+                      id: data.id,
+                      name: data.name,
+                      input: data.input,
+                      status: 'running',
+                      startedAt: new Date(),
+                    };
+                    currentToolCalls.push(newToolCall);
+                    setCurrentTool(newToolCall);
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, toolCalls: [...currentToolCalls] }
+                          : m
+                      )
+                    );
+                    options.onToolStart?.(newToolCall);
+                    break;
+
+                  case 'tool_result':
+                    const toolIndex = currentToolCalls.findIndex(
+                      (t) => t.id === data.id
+                    );
+                    if (toolIndex !== -1) {
+                      currentToolCalls[toolIndex] = {
+                        ...currentToolCalls[toolIndex],
+                        status: data.success ? 'completed' : 'error',
+                        result: data.result,
+                        error: data.error,
+                        completedAt: new Date(),
+                      };
+                      setMessages((prev) =>
+                        prev.map((m) =>
+                          m.id === assistantMessageId
+                            ? { ...m, toolCalls: [...currentToolCalls] }
+                            : m
+                        )
+                      );
+                      setCurrentTool(null);
+                      options.onToolComplete?.(currentToolCalls[toolIndex]);
+
+                      // Track tools used
+                      setToolsUsed((prev) => {
+                        if (!prev.includes(data.name)) {
+                          return [...prev, data.name];
+                        }
+                        return prev;
+                      });
+                    }
+                    break;
+
+                  case 'done':
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, isStreaming: false }
+                          : m
+                      )
+                    );
+                    options.onComplete?.(accumulatedContent, data.toolsUsed || []);
+
+                    // Persist assistant message after streaming completes
+                    if (persistSession && conversationId && sessionServiceRef.current && accumulatedContent) {
+                      const toolCallsMeta = currentToolCalls.length > 0
+                        ? currentToolCalls.map((tc) => ({
+                            id: tc.id,
+                            name: tc.name,
+                            input: tc.input,
+                            status: tc.status,
+                            result: tc.result,
+                            error: tc.error,
+                          }))
+                        : undefined;
+
+                      sessionServiceRef.current.addMessage({
+                        conversation_id: conversationId,
+                        role: 'assistant',
+                        content: accumulatedContent,
+                        metadata: toolCallsMeta ? { tool_calls: toolCallsMeta } : undefined,
+                      }).catch((err) => console.warn('[useCopilotChat] Error persisting assistant message:', err));
+                    }
+                    break;
+
+                  case 'error':
+                    setError(data.message);
+                    options.onError?.(data.message);
+                    break;
+                }
+
+                i++; // Skip the data line we just processed
+              }
+            }
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          // Request was cancelled
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: m.content + ' [Stopped]', isStreaming: false }
+                : m
+            )
+          );
+        } else {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          setError(errorMsg);
+          options.onError?.(errorMsg);
+
+          // Update message with error
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? {
+                    ...m,
+                    content: `Sorry, an error occurred: ${errorMsg}`,
+                    isStreaming: false,
+                  }
+                : m
+            )
+          );
+        }
+      } finally {
+        setIsThinking(false);
+        setIsStreaming(false);
+        setCurrentTool(null);
+        abortControllerRef.current = null;
+        currentMessageIdRef.current = null;
+      }
+    },
+    [options, persistSession, conversationId]
+  );
+
+  /**
+   * Clear all messages
+   */
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setToolsUsed([]);
+    setError(null);
+  }, []);
+
+  /**
+   * Stop the current generation
+   */
+  const stopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  }, []);
+
+  // Load persisted session on mount
+  useEffect(() => {
+    if (!persistSession || !options.userId) return;
+
+    let cancelled = false;
+
+    async function loadSession() {
+      try {
+        const service = sessionServiceRef.current!;
+        const session = await service.getMainSession(options.userId, options.organizationId);
+
+        if (cancelled) return;
+        setConversationId(session.id);
+
+        // Load recent messages
+        const persistedMessages = await service.loadMessages({
+          conversation_id: session.id,
+          limit: historyLimit,
+          include_compacted: false,
+        });
+
+        if (cancelled) return;
+
+        if (persistedMessages.length > 0) {
+          const chatMessages: ChatMessage[] = persistedMessages.map((m) => ({
+            id: m.id,
+            role: m.role as MessageRole,
+            content: m.content,
+            timestamp: new Date(m.created_at),
+            toolCalls: m.metadata?.tool_calls?.map((tc) => ({
+              id: tc.id,
+              name: tc.name,
+              input: tc.input,
+              status: tc.status,
+              result: tc.result,
+              error: tc.error,
+              startedAt: new Date(),
+            })),
+          }));
+          setMessages(chatMessages);
+        }
+      } catch (err) {
+        console.error('[useCopilotChat] Error loading session:', err);
+        // Non-fatal - user can still chat without persistence
+      } finally {
+        if (!cancelled) {
+          setIsLoadingSession(false);
+        }
+      }
+    }
+
+    loadSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [options.userId, options.organizationId, persistSession, historyLimit]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  return {
+    sendMessage,
+    messages,
+    isThinking,
+    isStreaming,
+    currentTool,
+    toolsUsed,
+    error,
+    clearMessages,
+    stopGeneration,
+    conversationId,
+    isLoadingSession,
+  };
+}
+
+export default useCopilotChat;

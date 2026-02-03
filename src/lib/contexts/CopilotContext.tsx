@@ -31,6 +31,7 @@ import { getTemporalContext } from '@/lib/utils/temporalContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { toast } from 'sonner';
 import { useAutonomousAgent } from '@/lib/copilot/agent/useAutonomousAgent';
+import { useCopilotChat, type ToolCall as AutonomousToolCall } from '@/lib/hooks/useCopilotChat';
 
 // =============================================================================
 // Agent Mode Types
@@ -77,6 +78,17 @@ interface CopilotContextValue {
   enableAgentMode: () => void;
   disableAgentMode: () => void;
   respondToAgentQuestion: (response: string | string[]) => Promise<void>;
+
+  // Autonomous copilot mode (new)
+  autonomousMode: {
+    enabled: boolean;
+    isThinking: boolean;
+    isStreaming: boolean;
+    currentTool: AutonomousToolCall | null;
+    toolsUsed: string[];
+  };
+  enableAutonomousMode: () => void;
+  disableAutonomousMode: () => void;
 }
 
 const CopilotContext = createContext<CopilotContextValue | undefined>(undefined);
@@ -114,8 +126,33 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   // =============================================================================
 
   const [agentModeEnabled, setAgentModeEnabled] = useState(false);
+  const [autonomousModeEnabled, setAutonomousModeEnabled] = useState(true); // Enabled by default
 
-  // Initialize autonomous agent
+  // Initialize autonomous copilot (new skill-based tool use)
+  const autonomousCopilot = useCopilotChat({
+    organizationId: activeOrgId || '',
+    userId: context.userId || '',
+    initialContext: {
+      currentView: context.currentView,
+      contactId: context.contactId,
+      dealIds: context.dealIds,
+    },
+    onToolStart: (toolCall) => {
+      logger.log('[CopilotContext] Autonomous tool started:', toolCall.name);
+    },
+    onToolComplete: (toolCall) => {
+      logger.log('[CopilotContext] Autonomous tool completed:', toolCall.name, toolCall.status);
+    },
+    onComplete: (response, toolsUsed) => {
+      logger.log('[CopilotContext] Autonomous copilot completed, tools used:', toolsUsed);
+    },
+    onError: (error) => {
+      logger.error('[CopilotContext] Autonomous copilot error:', error);
+      toast.error('Copilot encountered an error: ' + error);
+    },
+  });
+
+  // Initialize autonomous agent (legacy planning agent)
   const agent = useAutonomousAgent({
     organizationId: activeOrgId || '',
     userId: context.userId || '',
@@ -209,7 +246,12 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     if (agentModeEnabled) {
       agent.reset();
     }
-  }, [agentModeEnabled, agent]);
+
+    // Reset autonomous copilot if in autonomous mode
+    if (autonomousModeEnabled) {
+      autonomousCopilot.clearMessages();
+    }
+  }, [agentModeEnabled, agent, autonomousModeEnabled, autonomousCopilot]);
 
   // =============================================================================
   // Agent Mode Controls
@@ -243,8 +285,50 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     await agent.respondToQuestion(response);
   }, [agentModeEnabled, agent]);
 
+  // =============================================================================
+  // Autonomous Copilot Mode Controls (new skill-based tool use)
+  // =============================================================================
+
+  const enableAutonomousMode = useCallback(() => {
+    logger.log('[CopilotContext] Enabling autonomous copilot mode');
+    setAutonomousModeEnabled(true);
+    // Disable other modes
+    setAgentModeEnabled(false);
+    // Clear messages for fresh start
+    autonomousCopilot.clearMessages();
+    setState(prev => ({
+      ...prev,
+      messages: [],
+      conversationId: undefined,
+      mode: 'empty',
+      isLoading: false
+    }));
+  }, [autonomousCopilot]);
+
+  const disableAutonomousMode = useCallback(() => {
+    logger.log('[CopilotContext] Disabling autonomous copilot mode');
+    setAutonomousModeEnabled(false);
+    autonomousCopilot.clearMessages();
+  }, [autonomousCopilot]);
+
+  // Derived autonomous mode state
+  const autonomousMode = {
+    enabled: autonomousModeEnabled,
+    isThinking: autonomousCopilot.isThinking,
+    isStreaming: autonomousCopilot.isStreaming,
+    currentTool: autonomousCopilot.currentTool,
+    toolsUsed: autonomousCopilot.toolsUsed,
+  };
+
   // Cancel the current request
   const cancelRequest = useCallback(() => {
+    // Handle autonomous mode cancellation
+    if (autonomousModeEnabled) {
+      autonomousCopilot.stopGeneration();
+      logger.log('Autonomous copilot request cancelled by user');
+      return;
+    }
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -267,7 +351,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         };
       });
     }
-  }, []);
+  }, [autonomousModeEnabled, autonomousCopilot]);
 
   const openCopilot = useCallback((initialQuery?: string, startNewChatFlag?: boolean) => {
     setIsOpen(true);
@@ -501,7 +585,16 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       if (!message.trim() || state.isLoading) return;
 
       // =============================================================================
-      // Agent Mode Routing
+      // Autonomous Copilot Mode Routing (new skill-based tool use)
+      // =============================================================================
+      if (autonomousModeEnabled) {
+        logger.log('[CopilotContext] Routing to autonomous copilot mode');
+        await autonomousCopilot.sendMessage(message);
+        return;
+      }
+
+      // =============================================================================
+      // Agent Mode Routing (legacy planning agent)
       // =============================================================================
       if (agentModeEnabled) {
         logger.log('[CopilotContext] Routing to agent mode');
@@ -792,8 +885,30 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   }, []);
 
   // Determine which messages to show based on mode
-  const activeMessages = agentModeEnabled ? agent.messages : state.messages;
-  const activeIsLoading = agentModeEnabled ? agent.isProcessing : state.isLoading;
+  // Priority: autonomousMode > agentMode > regular
+  const getActiveMessages = (): CopilotMessage[] => {
+    if (autonomousModeEnabled) {
+      // Convert autonomous copilot messages to CopilotMessage format
+      return autonomousCopilot.messages.map(msg => ({
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: msg.timestamp,
+        // Note: toolCalls are passed separately via ChatMessage props
+      }));
+    }
+    if (agentModeEnabled) {
+      return agent.messages;
+    }
+    return state.messages;
+  };
+
+  const activeMessages = getActiveMessages();
+  const activeIsLoading = autonomousModeEnabled
+    ? autonomousCopilot.isThinking
+    : agentModeEnabled
+      ? agent.isProcessing
+      : state.isLoading;
 
   const value: CopilotContextValue = {
     // Core state
@@ -810,11 +925,16 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     conversationId: state.conversationId,
     loadConversation,
 
-    // Agent mode
+    // Agent mode (legacy planning agent)
     agentMode,
     enableAgentMode,
     disableAgentMode,
     respondToAgentQuestion,
+
+    // Autonomous copilot mode (new skill-based tool use)
+    autonomousMode,
+    enableAutonomousMode,
+    disableAutonomousMode,
   };
 
   return <CopilotContext.Provider value={value}>{children}</CopilotContext.Provider>;

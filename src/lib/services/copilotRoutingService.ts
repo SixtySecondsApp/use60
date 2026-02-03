@@ -56,12 +56,36 @@ const MAX_CANDIDATES = 5;
 // =============================================================================
 
 /**
+ * Normalize triggers to V2 format
+ * Handles both V1 (string[]) and V2 (SkillTrigger[]) formats
+ */
+function normalizeTriggers(
+  triggers: (string | SkillTrigger)[] | undefined
+): SkillTrigger[] {
+  if (!triggers) return [];
+
+  return triggers.map((trigger) => {
+    if (typeof trigger === 'string') {
+      // V1 format: simple string
+      return {
+        pattern: trigger,
+        confidence: 0.75, // Default confidence for V1 triggers
+      };
+    }
+    // V2 format: full object
+    return trigger;
+  });
+}
+
+/**
  * Calculate match score between user message and skill triggers
+ * Supports both V1 (string[]) and V2 (SkillTrigger[]) trigger formats
  */
 function calculateTriggerMatch(
   message: string,
-  triggers: SkillTrigger[],
-  keywords?: string[]
+  rawTriggers: (string | SkillTrigger)[] | undefined,
+  keywords?: string[],
+  description?: string
 ): { confidence: number; matchedTrigger?: string } {
   const messageLower = message.toLowerCase();
   const words = messageLower.split(/\s+/);
@@ -69,7 +93,10 @@ function calculateTriggerMatch(
   let bestConfidence = 0;
   let matchedTrigger: string | undefined;
 
-  // Check triggers
+  // Normalize triggers to V2 format
+  const triggers = normalizeTriggers(rawTriggers);
+
+  // Check triggers (highest priority)
   for (const trigger of triggers) {
     const patternLower = trigger.pattern.toLowerCase();
 
@@ -82,7 +109,7 @@ function calculateTriggerMatch(
       }
     }
 
-    // Check trigger examples
+    // Check trigger examples (V2 only)
     if (trigger.examples) {
       for (const example of trigger.examples) {
         if (messageLower.includes(example.toLowerCase())) {
@@ -96,7 +123,7 @@ function calculateTriggerMatch(
     }
   }
 
-  // Check keywords (lower confidence)
+  // Check keywords (medium priority)
   if (keywords && bestConfidence < 0.5) {
     const keywordMatches = keywords.filter((kw) =>
       words.includes(kw.toLowerCase())
@@ -106,6 +133,22 @@ function calculateTriggerMatch(
       if (keywordConfidence > bestConfidence) {
         bestConfidence = keywordConfidence;
         matchedTrigger = keywordMatches[0];
+      }
+    }
+  }
+
+  // Check description for relevant terms (lowest priority, fallback)
+  if (description && bestConfidence < 0.4) {
+    const descLower = description.toLowerCase();
+    // Count how many message words appear in description
+    const descMatches = words.filter(
+      (word) => word.length > 3 && descLower.includes(word)
+    );
+    if (descMatches.length >= 2) {
+      const descConfidence = Math.min(0.45, descMatches.length * 0.1);
+      if (descConfidence > bestConfidence) {
+        bestConfidence = descConfidence;
+        matchedTrigger = `description match: ${descMatches.slice(0, 2).join(', ')}`;
       }
     }
   }
@@ -209,13 +252,12 @@ export async function routeToSkill(
 
   for (const seq of sequences) {
     const frontmatter = seq.frontmatter as SkillFrontmatterV2;
-    const triggers = frontmatter?.triggers || [];
-    const keywords = frontmatter?.keywords;
 
     const { confidence, matchedTrigger } = calculateTriggerMatch(
       message,
-      triggers,
-      keywords
+      frontmatter?.triggers,
+      frontmatter?.keywords,
+      frontmatter?.description
     );
 
     if (confidence > 0) {
@@ -253,13 +295,12 @@ export async function routeToSkill(
 
   for (const skill of individualSkills) {
     const frontmatter = skill.frontmatter as SkillFrontmatterV2;
-    const triggers = frontmatter?.triggers || [];
-    const keywords = frontmatter?.keywords;
 
     const { confidence, matchedTrigger } = calculateTriggerMatch(
       message,
-      triggers,
-      keywords
+      frontmatter?.triggers,
+      frontmatter?.keywords,
+      frontmatter?.description
     );
 
     if (confidence > 0) {

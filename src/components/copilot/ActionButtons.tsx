@@ -123,12 +123,12 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions, onActionC
 
   return (
     <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200 dark:border-gray-800/50">
-      {actions.map(action => {
+      {actions.map((action, index) => {
         const Icon = action.icon ? getIcon(action.icon) : null;
-        
+
         return (
           <button
-            key={action.id}
+            key={action.id || `action-${index}`}
             onClick={() => handleClick(action)}
             className={cn(
               'px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2',

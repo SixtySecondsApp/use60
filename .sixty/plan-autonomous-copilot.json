@@ -1,0 +1,358 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "feature": "autonomous-copilot",
+    "createdAt": "2026-02-03T00:00:00Z",
+    "branch": "improve/skills-remap-andrew"
+  },
+
+  "features": [
+    {
+      "id": "autonomous-copilot",
+      "name": "Autonomous Copilot - Claude Decides Which Skills to Use",
+      "status": "in_progress",
+      "description": "Enable Claude to autonomously decide which skills to use via native tool use. Skills are exposed as tools that Claude can discover and invoke based on user intent. Replaces pattern-matching routing with AI-driven decision making.",
+      "createdAt": "2026-02-03T00:00:00Z",
+      "completedAt": null
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "AUTO-001",
+      "feature": "autonomous-copilot",
+      "title": "Install and configure Anthropic SDK",
+      "type": "setup",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["package.json"],
+        "schema": []
+      },
+      "blocks": ["AUTO-002", "AUTO-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "@anthropic-ai/sdk package installed",
+        "ANTHROPIC_API_KEY added to .env.example",
+        "Environment variable documented in README or .env.example",
+        "SDK imported successfully in autonomousExecutor.ts"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "package.json",
+        ".env.example"
+      ]
+    },
+    {
+      "id": "AUTO-002",
+      "feature": "autonomous-copilot",
+      "title": "Enhance skill frontmatter for better tool conversion",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["AUTO-001"],
+        "files": ["src/lib/types/skills.ts"],
+        "schema": ["platform_skills"]
+      },
+      "blocks": ["AUTO-004"],
+      "parallelWith": ["AUTO-003"],
+      "acceptance": [
+        "SkillFrontmatterV2 supports inputs array with name, type, description, required",
+        "SkillFrontmatterV2 supports outputs array with name, type, description",
+        "Update existing skills with proper input/output schemas",
+        "skillToTool function handles all frontmatter fields"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "src/lib/types/skills.ts",
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ]
+    },
+    {
+      "id": "AUTO-003",
+      "feature": "autonomous-copilot",
+      "title": "Create server-side API route for autonomous execution",
+      "type": "api",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["AUTO-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["AUTO-005"],
+      "parallelWith": ["AUTO-002"],
+      "acceptance": [
+        "Edge function /api/copilot/autonomous that handles execution",
+        "API key stored server-side only (not exposed to frontend)",
+        "Streaming support for real-time tool call updates",
+        "Error handling with proper HTTP status codes",
+        "Rate limiting per user/org"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    {
+      "id": "AUTO-004",
+      "feature": "autonomous-copilot",
+      "title": "Update 3-5 key skills with proper tool schemas",
+      "type": "seed-data",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["AUTO-002"],
+        "files": [],
+        "schema": ["platform_skills"]
+      },
+      "blocks": ["AUTO-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "deal-scoring skill has inputs: deal_id (required), include_recommendations (optional)",
+        "get-contact-context skill has inputs: contact_id or company_name",
+        "slack-briefing-format skill has inputs: content, channel, format_type",
+        "At least one sequence (agent-sequence) with proper schema",
+        "All updated skills have outputs defined"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "supabase/migrations/20260203100000_update_skill_schemas.sql"
+      ]
+    },
+    {
+      "id": "AUTO-005",
+      "feature": "autonomous-copilot",
+      "title": "Create useCopilotChat hook for UI integration",
+      "type": "hook",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["AUTO-003"],
+        "files": ["src/lib/copilot/agent/useAutonomousExecutor.ts"],
+        "schema": []
+      },
+      "blocks": ["AUTO-007"],
+      "parallelWith": ["AUTO-004"],
+      "acceptance": [
+        "Hook wraps useAutonomousExecutor with UI-friendly state",
+        "Provides messages array compatible with existing chat UI",
+        "Handles streaming updates for tool calls in progress",
+        "Exposes isThinking, currentTool, error states",
+        "Supports conversation reset and history"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts"
+      ]
+    },
+    {
+      "id": "AUTO-006",
+      "feature": "autonomous-copilot",
+      "title": "Add tool call visualization to ChatMessage",
+      "type": "component",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["AUTO-004"],
+        "files": ["src/components/copilot/ChatMessage.tsx"],
+        "schema": []
+      },
+      "blocks": ["AUTO-008"],
+      "parallelWith": ["AUTO-007"],
+      "acceptance": [
+        "Tool calls show as expandable cards within assistant messages",
+        "Shows tool name, inputs (summarized), and status (running/complete/error)",
+        "Collapsed by default, expandable to see full input/output",
+        "Different styling for sequence tools vs individual skills",
+        "Loading spinner while tool is executing"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "src/components/copilot/ChatMessage.tsx",
+        "src/components/copilot/ToolCallCard.tsx"
+      ]
+    },
+    {
+      "id": "AUTO-007",
+      "feature": "autonomous-copilot",
+      "title": "Update CopilotLayout to use autonomous executor",
+      "type": "integration",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["AUTO-005"],
+        "files": ["src/components/copilot/CopilotLayout.tsx"],
+        "schema": []
+      },
+      "blocks": ["AUTO-008"],
+      "parallelWith": ["AUTO-006"],
+      "acceptance": [
+        "Replace current agent usage with useCopilotChat hook",
+        "Pass organization context from active org store",
+        "Handle tool calls in message rendering",
+        "Keep existing UI layout and styling",
+        "Add feature flag to toggle between old/new agent"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "src/components/copilot/CopilotLayout.tsx"
+      ]
+    },
+    {
+      "id": "AUTO-008",
+      "feature": "autonomous-copilot",
+      "title": "Add autonomous execution analytics/logging",
+      "type": "observability",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["AUTO-006", "AUTO-007"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["AUTO-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "Log each execution: user_id, message, tools_used, iterations, duration",
+        "Track tool call success/failure rates per skill",
+        "Store conversation snippets for debugging (truncated)",
+        "Create copilot_executions table for analytics",
+        "Dashboard query to see most-used skills"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "supabase/migrations/20260203100001_copilot_executions.sql",
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ]
+    },
+    {
+      "id": "AUTO-009",
+      "feature": "autonomous-copilot",
+      "title": "End-to-end testing with real skill execution",
+      "type": "testing",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["AUTO-008"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Test: 'analyze deal health for Acme' triggers deal-scoring skill",
+        "Test: 'full deal review' triggers sequence over individual skills",
+        "Test: ambiguous request gets clarifying question from Claude",
+        "Test: multi-skill request chains tools correctly",
+        "Test: error in one tool doesn't crash entire execution"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "completedAt": null,
+      "files": [
+        "tests/integration/copilot/autonomous-executor.test.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 9,
+    "completedStories": 0,
+    "currentFeature": "autonomous-copilot",
+    "estimatedHours": 3,
+    "actualHours": null,
+    "parallelGroups": [
+      {
+        "name": "Setup",
+        "stories": ["AUTO-001"],
+        "status": "pending"
+      },
+      {
+        "name": "Foundation",
+        "stories": ["AUTO-002", "AUTO-003"],
+        "status": "pending",
+        "note": "Can run in parallel after setup"
+      },
+      {
+        "name": "Data & Hook",
+        "stories": ["AUTO-004", "AUTO-005"],
+        "status": "pending",
+        "note": "Can run in parallel"
+      },
+      {
+        "name": "UI Integration",
+        "stories": ["AUTO-006", "AUTO-007"],
+        "status": "pending",
+        "note": "Can run in parallel"
+      },
+      {
+        "name": "Observability",
+        "stories": ["AUTO-008"],
+        "status": "pending"
+      },
+      {
+        "name": "Testing",
+        "stories": ["AUTO-009"],
+        "status": "pending"
+      }
+    ]
+  },
+
+  "architecture": {
+    "overview": "Claude receives all skills as tools and autonomously decides which to call based on user intent. Skills are converted to tool definitions with proper input schemas. The agentic loop continues until Claude decides the task is complete.",
+    "components": {
+      "AutonomousExecutor": "Core class that loads skills as tools, runs agentic loop",
+      "useAutonomousExecutor": "React hook for state management",
+      "useCopilotChat": "UI-friendly wrapper with message formatting",
+      "ToolCallCard": "Visual component for showing tool execution"
+    },
+    "flow": [
+      "1. User sends message to copilot",
+      "2. AutonomousExecutor loads all skills as Claude tools",
+      "3. Claude receives message + tools, decides what to call",
+      "4. Tool calls execute skills (skill content as system prompt)",
+      "5. Results returned to Claude for next decision",
+      "6. Loop continues until Claude responds without tool calls",
+      "7. Final response shown to user with tool call history"
+    ],
+    "keyDecisions": {
+      "whyNotSDK": "Claude's native tool use is sufficient. SDK would add complexity without benefit since we're orchestrating in JS.",
+      "serverSideAPI": "API key stays server-side. Edge function handles execution.",
+      "featureFlag": "Keep old agent available during transition via feature flag."
+    }
+  },
+
+  "risks": [
+    {
+      "risk": "Claude may call too many tools or loop excessively",
+      "mitigation": "maxIterations limit (default 10), token tracking"
+    },
+    {
+      "risk": "Tool schemas may not accurately represent skill capabilities",
+      "mitigation": "Thorough frontmatter updates, testing with real queries"
+    },
+    {
+      "risk": "API costs could increase with more Claude calls",
+      "mitigation": "Monitor usage, consider caching common tool results"
+    }
+  ]
+}

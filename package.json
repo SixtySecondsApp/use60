@@ -75,6 +75,7 @@
     "deploy:migrations:production": "./scripts/deploy-migrations.sh production"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
     "@apollo/server": "^5.0.0",
     "@aws-sdk/client-ses": "^3.883.0",
     "@clerk/clerk-react": "^5.57.1",
