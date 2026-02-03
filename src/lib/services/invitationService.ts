@@ -153,9 +153,10 @@ export async function createInvitation({
 
     // Check for existing pending invitation - if exists, regenerate token instead of rejecting
     // This allows admins to easily resend if user accidentally closed the tab or lost the link
+    // Note: selecting specific columns to avoid auth.users permission error (invited_by FK)
     const { data: existingInvite } = await supabase
       .from('organization_invitations')
-      .select('*')
+      .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
       .eq('org_id', orgId)
       .eq('email', email.toLowerCase())
       .is('accepted_at', null)
@@ -340,9 +341,10 @@ export async function getOrgInvitations(
   orgId: string
 ): Promise<{ data: Invitation[] | null; error: string | null }> {
   try {
+    // Note: selecting specific columns to avoid auth.users permission error (invited_by FK)
     const { data, error } = await supabase
       .from('organization_invitations')
-      .select('*')
+      .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
       .eq('org_id', orgId)
       .is('accepted_at', null)
       .gt('expires_at', new Date().toISOString())
@@ -368,6 +370,7 @@ export async function getInvitationByToken(
   token: string
 ): Promise<{ data: Invitation | null; error: string | null }> {
   try {
+    // Note: excluding invited_by to avoid auth.users permission error (FK constraint)
     const { data, error } = await supabase
       .from('organization_invitations')
       .select(`
@@ -375,7 +378,6 @@ export async function getInvitationByToken(
         org_id,
         email,
         role,
-        invited_by,
         token,
         expires_at,
         accepted_at,

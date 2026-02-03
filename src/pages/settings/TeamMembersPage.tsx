@@ -34,6 +34,7 @@ interface TeamMember {
     id: string;
     email: string;
     full_name: string | null;
+    avatar_url?: string | null;
   } | null;
 }
 
@@ -378,7 +379,7 @@ export default function TeamMembersPage() {
 
         const { data: profiles, error: profileError } = await supabase
           .from('profiles')
-          .select('id, email, first_name, last_name')
+          .select('id, email, first_name, last_name, avatar_url')
           .in('id', userIds);
 
         if (profileError) {
@@ -395,6 +396,7 @@ export default function TeamMembersPage() {
               id: p.id,
               email: p.email,
               full_name: [p.first_name, p.last_name].filter(Boolean).join(' ') || null,
+              avatar_url: p.avatar_url || null,
             },
           ]) || []
         );

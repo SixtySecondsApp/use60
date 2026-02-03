@@ -47,6 +47,7 @@ import {
   changeOrganizationMemberRole,
   addOrganizationMember,
   getOrganizationMembers,
+  deleteOrganization,
   type OrganizationWithMemberCount,
 } from '@/lib/services/organizationAdminService';
 
@@ -86,6 +87,9 @@ export default function Organizations() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // Select mode state
+  const isSelectModeActive = selectedOrgs.size > 0;
 
   // Load organizations
   useEffect(() => {
@@ -287,30 +291,26 @@ export default function Organizations() {
     try {
       const selectedIds = Array.from(selectedOrgs);
 
-      // Delete each org by toggling (deactivating) them
-      const deletePromises = selectedIds.map(async (id) => {
-        const org = organizations.find((o) => o.id === id);
-        if (org) {
-          return toggleOrganizationStatus(id, false);
-        }
-      });
+      // Hard delete each organization
+      const deletePromises = selectedIds.map((id) => deleteOrganization(id));
+      const results = await Promise.all(deletePromises);
 
-      await Promise.all(deletePromises);
+      // Check if all deletions succeeded
+      const failures = results.filter((r) => !r.success);
+      if (failures.length > 0) {
+        throw new Error(`Failed to delete ${failures.length} organization(s)`);
+      }
 
-      // Update state
-      setOrganizations((prev) =>
-        prev.map((org) =>
-          selectedIds.includes(org.id) ? { ...org, is_active: false } : org
-        )
-      );
+      // Update state - remove deleted organizations
+      setOrganizations((prev) => prev.filter((org) => !selectedIds.includes(org.id)));
 
       setSelectedOrgs(new Set());
       setIsSelectAllChecked(false);
       setBulkDeleteDialogOpen(false);
 
-      toast.success(`Successfully deactivated ${selectedIds.length} organizations`);
-    } catch (error) {
-      toast.error('Failed to deactivate selected organizations');
+      toast.success(`Successfully deleted ${selectedIds.length} organization${selectedIds.length === 1 ? '' : 's'} and all associated data`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete selected organizations');
     }
   };
 
@@ -440,7 +440,7 @@ export default function Organizations() {
                   </Button>
                   <Button onClick={() => setBulkDeleteDialogOpen(true)} variant="destructive" size="sm">
                     <Trash2 className="w-4 h-4 mr-2" />
-                    Deactivate
+                    Delete
                   </Button>
                   <Button
                     onClick={() => {
@@ -874,11 +874,22 @@ export default function Organizations() {
         <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
           <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <DialogHeader>
-              <DialogTitle className="text-red-600 dark:text-red-400">Deactivate Organizations</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to deactivate{' '}
-                <strong>{selectedOrgs.size}</strong> selected organizations? This action can be
-                undone.
+              <DialogTitle className="text-red-600 dark:text-red-400">Delete Organizations</DialogTitle>
+              <DialogDescription className="space-y-3">
+                <p>
+                  Are you sure you want to permanently delete{' '}
+                  <strong>{selectedOrgs.size}</strong> selected organization{selectedOrgs.size === 1 ? '' : 's'}? This action <strong>cannot be undone</strong>.
+                </p>
+                <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 space-y-2">
+                  <p className="text-sm font-semibold text-red-900 dark:text-red-200">This will permanently delete:</p>
+                  <ul className="text-sm text-red-800 dark:text-red-300 space-y-1 ml-4 list-disc">
+                    <li>The organization and all its data</li>
+                    <li>All meetings, calls, and recordings</li>
+                    <li>All integration configurations</li>
+                    <li>All settings and preferences</li>
+                    <li>Members will be removed (they can re-onboard with their existing accounts)</li>
+                  </ul>
+                </div>
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:gap-0">
@@ -889,7 +900,7 @@ export default function Organizations() {
                 variant="destructive"
                 onClick={handleBulkDelete}
               >
-                Deactivate {selectedOrgs.size} Organizations
+                Delete {selectedOrgs.size} Organization{selectedOrgs.size === 1 ? '' : 's'}
               </Button>
             </DialogFooter>
           </DialogContent>

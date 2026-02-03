@@ -22,6 +22,7 @@ export interface OrganizationWithMemberCount extends Organization {
     email: string;
     first_name?: string;
     last_name?: string;
+    avatar_url?: string | null;
   };
 }
 
@@ -63,39 +64,25 @@ export async function getAllOrganizations(): Promise<OrganizationWithMemberCount
 
         if (countError) console.error('Error counting members:', countError);
 
-        // Get org owner (with fallback for older schema without member_status)
-        let ownerQuery = supabase
+        // Get org owner (with fallback for empty orgs or older schema)
+        let { data: owner, error: ownerError } = await supabase
           .from('organization_memberships')
-          .select('user_id, profiles!user_id(id, email, first_name, last_name)')
+          .select('user_id, profiles!user_id(id, email, first_name, last_name, avatar_url)')
           .eq('org_id', org.id)
           .eq('role', 'owner')
-          .neq('member_status', 'removed');
+          .neq('member_status', 'removed')
+          .maybeSingle();
 
-        let { data: owner, error: ownerError } = await ownerQuery.single();
-
-        // If relationship lookup fails, retry without the join
-        if (ownerError && ownerError.code === 'PGRST200') {
-          const result = await supabase
+        // If relationship lookup fails (406 error), retry without the join
+        if (ownerError && (ownerError.code === '406' || ownerError.code === 'PGRST116' || ownerError.code === 'PGRST200')) {
+          const { data: fallbackOwner } = await supabase
             .from('organization_memberships')
             .select('user_id')
             .eq('org_id', org.id)
             .eq('role', 'owner')
             .neq('member_status', 'removed')
-            .single();
-          owner = result.data;
-          ownerError = result.error;
-        }
-
-        // If relationship lookup fails, try fetching just the user_id and we'll skip owner display
-        if (ownerError && ownerError.code === 'PGRST200') {
-          const { data: ownerData } = await supabase
-            .from('organization_memberships')
-            .select('user_id')
-            .eq('org_id', org.id)
-            .eq('role', 'owner')
-            .single();
-          // We have user_id but no profile data, so skip owner display
-          owner = ownerData ? undefined : undefined;
+            .maybeSingle();
+          owner = fallbackOwner ? undefined : undefined; // Skip owner display if relationship fails
         }
 
         return {
@@ -147,27 +134,25 @@ export async function getOrganization(orgId: string): Promise<OrganizationWithMe
       count = fallbackCount;
     }
 
-    // Get org owner (with fallback for relationship failures)
-    let ownerQuery = supabase
+    // Get org owner (with fallback for empty orgs or relationship failures)
+    let { data: owner, error: ownerError } = await supabase
       .from('organization_memberships')
-      .select('user_id, profiles!user_id(id, email, first_name, last_name)')
+      .select('user_id, profiles!user_id(id, email, first_name, last_name, avatar_url)')
       .eq('org_id', orgId)
       .eq('role', 'owner')
-      .neq('member_status', 'removed');
+      .neq('member_status', 'removed')
+      .maybeSingle();
 
-    let { data: owner, error: ownerError } = await ownerQuery.single();
-
-    // If relationship lookup fails, try fetching just the user_id
-    if (ownerError && ownerError.code === 'PGRST200') {
-      const { data: ownerData } = await supabase
+    // If relationship lookup fails (406 error), retry without the join
+    if (ownerError && (ownerError.code === '406' || ownerError.code === 'PGRST116' || ownerError.code === 'PGRST200')) {
+      const { data: fallbackOwner } = await supabase
         .from('organization_memberships')
         .select('user_id')
         .eq('org_id', orgId)
         .eq('role', 'owner')
         .neq('member_status', 'removed')
-        .single();
-      // We have user_id but no profile data, so skip owner display
-      owner = ownerData ? undefined : undefined;
+        .maybeSingle();
+      owner = fallbackOwner ? undefined : undefined; // Skip owner display if relationship fails
     }
 
     return {
@@ -262,7 +247,8 @@ export async function getOrganizationMembers(orgId: string) {
           id,
           email,
           first_name,
-          last_name
+          last_name,
+          avatar_url
         )
       `)
       .eq('org_id', orgId)
@@ -487,16 +473,40 @@ export async function addOrganizationMember(
 }
 
 /**
- * Delete an organization (soft delete - mark as inactive)
+ * Delete an organization (hard delete)
+ * This will cascade delete all related data:
+ * - All 94 organization-linked tables (integrations, meetings, calls, recordings, etc.)
+ * - All organization memberships (soft-deleted with member_status = 'removed')
+ * - Users can re-onboard with their existing accounts to a different organization
  */
 export async function deleteOrganization(orgId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase
+    // First, soft-delete all members to preserve audit trail
+    const { error: memberError } = await supabase
+      .from('organization_memberships')
+      .update({
+        member_status: 'removed',
+        removed_at: new Date().toISOString(),
+        removed_by: (await supabase.auth.getUser()).data.user?.id || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('org_id', orgId);
+
+    if (memberError) throw memberError;
+
+    // Then hard-delete the organization
+    // CASCADE DELETE constraints will automatically remove all 94 organization-linked tables:
+    // - Fathom, HubSpot, JustCall, Savvycal, Gmail, Slack, Sentry integrations
+    // - Meetings, calls, recordings, meeting data
+    // - Organization settings, preferences, feature flags
+    // - Billing, usage, notification data
+    // - AI conversations, sequences, automation rules
+    const { error: orgError } = await supabase
       .from('organizations')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .delete()
       .eq('id', orgId);
 
-    if (error) throw error;
+    if (orgError) throw orgError;
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting organization:', error);

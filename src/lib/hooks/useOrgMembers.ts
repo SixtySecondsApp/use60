@@ -14,6 +14,7 @@ export interface OrgMember {
   email: string;
   name: string | null;
   role: string;
+  avatar_url?: string | null;
 }
 
 export function useOrgMembers() {
@@ -40,13 +41,13 @@ export function useOrgMembers() {
       const userIds = memberships.map((m) => m.user_id);
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('id, email, first_name, last_name')
+        .select('id, email, first_name, last_name, avatar_url')
         .in('id', userIds);
 
       if (profileError) throw profileError;
 
       // Create a lookup map for profiles
-      type ProfileData = { id: string; email: string; first_name: string | null; last_name: string | null };
+      type ProfileData = { id: string; email: string; first_name: string | null; last_name: string | null; avatar_url: string | null };
       const profileMap = new Map<string, ProfileData>(
         profiles?.map((p) => [p.id, p as ProfileData]) || []
       );
@@ -75,6 +76,7 @@ export function useOrgMembers() {
           email: profile?.email || '',
           name,
           role: member.role,
+          avatar_url: profile?.avatar_url || null,
         };
       }) as OrgMember[];
 

@@ -71,11 +71,11 @@ export async function leaveOrganization(
       };
     }
 
-    // Set redirect flag so user goes to goodbye screen on next page load
+    // Set redirect flag so user goes to onboarding screen on next page load
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
-        redirect_to_leaving_org: true,
+        redirect_to_onboarding: true,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId);
@@ -118,9 +118,9 @@ export async function isLastOwner(orgId: string, userId: string): Promise<boolea
     }
 
     // Count active owners
-    const { data, error: countError } = await supabase
+    const { data, count, error: countError } = await supabase
       .from('organization_memberships')
-      .select('id', { count: 'exact' })
+      .select('org_id', { count: 'exact' })
       .eq('org_id', orgId)
       .eq('role', 'owner')
       .eq('member_status', 'active');
@@ -130,7 +130,7 @@ export async function isLastOwner(orgId: string, userId: string): Promise<boolea
       return false;
     }
 
-    return (data?.length || 0) <= 1;
+    return (count || 0) <= 1;
   } catch (error: any) {
     console.error('Error checking if last owner:', error);
     return false;
