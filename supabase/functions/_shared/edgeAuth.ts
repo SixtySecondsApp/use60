@@ -21,34 +21,69 @@ export type VerifySecretResult = {
  * 1. Authorization: Bearer {secret} header (preferred for CORS compatibility)
  * 2. x-edge-function-secret header (custom header fallback)
  * 3. Dev mode: if no secret configured, returns true with console log
+ *
+ * Returns: { authenticated: boolean, method: 'bearer' | 'header' | 'dev' | 'none' }
  */
 export function verifySecret(req: Request, secret?: string): VerifySecretResult {
   const envSecret = secret || Deno.env.get('EDGE_FUNCTION_SECRET');
+  const hasEnvSecret = !!envSecret;
 
   // Check Authorization header for Bearer token (avoids CORS preflight issues)
   const authHeader = req.headers.get('authorization');
+  const hasAuthHeader = !!authHeader;
+
   if (authHeader?.toLowerCase().startsWith('bearer ')) {
     const token = authHeader.slice(7).trim();
     if (envSecret && token === envSecret) {
-      console.log('[edgeAuth.verifySecret] ✅ Authentication successful via Bearer token');
+      console.log('[edgeAuth.verifySecret] ✅ Authenticated via Bearer token', {
+        secretConfigured: hasEnvSecret,
+        tokenLength: token.length,
+      });
       return { authenticated: true, method: 'bearer' };
+    } else if (envSecret) {
+      console.warn('[edgeAuth.verifySecret] ❌ Bearer token provided but invalid', {
+        secretConfigured: hasEnvSecret,
+        tokenLength: token.length,
+        secretLength: envSecret.length,
+      });
     }
   }
 
   // Fallback: Check for custom header if Authorization not used
   const headerSecret = req.headers.get('x-edge-function-secret');
+  const hasHeaderSecret = !!headerSecret;
+
   if (headerSecret && envSecret && headerSecret === envSecret) {
-    console.log('[edgeAuth.verifySecret] ✅ Authentication successful via custom header');
+    console.log('[edgeAuth.verifySecret] ✅ Authenticated via x-edge-function-secret header', {
+      secretConfigured: hasEnvSecret,
+      secretLength: headerSecret.length,
+    });
     return { authenticated: true, method: 'header' };
+  } else if (headerSecret && envSecret) {
+    console.warn('[edgeAuth.verifySecret] ❌ Custom header provided but invalid', {
+      secretConfigured: hasEnvSecret,
+      headerLength: headerSecret.length,
+      secretLength: envSecret.length,
+    });
   }
 
   // If running locally (no secret configured), allow requests for development
   if (!envSecret) {
-    console.log('[edgeAuth.verifySecret] ℹ️ Dev mode - no EDGE_FUNCTION_SECRET configured, allowing request');
+    console.log('[edgeAuth.verifySecret] ℹ️ Development mode - no EDGE_FUNCTION_SECRET configured, allowing request', {
+      authHeaderPresent: hasAuthHeader,
+      customHeaderPresent: hasHeaderSecret,
+    });
     return { authenticated: true, method: 'dev' };
   }
 
-  console.warn('[edgeAuth.verifySecret] ❌ Authentication failed: invalid or missing credentials');
+  // Authentication failed - neither bearer token nor custom header matched
+  console.error('[edgeAuth.verifySecret] ❌ Authentication failed - invalid or missing credentials', {
+    authHeaderPresent: hasAuthHeader,
+    customHeaderPresent: hasHeaderSecret,
+    secretConfigured: hasEnvSecret,
+    bearerTokenFormat: authHeader?.substring(0, 10) || 'none',
+  });
+
   return { authenticated: false, method: 'none' };
 }
 
