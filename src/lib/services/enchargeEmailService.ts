@@ -48,8 +48,12 @@ interface SendEmailResponse {
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResponse> {
   try {
+    const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
     const { data, error } = await supabase.functions.invoke('encharge-email', {
       body: params,
+      headers: edgeFunctionSecret
+        ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+        : {},
     });
 
     if (error) {

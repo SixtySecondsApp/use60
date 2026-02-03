@@ -246,6 +246,7 @@ async function sendBulkInvitesFallback(params: SendInvitesParams): Promise<SendI
   // Send emails via Edge Function (or mark as pending if not configured)
   try {
     // Check if RESEND_API_KEY is configured by attempting to invoke the function
+    const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
     const { data: edgeFunctionData, error: edgeFunctionError } = await supabase.functions.invoke('send-waitlist-invite', {
       body: {
         invites: insertedInvites?.map(invite => ({
@@ -254,7 +255,10 @@ async function sendBulkInvitesFallback(params: SendInvitesParams): Promise<SendI
         })),
         referral_url: referralUrl,
         sender_name: sender_name
-      }
+      },
+      headers: edgeFunctionSecret
+        ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+        : {},
     });
 
     // If Edge Function fails due to missing API key, still mark as "sent" for tracking purposes
