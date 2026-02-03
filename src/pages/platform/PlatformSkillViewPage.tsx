@@ -27,7 +27,6 @@ import {
   ToggleLeft,
   ToggleRight,
   RefreshCw,
-  FolderTree,
   Zap,
   Settings2,
   Code2,
@@ -110,8 +109,7 @@ export default function PlatformSkillViewPage() {
   const { category, skillKey } = useParams<{ category: string; skillKey: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'folders' | 'test'>('folders');
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [activeTab, setActiveTab] = useState<'folders' | 'edit' | 'test'>('folders');
 
   // Modal state
   const [showTriggersModal, setShowTriggersModal] = useState(false);
@@ -309,73 +307,66 @@ export default function PlatformSkillViewPage() {
       {/* Tab Navigation */}
       <div className="border-b border-white/5 bg-gray-900/30">
         <div className="max-w-7xl mx-auto px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="inline-flex bg-white/5 rounded-xl p-1 border border-white/5">
-              <button
-                onClick={() => { setActiveTab('folders'); setIsEditMode(false); }}
-                className={cn(
-                  'px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2',
-                  activeTab === 'folders'
-                    ? 'bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-white shadow-sm ring-1 ring-white/10'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                )}
-              >
-                <FolderTree className={cn('w-4 h-4', activeTab === 'folders' && 'text-blue-400')} />
-                Folders
-              </button>
-              <button
-                onClick={() => setActiveTab('test')}
-                className={cn(
-                  'px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2',
-                  activeTab === 'test'
-                    ? 'bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-white shadow-sm ring-1 ring-white/10'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                )}
-              >
-                <Play className={cn('w-4 h-4', activeTab === 'test' && 'text-blue-400')} />
-                Test
-              </button>
-            </div>
-
-            {/* Edit toggle - only show on folders tab */}
-            {activeTab === 'folders' && (
-              <Button
-                variant={isEditMode ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setIsEditMode(!isEditMode)}
-                className={cn(
-                  'gap-2 h-9 transition-all duration-200 !text-white',
-                  isEditMode
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-0 shadow-lg shadow-blue-500/25'
-                    : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
-                )}
-              >
-                {isEditMode ? (
-                  <>
-                    <Eye className="w-4 h-4" />
-                    Done Editing
-                  </>
-                ) : (
-                  <>
-                    <Code2 className="w-4 h-4" />
-                    Edit Content
-                  </>
-                )}
-              </Button>
-            )}
+          <div className="inline-flex bg-white/5 rounded-xl p-1 border border-white/5">
+            <button
+              onClick={() => setActiveTab('folders')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2',
+                activeTab === 'folders'
+                  ? 'bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-white shadow-sm ring-1 ring-white/10'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              )}
+            >
+              <Eye className={cn('w-4 h-4', activeTab === 'folders' && 'text-blue-400')} />
+              Preview
+            </button>
+            <button
+              onClick={() => setActiveTab('edit')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2',
+                activeTab === 'edit'
+                  ? 'bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-white shadow-sm ring-1 ring-white/10'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              )}
+            >
+              <Code2 className={cn('w-4 h-4', activeTab === 'edit' && 'text-blue-400')} />
+              Edit
+            </button>
+            <button
+              onClick={() => setActiveTab('test')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2',
+                activeTab === 'test'
+                  ? 'bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-white shadow-sm ring-1 ring-white/10'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              )}
+            >
+              <Play className={cn('w-4 h-4', activeTab === 'test' && 'text-blue-400')} />
+              Test
+            </button>
           </div>
         </div>
       </div>
 
       {/* Content */}
       {activeTab === 'folders' ? (
-        // Folders view - toggleable between preview and edit mode
+        // Preview tab - rendered markdown view
         <div className="max-w-7xl mx-auto px-6 h-[calc(100vh-240px)] overflow-hidden">
           <SkillDetailView
             skillId={skill.id}
             onBack={() => {}}
             hideHeader
-            previewMode={!isEditMode}
+            previewMode={true}
+          />
+        </div>
+      ) : activeTab === 'edit' ? (
+        // Edit tab - markdown editor with preview toggle inside
+        <div className="max-w-7xl mx-auto px-6 h-[calc(100vh-240px)] overflow-hidden">
+          <SkillDetailView
+            skillId={skill.id}
+            onBack={() => {}}
+            hideHeader
+            previewMode={false}
           />
         </div>
       ) : (
