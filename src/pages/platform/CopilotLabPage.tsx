@@ -21,6 +21,7 @@ import {
   Hammer,
   Settings,
   RefreshCw,
+  History,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -40,12 +41,14 @@ import { SkillCard } from '@/components/copilot/lab/SkillCard';
 import { PopularQueriesPanel } from '@/components/copilot/lab/PopularQueriesPanel';
 import { SkillCoverageChart } from '@/components/copilot/lab/SkillCoverageChart';
 import { SkillBuilderWizard } from '@/components/copilot/lab/SkillBuilderWizard';
+import { ExecutionHistoryList } from '@/components/copilot/lab/ExecutionHistoryList';
 import type { PlatformSkill } from '@/lib/services/platformSkillService';
 
 const TABS = [
   { id: 'capabilities', label: 'Capabilities', icon: Zap },
   { id: 'playground', label: 'Playground', icon: FlaskConical },
   { id: 'quality', label: 'Quality', icon: BarChart3 },
+  { id: 'history', label: 'History', icon: History },
   { id: 'ideas', label: 'Ideas', icon: Lightbulb },
 ];
 
@@ -228,6 +231,23 @@ export function CopilotLabPage() {
                 capabilities={capabilities}
                 isLoading={isLoading}
                 onSkillClick={handleSkillClick}
+              />
+            </motion.div>
+          </TabsContent>
+
+          {/* History Tab */}
+          <TabsContent value="history" className="mt-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ExecutionHistoryList
+                orgId={activeOrgId || undefined}
+                onReRun={(message) => {
+                  setPlaygroundQuery(message);
+                  setActiveTab('playground');
+                }}
               />
             </motion.div>
           </TabsContent>

@@ -136,9 +136,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Semgrep
+      - name: Run Semgrep (SARIF)
         run: |
-          semgrep ci \
+          semgrep scan \
             --config=auto \
             --config=p/javascript \
             --config=p/typescript \
@@ -147,10 +147,20 @@ jobs:
             --config=p/secrets \
             --config=p/owasp-top-ten \
             --sarif --output=semgrep-results.sarif \
+            || true
+
+      - name: Run Semgrep (JSON)
+        run: |
+          semgrep scan \
+            --config=auto \
+            --config=p/javascript \
+            --config=p/typescript \
+            --config=p/react \
+            --config=p/security-audit \
+            --config=p/secrets \
+            --config=p/owasp-top-ten \
             --json --output=semgrep-results.json \
             || true
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
       - name: Upload Semgrep SARIF
         uses: github/codeql-action/upload-sarif@v3

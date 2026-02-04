@@ -590,7 +590,10 @@ async function logExecutionComplete(
   responseText: string,
   toolsUsed: string[],
   iterations: number,
-  errorMessage?: string
+  errorMessage?: string,
+  structuredResponse?: unknown,
+  skillKey?: string,
+  sequenceKey?: string
 ): Promise<void> {
   try {
     const duration = Date.now() - analytics.startTime;
@@ -609,8 +612,21 @@ async function logExecutionComplete(
         input_tokens: analytics.totalInputTokens,
         output_tokens: analytics.totalOutputTokens,
         total_tokens: analytics.totalInputTokens + analytics.totalOutputTokens,
+        ...(structuredResponse ? { structured_response: structuredResponse } : {}),
+        ...(skillKey ? { skill_key: skillKey } : {}),
+        ...(sequenceKey ? { sequence_key: sequenceKey } : {}),
       })
       .eq('id', executionId);
+
+    // Prune old structured responses to keep only last 5 per skill/sequence
+    if (structuredResponse && (skillKey || sequenceKey)) {
+      await supabase.rpc('prune_old_structured_responses', {
+        p_skill_key: skillKey || null,
+        p_sequence_key: sequenceKey || null,
+      }).catch((err: unknown) => {
+        console.error('[logExecutionComplete] Prune error (non-fatal):', err);
+      });
+    }
   } catch (err) {
     console.error('[logExecutionComplete] Exception:', err);
   }
@@ -952,6 +968,11 @@ serve(async (req: Request) => {
 
               // Log successful completion
               if (executionId) {
+                // Extract primary skill_key from tools used
+                const primarySkillKey = toolsUsed.length > 0
+                  ? tools.find((t) => t.name === toolsUsed[0])?._skillKey || null
+                  : null;
+
                 await logExecutionComplete(
                   supabase,
                   executionId,
@@ -959,7 +980,11 @@ serve(async (req: Request) => {
                   true,
                   finalResponseText,
                   [...new Set(toolsUsed)],
-                  iterations
+                  iterations,
+                  undefined, // errorMessage
+                  undefined, // structuredResponse (copilot-autonomous doesn't produce these)
+                  primarySkillKey || undefined,
+                  undefined // sequenceKey
                 );
               }
               break;

@@ -34,6 +34,7 @@ import {
   FlaskConical,
   Building2,
   User,
+  History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -46,8 +47,10 @@ import {
   usePlatformSkillOperations,
 } from '@/lib/hooks/usePlatformSkills';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrg } from '@/lib/contexts/OrgContext';
 import { supabase } from '@/lib/supabase/clientV2';
 import { SkillDetailView } from '@/components/platform/SkillDetailView';
+import { ExecutionHistoryList } from '@/components/copilot/lab/ExecutionHistoryList';
 import {
   Dialog,
   DialogContent,
@@ -114,7 +117,8 @@ export default function PlatformSkillViewPage() {
 
   // Check for query param to auto-switch to test tab with pre-filled input
   const tryQuery = searchParams.get('try');
-  const [activeTab, setActiveTab] = useState<'folders' | 'edit' | 'test'>(tryQuery ? 'test' : 'folders');
+  const [activeTab, setActiveTab] = useState<'folders' | 'edit' | 'test' | 'history'>(tryQuery ? 'test' : 'folders');
+  const { activeOrgId } = useOrg();
 
   // Modal state
   const [showTriggersModal, setShowTriggersModal] = useState(false);
@@ -349,6 +353,18 @@ export default function PlatformSkillViewPage() {
               <Play className={cn('w-4 h-4', activeTab === 'test' && 'text-blue-400')} />
               Test
             </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={cn(
+                'px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2',
+                activeTab === 'history'
+                  ? 'bg-gradient-to-r from-blue-600/20 to-indigo-600/20 text-white shadow-sm ring-1 ring-white/10'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              )}
+            >
+              <History className={cn('w-4 h-4', activeTab === 'history' && 'text-blue-400')} />
+              History
+            </button>
           </div>
         </div>
       </div>
@@ -374,7 +390,7 @@ export default function PlatformSkillViewPage() {
             previewMode={false}
           />
         </div>
-      ) : (
+      ) : activeTab === 'test' ? (
         // Test view
         <div className="max-w-7xl mx-auto px-6 py-6">
           <motion.div
@@ -385,6 +401,28 @@ export default function PlatformSkillViewPage() {
             className="min-h-[600px]"
           >
             <SkillTestConsole skillKey={skill.skill_key} initialInput={tryQuery || undefined} />
+          </motion.div>
+        </div>
+      ) : (
+        // History view
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="min-h-[600px]"
+          >
+            <ExecutionHistoryList
+              orgId={activeOrgId || undefined}
+              skillKey={skill.category === 'agent-sequence' ? undefined : skill.skill_key}
+              sequenceKey={skill.category === 'agent-sequence' ? skill.skill_key : undefined}
+              onReRun={(message) => {
+                setActiveTab('test');
+                // Navigate with try param to pre-fill the test console
+                navigate(`/platform/skills/${category}/${skillKey}?try=${encodeURIComponent(message)}`, { replace: true });
+              }}
+            />
           </motion.div>
         </div>
       )}

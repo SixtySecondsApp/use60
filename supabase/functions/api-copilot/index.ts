@@ -1369,6 +1369,23 @@ async function handleChat(
     // Log updated analytics with workflow data (non-blocking)
     logCopilotAnalytics(client, analyticsData).catch(() => {})
 
+    // Log to copilot_executions for execution history replay (non-blocking)
+    logExecutionHistory(client, {
+      organization_id: body.context?.orgId ? String(body.context.orgId) : null,
+      user_id: userId,
+      user_message: body.message,
+      response_text: responseContent,
+      success: true,
+      tools_used: aiResponse?.tool_executions?.map((t: any) => t.toolName) || [],
+      tool_call_count: aiResponse?.tool_executions?.length || 0,
+      duration_ms: Date.now() - requestStartTime,
+      input_tokens: analyticsData.input_tokens || 0,
+      output_tokens: analyticsData.output_tokens || 0,
+      structured_response: structuredResponse || null,
+      skill_key: extractSkillKeyFromExecutions(aiResponse?.tool_executions) || null,
+      sequence_key: extractSequenceKeyFromExecutions(aiResponse?.tool_executions) || null,
+    }).catch(() => {})
+
     // Log final response payload
     return new Response(JSON.stringify(responsePayload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -1456,6 +1473,99 @@ async function logCopilotAnalytics(client: any, analytics: any): Promise<void> {
       })
   } catch (error) {
     // Don't throw - analytics logging should never break the request
+  }
+}
+
+/**
+ * Extract the primary skill_key from tool executions
+ */
+function extractSkillKeyFromExecutions(toolExecutions?: any[]): string | null {
+  if (!toolExecutions?.length) return null
+  for (const exec of toolExecutions) {
+    if (exec?.args?.action === 'run_skill' && exec?.args?.params?.skill_key) {
+      return String(exec.args.params.skill_key)
+    }
+    // For individual skill tool calls
+    if (exec?.skillKey) return String(exec.skillKey)
+  }
+  return null
+}
+
+/**
+ * Extract the sequence_key from tool executions
+ */
+function extractSequenceKeyFromExecutions(toolExecutions?: any[]): string | null {
+  if (!toolExecutions?.length) return null
+  for (const exec of toolExecutions) {
+    if (exec?.args?.action === 'run_sequence' && exec?.args?.params?.sequence_key) {
+      return String(exec.args.params.sequence_key)
+    }
+  }
+  return null
+}
+
+/**
+ * Log execution to copilot_executions table for execution history replay.
+ * Non-blocking — errors are swallowed so the main response is never affected.
+ */
+async function logExecutionHistory(client: any, data: {
+  organization_id: string | null,
+  user_id: string,
+  user_message: string,
+  response_text: string,
+  success: boolean,
+  tools_used: string[],
+  tool_call_count: number,
+  duration_ms: number,
+  input_tokens: number,
+  output_tokens: number,
+  structured_response: any,
+  skill_key: string | null,
+  sequence_key: string | null,
+}): Promise<void> {
+  try {
+    if (!data.organization_id || !data.user_id) return
+
+    const { error } = await client
+      .from('copilot_executions')
+      .insert({
+        organization_id: data.organization_id,
+        user_id: data.user_id,
+        user_message: data.user_message,
+        execution_mode: 'agent',
+        model: 'gemini-2.0-flash',
+        response_text: data.response_text?.slice(0, 5000),
+        success: data.success,
+        tools_used: data.tools_used,
+        tool_call_count: data.tool_call_count,
+        started_at: new Date(Date.now() - data.duration_ms).toISOString(),
+        completed_at: new Date().toISOString(),
+        duration_ms: data.duration_ms,
+        input_tokens: data.input_tokens,
+        output_tokens: data.output_tokens,
+        total_tokens: (data.input_tokens || 0) + (data.output_tokens || 0),
+        structured_response: data.structured_response,
+        skill_key: data.skill_key,
+        sequence_key: data.sequence_key,
+      })
+
+    if (error) {
+      console.error('[logExecutionHistory] Insert error:', error)
+      return
+    }
+
+    // Prune old structured responses to keep only last 5 per skill/sequence
+    if (data.structured_response && (data.skill_key || data.sequence_key)) {
+      await client.rpc('prune_old_structured_responses', {
+        p_skill_key: data.skill_key || null,
+        p_sequence_key: data.sequence_key || null,
+      }).catch((err: any) => {
+        console.error('[logExecutionHistory] Prune error (non-fatal):', err)
+      })
+    }
+  } catch (error) {
+    // Don't throw - execution history logging should never break the request
+    console.error('[logExecutionHistory] Exception:', error)
   }
 }
 

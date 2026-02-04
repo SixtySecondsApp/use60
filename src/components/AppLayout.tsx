@@ -82,7 +82,6 @@ import { useTrialStatus } from '@/lib/hooks/useSubscription';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
-import { IntegrationReconnectBanner } from '@/components/IntegrationReconnectBanner';
 import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
