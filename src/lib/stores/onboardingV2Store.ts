@@ -1059,19 +1059,16 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       }
 
       // Call edge function with manual data
-      const response = await supabase.functions.invoke('deep-enrich-organization', {
+      const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
         body: {
           action: 'manual',
           organization_id: finalOrgId,
           manual_data: manualData,
         },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
       });
 
-      if (response.error) throw response.error;
-      if (!response.data?.success) throw new Error(response.data?.error || 'Failed to process data');
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Failed to process data');
 
       // Start polling for status (manual enrichment still runs AI skill generation)
       get().pollEnrichmentStatus(finalOrgId);
@@ -1093,20 +1090,24 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       if (!session) throw new Error('No session');
       if (!session.access_token) throw new Error('No access token in session');
 
-      const response = await supabase.functions.invoke('deep-enrich-organization', {
+      // Let Supabase SDK handle JWT automatically
+      console.log('[startEnrichment] Invoking deep-enrich-organization edge function');
+
+      const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
         body: {
           action: 'start',
           organization_id: organizationId,
           domain: domain,
           force: force,
         },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
       });
 
-      if (response.error) throw response.error;
-      if (!response.data?.success) throw new Error(response.data?.error || 'Failed to start enrichment');
+      if (error) {
+        console.error('[startEnrichment] Error:', error);
+        throw error;
+      }
+
+      if (!data?.success) throw new Error(data?.error || 'Failed to start enrichment');
 
       // Start polling for status
       get().pollEnrichmentStatus(organizationId);
@@ -1155,19 +1156,17 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) throw new Error('No session during polling');
 
-        const response = await supabase.functions.invoke('deep-enrich-organization', {
+        // Poll status via Supabase SDK
+        const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
           body: {
             action: 'status',
             organization_id: organizationId,
           },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
         });
 
-        if (response.error) throw response.error;
+        if (error) throw error;
 
-        const { status, enrichment, skills } = response.data;
+        const { status, enrichment, skills } = data;
 
         if (status === 'completed' && enrichment) {
           // Load skills into state
@@ -1639,5 +1638,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // Pending join request
       pendingJoinRequest: null,
     });
+
+    // Clear localStorage to prevent stale data from being restored
+    const state = get();
+    if (state.userEmail) {
+      clearOnboardingState(state.userEmail);
+    }
   },
 }));

@@ -17,7 +17,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/+esm';
 import { loadPrompt, interpolateVariables } from '../_shared/promptLoader.ts';
 
 const corsHeaders = {

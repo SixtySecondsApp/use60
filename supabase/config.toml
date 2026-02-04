@@ -137,3 +137,12 @@ verify_jwt = false
 # Public endpoint that handles auth internally (CORS preflight needs to work)
 [functions.send-organization-invitation]
 verify_jwt = false
+
+# Deep enrich organization - called from frontend during onboarding with user JWT
+# We handle JWT verification manually inside the function
+[functions.deep-enrich-organization]
+verify_jwt = false
+
+# Test auth endpoint - for debugging JWT issues
+[functions.test-auth]
+verify_jwt = false
