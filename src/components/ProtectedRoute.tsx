@@ -329,6 +329,19 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       return;
     }
 
+    // CRITICAL: If user has a pending join/rejoin request, they must stay on pending-approval page
+    // Block access to onboarding and other routes
+    if (isAuthenticated && emailVerified && hasPendingRequest === true && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute) {
+      // Only allow pending-approval page, block everything else including onboarding
+      if (location.pathname !== '/auth/pending-approval') {
+        console.log('[ProtectedRoute] User has pending request but trying to access:', location.pathname, ' - redirecting to pending approval');
+        navigate('/auth/pending-approval', { replace: true });
+        return;
+      }
+      // User is on pending-approval page, allow it
+      return;
+    }
+
     // CRITICAL: If user is authenticated and on a protected route, NEVER redirect them away
     // This preserves the current page on refresh
     const isProtectedRoute = !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute;
