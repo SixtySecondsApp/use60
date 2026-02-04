@@ -48,6 +48,14 @@ verify_jwt = false
 [functions.enrich-company]
 verify_jwt = false
 
+# Organization enrichment - called from frontend during onboarding
+[functions.enrich-organization]
+verify_jwt = false
+
+# CRM record enrichment - called from frontend for contact/company enrichment
+[functions.enrich-crm-record]
+verify_jwt = false
+
 # HubSpot integration (OAuth callback + webhooks must accept non-JWT requests)
 [functions.hubspot-oauth-callback]
 verify_jwt = false
