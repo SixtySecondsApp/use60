@@ -431,7 +431,7 @@ const ActivitySection: React.FC<ActivitySectionProps> = ({ dealId }) => {
             <div className="space-y-2">
               {recentNotes.map((note, index) => (
                 <div key={index} className="group relative">
-                  <div className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 border border-gray-700/30 rounded-xl p-4 
+                  <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-900/40 border border-gray-200 dark:border-gray-700/30 rounded-xl p-4 
                     backdrop-blur-sm hover:border-gray-600/50 transition-all duration-200 hover:shadow-lg">
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0 w-8 h-8 bg-violet-500/10 rounded-lg flex items-center justify-center">
@@ -552,7 +552,7 @@ const TaskForm: React.FC<{
   };
 
   return (
-    <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-6 w-full max-w-md mx-4 border border-gray-700/50 shadow-2xl backdrop-blur-sm">
+    <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 rounded-xl p-6 w-full max-w-md mx-4 border border-gray-200 dark:border-gray-700/50 shadow-2xl backdrop-blur-sm">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
           <Calendar className="w-5 h-5 text-blue-400" />
@@ -672,7 +672,7 @@ const CallLogForm: React.FC<{
   };
 
   return (
-    <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-6 w-full max-w-md mx-4 border border-gray-700/50 shadow-2xl backdrop-blur-sm">
+    <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 rounded-xl p-6 w-full max-w-md mx-4 border border-gray-200 dark:border-gray-700/50 shadow-2xl backdrop-blur-sm">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
           <PhoneCall className="w-5 h-5 text-green-400" />
@@ -773,7 +773,7 @@ const EmailLogForm: React.FC<{
   };
 
   return (
-    <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-6 w-full max-w-md mx-4 border border-gray-700/50 shadow-2xl backdrop-blur-sm">
+    <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 rounded-xl p-6 w-full max-w-md mx-4 border border-gray-200 dark:border-gray-700/50 shadow-2xl backdrop-blur-sm">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-orange-500/10 rounded-lg flex items-center justify-center">
           <Mail className="w-5 h-5 text-orange-400" />

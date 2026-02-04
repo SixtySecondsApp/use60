@@ -191,10 +191,10 @@ export const CommunicationHistoryResponse: React.FC<CommunicationHistoryResponse
                     onMouseEnter={() => setHoveredEmailId(comm.id)}
                     onMouseLeave={() => setHoveredEmailId(null)}
                   >
-                    <div 
+                    <div
                       className={`
-                        bg-gradient-to-r from-gray-800/60 to-gray-800/40 
-                        border border-gray-700/50 rounded-lg p-4
+                        bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800/60 dark:to-gray-800/40
+                        border border-gray-200 dark:border-gray-700/50 rounded-lg p-4
                         transition-all duration-200 cursor-pointer
                         hover:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/5
                         ${isExpanded ? 'border-blue-500/50 shadow-xl shadow-blue-500/10' : ''}

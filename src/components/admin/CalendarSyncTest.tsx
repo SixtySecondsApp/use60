@@ -193,12 +193,12 @@ export function CalendarSyncTest() {
   };
 
   return (
-    <Card className="p-6 bg-gray-800 border-gray-700">
+    <Card className="p-6 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-blue-400" />
-            <h3 className="text-lg font-semibold text-gray-100">Calendar Sync Test</h3>
+            <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Calendar Sync Test</h3>
           </div>
           <Button
             onClick={runTest}
@@ -222,7 +222,7 @@ export function CalendarSyncTest() {
         {steps.length > 0 && (
           <div className="space-y-2">
             {steps.map((step, index) => (
-              <div key={index} className="flex items-start gap-3 p-3 bg-gray-900 rounded">
+              <div key={index} className="flex items-start gap-3 p-3 bg-gray-100 dark:bg-gray-900 rounded">
                 {getStatusIcon(step.status)}
                 <div className="flex-1">
                   <div className="font-medium text-gray-200">{step.name}</div>

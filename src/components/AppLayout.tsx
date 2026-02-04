@@ -321,7 +321,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 className="w-full h-full object-cover aspect-square"
               />
             ) : (
-              <div className="w-full h-full bg-gray-700/30 flex items-center justify-center">
+              <div className="w-full h-full bg-gray-100 dark:bg-gray-700/30 flex items-center justify-center">
                 <span className="text-sm font-medium text-[#37bd7e]">
                   {userData?.first_name?.[0] || ''}{userData?.last_name?.[0] || ''}
                 </span>
@@ -399,8 +399,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           className="w-full h-full object-cover aspect-square"
                         />
                       ) : (
-                        <div className="w-full h-full bg-gray-700/30 flex items-center justify-center">
-                          <span className="text-base sm:text-lg font-medium text-gray-400">
+                        <div className="w-full h-full bg-gray-100 dark:bg-gray-700/30 flex items-center justify-center">
+                          <span className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-400">
                             {userData?.first_name?.[0]}{userData?.last_name?.[0]}
                           </span>
                         </div>
@@ -587,7 +587,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       className="w-full h-full object-cover aspect-square"
                     />
                   ) : (
-                    <div className="w-full h-full bg-gray-700/30 flex items-center justify-center">
+                    <div className="w-full h-full bg-gray-100 dark:bg-gray-700/30 flex items-center justify-center">
                       <span className="text-sm font-medium text-[#37bd7e]">
                         {userData?.first_name?.[0] || ''}{userData?.last_name?.[0] || ''}
                       </span>

@@ -60,12 +60,12 @@ export const ActivityBreakdownResponse: React.FC<ActivityBreakdownResponseProps>
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-gray-900/80 to-gray-800/80 backdrop-blur-sm border border-gray-800/50 rounded-lg p-6">
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900/80 dark:to-gray-800/80 backdrop-blur-sm border border-gray-200 dark:border-gray-800/50 rounded-lg p-6">
         <div className="flex items-center gap-3 mb-4">
-          <Activity className="w-6 h-6 text-blue-400" />
+          <Activity className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <div>
-            <h3 className="text-lg font-semibold text-gray-100">Activity Breakdown</h3>
-            <p className="text-sm text-gray-400">{period.startDate} to {period.endDate}</p>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Activity Breakdown</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{period.startDate} to {period.endDate}</p>
           </div>
         </div>
 
