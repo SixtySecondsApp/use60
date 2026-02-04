@@ -10,31 +10,79 @@ export interface LeaveOrganizationResult {
 /**
  * Leave an organization
  * User must not be the owner - owners must transfer ownership first
- * Uses RPC function for atomic updates
  */
 export async function leaveOrganization(
   orgId: string,
   userId: string
 ): Promise<LeaveOrganizationResult> {
   try {
-    // Use RPC function for atomic update of membership and profile
-    const { data, error } = await supabase.rpc('user_leave_organization', {
-      p_org_id: orgId,
-    });
+    // First, check if user is an owner
+    const { data: membership, error: fetchError } = await supabase
+      .from('organization_memberships')
+      .select('role, member_status')
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (error) {
-      console.error('RPC error leaving organization:', error);
+    if (fetchError) {
       return {
         success: false,
-        error: error.message || 'Failed to leave organization',
+        error: 'Failed to fetch membership information',
       };
     }
 
-    if (!data?.success) {
+    if (!membership) {
       return {
         success: false,
-        error: data?.error || 'Failed to leave organization',
+        error: 'You are not a member of this organization',
       };
+    }
+
+    if (membership.role === 'owner') {
+      return {
+        success: false,
+        error: 'Organization owners must transfer ownership before leaving. Please promote another member to owner and try again.',
+      };
+    }
+
+    if (membership.member_status === 'removed') {
+      return {
+        success: false,
+        error: 'You have already been removed from this organization',
+      };
+    }
+
+    // Perform soft delete: mark membership as removed
+    const { error: updateError } = await supabase
+      .from('organization_memberships')
+      .update({
+        member_status: 'removed',
+        removed_at: new Date().toISOString(),
+        removed_by: userId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('org_id', orgId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Membership update error:', updateError);
+      return {
+        success: false,
+        error: 'Failed to leave organization',
+      };
+    }
+
+    // Set redirect flag - non-blocking, continue even if this fails
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          redirect_to_onboarding: true,
+        })
+        .eq('id', userId);
+    } catch (error) {
+      console.error('Failed to set redirect flag:', error);
+      // Don't fail - membership is already updated
     }
 
     return {
