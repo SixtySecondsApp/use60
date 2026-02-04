@@ -117,11 +117,11 @@ export function OrganizationSelectionStep() {
     >
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-white mb-2">
-          Found Similar Organizations
+          Tell us more about {companyName}
         </h2>
         <p className="text-gray-400">
-          We found {similarOrgs.length} organization{similarOrgs.length !== 1 ? 's' : ''} similar to "{companyName}".
-          Would you like to join one, or create a new organization?
+          We found {similarOrgs.length} organization{similarOrgs.length !== 1 ? 's' : ''} with similar names.
+          Is your company one of these, or would you like to create a new one?
         </p>
       </div>
 
