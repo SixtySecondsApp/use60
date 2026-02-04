@@ -48,24 +48,36 @@ export default function PendingApprovalPage() {
       if (!user?.id) return;
 
       try {
-        const { data } = await supabase
+        // First try organization_join_requests (new joins)
+        let data = await supabase
           .from('organization_join_requests')
           .select('id, org_id, email, organizations(name)')
           .eq('user_id', user.id)
           .eq('status', 'pending')
           .maybeSingle();
 
-        if (data) {
-          console.log('[PendingApprovalPage] Join request data:', data);
+        // If not found, try rejoin_requests (users rejoining after leaving)
+        if (!data.data) {
+          console.log('[PendingApprovalPage] No new join request found, checking rejoin requests...');
+          data = await supabase
+            .from('rejoin_requests')
+            .select('id, org_id, email, organizations(name)')
+            .eq('user_id', user.id)
+            .eq('status', 'pending')
+            .maybeSingle();
+        }
+
+        if (data.data) {
+          console.log('[PendingApprovalPage] Join/Rejoin request data:', data.data);
           setJoinRequest({
-            requestId: data.id,
-            orgId: data.org_id,
-            orgName: data.organizations?.name || 'the organization',
-            email: data.email,
+            requestId: data.data.id,
+            orgId: data.data.org_id,
+            orgName: data.data.organizations?.name || 'the organization',
+            email: data.data.email,
           });
         } else {
           // No pending join request found - user may have been removed or request was deleted
-          console.log('[PendingApprovalPage] No pending join request found, auto-restarting onboarding');
+          console.log('[PendingApprovalPage] No pending join or rejoin request found, auto-restarting onboarding');
 
           // Reset profile status to active
           await supabase
@@ -209,15 +221,25 @@ export default function PendingApprovalPage() {
 
     setChecking(true);
     try {
-      // First check if there's any pending request at all
-      const { data: pendingRequests } = await supabase
+      // Check organization_join_requests first
+      let pendingRequests = await supabase
         .from('organization_join_requests')
         .select('status, org_id, organizations(name)')
         .eq('user_id', user.id)
         .eq('status', 'pending')
         .maybeSingle();
 
-      if (!pendingRequests) {
+      // If not found, check rejoin_requests
+      if (!pendingRequests.data) {
+        pendingRequests = await supabase
+          .from('rejoin_requests')
+          .select('status, org_id, organizations(name)')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+      }
+
+      if (!pendingRequests.data) {
         // Request not found - may have been deleted or org was deleted
         toast.warning('Join request not found. The organization may have been removed. Please restart onboarding.');
         // Auto-reset profile status to allow restart
@@ -231,15 +253,25 @@ export default function PendingApprovalPage() {
         return;
       }
 
-      // Now check if join request was approved
-      const { data: approvedRequests } = await supabase
+      // Check organization_join_requests for approval
+      let approvedRequests = await supabase
         .from('organization_join_requests')
         .select('status, org_id')
         .eq('user_id', user.id)
         .eq('status', 'approved')
         .maybeSingle();
 
-      if (approvedRequests) {
+      // If not found, check rejoin_requests
+      if (!approvedRequests.data) {
+        approvedRequests = await supabase
+          .from('rejoin_requests')
+          .select('status, org_id')
+          .eq('user_id', user.id)
+          .eq('status', 'approved')
+          .maybeSingle();
+      }
+
+      if (approvedRequests.data) {
         toast.success('Approved! Redirecting to your dashboard...');
         setTimeout(() => {
           navigate('/dashboard', { replace: true });
