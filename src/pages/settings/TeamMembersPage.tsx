@@ -79,6 +79,16 @@ export default function TeamMembersPage() {
   const [isOwner, setIsOwner] = useState(false);
   const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
 
+  // Remove member confirmation state
+  const [showRemoveMemberConfirmation, setShowRemoveMemberConfirmation] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
+  const [isRemovingMember, setIsRemovingMember] = useState(false);
+
+  // Transfer ownership confirmation state
+  const [showTransferOwnershipConfirmation, setShowTransferOwnershipConfirmation] = useState(false);
+  const [memberToTransferTo, setMemberToTransferTo] = useState<TeamMember | null>(null);
+  const [isTransferingOwnership, setIsTransferingOwnership] = useState(false);
+
   // Debug: Log component mount and context values
   useEffect(() => {
     console.log('[TeamMembersPage] ===== COMPONENT MOUNTED =====');
@@ -505,7 +515,7 @@ export default function TeamMembersPage() {
   };
 
   // Handle removing member - ORGREM-013
-  const handleRemoveMember = async (userId: string) => {
+  const handleRemoveMember = (userId: string) => {
     if (!activeOrgId) return;
 
     // Prevent removing self
@@ -517,17 +527,21 @@ export default function TeamMembersPage() {
     const member = members.find((m) => m.user_id === userId);
     if (!member) return;
 
-    // Show confirmation dialog with data retention explanation
-    const memberName = member.user?.full_name || member.user?.email || 'this user';
-    const confirmMessage = `Remove ${memberName} from the organization?\n\nImportant:\n• Their account will remain active\n• All data they created will be preserved\n• They can view their data but not edit it\n• They can request to rejoin later\n• They will be notified via email`;
+    // Show confirmation dialog
+    setMemberToRemove(member);
+    setShowRemoveMemberConfirmation(true);
+  };
 
-    if (!window.confirm(confirmMessage)) return;
+  // Handle confirming member removal
+  const handleConfirmRemoveMember = async () => {
+    if (!memberToRemove || !activeOrgId) return;
 
+    setIsRemovingMember(true);
     try {
       // Call remove_user_from_org RPC
       const { data, error } = await supabase.rpc('remove_user_from_org', {
         p_org_id: activeOrgId,
-        p_user_id: userId,
+        p_user_id: memberToRemove.user_id,
       });
 
       if (error) throw error;
@@ -553,7 +567,7 @@ export default function TeamMembersPage() {
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
         body: JSON.stringify({
-          user_id: userId,
+          user_id: memberToRemove.user_id,
           org_id: activeOrgId,
           org_name: orgData?.name || 'the organization',
           admin_email: user?.email,
@@ -567,14 +581,19 @@ export default function TeamMembersPage() {
       // Update UI - mark member as removed instead of filtering out
       setMembers(
         members.map((m) =>
-          m.user_id === userId ? { ...m, member_status: 'removed' as const } : m
+          m.user_id === memberToRemove.user_id ? { ...m, member_status: 'removed' as const } : m
         )
       );
 
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['org-members'] });
+
+      setShowRemoveMemberConfirmation(false);
+      setMemberToRemove(null);
     } catch (err: any) {
       toast.error(err.message || 'Failed to remove member');
+    } finally {
+      setIsRemovingMember(false);
     }
   };
 
@@ -627,9 +646,14 @@ export default function TeamMembersPage() {
     if (result.success) {
       setShowLeaveConfirmation(false);
       toast.success('You have left the organization');
-      // Refresh page to reset organization context
+
+      // Clear local onboarding state
+      localStorage.removeItem(`sixty_onboarding_${user.id}`);
+
+      // Redirect to removed user flow instead of reloading
+      // This ensures user cannot access dashboard before org membership check completes
       setTimeout(() => {
-        window.location.reload();
+        window.location.href = '/onboarding/removed-user';
       }, 1000);
     } else {
       toast.error(result.error || 'Failed to leave organization');
@@ -638,16 +662,22 @@ export default function TeamMembersPage() {
     }
   };
 
-  // Handle ownership transfer (owner only)
-  const handleTransferOwnership = async (newOwnerId: string) => {
+  // Handle ownership transfer (owner only) - show confirmation dialog
+  const handleTransferOwnership = (newOwnerId: string) => {
     if (!activeOrgId || !user?.id) return;
 
     const newOwner = members.find((m) => m.user_id === newOwnerId);
     if (!newOwner) return;
 
-    const confirmMessage = `Are you sure you want to transfer ownership to ${newOwner.user?.full_name || newOwner.user?.email}? You will become an admin.`;
-    if (!window.confirm(confirmMessage)) return;
+    setMemberToTransferTo(newOwner);
+    setShowTransferOwnershipConfirmation(true);
+  };
 
+  // Handle confirming ownership transfer
+  const handleConfirmTransferOwnership = async () => {
+    if (!memberToTransferTo || !activeOrgId || !user?.id) return;
+
+    setIsTransferingOwnership(true);
     try {
       // Start a transaction-like update: demote current owner to admin, promote new member to owner
       // 1. Promote new owner
@@ -655,7 +685,7 @@ export default function TeamMembersPage() {
         .from('organization_memberships')
         .update({ role: 'owner' })
         .eq('org_id', activeOrgId)
-        .eq('user_id', newOwnerId);
+        .eq('user_id', memberToTransferTo.user_id);
 
       if (promoteError) throw promoteError;
 
@@ -670,21 +700,24 @@ export default function TeamMembersPage() {
         // Try to rollback the promotion
         await supabase
           .from('organization_memberships')
-          .update({ role: newOwner.role })
+          .update({ role: memberToTransferTo.role })
           .eq('org_id', activeOrgId)
-          .eq('user_id', newOwnerId);
+          .eq('user_id', memberToTransferTo.user_id);
         throw demoteError;
       }
 
-      toast.success(`Ownership transferred to ${newOwner.user?.full_name || newOwner.user?.email}`);
+      toast.success(`Ownership transferred to ${memberToTransferTo.user?.full_name || memberToTransferTo.user?.email}`);
 
       // Update and re-sort members list
       const updatedMembers = members.map((m) => {
-        if (m.user_id === newOwnerId) return { ...m, role: 'owner' as const };
+        if (m.user_id === memberToTransferTo.user_id) return { ...m, role: 'owner' as const };
         if (m.user_id === user.id) return { ...m, role: 'admin' as const };
         return m;
       });
       setMembers(sortMembersByRole(updatedMembers));
+
+      setShowTransferOwnershipConfirmation(false);
+      setMemberToTransferTo(null);
 
       // Refresh organization context to update permissions
       setTimeout(() => {
@@ -692,6 +725,7 @@ export default function TeamMembersPage() {
       }, 1500);
     } catch (err: any) {
       toast.error(err.message || 'Failed to transfer ownership');
+      setIsTransferingOwnership(false);
     }
   };
 
@@ -1150,6 +1184,38 @@ export default function TeamMembersPage() {
         cancelText="Cancel"
         confirmVariant="destructive"
         loading={isLeavingTeam}
+      />
+
+      {/* Remove Member Confirmation Dialog */}
+      <ConfirmDialog
+        open={showRemoveMemberConfirmation}
+        onClose={() => {
+          setShowRemoveMemberConfirmation(false);
+          setMemberToRemove(null);
+        }}
+        onConfirm={handleConfirmRemoveMember}
+        title={`Remove ${memberToRemove?.user?.full_name || memberToRemove?.user?.email || 'this user'}?`}
+        description={`They will no longer have access to edit this organization's data. Important:\n• Their account will remain active\n• All data they created will be preserved\n• They can view their data but not edit it\n• They can request to rejoin later\n• They will be notified via email`}
+        confirmText="Remove Member"
+        cancelText="Cancel"
+        confirmVariant="destructive"
+        loading={isRemovingMember}
+      />
+
+      {/* Transfer Ownership Confirmation Dialog */}
+      <ConfirmDialog
+        open={showTransferOwnershipConfirmation}
+        onClose={() => {
+          setShowTransferOwnershipConfirmation(false);
+          setMemberToTransferTo(null);
+        }}
+        onConfirm={handleConfirmTransferOwnership}
+        title={`Transfer Ownership to ${memberToTransferTo?.user?.full_name || memberToTransferTo?.user?.email}?`}
+        description="You will become an admin and they will become the owner of this organization. Owners have full control over all settings and members."
+        confirmText="Transfer Ownership"
+        cancelText="Cancel"
+        confirmVariant="warning"
+        loading={isTransferingOwnership}
       />
     </SettingsPageWrapper>
   );
