@@ -19,6 +19,9 @@ import {
   DollarSign,
   Edit2,
   Settings,
+  User,
+  XCircle,
+  CheckCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -40,6 +43,12 @@ import {
   rejectJoinRequest,
   type JoinRequest,
 } from '@/lib/services/joinRequestService';
+import {
+  getPendingReactivationRequests,
+  approveReactivationRequest,
+  rejectReactivationRequest,
+  type OrganizationReactivationRequest,
+} from '@/lib/services/organizationReactivationService';
 import { leaveOrganization, isLastOwner } from '@/lib/services/leaveOrganizationService';
 import { toast } from 'sonner';
 import { CURRENCIES, type CurrencyCode } from '@/lib/services/currencyService';
@@ -93,7 +102,7 @@ export default function OrganizationManagementPage() {
   const queryClient = useQueryClient();
 
   // Active tab state
-  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'requests' | 'settings'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'requests' | 'reactivations' | 'settings'>('members');
 
   // Organization name editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -223,6 +232,14 @@ export default function OrganizationManagementPage() {
     },
     enabled: !!activeOrgId && !!user?.id && permissions.canManageTeam,
     retry: 2,
+  });
+
+  // Fetch reactivation requests (TODO: PLATFORM_ADMIN - Only enable for platform admins)
+  const { data: reactivationRequests = [], refetch: refetchReactivationRequests } = useQuery({
+    queryKey: ['organization-reactivation-requests'],
+    queryFn: getPendingReactivationRequests,
+    enabled: !!user?.id, // TODO: PLATFORM_ADMIN - Only enable for platform admins
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   // Approve mutation
@@ -1042,6 +1059,29 @@ export default function OrganizationManagementPage() {
                 )}
               </div>
             </button>
+            {/* TODO: PLATFORM_ADMIN - Only show this tab to platform admins */}
+            <button
+              onClick={() => setActiveTab('reactivations')}
+              className={`flex-1 min-w-[140px] px-5 py-3 rounded-xl font-medium text-sm transition-all ${
+                activeTab === 'reactivations'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4" />
+                Reactivations
+                {reactivationRequests.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    activeTab === 'reactivations'
+                      ? 'bg-white/20'
+                      : 'bg-amber-200 dark:bg-amber-700 text-amber-900 dark:text-amber-300'
+                  }`}>
+                    {reactivationRequests.length}
+                  </span>
+                )}
+              </div>
+            </button>
             <button
               onClick={() => setActiveTab('settings')}
               className={`flex-1 min-w-[140px] px-5 py-3 rounded-xl font-medium text-sm transition-all ${
@@ -1526,6 +1566,122 @@ export default function OrganizationManagementPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Tab Content - Reactivation Requests */}
+        {activeTab === 'reactivations' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                Organization Reactivation Requests
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Review and approve requests from inactive organizations to reactivate their accounts.
+              </p>
+              {/* TODO: BILLING - Add note about verifying billing status before approving */}
+            </div>
+
+            {reactivationRequests.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
+                <RefreshCw className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 dark:text-gray-400 font-medium">
+                  No pending reactivation requests
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+                  Requests from inactive organizations will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="border dark:border-gray-800 rounded-xl overflow-hidden">
+                {reactivationRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="p-6 border-b last:border-b-0 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        {/* Organization Info */}
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                            {request.organization?.name || 'Unknown Organization'}
+                          </h3>
+                          {request.organization?.company_domain && (
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              {request.organization.company_domain}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Request Details */}
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <User className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              Requested by: {request.requester?.full_name || request.requester?.email || 'Unknown'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              {new Date(request.requested_at).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* TODO: BILLING - Show billing status here */}
+                        {/* Example:
+                        <Alert variant="warning">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            Outstanding balance: $299.00 | Last payment failed: 12/15/2025
+                          </AlertDescription>
+                        </Alert>
+                        */}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={async () => {
+                            try {
+                              await approveReactivationRequest(request.id);
+                              toast.success('Organization reactivated');
+                              refetchReactivationRequests();
+                            } catch (error) {
+                              toast.error('Failed to approve request');
+                            }
+                          }}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Approve
+                        </Button>
+                        <Button
+                          onClick={async () => {
+                            // TODO: Add rejection reason input
+                            try {
+                              await rejectReactivationRequest(request.id, 'Rejected by admin');
+                              toast.success('Request rejected');
+                              refetchReactivationRequests();
+                            } catch (error) {
+                              toast.error('Failed to reject request');
+                            }
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="border-red-300 text-red-600 hover:bg-red-50"
+                        >
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

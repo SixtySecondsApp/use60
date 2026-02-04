@@ -23,6 +23,11 @@ export interface Organization {
   logo_url?: string | null;
   remove_logo?: boolean;
 
+  // Deactivation audit fields
+  deactivated_at?: string | null;
+  deactivated_by?: string | null;
+  deactivation_reason?: string | null;
+
   // Org-level preferences / enrichment (nullable in DB, optional here for backwards compatibility)
   currency_code?: string | null;
   currency_locale?: string | null;

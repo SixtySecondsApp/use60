@@ -52,6 +52,7 @@ import PublicMeetingShare from '@/pages/PublicMeetingShare';
 import DrueLanding from '@/pages/DrueLanding';
 import FathomCallback from '@/pages/auth/FathomCallback';
 import RemovedUserStep from '@/pages/onboarding/v2/RemovedUserStep';
+import InactiveOrganizationScreen from '@/pages/InactiveOrganizationScreen';
 import Organizations from '@/pages/platform/Organizations';
 
 // Landing pages wrapper (dev-only for local preview)
@@ -314,6 +315,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
               <Routes>
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/onboarding/removed-user" element={<RemovedUserStep />} />
+                <Route path="/inactive-organization" element={<InactiveOrganizationScreen />} />
                 <Route path="/debug-auth" element={<DebugAuth />} />
                 <Route path="/debug/auth" element={<AuthDebug />} />
                 <Route path="/debug-permissions" element={<DebugPermissions />} />
