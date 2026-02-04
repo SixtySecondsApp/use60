@@ -74,6 +74,19 @@ const roleColors: Record<string, string> = {
   readonly: 'bg-gray-100 dark:bg-gray-500/20 text-gray-700 dark:text-gray-400 border-gray-300 dark:border-gray-500/30',
 };
 
+// Helper function to calculate days until removal expiry (7 days after removal)
+const calculateDaysUntilExpiry = (removedAt: string | null | undefined): { daysLeft: number; isExpired: boolean } => {
+  if (!removedAt) return { daysLeft: 0, isExpired: true };
+
+  const removedDate = new Date(removedAt);
+  const expiryDate = new Date(removedDate.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days later
+  const now = new Date();
+  const diffMs = expiryDate.getTime() - now.getTime();
+  const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  return { daysLeft: Math.max(0, daysLeft), isExpired: daysLeft <= 0 };
+};
+
 export default function OrganizationManagementPage() {
   const { activeOrgId, activeOrg, permissions, refreshOrgs } = useOrg();
   const { user } = useAuth();
@@ -132,10 +145,32 @@ export default function OrganizationManagementPage() {
     });
   };
 
-  // Filter members based on showRemovedMembers toggle
-  const filteredMembers = showRemovedMembers
-    ? members
-    : members.filter((m) => m.member_status !== 'removed');
+  // Filter members based on showRemovedMembers toggle and 7-day expiry for removed members
+  // Only owners/admins can see removed members
+  const filteredMembers = useMemo(() => {
+    let filtered = members;
+
+    // If not showing removed members, filter them out
+    if (!showRemovedMembers) {
+      filtered = filtered.filter((m) => m.member_status !== 'removed');
+    } else {
+      // If showing removed members, only show those within 7 days of removal
+      // AND only if user is an owner or admin
+      filtered = filtered.filter((m) => {
+        if (m.member_status !== 'removed') return true;
+
+        // Only owners and admins can see removed members
+        if (!permissions.isOwner && !permissions.canManageTeam) {
+          return false;
+        }
+
+        const { isExpired } = calculateDaysUntilExpiry(m.removed_at);
+        return !isExpired; // Only keep if not expired
+      });
+    }
+
+    return filtered;
+  }, [members, showRemovedMembers, permissions]);
 
   // Helper to check if a removed member has a pending rejoin request
   const hasPendingRejoin = (userId: string): boolean => {
@@ -627,6 +662,91 @@ export default function OrganizationManagementPage() {
     setShowLeaveConfirmation(true);
   };
 
+  // State for permanent deletion confirmation
+  const [deletionConfirm, setDeletionConfirm] = useState<{ memberId: string; memberName: string } | null>(null);
+
+  // Handle permanently deleting a removed member (skip 7-day delay)
+  const handlePermanentlyDeleteMember = async (userId: string) => {
+    if (!activeOrgId) return;
+
+    const member = members.find((m) => m.user_id === userId);
+    if (!member || member.member_status !== 'removed') return;
+
+    setDeletionConfirm(null);
+
+    try {
+      // Delete the membership record to completely remove from the organization
+      const { error } = await supabase
+        .from('organization_memberships')
+        .delete()
+        .eq('org_id', activeOrgId)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      toast.success('Member permanently deleted');
+      setMembers(members.filter((m) => m.user_id !== userId));
+      queryClient.invalidateQueries({ queryKey: ['organization-members', activeOrgId] });
+    } catch (err: any) {
+      console.error('Error permanently deleting member:', err);
+      toast.error(err.message || 'Failed to delete member');
+    }
+  };
+
+  // Handle sending rejoin invite to removed member
+  const handleSendRejoinInvite = async (userId: string) => {
+    if (!activeOrgId || !user?.id) return;
+
+    const member = members.find((m) => m.user_id === userId);
+    if (!member || member.member_status !== 'removed') return;
+
+    try {
+      // Create a rejoin request for the member
+      const { data, error } = await supabase
+        .from('rejoin_requests')
+        .insert([
+          {
+            org_id: activeOrgId,
+            user_id: userId,
+            status: 'pending',
+            created_at: new Date().toISOString(),
+          },
+        ])
+        .select();
+
+      if (error) throw error;
+
+      // Send rejoin invitation email
+      const org = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', activeOrgId)
+        .single();
+
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-rejoin-invitation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          user_email: member.user?.email,
+          user_name: member.user?.full_name,
+          org_id: activeOrgId,
+          org_name: org.data?.name || 'the organization',
+          admin_name: user?.user_metadata?.full_name || user?.email,
+        }),
+      });
+
+      toast.success('Rejoin invitation sent');
+      queryClient.invalidateQueries({ queryKey: ['rejoin-requests', activeOrgId] });
+    } catch (err: any) {
+      console.error('Error sending rejoin invite:', err);
+      toast.error(err.message || 'Failed to send rejoin invite');
+    }
+  };
+
   // Confirm leaving the team
   const handleConfirmLeaveTeam = async () => {
     if (!activeOrgId || !user?.id) return;
@@ -638,6 +758,9 @@ export default function OrganizationManagementPage() {
       setShowLeaveConfirmation(false);
       toast.success('You have left the organization. Redirecting...');
 
+      // Clear local onboarding state
+      localStorage.removeItem(`sixty_onboarding_${user.id}`);
+
       // Set the redirect flag so RemovedUserStep knows why user is there
       try {
         sessionStorage.setItem('user_removed_redirect', 'true');
@@ -648,6 +771,7 @@ export default function OrganizationManagementPage() {
       console.log('[OrganizationManagementPage] Redirecting to removed-user page');
 
       // Redirect to removed-user page (short delay to ensure UI updates)
+      // This forces immediate redirect - user cannot bypass to /dashboard
       setTimeout(() => {
         window.location.href = '/onboarding/removed-user';
       }, 800);
@@ -1002,7 +1126,7 @@ export default function OrganizationManagementPage() {
                       Leave Team
                     </button>
                   )}
-                  {members.some((m) => m.member_status === 'removed') && (
+                  {members.some((m) => m.member_status === 'removed') && (permissions.isOwner || permissions.canManageTeam) && (
                     <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
                       <input
                         type="checkbox"
@@ -1026,11 +1150,11 @@ export default function OrganizationManagementPage() {
                     <div
                       key={member.user_id}
                       className={`flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors ${
-                        member.member_status === 'removed' ? 'opacity-60 bg-gray-50/50 dark:bg-gray-800/20' : ''
+                        member.member_status === 'removed' ? 'bg-gray-50/50 dark:bg-gray-800/20' : ''
                       }`}
                     >
-                      <div className="flex items-center gap-4">
-                        <Avatar className={`h-12 w-12 ${member.member_status === 'removed' ? 'opacity-60' : ''}`}>
+                      <div className={`flex items-center gap-4 ${member.member_status === 'removed' ? 'opacity-60' : ''}`}>
+                          <Avatar className={`h-12 w-12 ${member.member_status === 'removed' ? 'opacity-60' : ''}`}>
                           {member.user?.avatar_url && (
                             <AvatarImage src={member.user.avatar_url} />
                           )}
@@ -1048,12 +1172,25 @@ export default function OrganizationManagementPage() {
                               )}
                             </p>
                             {member.member_status === 'removed' && (
-                              <span
-                                className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-xs font-medium border border-red-300 dark:border-red-500/30"
-                                title={member.removed_at ? `Removed on ${new Date(member.removed_at).toLocaleDateString()}` : 'Removed'}
-                              >
-                                Removed
-                              </span>
+                              <>
+                                <span
+                                  className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-xs font-medium border border-red-300 dark:border-red-500/30"
+                                  title={member.removed_at ? `Removed on ${new Date(member.removed_at).toLocaleDateString()}` : 'Removed'}
+                                >
+                                  Removed
+                                </span>
+                                {(() => {
+                                  const { daysLeft, isExpired } = calculateDaysUntilExpiry(member.removed_at);
+                                  return (
+                                    !isExpired && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 text-xs font-medium border border-orange-300 dark:border-orange-500/30">
+                                        <Clock className="w-3 h-3 mr-1" />
+                                        {daysLeft} day{daysLeft !== 1 ? 's' : ''} left
+                                      </span>
+                                    )
+                                  );
+                                })()}
+                              </>
                             )}
                             {member.member_status === 'removed' && hasPendingRejoin(member.user_id) && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-medium border border-blue-300 dark:border-blue-500/30">
@@ -1066,11 +1203,32 @@ export default function OrganizationManagementPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         {member.member_status === 'removed' ? (
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[member.role]}`}
-                          >
-                            {roleLabels[member.role]}
-                          </span>
+                          <>
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[member.role]}`}
+                            >
+                              {roleLabels[member.role]}
+                            </span>
+                            {permissions.canManageTeam && !hasPendingRejoin(member.user_id) && (
+                              <button
+                                onClick={() => handleSendRejoinInvite(member.user_id)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-500/20 border border-green-300 dark:border-green-500/30 rounded-lg hover:bg-green-200 dark:hover:bg-green-500/30 transition-colors"
+                                title="Send rejoin invitation"
+                              >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                Send Rejoin Invite
+                              </button>
+                            )}
+                            {permissions.canManageTeam && (
+                              <button
+                                onClick={() => setDeletionConfirm({ memberId: member.user_id, memberName: member.user?.full_name || member.user?.email || 'this user' })}
+                                className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                                title="Permanently delete member"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </>
                         ) : (
                           <>
                             {permissions.isOwner && member.user_id !== user?.id ? (
@@ -1514,6 +1672,22 @@ export default function OrganizationManagementPage() {
         cancelText="Cancel"
         confirmVariant="destructive"
         loading={isLeavingTeam}
+      />
+
+      {/* Permanently Delete Member Confirmation Dialog */}
+      <ConfirmDialog
+        open={!!deletionConfirm}
+        onClose={() => setDeletionConfirm(null)}
+        onConfirm={() => {
+          if (deletionConfirm) {
+            handlePermanentlyDeleteMember(deletionConfirm.memberId);
+          }
+        }}
+        title="Permanently Delete Member?"
+        description={`Are you sure you want to permanently delete ${deletionConfirm?.memberName} from the organization? This action cannot be undone and will remove all their membership records.`}
+        confirmText="Yes, Delete Member"
+        cancelText="Cancel"
+        confirmVariant="destructive"
       />
     </SettingsPageWrapper>
   );

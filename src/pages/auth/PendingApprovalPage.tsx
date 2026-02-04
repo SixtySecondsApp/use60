@@ -433,7 +433,7 @@ export default function PendingApprovalPage() {
             <Button
               onClick={checkApprovalStatus}
               disabled={checking || isLoadingDashboard}
-              className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2"
+              className="w-full bg-violet-600 hover:bg-violet-700 border !border-violet-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2"
             >
               {checking ? (
                 <>
@@ -449,7 +449,7 @@ export default function PendingApprovalPage() {
                 <Button
                   onClick={() => setShowCancelDialog(true)}
                   disabled={canceling || isLoadingDashboard}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  className="w-full bg-gray-700 hover:bg-gray-600 border !border-gray-700 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
                 >
                   {canceling ? (
                     <>
@@ -477,7 +477,7 @@ export default function PendingApprovalPage() {
                     }
                     navigate('/onboarding?step=website_input', { replace: true });
                   }}
-                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                  className="w-full bg-violet-600 hover:bg-violet-700 border !border-violet-600 text-white"
                 >
                   Restart Onboarding
                 </Button>
@@ -488,7 +488,7 @@ export default function PendingApprovalPage() {
             )}
             <Button
               onClick={handleLogout}
-              className="w-full bg-red-600 hover:bg-red-700 text-white !focus-visible:ring-0 !focus-visible:ring-offset-0"
+              className="w-full bg-red-600 hover:bg-red-700 text-white border !border-red-600 !focus-visible:ring-0 !focus-visible:ring-offset-0"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Log Out

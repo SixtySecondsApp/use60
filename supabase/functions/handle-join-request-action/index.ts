@@ -3,18 +3,18 @@
  *
  * Processes admin approval/rejection of organization join requests.
  * When approved: generates magic link token, sets expiry, sends approval email
- * When rejected: marks request as rejected, sends rejection email
+ * When rejected: marks request as rejected, sends rejection email via AWS SES
  *
  * Flow:
  * 1. Validate request and admin permissions
- * 2. Generate magic link token (if approving)
- * 3. Update database records
- * 4. Send appropriate email via encharge-send-email
+ * 2. Update database records
+ * 3. Send rejection email directly via AWS SES (sendEmail function)
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { crypto } from 'https://deno.land/std@0.190.0/crypto/mod.ts';
+import { sendEmail } from '../_shared/ses.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -51,6 +51,61 @@ function generateToken(length: number = 64): string {
     token += chars[bytes[i] % 16];
   }
   return token;
+}
+
+/**
+ * Generate HTML email template for rejection emails
+ */
+function generateRejectionEmailTemplate(
+  recipientName: string,
+  organizationName: string,
+  rejectionReason: string
+): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; }
+        .email-wrapper { background: white; border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        h1 { color: #1f2937; margin-bottom: 16px; font-size: 24px; }
+        p { color: #4b5563; margin-bottom: 16px; }
+        .status-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 16px; margin: 20px 0; }
+        .reason { background: #f3f4f6; border-left: 4px solid #ef4444; padding: 12px; margin: 16px 0; }
+        .footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="email-wrapper">
+            <h1>Application Status Update</h1>
+
+            <p>Hi ${recipientName},</p>
+
+            <p>Thank you for your interest in joining <strong>${organizationName}</strong> on 60.</p>
+
+            <div class="status-box">
+                <p style="margin: 0; font-weight: 600; color: #ef4444;">Your request has been declined</p>
+            </div>
+
+            <p>Unfortunately, your request to join ${organizationName} was not approved at this time.</p>
+
+            <div class="reason">
+                <p style="margin: 0; font-size: 14px;"><strong>Reason:</strong></p>
+                <p style="margin: 8px 0 0 0; font-size: 14px;">${rejectionReason}</p>
+            </div>
+
+            <p>If you have any questions about this decision, please reach out to the organization administrator or contact our support team at <strong>support@use60.com</strong>.</p>
+
+            <div class="footer">
+                <p>This is an automated message. Please do not reply to this email.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`;
 }
 
 serve(async (req: Request): Promise<Response> => {
@@ -377,32 +432,28 @@ serve(async (req: Request): Promise<Response> => {
         // Don't fail - rejection was already recorded
       }
 
-      // Send rejection email via encharge-send-email
-      const enchargeFunctionUrl = `${SUPABASE_URL}/functions/v1/encharge-send-email`;
+      // Send rejection email via SES
+      const rejectionReason = rejection_reason || 'Your request does not meet our criteria at this time.';
+      const emailHtml = generateRejectionEmailTemplate(
+        userName,
+        org.name,
+        rejectionReason
+      );
 
-      const emailResponse = await fetch(enchargeFunctionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          'apikey': SUPABASE_SERVICE_ROLE_KEY,
-        },
-        body: JSON.stringify({
-          template_type: 'join_request_rejected',
-          to_email: joinRequest.email,
-          to_name: userName,
-          user_id: joinRequest.user_id,
-          variables: {
-            first_name: profile?.first_name || userName,
-            org_name: org.name,
-            rejection_reason: rejection_reason || 'Your request does not meet our criteria at this time.',
-          },
-        }),
+      const emailResult = await sendEmail({
+        to: joinRequest.email,
+        subject: `Your Request to Join ${org.name} - Update`,
+        html: emailHtml,
+        text: `Your request to join ${org.name} was not approved.\n\nReason: ${rejectionReason}\n\nIf you have questions, contact support@use60.com`,
+        from: 'noreply@use60.com',
+        fromName: '60',
       });
 
-      if (!emailResponse.ok) {
-        console.error('Failed to send rejection email:', emailResponse.status);
+      if (!emailResult.success) {
+        console.error('Failed to send rejection email:', emailResult.error);
         // Don't fail the whole request if email fails - the rejection was still recorded
+      } else {
+        console.log(`Rejection email sent to ${joinRequest.email} for organization ${org.name}`);
       }
 
       return new Response(
