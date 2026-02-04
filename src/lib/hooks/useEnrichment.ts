@@ -22,6 +22,17 @@ interface EnrichmentJob {
   processed_rows: number;
   failed_rows: number;
   started_at: string;
+  last_processed_row_index?: number;
+}
+
+interface EnrichmentResult {
+  job_id: string;
+  status: 'complete' | 'failed' | 'running';
+  total_rows: number;
+  processed_rows: number;
+  failed_rows: number;
+  has_more: boolean;
+  last_processed_row_index: number;
 }
 
 // ============================================================================
@@ -52,7 +63,7 @@ export function useEnrichment(tableId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('enrichment_jobs')
-        .select('id, column_id, status, total_rows, processed_rows, failed_rows, started_at')
+        .select('id, column_id, status, total_rows, processed_rows, failed_rows, started_at, last_processed_row_index')
         .eq('table_id', tableId)
         .in('status', ['queued', 'running'])
         .order('started_at', { ascending: false });
@@ -86,6 +97,44 @@ export function useEnrichment(tableId: string) {
   // Start Enrichment Mutation
   // --------------------------------------------------------------------------
 
+  /**
+   * Invoke the enrichment edge function. If the result indicates more rows
+   * remain (has_more), automatically chains another request to continue.
+   */
+  const invokeEnrichment = async (params: {
+    columnId: string;
+    rowIds?: string[];
+    resumeJobId?: string;
+  }): Promise<EnrichmentResult> => {
+    const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
+      body: {
+        table_id: tableId,
+        column_id: params.columnId,
+        row_ids: params.rowIds,
+        resume_job_id: params.resumeJobId,
+      },
+    });
+
+    if (error) throw error;
+    const result = data as EnrichmentResult;
+
+    // Auto-chain: if more rows remain, schedule the next batch
+    if (result.has_more && result.status === 'running') {
+      // Invalidate queries so the UI updates with progress
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.jobs(tableId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
+
+      // Continue with next batch (small delay to avoid hammering)
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return invokeEnrichment({
+        columnId: params.columnId,
+        resumeJobId: result.job_id,
+      });
+    }
+
+    return result;
+  };
+
   const startEnrichmentMutation = useMutation({
     mutationFn: async ({
       columnId,
@@ -94,23 +143,14 @@ export function useEnrichment(tableId: string) {
       columnId: string;
       rowIds?: string[];
     }) => {
-      const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
-        body: {
-          table_id: tableId,
-          column_id: columnId,
-          row_ids: rowIds,
-        },
-      });
-
-      if (error) throw error;
-      return data;
+      return invokeEnrichment({ columnId, rowIds });
     },
     onSuccess: () => {
-      // Refresh jobs list to pick up the new job
+      // Refresh jobs list to pick up the completed job
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.jobs(tableId) });
       // Refresh table data to show enriched cells
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
-      toast.success('Enrichment started');
+      toast.success('Enrichment complete');
     },
     onError: (error: Error) => {
       toast.error(`Enrichment failed: ${error.message}`);

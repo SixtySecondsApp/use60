@@ -32,7 +32,6 @@ import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizar
 import { ViewSelector } from '@/components/ops/ViewSelector';
 import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
 import type { SavedView, FilterCondition, OpsTableColumn } from '@/lib/services/opsTableService';
-import { applyFilters } from '@/lib/utils/opsTableFilters';
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
 
@@ -102,12 +101,13 @@ function OpsDetailPage() {
     data: tableData,
     isLoading: isDataLoading,
   } = useQuery({
-    queryKey: ['ops-table-data', tableId, sortState],
+    queryKey: ['ops-table-data', tableId, sortState, filterConditions],
     queryFn: () =>
       tableService.getTableData(tableId!, {
         perPage: 500,
-        sortBy: sortState?.key === 'row_index' ? 'row_index' : undefined,
+        sortBy: sortState?.key ?? 'row_index',
         sortDir: sortState?.dir,
+        filters: filterConditions.length > 0 ? filterConditions : undefined,
       }),
     enabled: !!tableId,
   });
@@ -165,26 +165,8 @@ function OpsDetailPage() {
     });
   }, [tableId, table, views.length, columns, systemViewsCreated, queryClient]);
 
-  const rows = useMemo(() => {
-    let result = tableData?.rows ?? [];
-
-    // Apply filters
-    if (filterConditions.length > 0) {
-      result = applyFilters(result, filterConditions, columns);
-    }
-
-    // Apply sort
-    if (sortState && sortState.key !== 'row_index') {
-      result = [...result].sort((a, b) => {
-        const aVal = a.cells[sortState.key]?.value ?? '';
-        const bVal = b.cells[sortState.key]?.value ?? '';
-        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
-        return sortState.dir === 'asc' ? cmp : -cmp;
-      });
-    }
-
-    return result;
-  }, [tableData?.rows, sortState, filterConditions, columns]);
+  // Rows are now filtered and sorted server-side via getTableData()
+  const rows = useMemo(() => tableData?.rows ?? [], [tableData?.rows]);
 
   // ---- Mutations ----
 

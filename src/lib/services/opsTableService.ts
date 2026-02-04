@@ -393,42 +393,229 @@ export class OpsTableService {
 
   async getTableData(
     tableId: string,
-    opts?: { page?: number; perPage?: number; sortBy?: string; sortDir?: 'asc' | 'desc' }
+    opts?: {
+      page?: number;
+      perPage?: number;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      filters?: FilterCondition[];
+    }
   ): Promise<{ rows: OpsTableRow[]; total: number }> {
     const page = opts?.page ?? 1;
-    const perPage = opts?.perPage ?? 50;
+    const perPage = opts?.perPage ?? 500;
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
 
-    // Fetch columns so we can key cells
+    // Fetch columns so we can key cells and resolve filter column keys to IDs
     const { data: columns, error: colError } = await this.supabase
       .from('dynamic_table_columns')
-      .select('id, key')
+      .select('id, key, column_type')
       .eq('table_id', tableId);
 
     if (colError) throw colError;
 
-    // Build query
+    const columnsList = (columns ?? []) as { id: string; key: string; column_type: string }[];
+
+    // Build a map of column key → column ID for server-side filtering
+    const keyToColumnId = new Map<string, string>();
+    const keyToColumnType = new Map<string, string>();
+    for (const col of columnsList) {
+      keyToColumnId.set(col.key, col.id);
+      keyToColumnType.set(col.key, col.column_type);
+    }
+
+    // -----------------------------------------------------------------
+    // Server-side filtering: get row IDs that match all filter conditions
+    // -----------------------------------------------------------------
+    const filters = opts?.filters ?? [];
+    let filteredRowIds: string[] | null = null;
+
+    if (filters.length > 0) {
+      filteredRowIds = await this.getFilteredRowIds(tableId, filters, keyToColumnId, keyToColumnType);
+    }
+
+    // Build main query
     let query = this.supabase
       .from('dynamic_table_rows')
       .select(`${ROW_COLUMNS}, dynamic_table_cells(${CELL_COLUMNS})`, { count: 'exact' })
-      .eq('table_id', tableId)
-      .range(from, to);
+      .eq('table_id', tableId);
 
+    // Apply filter (restrict to matching row IDs)
+    if (filteredRowIds !== null) {
+      if (filteredRowIds.length === 0) {
+        // No rows match — return empty
+        return { rows: [], total: 0 };
+      }
+      query = query.in('id', filteredRowIds);
+    }
+
+    // Sort
     const sortColumn = opts?.sortBy ?? 'row_index';
     const ascending = (opts?.sortDir ?? 'asc') === 'asc';
-    query = query.order(sortColumn, { ascending });
+
+    if (sortColumn === 'row_index') {
+      query = query.order('row_index', { ascending });
+    } else {
+      // For cell-based sorts, we sort client-side after fetch (Supabase
+      // doesn't support ordering by nested relation columns). The server-side
+      // filtering still narrows the result set significantly.
+      query = query.order('row_index', { ascending: true });
+    }
+
+    query = query.range(from, to);
 
     const { data, error, count } = await query;
 
     if (error) throw error;
 
-    const rows = this.mapRows(
+    let rows = this.mapRows(
       (data ?? []) as RawRow[],
-      (columns ?? []) as { id: string; key: string }[]
+      columnsList as { id: string; key: string }[]
     );
 
+    // Client-side sort for cell-based columns (server already filtered)
+    if (sortColumn && sortColumn !== 'row_index') {
+      rows = [...rows].sort((a, b) => {
+        const aVal = a.cells[sortColumn]?.value ?? '';
+        const bVal = b.cells[sortColumn]?.value ?? '';
+        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
+        return ascending ? cmp : -cmp;
+      });
+    }
+
     return { rows, total: count ?? 0 };
+  }
+
+  /**
+   * Get row IDs that match ALL filter conditions (AND logic).
+   * Each condition queries the cells table; results are intersected.
+   */
+  private async getFilteredRowIds(
+    tableId: string,
+    filters: FilterCondition[],
+    keyToColumnId: Map<string, string>,
+    keyToColumnType: Map<string, string>,
+  ): Promise<string[]> {
+    // Get all row IDs for this table first
+    const { data: allRows, error: allRowsError } = await this.supabase
+      .from('dynamic_table_rows')
+      .select('id')
+      .eq('table_id', tableId);
+
+    if (allRowsError) throw allRowsError;
+    let matchingRowIds = new Set((allRows ?? []).map((r) => (r as { id: string }).id));
+
+    for (const filter of filters) {
+      const columnId = keyToColumnId.get(filter.column_key);
+      if (!columnId) continue;
+
+      const conditionRowIds = await this.evaluateFilterCondition(
+        tableId,
+        columnId,
+        filter,
+        matchingRowIds,
+      );
+
+      // Intersect — all conditions must match (AND logic)
+      matchingRowIds = new Set([...matchingRowIds].filter((id) => conditionRowIds.has(id)));
+
+      // Short-circuit if no matches remain
+      if (matchingRowIds.size === 0) break;
+    }
+
+    return [...matchingRowIds];
+  }
+
+  /**
+   * Evaluate a single filter condition and return the set of matching row IDs.
+   */
+  private async evaluateFilterCondition(
+    tableId: string,
+    columnId: string,
+    filter: FilterCondition,
+    candidateRowIds: Set<string>,
+  ): Promise<Set<string>> {
+    const { operator, value } = filter;
+
+    // Handle is_empty and is_not_empty specially — they check for absence of cells
+    if (operator === 'is_empty') {
+      // Rows that have no cell for this column, OR cell value is null/empty
+      const { data: cellRows, error } = await this.supabase
+        .from('dynamic_table_cells')
+        .select('row_id, value')
+        .eq('column_id', columnId)
+        .in('row_id', [...candidateRowIds]);
+
+      if (error) throw error;
+
+      const nonEmptyRowIds = new Set(
+        (cellRows ?? [])
+          .filter((c) => (c as { row_id: string; value: string | null }).value != null && (c as { row_id: string; value: string | null }).value !== '')
+          .map((c) => (c as { row_id: string }).row_id)
+      );
+
+      // Return rows that are NOT in the non-empty set
+      return new Set([...candidateRowIds].filter((id) => !nonEmptyRowIds.has(id)));
+    }
+
+    if (operator === 'is_not_empty') {
+      const { data: cellRows, error } = await this.supabase
+        .from('dynamic_table_cells')
+        .select('row_id, value')
+        .eq('column_id', columnId)
+        .in('row_id', [...candidateRowIds]);
+
+      if (error) throw error;
+
+      return new Set(
+        (cellRows ?? [])
+          .filter((c) => (c as { row_id: string; value: string | null }).value != null && (c as { row_id: string; value: string | null }).value !== '')
+          .map((c) => (c as { row_id: string }).row_id)
+      );
+    }
+
+    // For all other operators, query cells and filter
+    let cellQuery = this.supabase
+      .from('dynamic_table_cells')
+      .select('row_id, value')
+      .eq('column_id', columnId)
+      .in('row_id', [...candidateRowIds]);
+
+    // Use Supabase PostgREST operators where possible for performance
+    switch (operator) {
+      case 'equals':
+        cellQuery = cellQuery.ilike('value', value);
+        break;
+      case 'not_equals':
+        cellQuery = cellQuery.not('value', 'ilike', value);
+        break;
+      case 'contains':
+        cellQuery = cellQuery.ilike('value', `%${value}%`);
+        break;
+      case 'not_contains':
+        cellQuery = cellQuery.not('value', 'ilike', `%${value}%`);
+        break;
+      case 'starts_with':
+        cellQuery = cellQuery.ilike('value', `${value}%`);
+        break;
+      case 'ends_with':
+        cellQuery = cellQuery.ilike('value', `%${value}`);
+        break;
+      case 'greater_than':
+        cellQuery = cellQuery.gt('value', value);
+        break;
+      case 'less_than':
+        cellQuery = cellQuery.lt('value', value);
+        break;
+      default:
+        break;
+    }
+
+    const { data: matchingCells, error } = await cellQuery;
+
+    if (error) throw error;
+
+    return new Set((matchingCells ?? []).map((c) => (c as { row_id: string }).row_id));
   }
 
   async updateCell(cellId: string, value: string): Promise<void> {

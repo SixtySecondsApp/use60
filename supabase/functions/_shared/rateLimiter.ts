@@ -215,9 +215,108 @@ export async function cleanupRateLimitRecords(supabaseClient: any): Promise<void
   }
 }
 
+// =============================================================================
+// Concurrency & Retry utilities for external API calls (enrichment, integrations)
+// =============================================================================
+
+/**
+ * Simple concurrency limiter — runs up to `limit` async functions in parallel.
+ * Used by enrichment and integration edge functions to avoid API bans.
+ */
+export function createConcurrencyLimiter(limit: number) {
+  let active = 0
+  const queue: (() => void)[] = []
+
+  function next() {
+    if (queue.length > 0 && active < limit) {
+      active++
+      const resolve = queue.shift()!
+      resolve()
+    }
+  }
+
+  return async function run<T>(fn: () => Promise<T>): Promise<T> {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => {
+        queue.push(resolve)
+      })
+    } else {
+      active++
+    }
+
+    try {
+      return await fn()
+    } finally {
+      active--
+      next()
+    }
+  }
+}
+
+/**
+ * Fetch with retry on 429 (rate limit) and 5xx (server error) responses.
+ * Parses Retry-After header for optimal backoff timing.
+ */
+export async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  opts?: {
+    maxRetries?: number
+    baseDelayMs?: number
+    signal?: AbortSignal
+    logPrefix?: string
+  }
+): Promise<Response> {
+  const maxRetries = opts?.maxRetries ?? 3
+  const baseDelayMs = opts?.baseDelayMs ?? 2000
+  const logPrefix = opts?.logPrefix ?? '[fetchWithRetry]'
+
+  let lastResponse: Response | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, {
+      ...init,
+      signal: opts?.signal,
+    })
+
+    if (response.ok) {
+      return response
+    }
+
+    lastResponse = response
+
+    const shouldRetry = response.status === 429 || response.status >= 500
+    if (!shouldRetry || attempt === maxRetries) {
+      return response
+    }
+
+    let delayMs = Math.min(baseDelayMs * Math.pow(2, attempt), 30000)
+
+    const retryAfter = response.headers.get('retry-after')
+    if (retryAfter) {
+      const seconds = parseInt(retryAfter, 10)
+      if (!isNaN(seconds)) {
+        delayMs = seconds * 1000
+      }
+    }
+
+    delayMs += Math.random() * 1000
+
+    console.log(
+      `${logPrefix} ${response.status} — retrying in ${Math.round(delayMs)}ms (attempt ${attempt + 1}/${maxRetries})`
+    )
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+
+  return lastResponse!
+}
+
 export default {
   checkRateLimit,
   rateLimitMiddleware,
   cleanupRateLimitRecords,
+  createConcurrencyLimiter,
+  fetchWithRetry,
   RATE_LIMIT_CONFIGS
 };

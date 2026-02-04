@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { fetchWithRetry } from '../_shared/rateLimiter.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,18 +30,27 @@ function resolveColumnMentions(
   })
 }
 
+// Maximum rows per invocation to stay within Supabase edge function wall-clock limit (150s)
+const BATCH_SIZE = 50
+
 interface EnrichRequest {
   table_id: string
   column_id: string
   row_ids?: string[]
+  /** Resume an existing job from where it left off */
+  resume_job_id?: string
 }
 
 interface JobSummary {
   job_id: string
-  status: 'complete' | 'failed'
+  status: 'complete' | 'failed' | 'running'
   total_rows: number
   processed_rows: number
   failed_rows: number
+  /** True if more rows remain to be processed */
+  has_more: boolean
+  /** The row_index of the last processed row — used for batch resumption */
+  last_processed_row_index: number
 }
 
 /**
@@ -97,27 +107,36 @@ function scoreConfidence(text: string): number {
 }
 
 /**
- * Call Claude API with a timeout. Returns the text content or throws on error/timeout.
+ * Call Claude API with a timeout, automatic retry on 429/5xx, and backoff.
+ * Returns the text content or throws on error/timeout.
  */
 async function callClaude(prompt: string, apiKey: string): Promise<string> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), ROW_TIMEOUT_MS)
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+    const response = await fetchWithRetry(
+      'https://api.anthropic.com/v1/messages',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: prompt }],
+        }),
       },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-      signal: controller.signal,
-    })
+      {
+        maxRetries: 3,
+        baseDelayMs: 2000,
+        signal: controller.signal,
+        logPrefix: LOG_PREFIX,
+      }
+    )
 
     if (!response.ok) {
       const errorBody = await response.text()
@@ -202,7 +221,7 @@ serve(async (req) => {
       )
     }
 
-    const { table_id, column_id, row_ids } = body
+    const { table_id, column_id, row_ids, resume_job_id } = body
 
     // Verify the table exists and user has access (use user client for RLS check)
     const { data: table, error: tableError } = await userClient
@@ -251,8 +270,43 @@ serve(async (req) => {
     }
 
     // -----------------------------------------------------------------
-    // 3. Fetch rows to enrich
+    // 3. Fetch rows to enrich (with batch limits)
     // -----------------------------------------------------------------
+
+    // If resuming, fetch the existing job to get the last processed position
+    let resumeFromIndex = 0
+    let existingJobProcessed = 0
+    let existingJobFailed = 0
+
+    if (resume_job_id) {
+      const { data: existingJob, error: jobFetchError } = await serviceClient
+        .from('enrichment_jobs')
+        .select('id, last_processed_row_index, processed_rows, failed_rows, total_rows, status')
+        .eq('id', resume_job_id)
+        .maybeSingle()
+
+      if (jobFetchError || !existingJob) {
+        console.error(`${LOG_PREFIX} Failed to fetch resume job:`, jobFetchError?.message)
+        return new Response(
+          JSON.stringify({ error: 'Resume job not found' }),
+          { status: 404, headers: JSON_HEADERS }
+        )
+      }
+
+      if (existingJob.status !== 'running') {
+        return new Response(
+          JSON.stringify({ error: `Cannot resume job with status: ${existingJob.status}` }),
+          { status: 400, headers: JSON_HEADERS }
+        )
+      }
+
+      resumeFromIndex = existingJob.last_processed_row_index ?? 0
+      existingJobProcessed = existingJob.processed_rows ?? 0
+      existingJobFailed = existingJob.failed_rows ?? 0
+      console.log(`${LOG_PREFIX} Resuming job ${resume_job_id} from row_index > ${resumeFromIndex}`)
+    }
+
+    // Fetch rows — either specific row_ids or next batch by row_index
     let rowsQuery = serviceClient
       .from('dynamic_table_rows')
       .select('id, row_index')
@@ -263,9 +317,39 @@ serve(async (req) => {
       rowsQuery = rowsQuery.in('id', row_ids)
     }
 
+    if (resumeFromIndex > 0) {
+      rowsQuery = rowsQuery.gt('row_index', resumeFromIndex)
+    }
+
+    // Limit to BATCH_SIZE rows per invocation
+    rowsQuery = rowsQuery.limit(BATCH_SIZE)
+
     const { data: rows, error: rowsError } = await rowsQuery
 
     if (rowsError || !rows || rows.length === 0) {
+      // If resuming and no more rows, the job is complete
+      if (resume_job_id) {
+        const finalStatus = existingJobFailed > 0 && existingJobProcessed === 0 ? 'failed' : 'complete'
+        await serviceClient
+          .from('enrichment_jobs')
+          .update({
+            status: finalStatus,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', resume_job_id)
+
+        const summary: JobSummary = {
+          job_id: resume_job_id,
+          status: finalStatus,
+          total_rows: existingJobProcessed + existingJobFailed,
+          processed_rows: existingJobProcessed,
+          failed_rows: existingJobFailed,
+          has_more: false,
+          last_processed_row_index: resumeFromIndex,
+        }
+        return new Response(JSON.stringify(summary), { status: 200, headers: JSON_HEADERS })
+      }
+
       console.error(`${LOG_PREFIX} No rows found:`, rowsError?.message)
       return new Response(
         JSON.stringify({ error: 'No rows found to enrich' }),
@@ -273,7 +357,20 @@ serve(async (req) => {
       )
     }
 
-    console.log(`${LOG_PREFIX} Found ${rows.length} rows to enrich for column "${column.label}"`)
+    // Count total remaining rows (for progress tracking on new jobs)
+    let totalRowCount = rows.length
+    if (!resume_job_id && !row_ids) {
+      const { count } = await serviceClient
+        .from('dynamic_table_rows')
+        .select('id', { count: 'exact', head: true })
+        .eq('table_id', table_id)
+
+      totalRowCount = count ?? rows.length
+    } else if (row_ids && row_ids.length > 0) {
+      totalRowCount = row_ids.length
+    }
+
+    console.log(`${LOG_PREFIX} Processing batch of ${rows.length} rows (total: ${totalRowCount}) for column "${column.label}"`)
 
     // -----------------------------------------------------------------
     // 4. Fetch all columns for this table (to build row context)
@@ -332,40 +429,50 @@ serve(async (req) => {
     }
 
     // -----------------------------------------------------------------
-    // 6. Create enrichment job
+    // 6. Create or resume enrichment job
     // -----------------------------------------------------------------
-    const { data: job, error: jobError } = await serviceClient
-      .from('enrichment_jobs')
-      .insert({
-        table_id,
-        column_id,
-        created_by: user.id,
-        status: 'running',
-        total_rows: rows.length,
-        processed_rows: 0,
-        failed_rows: 0,
-        enrichment_prompt: enrichmentPrompt,
-        started_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single()
+    let jobId: string
 
-    if (jobError || !job) {
-      console.error(`${LOG_PREFIX} Failed to create enrichment job:`, jobError?.message)
-      return new Response(
-        JSON.stringify({ error: 'Failed to create enrichment job' }),
-        { status: 500, headers: JSON_HEADERS }
-      )
+    if (resume_job_id) {
+      jobId = resume_job_id
+      console.log(`${LOG_PREFIX} Resuming enrichment job: ${jobId}`)
+    } else {
+      const { data: job, error: jobError } = await serviceClient
+        .from('enrichment_jobs')
+        .insert({
+          table_id,
+          column_id,
+          created_by: user.id,
+          status: 'running',
+          total_rows: totalRowCount,
+          processed_rows: 0,
+          failed_rows: 0,
+          enrichment_prompt: enrichmentPrompt,
+          started_at: new Date().toISOString(),
+          batch_size: BATCH_SIZE,
+          last_processed_row_index: 0,
+        })
+        .select('id')
+        .single()
+
+      if (jobError || !job) {
+        console.error(`${LOG_PREFIX} Failed to create enrichment job:`, jobError?.message)
+        return new Response(
+          JSON.stringify({ error: 'Failed to create enrichment job' }),
+          { status: 500, headers: JSON_HEADERS }
+        )
+      }
+
+      jobId = job.id
+      console.log(`${LOG_PREFIX} Created enrichment job: ${jobId}`)
     }
 
-    const jobId = job.id
-    console.log(`${LOG_PREFIX} Created enrichment job: ${jobId}`)
-
     // -----------------------------------------------------------------
-    // 7. Process rows sequentially
+    // 7. Process rows sequentially (this batch only)
     // -----------------------------------------------------------------
-    let processedRows = 0
-    let failedRows = 0
+    let processedRows = existingJobProcessed
+    let failedRows = existingJobFailed
+    let lastRowIndex = resumeFromIndex
 
     for (const row of rows) {
       const rowContext = rowContextMap[row.id] || {}
@@ -471,48 +578,69 @@ Respond with ONLY the enrichment result. Be concise and factual. If you cannot d
         failedRows++
       }
 
-      // Update job progress after each row
+      // Track last processed row_index for checkpoint
+      lastRowIndex = row.row_index
+
+      // Update job progress after each row (checkpoint)
       await serviceClient
         .from('enrichment_jobs')
         .update({
           processed_rows: processedRows,
           failed_rows: failedRows,
+          last_processed_row_index: lastRowIndex,
         })
         .eq('id', jobId)
     }
 
     // -----------------------------------------------------------------
-    // 8. Complete the job
+    // 8. Determine if more rows remain
     // -----------------------------------------------------------------
-    const finalStatus = failedRows === rows.length ? 'failed' : 'complete'
+    // Check if there are rows after the last one we processed
+    const { count: remainingCount } = await serviceClient
+      .from('dynamic_table_rows')
+      .select('id', { count: 'exact', head: true })
+      .eq('table_id', table_id)
+      .gt('row_index', lastRowIndex)
 
-    await serviceClient
-      .from('enrichment_jobs')
-      .update({
-        status: finalStatus,
-        processed_rows: processedRows,
-        failed_rows: failedRows,
-        completed_at: new Date().toISOString(),
-        error_message:
-          failedRows === rows.length
-            ? 'All rows failed enrichment'
-            : null,
-      })
-      .eq('id', jobId)
+    const hasMore = (remainingCount ?? 0) > 0 && !row_ids
 
-    console.log(
-      `${LOG_PREFIX} Job ${jobId} ${finalStatus}: ${processedRows} processed, ${failedRows} failed out of ${rows.length} total`
-    )
+    // If no more rows (or specific row_ids were given), mark job complete
+    if (!hasMore) {
+      const allFailed = processedRows === 0 && failedRows > 0
+      const finalStatus = allFailed ? 'failed' : 'complete'
+
+      await serviceClient
+        .from('enrichment_jobs')
+        .update({
+          status: finalStatus,
+          processed_rows: processedRows,
+          failed_rows: failedRows,
+          last_processed_row_index: lastRowIndex,
+          completed_at: new Date().toISOString(),
+          error_message: allFailed ? 'All rows failed enrichment' : null,
+        })
+        .eq('id', jobId)
+
+      console.log(
+        `${LOG_PREFIX} Job ${jobId} ${finalStatus}: ${processedRows} processed, ${failedRows} failed`
+      )
+    } else {
+      console.log(
+        `${LOG_PREFIX} Job ${jobId} batch complete: ${processedRows} processed, ${failedRows} failed, more rows remain`
+      )
+    }
 
     // -----------------------------------------------------------------
     // 9. Return job summary
     // -----------------------------------------------------------------
     const summary: JobSummary = {
       job_id: jobId,
-      status: finalStatus,
-      total_rows: rows.length,
+      status: hasMore ? 'running' : (processedRows === 0 && failedRows > 0 ? 'failed' : 'complete'),
+      total_rows: totalRowCount,
       processed_rows: processedRows,
       failed_rows: failedRows,
+      has_more: hasMore,
+      last_processed_row_index: lastRowIndex,
     }
 
     return new Response(JSON.stringify(summary), {
