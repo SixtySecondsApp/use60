@@ -121,25 +121,33 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
           <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6">
             <span className="text-3xl">⚠️</span>
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Something went wrong</h2>
-          <p className="text-gray-400 mb-6">{enrichmentError}</p>
-          <button
-            onClick={() => {
-              if (!organizationId) return;
-              // For manual enrichment, just reload the page
-              // For website enrichment, retry with the domain
-              if (enrichmentSource === 'manual' || !domain) {
-                // Just reload the page - the enrichment process is running in the background
-                location.reload();
-              } else {
-                startEnrichment(organizationId, domain, true); // force = true to retry
-              }
-            }}
-            disabled={!organizationId}
-            className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Try Again
-          </button>
+          <h2 className="text-xl font-bold text-white mb-2">Enrichment failed</h2>
+          <p className="text-gray-400 mb-2">{enrichmentError}</p>
+          <p className="text-sm text-gray-500 mb-6">
+            Some websites block automated access. You can retry or enter your company details manually.
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => {
+                if (!organizationId) return;
+                if (enrichmentSource === 'manual' || !domain) {
+                  location.reload();
+                } else {
+                  startEnrichment(organizationId, domain, true);
+                }
+              }}
+              disabled={!organizationId}
+              className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => setStep('manual_enrichment')}
+              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors"
+            >
+              Enter Details Manually
+            </button>
+          </div>
         </div>
       </motion.div>
     );

@@ -36,9 +36,10 @@ export function OrganizationSelectionStep() {
   const companyName = manualData?.company_name || matchSearchTerm || '';
 
   useEffect(() => {
-    // If we have pre-fetched orgs, use them immediately
+    // If we have pre-fetched orgs, use them sorted by confidence
     if (preFetchedOrgs && preFetchedOrgs.length > 0) {
-      setSimilarOrgs(preFetchedOrgs);
+      const sorted = [...preFetchedOrgs].sort((a, b) => b.similarity_score - a.similarity_score);
+      setSimilarOrgs(sorted);
       setLoading(false);
       return;
     }
@@ -63,7 +64,8 @@ export function OrganizationSelectionStep() {
         return;
       }
 
-      setSimilarOrgs(data || []);
+      const sorted = (data || []).sort((a: SimilarOrg, b: SimilarOrg) => b.similarity_score - a.similarity_score);
+      setSimilarOrgs(sorted);
     } catch (err) {
       console.error('Exception searching orgs:', err);
     } finally {
@@ -149,7 +151,13 @@ export function OrganizationSelectionStep() {
                     </div>
                   </div>
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  org.similarity_score > 0.9
+                    ? 'bg-emerald-900/40 text-emerald-400'
+                    : org.similarity_score > 0.8
+                    ? 'bg-blue-900/40 text-blue-400'
+                    : 'bg-amber-900/40 text-amber-400'
+                }`}>
                   {Math.round(org.similarity_score * 100)}% match
                 </div>
               </div>
