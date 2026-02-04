@@ -58,6 +58,15 @@
       "createdAt": "2026-02-03T23:30:00Z",
       "description": "Fix 11 bugs and 3 logic gaps in the onboarding flow from waitlist release to dashboard access. Covers business email domain matching, org selection, approval flow, template consistency, and data field errors.",
       "consultReport": ".sixty/consult/onboarding-audit.md"
+    },
+    {
+      "id": "launch-audit-fixes",
+      "name": "Launch Audit Critical & High Fixes",
+      "status": "pending",
+      "priority": 0,
+      "createdAt": "2026-02-04T00:00:00Z",
+      "description": "Fix 7 critical and 9 high-severity issues found during onboarding launch audit. Without fixes, ~30-40% of users will be blocked or have a broken experience. Covers invitation flow for existing users, multi-tenant membership safety, RLS security, email delivery reliability, race conditions, state persistence, and edge function auth hardening.",
+      "consultReport": ".sixty/consult/onboarding-launch-audit.md"
     }
   ],
   "stories": [
@@ -728,11 +737,365 @@
       "files": [],
       "technicalNotes": "Test in staging. Create test orgs with known domains. Test with business email accounts and personal email accounts. Verify user_onboarding_progress is set to 'complete' after each successful path."
     }
+    ,
+    {
+      "id": "LA-001",
+      "feature": "launch-audit-fixes",
+      "title": "C1: Add sign-in path for existing users in InviteSignup",
+      "type": "bugfix",
+      "status": "complete",
+      "completedAt": "2026-02-04T00:10:00Z",
+      "priority": 0,
+      "description": "CRITICAL: InviteSignup.tsx only has a signup flow. If the invited email already has an account, signUp() fails with 'User already exists' and there's no sign-in fallback. ~20-30% of invited users blocked. Fix: After signup fails with 'User already exists', show a sign-in form instead. After successful sign-in, call completeInviteSignup() to add the user to the invited org.",
+      "estimatedMinutes": 30,
+      "files": ["src/pages/auth/InviteSignup.tsx"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-002", "LA-003"],
+      "acceptance": [
+        "Existing user clicking invite link sees sign-in option (not just signup)",
+        "After 'User already exists' error, UI switches to sign-in form",
+        "After successful sign-in, completeInviteSignup() is called with invitation token",
+        "User is added to invited org and redirected to dashboard",
+        "New users still see signup flow as before"
+      ],
+      "technicalNotes": "At InviteSignup.tsx:92-107, catch the 'User already exists' error from signUp(). Add state toggle between signup/signin modes. In signin mode, call supabase.auth.signInWithPassword(), then on success call completeInviteSignup(). Reuse the existing invitation token from URL params."
+    },
+    {
+      "id": "LA-002",
+      "feature": "launch-audit-fixes",
+      "title": "C2: Remove cleanup loop that deletes user from all other orgs",
+      "type": "bugfix",
+      "status": "complete",
+      "completedAt": "2026-02-04T00:10:00Z",
+      "priority": 0,
+      "description": "CRITICAL: acceptInvitation() has a cleanup loop (lines 287-319) that deletes the user's membership from every organization except the newly joined one. This violates the multi-tenant model. If Alice owns Company-A and accepts an invite to Company-B, she loses all access to Company-A. Fix: Remove the cleanup loop entirely.",
+      "estimatedMinutes": 10,
+      "files": ["src/lib/services/invitationService.ts"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-001", "LA-003"],
+      "acceptance": [
+        "User accepting invitation retains membership in all existing orgs",
+        "New org membership is added without removing others",
+        "Multi-tenant org switching still works after accepting invite",
+        "No orphaned data from removed memberships"
+      ],
+      "technicalNotes": "Delete lines 287-319 in invitationService.ts (the loop that queries all memberships and deletes non-matching ones). The rest of acceptInvitation() remains unchanged - it already creates the new membership correctly."
+    },
+    {
+      "id": "LA-003",
+      "feature": "launch-audit-fixes",
+      "title": "C3: Re-enable RLS on organization_invitations table",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-04T00:10:00Z",
+      "priority": 0,
+      "description": "CRITICAL: RLS is DISABLED on organization_invitations table (migration 20260203210100). Any authenticated user can query ALL invitations across ALL organizations - emails, tokens, roles, org IDs. Fix: Re-enable RLS. Create policies: (1) users can see invitations sent to their email, (2) org admins/owners can see their org's invitations, (3) unauthenticated token lookup still works via the edge function.",
+      "estimatedMinutes": 20,
+      "files": ["supabase/migrations/20260204100000_reenable_invitation_rls.sql"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-001", "LA-002"],
+      "acceptance": [
+        "RLS is enabled on organization_invitations table",
+        "Users can only see invitations sent to their own email",
+        "Org admins/owners can see all invitations for their org",
+        "get-invitation-by-token edge function still works (uses service role)",
+        "Non-admin users cannot see other orgs' invitations",
+        "Invitation creation by admins still works"
+      ],
+      "technicalNotes": "New migration: ALTER TABLE organization_invitations ENABLE ROW LEVEL SECURITY; CREATE POLICY for SELECT where email = auth.jwt()->>'email' OR user is admin/owner of the org_id. CREATE POLICY for INSERT where user is admin/owner. CREATE POLICY for UPDATE where user is admin/owner. The edge function uses service role key which bypasses RLS."
+    },
+    {
+      "id": "LA-004",
+      "feature": "launch-audit-fixes",
+      "title": "C4: Surface email send failures to admin on invitation creation",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 0,
+      "description": "CRITICAL: sendInvitationEmail() returns false on failure, but createInvitation() ignores the return value and reports success. Admin thinks email was sent but user never receives it. Fix: Check email send result. If failed, return warning to admin. Add email_sent_at column to track delivery status.",
+      "estimatedMinutes": 20,
+      "files": ["src/lib/services/invitationService.ts", "supabase/migrations/20260204100100_add_email_sent_tracking.sql"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-005"],
+      "acceptance": [
+        "createInvitation() checks sendInvitationEmail() return value",
+        "If email fails, admin sees warning toast: 'Invitation created but email failed. Use Resend.'",
+        "Invitation still created in DB (so admin can resend)",
+        "email_sent_at column added to organization_invitations",
+        "Successful sends update email_sent_at timestamp",
+        "Invitation list UI shows email delivery status"
+      ],
+      "technicalNotes": "At invitationService.ts:234-238, capture the return value of sendInvitationEmail(). If false, return { success: true, emailSent: false, warning: 'Email delivery failed' } instead of just { success: true }. Add migration for email_sent_at column. Update sendInvitationEmail to set email_sent_at on success."
+    },
+    {
+      "id": "LA-005",
+      "feature": "launch-audit-fixes",
+      "title": "C5: Fix race condition in complete_invite_signup + add UNIQUE constraint",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 0,
+      "description": "CRITICAL: complete_invite_signup RPC uses SELECT...INTO without FOR UPDATE locking. Two concurrent calls can both pass the 'not already a member' check and insert duplicate memberships. Fix: Add SELECT...FOR UPDATE on invitation row. Add UNIQUE(org_id, user_id) constraint to organization_memberships.",
+      "estimatedMinutes": 20,
+      "files": ["supabase/migrations/20260204100200_fix_race_condition_memberships.sql"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-004"],
+      "acceptance": [
+        "complete_invite_signup uses SELECT...FOR UPDATE on invitation row",
+        "UNIQUE constraint on organization_memberships(org_id, user_id) exists",
+        "Concurrent invitation acceptances don't create duplicate memberships",
+        "Existing duplicate memberships handled gracefully (INSERT...ON CONFLICT DO NOTHING)",
+        "Migration is idempotent (safe to run multiple times)"
+      ],
+      "technicalNotes": "New migration: (1) ALTER TABLE organization_memberships ADD CONSTRAINT unique_org_user UNIQUE(org_id, user_id); (2) CREATE OR REPLACE FUNCTION complete_invite_signup with FOR UPDATE on the invitation SELECT. Use ON CONFLICT DO NOTHING for the membership INSERT to handle edge cases."
+    },
+    {
+      "id": "LA-006",
+      "feature": "launch-audit-fixes",
+      "title": "C6: Fix state persistence for enrichment progress on browser refresh",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 1,
+      "description": "CRITICAL: localStorage persistence missing key fields (isEnrichmentLoading, pollingStartTime, pollingAttempts, enrichmentError). DB sync has 1-second debounce so refresh within 1 second reverts step. ~8-12% of signups lose progress. Fix: Persist full enrichment state to localStorage. Remove debounce on step changes. Add recovery UI.",
+      "estimatedMinutes": 25,
+      "files": ["src/lib/stores/onboardingV2Store.ts", "src/pages/onboarding/v2/OnboardingV2.tsx"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-007"],
+      "acceptance": [
+        "isEnrichmentLoading, pollingStartTime, pollingAttempts persisted to localStorage",
+        "Step changes sync to DB immediately (no debounce on step field)",
+        "Browser refresh during enrichment resumes polling from where it left off",
+        "Recovery UI shown: 'Your onboarding was interrupted. Resume from [step]?'",
+        "Non-step fields can still use debounce for performance"
+      ],
+      "technicalNotes": "In onboardingV2Store.ts:24-42, add enrichment fields to the persist config partialize. For the DB sync debounce, split: step changes flush immediately, other fields keep 1s debounce. In OnboardingV2.tsx:81-231, check on mount if there's interrupted enrichment state and show a recovery prompt."
+    },
+    {
+      "id": "LA-007",
+      "feature": "launch-audit-fixes",
+      "title": "C7: Remove service role key auth fallback and verbose logging from edge functions",
+      "type": "security",
+      "status": "pending",
+      "priority": 1,
+      "description": "CRITICAL: encharge-send-email uses direct string comparison for service role key validation, logs key metadata (length, prefix), and allows service role callers to send to any address. The key was already in git history. Fix: Remove service role key fallback from user-facing auth. Remove auth detail logging. Keep only EDGE_FUNCTION_SECRET for inter-function calls.",
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/encharge-send-email/index.ts"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-006"],
+      "acceptance": [
+        "Service role key is NOT accepted as auth for external callers",
+        "Only EDGE_FUNCTION_SECRET accepted for inter-function calls",
+        "No key metadata logged (no length, prefix, or partial key in logs)",
+        "All existing inter-function calls still work with EDGE_FUNCTION_SECRET",
+        "External callers get 401 if not using proper auth"
+      ],
+      "technicalNotes": "In encharge-send-email/index.ts:407-476, remove the service role key comparison branch. Remove console.log statements that log key length/prefix (lines 411-417). Keep only the EDGE_FUNCTION_SECRET check. This aligns with the AUTH feature stories but focuses specifically on the security-critical logging and fallback removal."
+    },
+    {
+      "id": "LA-008",
+      "feature": "launch-audit-fixes",
+      "title": "H2: Restrict organizations table visibility to members only",
+      "type": "security",
+      "status": "pending",
+      "priority": 1,
+      "description": "HIGH: Organizations table has policy 'Allow public organization view' with USING(true), letting any authenticated user enumerate all organizations. Competitors could scrape entire customer list. Fix: Replace with member-only SELECT policy. Keep a limited public lookup for domain matching during onboarding.",
+      "estimatedMinutes": 20,
+      "files": ["supabase/migrations/20260204100300_restrict_org_visibility.sql"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-009"],
+      "acceptance": [
+        "Public SELECT policy on organizations is replaced",
+        "Users can only see orgs they are members of",
+        "Onboarding domain-matching RPC still works (uses SECURITY DEFINER)",
+        "Organization switcher only shows user's own orgs",
+        "find_similar_organizations_by_domain RPC unaffected (already SECURITY DEFINER)"
+      ],
+      "technicalNotes": "DROP POLICY 'Allow public organization view' ON organizations; CREATE POLICY 'Members can view their orgs' ON organizations FOR SELECT USING (id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())). The find_similar_organizations_by_domain RPC already runs as SECURITY DEFINER so it bypasses RLS."
+    },
+    {
+      "id": "LA-009",
+      "feature": "launch-audit-fixes",
+      "title": "H3: Add backend permission check for invitation creation",
+      "type": "security",
+      "status": "pending",
+      "priority": 1,
+      "description": "HIGH: createInvitation() has no authorization check. Any authenticated user can call it via browser console and invite anyone with any role including admin/owner. Fix: Add permission check that caller must be admin or owner of the target org before creating invitation.",
+      "estimatedMinutes": 15,
+      "files": ["src/lib/services/invitationService.ts"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-008"],
+      "acceptance": [
+        "createInvitation() checks caller's role in the target org",
+        "Only admin and owner roles can create invitations",
+        "Non-admin callers get clear error: 'You do not have permission to invite members'",
+        "Permission check queries organization_memberships for caller's role",
+        "Existing admin invitation flow still works"
+      ],
+      "technicalNotes": "At invitationService.ts:124, before any invitation logic, query organization_memberships for the current user's role in the target org_id. If role is not 'admin' or 'owner', return { success: false, error: 'Insufficient permissions' }. Use supabase.auth.getUser() to get current user ID."
+    },
+    {
+      "id": "LA-010",
+      "feature": "launch-audit-fixes",
+      "title": "H4: Add enrichment error recovery with manual fallback and retry",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 1,
+      "description": "HIGH: When enrichment fails (website blocks scraping, WAF, robots.txt), user waits 5 minutes for timeout, then sees generic error with no way to retry or fall back. ~8-12% of websites fail enrichment. Fix: Add 'Retry' button and 'Enter details manually' fallback on enrichment failure.",
+      "estimatedMinutes": 25,
+      "files": ["src/lib/stores/onboardingV2Store.ts", "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-011"],
+      "acceptance": [
+        "Enrichment failure shows two options: 'Retry' and 'Enter details manually'",
+        "Retry re-triggers enrichment with same website URL",
+        "Manual fallback redirects to manual_enrichment step",
+        "Timeout reduced from 5 minutes to 2 minutes with early failure detection",
+        "Error message explains why enrichment might fail (e.g. 'Website may block automated access')"
+      ],
+      "technicalNotes": "In onboardingV2Store.ts:1112-1203, when enrichment polling times out or fails, set enrichmentError with actionable options. In EnrichmentLoadingStep, render error state with retry button (calls startEnrichment again) and manual fallback button (sets currentStep='manual_enrichment'). Reduce MAX_POLL_TIME from 300s to 120s."
+    },
+    {
+      "id": "LA-011",
+      "feature": "launch-audit-fixes",
+      "title": "H5: Show confidence scores in organization selection step",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 2,
+      "description": "HIGH: Fuzzy org matching shows all results above 0.7 threshold without scores or ranking. A 95% match and 71% match look identical. Users can accidentally join wrong org. Fix: Display match confidence as percentage, sort by score descending, visually differentiate high vs low confidence.",
+      "estimatedMinutes": 15,
+      "files": ["src/pages/onboarding/v2/OrganizationSelectionStep.tsx"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-010"],
+      "acceptance": [
+        "Organization selection shows match percentage (e.g. '95% match')",
+        "Results sorted by confidence score descending",
+        "High confidence (>90%) has green indicator",
+        "Medium confidence (70-90%) has yellow/amber indicator",
+        "User can still select any match regardless of score"
+      ],
+      "technicalNotes": "The similarOrganizations array already contains similarity_score from the RPC. In OrganizationSelectionStep, display Math.round(org.similarity_score * 100) + '% match' next to each org name. Sort the array by similarity_score descending before rendering. Use Tailwind color classes for the confidence badge."
+    },
+    {
+      "id": "LA-012",
+      "feature": "launch-audit-fixes",
+      "title": "H7: Add 'Skip All Skills' button to reduce onboarding friction",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 2,
+      "description": "HIGH: Users must click through 5 separate skill screens with no 'Skip All' option. Minimum 5 clicks even to skip everything. 10-15% abandonment at this step. Fix: Add 'Skip All' button on the first skill screen that jumps directly to completion.",
+      "estimatedMinutes": 15,
+      "files": ["src/pages/onboarding/v2/SkillsConfigStep.tsx", "src/lib/stores/onboardingV2Store.ts"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-013"],
+      "acceptance": [
+        "'Skip All Skills' button visible on first skill config screen",
+        "Clicking Skip All marks onboarding as complete",
+        "User proceeds to dashboard without configuring any skills",
+        "Skills can be configured later from settings",
+        "Button is subtle/secondary (doesn't compete with primary 'Next' action)"
+      ],
+      "technicalNotes": "In SkillsConfigStep, add a secondary button 'Skip All & Continue' that calls onboardingV2Store's completeOnboarding() directly, bypassing remaining skill steps. In the store at lines 1265-1317, add a skipAllSkills() action that sets all skill defaults and calls completeOnboarding()."
+    },
+    {
+      "id": "LA-013",
+      "feature": "launch-audit-fixes",
+      "title": "H8: Add approval status display and withdrawal option",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 2,
+      "description": "HIGH: Users pending approval see no indication of wait time, who can approve, or how to withdraw. No email notification on approval/rejection. Fix: Show approval status info and allow withdrawal of pending request.",
+      "estimatedMinutes": 20,
+      "files": ["src/pages/onboarding/v2/PendingApprovalStep.tsx"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-012"],
+      "acceptance": [
+        "Pending approval page shows 'Waiting for admin approval' with org name",
+        "Shows when request was submitted (relative time)",
+        "'Withdraw Request' button lets user cancel and start over",
+        "Withdrawal deletes the join request and resets onboarding to org selection",
+        "Page auto-refreshes status every 30 seconds"
+      ],
+      "technicalNotes": "In PendingApprovalStep.tsx, query organization_join_requests for the user's pending request to get created_at and org name. Add a withdraw button that deletes the join request row and calls onboardingV2Store reset to return to organization selection. Add setInterval for 30s polling of request status."
+    },
+    {
+      "id": "LA-014",
+      "feature": "launch-audit-fixes",
+      "title": "H9: Invalidate old tokens when resending invitation",
+      "type": "security",
+      "status": "pending",
+      "priority": 2,
+      "description": "HIGH: When admin resends invitation, new token is generated but old token remains valid for up to 7 days. If old email was intercepted, attacker can still use it. Fix: Invalidate old token when generating new one on resend.",
+      "estimatedMinutes": 10,
+      "files": ["src/lib/services/invitationService.ts"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-011"],
+      "acceptance": [
+        "Resending invitation generates new token AND invalidates the old one",
+        "Old token returns 'expired' or 'invalid' when used",
+        "New token works correctly for acceptance",
+        "Invitation record updated with new token (not a separate row)",
+        "Admin sees confirmation that old link is invalidated"
+      ],
+      "technicalNotes": "At invitationService.ts:164-200, when resending: update the existing invitation row with new token + new expires_at, rather than creating a new row. The old token no longer exists in the DB so lookups fail. If current implementation creates new rows, change to UPDATE with SET token=newToken, expires_at=newExpiry, updated_at=now()."
+    },
+    {
+      "id": "LA-015",
+      "feature": "launch-audit-fixes",
+      "title": "H1+H6: Add rate limiting to token lookup + improve phantom org cleanup",
+      "type": "security",
+      "status": "pending",
+      "priority": 2,
+      "description": "HIGH: (H1) No rate limiting on token lookups - attacker can attempt millions of tokens. (H6) Phantom org cleanup only matches personal email domains and 'My Organization' - renamed phantoms persist. Fix: Add basic rate limiting via IP tracking in edge function. Expand phantom cleanup to match by creation timestamp + sole member pattern.",
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/get-invitation-by-token/index.ts", "supabase/migrations/20260204100400_improve_phantom_cleanup.sql"],
+      "blocks": ["LA-016"],
+      "parallelWith": ["LA-014"],
+      "acceptance": [
+        "Token lookup rate limited to 10 attempts per IP per minute",
+        "Rate limit exceeded returns 429 Too Many Requests",
+        "Phantom org cleanup also matches: orgs created within 5 min of invite signup with only 1 member",
+        "Cleanup runs for both invite flow and normal signup flow",
+        "Existing valid orgs are not affected by expanded cleanup"
+      ],
+      "technicalNotes": "For rate limiting: use in-memory Map in edge function with IP -> {count, resetTime}. Reset every 60s. For phantom cleanup: in the complete_invite_signup RPC, expand the WHERE clause to also match orgs where created_at > (now() - interval '5 minutes') AND member count = 1 AND the sole member is the current user."
+    },
+    {
+      "id": "LA-016",
+      "feature": "launch-audit-fixes",
+      "title": "End-to-end test of all launch audit fixes",
+      "type": "test",
+      "status": "pending",
+      "priority": 1,
+      "description": "Test all critical and high fixes from the launch audit. Cover: existing user invite acceptance, multi-org retention, RLS policies, email failure surfacing, race conditions, state persistence, edge function auth, org visibility, permission checks, enrichment recovery, skill skipping, approval UX, and token invalidation.",
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": ["LA-001", "LA-002", "LA-003", "LA-004", "LA-005", "LA-006", "LA-007", "LA-008", "LA-009", "LA-010", "LA-011", "LA-012", "LA-013", "LA-014", "LA-015"],
+        "files": [],
+        "schema": []
+      },
+      "acceptance": [
+        "Existing user can accept invitation via sign-in path",
+        "User retains all org memberships after accepting new invite",
+        "Non-admin cannot query other orgs' invitations (RLS enforced)",
+        "Email send failure shows warning to admin with resend option",
+        "Concurrent invite acceptances don't create duplicate memberships",
+        "Browser refresh mid-enrichment resumes correctly",
+        "Edge function rejects service role key auth from external callers",
+        "Users can only see orgs they belong to",
+        "Non-admin cannot create invitations",
+        "Enrichment failure shows retry + manual fallback",
+        "Org selection shows confidence scores sorted descending",
+        "Skip All Skills completes onboarding immediately",
+        "Pending approval shows status and withdrawal option",
+        "Resent invitation invalidates old token",
+        "Token lookup rate limited to 10/min per IP"
+      ],
+      "files": [],
+      "technicalNotes": "Test in staging environment. Create test users for: existing user, multi-org user, non-admin user. Test RLS with direct Supabase client queries. Test race condition with concurrent curl requests. Test state persistence by clearing tab during enrichment."
+    }
   ],
   "execution": {
-    "totalStories": 44,
+    "totalStories": 60,
     "completedStories": 25,
-    "currentFeature": "onboarding-audit",
-    "lastUpdated": "2026-02-03T23:30:00Z"
+    "currentFeature": "launch-audit-fixes",
+    "lastUpdated": "2026-02-04T00:00:00Z"
   }
 }

@@ -284,40 +284,6 @@ export async function acceptInvitation(
 
     logger.log('[InvitationService] Invitation accepted:', result);
 
-    // After accepting invitation, remove user from old organizations
-    // This prevents users from being in multiple organizations
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) {
-        const userId = session.user.id;
-
-        // Get all user's memberships
-        const { data: allMemberships } = await supabase
-          .from('organization_memberships')
-          .select('org_id, role, organizations(created_by)')
-          .eq('user_id', userId);
-
-        // Find old organizations (anything except the one they just joined)
-        const oldOrgs = allMemberships?.filter(m =>
-          m.org_id !== result.org_id  // Not the organization they just joined
-        ) || [];
-
-        // Remove user from all other organizations
-        for (const oldOrg of oldOrgs) {
-          await supabase
-            .from('organization_memberships')
-            .delete()
-            .eq('org_id', oldOrg.org_id)
-            .eq('user_id', userId);
-
-          logger.log('[InvitationService] Removed from old org:', oldOrg.org_id);
-        }
-        // Trigger will automatically delete empty orgs
-      }
-    } catch (cleanupErr) {
-      logger.error('[InvitationService] Failed to cleanup old orgs:', cleanupErr);
-    }
-
     return {
       success: true,
       org_id: result.org_id,
