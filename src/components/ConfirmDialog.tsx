@@ -55,20 +55,20 @@ export function ConfirmDialog({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xl max-w-md w-full overflow-hidden"
+              className="relative bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl max-w-md w-full overflow-hidden"
             >
               {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-br from-white/90 via-gray-50/70 to-gray-100/30 dark:from-gray-900/90 dark:via-gray-900/70 dark:to-gray-900/30 pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-900/90 via-gray-900/70 to-gray-900/30 pointer-events-none" />
 
               {/* Content */}
               <div className="relative p-6">
                 {/* Close button */}
                 <button
                   onClick={onClose}
-                  className="absolute top-4 right-4 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  className="absolute top-4 right-4 p-2 rounded-lg hover:bg-gray-800 transition-colors"
                   disabled={loading}
                 >
-                  <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  <X className="w-4 h-4 text-gray-400" />
                 </button>
 
                 {/* Icon */}
@@ -94,31 +94,30 @@ export function ConfirmDialog({
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h3>
+                  <h3 className="text-xl font-bold text-white">{title}</h3>
                 </div>
 
                 {/* Description */}
-                <p className="text-gray-700 dark:text-gray-300 mb-6 leading-relaxed">{description}</p>
+                <p className="text-gray-300 mb-6 leading-relaxed">{description}</p>
 
                 {/* Actions */}
                 <div className="flex gap-3">
                   <Button
                     onClick={onClose}
-                    variant="outline"
-                    className="flex-1 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-white border-0"
                     disabled={loading}
                   >
                     {cancelText}
                   </Button>
                   <Button
                     onClick={handleConfirm}
-                    className={`flex-1 ${
+                    className={`flex-1 text-white font-medium border-0 ${
                       confirmVariant === 'destructive'
                         ? 'bg-red-600 hover:bg-red-700'
                         : confirmVariant === 'warning'
                         ? 'bg-amber-600 hover:bg-amber-700'
                         : 'bg-violet-600 hover:bg-violet-700'
-                    } text-white`}
+                    }`}
                     disabled={loading}
                   >
                     {loading ? 'Processing...' : confirmText}
