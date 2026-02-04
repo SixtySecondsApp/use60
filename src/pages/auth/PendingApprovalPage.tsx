@@ -204,10 +204,12 @@ export default function PendingApprovalPage() {
       }
 
       // 5. Show success message and navigate to dashboard
+      // Use a longer delay (2.5 seconds) to ensure all data is synced and ProtectedRoute can detect completion
       toast.success('Welcome! Redirecting to your dashboard...');
       setTimeout(() => {
+        console.log('[PendingApprovalPage] Navigating to dashboard');
         navigate('/dashboard', { replace: true });
-      }, 1000);
+      }, 2500);
     } catch (error) {
       console.error('[PendingApprovalPage] Error handling approval:', error);
       toast.error('Failed to load dashboard. Please try refreshing the page.');

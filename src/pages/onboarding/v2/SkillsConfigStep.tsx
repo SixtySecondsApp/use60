@@ -7,6 +7,17 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Hide scrollbar on tab navigation
+const scrollbarHideStyle = `
+  .skill-tabs-container::-webkit-scrollbar {
+    display: none;
+  }
+  .skill-tabs-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+`;
 import {
   Check,
   ChevronRight,
@@ -639,16 +650,18 @@ export function SkillsConfigStep() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-2xl mx-auto px-4"
-    >
-      <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
-        {/* Tab Navigation */}
-        <div className="px-4 pt-4 border-b border-gray-800">
-          <div className="flex gap-1 overflow-x-auto pb-0 scrollbar-hide">
+    <>
+      <style>{scrollbarHideStyle}</style>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="w-full max-w-2xl mx-auto px-4"
+      >
+        <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
+          {/* Tab Navigation */}
+          <div className="px-4 pt-4 border-b border-gray-800">
+            <div className="skill-tabs-container flex gap-1 overflow-x-auto pb-0">
             {SKILLS.map((skill, index) => {
               const Icon = skill.icon;
               const status = getSkillStatus(skill.id);
@@ -754,6 +767,7 @@ export function SkillsConfigStep() {
           </button>
         </div>
       </div>
-    </motion.div>
+      </motion.div>
+    </>
   );
 }

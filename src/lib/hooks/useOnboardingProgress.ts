@@ -58,7 +58,7 @@ export function useOnboardingProgress(): UseOnboardingProgressReturn {
 
   // Fetch onboarding progress
   useEffect(() => {
-    if (!user) {
+    if (!user?.id) {
       setLoading(false);
       return;
     }
