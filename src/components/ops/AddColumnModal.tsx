@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { X, Sparkles, Newspaper, Cpu, Swords, AlertTriangle, AtSign } from 'lucide-react';
+import { X, Sparkles, Newspaper, Cpu, Swords, AlertTriangle, AtSign, Plus, Trash2 } from 'lucide-react';
+import type { DropdownOption } from '@/lib/services/opsTableService';
 
 interface ExistingColumn {
   key: string;
@@ -16,6 +17,8 @@ interface AddColumnModalProps {
     isEnrichment: boolean;
     enrichmentPrompt?: string;
     autoRunRows?: number | 'all';
+    dropdownOptions?: DropdownOption[];
+    formulaExpression?: string;
   }) => void;
   existingColumns?: ExistingColumn[];
 }
@@ -25,6 +28,11 @@ const COLUMN_TYPES = [
   { value: 'email', label: 'Email' },
   { value: 'url', label: 'URL' },
   { value: 'number', label: 'Number' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'checkbox', label: 'Checkbox' },
+  { value: 'dropdown', label: 'Dropdown' },
+  { value: 'tags', label: 'Tags' },
+  { value: 'formula', label: 'Formula' },
   { value: 'enrichment', label: 'Enrichment' },
 ];
 
@@ -64,9 +72,14 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
   const [columnType, setColumnType] = useState('text');
   const [enrichmentPrompt, setEnrichmentPrompt] = useState('');
   const [autoRunRows, setAutoRunRows] = useState<string>('all');
+  const [dropdownOptions, setDropdownOptions] = useState<DropdownOption[]>([
+    { value: 'option_1', label: 'Option 1', color: '#8b5cf6' },
+  ]);
+  const [formulaExpression, setFormulaExpression] = useState('');
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const formulaRef = useRef<HTMLTextAreaElement>(null);
 
   // @mention dropdown state
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -76,8 +89,14 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isEnrichment = columnType === 'enrichment';
+  const isDropdownOrTags = columnType === 'dropdown' || columnType === 'tags';
+  const isFormula = columnType === 'formula';
   const key = toSnakeCase(label);
-  const canAdd = label.trim().length > 0 && (!isEnrichment || enrichmentPrompt.trim().length > 0);
+  const canAdd =
+    label.trim().length > 0
+    && (!isEnrichment || enrichmentPrompt.trim().length > 0)
+    && (!isDropdownOrTags || dropdownOptions.length > 0)
+    && (!isFormula || formulaExpression.trim().length > 0);
 
   // Filter columns for the @mention dropdown (exclude enrichment columns being created)
   const filteredColumns = useMemo(() => {
@@ -95,6 +114,8 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
     setColumnType('text');
     setEnrichmentPrompt('');
     setAutoRunRows('all');
+    setDropdownOptions([{ value: 'option_1', label: 'Option 1', color: '#8b5cf6' }]);
+    setFormulaExpression('');
     setMentionOpen(false);
     setMentionQuery('');
     setMentionIndex(0);
@@ -136,6 +157,8 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
         enrichmentPrompt: enrichmentPrompt.trim(),
         autoRunRows: parsedAutoRun,
       } : {}),
+      ...(isDropdownOrTags ? { dropdownOptions } : {}),
+      ...(isFormula ? { formulaExpression: formulaExpression.trim() } : {}),
     });
     onClose();
   };
@@ -305,6 +328,117 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
               ))}
             </select>
           </div>
+
+          {/* Dropdown/Tags Options Editor */}
+          {isDropdownOrTags && (
+            <div className="space-y-3">
+              <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                {columnType === 'dropdown' ? 'Dropdown Options' : 'Tag Options'}
+              </label>
+              <div className="space-y-1.5">
+                {dropdownOptions.map((opt, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={opt.color ?? '#8b5cf6'}
+                      onChange={(e) => {
+                        const updated = [...dropdownOptions];
+                        updated[idx] = { ...updated[idx], color: e.target.value };
+                        setDropdownOptions(updated);
+                      }}
+                      className="h-7 w-7 cursor-pointer rounded border border-gray-700 bg-gray-800 p-0.5"
+                    />
+                    <input
+                      type="text"
+                      value={opt.label}
+                      onChange={(e) => {
+                        const updated = [...dropdownOptions];
+                        updated[idx] = {
+                          ...updated[idx],
+                          label: e.target.value,
+                          value: toSnakeCase(e.target.value) || `option_${idx + 1}`,
+                        };
+                        setDropdownOptions(updated);
+                      }}
+                      placeholder={`Option ${idx + 1}`}
+                      className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-violet-500"
+                    />
+                    {dropdownOptions.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setDropdownOptions(dropdownOptions.filter((_, i) => i !== idx))}
+                        className="rounded p-1 text-gray-500 hover:bg-gray-800 hover:text-red-400"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setDropdownOptions([
+                    ...dropdownOptions,
+                    { value: `option_${dropdownOptions.length + 1}`, label: '', color: '#6366f1' },
+                  ])
+                }
+                className="flex items-center gap-1.5 text-xs font-medium text-violet-400 hover:text-violet-300"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add option
+              </button>
+            </div>
+          )}
+
+          {/* Formula Expression Editor */}
+          {isFormula && (
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Formula Expression
+                </label>
+                <div className="relative">
+                  <textarea
+                    ref={formulaRef}
+                    value={formulaExpression}
+                    onChange={(e) => setFormulaExpression(e.target.value)}
+                    placeholder="e.g. @price * @quantity or IF(@status = 'won', @revenue, 0)"
+                    rows={2}
+                    className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 font-mono text-sm text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
+                  />
+                  {existingColumns.length > 0 && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      <AtSign className="mr-0.5 inline-block h-3 w-3" />
+                      Use <span className="font-mono text-gray-400">@column_key</span> to reference column values
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                  Quick Insert
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: 'SUM', expr: '@col1 + @col2' },
+                    { label: 'IF', expr: 'IF(@col = "value", "yes", "no")' },
+                    { label: 'CONCAT', expr: 'CONCAT(@first, " ", @last)' },
+                    { label: 'MULTIPLY', expr: '@price * @quantity' },
+                  ].map((tmpl) => (
+                    <button
+                      key={tmpl.label}
+                      type="button"
+                      onClick={() => setFormulaExpression(tmpl.expr)}
+                      className="rounded border border-gray-700 bg-gray-800/50 px-2 py-1 text-xs font-medium text-gray-400 hover:border-violet-500/40 hover:text-violet-300"
+                    >
+                      {tmpl.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Enrichment Section */}
           {isEnrichment && (

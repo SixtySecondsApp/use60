@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Mail, Linkedin, Building2, AlertCircle, Loader2, User } from 'lucide-react';
+import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare } from 'lucide-react';
+import type { DropdownOption } from '@/lib/services/opsTableService';
 
 interface CellData {
   value: string | null;
@@ -14,6 +15,8 @@ interface OpsTableCellProps {
   firstName?: string;
   lastName?: string;
   onEdit?: (value: string) => void;
+  dropdownOptions?: DropdownOption[] | null;
+  formulaExpression?: string | null;
 }
 
 /**
@@ -29,10 +32,14 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   firstName,
   lastName,
   onEdit,
+  dropdownOptions,
+  formulaExpression,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(cell.value ?? '');
+  const [showDropdown, setShowDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Focus input when entering edit mode
   useEffect(() => {
@@ -47,6 +54,18 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
       setEditValue(cell.value ?? '');
     }
   }, [cell.value, isEditing]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showDropdown]);
 
   const startEditing = useCallback(() => {
     if (onEdit) {
@@ -221,6 +240,196 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         </div>
         <span className="truncate text-gray-100 text-sm">
           {cell.value || <span className="text-gray-600">Enter company...</span>}
+        </span>
+      </div>
+    );
+  }
+
+  // Phone
+  if (columnType === 'phone') {
+    if (!cell.value) {
+      return (
+        <div className="w-full h-full flex items-center cursor-text" onClick={startEditing}>
+          {isEditing ? renderInput() : <span className="text-gray-600 text-sm">Enter phone...</span>}
+        </div>
+      );
+    }
+    if (isEditing) return renderInput();
+    return (
+      <div className="w-full h-full flex items-center min-w-0 group/cell">
+        <Phone className="w-3 h-3 text-emerald-400 shrink-0 mr-1.5" />
+        <span
+          className="truncate text-sm text-emerald-400 cursor-text"
+          onClick={startEditing}
+          title={cell.value}
+        >
+          {cell.value}
+        </span>
+      </div>
+    );
+  }
+
+  // Checkbox
+  if (columnType === 'checkbox') {
+    const checked = cell.value === 'true' || cell.value === '1';
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <button
+          type="button"
+          onClick={() => onEdit?.(checked ? 'false' : 'true')}
+          className={`w-5 h-5 rounded border transition-colors flex items-center justify-center ${
+            checked
+              ? 'bg-violet-500 border-violet-500 text-white'
+              : 'border-gray-600 bg-gray-800/50 hover:border-gray-500'
+          }`}
+        >
+          {checked && <Check className="w-3 h-3" />}
+        </button>
+      </div>
+    );
+  }
+
+  // Dropdown (single-select)
+  if (columnType === 'dropdown') {
+    const options = dropdownOptions ?? [];
+    const selected = options.find((o) => o.value === cell.value);
+    return (
+      <div className="w-full h-full flex items-center relative" ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => setShowDropdown(!showDropdown)}
+          className="w-full h-full flex items-center gap-1.5 cursor-pointer text-left"
+        >
+          {selected ? (
+            <span
+              className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
+              style={{ backgroundColor: `${selected.color ?? '#6366f1'}20`, color: selected.color ?? '#6366f1' }}
+            >
+              {selected.label}
+            </span>
+          ) : (
+            <span className="text-gray-600 text-sm">Select...</span>
+          )}
+          <ChevronDown className="w-3 h-3 text-gray-500 ml-auto" />
+        </button>
+        {showDropdown && (
+          <div className="absolute top-full left-0 z-20 mt-1 min-w-[140px] rounded-lg border border-gray-700 bg-gray-900 py-1 shadow-xl">
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onEdit?.(opt.value);
+                  setShowDropdown(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-gray-800 ${
+                  opt.value === cell.value ? 'text-violet-300' : 'text-gray-300'
+                }`}
+              >
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: opt.color ?? '#6366f1' }}
+                />
+                {opt.label}
+              </button>
+            ))}
+            {cell.value && (
+              <>
+                <div className="my-1 border-t border-gray-700/60" />
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onEdit?.('');
+                    setShowDropdown(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-800 hover:text-gray-300"
+                >
+                  <X className="w-3 h-3" />
+                  Clear
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Tags (multi-select)
+  if (columnType === 'tags') {
+    const options = dropdownOptions ?? [];
+    const selectedValues = cell.value ? cell.value.split(',').filter(Boolean) : [];
+    const selectedOptions = selectedValues
+      .map((v) => options.find((o) => o.value === v))
+      .filter(Boolean) as DropdownOption[];
+
+    return (
+      <div className="w-full h-full flex items-center relative" ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => setShowDropdown(!showDropdown)}
+          className="w-full h-full flex items-center gap-1 cursor-pointer overflow-hidden"
+        >
+          {selectedOptions.length > 0 ? (
+            <div className="flex items-center gap-1 overflow-hidden">
+              {selectedOptions.map((opt) => (
+                <span
+                  key={opt.value}
+                  className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium shrink-0"
+                  style={{ backgroundColor: `${opt.color ?? '#6366f1'}20`, color: opt.color ?? '#6366f1' }}
+                >
+                  {opt.label}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-gray-600 text-sm">Select tags...</span>
+          )}
+          <ChevronDown className="w-3 h-3 text-gray-500 ml-auto shrink-0" />
+        </button>
+        {showDropdown && (
+          <div className="absolute top-full left-0 z-20 mt-1 min-w-[160px] rounded-lg border border-gray-700 bg-gray-900 py-1 shadow-xl">
+            {options.map((opt) => {
+              const isSelected = selectedValues.includes(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const newValues = isSelected
+                      ? selectedValues.filter((v) => v !== opt.value)
+                      : [...selectedValues, opt.value];
+                    onEdit?.(newValues.join(','));
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-gray-800 ${
+                    isSelected ? 'text-violet-300' : 'text-gray-300'
+                  }`}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: opt.color ?? '#6366f1' }}
+                  />
+                  {opt.label}
+                  {isSelected && <Check className="w-3 h-3 ml-auto text-violet-400" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Formula (read-only, computed value)
+  if (columnType === 'formula') {
+    return (
+      <div className="w-full h-full flex items-center cursor-default" title={formulaExpression ?? undefined}>
+        <FunctionSquare className="w-3 h-3 text-blue-400 shrink-0 mr-1.5" />
+        <span className="truncate text-sm text-blue-300">
+          {cell.value ?? <span className="text-gray-600 italic text-xs">No value</span>}
         </span>
       </div>
     );

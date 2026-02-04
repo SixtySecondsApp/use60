@@ -13,6 +13,11 @@ import {
   Calendar,
   Link2,
   Loader2,
+  Phone,
+  CheckSquare,
+  ListFilter,
+  Tags,
+  FunctionSquare,
 } from 'lucide-react';
 import { OpsTableCell } from './OpsTableCell';
 
@@ -28,6 +33,8 @@ interface Column {
   is_enrichment: boolean;
   width: number;
   is_visible: boolean;
+  dropdown_options?: { value: string; label: string; color?: string }[] | null;
+  formula_expression?: string | null;
 }
 
 interface Row {
@@ -62,6 +69,11 @@ const columnTypeIcons: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> =
   person: User,
   date: Calendar,
   icp_score: ArrowUpDown,
+  phone: Phone,
+  checkbox: CheckSquare,
+  dropdown: ListFilter,
+  tags: Tags,
+  formula: FunctionSquare,
 };
 
 // ---------------------------------------------------------------------------
@@ -311,7 +323,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           isEnrichment={col.is_enrichment}
                           firstName={firstName}
                           lastName={lastName}
-                          onEdit={col.is_enrichment ? undefined : handleCellEdit(row.id, col.key)}
+                          onEdit={(col.is_enrichment || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
+                          dropdownOptions={col.dropdown_options}
+                          formulaExpression={col.formula_expression}
                         />
                       </div>
                     );

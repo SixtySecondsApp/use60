@@ -188,6 +188,8 @@ function OpsDetailPage() {
       isEnrichment: boolean;
       enrichmentPrompt?: string;
       autoRunRows?: number | 'all';
+      dropdownOptions?: { value: string; label: string; color?: string }[];
+      formulaExpression?: string;
     }) => {
       const column = await tableService.addColumn({
         tableId: tableId!,
@@ -196,6 +198,8 @@ function OpsDetailPage() {
         columnType: params.columnType as 'text',
         isEnrichment: params.isEnrichment,
         enrichmentPrompt: params.enrichmentPrompt,
+        dropdownOptions: params.dropdownOptions,
+        formulaExpression: params.formulaExpression,
         position: (table?.columns?.length ?? 0),
       });
       return { column, autoRunRows: params.autoRunRows };
@@ -218,6 +222,11 @@ function OpsDetailPage() {
         if (allRowIds && allRowIds.length > 0) {
           startEnrichment({ columnId: column.id, rowIds: rowIdsToEnrich });
         }
+      }
+
+      // Auto-evaluate formula columns on creation
+      if (column.column_type === 'formula' && column.formula_expression) {
+        recalcFormulaMutation.mutate(column.id);
       }
     },
     onError: () => toast.error('Failed to add column'),
@@ -251,6 +260,21 @@ function OpsDetailPage() {
       toast.success('Column deleted');
     },
     onError: () => toast.error('Failed to delete column'),
+  });
+
+  const recalcFormulaMutation = useMutation({
+    mutationFn: async (columnId: string) => {
+      const { data, error } = await supabase.functions.invoke('evaluate-formula', {
+        body: { table_id: tableId, column_id: columnId },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      toast.success(`Formula recalculated (${data?.evaluated ?? 0} rows)`);
+    },
+    onError: () => toast.error('Failed to recalculate formula'),
   });
 
   const cellEditMutation = useMutation({
@@ -731,6 +755,7 @@ function OpsDetailPage() {
           }}
           onHide={() => hideColumnMutation.mutate(activeColumn.id)}
           onDelete={() => deleteColumnMutation.mutate(activeColumn.id)}
+          onRecalcFormula={activeColumn.column_type === 'formula' ? () => recalcFormulaMutation.mutate(activeColumn.id) : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
         />
       )}

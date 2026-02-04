@@ -8,18 +8,20 @@ import {
   Trash2,
   Check,
   X,
+  RefreshCw,
 } from 'lucide-react';
 
 interface ColumnHeaderMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  column: { id: string; label: string; key: string; is_enrichment: boolean };
+  column: { id: string; label: string; key: string; is_enrichment: boolean; column_type?: string };
   onRename: (label: string) => void;
   onSortAsc: () => void;
   onSortDesc: () => void;
   onFilter: () => void;
   onHide: () => void;
   onDelete: () => void;
+  onRecalcFormula?: () => void;
   anchorRect?: DOMRect;
 }
 
@@ -33,6 +35,7 @@ export function ColumnHeaderMenu({
   onFilter,
   onHide,
   onDelete,
+  onRecalcFormula,
   anchorRect,
 }: ColumnHeaderMenuProps) {
   const [isRenaming, setIsRenaming] = useState(false);
@@ -161,6 +164,18 @@ export function ColumnHeaderMenu({
           onClose();
         }}
       />
+
+      {/* Recalculate (formula columns only) */}
+      {column.column_type === 'formula' && onRecalcFormula && (
+        <MenuItem
+          icon={<RefreshCw className="h-4 w-4" />}
+          label="Recalculate"
+          onClick={() => {
+            onRecalcFormula();
+            onClose();
+          }}
+        />
+      )}
 
       <Separator />
 

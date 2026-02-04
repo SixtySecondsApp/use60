@@ -18,6 +18,12 @@ export interface OpsTableRecord {
   columns?: OpsTableColumn[];
 }
 
+export interface DropdownOption {
+  value: string;
+  label: string;
+  color?: string;
+}
+
 export interface OpsTableColumn {
   id: string;
   table_id: string;
@@ -34,9 +40,16 @@ export interface OpsTableColumn {
     | 'person'
     | 'company'
     | 'linkedin'
-    | 'date';
+    | 'date'
+    | 'dropdown'
+    | 'tags'
+    | 'phone'
+    | 'checkbox'
+    | 'formula';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
+  dropdown_options: DropdownOption[] | null;
+  formula_expression: string | null;
   position: number;
   width: number;
   is_visible: boolean;
@@ -131,7 +144,7 @@ const TABLE_COLUMNS =
   'id, organization_id, created_by, name, description, source_type, source_query, row_count, created_at, updated_at';
 
 const COLUMN_COLUMNS =
-  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, position, width, is_visible, created_at';
+  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, dropdown_options, formula_expression, position, width, is_visible, created_at';
 
 const ROW_COLUMNS =
   'id, table_id, row_index, source_id, source_data, created_at';
@@ -245,6 +258,8 @@ export class OpsTableService {
     columnType: OpsTableColumn['column_type'];
     isEnrichment?: boolean;
     enrichmentPrompt?: string;
+    dropdownOptions?: DropdownOption[];
+    formulaExpression?: string;
     position?: number;
   }): Promise<OpsTableColumn> {
     const { data, error } = await this.supabase
@@ -256,6 +271,8 @@ export class OpsTableService {
         column_type: params.columnType,
         is_enrichment: params.isEnrichment ?? false,
         enrichment_prompt: params.enrichmentPrompt ?? null,
+        dropdown_options: params.dropdownOptions ?? null,
+        formula_expression: params.formulaExpression ?? null,
         position: params.position ?? 0,
       })
       .select(COLUMN_COLUMNS)
@@ -267,13 +284,22 @@ export class OpsTableService {
 
   async updateColumn(
     columnId: string,
-    updates: { label?: string; width?: number; isVisible?: boolean; position?: number }
+    updates: {
+      label?: string;
+      width?: number;
+      isVisible?: boolean;
+      position?: number;
+      dropdownOptions?: DropdownOption[];
+      formulaExpression?: string;
+    }
   ): Promise<OpsTableColumn> {
     const payload: Record<string, unknown> = {};
     if (updates.label !== undefined) payload.label = updates.label;
     if (updates.width !== undefined) payload.width = updates.width;
     if (updates.isVisible !== undefined) payload.is_visible = updates.isVisible;
     if (updates.position !== undefined) payload.position = updates.position;
+    if (updates.dropdownOptions !== undefined) payload.dropdown_options = updates.dropdownOptions;
+    if (updates.formulaExpression !== undefined) payload.formula_expression = updates.formulaExpression;
 
     const { data, error } = await this.supabase
       .from('dynamic_table_columns')

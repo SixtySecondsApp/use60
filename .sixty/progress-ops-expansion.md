@@ -3,7 +3,7 @@
 **Plan**: `.sixty/plan-ops-expansion.json`
 **Consult**: `.sixty/consult/ops-expansion.md`
 **Branch**: `feat/dynamic-tables`
-**Stories**: 27 total | 0 complete | 0 in progress
+**Stories**: 27 total | 7 complete | 0 in progress
 
 ---
 
@@ -13,10 +13,10 @@
 - [x] OPS-003 — Rate limiting and concurrency control
 
 ## Phase 1: New Column Types
-- [ ] OPS-004 — Dropdown and tags columns
-- [ ] OPS-005 — Phone and checkbox columns
-- [ ] OPS-006 — Formula columns (schema + evaluator)
-- [ ] OPS-007 — Formula columns (UI + recalc)
+- [x] OPS-004 — Dropdown and tags columns
+- [x] OPS-005 — Phone and checkbox columns
+- [x] OPS-006 — Formula columns (schema + evaluator)
+- [x] OPS-007 — Formula columns (UI + recalc)
 
 ## Phase 2: Integration Columns
 - [ ] OPS-008 — Integration column schema + shared infra
