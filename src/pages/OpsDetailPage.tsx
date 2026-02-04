@@ -28,6 +28,7 @@ import { ColumnHeaderMenu } from '@/components/ops/ColumnHeaderMenu';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
 import { BulkActionsBar } from '@/components/ops/BulkActionsBar';
+import { HubSpotPushModal } from '@/components/ops/HubSpotPushModal';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 import { ViewSelector } from '@/components/ops/ViewSelector';
 import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
@@ -85,6 +86,7 @@ function OpsDetailPage() {
     editIndex?: number;
   } | null>(null);
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [showHubSpotPush, setShowHubSpotPush] = useState(false);
 
   // ---- Data queries ----
 
@@ -268,6 +270,26 @@ function OpsDetailPage() {
       toast.success('Column deleted');
     },
     onError: () => toast.error('Failed to delete column'),
+  });
+
+  const pushToHubSpotMutation = useMutation({
+    mutationFn: async (config: {
+      fieldMappings: { opsColumnKey: string; hubspotProperty: string }[];
+      duplicateStrategy: 'update' | 'skip' | 'create';
+      listId?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('push-to-hubspot', {
+        body: { table_id: tableId, row_ids: Array.from(selectedRows), config },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      setShowHubSpotPush(false);
+      toast.success(`HubSpot: ${data?.pushed ?? 0} pushed, ${data?.failed ?? 0} failed`);
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to push to HubSpot'),
   });
 
   const runIntegrationMutation = useMutation({
@@ -816,10 +838,30 @@ function OpsDetailPage() {
       <BulkActionsBar
         selectedCount={selectedRows.size}
         totalCount={rows.length}
-        onEnrich={() => toast.info('Enrichment coming soon.')}
+        onEnrich={() => {
+          const enrichCols = columns.filter((c) => c.is_enrichment);
+          if (enrichCols.length === 0) return toast.info('No enrichment columns');
+          startEnrichment({ columnId: enrichCols[0].id, rowIds: Array.from(selectedRows) });
+        }}
         onPushToInstantly={() => toast.info('Push to Instantly coming soon.')}
+        onPushToHubSpot={() => setShowHubSpotPush(true)}
+        onReEnrich={() => {
+          const enrichCols = columns.filter((c) => c.is_enrichment);
+          if (enrichCols.length === 0) return toast.info('No enrichment columns');
+          startEnrichment({ columnId: enrichCols[0].id, rowIds: Array.from(selectedRows) });
+        }}
         onDelete={() => deleteRowsMutation.mutate(Array.from(selectedRows))}
         onDeselectAll={() => setSelectedRows(new Set())}
+      />
+
+      {/* HubSpot Push Modal */}
+      <HubSpotPushModal
+        isOpen={showHubSpotPush}
+        onClose={() => setShowHubSpotPush(false)}
+        columns={columns}
+        selectedRows={rows.filter((r) => selectedRows.has(r.id))}
+        onPush={(config) => pushToHubSpotMutation.mutate(config)}
+        isPushing={pushToHubSpotMutation.isPending}
       />
 
       {/* Save View Dialog */}

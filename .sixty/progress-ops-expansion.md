@@ -3,7 +3,7 @@
 **Plan**: `.sixty/plan-ops-expansion.json`
 **Consult**: `.sixty/consult/ops-expansion.md`
 **Branch**: `feat/dynamic-tables`
-**Stories**: 27 total | 11 complete | 0 in progress
+**Stories**: 27 total | 16 complete | 0 in progress
 
 ---
 
@@ -25,11 +25,11 @@
 - [x] OPS-011 — Integration bulk retry + progress UI
 
 ## Phase 3: Action Columns & CRM Push
-- [ ] OPS-012 — Action button column type
-- [ ] OPS-013 — HubSpot push field mapping modal
-- [ ] OPS-014 — HubSpot push edge function
-- [ ] OPS-015 — Per-row CRM status column
-- [ ] OPS-016 — Re-enrich action
+- [x] OPS-012 — Action button column type
+- [x] OPS-013 — HubSpot push field mapping modal
+- [x] OPS-014 — HubSpot push edge function
+- [x] OPS-015 — Per-row CRM status column
+- [x] OPS-016 — Re-enrich action
 
 ## Phase 4: HubSpot Pull
 - [ ] OPS-017 — Connection check + list browser

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Send, Trash2, X } from 'lucide-react';
+import { Sparkles, Send, Trash2, X, Upload, RotateCcw } from 'lucide-react';
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -8,6 +8,9 @@ interface BulkActionsBarProps {
   onPushToInstantly: () => void;
   onDelete: () => void;
   onDeselectAll: () => void;
+  onPushToHubSpot?: () => void;
+  onReEnrich?: () => void;
+  onRetryFailed?: () => void;
   isEnriching?: boolean;
   enrichProgress?: number;
 }
@@ -19,6 +22,9 @@ export function BulkActionsBar({
   onPushToInstantly,
   onDelete,
   onDeselectAll,
+  onPushToHubSpot,
+  onReEnrich,
+  onRetryFailed,
   isEnriching = false,
   enrichProgress = 0,
 }: BulkActionsBarProps) {
@@ -72,6 +78,30 @@ export function BulkActionsBar({
             <Send className="h-4 w-4" />
             Push to Instantly
           </button>
+
+          {/* Push to HubSpot Button */}
+          {onPushToHubSpot && (
+            <button
+              onClick={onPushToHubSpot}
+              disabled={isEnriching}
+              className="flex items-center gap-2 rounded-lg bg-orange-600 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Upload className="h-4 w-4" />
+              HubSpot
+            </button>
+          )}
+
+          {/* Re-enrich Button */}
+          {onReEnrich && (
+            <button
+              onClick={onReEnrich}
+              disabled={isEnriching}
+              className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-violet-400 transition-colors hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Re-enrich
+            </button>
+          )}
 
           {/* Delete Button */}
           <button
