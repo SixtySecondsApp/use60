@@ -638,11 +638,19 @@ export default function OrganizationManagementPage() {
       setShowLeaveConfirmation(false);
       toast.success('You have left the organization. Redirecting...');
 
-      // Wait a bit to ensure redirect flag is set in database, then redirect
+      // Set the redirect flag so RemovedUserStep knows why user is there
+      try {
+        sessionStorage.setItem('user_removed_redirect', 'true');
+      } catch (e) {
+        console.warn('Failed to set sessionStorage:', e);
+      }
+
+      console.log('[OrganizationManagementPage] Redirecting to removed-user page');
+
+      // Redirect to removed-user page (short delay to ensure UI updates)
       setTimeout(() => {
-        // Redirect to removed-user page to allow user to rejoin or choose different org
         window.location.href = '/onboarding/removed-user';
-      }, 1500);
+      }, 800);
     } else {
       toast.error(result.error || 'Failed to leave organization');
       setIsLeavingTeam(false);

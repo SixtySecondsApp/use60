@@ -9,12 +9,13 @@
  * - Option to choose a different organization
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle, ArrowRight, Building, MailCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, Building, MailCheck, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
@@ -23,10 +24,59 @@ interface RemovedUserStepProps {
   orgId?: string;
 }
 
-export function RemovedUserStep({ orgName, orgId }: RemovedUserStepProps) {
+export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: RemovedUserStepProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isRequesting, setIsRequesting] = useState(false);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [orgName, setOrgName] = useState(propOrgName);
+  const [orgId, setOrgId] = useState(propOrgId);
+  const [isLoading, setIsLoading] = useState(!propOrgId); // Load org info if not provided
+
+  // Fetch organization info if not provided as props
+  useEffect(() => {
+    const fetchRemovedOrgInfo = async () => {
+      if (!user?.id || orgId) return; // Skip if we already have orgId or no user
+
+      try {
+        const { data, error } = await supabase
+          .from('organization_join_requests')
+          .select('org_id, organizations(name)')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .maybeSingle();
+
+        if (data?.org_id) {
+          setOrgId(data.org_id);
+          setOrgName(data.organizations?.name || 'the organization');
+          logger.log('Loaded removed org info:', data.org_id);
+        } else {
+          // Also check for recent removed memberships
+          const { data: recentRemoved } = await supabase
+            .from('organization_memberships')
+            .select('org_id, organizations(name)')
+            .eq('user_id', user.id)
+            .eq('member_status', 'removed')
+            .order('removed_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (recentRemoved?.org_id) {
+            setOrgId(recentRemoved.org_id);
+            setOrgName(recentRemoved.organizations?.name || 'the organization');
+            logger.log('Loaded recent removed membership:', recentRemoved.org_id);
+          }
+        }
+      } catch (error) {
+        logger.error('Error fetching removed org info:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRemovedOrgInfo();
+  }, [user?.id, orgId]);
 
   const handleRequestRejoin = async () => {
     if (!orgId) {
@@ -95,6 +145,24 @@ export function RemovedUserStep({ orgName, orgId }: RemovedUserStepProps) {
       toast.error('Failed to proceed. Please try again.');
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+        <Card className="max-w-2xl w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
+            </div>
+            <CardTitle className="text-2xl">Loading...</CardTitle>
+            <CardDescription>
+              Preparing your options...
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
 
   if (requestSubmitted) {
     return (
