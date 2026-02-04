@@ -68,10 +68,10 @@ export async function grantAccess(
     // 1. Get entry details
     const { data: entry, error: fetchError } = await (supabase
       .from('meetings_waitlist' as any)
-      .select('id, email, full_name, status')
+      .select('id, email, full_name, status, company_name')
       .eq('id', entryId)
       .single() as any) as {
-      data: { id: string; email: string; full_name: string | null; status: string } | null;
+      data: { id: string; email: string; full_name: string | null; status: string; company_name: string | null } | null;
       error: any
     };
 
@@ -131,7 +131,7 @@ export async function grantAccess(
           variables: {
             recipient_name: firstName,
             action_url: invitationUrl,
-            company_name: entry.company || '',
+            company_name: entry.company_name || '',
             expiry_time: '7 days',
           },
         },
@@ -328,7 +328,7 @@ export async function bulkGrantAccess(
                   recipient_name: firstName,
                   action_url: link.magicLink,
                   user_email: entry.email,
-                  company_name: entry.company || '',
+                  company_name: entry.company_name || '',
                 },
               },
               headers: edgeFunctionSecret

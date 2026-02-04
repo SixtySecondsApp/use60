@@ -628,16 +628,32 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       existingOrg = exactMatch;
 
       // Strategy 2: If no exact match, try fuzzy domain matching RPC
+      let multipleMatches = false;
       if (!existingOrg) {
         const { data: fuzzyMatches } = await supabase.rpc('find_similar_organizations_by_domain', {
           p_search_domain: domain,
           p_limit: 5,
         });
 
-        // Use the best match (highest similarity score > 0.7)
-        if (fuzzyMatches && fuzzyMatches.length > 0 && fuzzyMatches[0].similarity_score > 0.7) {
-          console.log('[onboardingV2] Found fuzzy match with score:', fuzzyMatches[0].similarity_score);
-          existingOrg = fuzzyMatches[0];
+        if (fuzzyMatches && fuzzyMatches.length > 0) {
+          // Filter matches with score > 0.7
+          const highScoreMatches = fuzzyMatches.filter((m: any) => m.similarity_score > 0.7);
+
+          if (highScoreMatches.length > 1) {
+            // Multiple matches: show selection step
+            console.log('[onboardingV2] Found multiple fuzzy matches with high scores, showing selection:', highScoreMatches.length);
+            multipleMatches = true;
+            set({
+              currentStep: 'organization_selection',
+              similarOrganizations: highScoreMatches,
+              matchSearchTerm: domain,
+            });
+            return;
+          } else if (highScoreMatches.length === 1) {
+            // Single match: use it
+            console.log('[onboardingV2] Found fuzzy match with score:', highScoreMatches[0].similarity_score);
+            existingOrg = highScoreMatches[0];
+          }
         }
       }
 
@@ -813,7 +829,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           similarOrganizations: similarOrgs,
           matchSearchTerm: organizationName,
         });
-        return organizationName; // Return something truthy to prevent error
+        return null; // Return null when routing to selection step - organizationId will be set from selection
       }
 
       // Check if organization with this name already exists (fallback to exact match)
@@ -1034,7 +1050,10 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // If organizationId is empty/null (personal email user), create org first
       if (!finalOrgId || finalOrgId === '') {
         finalOrgId = await get().createOrganizationFromManualData(session.user.id, manualData);
-        set({ organizationId: finalOrgId });
+        // Only set organizationId if we got a real ID back (not null from selection step)
+        if (finalOrgId) {
+          set({ organizationId: finalOrgId });
+        }
       }
 
       // Call edge function with manual data
