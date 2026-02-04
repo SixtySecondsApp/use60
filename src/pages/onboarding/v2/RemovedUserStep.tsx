@@ -117,29 +117,30 @@ export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: Remo
   };
 
   const handleChooseDifferentOrg = async () => {
-    // Clear redirect flag and go to org selection
+    // Clear redirect flag from sessionStorage
     sessionStorage.removeItem('user_removed_redirect');
 
     try {
-      // Get current user ID
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) {
-        throw new Error('User not found');
+      console.log('[RemovedUserStep] User chose to select different organization');
+
+      // Attempt to clear redirect flag in database (non-blocking)
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+          await supabase
+            .from('profiles')
+            .update({ redirect_to_onboarding: false })
+            .eq('id', user.id);
+        }
+      } catch (dbError) {
+        console.warn('Warning: Could not clear redirect flag in database:', dbError);
+        // Don't fail - will navigate anyway
       }
 
-      // Update profile to clear redirect flag
-      const { error } = await supabase
-        .from('profiles')
-        .update({ redirect_to_onboarding: false })
-        .eq('id', user.id);
-
-      if (error) {
-        console.error('Error clearing redirect flag:', error);
-        // Continue anyway - user can still proceed to onboarding
-      }
-
-      // Navigate to organization selection
-      navigate('/onboarding?step=organization_selection');
+      // Navigate to organization selection using window.location for guaranteed redirect
+      // (bypasses React Router guards that might interfere)
+      console.log('[RemovedUserStep] Redirecting to onboarding organization selection');
+      window.location.href = '/onboarding?step=organization_selection';
     } catch (error) {
       console.error('Error in handleChooseDifferentOrg:', error);
       toast.error('Failed to proceed. Please try again.');
