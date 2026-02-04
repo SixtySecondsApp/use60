@@ -3556,6 +3556,10 @@ ACTION PARAMETERS:
   - Analyze competitors: run_skill { skill_key: "competitor-intel", skill_context: { competitor_name: "Salesforce", our_company: "HubSpot" } }
   - Market research: run_skill { skill_key: "market-research", skill_context: { industry: "fintech", focus_areas: "payment processing" } }
 
+## Dynamic Tables
+• search_leads_create_table: { query, title?, person_titles?, person_locations?, organization_num_employees_ranges?, person_seniorities? } - Search Apollo for leads matching criteria and create a Dynamic Table with results. Returns table_id, table_name, row_count.
+• enrich_table_column: { table_id, column_id, row_ids? } - Enrich a column in a Dynamic Table using AI. If row_ids not provided, enriches all rows.
+
 Write actions require params.confirm=true.`,
     input_schema: {
       type: 'object',
@@ -3589,6 +3593,8 @@ Write actions require params.confirm=true.`,
             'create_task',
             'list_tasks',
             'create_activity',
+            'search_leads_create_table',
+            'enrich_table_column',
           ],
           description: 'The action to execute',
         },
@@ -9622,8 +9628,52 @@ async function detectAndStructureResponse(
         }
       }
     }
+
+    // Dynamic Table creation responses
+    const dynamicTableExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'search_leads_create_table')
+      .slice(-1)[0] as any;
+
+    if (dynamicTableExec?.result?.data) {
+      const dtResult = dynamicTableExec.result.data;
+      return {
+        type: 'dynamic_table',
+        summary: `Created a Dynamic Table "${dtResult.table_name || 'Untitled'}" with ${dtResult.row_count || 0} leads.`,
+        data: {
+          table_id: dtResult.table_id,
+          table_name: dtResult.table_name || 'Untitled Table',
+          row_count: dtResult.row_count || 0,
+          column_count: dtResult.column_count || 0,
+          source_type: dtResult.source_type || 'apollo',
+          enriched_count: dtResult.enriched_count || 0,
+          preview_rows: dtResult.preview_rows || [],
+          preview_columns: dtResult.preview_columns || [],
+          query_description: dtResult.query_description || '',
+        },
+        actions: [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'primary',
+            callback: 'open_dynamic_table',
+            params: { table_id: dtResult.table_id },
+          },
+          {
+            id: 'add-enrichment',
+            label: 'Add Enrichment',
+            type: 'secondary',
+            callback: 'add_enrichment',
+            params: { table_id: dtResult.table_id },
+          },
+        ],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['dynamic_tables', 'apollo'],
+        },
+      };
+    }
   }
-  
+
   // ---------------------------------------------------------------------------
   // Meetings list (today/tomorrow) from get_meetings_for_period
   // ---------------------------------------------------------------------------

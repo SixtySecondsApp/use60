@@ -860,6 +860,69 @@ export async function executeAction(
       };
     }
 
+    case 'search_leads_create_table': {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/copilot-dynamic-table`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+          },
+          body: JSON.stringify({
+            query: params.query ? String(params.query) : '',
+            title: params.title ? String(params.title) : undefined,
+            person_titles: params.person_titles,
+            person_locations: params.person_locations,
+            organization_num_employees_ranges: params.organization_num_employees_ranges,
+            person_seniorities: params.person_seniorities,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Dynamic table creation failed: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result };
+      } catch (e: any) {
+        return { success: false, data: null, error: e?.message || 'Failed to create dynamic table' };
+      }
+    }
+
+    case 'enrich_table_column': {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/enrich-dynamic-table`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+          },
+          body: JSON.stringify({
+            table_id: params.table_id ? String(params.table_id) : '',
+            column_id: params.column_id ? String(params.column_id) : '',
+            row_ids: params.row_ids,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Enrichment failed: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result };
+      } catch (e: any) {
+        return { success: false, data: null, error: e?.message || 'Failed to enrich table column' };
+      }
+    }
+
     default:
       return { success: false, data: null, error: `Unknown action: ${String(action)}` };
   }

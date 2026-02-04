@@ -47,7 +47,9 @@ export type ExecuteActionName =
   | 'run_sequence'
   | 'create_task'
   | 'list_tasks'
-  | 'create_activity';
+  | 'create_activity'
+  | 'search_leads_create_table'
+  | 'enrich_table_column';
 
 /**
  * Parameters for run_sequence action - executes a multi-step agent sequence

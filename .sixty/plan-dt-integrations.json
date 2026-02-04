@@ -1,0 +1,152 @@
+{
+  "project": {
+    "name": "Dynamic Tables — Integration Wiring",
+    "description": "Wire Apollo & Instantly into the Integrations page, connect Dynamic Table tools to the copilot, and add action handlers",
+    "createdAt": "2026-02-04T19:00:00Z",
+    "branch": "feat/dynamic-tables",
+    "parent_plan": ".sixty/plan-dynamic-tables.json"
+  },
+
+  "features": [
+    {
+      "id": "dt-integrations-page",
+      "name": "Integrations Page — Apollo & Instantly",
+      "status": "done",
+      "priority": 1,
+      "description": "Add Apollo and Instantly as built integrations with API key config modals so users can set up their credentials"
+    },
+    {
+      "id": "dt-copilot-wiring",
+      "name": "Copilot Tool Registration & Action Handlers",
+      "status": "done",
+      "priority": 2,
+      "description": "Register Dynamic Table tools with the copilot, add action handlers in AssistantShell, and wire backend response detection"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "DTI-001",
+      "feature": "dt-integrations-page",
+      "title": "Add Apollo & Instantly API key config modals",
+      "type": "frontend",
+      "status": "done",
+      "priority": 1,
+
+      "description": "Create two API-key-based config modals following the JustCall/Fireflies pattern (no OAuth — users paste their API key). These modals save credentials to the `integration_credentials` table via Supabase.",
+
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["DTI-002"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "ApolloConfigModal component: text input for API key, save to integration_credentials with provider='apollo'",
+        "InstantlyConfigModal component: text input for API key, save to integration_credentials with provider='instantly'",
+        "Both modals show connection status (connected/disconnected) and allow updating/removing the key",
+        "Follow existing pattern from JustCallConfigModal or FirefliesConfigModal"
+      ],
+
+      "files": [
+        "src/components/integrations/ApolloConfigModal.tsx",
+        "src/components/integrations/InstantlyConfigModal.tsx"
+      ]
+    },
+    {
+      "id": "DTI-002",
+      "feature": "dt-integrations-page",
+      "title": "Register Apollo & Instantly as built integrations on Integrations page",
+      "type": "frontend",
+      "status": "done",
+      "priority": 2,
+
+      "description": "Move Apollo and Instantly from the 'suggested' (coming soon) list to the 'built' integrations array. Add integration hooks (useApolloIntegration, useInstantlyIntegration) that check integration_credentials. Wire into getIntegrationStatus(), handleCardAction(), and the config modal switch. Remove from suggestedIntegrations to avoid duplicates.",
+
+      "dependencies": { "stories": ["DTI-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Apollo and Instantly appear in the 'Available Integrations' section (not 'Coming Soon')",
+        "Clicking Apollo/Instantly opens their config modal (API key input)",
+        "Status shows 'active' when credentials exist in integration_credentials, 'inactive' otherwise",
+        "Apollo and Instantly removed from suggestedIntegrations to avoid appearing twice",
+        "useApolloIntegration and useInstantlyIntegration hooks query integration_credentials"
+      ],
+
+      "files": [
+        "src/pages/Integrations.tsx",
+        "src/lib/hooks/useApolloIntegration.ts",
+        "src/lib/hooks/useInstantlyIntegration.ts"
+      ]
+    },
+    {
+      "id": "DTI-003",
+      "feature": "dt-copilot-wiring",
+      "title": "Add Dynamic Table action handlers to AssistantShell",
+      "type": "frontend",
+      "status": "done",
+      "priority": 3,
+
+      "description": "Add handlers for the three actions emitted by DynamicTableResponse: open_dynamic_table (navigate to /dynamic-tables/{table_id}), add_enrichment (navigate to table detail with enrichment focus), push_to_instantly (navigate to table detail with push focus). These are currently unhandled — clicking the buttons does nothing.",
+
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DTI-001", "DTI-002", "DTI-004"],
+
+      "acceptance": [
+        "'Open Table' button navigates to /dynamic-tables/{table_id}",
+        "'Add Enrichment' button navigates to /dynamic-tables/{table_id}?action=enrich",
+        "'Push to Instantly' button navigates to /dynamic-tables/{table_id}?action=push"
+      ],
+
+      "files": [
+        "src/components/assistant/AssistantShell.tsx"
+      ]
+    },
+    {
+      "id": "DTI-004",
+      "feature": "dt-copilot-wiring",
+      "title": "Register Dynamic Table tools in copilot execute_action and add response detection",
+      "type": "backend",
+      "status": "done",
+      "priority": 4,
+
+      "description": "Wire the Dynamic Table edge functions into the copilot's tool system. Add 'search_leads_create_table' and 'enrich_table_column' as sub-actions in the execute_action tool's action enum. Implement handlers that call the copilot-dynamic-table and enrich-dynamic-table edge functions. Add a 'dynamic_table' case to detectAndStructureResponse() so the copilot returns the DynamicTableResponse UI component when a table is created.",
+
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DTI-001", "DTI-002", "DTI-003"],
+
+      "acceptance": [
+        "execute_action action enum includes 'search_leads_create_table' and 'enrich_table_column'",
+        "Handler for search_leads_create_table calls copilot-dynamic-table edge function and returns structured result",
+        "Handler for enrich_table_column calls enrich-dynamic-table edge function",
+        "detectAndStructureResponse() returns type 'dynamic_table' with DynamicTableResponseData when table creation completes",
+        "User can say 'Find me 50 VP Sales at Series B SaaS companies' and get a DynamicTableResponse in chat"
+      ],
+
+      "files": [
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 4,
+    "groups": [
+      {
+        "id": 1,
+        "name": "Parallel: Config modals + Copilot wiring",
+        "stories": ["DTI-001", "DTI-003", "DTI-004"],
+        "note": "DTI-001 (modals), DTI-003 (action handlers), DTI-004 (copilot tools) have no dependencies on each other"
+      },
+      {
+        "id": 2,
+        "name": "Integrations page registration",
+        "stories": ["DTI-002"],
+        "note": "Depends on DTI-001 (needs the modals to exist)"
+      }
+    ]
+  }
+}

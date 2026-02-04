@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -23,7 +23,14 @@ import { DynamicTableService } from '@/lib/services/dynamicTableService';
 import { DynamicTable } from '@/components/dynamic-tables/DynamicTable';
 import { AddColumnModal } from '@/components/dynamic-tables/AddColumnModal';
 import { ColumnHeaderMenu } from '@/components/dynamic-tables/ColumnHeaderMenu';
+import { ColumnFilterPopover } from '@/components/dynamic-tables/ColumnFilterPopover';
+import { ActiveFilterBar } from '@/components/dynamic-tables/ActiveFilterBar';
 import { BulkActionsBar } from '@/components/dynamic-tables/BulkActionsBar';
+import { ViewSelector } from '@/components/dynamic-tables/ViewSelector';
+import { SaveViewDialog } from '@/components/dynamic-tables/SaveViewDialog';
+import type { SavedView, FilterCondition, DynamicTableColumn } from '@/lib/services/dynamicTableService';
+import { applyFilters } from '@/lib/utils/dynamicTableFilters';
+import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
 
 // ---------------------------------------------------------------------------
 // Service singleton
@@ -50,6 +57,7 @@ function DynamicTableDetailPage() {
   const { tableId } = useParams<{ tableId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // ---- Local state ----
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -63,6 +71,15 @@ function DynamicTableDetailPage() {
   const [editNameValue, setEditNameValue] = useState('');
   const [queryInput, setQueryInput] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get('view'));
+  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([]);
+  const [showSaveViewDialog, setShowSaveViewDialog] = useState(false);
+  const [systemViewsCreated, setSystemViewsCreated] = useState(false);
+  const [filterPopoverColumn, setFilterPopoverColumn] = useState<{
+    column: DynamicTableColumn;
+    anchorRect: DOMRect;
+    editIndex?: number;
+  } | null>(null);
 
   // ---- Data queries ----
 
@@ -90,6 +107,12 @@ function DynamicTableDetailPage() {
     enabled: !!tableId,
   });
 
+  const { data: views = [] } = useQuery({
+    queryKey: ['dynamic-table-views', tableId],
+    queryFn: () => tableService.getViews(tableId!),
+    enabled: !!tableId,
+  });
+
   // ---- Derived data ----
 
   const columns = useMemo(
@@ -98,19 +121,62 @@ function DynamicTableDetailPage() {
     [table?.columns],
   );
 
-  const rows = useMemo(() => {
-    const rawRows = tableData?.rows ?? [];
-    if (!sortState || sortState.key === 'row_index') return rawRows;
+  // Auto-create system views when a table has zero views
+  useEffect(() => {
+    if (!tableId || !table || views.length > 0 || systemViewsCreated) return;
+    if (columns.length === 0) return;
 
-    // Client-side sort by cell value for a given column key
-    const sorted = [...rawRows].sort((a, b) => {
-      const aVal = a.cells[sortState.key]?.value ?? '';
-      const bVal = b.cells[sortState.key]?.value ?? '';
-      const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
-      return sortState.dir === 'asc' ? cmp : -cmp;
+    setSystemViewsCreated(true);
+
+    const systemViewConfigs = generateSystemViews(columns);
+
+    Promise.all(
+      systemViewConfigs.map((config) =>
+        tableService.createView({
+          tableId: tableId,
+          createdBy: table.created_by,
+          name: config.name,
+          isSystem: true,
+          isDefault: config.name === 'All',
+          filterConfig: config.filterConfig,
+          sortConfig: config.sortConfig,
+          columnConfig: config.columnConfig,
+          position: config.position,
+        })
+      )
+    ).then((createdViews) => {
+      queryClient.invalidateQueries({ queryKey: ['dynamic-table-views', tableId] });
+      // Auto-select the "All" view
+      const allView = createdViews.find((v) => v.name === 'All');
+      if (allView) {
+        setActiveViewId(allView.id);
+      }
+    }).catch(() => {
+      // Silently fail — views will just not be auto-created
+      // User can still manually create views
     });
-    return sorted;
-  }, [tableData?.rows, sortState]);
+  }, [tableId, table, views.length, columns, systemViewsCreated, queryClient]);
+
+  const rows = useMemo(() => {
+    let result = tableData?.rows ?? [];
+
+    // Apply filters
+    if (filterConditions.length > 0) {
+      result = applyFilters(result, filterConditions, columns);
+    }
+
+    // Apply sort
+    if (sortState && sortState.key !== 'row_index') {
+      result = [...result].sort((a, b) => {
+        const aVal = a.cells[sortState.key]?.value ?? '';
+        const bVal = b.cells[sortState.key]?.value ?? '';
+        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
+        return sortState.dir === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    return result;
+  }, [tableData?.rows, sortState, filterConditions, columns]);
 
   // ---- Mutations ----
 
@@ -199,7 +265,65 @@ function DynamicTableDetailPage() {
     onError: () => toast.error('Failed to delete rows'),
   });
 
+  // ---- View mutations ----
+
+  const createViewMutation = useMutation({
+    mutationFn: (params: { name: string }) =>
+      tableService.createView({
+        tableId: tableId!,
+        createdBy: table!.created_by,
+        name: params.name,
+        filterConfig: filterConditions,
+        sortConfig: sortState,
+        columnConfig: null,
+      }),
+    onSuccess: (newView) => {
+      queryClient.invalidateQueries({ queryKey: ['dynamic-table-views', tableId] });
+      setActiveViewId(newView.id);
+      setSearchParams({ view: newView.id });
+      toast.success('View created');
+    },
+    onError: () => toast.error('Failed to create view'),
+  });
+
+  const updateViewMutation = useMutation({
+    mutationFn: ({ viewId, updates }: { viewId: string; updates: { name?: string } }) =>
+      tableService.updateView(viewId, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dynamic-table-views', tableId] });
+      toast.success('View updated');
+    },
+    onError: () => toast.error('Failed to update view'),
+  });
+
+  const deleteViewMutation = useMutation({
+    mutationFn: (viewId: string) => tableService.deleteView(viewId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dynamic-table-views', tableId] });
+      setActiveViewId(null);
+      setSearchParams({});
+      toast.success('View deleted');
+    },
+    onError: () => toast.error('Failed to delete view'),
+  });
+
   // ---- Handlers ----
+
+  const handleSelectView = useCallback((viewId: string) => {
+    setActiveViewId(viewId);
+    setSearchParams({ view: viewId });
+
+    // Apply the view's config
+    const view = views.find((v) => v.id === viewId);
+    if (view) {
+      setFilterConditions(view.filter_config ?? []);
+      setSortState(view.sort_config ?? null);
+    }
+  }, [views, setSearchParams]);
+
+  const handleDuplicateView = useCallback((view: SavedView) => {
+    createViewMutation.mutate({ name: `${view.name} (copy)` });
+  }, [createViewMutation]);
 
   const handleSelectRow = useCallback((rowId: string) => {
     setSelectedRows((prev) => {
@@ -278,6 +402,32 @@ function DynamicTableDetailPage() {
     [handleSaveName],
   );
 
+  const handleApplyFilter = useCallback((condition: FilterCondition, editIndex?: number) => {
+    setFilterConditions((prev) => {
+      if (editIndex !== undefined) {
+        const next = [...prev];
+        next[editIndex] = condition;
+        return next;
+      }
+      return [...prev, condition];
+    });
+    setFilterPopoverColumn(null);
+  }, []);
+
+  const handleRemoveFilter = useCallback((index: number) => {
+    setFilterConditions((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleEditFilter = useCallback((index: number) => {
+    const condition = filterConditions[index];
+    const col = columns.find((c) => c.key === condition.column_key);
+    if (col) {
+      const headerEl = document.querySelector(`[data-column-id="${col.id}"]`);
+      const rect = headerEl?.getBoundingClientRect() ?? new DOMRect(200, 200, 100, 34);
+      setFilterPopoverColumn({ column: col, anchorRect: rect, editIndex: index });
+    }
+  }, [filterConditions, columns]);
+
   const handleQuerySubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
@@ -346,6 +496,36 @@ function DynamicTableDetailPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Dynamic Tables
         </button>
+
+        {/* View selector tabs */}
+        {views.length > 0 && (
+          <div className="mb-3">
+            <ViewSelector
+              views={views}
+              activeViewId={activeViewId}
+              onSelectView={handleSelectView}
+              onCreateView={() => setShowSaveViewDialog(true)}
+              onRenameView={(viewId, name) =>
+                updateViewMutation.mutate({ viewId, updates: { name } })
+              }
+              onDuplicateView={handleDuplicateView}
+              onDeleteView={(viewId) => deleteViewMutation.mutate(viewId)}
+            />
+          </div>
+        )}
+
+        {/* Active filter bar */}
+        {filterConditions.length > 0 && (
+          <div className="mb-3">
+            <ActiveFilterBar
+              conditions={filterConditions}
+              columns={columns}
+              onRemove={handleRemoveFilter}
+              onClearAll={() => setFilterConditions([])}
+              onEditFilter={handleEditFilter}
+            />
+          </div>
+        )}
 
         {/* Query bar */}
         <form onSubmit={handleQuerySubmit} className="mb-5">
@@ -486,9 +666,33 @@ function DynamicTableDetailPage() {
           onSortDesc={() => {
             setSortState({ key: activeColumn.key, dir: 'desc' });
           }}
+          onFilter={() => {
+            if (activeColumnMenu) {
+              setFilterPopoverColumn({
+                column: activeColumn,
+                anchorRect: activeColumnMenu.anchorRect,
+              });
+              setActiveColumnMenu(null);
+            }
+          }}
           onHide={() => hideColumnMutation.mutate(activeColumn.id)}
           onDelete={() => deleteColumnMutation.mutate(activeColumn.id)}
           anchorRect={activeColumnMenu?.anchorRect}
+        />
+      )}
+
+      {/* Column Filter Popover */}
+      {filterPopoverColumn && (
+        <ColumnFilterPopover
+          column={filterPopoverColumn.column}
+          onApply={(condition) => handleApplyFilter(condition, filterPopoverColumn.editIndex)}
+          onClose={() => setFilterPopoverColumn(null)}
+          anchorRect={filterPopoverColumn.anchorRect}
+          existingCondition={
+            filterPopoverColumn.editIndex !== undefined
+              ? filterConditions[filterPopoverColumn.editIndex]
+              : undefined
+          }
         />
       )}
 
@@ -500,6 +704,16 @@ function DynamicTableDetailPage() {
         onPushToInstantly={() => toast.info('Push to Instantly coming soon.')}
         onDelete={() => deleteRowsMutation.mutate(Array.from(selectedRows))}
         onDeselectAll={() => setSelectedRows(new Set())}
+      />
+
+      {/* Save View Dialog */}
+      <SaveViewDialog
+        isOpen={showSaveViewDialog}
+        onClose={() => setShowSaveViewDialog(false)}
+        onSave={(name) => {
+          createViewMutation.mutate({ name });
+          setShowSaveViewDialog(false);
+        }}
       />
     </div>
   );

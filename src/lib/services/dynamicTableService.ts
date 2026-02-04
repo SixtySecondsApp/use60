@@ -64,6 +64,40 @@ export interface DynamicTableCell {
   error_message: string | null;
 }
 
+// Filter operators for views
+export type FilterOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'greater_than'
+  | 'less_than'
+  | 'is_empty'
+  | 'is_not_empty';
+
+export interface FilterCondition {
+  column_key: string;
+  operator: FilterOperator;
+  value: string;
+}
+
+export interface SavedView {
+  id: string;
+  table_id: string;
+  created_by: string;
+  name: string;
+  is_default: boolean;
+  is_system: boolean;
+  filter_config: FilterCondition[];
+  sort_config: { key: string; dir: 'asc' | 'desc' } | null;
+  column_config: string[] | null; // array of column keys in display order
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Internal raw types returned by Supabase queries
 // ---------------------------------------------------------------------------
@@ -104,6 +138,9 @@ const ROW_COLUMNS =
 
 const CELL_COLUMNS =
   'id, row_id, column_id, value, confidence, source, status, error_message';
+
+const VIEW_COLUMNS =
+  'id, table_id, created_by, name, is_default, is_system, filter_config, sort_config, column_config, position, created_at, updated_at';
 
 // ---------------------------------------------------------------------------
 // Service
@@ -410,6 +447,102 @@ export class DynamicTableService {
       .from('dynamic_table_rows')
       .delete()
       .in('id', rowIds);
+
+    if (error) throw error;
+  }
+
+  // -----------------------------------------------------------------------
+  // View CRUD
+  // -----------------------------------------------------------------------
+
+  async getViews(tableId: string): Promise<SavedView[]> {
+    const { data, error } = await this.supabase
+      .from('dynamic_table_views')
+      .select(VIEW_COLUMNS)
+      .eq('table_id', tableId)
+      .order('is_system', { ascending: false })
+      .order('position', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as SavedView[];
+  }
+
+  async createView(params: {
+    tableId: string;
+    createdBy: string;
+    name: string;
+    isDefault?: boolean;
+    isSystem?: boolean;
+    filterConfig?: FilterCondition[];
+    sortConfig?: { key: string; dir: 'asc' | 'desc' } | null;
+    columnConfig?: string[] | null;
+    position?: number;
+  }): Promise<SavedView> {
+    const { data, error } = await this.supabase
+      .from('dynamic_table_views')
+      .insert({
+        table_id: params.tableId,
+        created_by: params.createdBy,
+        name: params.name,
+        is_default: params.isDefault ?? false,
+        is_system: params.isSystem ?? false,
+        filter_config: params.filterConfig ?? [],
+        sort_config: params.sortConfig ?? null,
+        column_config: params.columnConfig ?? null,
+        position: params.position ?? 0,
+      })
+      .select(VIEW_COLUMNS)
+      .single();
+
+    if (error) throw error;
+    return data as SavedView;
+  }
+
+  async updateView(
+    viewId: string,
+    updates: {
+      name?: string;
+      isDefault?: boolean;
+      filterConfig?: FilterCondition[];
+      sortConfig?: { key: string; dir: 'asc' | 'desc' } | null;
+      columnConfig?: string[] | null;
+      position?: number;
+    }
+  ): Promise<SavedView> {
+    const payload: Record<string, unknown> = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.isDefault !== undefined) payload.is_default = updates.isDefault;
+    if (updates.filterConfig !== undefined) payload.filter_config = updates.filterConfig;
+    if (updates.sortConfig !== undefined) payload.sort_config = updates.sortConfig;
+    if (updates.columnConfig !== undefined) payload.column_config = updates.columnConfig;
+    if (updates.position !== undefined) payload.position = updates.position;
+
+    const { data, error } = await this.supabase
+      .from('dynamic_table_views')
+      .update(payload)
+      .eq('id', viewId)
+      .select(VIEW_COLUMNS)
+      .single();
+
+    if (error) throw error;
+    return data as SavedView;
+  }
+
+  async deleteView(viewId: string): Promise<void> {
+    // First check if it's a system view
+    const { data: view, error: fetchError } = await this.supabase
+      .from('dynamic_table_views')
+      .select('is_system')
+      .eq('id', viewId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (view?.is_system) throw new Error('Cannot delete system views');
+
+    const { error } = await this.supabase
+      .from('dynamic_table_views')
+      .delete()
+      .eq('id', viewId);
 
     if (error) throw error;
   }

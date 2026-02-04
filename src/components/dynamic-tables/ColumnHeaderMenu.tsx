@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowUp,
   ArrowDown,
+  Filter,
   Pencil,
   EyeOff,
   Trash2,
@@ -16,6 +17,7 @@ interface ColumnHeaderMenuProps {
   onRename: (label: string) => void;
   onSortAsc: () => void;
   onSortDesc: () => void;
+  onFilter: () => void;
   onHide: () => void;
   onDelete: () => void;
   anchorRect?: DOMRect;
@@ -28,6 +30,7 @@ export function ColumnHeaderMenu({
   onRename,
   onSortAsc,
   onSortDesc,
+  onFilter,
   onHide,
   onDelete,
   anchorRect,
@@ -143,6 +146,18 @@ export function ColumnHeaderMenu({
         label="Sort descending"
         onClick={() => {
           onSortDesc();
+          onClose();
+        }}
+      />
+
+      <Separator />
+
+      {/* Filter */}
+      <MenuItem
+        icon={<Filter className="h-4 w-4" />}
+        label="Filter this column"
+        onClick={() => {
+          onFilter();
           onClose();
         }}
       />

@@ -35,6 +35,8 @@ import { JustCallConfigModal } from '@/components/integrations/JustCallConfigMod
 import { HubSpotConfigModal } from '@/components/integrations/HubSpotConfigModal';
 import { NotetakerConfigModal } from '@/components/integrations/NotetakerConfigModal';
 import { FirefliesConfigModal } from '@/components/integrations/FirefliesConfigModal';
+import { ApolloConfigModal } from '@/components/integrations/ApolloConfigModal';
+import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 
 // Hooks and stores
 import { useGoogleIntegration } from '@/lib/stores/integrationStore';
@@ -45,6 +47,8 @@ import { useSavvyCalIntegration } from '@/lib/hooks/useSavvyCalIntegration';
 import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
 import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
 import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
+import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
+import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { getIntegrationDomain, getLogoS3Url, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { useUser } from '@/lib/hooks/useUser';
 import { IntegrationVoteState, useIntegrationUpvotes } from '@/lib/hooks/useIntegrationUpvotes';
@@ -377,6 +381,34 @@ const builtIntegrations: IntegrationConfig[] = [
     fallbackIcon: <Video className="w-6 h-6 text-yellow-500" />,
     isBuilt: true,
   },
+  {
+    id: 'apollo',
+    name: 'Apollo.io',
+    description: 'Sales intelligence & lead search.',
+    permissions: [
+      { title: 'Search leads', description: 'Search Apollo database for prospects.' },
+      { title: 'Enrich contacts', description: 'Enrich contact data with Apollo intelligence.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    iconBorderColor: 'border-blue-100 dark:border-blue-800/40',
+    fallbackIcon: <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'instantly',
+    name: 'Instantly',
+    description: 'Cold email campaigns at scale.',
+    permissions: [
+      { title: 'Push leads', description: 'Add leads to Instantly campaigns.' },
+      { title: 'Create campaigns', description: 'Create new email campaigns.' },
+    ],
+    brandColor: 'gray',
+    iconBgColor: 'bg-gray-50 dark:bg-gray-800',
+    iconBorderColor: 'border-gray-200 dark:border-gray-700',
+    fallbackIcon: <Mail className="w-6 h-6 text-gray-600 dark:text-gray-400" />,
+    isBuilt: true,
+  },
 ];
 
 // =====================================================
@@ -517,10 +549,8 @@ const suggestedIntegrations: IntegrationCategory[] = [
     icon: <Mail className="w-5 h-5" />,
     integrations: [
       { id: 'lemlist', name: 'Lemlist', description: 'Cold email outreach.', fallbackIcon: <Mail className="w-6 h-6 text-purple-500" /> },
-      { id: 'apollo', name: 'Apollo.io', description: 'Sales intelligence & outreach.', fallbackIcon: <Mail className="w-6 h-6 text-blue-600" /> },
       { id: 'outreach', name: 'Outreach', description: 'Sales engagement platform.', fallbackIcon: <Mail className="w-6 h-6 text-purple-600" /> },
       { id: 'salesloft', name: 'Salesloft', description: 'Revenue workflow platform.', fallbackIcon: <Mail className="w-6 h-6 text-blue-500" /> },
-      { id: 'instantly', name: 'Instantly', description: 'Cold email at scale.', fallbackIcon: <Mail className="w-6 h-6 text-gray-700 dark:text-gray-300" /> },
     ],
   },
   {
@@ -634,6 +664,16 @@ export default function Integrations() {
     loading: firefliesLoading,
   } = useFirefliesIntegration();
 
+  const {
+    isConnected: apolloConnected,
+    loading: apolloLoading,
+  } = useApolloIntegration();
+
+  const {
+    isConnected: instantlyConnected,
+    loading: instantlyLoading,
+  } = useInstantlyIntegration();
+
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
   const [activeConfigModal, setActiveConfigModal] = useState<string | null>(null);
@@ -709,6 +749,10 @@ export default function Integrations() {
         return notetakerConnected ? 'active' : 'inactive';
       case 'fireflies':
         return firefliesConnected ? 'active' : 'inactive';
+      case 'apollo':
+        return apolloConnected ? 'active' : 'inactive';
+      case 'instantly':
+        return instantlyConnected ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
@@ -745,6 +789,14 @@ export default function Integrations() {
       // Fireflies is API-key based - go straight to config modal for initial connection
       if (integrationId === 'fireflies') {
         setActiveConfigModal('fireflies');
+        return;
+      }
+      if (integrationId === 'apollo') {
+        setActiveConfigModal('apollo');
+        return;
+      }
+      if (integrationId === 'instantly') {
+        setActiveConfigModal('instantly');
         return;
       }
       // 60 Notetaker goes straight to config modal (handles its own enable flow)
@@ -822,8 +874,10 @@ export default function Integrations() {
       hubspot: hubspotLoading,
       '60-notetaker': notetakerLoading,
       fireflies: firefliesLoading,
+      apollo: apolloLoading,
+      instantly: instantlyLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, instantlyLoading]
   );
 
   // Preload cached S3 logo URLs on page load to prevent any visible swap/flicker.
@@ -997,6 +1051,14 @@ export default function Integrations() {
       />
       <FirefliesConfigModal
         open={activeConfigModal === 'fireflies'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <ApolloConfigModal
+        open={activeConfigModal === 'apollo'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <InstantlyConfigModal
+        open={activeConfigModal === 'instantly'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>

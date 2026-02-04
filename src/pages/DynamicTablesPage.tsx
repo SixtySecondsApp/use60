@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Table2, Plus, Clock, Rows3, Sparkles, Loader2 } from 'lucide-react';
+import { Table2, Plus, Clock, Rows3, Sparkles, Loader2, Upload } from 'lucide-react';
 import { useUser } from '@/lib/hooks/useUser';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { supabase } from '@/lib/supabase/clientV2';
 import { formatDistanceToNow } from 'date-fns';
+import { CSVImportDynamicTableWizard } from '@/components/dynamic-tables/CSVImportDynamicTableWizard';
 
 interface DynamicTable {
   id: string;
@@ -21,6 +22,8 @@ function DynamicTablesPage() {
   const navigate = useNavigate();
   const { user } = useUser();
   const { activeOrg } = useOrg();
+
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   const { data: tables, isLoading } = useQuery({
     queryKey: ['dynamic-tables', activeOrg?.id],
@@ -78,13 +81,22 @@ function DynamicTablesPage() {
             AI-powered lead enrichment and data processing
           </p>
         </div>
-        <button
-          onClick={() => navigate('/copilot')}
-          className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500"
-        >
-          <Plus className="h-4 w-4" />
-          New Table
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowCSVImport(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
+          >
+            <Upload className="h-4 w-4" />
+            Upload CSV
+          </button>
+          <button
+            onClick={() => navigate('/copilot')}
+            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500"
+          >
+            <Plus className="h-4 w-4" />
+            New Table
+          </button>
+        </div>
       </div>
 
       {/* Table Grid */}
@@ -141,6 +153,15 @@ function DynamicTablesPage() {
           </button>
         </div>
       )}
+
+      <CSVImportDynamicTableWizard
+        open={showCSVImport}
+        onOpenChange={setShowCSVImport}
+        onComplete={(tableId) => {
+          setShowCSVImport(false);
+          navigate(`/dynamic-tables/${tableId}`);
+        }}
+      />
     </div>
   );
 }
