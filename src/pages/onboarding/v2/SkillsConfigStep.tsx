@@ -104,6 +104,26 @@ export function SkillsConfigStep() {
     await moveNext();
   }, [activeSkill.id, moveNext]);
 
+  const handleSkipAll = useCallback(async () => {
+    // Mark all remaining skills as skipped and go to complete
+    const updated = { ...skillStatuses };
+    for (const skill of SKILLS) {
+      if (updated[skill.id] === 'pending') {
+        updated[skill.id] = 'skipped';
+      }
+    }
+    setSkillStatuses(updated);
+
+    if (organizationId) {
+      const success = await saveAllSkills(organizationId);
+      if (success) {
+        setStep('complete');
+      }
+    } else {
+      setStep('complete');
+    }
+  }, [skillStatuses, organizationId, saveAllSkills, setStep]);
+
   const renderSkillConfig = () => {
     if (!activeConfig) return null;
 
@@ -718,13 +738,19 @@ export function SkillsConfigStep() {
           </button>
         </div>
 
-        {/* Start Over Link */}
-        <div className="px-4 sm:px-6 py-3 border-t border-gray-800/50 text-center">
+        {/* Skip All & Start Over */}
+        <div className="px-4 sm:px-6 py-3 border-t border-gray-800/50 flex items-center justify-between">
           <button
             onClick={() => useOnboardingV2Store.getState().reset()}
             className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
           >
             Start Over
+          </button>
+          <button
+            onClick={handleSkipAll}
+            className="text-xs text-gray-400 hover:text-violet-400 transition-colors font-medium"
+          >
+            Skip All & Finish
           </button>
         </div>
       </div>

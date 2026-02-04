@@ -5,6 +5,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
+// Simple in-memory rate limiter per IP (resets on cold start)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX = 20; // max requests per window per IP
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -12,6 +28,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Rate limiting
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (isRateLimited(clientIp)) {
+      return new Response(
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { token } = await req.json();
 
     if (!token || typeof token !== 'string') {
@@ -21,14 +46,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Validate token format (must be 64-char hex string)
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid token format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    // Query invitation (no join to avoid ambiguous column references)
     const { data, error } = await supabase
       .from('organization_invitations')
-      .select('id, org_id, email, role, token, expires_at, accepted_at, created_at, organizations(id, name)')
+      .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
       .eq('token', token)
       .is('accepted_at', null)
       .gt('expires_at', new Date().toISOString())
@@ -49,7 +83,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    const org = (data as any).organizations;
+    // Fetch org name separately (service role bypasses RLS)
+    let orgName: string | null = null;
+    if (data.org_id) {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', data.org_id)
+        .maybeSingle();
+      orgName = org?.name || null;
+    }
 
     return new Response(
       JSON.stringify({
@@ -62,7 +105,7 @@ Deno.serve(async (req) => {
           expires_at: data.expires_at,
           accepted_at: data.accepted_at,
           created_at: data.created_at,
-          org_name: org?.name || null,
+          org_name: orgName,
         },
         error: null,
       }),

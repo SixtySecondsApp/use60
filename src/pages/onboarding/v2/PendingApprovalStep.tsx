@@ -29,6 +29,7 @@ export function PendingApprovalStep() {
   const [canceling, setCanceling] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [joinRequestId, setJoinRequestId] = useState<string | null>(null);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
   const [showApprovalSuccess, setShowApprovalSuccess] = useState(false);
@@ -54,13 +55,14 @@ export function PendingApprovalStep() {
       if (user?.id && !pendingJoinRequest?.requestId) {
         const { data } = await supabase
           .from('organization_join_requests')
-          .select('id, org_id')
+          .select('id, org_id, created_at')
           .eq('user_id', user.id)
           .eq('status', 'pending')
           .maybeSingle();
 
         if (data?.id) {
           setJoinRequestId(data.id);
+          if (data.created_at) setSubmittedAt(data.created_at);
 
           // If orgName is not in store but we have orgId, fetch organization name
           if (data.org_id && !pendingJoinRequest?.orgName) {
@@ -548,6 +550,20 @@ export function PendingApprovalStep() {
                 </p>
                 <p className="font-medium text-white">{orgName}</p>
               </div>
+
+              {submittedAt && (
+                <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide mb-1 text-gray-400">
+                    Submitted
+                  </p>
+                  <p className="font-medium text-white">
+                    {new Date(submittedAt).toLocaleDateString(undefined, {
+                      year: 'numeric', month: 'long', day: 'numeric',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              )}
 
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4">
                 <p className="text-xs font-medium uppercase tracking-wide mb-1 text-gray-400">

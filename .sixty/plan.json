@@ -79,9 +79,15 @@
       "priority": 1,
       "description": "Fix critical bug: html_template → html_body in line 247",
       "estimatedMinutes": 5,
-      "files": ["supabase/functions/waitlist-welcome-email/index.ts"],
-      "blocks": ["EMAIL-004"],
-      "parallelWith": ["EMAIL-002"]
+      "files": [
+        "supabase/functions/waitlist-welcome-email/index.ts"
+      ],
+      "blocks": [
+        "EMAIL-004"
+      ],
+      "parallelWith": [
+        "EMAIL-002"
+      ]
     },
     {
       "id": "EMAIL-002",
@@ -92,9 +98,15 @@
       "priority": 1,
       "description": "Add EDGE_FUNCTION_SECRET verification before line 164",
       "estimatedMinutes": 10,
-      "files": ["supabase/functions/waitlist-welcome-email/index.ts"],
-      "blocks": ["EMAIL-004"],
-      "parallelWith": ["EMAIL-001"]
+      "files": [
+        "supabase/functions/waitlist-welcome-email/index.ts"
+      ],
+      "blocks": [
+        "EMAIL-004"
+      ],
+      "parallelWith": [
+        "EMAIL-001"
+      ]
     },
     {
       "id": "EMAIL-003",
@@ -105,8 +117,12 @@
       "priority": 2,
       "description": "Remove inline implementation, use _shared/ses.ts instead",
       "estimatedMinutes": 20,
-      "files": ["supabase/functions/waitlist-welcome-email/index.ts"],
-      "blocks": ["EMAIL-004"]
+      "files": [
+        "supabase/functions/waitlist-welcome-email/index.ts"
+      ],
+      "blocks": [
+        "EMAIL-004"
+      ]
     },
     {
       "id": "EMAIL-004",
@@ -117,8 +133,12 @@
       "priority": 2,
       "description": "Deprecate and delete send-waitlist-welcome, update all callers",
       "estimatedMinutes": 15,
-      "files": ["supabase/functions/send-waitlist-welcome/"],
-      "blocks": ["EMAIL-005"]
+      "files": [
+        "supabase/functions/send-waitlist-welcome/"
+      ],
+      "blocks": [
+        "EMAIL-005"
+      ]
     },
     {
       "id": "EMAIL-005",
@@ -129,8 +149,13 @@
       "priority": 2,
       "description": "Use EDGE_FUNCTION_SECRET pattern everywhere",
       "estimatedMinutes": 25,
-      "files": ["supabase/functions/encharge-send-email/index.ts", "supabase/functions/send-removal-email/index.ts"],
-      "blocks": ["EMAIL-006"]
+      "files": [
+        "supabase/functions/encharge-send-email/index.ts",
+        "supabase/functions/send-removal-email/index.ts"
+      ],
+      "blocks": [
+        "EMAIL-006"
+      ]
     },
     {
       "id": "EMAIL-006",
@@ -141,8 +166,12 @@
       "priority": 2,
       "description": "Use consistent names: recipient_name, action_url, organization_name, etc.",
       "estimatedMinutes": 20,
-      "files": ["supabase/functions/encharge-send-email/index.ts"],
-      "blocks": ["EMAIL-007"]
+      "files": [
+        "supabase/functions/encharge-send-email/index.ts"
+      ],
+      "blocks": [
+        "EMAIL-007"
+      ]
     },
     {
       "id": "EMAIL-007",
@@ -153,8 +182,12 @@
       "priority": 2,
       "description": "All functions log to email_logs table consistently",
       "estimatedMinutes": 15,
-      "files": ["supabase/functions/encharge-send-email/index.ts"],
-      "blocks": ["EMAIL-008"]
+      "files": [
+        "supabase/functions/encharge-send-email/index.ts"
+      ],
+      "blocks": [
+        "EMAIL-008"
+      ]
     },
     {
       "id": "EMAIL-008",
@@ -165,7 +198,9 @@
       "priority": 1,
       "description": "Test invitations, waitlist_welcome, and waitlist_invite with AWS SES",
       "estimatedMinutes": 20,
-      "files": ["test/email-integration.test.ts"]
+      "files": [
+        "test/email-integration.test.ts"
+      ]
     },
     {
       "id": "ORG-001",
@@ -176,7 +211,9 @@
       "priority": 1,
       "description": "Add logo_url (text) and remove_logo (boolean) columns to organizations table",
       "estimatedMinutes": 15,
-      "files": ["supabase/migrations/20260203160000_add_org_logo_columns.sql"]
+      "files": [
+        "supabase/migrations/20260203160000_add_org_logo_columns.sql"
+      ]
     },
     {
       "id": "ORG-002",
@@ -187,7 +224,9 @@
       "priority": 1,
       "description": "Create dedicated org-logos bucket in Supabase Storage with appropriate RLS policies",
       "estimatedMinutes": 20,
-      "files": ["supabase/migrations/20260203160100_setup_org_logos_bucket_rls.sql"]
+      "files": [
+        "supabase/migrations/20260203160100_setup_org_logos_bucket_rls.sql"
+      ]
     },
     {
       "id": "ORG-003",
@@ -198,7 +237,9 @@
       "priority": 2,
       "description": "Create reusable OrgLogoUpload component adapted from AvatarUpload.tsx",
       "estimatedMinutes": 30,
-      "files": ["src/components/OrgLogoUpload.tsx"]
+      "files": [
+        "src/components/OrgLogoUpload.tsx"
+      ]
     },
     {
       "id": "ORG-004",
@@ -209,7 +250,9 @@
       "priority": 2,
       "description": "Integrate OrgLogoUpload into Settings tab gated behind permissions",
       "estimatedMinutes": 25,
-      "files": ["src/pages/settings/OrganizationManagementPage.tsx"]
+      "files": [
+        "src/pages/settings/OrganizationManagementPage.tsx"
+      ]
     },
     {
       "id": "ORG-005",
@@ -220,7 +263,10 @@
       "priority": 2,
       "description": "Ensure logo_url and remove_logo are fetched in organization queries",
       "estimatedMinutes": 15,
-      "files": ["src/lib/contexts/OrgContext.tsx", "src/lib/supabase/database.types.ts"]
+      "files": [
+        "src/lib/contexts/OrgContext.tsx",
+        "src/lib/supabase/database.types.ts"
+      ]
     },
     {
       "id": "ORG-006",
@@ -231,7 +277,9 @@
       "priority": 3,
       "description": "Display organization logo in AppLayout header organization switcher",
       "estimatedMinutes": 20,
-      "files": ["src/components/AppLayout.tsx"]
+      "files": [
+        "src/components/AppLayout.tsx"
+      ]
     },
     {
       "id": "ORG-007",
@@ -253,7 +301,9 @@
       "priority": 1,
       "description": "Query staging database to check invitations, verify token format, confirm base URL",
       "estimatedMinutes": 15,
-      "files": [".sixty/consult/magic-link-fix.md"]
+      "files": [
+        ".sixty/consult/magic-link-fix.md"
+      ]
     },
     {
       "id": "INVITE-002",
@@ -264,7 +314,9 @@
       "priority": 1,
       "description": "Create RLS policy allowing unauthenticated users to look up invitations by token",
       "estimatedMinutes": 20,
-      "files": ["supabase/migrations/20260203200000_allow_public_invitation_lookup.sql"]
+      "files": [
+        "supabase/migrations/20260203200000_allow_public_invitation_lookup.sql"
+      ]
     },
     {
       "id": "INVITE-003",
@@ -275,7 +327,9 @@
       "priority": 1,
       "description": "Update invitationService.ts to use VITE_PUBLIC_URL env var",
       "estimatedMinutes": 10,
-      "files": ["src/lib/services/invitationService.ts"]
+      "files": [
+        "src/lib/services/invitationService.ts"
+      ]
     },
     {
       "id": "INVITE-004",
@@ -286,7 +340,9 @@
       "priority": 2,
       "description": "Update getInvitationByToken() to use .maybeSingle()",
       "estimatedMinutes": 15,
-      "files": ["src/lib/services/invitationService.ts"]
+      "files": [
+        "src/lib/services/invitationService.ts"
+      ]
     },
     {
       "id": "INVITE-005",
@@ -297,7 +353,9 @@
       "priority": 1,
       "description": "Comprehensive testing of invitation creation, email sending, magic link acceptance",
       "estimatedMinutes": 30,
-      "files": ["test/invitation-magic-link.test.ts"]
+      "files": [
+        "test/invitation-magic-link.test.ts"
+      ]
     },
     {
       "id": "AUTH-001",
@@ -308,8 +366,13 @@
       "priority": 1,
       "description": "Document authentication patterns in all 11 email functions, identify inconsistencies",
       "estimatedMinutes": 20,
-      "files": [".sixty/consult/email-auth-audit.md"],
-      "blocks": ["AUTH-002", "AUTH-003"]
+      "files": [
+        ".sixty/consult/email-auth-audit.md"
+      ],
+      "blocks": [
+        "AUTH-002",
+        "AUTH-003"
+      ]
     },
     {
       "id": "AUTH-002",
@@ -320,8 +383,14 @@
       "priority": 1,
       "description": "Create consistent, reusable verifySecret function to eliminate duplication",
       "estimatedMinutes": 25,
-      "files": ["supabase/functions/_shared/edgeAuth.ts"],
-      "blocks": ["AUTH-004", "AUTH-005", "AUTH-006"]
+      "files": [
+        "supabase/functions/_shared/edgeAuth.ts"
+      ],
+      "blocks": [
+        "AUTH-004",
+        "AUTH-005",
+        "AUTH-006"
+      ]
     },
     {
       "id": "AUTH-003",
@@ -332,8 +401,15 @@
       "priority": 1,
       "description": "Fix 4 client services that call edge functions without authentication headers",
       "estimatedMinutes": 30,
-      "files": ["src/lib/services/waitlistAdminService.ts", "src/lib/services/enchargeEmailService.ts", "src/lib/services/emailInviteService.ts", "src/lib/services/testEmailService.ts"],
-      "blocks": ["AUTH-007"]
+      "files": [
+        "src/lib/services/waitlistAdminService.ts",
+        "src/lib/services/enchargeEmailService.ts",
+        "src/lib/services/emailInviteService.ts",
+        "src/lib/services/testEmailService.ts"
+      ],
+      "blocks": [
+        "AUTH-007"
+      ]
     },
     {
       "id": "AUTH-004",
@@ -344,8 +420,12 @@
       "priority": 1,
       "description": "Replace custom verifySecret with shared utility function",
       "estimatedMinutes": 15,
-      "files": ["supabase/functions/send-organization-invitation/index.ts"],
-      "blocks": ["AUTH-008"]
+      "files": [
+        "supabase/functions/send-organization-invitation/index.ts"
+      ],
+      "blocks": [
+        "AUTH-008"
+      ]
     },
     {
       "id": "AUTH-005",
@@ -356,8 +436,12 @@
       "priority": 1,
       "description": "Replace custom verifySecret with shared utility, remove service role key fallback",
       "estimatedMinutes": 15,
-      "files": ["supabase/functions/send-removal-email/index.ts"],
-      "blocks": ["AUTH-008"]
+      "files": [
+        "supabase/functions/send-removal-email/index.ts"
+      ],
+      "blocks": [
+        "AUTH-008"
+      ]
     },
     {
       "id": "AUTH-006",
@@ -368,8 +452,18 @@
       "priority": 1,
       "description": "Standardize auth in 7 remaining email edge functions",
       "estimatedMinutes": 35,
-      "files": ["supabase/functions/waitlist-welcome-email/index.ts", "supabase/functions/org-approval-email/index.ts", "supabase/functions/fathom-connected-email/index.ts", "supabase/functions/first-meeting-synced-email/index.ts", "supabase/functions/subscription-confirmed-email/index.ts", "supabase/functions/meeting-limit-warning-email/index.ts", "supabase/functions/permission-to-close-email/index.ts"],
-      "blocks": ["AUTH-008"]
+      "files": [
+        "supabase/functions/waitlist-welcome-email/index.ts",
+        "supabase/functions/org-approval-email/index.ts",
+        "supabase/functions/fathom-connected-email/index.ts",
+        "supabase/functions/first-meeting-synced-email/index.ts",
+        "supabase/functions/subscription-confirmed-email/index.ts",
+        "supabase/functions/meeting-limit-warning-email/index.ts",
+        "supabase/functions/permission-to-close-email/index.ts"
+      ],
+      "blocks": [
+        "AUTH-008"
+      ]
     },
     {
       "id": "AUTH-007",
@@ -380,8 +474,12 @@
       "priority": 2,
       "description": "Remove service role key fallback from encharge-send-email dispatcher",
       "estimatedMinutes": 20,
-      "files": ["supabase/functions/encharge-send-email/index.ts"],
-      "blocks": ["AUTH-009"]
+      "files": [
+        "supabase/functions/encharge-send-email/index.ts"
+      ],
+      "blocks": [
+        "AUTH-009"
+      ]
     },
     {
       "id": "AUTH-008",
@@ -392,7 +490,9 @@
       "priority": 1,
       "description": "Ensure all email functions pass EDGE_FUNCTION_SECRET when calling dispatcher",
       "estimatedMinutes": 20,
-      "blocks": ["AUTH-009"]
+      "blocks": [
+        "AUTH-009"
+      ]
     },
     {
       "id": "AUTH-009",
@@ -403,8 +503,12 @@
       "priority": 2,
       "description": "Fix dev mode fallback in verifySecret, add detailed auth logging",
       "estimatedMinutes": 15,
-      "files": ["supabase/functions/_shared/edgeAuth.ts"],
-      "blocks": ["AUTH-010"]
+      "files": [
+        "supabase/functions/_shared/edgeAuth.ts"
+      ],
+      "blocks": [
+        "AUTH-010"
+      ]
     },
     {
       "id": "AUTH-010",
@@ -415,7 +519,9 @@
       "priority": 1,
       "description": "Comprehensive test of all 11 email functions with standardized authentication",
       "estimatedMinutes": 45,
-      "files": ["test/email-auth-integration.test.ts"]
+      "files": [
+        "test/email-auth-integration.test.ts"
+      ]
     },
     {
       "id": "SIGNUP-001",
@@ -427,8 +533,12 @@
       "completedAt": "2026-02-03T23:15:00Z",
       "description": "Add explicit profile update after signup in InviteSignup.tsx",
       "estimatedMinutes": 15,
-      "files": ["src/pages/auth/InviteSignup.tsx"],
-      "blocks": ["SIGNUP-004"]
+      "files": [
+        "src/pages/auth/InviteSignup.tsx"
+      ],
+      "blocks": [
+        "SIGNUP-004"
+      ]
     },
     {
       "id": "SIGNUP-002",
@@ -440,7 +550,9 @@
       "completedAt": "2026-02-03T23:15:00Z",
       "description": "Confirm auto_create_org_for_new_user trigger is removed",
       "estimatedMinutes": 10,
-      "blocks": ["SIGNUP-003"]
+      "blocks": [
+        "SIGNUP-003"
+      ]
     },
     {
       "id": "SIGNUP-003",
@@ -452,8 +564,12 @@
       "completedAt": "2026-02-03T23:20:00Z",
       "description": "Detect and remove auto-created organizations from personal email domains",
       "estimatedMinutes": 25,
-      "files": ["supabase/migrations/new_fix_complete_invite_signup_cleanup.sql"],
-      "blocks": ["SIGNUP-004"]
+      "files": [
+        "supabase/migrations/new_fix_complete_invite_signup_cleanup.sql"
+      ],
+      "blocks": [
+        "SIGNUP-004"
+      ]
     },
     {
       "id": "SIGNUP-004",
@@ -465,8 +581,13 @@
       "completedAt": "2026-02-03T23:15:00Z",
       "description": "Explicitly set active organization in orgStore to the invited org",
       "estimatedMinutes": 10,
-      "files": ["src/pages/auth/InviteSignup.tsx", "src/lib/stores/orgStore.ts"],
-      "blocks": ["SIGNUP-005"]
+      "files": [
+        "src/pages/auth/InviteSignup.tsx",
+        "src/lib/stores/orgStore.ts"
+      ],
+      "blocks": [
+        "SIGNUP-005"
+      ]
     },
     {
       "id": "SIGNUP-005",
@@ -490,11 +611,21 @@
       "estimatedMinutes": 30,
       "dependencies": {
         "stories": [],
-        "files": ["src/lib/stores/onboardingV2Store.ts"],
-        "schema": ["organizations", "organization_memberships"]
+        "files": [
+          "src/lib/stores/onboardingV2Store.ts"
+        ],
+        "schema": [
+          "organizations",
+          "organization_memberships"
+        ]
       },
-      "blocks": ["OB-004", "OB-009"],
-      "parallelWith": ["OB-002"],
+      "blocks": [
+        "OB-004",
+        "OB-009"
+      ],
+      "parallelWith": [
+        "OB-002"
+      ],
       "acceptance": [
         "Business email user with domain matching existing org is auto-joined to that org",
         "Business email user with domain matching multiple orgs sees organization_selection step",
@@ -519,11 +650,19 @@
       "estimatedMinutes": 15,
       "dependencies": {
         "stories": [],
-        "files": ["src/pages/auth/PendingApprovalPage.tsx"],
-        "schema": ["user_onboarding_progress"]
+        "files": [
+          "src/pages/auth/PendingApprovalPage.tsx"
+        ],
+        "schema": [
+          "user_onboarding_progress"
+        ]
       },
-      "blocks": ["OB-009"],
-      "parallelWith": ["OB-001"],
+      "blocks": [
+        "OB-009"
+      ],
+      "parallelWith": [
+        "OB-001"
+      ],
       "acceptance": [
         "After approval detected, user_onboarding_progress is upserted with onboarding_step='complete'",
         "User is not redirected back to /onboarding after approval",
@@ -547,11 +686,20 @@
       "estimatedMinutes": 10,
       "dependencies": {
         "stories": [],
-        "files": ["src/lib/services/waitlistAdminService.ts"],
-        "schema": ["meetings_waitlist"]
+        "files": [
+          "src/lib/services/waitlistAdminService.ts"
+        ],
+        "schema": [
+          "meetings_waitlist"
+        ]
       },
-      "blocks": ["OB-009"],
-      "parallelWith": ["OB-004", "OB-005"],
+      "blocks": [
+        "OB-009"
+      ],
+      "parallelWith": [
+        "OB-004",
+        "OB-005"
+      ],
       "acceptance": [
         "grantAccess select query includes company_name column",
         "grantAccess line 134 uses entry.company_name instead of entry.company",
@@ -574,12 +722,20 @@
       "description": "HIGH (Bug 6): submitWebsite() at line 526 only takes the top fuzzy match (fuzzyMatches[0]) when score > 0.7 and auto-creates a join request. Per requirements, if multiple orgs match a domain with score > 0.7, the user should see a list to choose from. Fix: When fuzzyMatches has 2+ results with score > 0.7, set currentStep='organization_selection' with those matches instead of auto-joining the first one.",
       "estimatedMinutes": 15,
       "dependencies": {
-        "stories": ["OB-001"],
-        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "stories": [
+          "OB-001"
+        ],
+        "files": [
+          "src/lib/stores/onboardingV2Store.ts"
+        ],
         "schema": []
       },
-      "blocks": ["OB-009"],
-      "parallelWith": ["OB-005"],
+      "blocks": [
+        "OB-009"
+      ],
+      "parallelWith": [
+        "OB-005"
+      ],
       "acceptance": [
         "When fuzzy match returns 1 result with score > 0.7: auto-join (existing behavior)",
         "When fuzzy match returns 2+ results with score > 0.7: show organization_selection step",
@@ -603,11 +759,17 @@
       "estimatedMinutes": 10,
       "dependencies": {
         "stories": [],
-        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "files": [
+          "src/lib/stores/onboardingV2Store.ts"
+        ],
         "schema": []
       },
-      "blocks": ["OB-009"],
-      "parallelWith": ["OB-004"],
+      "blocks": [
+        "OB-009"
+      ],
+      "parallelWith": [
+        "OB-004"
+      ],
       "acceptance": [
         "createOrganizationFromManualData returns null when routing to organization_selection",
         "submitManualEnrichment does not set organizationId when return value is null",
@@ -630,11 +792,19 @@
       "estimatedMinutes": 10,
       "dependencies": {
         "stories": [],
-        "files": ["src/pages/auth/RequestRejectedPage.tsx"],
-        "schema": ["organization_join_requests"]
+        "files": [
+          "src/pages/auth/RequestRejectedPage.tsx"
+        ],
+        "schema": [
+          "organization_join_requests"
+        ]
       },
-      "blocks": ["OB-009"],
-      "parallelWith": ["OB-003"],
+      "blocks": [
+        "OB-009"
+      ],
+      "parallelWith": [
+        "OB-003"
+      ],
       "acceptance": [
         "Query uses org_id instead of organization_id",
         "FK join uses organizations(name) syntax",
@@ -658,11 +828,17 @@
       "estimatedMinutes": 5,
       "dependencies": {
         "stories": [],
-        "files": ["src/lib/services/waitlistAdminService.ts"],
+        "files": [
+          "src/lib/services/waitlistAdminService.ts"
+        ],
         "schema": []
       },
-      "blocks": ["OB-009"],
-      "parallelWith": ["OB-008"],
+      "blocks": [
+        "OB-009"
+      ],
+      "parallelWith": [
+        "OB-008"
+      ],
       "acceptance": [
         "bulkGrantAccess uses template_type 'waitlist_invite' instead of 'waitlist_welcome'",
         "Both single and bulk grant send identical email templates",
@@ -689,8 +865,12 @@
         ],
         "schema": []
       },
-      "blocks": ["OB-009"],
-      "parallelWith": ["OB-007"],
+      "blocks": [
+        "OB-009"
+      ],
+      "parallelWith": [
+        "OB-007"
+      ],
       "acceptance": [
         "Enrichment loading step shows a subtle 'Start Over' link/button",
         "Enrichment result step shows a back/restart option",
@@ -716,7 +896,16 @@
       "description": "Test all onboarding paths: (1) Business email with existing org domain → auto-join, (2) Business email with new domain → enrichment flow, (3) Personal email → website input → existing org → join request → approval → dashboard, (4) Personal email → no website → manual enrichment → similar org → selection, (5) Join request denied → restart or create own org. Verify no redirect loops, correct org state, and complete onboarding marking.",
       "estimatedMinutes": 30,
       "dependencies": {
-        "stories": ["OB-001", "OB-002", "OB-003", "OB-004", "OB-005", "OB-006", "OB-007", "OB-008"],
+        "stories": [
+          "OB-001",
+          "OB-002",
+          "OB-003",
+          "OB-004",
+          "OB-005",
+          "OB-006",
+          "OB-007",
+          "OB-008"
+        ],
         "files": [],
         "schema": []
       },
@@ -736,8 +925,7 @@
       ],
       "files": [],
       "technicalNotes": "Test in staging. Create test orgs with known domains. Test with business email accounts and personal email accounts. Verify user_onboarding_progress is set to 'complete' after each successful path."
-    }
-    ,
+    },
     {
       "id": "LA-001",
       "feature": "launch-audit-fixes",
@@ -748,9 +936,16 @@
       "priority": 0,
       "description": "CRITICAL: InviteSignup.tsx only has a signup flow. If the invited email already has an account, signUp() fails with 'User already exists' and there's no sign-in fallback. ~20-30% of invited users blocked. Fix: After signup fails with 'User already exists', show a sign-in form instead. After successful sign-in, call completeInviteSignup() to add the user to the invited org.",
       "estimatedMinutes": 30,
-      "files": ["src/pages/auth/InviteSignup.tsx"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-002", "LA-003"],
+      "files": [
+        "src/pages/auth/InviteSignup.tsx"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-002",
+        "LA-003"
+      ],
       "acceptance": [
         "Existing user clicking invite link sees sign-in option (not just signup)",
         "After 'User already exists' error, UI switches to sign-in form",
@@ -770,9 +965,16 @@
       "priority": 0,
       "description": "CRITICAL: acceptInvitation() has a cleanup loop (lines 287-319) that deletes the user's membership from every organization except the newly joined one. This violates the multi-tenant model. If Alice owns Company-A and accepts an invite to Company-B, she loses all access to Company-A. Fix: Remove the cleanup loop entirely.",
       "estimatedMinutes": 10,
-      "files": ["src/lib/services/invitationService.ts"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-001", "LA-003"],
+      "files": [
+        "src/lib/services/invitationService.ts"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-001",
+        "LA-003"
+      ],
       "acceptance": [
         "User accepting invitation retains membership in all existing orgs",
         "New org membership is added without removing others",
@@ -791,9 +993,16 @@
       "priority": 0,
       "description": "CRITICAL: RLS is DISABLED on organization_invitations table (migration 20260203210100). Any authenticated user can query ALL invitations across ALL organizations - emails, tokens, roles, org IDs. Fix: Re-enable RLS. Create policies: (1) users can see invitations sent to their email, (2) org admins/owners can see their org's invitations, (3) unauthenticated token lookup still works via the edge function.",
       "estimatedMinutes": 20,
-      "files": ["supabase/migrations/20260204100000_reenable_invitation_rls.sql"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-001", "LA-002"],
+      "files": [
+        "supabase/migrations/20260204100000_reenable_invitation_rls.sql"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-001",
+        "LA-002"
+      ],
       "acceptance": [
         "RLS is enabled on organization_invitations table",
         "Users can only see invitations sent to their own email",
@@ -814,9 +1023,16 @@
       "priority": 0,
       "description": "CRITICAL: sendInvitationEmail() returns false on failure, but createInvitation() ignores the return value and reports success. Admin thinks email was sent but user never receives it. Fix: Check email send result. If failed, return warning to admin. Add email_sent_at column to track delivery status.",
       "estimatedMinutes": 20,
-      "files": ["src/lib/services/invitationService.ts", "supabase/migrations/20260204100100_add_email_sent_tracking.sql"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-005"],
+      "files": [
+        "src/lib/services/invitationService.ts",
+        "supabase/migrations/20260204100100_add_email_sent_tracking.sql"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-005"
+      ],
       "acceptance": [
         "createInvitation() checks sendInvitationEmail() return value",
         "If email fails, admin sees warning toast: 'Invitation created but email failed. Use Resend.'",
@@ -837,9 +1053,15 @@
       "priority": 0,
       "description": "CRITICAL: complete_invite_signup RPC uses SELECT...INTO without FOR UPDATE locking. Two concurrent calls can both pass the 'not already a member' check and insert duplicate memberships. Fix: Add SELECT...FOR UPDATE on invitation row. Add UNIQUE(org_id, user_id) constraint to organization_memberships.",
       "estimatedMinutes": 20,
-      "files": ["supabase/migrations/20260204100200_fix_race_condition_memberships.sql"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-004"],
+      "files": [
+        "supabase/migrations/20260204100200_fix_race_condition_memberships.sql"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-004"
+      ],
       "acceptance": [
         "complete_invite_signup uses SELECT...FOR UPDATE on invitation row",
         "UNIQUE constraint on organization_memberships(org_id, user_id) exists",
@@ -859,9 +1081,16 @@
       "priority": 1,
       "description": "CRITICAL: localStorage persistence missing key fields (isEnrichmentLoading, pollingStartTime, pollingAttempts, enrichmentError). DB sync has 1-second debounce so refresh within 1 second reverts step. ~8-12% of signups lose progress. Fix: Persist full enrichment state to localStorage. Remove debounce on step changes. Add recovery UI.",
       "estimatedMinutes": 25,
-      "files": ["src/lib/stores/onboardingV2Store.ts", "src/pages/onboarding/v2/OnboardingV2.tsx"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-007"],
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/onboarding/v2/OnboardingV2.tsx"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-007"
+      ],
       "acceptance": [
         "isEnrichmentLoading, pollingStartTime, pollingAttempts persisted to localStorage",
         "Step changes sync to DB immediately (no debounce on step field)",
@@ -881,9 +1110,15 @@
       "priority": 1,
       "description": "CRITICAL: encharge-send-email uses direct string comparison for service role key validation, logs key metadata (length, prefix), and allows service role callers to send to any address. The key was already in git history. Fix: Remove service role key fallback from user-facing auth. Remove auth detail logging. Keep only EDGE_FUNCTION_SECRET for inter-function calls.",
       "estimatedMinutes": 20,
-      "files": ["supabase/functions/encharge-send-email/index.ts"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-006"],
+      "files": [
+        "supabase/functions/encharge-send-email/index.ts"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-006"
+      ],
       "acceptance": [
         "Service role key is NOT accepted as auth for external callers",
         "Only EDGE_FUNCTION_SECRET accepted for inter-function calls",
@@ -903,9 +1138,15 @@
       "priority": 1,
       "description": "HIGH: Organizations table has policy 'Allow public organization view' with USING(true), letting any authenticated user enumerate all organizations. Competitors could scrape entire customer list. Fix: Replace with member-only SELECT policy. Keep a limited public lookup for domain matching during onboarding.",
       "estimatedMinutes": 20,
-      "files": ["supabase/migrations/20260204100300_restrict_org_visibility.sql"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-009"],
+      "files": [
+        "supabase/migrations/20260204100300_restrict_org_visibility.sql"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-009"
+      ],
       "acceptance": [
         "Public SELECT policy on organizations is replaced",
         "Users can only see orgs they are members of",
@@ -925,9 +1166,15 @@
       "priority": 1,
       "description": "HIGH: createInvitation() has no authorization check. Any authenticated user can call it via browser console and invite anyone with any role including admin/owner. Fix: Add permission check that caller must be admin or owner of the target org before creating invitation.",
       "estimatedMinutes": 15,
-      "files": ["src/lib/services/invitationService.ts"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-008"],
+      "files": [
+        "src/lib/services/invitationService.ts"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-008"
+      ],
       "acceptance": [
         "createInvitation() checks caller's role in the target org",
         "Only admin and owner roles can create invitations",
@@ -947,9 +1194,16 @@
       "priority": 1,
       "description": "HIGH: When enrichment fails (website blocks scraping, WAF, robots.txt), user waits 5 minutes for timeout, then sees generic error with no way to retry or fall back. ~8-12% of websites fail enrichment. Fix: Add 'Retry' button and 'Enter details manually' fallback on enrichment failure.",
       "estimatedMinutes": 25,
-      "files": ["src/lib/stores/onboardingV2Store.ts", "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-011"],
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-011"
+      ],
       "acceptance": [
         "Enrichment failure shows two options: 'Retry' and 'Enter details manually'",
         "Retry re-triggers enrichment with same website URL",
@@ -969,9 +1223,15 @@
       "priority": 2,
       "description": "HIGH: Fuzzy org matching shows all results above 0.7 threshold without scores or ranking. A 95% match and 71% match look identical. Users can accidentally join wrong org. Fix: Display match confidence as percentage, sort by score descending, visually differentiate high vs low confidence.",
       "estimatedMinutes": 15,
-      "files": ["src/pages/onboarding/v2/OrganizationSelectionStep.tsx"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-010"],
+      "files": [
+        "src/pages/onboarding/v2/OrganizationSelectionStep.tsx"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-010"
+      ],
       "acceptance": [
         "Organization selection shows match percentage (e.g. '95% match')",
         "Results sorted by confidence score descending",
@@ -986,13 +1246,20 @@
       "feature": "launch-audit-fixes",
       "title": "H7: Add 'Skip All Skills' button to reduce onboarding friction",
       "type": "enhancement",
-      "status": "pending",
+      "status": "complete",
       "priority": 2,
       "description": "HIGH: Users must click through 5 separate skill screens with no 'Skip All' option. Minimum 5 clicks even to skip everything. 10-15% abandonment at this step. Fix: Add 'Skip All' button on the first skill screen that jumps directly to completion.",
       "estimatedMinutes": 15,
-      "files": ["src/pages/onboarding/v2/SkillsConfigStep.tsx", "src/lib/stores/onboardingV2Store.ts"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-013"],
+      "files": [
+        "src/pages/onboarding/v2/SkillsConfigStep.tsx",
+        "src/lib/stores/onboardingV2Store.ts"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-013"
+      ],
       "acceptance": [
         "'Skip All Skills' button visible on first skill config screen",
         "Clicking Skip All marks onboarding as complete",
@@ -1000,20 +1267,27 @@
         "Skills can be configured later from settings",
         "Button is subtle/secondary (doesn't compete with primary 'Next' action)"
       ],
-      "technicalNotes": "In SkillsConfigStep, add a secondary button 'Skip All & Continue' that calls onboardingV2Store's completeOnboarding() directly, bypassing remaining skill steps. In the store at lines 1265-1317, add a skipAllSkills() action that sets all skill defaults and calls completeOnboarding()."
+      "technicalNotes": "In SkillsConfigStep, add a secondary button 'Skip All & Continue' that calls onboardingV2Store's completeOnboarding() directly, bypassing remaining skill steps. In the store at lines 1265-1317, add a skipAllSkills() action that sets all skill defaults and calls completeOnboarding().",
+      "completedAt": "2026-02-04T10:16:21.810Z"
     },
     {
       "id": "LA-013",
       "feature": "launch-audit-fixes",
       "title": "H8: Add approval status display and withdrawal option",
       "type": "enhancement",
-      "status": "pending",
+      "status": "complete",
       "priority": 2,
       "description": "HIGH: Users pending approval see no indication of wait time, who can approve, or how to withdraw. No email notification on approval/rejection. Fix: Show approval status info and allow withdrawal of pending request.",
       "estimatedMinutes": 20,
-      "files": ["src/pages/onboarding/v2/PendingApprovalStep.tsx"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-012"],
+      "files": [
+        "src/pages/onboarding/v2/PendingApprovalStep.tsx"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-012"
+      ],
       "acceptance": [
         "Pending approval page shows 'Waiting for admin approval' with org name",
         "Shows when request was submitted (relative time)",
@@ -1021,20 +1295,27 @@
         "Withdrawal deletes the join request and resets onboarding to org selection",
         "Page auto-refreshes status every 30 seconds"
       ],
-      "technicalNotes": "In PendingApprovalStep.tsx, query organization_join_requests for the user's pending request to get created_at and org name. Add a withdraw button that deletes the join request row and calls onboardingV2Store reset to return to organization selection. Add setInterval for 30s polling of request status."
+      "technicalNotes": "In PendingApprovalStep.tsx, query organization_join_requests for the user's pending request to get created_at and org name. Add a withdraw button that deletes the join request row and calls onboardingV2Store reset to return to organization selection. Add setInterval for 30s polling of request status.",
+      "completedAt": "2026-02-04T10:16:21.810Z"
     },
     {
       "id": "LA-014",
       "feature": "launch-audit-fixes",
       "title": "H9: Invalidate old tokens when resending invitation",
       "type": "security",
-      "status": "pending",
+      "status": "complete",
       "priority": 2,
       "description": "HIGH: When admin resends invitation, new token is generated but old token remains valid for up to 7 days. If old email was intercepted, attacker can still use it. Fix: Invalidate old token when generating new one on resend.",
       "estimatedMinutes": 10,
-      "files": ["src/lib/services/invitationService.ts"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-011"],
+      "files": [
+        "src/lib/services/invitationService.ts"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-011"
+      ],
       "acceptance": [
         "Resending invitation generates new token AND invalidates the old one",
         "Old token returns 'expired' or 'invalid' when used",
@@ -1042,20 +1323,28 @@
         "Invitation record updated with new token (not a separate row)",
         "Admin sees confirmation that old link is invalidated"
       ],
-      "technicalNotes": "At invitationService.ts:164-200, when resending: update the existing invitation row with new token + new expires_at, rather than creating a new row. The old token no longer exists in the DB so lookups fail. If current implementation creates new rows, change to UPDATE with SET token=newToken, expires_at=newExpiry, updated_at=now()."
+      "technicalNotes": "At invitationService.ts:164-200, when resending: update the existing invitation row with new token + new expires_at, rather than creating a new row. The old token no longer exists in the DB so lookups fail. If current implementation creates new rows, change to UPDATE with SET token=newToken, expires_at=newExpiry, updated_at=now().",
+      "completedAt": "2026-02-04T10:16:21.810Z"
     },
     {
       "id": "LA-015",
       "feature": "launch-audit-fixes",
       "title": "H1+H6: Add rate limiting to token lookup + improve phantom org cleanup",
       "type": "security",
-      "status": "pending",
+      "status": "complete",
       "priority": 2,
       "description": "HIGH: (H1) No rate limiting on token lookups - attacker can attempt millions of tokens. (H6) Phantom org cleanup only matches personal email domains and 'My Organization' - renamed phantoms persist. Fix: Add basic rate limiting via IP tracking in edge function. Expand phantom cleanup to match by creation timestamp + sole member pattern.",
       "estimatedMinutes": 25,
-      "files": ["supabase/functions/get-invitation-by-token/index.ts", "supabase/migrations/20260204100400_improve_phantom_cleanup.sql"],
-      "blocks": ["LA-016"],
-      "parallelWith": ["LA-014"],
+      "files": [
+        "supabase/functions/get-invitation-by-token/index.ts",
+        "supabase/migrations/20260204100400_improve_phantom_cleanup.sql"
+      ],
+      "blocks": [
+        "LA-016"
+      ],
+      "parallelWith": [
+        "LA-014"
+      ],
       "acceptance": [
         "Token lookup rate limited to 10 attempts per IP per minute",
         "Rate limit exceeded returns 429 Too Many Requests",
@@ -1063,19 +1352,36 @@
         "Cleanup runs for both invite flow and normal signup flow",
         "Existing valid orgs are not affected by expanded cleanup"
       ],
-      "technicalNotes": "For rate limiting: use in-memory Map in edge function with IP -> {count, resetTime}. Reset every 60s. For phantom cleanup: in the complete_invite_signup RPC, expand the WHERE clause to also match orgs where created_at > (now() - interval '5 minutes') AND member count = 1 AND the sole member is the current user."
+      "technicalNotes": "For rate limiting: use in-memory Map in edge function with IP -> {count, resetTime}. Reset every 60s. For phantom cleanup: in the complete_invite_signup RPC, expand the WHERE clause to also match orgs where created_at > (now() - interval '5 minutes') AND member count = 1 AND the sole member is the current user.",
+      "completedAt": "2026-02-04T10:16:21.810Z"
     },
     {
       "id": "LA-016",
       "feature": "launch-audit-fixes",
       "title": "End-to-end test of all launch audit fixes",
       "type": "test",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "description": "Test all critical and high fixes from the launch audit. Cover: existing user invite acceptance, multi-org retention, RLS policies, email failure surfacing, race conditions, state persistence, edge function auth, org visibility, permission checks, enrichment recovery, skill skipping, approval UX, and token invalidation.",
       "estimatedMinutes": 30,
       "dependencies": {
-        "stories": ["LA-001", "LA-002", "LA-003", "LA-004", "LA-005", "LA-006", "LA-007", "LA-008", "LA-009", "LA-010", "LA-011", "LA-012", "LA-013", "LA-014", "LA-015"],
+        "stories": [
+          "LA-001",
+          "LA-002",
+          "LA-003",
+          "LA-004",
+          "LA-005",
+          "LA-006",
+          "LA-007",
+          "LA-008",
+          "LA-009",
+          "LA-010",
+          "LA-011",
+          "LA-012",
+          "LA-013",
+          "LA-014",
+          "LA-015"
+        ],
         "files": [],
         "schema": []
       },
@@ -1097,12 +1403,13 @@
         "Token lookup rate limited to 10/min per IP"
       ],
       "files": [],
-      "technicalNotes": "Test in staging environment. Create test users for: existing user, multi-org user, non-admin user. Test RLS with direct Supabase client queries. Test race condition with concurrent curl requests. Test state persistence by clearing tab during enrichment."
+      "technicalNotes": "Test in staging environment. Create test users for: existing user, multi-org user, non-admin user. Test RLS with direct Supabase client queries. Test race condition with concurrent curl requests. Test state persistence by clearing tab during enrichment.",
+      "completedAt": "2026-02-04T10:16:21.810Z"
     }
   ],
   "execution": {
     "totalStories": 60,
-    "completedStories": 25,
+    "completedStories": 43,
     "currentFeature": "launch-audit-fixes",
     "lastUpdated": "2026-02-04T00:00:00Z"
   }
