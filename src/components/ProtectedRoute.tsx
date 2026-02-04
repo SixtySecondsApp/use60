@@ -76,6 +76,8 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   const [isCheckingProfileStatus, setIsCheckingProfileStatus] = useState(true);
   const [hasOrgMembership, setHasOrgMembership] = useState<boolean | null>(null);
   const [isCheckingOrgMembership, setIsCheckingOrgMembership] = useState(true);
+  const [hasPendingRequest, setHasPendingRequest] = useState<boolean | null>(null);
+  const [isCheckingPendingRequest, setIsCheckingPendingRequest] = useState(true);
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isPublicRoute = publicRoutes.includes(location.pathname) || isPublicWaitlistRoute(location.pathname);
@@ -231,6 +233,63 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
     checkOrgMembership();
   }, [isAuthenticated, user, loading, isPublicRoute]);
 
+  // Check if user has a pending join or rejoin request
+  // This is important for users waiting for approval after requesting to join or rejoin
+  useEffect(() => {
+    if (isPublicRoute || !isAuthenticated || !user) {
+      setIsCheckingPendingRequest(false);
+      return;
+    }
+
+    if (loading) {
+      return;
+    }
+
+    const checkPendingRequest = async () => {
+      try {
+        // Check organization_join_requests
+        const { data: joinRequest } = await supabase
+          .from('organization_join_requests')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (joinRequest) {
+          console.log('[ProtectedRoute] Found pending join request');
+          setHasPendingRequest(true);
+          setIsCheckingPendingRequest(false);
+          return;
+        }
+
+        // Check rejoin_requests
+        const { data: rejoinRequest } = await supabase
+          .from('rejoin_requests')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (rejoinRequest) {
+          console.log('[ProtectedRoute] Found pending rejoin request');
+          setHasPendingRequest(true);
+          setIsCheckingPendingRequest(false);
+          return;
+        }
+
+        console.log('[ProtectedRoute] No pending join/rejoin requests found');
+        setHasPendingRequest(false);
+      } catch (err) {
+        console.error('[ProtectedRoute] Error checking pending requests:', err);
+        setHasPendingRequest(false);
+      } finally {
+        setIsCheckingPendingRequest(false);
+      }
+    };
+
+    checkPendingRequest();
+  }, [isAuthenticated, user, loading, isPublicRoute]);
+
   useEffect(() => {
     // Clean up timeout on unmount
     return () => {
@@ -241,8 +300,8 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   }, []);
 
   useEffect(() => {
-    // Don't redirect while loading auth, onboarding status, email verification, profile status, or org membership
-    if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership) return;
+    // Don't redirect while loading auth, onboarding status, email verification, profile status, org membership, or pending requests
+    if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest) return;
 
     // Check profile status for join request approval flow
     // CRITICAL: Check memberships BEFORE checking profile_status
@@ -274,11 +333,26 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
     // This preserves the current page on refresh
     const isProtectedRoute = !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute;
     if (isAuthenticated && emailVerified && isProtectedRoute) {
-      // CRITICAL: If user has NO organization membership, force onboarding
-      // This ensures all users are assigned to an organization before accessing dashboard
-      // Exception: Allow org membership check to happen even if they've been invited
+      // CRITICAL: If user has NO organization membership, check for pending requests first
+      // This ensures users waiting for approval stay on the pending page instead of being sent to onboarding
       if (hasOrgMembership === false && !isOnboardingExempt) {
+        // Check if user has a pending join or rejoin request
+        if (hasPendingRequest === true) {
+          console.log('[ProtectedRoute] User has no active org membership but has pending request, redirecting to pending approval');
+          navigate('/auth/pending-approval', { replace: true });
+          return;
+        }
+
+        // No pending request - send to onboarding
+        console.log('[ProtectedRoute] User has no active org membership and no pending request, redirecting to onboarding');
         navigate('/onboarding', { replace: true });
+        return;
+      }
+
+      // If org membership check is still in progress AND this is a dashboard access attempt,
+      // show loading state instead of allowing access
+      if (isCheckingOrgMembership && (location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/'))) {
+        // Block access to dashboard while checking membership
         return;
       }
 
@@ -341,10 +415,10 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       });
       return;
     }
-  }, [isAuthenticated, loading, onboardingLoading, isCheckingEmail, isCheckingProfileStatus, isCheckingOrgMembership, profileStatus, hasOrgMembership, emailVerified, needsOnboarding, isPublicRoute, isVerifyEmailRoute, isPasswordRecovery, hasRecoveryTokens, isDevModeBypass, isAuthRequiredRoute, isOnboardingExempt, navigate, redirectTo, location, isRedirecting, user?.email]);
+  }, [isAuthenticated, loading, onboardingLoading, isCheckingEmail, isCheckingProfileStatus, isCheckingOrgMembership, isCheckingPendingRequest, profileStatus, hasOrgMembership, hasPendingRequest, emailVerified, needsOnboarding, isPublicRoute, isVerifyEmailRoute, isPasswordRecovery, hasRecoveryTokens, isDevModeBypass, isAuthRequiredRoute, isOnboardingExempt, navigate, redirectTo, location, isRedirecting, user?.email]);
 
-  // Show loading spinner while checking authentication, onboarding status, email verification, profile status, org membership, or during redirect delay
-  if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isRedirecting) {
+  // Show loading spinner while checking authentication, onboarding status, email verification, profile status, org membership, pending requests, or during redirect delay
+  if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isRedirecting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(74,74,117,0.25),transparent)] pointer-events-none" />
