@@ -160,7 +160,8 @@ export type CopilotResponseType =
   | 'daily_focus_plan'
   | 'followup_zero_inbox'
   | 'deal_slippage_guardrails'
-  | 'daily_brief';
+  | 'daily_brief'
+  | 'dynamic_table';
 
 export interface CopilotResponse {
   type: CopilotResponseType;

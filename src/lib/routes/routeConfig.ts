@@ -31,6 +31,7 @@ import {
   HeartPulse,
   Bot,
   Inbox,
+  Table2,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -230,6 +231,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: true,
     navSection: 'tools',
     order: 2,
+    displayGroup: 2,
+    badge: 'New',
+  },
+  {
+    path: '/dynamic-tables',
+    access: 'internal',
+    label: 'Dynamic Tables',
+    icon: Table2,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3,
     displayGroup: 2,
     badge: 'New',
   },

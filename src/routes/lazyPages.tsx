@@ -135,6 +135,8 @@ export const Workflows = lazyWithRetry(() => import('@/pages/Workflows'));
 export const FreepikFlow = lazyWithRetry(() => import('@/components/workflows/FreepikFlow'));
 export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m => ({ default: m.Copilot })));
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
+export const DynamicTablesPage = lazyWithRetry(() => import('@/pages/DynamicTablesPage'));
+export const DynamicTableDetailPage = lazyWithRetry(() => import('@/pages/DynamicTableDetailPage'));
 
 // ============================================================
 // SETTINGS PAGES
