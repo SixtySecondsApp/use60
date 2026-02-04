@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabase/clientV2';
 import { logger } from '@/lib/utils/logger';
 
 /**
