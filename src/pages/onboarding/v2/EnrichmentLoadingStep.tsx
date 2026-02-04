@@ -307,6 +307,16 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
             )}
           </motion.div>
         )}
+
+        {/* Start Over Link */}
+        <div className="mt-8 pt-6 border-t border-gray-800/50">
+          <button
+            onClick={() => useOnboardingV2Store.getState().reset()}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+          >
+            Start Over
+          </button>
+        </div>
       </div>
     </motion.div>
   );

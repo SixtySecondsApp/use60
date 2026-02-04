@@ -127,6 +127,16 @@ export function EnrichmentResultStep() {
             Review AI Suggestions
             <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
           </button>
+
+          {/* Start Over Link */}
+          <div className="mt-4 pt-4 border-t border-gray-800/50 text-center">
+            <button
+              onClick={() => useOnboardingV2Store.getState().reset()}
+              className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+            >
+              Start Over
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>

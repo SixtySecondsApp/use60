@@ -321,7 +321,7 @@ export async function bulkGrantAccess(
 
             return supabase.functions.invoke('encharge-send-email', {
               body: {
-                template_type: 'waitlist_welcome',
+                template_type: 'waitlist_invite',
                 to_email: entry.email,
                 to_name: firstName,
                 variables: {
@@ -329,6 +329,7 @@ export async function bulkGrantAccess(
                   action_url: link.magicLink,
                   user_email: entry.email,
                   company_name: entry.company_name || '',
+                  expiry_time: '7 days',
                 },
               },
               headers: edgeFunctionSecret

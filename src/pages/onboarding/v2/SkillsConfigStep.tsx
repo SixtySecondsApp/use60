@@ -717,6 +717,16 @@ export function SkillsConfigStep() {
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Start Over Link */}
+        <div className="px-4 sm:px-6 py-3 border-t border-gray-800/50 text-center">
+          <button
+            onClick={() => useOnboardingV2Store.getState().reset()}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+          >
+            Start Over
+          </button>
+        </div>
       </div>
     </motion.div>
   );
