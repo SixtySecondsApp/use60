@@ -275,7 +275,10 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
       // Only run this check in early stages of onboarding (before pending approval)
       // Skip if user is past organization selection or in pending approval
       const stepsToSkip = ['pending_approval', 'enrichment_loading', 'enrichment_result', 'skills_config', 'complete', 'organization_selection'];
-      if (stepsToSkip.includes(currentStep)) return;
+      if (stepsToSkip.includes(currentStep)) {
+        console.log('[OnboardingV2] Skipping business email org check for step:', currentStep);
+        return;
+      }
 
       // Only run this check once when component mounts with business email
       if (!userEmail || !domain) return;
@@ -283,12 +286,18 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
       const { setStep } = useOnboardingV2Store.getState();
 
       try {
+        console.log('[OnboardingV2] Checking for existing org with email domain:', domain);
         // Call RPC to check if org exists for this email domain
-        const { data: existingOrg } = await supabase
+        const { data: existingOrg, error } = await supabase
           .rpc('check_existing_org_by_email_domain', {
             p_email: userEmail,
           })
           .maybeSingle();
+
+        if (error) {
+          console.warn('[OnboardingV2] RPC error checking org (may not exist yet):', error);
+          return;
+        }
 
         if (existingOrg && existingOrg.should_request_join) {
           console.log('[OnboardingV2] Found existing org for business email:', existingOrg.org_name);
@@ -307,8 +316,8 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
           });
         }
       } catch (error) {
-        console.error('[OnboardingV2] Error checking for existing org:', error);
-        // Continue to enrichment on error
+        console.error('[OnboardingV2] Exception checking for existing org:', error);
+        // Continue to enrichment on error - don't block
       }
     };
 
