@@ -33,6 +33,10 @@ export function persistOnboardingState(userId: string, state: Partial<Onboarding
       enrichment: state.enrichment,
       skillConfigs: state.skillConfigs,
       organizationId: state.organizationId,
+      isEnrichmentLoading: state.isEnrichmentLoading,
+      enrichmentError: state.enrichmentError,
+      pollingStartTime: state.pollingStartTime,
+      pollingAttempts: state.pollingAttempts,
       savedAt: new Date().toISOString(),
     };
     localStorage.setItem(key, JSON.stringify(persistData));

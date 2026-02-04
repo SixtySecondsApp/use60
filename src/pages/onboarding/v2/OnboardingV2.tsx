@@ -117,7 +117,6 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
             }
 
             // Restore state to Zustand store
-            if (parsed.currentStep) setStep(parsed.currentStep);
             if (parsed.domain) setDomain(parsed.domain);
             if (parsed.organizationId) setOrganizationId(parsed.organizationId);
             if (parsed.websiteUrl) useOnboardingV2Store.setState({ websiteUrl: parsed.websiteUrl });
@@ -125,7 +124,23 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
             if (parsed.enrichment) useOnboardingV2Store.setState({ enrichment: parsed.enrichment });
             if (parsed.skillConfigs) useOnboardingV2Store.setState({ skillConfigs: parsed.skillConfigs });
 
-            toast.info('Restored your progress');
+            // Restore enrichment loading state for session recovery
+            if (parsed.pollingStartTime) {
+              useOnboardingV2Store.setState({
+                pollingStartTime: parsed.pollingStartTime,
+                pollingAttempts: parsed.pollingAttempts || 0,
+              });
+            }
+
+            // If enrichment was in progress when interrupted, resume from enrichment_loading
+            // but don't restore isEnrichmentLoading directly (let the step trigger re-poll)
+            if (parsed.currentStep === 'enrichment_loading' && parsed.isEnrichmentLoading) {
+              setStep('enrichment_loading');
+              toast.info('Resuming enrichment from where you left off...');
+            } else if (parsed.currentStep) {
+              setStep(parsed.currentStep);
+              toast.info('Restored your progress');
+            }
           } catch (error) {
             console.error('[OnboardingV2] Failed to parse saved state:', error);
             // Clear invalid state

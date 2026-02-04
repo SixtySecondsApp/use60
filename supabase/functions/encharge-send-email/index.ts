@@ -404,73 +404,40 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Check authentication - allow service role key or user JWT
+  // Check authentication - EDGE_FUNCTION_SECRET for inter-function calls, or user JWT
   const authHeader = req.headers.get('Authorization');
-  const apikeyHeader = req.headers.get('apikey');
+  const EDGE_FUNCTION_SECRET = Deno.env.get('EDGE_FUNCTION_SECRET');
 
-  console.log('[encharge-send-email] Auth check:', {
-    hasAuthHeader: !!authHeader,
-    hasApiKeyHeader: !!apikeyHeader,
-    authHeaderPreview: authHeader ? authHeader.substring(0, 20) + '...' : null,
-    serviceRoleKeySet: !!SUPABASE_SERVICE_ROLE_KEY,
-    serviceRoleKeyLength: SUPABASE_SERVICE_ROLE_KEY?.length,
-  });
-
-  // Allow service role authentication (for service-to-service calls)
-  const isServiceRoleAuth = (() => {
-    if (!authHeader || !SUPABASE_SERVICE_ROLE_KEY) return false;
+  // Check for EDGE_FUNCTION_SECRET (inter-function calls from other edge functions)
+  const isEdgeFunctionAuth = (() => {
+    if (!authHeader || !EDGE_FUNCTION_SECRET) return false;
     const token = authHeader.replace(/^Bearer\s+/i, '');
-    return token === SUPABASE_SERVICE_ROLE_KEY;
+    return token === EDGE_FUNCTION_SECRET;
   })();
-  const isServiceRole = isServiceRoleAuth || (apikeyHeader === SUPABASE_SERVICE_ROLE_KEY);
 
-  console.log('[encharge-send-email] Service role check result:', { isServiceRole });
-
-  // If we have a service role key match, skip further auth checks
-  if (isServiceRole) {
-    console.log('[encharge-send-email] Authenticated as service role - proceeding');
+  if (isEdgeFunctionAuth) {
+    // Authenticated via EDGE_FUNCTION_SECRET - proceed
   } else if (authHeader) {
-    // If not service role, try to validate as user JWT
+    // Try to validate as user JWT (for client-side calls via supabase.functions.invoke)
     try {
       const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const token = authHeader.replace(/^Bearer\s+/i, '');
       const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
-      console.log('[encharge-send-email] JWT validation result:', {
-        error: error?.message,
-        hasUser: !!user,
-      });
       if (error || !user) {
         return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Unauthorized: invalid authentication',
-            details: {
-              message: error?.message || 'User not found',
-            }
-          }),
+          JSON.stringify({ success: false, error: 'Unauthorized: invalid authentication' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     } catch (authError) {
-      console.log('[encharge-send-email] Auth exception:', authError);
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Unauthorized: authentication failed',
-          details: {
-            message: authError instanceof Error ? authError.message : 'Unknown error'
-          }
-        }),
+        JSON.stringify({ success: false, error: 'Unauthorized: authentication failed' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
   } else {
-    // No auth headers provided
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Unauthorized: no authentication provided'
-      }),
+      JSON.stringify({ success: false, error: 'Unauthorized: no authentication provided' }),
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
