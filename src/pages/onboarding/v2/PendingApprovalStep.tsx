@@ -603,7 +603,7 @@ export function PendingApprovalStep() {
                 {!showApprovalSuccess && !isLoadingDashboard && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                       <p className="font-medium text-white">
                         Awaiting Admin Review
                       </p>
@@ -675,7 +675,7 @@ export function PendingApprovalStep() {
           {/* Support note */}
           <div className="text-center">
             <p className="text-sm text-gray-400">
-              Questions? Please contact your organization administrator or <a href="mailto:support@use60.com" className="text-amber-400 hover:text-amber-300 transition-colors">reach out to support</a>.
+              Questions? Please contact your organization administrator or <a href="mailto:support@use60.com" className="text-blue-400 hover:text-blue-300 transition-colors">reach out to support</a>.
             </p>
           </div>
         </div>
