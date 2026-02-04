@@ -66,21 +66,34 @@ export function RemovedUserStep({ orgName, orgId }: RemovedUserStepProps) {
     }
   };
 
-  const handleChooseDifferentOrg = () => {
+  const handleChooseDifferentOrg = async () => {
     // Clear redirect flag and go to org selection
     sessionStorage.removeItem('user_removed_redirect');
 
-    // Update profile to clear redirect flag
-    supabase
-      .from('profiles')
-      .update({ redirect_to_onboarding: false })
-      .eq('id', (async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        return user?.id;
-      })())
-      .then(() => {
-        navigate('/onboarding?step=organization_selection');
-      });
+    try {
+      // Get current user ID
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        throw new Error('User not found');
+      }
+
+      // Update profile to clear redirect flag
+      const { error } = await supabase
+        .from('profiles')
+        .update({ redirect_to_onboarding: false })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Error clearing redirect flag:', error);
+        // Continue anyway - user can still proceed to onboarding
+      }
+
+      // Navigate to organization selection
+      navigate('/onboarding?step=organization_selection');
+    } catch (error) {
+      console.error('Error in handleChooseDifferentOrg:', error);
+      toast.error('Failed to proceed. Please try again.');
+    }
   };
 
   if (requestSubmitted) {
@@ -149,6 +162,7 @@ export function RemovedUserStep({ orgName, orgId }: RemovedUserStepProps) {
 
             <Button
               onClick={handleChooseDifferentOrg}
+              disabled={isRequesting}
               variant="outline"
               className="w-full justify-between"
               size="lg"

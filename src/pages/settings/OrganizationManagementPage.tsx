@@ -636,10 +636,19 @@ export default function OrganizationManagementPage() {
 
     if (result.success) {
       setShowLeaveConfirmation(false);
-      toast.success('You have left the organization');
+      toast.success('You have left the organization. Redirecting...');
+
+      // Clear org context and switch to no organization
+      // This prevents trying to load data for an org user no longer has access to
+      if (switchOrg) {
+        switchOrg(''); // Clear active org
+      }
+
+      // Wait a bit longer to ensure redirect flag is set in database
       setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+        // Redirect to removed-user page to allow user to rejoin or choose different org
+        window.location.href = '/onboarding/removed-user';
+      }, 1500);
     } else {
       toast.error(result.error || 'Failed to leave organization');
       setIsLeavingTeam(false);
