@@ -16,11 +16,24 @@ export async function leaveOrganization(
   userId: string
 ): Promise<LeaveOrganizationResult> {
   try {
+    console.log('[leaveOrganization] Starting leave process:', { orgId, userId });
+
+    // Get current session to verify authentication
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      console.error('[leaveOrganization] No session - cannot proceed:', sessionError);
+      return await leaveOrganizationFallback(orgId, userId);
+    }
+
+    console.log('[leaveOrganization] Session valid, attempting RPC call');
+
     // First, try using RPC function which has SECURITY DEFINER to bypass RLS
     const { data, error: rpcError } = await supabase
       .rpc('user_leave_organization', {
         p_org_id: orgId,
       });
+
+    console.log('[leaveOrganization] RPC response:', { data, error: rpcError });
 
     // If RPC function doesn't exist (PGRST202), try fallback direct update
     if (rpcError && (rpcError.code === 'PGRST202' || rpcError.message?.includes('Could not find the function'))) {
@@ -29,45 +42,66 @@ export async function leaveOrganization(
     }
 
     if (rpcError) {
-      console.error('RPC error leaving organization:', rpcError);
-      return {
-        success: false,
-        error: rpcError.message || 'Failed to leave organization',
-      };
+      console.error('[leaveOrganization] RPC error:', rpcError);
+      // Still try fallback even on error - user might not have been authenticated or other transient issues
+      console.warn('[leaveOrganization] RPC failed, attempting fallback...');
+      return await leaveOrganizationFallback(orgId, userId);
     }
 
     if (!data) {
-      return {
-        success: false,
-        error: 'Unexpected error: no response from server',
-      };
+      console.warn('[leaveOrganization] No data returned from RPC, trying fallback');
+      return await leaveOrganizationFallback(orgId, userId);
     }
 
-    if (!data.success) {
-      console.warn('RPC returned failure:', data.error);
+    // RPC might return an array or an object - handle both cases
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (!result || !result.success) {
+      console.warn('[leaveOrganization] RPC returned failure:', result?.error);
       return {
         success: false,
-        error: data.error || 'Failed to leave organization',
+        error: result?.error || 'Failed to leave organization',
       };
     }
 
     console.log('[leaveOrganization] ✓ Successfully left organization via RPC:', {
-      orgId: data.orgId,
-      userId: data.userId,
-      removedAt: data.removedAt,
+      orgId: result.orgId,
+      userId: result.userId,
+      removedAt: result.removedAt,
     });
+
+    // Verify the database was actually updated
+    const { data: verification, error: verifyError } = await supabase
+      .from('organization_memberships')
+      .select('member_status')
+      .eq('org_id', result.orgId)
+      .eq('user_id', result.userId)
+      .maybeSingle();
+
+    if (verifyError || !verification) {
+      console.warn('[leaveOrganization] Could not verify membership update:', verifyError);
+    } else {
+      console.log('[leaveOrganization] Verified member_status:', verification.member_status);
+      if (verification.member_status !== 'removed') {
+        console.error('[leaveOrganization] CRITICAL: member_status is NOT removed! Actual:', verification.member_status);
+        // The RPC claimed success but didn't actually update - return error
+        return {
+          success: false,
+          error: 'Failed to leave organization: member status not updated',
+        };
+      }
+    }
 
     return {
       success: true,
-      orgId: data.orgId,
-      userId: data.userId,
+      orgId: result.orgId,
+      userId: result.userId,
     };
   } catch (error: any) {
-    console.error('Error leaving organization:', error);
-    return {
-      success: false,
-      error: error.message || 'An unexpected error occurred',
-    };
+    console.error('[leaveOrganization] Exception caught:', error);
+    // Try fallback on any exception
+    console.warn('[leaveOrganization] Exception occurred, attempting fallback...');
+    return await leaveOrganizationFallback(orgId, userId);
   }
 }
 
@@ -117,6 +151,7 @@ async function leaveOrganizationFallback(
     }
 
     // Perform soft delete: mark membership as removed
+    console.log('[leaveOrganizationFallback] Updating member_status to removed');
     const { error: updateError } = await supabase
       .from('organization_memberships')
       .update({
@@ -129,10 +164,36 @@ async function leaveOrganizationFallback(
       .eq('user_id', userId);
 
     if (updateError) {
-      console.error('Membership update error (fallback):', updateError);
+      console.error('[leaveOrganizationFallback] Membership update error:', updateError);
       return {
         success: false,
-        error: 'Failed to leave organization',
+        error: 'Failed to leave organization: ' + (updateError.message || 'database update failed'),
+      };
+    }
+
+    // Verify the update actually happened
+    console.log('[leaveOrganizationFallback] Verifying member_status update');
+    const { data: verification, error: verifyError } = await supabase
+      .from('organization_memberships')
+      .select('member_status, updated_at')
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (verifyError || !verification) {
+      console.error('[leaveOrganizationFallback] Could not verify update:', verifyError);
+      return {
+        success: false,
+        error: 'Failed to verify membership update',
+      };
+    }
+
+    console.log('[leaveOrganizationFallback] Verified update - member_status:', verification.member_status);
+    if (verification.member_status !== 'removed') {
+      console.error('[leaveOrganizationFallback] CRITICAL: member_status is NOT removed! Actual:', verification.member_status);
+      return {
+        success: false,
+        error: 'Failed to leave organization: member_status not updated to removed',
       };
     }
 
@@ -145,7 +206,7 @@ async function leaveOrganizationFallback(
         })
         .eq('id', userId);
     } catch (error) {
-      console.error('Failed to set redirect flag (fallback):', error);
+      console.error('[leaveOrganizationFallback] Failed to set redirect flag:', error);
       // Don't fail - membership is already updated
     }
 

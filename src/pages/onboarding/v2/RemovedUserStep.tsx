@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { AlertCircle, ArrowRight, Building, MailCheck, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
@@ -27,10 +28,12 @@ interface RemovedUserStepProps {
 export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: RemovedUserStepProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { reset } = useOnboardingV2Store();
   const [isRequesting, setIsRequesting] = useState(false);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
   const [orgName, setOrgName] = useState(propOrgName);
   const [orgId, setOrgId] = useState(propOrgId);
+  const [isUserRemoved, setIsUserRemoved] = useState(true); // True = removed by admin, False = user left
   const [isLoading, setIsLoading] = useState(!propOrgId); // Load org info if not provided
 
   // Fetch organization info if not provided as props
@@ -52,10 +55,10 @@ export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: Remo
           setOrgName(data.organizations?.name || 'the organization');
           logger.log('Loaded removed org info:', data.org_id);
         } else {
-          // Also check for recent removed memberships
+          // Also check for recent removed/left memberships
           const { data: recentRemoved } = await supabase
             .from('organization_memberships')
-            .select('org_id, organizations(name)')
+            .select('org_id, organizations(name), member_status, removed_by')
             .eq('user_id', user.id)
             .eq('member_status', 'removed')
             .order('removed_at', { ascending: false })
@@ -65,7 +68,9 @@ export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: Remo
           if (recentRemoved?.org_id) {
             setOrgId(recentRemoved.org_id);
             setOrgName(recentRemoved.organizations?.name || 'the organization');
-            logger.log('Loaded recent removed membership:', recentRemoved.org_id);
+            // Check if user left (removed_by = user_id) or was removed by admin (removed_by != user_id)
+            setIsUserRemoved(recentRemoved.removed_by !== user.id);
+            logger.log('Loaded recent membership:', recentRemoved.org_id, 'Removed by:', recentRemoved.removed_by, 'Current user:', user.id);
           }
         }
       } catch (error) {
@@ -117,30 +122,55 @@ export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: Remo
   };
 
   const handleChooseDifferentOrg = async () => {
-    // Clear redirect flag from sessionStorage
+    // Clear redirect flag and local state
     sessionStorage.removeItem('user_removed_redirect');
 
     try {
       console.log('[RemovedUserStep] User chose to select different organization');
 
-      // Attempt to clear redirect flag in database (non-blocking)
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.id) {
-          await supabase
-            .from('profiles')
-            .update({ redirect_to_onboarding: false })
-            .eq('id', user.id);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+
+      if (authUser?.id) {
+        // Clear local Zustand store to reset onboarding state
+        reset();
+
+        // Clear any localStorage onboarding state
+        localStorage.removeItem(`sixty_onboarding_${authUser.id}`);
+
+        // Reset onboarding progress to website_input so user can restart fresh
+        const { error: progressError } = await supabase
+          .from('user_onboarding_progress')
+          .upsert({
+            user_id: authUser.id,
+            onboarding_step: 'website_input',
+          }, {
+            onConflict: 'user_id',
+          });
+
+        if (progressError) {
+          console.warn('[RemovedUserStep] Error updating progress:', progressError);
         }
-      } catch (dbError) {
-        console.warn('Warning: Could not clear redirect flag in database:', dbError);
-        // Don't fail - will navigate anyway
+
+        // Also clear redirect flag
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ redirect_to_onboarding: false })
+          .eq('id', authUser.id);
+
+        if (profileError) {
+          console.warn('[RemovedUserStep] Error updating profile:', profileError);
+        }
+
+        console.log('[RemovedUserStep] Cleared store, localStorage, and reset database');
       }
 
-      // Navigate to organization selection using window.location for guaranteed redirect
-      // (bypasses React Router guards that might interfere)
-      console.log('[RemovedUserStep] Redirecting to onboarding organization selection');
-      window.location.href = '/onboarding?step=organization_selection';
+      // Small delay to ensure database writes complete before navigation
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Restart onboarding from the beginning, as if they're a new user
+      // This lets them choose a different organization through the normal flow
+      console.log('[RemovedUserStep] Redirecting to onboarding start');
+      window.location.href = '/onboarding?step=website_input';
     } catch (error) {
       console.error('Error in handleChooseDifferentOrg:', error);
       toast.error('Failed to proceed. Please try again.');
@@ -196,9 +226,13 @@ export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: Remo
           <div className="mx-auto mb-4 w-16 h-16 bg-orange-100 dark:bg-orange-900/20 rounded-full flex items-center justify-center">
             <AlertCircle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
           </div>
-          <CardTitle className="text-2xl">You Were Removed from {orgName || 'an Organization'}</CardTitle>
+          <CardTitle className="text-2xl">
+            {isUserRemoved ? 'You Were Removed from ' : 'You Left '}{orgName || 'an Organization'}
+          </CardTitle>
           <CardDescription className="mt-4">
-            An administrator has removed you from {orgName || 'the organization'}.
+            {isUserRemoved
+              ? `An administrator has removed you from ${orgName || 'the organization'}. You can request to rejoin or choose another organization.`
+              : `You left ${orgName || 'the organization'}. You can request to rejoin or choose another organization.`}
             Your account remains active, and you have several options to continue.
           </CardDescription>
         </CardHeader>
@@ -211,7 +245,12 @@ export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: Remo
               <li>Your account and profile are still active</li>
               <li>All data you created has been preserved</li>
               <li>You can view your past work, but cannot edit it</li>
-              <li>You can request to rejoin or choose a different organization</li>
+              {isUserRemoved ? (
+                <li>Request to rejoin {orgName} if you'd like to continue working with this team</li>
+              ) : (
+                <li>Request to rejoin {orgName} if you change your mind</li>
+              )}
+              <li>Choose a different organization to continue working</li>
             </ul>
           </div>
 
@@ -224,6 +263,7 @@ export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: Remo
               disabled={isRequesting || !orgId}
               className="w-full justify-between"
               size="lg"
+              title={!orgId ? 'Loading organization information...' : ''}
             >
               <span>Request to Rejoin {orgName || 'Organization'}</span>
               <ArrowRight className="w-4 h-4" />

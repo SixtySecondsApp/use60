@@ -384,8 +384,8 @@ export default function OrganizationManagementPage() {
           .eq('org_id', activeOrgId)
           .order('created_at', { ascending: true });
 
-        if (!errorWithOrgrem && dataWithOrgrem) {
-          memberships = dataWithOrgrem;
+        if (!errorWithOrgrem) {
+          memberships = dataWithOrgrem || [];
         } else if (errorWithOrgrem?.code === '42703') {
           const { data: basicData, error: basicError } = await supabase
             .from('organization_memberships')
