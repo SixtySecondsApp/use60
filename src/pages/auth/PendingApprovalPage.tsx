@@ -182,7 +182,7 @@ export default function PendingApprovalPage() {
               {
                 user_id: user.id,
                 onboarding_step: 'complete',
-                completed_at: new Date().toISOString(),
+                onboarding_completed_at: new Date().toISOString(),
               },
               { onConflict: 'user_id' }
             );
@@ -488,8 +488,7 @@ export default function PendingApprovalPage() {
             )}
             <Button
               onClick={handleLogout}
-              variant="outline"
-              className="w-full border-gray-600 text-gray-300 hover:bg-gray-800"
+              className="w-full bg-red-600 hover:bg-red-700 text-white !focus-visible:ring-0 !focus-visible:ring-offset-0"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Log Out

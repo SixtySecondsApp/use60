@@ -67,10 +67,9 @@ export function useApprovalDetection(
       let query = supabase
         .from('organization_memberships')
         .select('org_id, user_id, role, created_at')
-        .eq('user_id', userId);
-
-      // Filter by orgId (required to get exactly 1 row or 0)
-      query = query.eq('org_id', orgId);
+        .eq('user_id', userId)
+        .eq('org_id', orgId)
+        .eq('member_status', 'active'); // Only return active memberships, not removed ones
 
       const { data, error } = await query.maybeSingle();
 
