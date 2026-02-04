@@ -9,6 +9,8 @@ import {
   Check,
   X,
   RefreshCw,
+  Play,
+  RotateCcw,
 } from 'lucide-react';
 
 interface ColumnHeaderMenuProps {
@@ -22,6 +24,8 @@ interface ColumnHeaderMenuProps {
   onHide: () => void;
   onDelete: () => void;
   onRecalcFormula?: () => void;
+  onRunIntegration?: () => void;
+  onRetryFailed?: () => void;
   anchorRect?: DOMRect;
 }
 
@@ -36,6 +40,8 @@ export function ColumnHeaderMenu({
   onHide,
   onDelete,
   onRecalcFormula,
+  onRunIntegration,
+  onRetryFailed,
   anchorRect,
 }: ColumnHeaderMenuProps) {
   const [isRenaming, setIsRenaming] = useState(false);
@@ -172,6 +178,28 @@ export function ColumnHeaderMenu({
           label="Recalculate"
           onClick={() => {
             onRecalcFormula();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Integration actions */}
+      {column.column_type === 'integration' && onRunIntegration && (
+        <MenuItem
+          icon={<Play className="h-4 w-4" />}
+          label="Run integration"
+          onClick={() => {
+            onRunIntegration();
+            onClose();
+          }}
+        />
+      )}
+      {column.column_type === 'integration' && onRetryFailed && (
+        <MenuItem
+          icon={<RotateCcw className="h-4 w-4" />}
+          label="Retry failed"
+          onClick={() => {
+            onRetryFailed();
             onClose();
           }}
         />

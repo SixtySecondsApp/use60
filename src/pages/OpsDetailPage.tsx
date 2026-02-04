@@ -34,6 +34,7 @@ import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
 import type { SavedView, FilterCondition, OpsTableColumn } from '@/lib/services/opsTableService';
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
+import { useIntegrationPolling } from '@/lib/hooks/useIntegrationStatus';
 
 // ---------------------------------------------------------------------------
 // Service singleton
@@ -168,6 +169,9 @@ function OpsDetailPage() {
   // Rows are now filtered and sorted server-side via getTableData()
   const rows = useMemo(() => tableData?.rows ?? [], [tableData?.rows]);
 
+  // ---- Integration polling ----
+  useIntegrationPolling(tableId, columns, rows);
+
   // ---- Mutations ----
 
   const updateTableMutation = useMutation({
@@ -190,6 +194,8 @@ function OpsDetailPage() {
       autoRunRows?: number | 'all';
       dropdownOptions?: { value: string; label: string; color?: string }[];
       formulaExpression?: string;
+      integrationType?: string;
+      integrationConfig?: Record<string, unknown>;
     }) => {
       const column = await tableService.addColumn({
         tableId: tableId!,
@@ -200,6 +206,8 @@ function OpsDetailPage() {
         enrichmentPrompt: params.enrichmentPrompt,
         dropdownOptions: params.dropdownOptions,
         formulaExpression: params.formulaExpression,
+        integrationType: params.integrationType,
+        integrationConfig: params.integrationConfig,
         position: (table?.columns?.length ?? 0),
       });
       return { column, autoRunRows: params.autoRunRows };
@@ -260,6 +268,24 @@ function OpsDetailPage() {
       toast.success('Column deleted');
     },
     onError: () => toast.error('Failed to delete column'),
+  });
+
+  const runIntegrationMutation = useMutation({
+    mutationFn: async ({ columnId, rowIds }: { columnId: string; rowIds?: string[] }) => {
+      const col = columns.find((c) => c.id === columnId);
+      if (!col) throw new Error('Column not found');
+      const edgeFn = col.integration_type === 'apify_actor' ? 'run-apify-actor' : 'run-reoon-verification';
+      const { data, error } = await supabase.functions.invoke(edgeFn, {
+        body: { table_id: tableId, column_id: columnId, row_ids: rowIds },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      toast.success(`Integration started (${data?.processed ?? 0} rows)`);
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to run integration'),
   });
 
   const recalcFormulaMutation = useMutation({
@@ -756,6 +782,17 @@ function OpsDetailPage() {
           onHide={() => hideColumnMutation.mutate(activeColumn.id)}
           onDelete={() => deleteColumnMutation.mutate(activeColumn.id)}
           onRecalcFormula={activeColumn.column_type === 'formula' ? () => recalcFormulaMutation.mutate(activeColumn.id) : undefined}
+          onRunIntegration={activeColumn.column_type === 'integration' ? () => runIntegrationMutation.mutate({ columnId: activeColumn.id }) : undefined}
+          onRetryFailed={activeColumn.column_type === 'integration' ? () => {
+            const failedRowIds = tableData?.rows
+              ?.filter((r) => r.cells[activeColumn.key]?.status === 'failed')
+              .map((r) => r.id);
+            if (failedRowIds && failedRowIds.length > 0) {
+              runIntegrationMutation.mutate({ columnId: activeColumn.id, rowIds: failedRowIds });
+            } else {
+              toast.info('No failed rows to retry');
+            }
+          } : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
         />
       )}

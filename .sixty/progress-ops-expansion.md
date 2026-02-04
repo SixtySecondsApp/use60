@@ -3,7 +3,7 @@
 **Plan**: `.sixty/plan-ops-expansion.json`
 **Consult**: `.sixty/consult/ops-expansion.md`
 **Branch**: `feat/dynamic-tables`
-**Stories**: 27 total | 7 complete | 0 in progress
+**Stories**: 27 total | 11 complete | 0 in progress
 
 ---
 
@@ -19,10 +19,10 @@
 - [x] OPS-007 — Formula columns (UI + recalc)
 
 ## Phase 2: Integration Columns
-- [ ] OPS-008 — Integration column schema + shared infra
-- [ ] OPS-009 — Reoon email verification
-- [ ] OPS-010 — Apify actor runner
-- [ ] OPS-011 — Integration bulk retry + progress UI
+- [x] OPS-008 — Integration column schema + shared infra
+- [x] OPS-009 — Reoon email verification
+- [x] OPS-010 — Apify actor runner
+- [x] OPS-011 — Integration bulk retry + progress UI
 
 ## Phase 3: Action Columns & CRM Push
 - [ ] OPS-012 — Action button column type

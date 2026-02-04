@@ -19,6 +19,8 @@ interface AddColumnModalProps {
     autoRunRows?: number | 'all';
     dropdownOptions?: DropdownOption[];
     formulaExpression?: string;
+    integrationType?: string;
+    integrationConfig?: Record<string, unknown>;
   }) => void;
   existingColumns?: ExistingColumn[];
 }
@@ -33,7 +35,13 @@ const COLUMN_TYPES = [
   { value: 'dropdown', label: 'Dropdown' },
   { value: 'tags', label: 'Tags' },
   { value: 'formula', label: 'Formula' },
+  { value: 'integration', label: 'Integration' },
   { value: 'enrichment', label: 'Enrichment' },
+];
+
+const INTEGRATION_TYPES = [
+  { value: 'reoon_email_verify', label: 'Reoon Email Verification' },
+  { value: 'apify_actor', label: 'Apify Actor' },
 ];
 
 const ENRICHMENT_TEMPLATES = [
@@ -76,6 +84,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
     { value: 'option_1', label: 'Option 1', color: '#8b5cf6' },
   ]);
   const [formulaExpression, setFormulaExpression] = useState('');
+  const [integrationType, setIntegrationType] = useState('reoon_email_verify');
+  const [integrationSourceColumn, setIntegrationSourceColumn] = useState('');
+  const [apifyActorId, setApifyActorId] = useState('');
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -91,12 +102,14 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
   const isEnrichment = columnType === 'enrichment';
   const isDropdownOrTags = columnType === 'dropdown' || columnType === 'tags';
   const isFormula = columnType === 'formula';
+  const isIntegration = columnType === 'integration';
   const key = toSnakeCase(label);
   const canAdd =
     label.trim().length > 0
     && (!isEnrichment || enrichmentPrompt.trim().length > 0)
     && (!isDropdownOrTags || dropdownOptions.length > 0)
-    && (!isFormula || formulaExpression.trim().length > 0);
+    && (!isFormula || formulaExpression.trim().length > 0)
+    && (!isIntegration || (integrationType === 'apify_actor' ? apifyActorId.trim().length > 0 : integrationSourceColumn.length > 0));
 
   // Filter columns for the @mention dropdown (exclude enrichment columns being created)
   const filteredColumns = useMemo(() => {
@@ -116,6 +129,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
     setAutoRunRows('all');
     setDropdownOptions([{ value: 'option_1', label: 'Option 1', color: '#8b5cf6' }]);
     setFormulaExpression('');
+    setIntegrationType('reoon_email_verify');
+    setIntegrationSourceColumn('');
+    setApifyActorId('');
     setMentionOpen(false);
     setMentionQuery('');
     setMentionIndex(0);
@@ -159,6 +175,12 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
       } : {}),
       ...(isDropdownOrTags ? { dropdownOptions } : {}),
       ...(isFormula ? { formulaExpression: formulaExpression.trim() } : {}),
+      ...(isIntegration ? {
+        integrationType,
+        integrationConfig: integrationType === 'apify_actor'
+          ? { actor_id: apifyActorId.trim(), input_template: {}, result_path: '' }
+          : { source_column_key: integrationSourceColumn },
+      } : {}),
     });
     onClose();
   };
@@ -437,6 +459,65 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Integration Section */}
+          {isIntegration && (
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Integration Type
+                </label>
+                <select
+                  value={integrationType}
+                  onChange={(e) => setIntegrationType(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
+                >
+                  {INTEGRATION_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {integrationType === 'reoon_email_verify' && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                    Email Source Column
+                  </label>
+                  <select
+                    value={integrationSourceColumn}
+                    onChange={(e) => setIntegrationSourceColumn(e.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
+                  >
+                    <option value="">Select column...</option>
+                    {existingColumns.map((col) => (
+                      <option key={col.key} value={col.key}>{col.label}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Column containing email addresses to verify
+                  </p>
+                </div>
+              )}
+
+              {integrationType === 'apify_actor' && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                    Actor ID
+                  </label>
+                  <input
+                    type="text"
+                    value={apifyActorId}
+                    onChange={(e) => setApifyActorId(e.target.value)}
+                    placeholder="e.g. apify/web-scraper"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Apify actor to run per row. Configure input mapping after column creation.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

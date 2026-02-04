@@ -45,11 +45,17 @@ export interface OpsTableColumn {
     | 'tags'
     | 'phone'
     | 'checkbox'
-    | 'formula';
+    | 'formula'
+    | 'integration'
+    | 'action';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
   dropdown_options: DropdownOption[] | null;
   formula_expression: string | null;
+  integration_type: string | null;
+  integration_config: Record<string, unknown> | null;
+  action_type: string | null;
+  action_config: Record<string, unknown> | null;
   position: number;
   width: number;
   is_visible: boolean;
@@ -144,7 +150,7 @@ const TABLE_COLUMNS =
   'id, organization_id, created_by, name, description, source_type, source_query, row_count, created_at, updated_at';
 
 const COLUMN_COLUMNS =
-  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, dropdown_options, formula_expression, position, width, is_visible, created_at';
+  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, dropdown_options, formula_expression, integration_type, integration_config, action_type, action_config, position, width, is_visible, created_at';
 
 const ROW_COLUMNS =
   'id, table_id, row_index, source_id, source_data, created_at';
@@ -260,6 +266,10 @@ export class OpsTableService {
     enrichmentPrompt?: string;
     dropdownOptions?: DropdownOption[];
     formulaExpression?: string;
+    integrationType?: string;
+    integrationConfig?: Record<string, unknown>;
+    actionType?: string;
+    actionConfig?: Record<string, unknown>;
     position?: number;
   }): Promise<OpsTableColumn> {
     const { data, error } = await this.supabase
@@ -273,6 +283,10 @@ export class OpsTableService {
         enrichment_prompt: params.enrichmentPrompt ?? null,
         dropdown_options: params.dropdownOptions ?? null,
         formula_expression: params.formulaExpression ?? null,
+        integration_type: params.integrationType ?? null,
+        integration_config: params.integrationConfig ?? null,
+        action_type: params.actionType ?? null,
+        action_config: params.actionConfig ?? null,
         position: params.position ?? 0,
       })
       .select(COLUMN_COLUMNS)

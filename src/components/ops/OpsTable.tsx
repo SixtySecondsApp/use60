@@ -18,6 +18,8 @@ import {
   ListFilter,
   Tags,
   FunctionSquare,
+  Zap,
+  Play,
 } from 'lucide-react';
 import { OpsTableCell } from './OpsTableCell';
 
@@ -35,6 +37,10 @@ interface Column {
   is_visible: boolean;
   dropdown_options?: { value: string; label: string; color?: string }[] | null;
   formula_expression?: string | null;
+  integration_type?: string | null;
+  integration_config?: Record<string, unknown> | null;
+  action_type?: string | null;
+  action_config?: Record<string, unknown> | null;
 }
 
 interface Row {
@@ -74,6 +80,8 @@ const columnTypeIcons: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> =
   dropdown: ListFilter,
   tags: Tags,
   formula: FunctionSquare,
+  integration: Zap,
+  action: Play,
 };
 
 // ---------------------------------------------------------------------------

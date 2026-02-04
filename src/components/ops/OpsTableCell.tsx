@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare } from 'lucide-react';
+import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play } from 'lucide-react';
 import type { DropdownOption } from '@/lib/services/opsTableService';
 
 interface CellData {
@@ -419,6 +419,96 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
             })}
           </div>
         )}
+      </div>
+    );
+  }
+
+  // Integration column (status badge + value)
+  if (columnType === 'integration') {
+    const statusColors: Record<string, string> = {
+      pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+      running: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+      complete: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+      failed: 'bg-red-500/15 text-red-400 border-red-500/30',
+    };
+    const badgeClass = statusColors[cell.status] ?? statusColors.pending;
+
+    if (cell.status === 'pending' || cell.status === 'none') {
+      return (
+        <div className="w-full h-full flex items-center">
+          <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border ${statusColors.pending}`}>
+            <Zap className="w-3 h-3" />
+            Pending
+          </span>
+        </div>
+      );
+    }
+
+    if (cell.status === 'running') {
+      return (
+        <div className="w-full h-full flex items-center">
+          <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border ${badgeClass}`}>
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Running
+          </span>
+        </div>
+      );
+    }
+
+    if (cell.status === 'failed') {
+      return (
+        <div className="w-full h-full flex items-center gap-1.5 cursor-pointer" title={cell.value ?? 'Failed'}>
+          <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border ${badgeClass}`}>
+            <AlertCircle className="w-3 h-3" />
+            Failed
+          </span>
+        </div>
+      );
+    }
+
+    // Complete — show value
+    return (
+      <div className="w-full h-full flex items-center cursor-default" title={cell.value ?? undefined}>
+        <span className="truncate text-sm text-emerald-300">
+          {cell.value ?? '—'}
+        </span>
+      </div>
+    );
+  }
+
+  // Action column (button)
+  if (columnType === 'action') {
+    const isRunning = cell.status === 'pending' || cell.status === 'running';
+    const isDone = cell.status === 'complete';
+    const isFailed = cell.status === 'failed';
+
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <button
+          type="button"
+          onClick={() => onEdit?.('execute')}
+          disabled={isRunning}
+          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border ${
+            isDone
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+              : isFailed
+                ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                : isRunning
+                  ? 'border-blue-500/30 bg-blue-500/10 text-blue-400 cursor-wait'
+                  : 'border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20'
+          }`}
+        >
+          {isRunning ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : isDone ? (
+            <Check className="w-3 h-3" />
+          ) : isFailed ? (
+            <AlertCircle className="w-3 h-3" />
+          ) : (
+            <Play className="w-3 h-3" />
+          )}
+          {isDone ? 'Done' : isFailed ? 'Retry' : isRunning ? 'Running' : 'Run'}
+        </button>
       </div>
     );
   }
