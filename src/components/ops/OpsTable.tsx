@@ -14,7 +14,7 @@ import {
   Link2,
   Loader2,
 } from 'lucide-react';
-import { DynamicTableCell } from './DynamicTableCell';
+import { OpsTableCell } from './OpsTableCell';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,7 +36,7 @@ interface Row {
   source_data?: Record<string, unknown>;
 }
 
-interface DynamicTableProps {
+interface OpsTableProps {
   columns: Column[];
   rows: Row[];
   selectedRows: Set<string>;
@@ -78,7 +78,7 @@ const OVERSCAN = 10;
 // Component
 // ---------------------------------------------------------------------------
 
-export const DynamicTable: React.FC<DynamicTableProps> = ({
+export const OpsTable: React.FC<OpsTableProps> = ({
   columns,
   rows,
   selectedRows,
@@ -301,7 +301,7 @@ export const DynamicTable: React.FC<DynamicTableProps> = ({
                         `}
                         style={{ width: col.width, minWidth: col.width }}
                       >
-                        <DynamicTableCell
+                        <OpsTableCell
                           cell={{
                             value: cellData.value,
                             confidence: cellData.confidence,
@@ -311,7 +311,7 @@ export const DynamicTable: React.FC<DynamicTableProps> = ({
                           isEnrichment={col.is_enrichment}
                           firstName={firstName}
                           lastName={lastName}
-                          onEdit={handleCellEdit(row.id, col.key)}
+                          onEdit={col.is_enrichment ? undefined : handleCellEdit(row.id, col.key)}
                         />
                       </div>
                     );
@@ -343,4 +343,4 @@ export const DynamicTable: React.FC<DynamicTableProps> = ({
   );
 };
 
-export default DynamicTable;
+export default OpsTable;

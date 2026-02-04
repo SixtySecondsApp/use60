@@ -4,7 +4,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 // Types
 // ---------------------------------------------------------------------------
 
-export interface DynamicTable {
+export interface OpsTableRecord {
   id: string;
   organization_id: string;
   created_by: string;
@@ -15,10 +15,10 @@ export interface DynamicTable {
   row_count: number;
   created_at: string;
   updated_at: string;
-  columns?: DynamicTableColumn[];
+  columns?: OpsTableColumn[];
 }
 
-export interface DynamicTableColumn {
+export interface OpsTableColumn {
   id: string;
   table_id: string;
   key: string;
@@ -43,17 +43,17 @@ export interface DynamicTableColumn {
   created_at: string;
 }
 
-export interface DynamicTableRow {
+export interface OpsTableRow {
   id: string;
   table_id: string;
   row_index: number;
   source_id: string | null;
   source_data: Record<string, unknown> | null;
   created_at: string;
-  cells: Record<string, DynamicTableCell>; // keyed by column key
+  cells: Record<string, OpsTableCell>; // keyed by column key
 }
 
-export interface DynamicTableCell {
+export interface OpsTableCell {
   id: string;
   row_id: string;
   column_id: string;
@@ -146,7 +146,7 @@ const VIEW_COLUMNS =
 // Service
 // ---------------------------------------------------------------------------
 
-export class DynamicTableService {
+export class OpsTableService {
   private supabase: SupabaseClient;
 
   constructor(supabase: SupabaseClient) {
@@ -162,9 +162,9 @@ export class DynamicTableService {
     createdBy: string;
     name: string;
     description?: string;
-    sourceType?: DynamicTable['source_type'];
+    sourceType?: OpsTableRecord['source_type'];
     sourceQuery?: Record<string, unknown>;
-  }): Promise<DynamicTable> {
+  }): Promise<OpsTableRecord> {
     const { data, error } = await this.supabase
       .from('dynamic_tables')
       .insert({
@@ -179,10 +179,10 @@ export class DynamicTableService {
       .single();
 
     if (error) throw error;
-    return data as DynamicTable;
+    return data as OpsTableRecord;
   }
 
-  async getTable(tableId: string): Promise<DynamicTable | null> {
+  async getTable(tableId: string): Promise<OpsTableRecord | null> {
     const { data, error } = await this.supabase
       .from('dynamic_tables')
       .select(`${TABLE_COLUMNS}, dynamic_table_columns(${COLUMN_COLUMNS})`)
@@ -195,11 +195,11 @@ export class DynamicTableService {
     const { dynamic_table_columns, ...rest } = data as Record<string, unknown>;
     return {
       ...rest,
-      columns: (dynamic_table_columns as DynamicTableColumn[]) ?? [],
-    } as DynamicTable;
+      columns: (dynamic_table_columns as OpsTableColumn[]) ?? [],
+    } as OpsTableRecord;
   }
 
-  async listTables(organizationId: string): Promise<DynamicTable[]> {
+  async listTables(organizationId: string): Promise<OpsTableRecord[]> {
     const { data, error } = await this.supabase
       .from('dynamic_tables')
       .select(TABLE_COLUMNS)
@@ -207,13 +207,13 @@ export class DynamicTableService {
       .order('updated_at', { ascending: false });
 
     if (error) throw error;
-    return (data ?? []) as DynamicTable[];
+    return (data ?? []) as OpsTableRecord[];
   }
 
   async updateTable(
     tableId: string,
     updates: { name?: string; description?: string }
-  ): Promise<DynamicTable> {
+  ): Promise<OpsTableRecord> {
     const { data, error } = await this.supabase
       .from('dynamic_tables')
       .update(updates)
@@ -222,7 +222,7 @@ export class DynamicTableService {
       .single();
 
     if (error) throw error;
-    return data as DynamicTable;
+    return data as OpsTableRecord;
   }
 
   async deleteTable(tableId: string): Promise<void> {
@@ -242,11 +242,11 @@ export class DynamicTableService {
     tableId: string;
     key: string;
     label: string;
-    columnType: DynamicTableColumn['column_type'];
+    columnType: OpsTableColumn['column_type'];
     isEnrichment?: boolean;
     enrichmentPrompt?: string;
     position?: number;
-  }): Promise<DynamicTableColumn> {
+  }): Promise<OpsTableColumn> {
     const { data, error } = await this.supabase
       .from('dynamic_table_columns')
       .insert({
@@ -262,13 +262,13 @@ export class DynamicTableService {
       .single();
 
     if (error) throw error;
-    return data as DynamicTableColumn;
+    return data as OpsTableColumn;
   }
 
   async updateColumn(
     columnId: string,
     updates: { label?: string; width?: number; isVisible?: boolean; position?: number }
-  ): Promise<DynamicTableColumn> {
+  ): Promise<OpsTableColumn> {
     const payload: Record<string, unknown> = {};
     if (updates.label !== undefined) payload.label = updates.label;
     if (updates.width !== undefined) payload.width = updates.width;
@@ -283,7 +283,7 @@ export class DynamicTableService {
       .single();
 
     if (error) throw error;
-    return data as DynamicTableColumn;
+    return data as OpsTableColumn;
   }
 
   async removeColumn(columnId: string): Promise<void> {
@@ -316,7 +316,7 @@ export class DynamicTableService {
   async addRows(
     tableId: string,
     rows: { sourceId?: string; sourceData?: Record<string, unknown>; cells: Record<string, string> }[]
-  ): Promise<DynamicTableRow[]> {
+  ): Promise<OpsTableRow[]> {
     // 1. Fetch columns for this table so we can map keys → column IDs
     const { data: columns, error: colError } = await this.supabase
       .from('dynamic_table_columns')
@@ -394,7 +394,7 @@ export class DynamicTableService {
   async getTableData(
     tableId: string,
     opts?: { page?: number; perPage?: number; sortBy?: string; sortDir?: 'asc' | 'desc' }
-  ): Promise<{ rows: DynamicTableRow[]; total: number }> {
+  ): Promise<{ rows: OpsTableRow[]; total: number }> {
     const page = opts?.page ?? 1;
     const perPage = opts?.perPage ?? 50;
     const from = (page - 1) * perPage;
@@ -438,6 +438,24 @@ export class DynamicTableService {
       .eq('id', cellId);
 
     if (error) throw error;
+  }
+
+  /**
+   * Create a cell for an existing row + column, or update it if it already exists.
+   * Used when the user types into an empty cell that has no cell record yet.
+   */
+  async upsertCell(rowId: string, columnId: string, value: string): Promise<string> {
+    const { data, error } = await this.supabase
+      .from('dynamic_table_cells')
+      .upsert(
+        { row_id: rowId, column_id: columnId, value },
+        { onConflict: 'row_id,column_id' }
+      )
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return data.id;
   }
 
   async deleteRows(rowIds: string[]): Promise<void> {
@@ -552,20 +570,20 @@ export class DynamicTableService {
   // -----------------------------------------------------------------------
 
   /**
-   * Map raw Supabase row+cell join results into typed DynamicTableRow objects
+   * Map raw Supabase row+cell join results into typed OpsTableRow objects
    * with cells keyed by column key.
    */
   private mapRows(
     rawRows: RawRow[],
     columns: { id: string; key: string }[]
-  ): DynamicTableRow[] {
+  ): OpsTableRow[] {
     const columnIdToKey = new Map<string, string>();
     for (const col of columns) {
       columnIdToKey.set(col.id, col.key);
     }
 
     return rawRows.map((row) => {
-      const cells: Record<string, DynamicTableCell> = {};
+      const cells: Record<string, OpsTableCell> = {};
 
       for (const cell of row.dynamic_table_cells ?? []) {
         const key = columnIdToKey.get(cell.column_id);
@@ -578,7 +596,7 @@ export class DynamicTableService {
           value: cell.value,
           confidence: cell.confidence,
           source: cell.source,
-          status: cell.status as DynamicTableCell['status'],
+          status: cell.status as OpsTableCell['status'],
           error_message: cell.error_message,
         };
       }

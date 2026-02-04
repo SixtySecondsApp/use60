@@ -1,7 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import type { FilterCondition } from '@/lib/services/dynamicTableService';
-import { FILTER_OPERATORS } from '@/lib/utils/dynamicTableFilters';
+import type { FilterCondition } from '@/lib/services/opsTableService';
+import { FILTER_OPERATORS } from '@/lib/utils/opsTableFilters';
 
 interface ActiveFilterBarProps {
   conditions: FilterCondition[];

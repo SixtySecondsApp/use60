@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { FilterCondition, FilterOperator } from '@/lib/services/dynamicTableService';
-import { FILTER_OPERATORS, getOperatorsForColumnType } from '@/lib/utils/dynamicTableFilters';
+import type { FilterCondition, FilterOperator } from '@/lib/services/opsTableService';
+import { FILTER_OPERATORS, getOperatorsForColumnType } from '@/lib/utils/opsTableFilters';
 
 interface ColumnFilterPopoverProps {
   column: { id: string; key: string; label: string; column_type: string };
@@ -96,7 +96,7 @@ export function ColumnFilterPopover({
     <div
       ref={popoverRef}
       style={style}
-      className="z-50 w-72 rounded-lg border border-gray-700 bg-gray-900 p-4 shadow-2xl"
+      className="z-[150] w-72 rounded-lg border border-gray-700 bg-gray-900 p-4 shadow-2xl"
     >
       {/* Title */}
       <h3 className="mb-3 text-sm font-medium text-gray-200">

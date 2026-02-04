@@ -8,9 +8,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { DetectedColumn, DynamicColumnType } from '@/lib/services/csvDynamicTableService';
+import type { DetectedColumn, OpsColumnType } from '@/lib/services/csvOpsTableService';
 
-const COLUMN_TYPES: { value: DynamicColumnType; label: string }[] = [
+const COLUMN_TYPES: { value: OpsColumnType; label: string }[] = [
   { value: 'text', label: 'Text' },
   { value: 'email', label: 'Email' },
   { value: 'url', label: 'URL' },
@@ -110,7 +110,7 @@ export function CSVColumnMappingStep({
                 <div>
                   <Select
                     value={col.type}
-                    onValueChange={(value) => updateColumn(index, { type: value as DynamicColumnType })}
+                    onValueChange={(value) => updateColumn(index, { type: value as OpsColumnType })}
                     disabled={!col.included}
                   >
                     <SelectTrigger className="h-8 text-sm">

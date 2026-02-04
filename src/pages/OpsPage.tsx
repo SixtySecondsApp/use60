@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Table2, Plus, Clock, Rows3, Sparkles, Loader2, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 import { useUser } from '@/lib/hooks/useUser';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { supabase } from '@/lib/supabase/clientV2';
+import { OpsTableService } from '@/lib/services/opsTableService';
 import { formatDistanceToNow } from 'date-fns';
-import { CSVImportDynamicTableWizard } from '@/components/dynamic-tables/CSVImportDynamicTableWizard';
+import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 
-interface DynamicTable {
+const tableService = new OpsTableService(supabase);
+
+interface OpsTableItem {
   id: string;
   name: string;
   description: string | null;
@@ -18,15 +22,40 @@ interface DynamicTable {
   updated_at: string;
 }
 
-function DynamicTablesPage() {
+function OpsPage() {
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { userData: user } = useUser();
   const { activeOrg } = useOrg();
 
+  const queryClient = useQueryClient();
   const [showCSVImport, setShowCSVImport] = useState(false);
 
+  const createTableMutation = useMutation({
+    mutationFn: () => {
+      if (!activeOrg?.id || !user?.id) throw new Error('Not authenticated');
+      // Generate a short table ID as the default name (XXX-XXX-XXX format)
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      const seg = () => Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      const name = `${seg()}-${seg()}-${seg()}`;
+      return tableService.createTable({
+        organizationId: activeOrg.id,
+        createdBy: user.id,
+        name,
+        sourceType: 'manual',
+      });
+    },
+    onSuccess: (newTable) => {
+      queryClient.invalidateQueries({ queryKey: ['ops-tables', activeOrg?.id] });
+      navigate(`/ops/${newTable.id}`);
+    },
+    onError: (err: any) => {
+      console.error('Create table error:', err);
+      toast.error(err?.message || 'Failed to create table');
+    },
+  });
+
   const { data: tables, isLoading } = useQuery({
-    queryKey: ['dynamic-tables', activeOrg?.id],
+    queryKey: ['ops-tables', activeOrg?.id],
     queryFn: async () => {
       if (!activeOrg?.id) return [];
       const { data, error } = await supabase
@@ -36,7 +65,7 @@ function DynamicTablesPage() {
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      return (data ?? []) as DynamicTable[];
+      return (data ?? []) as OpsTableItem[];
     },
     enabled: !!activeOrg?.id,
   });
@@ -75,7 +104,7 @@ function DynamicTablesPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
               <Table2 className="h-5 w-5" />
             </div>
-            <h1 className="text-2xl font-semibold text-white">Dynamic Tables</h1>
+            <h1 className="text-2xl font-semibold text-white">Ops</h1>
           </div>
           <p className="mt-2 text-sm text-zinc-400">
             AI-powered lead enrichment and data processing
@@ -90,10 +119,15 @@ function DynamicTablesPage() {
             Upload CSV
           </button>
           <button
-            onClick={() => navigate('/copilot')}
-            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500"
+            onClick={() => createTableMutation.mutate()}
+            disabled={createTableMutation.isPending}
+            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
           >
-            <Plus className="h-4 w-4" />
+            {createTableMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
             New Table
           </button>
         </div>
@@ -105,7 +139,7 @@ function DynamicTablesPage() {
           {tables.map((table) => (
             <button
               key={table.id}
-              onClick={() => navigate(`/dynamic-tables/${table.id}`)}
+              onClick={() => navigate(`/ops/${table.id}`)}
               className="group flex flex-col rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 text-left transition-all hover:border-zinc-700 hover:bg-zinc-900"
             >
               <div className="mb-3 flex items-start justify-between">
@@ -142,28 +176,33 @@ function DynamicTablesPage() {
           </div>
           <h3 className="mb-1 text-lg font-medium text-white">No tables yet</h3>
           <p className="mb-6 max-w-sm text-sm text-zinc-400">
-            Create your first dynamic table to start enriching leads and processing data with AI.
+            Create your first ops table to start enriching leads and processing data with AI.
           </p>
           <button
-            onClick={() => navigate('/copilot')}
-            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500"
+            onClick={() => createTableMutation.mutate()}
+            disabled={createTableMutation.isPending}
+            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
           >
-            <Plus className="h-4 w-4" />
+            {createTableMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
             Create Table
           </button>
         </div>
       )}
 
-      <CSVImportDynamicTableWizard
+      <CSVImportOpsTableWizard
         open={showCSVImport}
         onOpenChange={setShowCSVImport}
         onComplete={(tableId) => {
           setShowCSVImport(false);
-          navigate(`/dynamic-tables/${tableId}`);
+          navigate(`/ops/${tableId}`);
         }}
       />
     </div>
   );
 }
 
-export default DynamicTablesPage;
+export default OpsPage;

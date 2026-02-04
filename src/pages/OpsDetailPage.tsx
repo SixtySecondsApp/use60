@@ -16,27 +16,31 @@ import {
   Bot,
   FileText,
   MessageSquare,
+  Plus,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
-import { DynamicTableService } from '@/lib/services/dynamicTableService';
-import { DynamicTable } from '@/components/dynamic-tables/DynamicTable';
-import { AddColumnModal } from '@/components/dynamic-tables/AddColumnModal';
-import { ColumnHeaderMenu } from '@/components/dynamic-tables/ColumnHeaderMenu';
-import { ColumnFilterPopover } from '@/components/dynamic-tables/ColumnFilterPopover';
-import { ActiveFilterBar } from '@/components/dynamic-tables/ActiveFilterBar';
-import { BulkActionsBar } from '@/components/dynamic-tables/BulkActionsBar';
-import { ViewSelector } from '@/components/dynamic-tables/ViewSelector';
-import { SaveViewDialog } from '@/components/dynamic-tables/SaveViewDialog';
-import type { SavedView, FilterCondition, DynamicTableColumn } from '@/lib/services/dynamicTableService';
-import { applyFilters } from '@/lib/utils/dynamicTableFilters';
+import { OpsTableService } from '@/lib/services/opsTableService';
+import { OpsTable } from '@/components/ops/OpsTable';
+import { AddColumnModal } from '@/components/ops/AddColumnModal';
+import { ColumnHeaderMenu } from '@/components/ops/ColumnHeaderMenu';
+import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
+import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
+import { BulkActionsBar } from '@/components/ops/BulkActionsBar';
+import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
+import { ViewSelector } from '@/components/ops/ViewSelector';
+import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
+import type { SavedView, FilterCondition, OpsTableColumn } from '@/lib/services/opsTableService';
+import { applyFilters } from '@/lib/utils/opsTableFilters';
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
+import { useEnrichment } from '@/lib/hooks/useEnrichment';
 
 // ---------------------------------------------------------------------------
 // Service singleton
 // ---------------------------------------------------------------------------
 
-const tableService = new DynamicTableService(supabase);
+const tableService = new OpsTableService(supabase);
 
 // ---------------------------------------------------------------------------
 // Source badge config
@@ -53,7 +57,7 @@ const SOURCE_BADGE: Record<string, { label: string; className: string; icon: Rea
 // Component
 // ---------------------------------------------------------------------------
 
-function DynamicTableDetailPage() {
+function OpsDetailPage() {
   const { tableId } = useParams<{ tableId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -76,10 +80,11 @@ function DynamicTableDetailPage() {
   const [showSaveViewDialog, setShowSaveViewDialog] = useState(false);
   const [systemViewsCreated, setSystemViewsCreated] = useState(false);
   const [filterPopoverColumn, setFilterPopoverColumn] = useState<{
-    column: DynamicTableColumn;
+    column: OpsTableColumn;
     anchorRect: DOMRect;
     editIndex?: number;
   } | null>(null);
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   // ---- Data queries ----
 
@@ -88,7 +93,7 @@ function DynamicTableDetailPage() {
     isLoading: isTableLoading,
     error: tableError,
   } = useQuery({
-    queryKey: ['dynamic-table', tableId],
+    queryKey: ['ops-table', tableId],
     queryFn: () => tableService.getTable(tableId!),
     enabled: !!tableId,
   });
@@ -97,7 +102,7 @@ function DynamicTableDetailPage() {
     data: tableData,
     isLoading: isDataLoading,
   } = useQuery({
-    queryKey: ['dynamic-table-data', tableId, sortState],
+    queryKey: ['ops-table-data', tableId, sortState],
     queryFn: () =>
       tableService.getTableData(tableId!, {
         perPage: 500,
@@ -108,10 +113,13 @@ function DynamicTableDetailPage() {
   });
 
   const { data: views = [] } = useQuery({
-    queryKey: ['dynamic-table-views', tableId],
+    queryKey: ['ops-table-views', tableId],
     queryFn: () => tableService.getViews(tableId!),
     enabled: !!tableId,
   });
+
+  // ---- Enrichment hook ----
+  const { startEnrichment } = useEnrichment(tableId ?? '');
 
   // ---- Derived data ----
 
@@ -145,7 +153,7 @@ function DynamicTableDetailPage() {
         })
       )
     ).then((createdViews) => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table-views', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
       // Auto-select the "All" view
       const allView = createdViews.find((v) => v.name === 'All');
       if (allView) {
@@ -184,21 +192,22 @@ function DynamicTableDetailPage() {
     mutationFn: (updates: { name?: string; description?: string }) =>
       tableService.updateTable(tableId!, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       toast.success('Table updated');
     },
     onError: () => toast.error('Failed to update table'),
   });
 
   const addColumnMutation = useMutation({
-    mutationFn: (params: {
+    mutationFn: async (params: {
       key: string;
       label: string;
       columnType: string;
       isEnrichment: boolean;
       enrichmentPrompt?: string;
-    }) =>
-      tableService.addColumn({
+      autoRunRows?: number | 'all';
+    }) => {
+      const column = await tableService.addColumn({
         tableId: tableId!,
         key: params.key,
         label: params.label,
@@ -206,11 +215,28 @@ function DynamicTableDetailPage() {
         isEnrichment: params.isEnrichment,
         enrichmentPrompt: params.enrichmentPrompt,
         position: (table?.columns?.length ?? 0),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table', tableId] });
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table-data', tableId] });
+      });
+      return { column, autoRunRows: params.autoRunRows };
+    },
+    onSuccess: ({ column, autoRunRows: runRows }) => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       toast.success('Column added');
+
+      // Auto-trigger enrichment if requested
+      if (column.is_enrichment && runRows != null) {
+        const allRowIds = tableData?.rows?.map((r) => r.id);
+        let rowIdsToEnrich: string[] | undefined;
+
+        if (typeof runRows === 'number' && allRowIds) {
+          rowIdsToEnrich = allRowIds.slice(0, runRows);
+        }
+        // runRows === 'all' → pass undefined (enriches all rows)
+
+        if (allRowIds && allRowIds.length > 0) {
+          startEnrichment({ columnId: column.id, rowIds: rowIdsToEnrich });
+        }
+      }
     },
     onError: () => toast.error('Failed to add column'),
   });
@@ -219,7 +245,7 @@ function DynamicTableDetailPage() {
     mutationFn: ({ columnId, label }: { columnId: string; label: string }) =>
       tableService.updateColumn(columnId, { label }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       toast.success('Column renamed');
     },
     onError: () => toast.error('Failed to rename column'),
@@ -229,7 +255,7 @@ function DynamicTableDetailPage() {
     mutationFn: (columnId: string) =>
       tableService.updateColumn(columnId, { isVisible: false }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       toast.success('Column hidden');
     },
     onError: () => toast.error('Failed to hide column'),
@@ -238,18 +264,23 @@ function DynamicTableDetailPage() {
   const deleteColumnMutation = useMutation({
     mutationFn: (columnId: string) => tableService.removeColumn(columnId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table', tableId] });
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table-data', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       toast.success('Column deleted');
     },
     onError: () => toast.error('Failed to delete column'),
   });
 
   const cellEditMutation = useMutation({
-    mutationFn: ({ cellId, value }: { cellId: string; value: string }) =>
-      tableService.updateCell(cellId, value),
+    mutationFn: ({ cellId, rowId, columnId, value }: { cellId?: string; rowId: string; columnId: string; value: string }) => {
+      if (cellId) {
+        return tableService.updateCell(cellId, value);
+      }
+      // Cell doesn't exist yet (empty row) — upsert it
+      return tableService.upsertCell(rowId, columnId, value);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table-data', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
     },
     onError: () => toast.error('Failed to update cell'),
   });
@@ -258,11 +289,22 @@ function DynamicTableDetailPage() {
     mutationFn: (rowIds: string[]) => tableService.deleteRows(rowIds),
     onSuccess: () => {
       setSelectedRows(new Set());
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table', tableId] });
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table-data', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       toast.success('Rows deleted');
     },
     onError: () => toast.error('Failed to delete rows'),
+  });
+
+  const addRowMutation = useMutation({
+    mutationFn: () =>
+      tableService.addRows(tableId!, [{ cells: {} }]),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      toast.success('Row added');
+    },
+    onError: () => toast.error('Failed to add row'),
   });
 
   // ---- View mutations ----
@@ -278,7 +320,7 @@ function DynamicTableDetailPage() {
         columnConfig: null,
       }),
     onSuccess: (newView) => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table-views', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
       setActiveViewId(newView.id);
       setSearchParams({ view: newView.id });
       toast.success('View created');
@@ -290,7 +332,7 @@ function DynamicTableDetailPage() {
     mutationFn: ({ viewId, updates }: { viewId: string; updates: { name?: string } }) =>
       tableService.updateView(viewId, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table-views', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
       toast.success('View updated');
     },
     onError: () => toast.error('Failed to update view'),
@@ -299,7 +341,7 @@ function DynamicTableDetailPage() {
   const deleteViewMutation = useMutation({
     mutationFn: (viewId: string) => tableService.deleteView(viewId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dynamic-table-views', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
       setActiveViewId(null);
       setSearchParams({});
       toast.success('View deleted');
@@ -347,13 +389,19 @@ function DynamicTableDetailPage() {
 
   const handleCellEdit = useCallback(
     (rowId: string, columnKey: string, value: string) => {
-      const row = rows.find((r) => r.id === rowId);
-      const cell = row?.cells[columnKey];
+      // Look up from the full tableData rows (which have cell IDs)
+      const fullRow = tableData?.rows?.find((r) => r.id === rowId);
+      const cell = fullRow?.cells[columnKey];
+      const col = columns.find((c) => c.key === columnKey);
+
       if (cell?.id) {
-        cellEditMutation.mutate({ cellId: cell.id, value });
+        cellEditMutation.mutate({ cellId: cell.id, rowId, columnId: col?.id ?? '', value });
+      } else if (col) {
+        // Cell doesn't exist yet — upsert
+        cellEditMutation.mutate({ rowId, columnId: col.id, value });
       }
     },
-    [rows, cellEditMutation],
+    [tableData?.rows, columns, cellEditMutation],
   );
 
   const handleColumnHeaderClick = useCallback(
@@ -467,11 +515,11 @@ function DynamicTableDetailPage() {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <button
-          onClick={() => navigate('/dynamic-tables')}
+          onClick={() => navigate('/ops')}
           className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Dynamic Tables
+          Back to Ops
         </button>
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-red-800/50 bg-red-950/20 px-6 py-20 text-center">
           <p className="text-sm text-red-400">
@@ -490,11 +538,11 @@ function DynamicTableDetailPage() {
       <div className="shrink-0 border-b border-gray-800 bg-gray-950 px-6 pb-4 pt-5">
         {/* Back button */}
         <button
-          onClick={() => navigate('/dynamic-tables')}
+          onClick={() => navigate('/ops')}
           className="mb-4 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Dynamic Tables
+          Back to Ops
         </button>
 
         {/* View selector tabs */}
@@ -626,12 +674,35 @@ function DynamicTableDetailPage() {
               </span>
             </div>
           </div>
+
+          {/* Right: action buttons */}
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => addRowMutation.mutate()}
+              disabled={addRowMutation.isPending}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white disabled:opacity-50"
+            >
+              {addRowMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              Add Row
+            </button>
+            <button
+              onClick={() => setShowCSVImport(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Upload CSV
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Table area */}
       <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
-        <DynamicTable
+        <OpsTable
           columns={columns}
           rows={rows}
           selectedRows={selectedRows}
@@ -649,6 +720,7 @@ function DynamicTableDetailPage() {
         isOpen={showAddColumn}
         onClose={() => setShowAddColumn(false)}
         onAdd={(col) => addColumnMutation.mutate(col)}
+        existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
       />
 
       {/* Column Header Menu */}
@@ -715,8 +787,19 @@ function DynamicTableDetailPage() {
           setShowSaveViewDialog(false);
         }}
       />
+
+      {/* CSV Import Wizard */}
+      <CSVImportOpsTableWizard
+        open={showCSVImport}
+        onOpenChange={setShowCSVImport}
+        onComplete={(_importedTableId) => {
+          setShowCSVImport(false);
+          queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+          queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+        }}
+      />
     </div>
   );
 }
 
-export default DynamicTableDetailPage;
+export default OpsDetailPage;

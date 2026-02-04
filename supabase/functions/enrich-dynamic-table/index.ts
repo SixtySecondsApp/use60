@@ -16,6 +16,19 @@ const LOG_PREFIX = '[enrich-dynamic-table]'
 // Timeout for a single row enrichment (30 seconds)
 const ROW_TIMEOUT_MS = 30_000
 
+/**
+ * Resolve @column_key references in an enrichment prompt using row data.
+ * e.g. "Find news about @company_name" → "Find news about Acme Corp"
+ */
+function resolveColumnMentions(
+  prompt: string,
+  rowContext: Record<string, string>
+): string {
+  return prompt.replace(/@([a-z][a-z0-9_]*)/g, (_match, key) => {
+    return rowContext[key] ?? 'N/A'
+  })
+}
+
 interface EnrichRequest {
   table_id: string
   column_id: string
@@ -358,6 +371,9 @@ serve(async (req) => {
       const rowContext = rowContextMap[row.id] || {}
 
       try {
+        // Resolve @column_key references in the prompt with actual row values
+        const resolvedPrompt = resolveColumnMentions(enrichmentPrompt, rowContext)
+
         // Build the prompt
         const prompt = `You are a data enrichment agent. Given the following information about a person/company, complete the requested enrichment task.
 
@@ -365,7 +381,7 @@ PERSON/COMPANY DATA:
 ${JSON.stringify(rowContext, null, 2)}
 
 ENRICHMENT TASK:
-${enrichmentPrompt}
+${resolvedPrompt}
 
 Respond with ONLY the enrichment result. Be concise and factual. If you cannot determine the answer with confidence, respond with "N/A".`
 

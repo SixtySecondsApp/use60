@@ -1,9 +1,9 @@
 import type {
-  DynamicTableRow,
-  DynamicTableColumn,
+  OpsTableRow,
+  OpsTableColumn,
   FilterCondition,
   FilterOperator,
-} from '@/lib/services/dynamicTableService';
+} from '@/lib/services/opsTableService';
 
 // ---------------------------------------------------------------------------
 // Operator metadata for dropdown UIs
@@ -66,7 +66,7 @@ const BOOLEAN_OPERATORS: FilterOperator[] = [
   'is_not_empty',
 ];
 
-const COLUMN_TYPE_OPERATORS: Record<DynamicTableColumn['column_type'], FilterOperator[]> = {
+const COLUMN_TYPE_OPERATORS: Record<OpsTableColumn['column_type'], FilterOperator[]> = {
   text: TEXT_OPERATORS,
   email: TEXT_OPERATORS,
   url: TEXT_OPERATORS,
@@ -84,7 +84,7 @@ const COLUMN_TYPE_OPERATORS: Record<DynamicTableColumn['column_type'], FilterOpe
  * Returns the filter operators that are applicable to the given column type.
  */
 export function getOperatorsForColumnType(
-  columnType: DynamicTableColumn['column_type'],
+  columnType: OpsTableColumn['column_type'],
 ): FilterOperator[] {
   return COLUMN_TYPE_OPERATORS[columnType] ?? TEXT_OPERATORS;
 }
@@ -93,7 +93,7 @@ export function getOperatorsForColumnType(
 // Cell value helpers
 // ---------------------------------------------------------------------------
 
-function getCellValue(row: DynamicTableRow, columnKey: string): string | null {
+function getCellValue(row: OpsTableRow, columnKey: string): string | null {
   return row.cells[columnKey]?.value ?? null;
 }
 
@@ -108,7 +108,7 @@ function isEmpty(value: string | null): boolean {
 function evaluateCondition(
   cellValue: string | null,
   condition: FilterCondition,
-  column: DynamicTableColumn | undefined,
+  column: OpsTableColumn | undefined,
 ): boolean {
   const { operator, value: conditionValue } = condition;
   const columnType = column?.column_type ?? 'text';
@@ -163,7 +163,7 @@ function evaluateCondition(
 function compareValues(
   a: string | null,
   b: string,
-  columnType: DynamicTableColumn['column_type'],
+  columnType: OpsTableColumn['column_type'],
 ): number {
   if (a === null || a === '') return -1;
 
@@ -200,16 +200,16 @@ function compareValues(
  * An empty conditions array returns all rows unchanged.
  */
 export function applyFilters(
-  rows: DynamicTableRow[],
+  rows: OpsTableRow[],
   conditions: FilterCondition[],
-  columns: DynamicTableColumn[],
-): DynamicTableRow[] {
+  columns: OpsTableColumn[],
+): OpsTableRow[] {
   if (conditions.length === 0) {
     return rows;
   }
 
   // Build a quick lookup map for columns by key
-  const columnMap = new Map<string, DynamicTableColumn>();
+  const columnMap = new Map<string, OpsTableColumn>();
   for (const col of columns) {
     columnMap.set(col.key, col);
   }

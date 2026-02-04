@@ -8,17 +8,17 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Upload, FileSpreadsheet, Columns, Eye, Loader2, CheckCircle2, ArrowLeft, ArrowRight, ExternalLink, AlertCircle } from 'lucide-react';
-import { parseCSVFile, transformRowsForDynamicTable } from '@/lib/services/csvDynamicTableService';
-import type { DetectedColumn } from '@/lib/services/csvDynamicTableService';
+import { parseCSVFile, transformRowsForOpsTable } from '@/lib/services/csvOpsTableService';
+import type { DetectedColumn } from '@/lib/services/csvOpsTableService';
 import { CSVColumnMappingStep } from './CSVColumnMappingStep';
-import { DynamicTableService } from '@/lib/services/dynamicTableService';
+import { OpsTableService } from '@/lib/services/opsTableService';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useUser } from '@/lib/hooks/useUser';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-interface CSVImportDynamicTableWizardProps {
+interface CSVImportOpsTableWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onComplete?: (tableId: string) => void;
@@ -34,9 +34,9 @@ const STEPS = [
 
 type ImportPhase = 'idle' | 'creating_table' | 'adding_columns' | 'inserting_rows' | 'complete' | 'error';
 
-const tableService = new DynamicTableService(supabase);
+const tableService = new OpsTableService(supabase);
 
-export function CSVImportDynamicTableWizard({ open, onOpenChange, onComplete }: CSVImportDynamicTableWizardProps) {
+export function CSVImportOpsTableWizard({ open, onOpenChange, onComplete }: CSVImportOpsTableWizardProps) {
   const { user } = useUser();
   const { activeOrg } = useOrg();
   const queryClient = useQueryClient();
@@ -111,7 +111,7 @@ export function CSVImportDynamicTableWizard({ open, onOpenChange, onComplete }: 
       setTableName(defaultName);
 
       // Auto-detect columns
-      const { detectColumns } = await import('@/lib/services/csvDynamicTableService');
+      const { detectColumns } = await import('@/lib/services/csvOpsTableService');
       const detected = detectColumns(result.headers, result.rows);
       setColumns(detected);
 
@@ -156,7 +156,7 @@ export function CSVImportDynamicTableWizard({ open, onOpenChange, onComplete }: 
 
       // 3. Insert rows in batches
       setImportPhase('inserting_rows');
-      const transformed = transformRowsForDynamicTable(rows, columns);
+      const transformed = transformRowsForOpsTable(rows, columns);
       const BATCH_SIZE = 100;
       let inserted = 0;
 
@@ -169,7 +169,7 @@ export function CSVImportDynamicTableWizard({ open, onOpenChange, onComplete }: 
 
       // 4. Done
       setImportPhase('complete');
-      queryClient.invalidateQueries({ queryKey: ['dynamic-tables'] });
+      queryClient.invalidateQueries({ queryKey: ['ops-tables'] });
       toast.success(`Imported ${inserted} rows to "${tableName}"`);
     } catch (e: any) {
       setImportPhase('error');
@@ -216,8 +216,8 @@ export function CSVImportDynamicTableWizard({ open, onOpenChange, onComplete }: 
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="sr-only">
-          <DialogTitle>Import CSV to Dynamic Table</DialogTitle>
-          <DialogDescription>Upload a CSV file to create a new Dynamic Table</DialogDescription>
+          <DialogTitle>Import CSV</DialogTitle>
+          <DialogDescription>Upload a CSV file to create a new ops table</DialogDescription>
         </DialogHeader>
 
         {/* Step indicator */}

@@ -3556,9 +3556,9 @@ ACTION PARAMETERS:
   - Analyze competitors: run_skill { skill_key: "competitor-intel", skill_context: { competitor_name: "Salesforce", our_company: "HubSpot" } }
   - Market research: run_skill { skill_key: "market-research", skill_context: { industry: "fintech", focus_areas: "payment processing" } }
 
-## Dynamic Tables
-• search_leads_create_table: { query, title?, person_titles?, person_locations?, organization_num_employees_ranges?, person_seniorities? } - Search Apollo for leads matching criteria and create a Dynamic Table with results. Returns table_id, table_name, row_count.
-• enrich_table_column: { table_id, column_id, row_ids? } - Enrich a column in a Dynamic Table using AI. If row_ids not provided, enriches all rows.
+## Ops
+• search_leads_create_table: { query, title?, person_titles?, person_locations?, organization_num_employees_ranges?, person_seniorities? } - Search Apollo for leads matching criteria and create an Ops with results. Returns table_id, table_name, row_count.
+• enrich_table_column: { table_id, column_id, row_ids? } - Enrich a column in an Ops using AI. If row_ids not provided, enriches all rows.
 
 Write actions require params.confirm=true.`,
     input_schema: {
@@ -9629,7 +9629,7 @@ async function detectAndStructureResponse(
       }
     }
 
-    // Dynamic Table creation responses
+    // Ops creation responses
     const dynamicTableExec = toolExecutions
       .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'search_leads_create_table')
       .slice(-1)[0] as any;
@@ -9638,7 +9638,7 @@ async function detectAndStructureResponse(
       const dtResult = dynamicTableExec.result.data;
       return {
         type: 'dynamic_table',
-        summary: `Created a Dynamic Table "${dtResult.table_name || 'Untitled'}" with ${dtResult.row_count || 0} leads.`,
+        summary: `Created an Ops "${dtResult.table_name || 'Untitled'}" with ${dtResult.row_count || 0} leads.`,
         data: {
           table_id: dtResult.table_id,
           table_name: dtResult.table_name || 'Untitled Table',

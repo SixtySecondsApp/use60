@@ -1,7 +1,7 @@
 /**
- * useDynamicTableSearch Hook
+ * useOpsTableSearch Hook
  *
- * React Query mutations for Apollo search and Dynamic Table creation.
+ * React Query mutations for Apollo search and Ops creation.
  * Wraps apolloSearchService with toast notifications, cache invalidation,
  * and optional navigation to the newly created table.
  */
@@ -14,34 +14,34 @@ import {
   apolloSearchService,
   type CreateTableFromSearchParams,
   type ApolloSearchParams,
-  type DynamicTableResult,
+  type OpsTableResult,
   type ApolloSearchResult,
 } from '@/lib/services/apolloSearchService'
 
-interface UseDynamicTableSearchOptions {
+interface UseOpsTableSearchOptions {
   /** When true, navigate to the new table on successful creation. Defaults to true. */
   navigateOnSuccess?: boolean
 }
 
-export function useDynamicTableSearch(options: UseDynamicTableSearchOptions = {}) {
+export function useOpsTableSearch(options: UseOpsTableSearchOptions = {}) {
   const { navigateOnSuccess = true } = options
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
   // ------------------------------------------------------------------
-  // Mutation: Search Apollo and create a Dynamic Table
+  // Mutation: Search Apollo and create a Ops
   // ------------------------------------------------------------------
-  const createTableFromSearch = useMutation<DynamicTableResult, Error, CreateTableFromSearchParams>({
+  const createTableFromSearch = useMutation<OpsTableResult, Error, CreateTableFromSearchParams>({
     mutationFn: (params) => apolloSearchService.searchAndCreateTable(params),
 
     onSuccess: (result) => {
-      // Invalidate the dynamic tables list so the sidebar / list page refreshes
-      queryClient.invalidateQueries({ queryKey: ['dynamic-tables'] })
+      // Invalidate the ops tables list so the sidebar / list page refreshes
+      queryClient.invalidateQueries({ queryKey: ['ops-tables'] })
 
       toast.success(`Table "${result.table_name}" created with ${result.row_count} leads`)
 
       if (navigateOnSuccess) {
-        navigate(`/dynamic-tables/${result.table_id}`)
+        navigate(`/ops/${result.table_id}`)
       }
     },
 

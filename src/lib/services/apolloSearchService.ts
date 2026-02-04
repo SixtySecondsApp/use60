@@ -1,9 +1,9 @@
 /**
  * Apollo Search Service
  *
- * Wraps the Apollo search and Dynamic Table creation flow.
- * Calls the `copilot-dynamic-table` edge function to search Apollo
- * and persist results as a Dynamic Table, or calls `apollo-search`
+ * Wraps the Apollo search and Ops creation flow.
+ * Calls the copilot-dynamic-table edge function to search Apollo
+ * and persist results as a Ops, or calls `apollo-search`
  * directly for standalone searches without table creation.
  */
 
@@ -30,7 +30,7 @@ export interface CreateTableFromSearchParams {
   table_name?: string
 }
 
-export interface DynamicTableResult {
+export interface OpsTableResult {
   table_id: string
   table_name: string
   row_count: number
@@ -83,14 +83,14 @@ export interface ApolloSearchError {
 
 export const apolloSearchService = {
   /**
-   * Search Apollo and persist results as a new Dynamic Table.
+   * Search Apollo and persist results as a new Ops.
    *
-   * Calls the `copilot-dynamic-table` edge function which internally
+   * Calls the copilot-dynamic-table edge function which internally
    * calls `apollo-search`, then creates the table + columns + rows + cells.
    */
   async searchAndCreateTable(
     params: CreateTableFromSearchParams
-  ): Promise<DynamicTableResult> {
+  ): Promise<OpsTableResult> {
     const { data, error } = await supabase.functions.invoke('copilot-dynamic-table', {
       body: {
         query_description: params.query_description,
@@ -100,7 +100,7 @@ export const apolloSearchService = {
     })
 
     if (error) {
-      throw new Error(error.message || 'Failed to create dynamic table from search')
+      throw new Error(error.message || 'Failed to create ops table from search')
     }
 
     // The edge function returns error payloads in the data body for
@@ -111,7 +111,7 @@ export const apolloSearchService = {
       throw err
     }
 
-    return data as DynamicTableResult
+    return data as OpsTableResult
   },
 
   /**

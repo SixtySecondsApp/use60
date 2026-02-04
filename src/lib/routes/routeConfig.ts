@@ -235,9 +235,9 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     badge: 'New',
   },
   {
-    path: '/dynamic-tables',
+    path: '/ops',
     access: 'internal',
-    label: 'Dynamic Tables',
+    label: 'Ops',
     icon: Table2,
     showInNav: true,
     navSection: 'tools',

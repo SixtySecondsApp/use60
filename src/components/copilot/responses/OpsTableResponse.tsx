@@ -1,7 +1,7 @@
 import React from 'react';
 import { Table2, Sparkles, ExternalLink, Rows3, Send } from 'lucide-react';
 
-export interface DynamicTableResponseData {
+export interface OpsTableResponseData {
   table_id: string;
   table_name: string;
   row_count: number;
@@ -13,12 +13,12 @@ export interface DynamicTableResponseData {
   query_description?: string;
 }
 
-interface DynamicTableResponseProps {
-  data: DynamicTableResponseData;
+interface OpsTableResponseProps {
+  data: OpsTableResponseData;
   onActionClick: (action: string, payload?: Record<string, unknown>) => void;
 }
 
-export const DynamicTableResponse: React.FC<DynamicTableResponseProps> = ({ data, onActionClick }) => {
+export const OpsTableResponse: React.FC<OpsTableResponseProps> = ({ data, onActionClick }) => {
   const {
     table_id,
     table_name,
@@ -132,4 +132,4 @@ export const DynamicTableResponse: React.FC<DynamicTableResponseProps> = ({ data
   );
 };
 
-export default DynamicTableResponse;
+export default OpsTableResponse;

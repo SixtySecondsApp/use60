@@ -2,12 +2,12 @@
 export { parseCSVFile } from './csvImportService';
 
 // Column type auto-detection
-export type DynamicColumnType = 'text' | 'email' | 'url' | 'number' | 'boolean' | 'person' | 'company' | 'linkedin' | 'date';
+export type OpsColumnType = 'text' | 'email' | 'url' | 'number' | 'boolean' | 'person' | 'company' | 'linkedin' | 'date';
 
 export interface DetectedColumn {
   key: string;           // sanitized key (lowercase, underscored)
   label: string;         // original header name
-  type: DynamicColumnType;
+  type: OpsColumnType;
   included: boolean;     // default true
   sampleValues: string[]; // first 3 non-empty values
 }
@@ -15,7 +15,7 @@ export interface DetectedColumn {
 /**
  * Auto-detect column type from header name and sample values
  */
-export function autoDetectColumnType(header: string, sampleValues: string[]): DynamicColumnType {
+export function autoDetectColumnType(header: string, sampleValues: string[]): OpsColumnType {
   const h = header.toLowerCase().trim();
   const samples = sampleValues.filter(v => v?.trim());
 
@@ -109,13 +109,13 @@ export function detectColumns(headers: string[], rows: Record<string, string>[])
 }
 
 /**
- * Transform parsed CSV rows into DynamicTableService.addRows() format
+ * Transform parsed CSV rows into OpsTableService.addRows() format
  *
  * @param rows - Raw CSV rows (header -> value)
  * @param columns - Column definitions with key mapping
  * @returns Array of { cells: Record<string, string> } for addRows()
  */
-export function transformRowsForDynamicTable(
+export function transformRowsForOpsTable(
   rows: Record<string, string>[],
   columns: DetectedColumn[]
 ): { cells: Record<string, string> }[] {

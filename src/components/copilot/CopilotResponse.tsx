@@ -50,8 +50,8 @@ import { MeetingCountResponse } from './responses/MeetingCountResponse';
 import { MeetingBriefingResponse } from './responses/MeetingBriefingResponse';
 import { MeetingListResponse } from './responses/MeetingListResponse';
 import { TimeBreakdownResponse } from './responses/TimeBreakdownResponse';
-import { DynamicTableResponse } from './responses/DynamicTableResponse';
-import type { DynamicTableResponseData } from './responses/DynamicTableResponse';
+import { OpsTableResponse } from './responses/OpsTableResponse';
+import type { OpsTableResponseData } from './responses/OpsTableResponse';
 import type {
   CopilotResponse as CopilotResponseType,
   PipelineResponse as PipelineResponseType,
@@ -249,7 +249,7 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
       return <TimeBreakdownResponse data={(response as any).data as TimeBreakdownResponseData} onActionClick={onActionClick} />;
 
     case 'dynamic_table':
-      return <DynamicTableResponse data={(response as any).data as DynamicTableResponseData} onActionClick={onActionClick} />;
+      return <OpsTableResponse data={(response as any).data as OpsTableResponseData} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown

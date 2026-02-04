@@ -64,19 +64,19 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       return;
     }
 
-    // Dynamic Table navigation
+    // Ops navigation
     if (actionName === 'open_dynamic_table' && (payload?.table_id || payload?.tableId)) {
-      navigate(`/dynamic-tables/${String(payload.table_id || payload.tableId)}`);
+      navigate(`/ops/${String(payload.table_id || payload.tableId)}`);
       return;
     }
 
     if (actionName === 'add_enrichment' && (payload?.table_id || payload?.tableId)) {
-      navigate(`/dynamic-tables/${String(payload.table_id || payload.tableId)}?action=enrich`);
+      navigate(`/ops/${String(payload.table_id || payload.tableId)}?action=enrich`);
       return;
     }
 
     if (actionName === 'push_to_instantly' && (payload?.table_id || payload?.tableId)) {
-      navigate(`/dynamic-tables/${String(payload.table_id || payload.tableId)}?action=push`);
+      navigate(`/ops/${String(payload.table_id || payload.tableId)}?action=push`);
       return;
     }
 

@@ -1,8 +1,8 @@
 /**
  * useEnrichment Hook
  *
- * Manages enrichment operations for a dynamic table.
- * Connects the enrich-dynamic-table edge function to the UI,
+ * Manages enrichment operations for a ops table.
+ * Connects the enrich-dynamic-table edge function (Ops enrichment) to the UI,
  * providing start/retry mutations, active job polling, and progress tracking.
  */
 
@@ -30,7 +30,7 @@ interface EnrichmentJob {
 
 const QUERY_KEYS = {
   jobs: (tableId: string) => ['enrichment-jobs', tableId] as const,
-  tableData: (tableId: string) => ['dynamic-table-data', tableId] as const,
+  tableData: (tableId: string) => ['ops-table-data', tableId] as const,
 };
 
 // ============================================================================

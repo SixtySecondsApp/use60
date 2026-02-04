@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, MoreHorizontal, Pencil, Copy, Trash2 } from 'lucide-react';
-import type { SavedView } from '@/lib/services/dynamicTableService';
+import type { SavedView } from '@/lib/services/opsTableService';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,17 +98,25 @@ export function ViewSelector({
 
         return (
           <div key={view.id} className="relative flex shrink-0 items-center">
-            {/* Tab button */}
-            <button
+            {/* Tab */}
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => {
                 if (!isRenaming) onSelectView(view.id);
+              }}
+              onKeyDown={(e) => {
+                if (!isRenaming && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  onSelectView(view.id);
+                }
               }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenuOpenId(view.id);
               }}
               className={`
-                inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium
+                inline-flex cursor-pointer select-none items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium
                 transition-colors
                 ${
                   isActive
@@ -144,7 +152,7 @@ export function ViewSelector({
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </button>
               )}
-            </button>
+            </div>
 
             {/* Context menu */}
             {menuOpenId === view.id && (

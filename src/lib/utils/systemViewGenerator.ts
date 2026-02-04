@@ -1,4 +1,4 @@
-import type { DynamicTableColumn, FilterCondition } from '@/lib/services/dynamicTableService';
+import type { OpsTableColumn, FilterCondition } from '@/lib/services/opsTableService';
 
 export interface SystemViewConfig {
   name: string;
@@ -12,7 +12,7 @@ export interface SystemViewConfig {
  * Generates system view configs based on column analysis.
  * Always includes an "All" view. May add smart views based on column types/names.
  */
-export function generateSystemViews(columns: DynamicTableColumn[]): SystemViewConfig[] {
+export function generateSystemViews(columns: OpsTableColumn[]): SystemViewConfig[] {
   const views: SystemViewConfig[] = [];
   let position = 0;
 

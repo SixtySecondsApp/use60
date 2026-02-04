@@ -50,7 +50,7 @@ interface ApolloSearchResponse {
   }
 }
 
-// Standard columns for Apollo-sourced dynamic tables
+// Standard columns for Apollo-sourced ops tables
 const APOLLO_COLUMNS = [
   { key: 'full_name', label: 'Name', column_type: 'person', position: 0, width: 180 },
   { key: 'title', label: 'Title', column_type: 'text', position: 1, width: 200 },
@@ -254,11 +254,11 @@ serve(async (req) => {
     const tableName = requestedTableName || generateTableName(search_params, query_description)
 
     // ---------------------------------------------------------------
-    // 6. Create dynamic table + columns + rows + cells using service role
+    // 6. Create ops table + columns + rows + cells using service role
     // ---------------------------------------------------------------
     const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
 
-    // 6a. Insert the dynamic table
+    // 6a. Insert the ops table
     const { data: newTable, error: tableError } = await serviceClient
       .from('dynamic_tables')
       .insert({
@@ -287,7 +287,7 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ error: 'Failed to create dynamic table' }),
+        JSON.stringify({ error: 'Failed to create ops table' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
