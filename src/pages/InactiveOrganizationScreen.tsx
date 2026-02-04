@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, RefreshCw, LogOut, Clock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useOrganizationContext } from '@/lib/hooks/useOrganizationContext';
 import {
   requestOrganizationReactivation,
@@ -81,17 +80,17 @@ export default function InactiveOrganizationScreen() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <Card className="max-w-2xl w-full shadow-2xl border-red-200 dark:border-red-900/30">
-        <CardHeader className="text-center space-y-4 pb-4">
+      <Card className="max-w-2xl w-full">
+        <CardHeader className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
             <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
           </div>
 
           <div>
-            <CardTitle className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            <CardTitle className="text-2xl">
               Organization Inactive
             </CardTitle>
-            <CardDescription className="text-base mt-2">
+            <CardDescription className="mt-2">
               {activeOrg?.name} has been deactivated and is currently unavailable.
             </CardDescription>
           </div>
@@ -99,29 +98,32 @@ export default function InactiveOrganizationScreen() {
 
         <CardContent className="space-y-6">
           {/* Deactivation Info */}
-          <Alert className="border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-900/10">
-            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-            <AlertDescription className="text-red-800 dark:text-red-200">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              Organization Deactivated
+            </h3>
+            <p className="text-sm text-red-800 dark:text-red-200">
               This organization has been temporarily deactivated. Access to all features is currently restricted.
-              {activeOrg?.deactivation_reason && (
-                <>
-                  <br />
-                  <span className="font-medium mt-2 block">Reason:</span> {activeOrg.deactivation_reason}
-                </>
-              )}
-            </AlertDescription>
-          </Alert>
+            </p>
+            {activeOrg?.deactivation_reason && (
+              <p className="text-sm text-red-800 dark:text-red-200 mt-2">
+                <span className="font-medium">Reason:</span> {activeOrg.deactivation_reason}
+              </p>
+            )}
+          </div>
 
           {/* TODO: BILLING - Show billing-specific messages */}
           {/* Example:
-          <Alert className="border-amber-200 bg-amber-50">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800">
-              <span className="font-medium">Billing Issue:</span> Your subscription has been cancelled or payment has failed.
-              <br />
-              <a href="/settings/billing" className="underline font-medium">Update payment method</a> to reactivate your organization.
-            </AlertDescription>
-          </Alert>
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-2">Billing Issue</h3>
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              Your subscription has been cancelled or payment has failed.
+            </p>
+            <a href="/settings/billing" className="text-amber-600 dark:text-amber-400 hover:underline font-medium text-sm mt-2 block">
+              Update payment method to reactivate
+            </a>
+          </div>
           */}
 
           {/* Request Status */}
@@ -131,95 +133,82 @@ export default function InactiveOrganizationScreen() {
               <span className="ml-2 text-gray-600 dark:text-gray-400">Checking request status...</span>
             </div>
           ) : existingRequest ? (
-            <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/30 dark:bg-amber-900/10">
-              <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <AlertDescription className="text-amber-800 dark:text-amber-200">
-                <span className="font-medium">Reactivation Request Pending</span>
-                <br />
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+              <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Reactivation Request Pending
+              </h3>
+              <p className="text-sm text-amber-800 dark:text-amber-200">
                 Your request to reactivate this organization is being reviewed by an administrator.
-                <br />
-                <span className="text-sm text-amber-700 dark:text-amber-300 mt-2 block">
-                  Submitted: {new Date(existingRequest.requested_at).toLocaleString()}
-                </span>
-              </AlertDescription>
-            </Alert>
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+                Submitted: {new Date(existingRequest.requested_at).toLocaleString()}
+              </p>
+            </div>
           ) : (
-            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/30 rounded-xl p-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <RefreshCw className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                <div>
-                  <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                    Request Reactivation
-                  </h3>
-                  <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                    Submit a request to reactivate this organization. An administrator will review and approve your request.
-                  </p>
-                  {/* TODO: BILLING - Add billing-specific requirements */}
-                  {/* Example:
-                  <p className="text-sm text-blue-800 mt-2">
-                    <strong>Note:</strong> You will need to update your payment method and resolve any outstanding invoices before reactivation.
-                  </p>
-                  */}
-                </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-4">
+              <div>
+                <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                  Request Reactivation
+                </h3>
+                <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                  Submit a request to reactivate this organization. An administrator will review and approve your request.
+                </p>
+                {/* TODO: BILLING - Add billing-specific requirements */}
+                {/* Example:
+                <p className="text-sm text-blue-800 dark:text-blue-200 mt-2">
+                  <strong>Note:</strong> You will need to update your payment method and resolve any outstanding invoices before reactivation.
+                </p>
+                */}
               </div>
 
               <Button
                 onClick={handleRequestReactivation}
                 disabled={isRequesting}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                className="w-full justify-between"
+                size="lg"
               >
-                {isRequesting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Submitting Request...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Request Reactivation Now
-                  </>
-                )}
+                <span>Request Reactivation Now</span>
+                {isRequesting && <RefreshCw className="w-4 h-4 animate-spin" />}
               </Button>
             </div>
           )}
-
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white dark:bg-gray-900 text-gray-500">or</span>
-            </div>
-          </div>
 
           {/* Alternative Actions */}
           <div className="space-y-3">
             <Button
               onClick={handleChooseDifferentOrg}
               variant="outline"
-              className="w-full"
+              className="w-full justify-between"
+              size="lg"
             >
-              Choose Different Organization
+              <span>Choose Different Organization</span>
+              <span>→</span>
             </Button>
 
             <Button
               onClick={handleSignOut}
               variant="outline"
-              className="w-full text-gray-600 hover:text-gray-900"
+              className="w-full justify-between"
+              size="lg"
             >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
+              <span className="flex items-center gap-2">
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </span>
+              <span>→</span>
             </Button>
           </div>
 
           {/* Help Text */}
-          <p className="text-sm text-center text-gray-600 dark:text-gray-400">
-            Need help? Contact{' '}
-            <a href="mailto:support@use60.com" className="text-blue-600 hover:underline">
-              support@use60.com
-            </a>
-          </p>
+          <div className="text-center text-sm text-muted-foreground pt-4 border-t">
+            <p>
+              Need help? Contact support at{' '}
+              <a href="mailto:support@use60.com" className="text-primary hover:underline">
+                support@use60.com
+              </a>
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
