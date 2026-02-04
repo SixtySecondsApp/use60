@@ -23,7 +23,7 @@ interface UseCommandCenterStateProps {
 }
 
 export function useCommandCenterState({ isOpen, onClose }: UseCommandCenterStateProps) {
-  const { messages, cancelRequest } = useCopilot();
+  const { messages, cancelRequest, startNewChat } = useCopilot();
   const [state, setState] = useState<CommandCenterState>('closed');
   const [activeQuickAddAction, setActiveQuickAddActionState] = useState<QuickAddAction>(null);
   const [quickAddPrefill, setQuickAddPrefill] = useState<QuickAddPrefill>({});
@@ -87,10 +87,11 @@ export function useCommandCenterState({ isOpen, onClose }: UseCommandCenterState
   }, [state]);
 
   const openChat = useCallback(() => {
+    startNewChat();
     setState('medium');
     setActiveQuickAddActionState(null);
     setQuickAddPrefill({});
-  }, []);
+  }, [startNewChat]);
 
   const expandFull = useCallback(() => {
     setState('full');
