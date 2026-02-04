@@ -59,12 +59,29 @@ export default function PendingApprovalPage() {
         // If not found, try rejoin_requests (users rejoining after leaving)
         if (!data.data) {
           console.log('[PendingApprovalPage] No new join request found, checking rejoin requests...');
-          data = await supabase
-            .from('rejoin_requests')
-            .select('id, org_id, email, organizations(name)')
-            .eq('user_id', user.id)
-            .eq('status', 'pending')
-            .maybeSingle();
+          try {
+            // rejoin_requests doesn't have email column, so join to organizations for org name
+            data = await supabase
+              .from('rejoin_requests')
+              .select('id, org_id, organizations(name)')
+              .eq('user_id', user.id)
+              .eq('status', 'pending')
+              .maybeSingle();
+
+            if (data.error) {
+              console.log('[PendingApprovalPage] Retrying rejoin_requests query without org join due to error:', data.error?.message);
+              // Retry without the organization join
+              data = await supabase
+                .from('rejoin_requests')
+                .select('id, org_id')
+                .eq('user_id', user.id)
+                .eq('status', 'pending')
+                .maybeSingle();
+            }
+          } catch (err) {
+            console.error('[PendingApprovalPage] Error querying rejoin_requests:', err);
+            data = { data: null, error: err };
+          }
         }
 
         if (data.data) {
@@ -73,7 +90,7 @@ export default function PendingApprovalPage() {
             requestId: data.data.id,
             orgId: data.data.org_id,
             orgName: data.data.organizations?.name || 'the organization',
-            email: data.data.email,
+            email: data.data.email || user?.email || '',
           });
         } else {
           // No pending join request found - user may have been removed or request was deleted
@@ -97,7 +114,7 @@ export default function PendingApprovalPage() {
     };
 
     fetchJoinRequest();
-  }, [user?.id, navigate]);
+  }, [user?.id, user?.email, navigate]);
 
   // Automatic polling for approval detection (5 seconds)
   useEffect(() => {
@@ -224,7 +241,7 @@ export default function PendingApprovalPage() {
       // Check organization_join_requests first
       let pendingRequests = await supabase
         .from('organization_join_requests')
-        .select('status, org_id, organizations(name)')
+        .select('status, org_id')
         .eq('user_id', user.id)
         .eq('status', 'pending')
         .maybeSingle();
@@ -233,7 +250,7 @@ export default function PendingApprovalPage() {
       if (!pendingRequests.data) {
         pendingRequests = await supabase
           .from('rejoin_requests')
-          .select('status, org_id, organizations(name)')
+          .select('status, org_id')
           .eq('user_id', user.id)
           .eq('status', 'pending')
           .maybeSingle();
@@ -263,12 +280,17 @@ export default function PendingApprovalPage() {
 
       // If not found, check rejoin_requests
       if (!approvedRequests.data) {
-        approvedRequests = await supabase
-          .from('rejoin_requests')
-          .select('status, org_id')
-          .eq('user_id', user.id)
-          .eq('status', 'approved')
-          .maybeSingle();
+        try {
+          approvedRequests = await supabase
+            .from('rejoin_requests')
+            .select('status, org_id')
+            .eq('user_id', user.id)
+            .eq('status', 'approved')
+            .maybeSingle();
+        } catch (err) {
+          console.error('[PendingApprovalPage] Error checking rejoin_requests approval:', err);
+          approvedRequests = { data: null };
+        }
       }
 
       if (approvedRequests.data) {
