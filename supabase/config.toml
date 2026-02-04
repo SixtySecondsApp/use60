@@ -269,3 +269,17 @@ verify_jwt = false
 
 [functions.test-fathom-api]
 verify_jwt = false
+
+# Analytics web vitals - called from browser, no auth needed for telemetry
+[functions.analytics-web-vitals]
+verify_jwt = false
+
+# Org capabilities check - called from browser with user JWT
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.check-org-capabilities]
+verify_jwt = false
+
+# Autonomous copilot - called from browser with user JWT
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.copilot-autonomous]
+verify_jwt = false
