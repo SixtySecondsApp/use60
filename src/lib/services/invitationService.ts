@@ -129,6 +129,23 @@ export async function createInvitation({
   try {
     logger.log('[InvitationService] Creating invitation:', { orgId, email, role });
 
+    // Permission check: caller must be admin or owner of the target org
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) {
+      return { data: null, error: 'Not authenticated' };
+    }
+
+    const { data: callerMembership } = await supabase
+      .from('organization_memberships')
+      .select('role')
+      .eq('org_id', orgId)
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    if (!callerMembership || !['admin', 'owner'].includes(callerMembership.role)) {
+      return { data: null, error: 'You do not have permission to invite members to this organization' };
+    }
+
     // Check if user already exists and is a member
     const { data: profileData } = await supabase
       .from('profiles')
