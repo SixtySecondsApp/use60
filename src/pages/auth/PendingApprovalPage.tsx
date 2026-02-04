@@ -353,15 +353,15 @@ export default function PendingApprovalPage() {
       >
         <div className="relative bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800/50 p-8">
           <div className="absolute inset-0 bg-gradient-to-br from-gray-900/90 via-gray-900/70 to-gray-900/30 rounded-2xl -z-10" />
-          <div className="absolute -right-20 -top-20 w-40 h-40 bg-amber-500/10 blur-3xl rounded-full" />
+          <div className="absolute -right-20 -top-20 w-40 h-40 bg-blue-500/10 blur-3xl rounded-full" />
 
           <div className="text-center">
             <motion.div
               animate={{ rotate: [0, 5, -5, 0] }}
               transition={{ repeat: Infinity, duration: 3 }}
-              className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/20 mx-auto mb-6"
+              className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/20 mx-auto mb-6"
             >
-              <Clock className="w-8 h-8 text-amber-500" />
+              <Clock className="w-8 h-8 text-blue-500" />
             </motion.div>
 
             <h1 className="text-2xl font-bold text-white mb-2">
@@ -389,7 +389,7 @@ export default function PendingApprovalPage() {
                 Status
               </p>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                 <p className="font-medium text-white">
                   {isLoadingDashboard ? 'Loading your dashboard...' : 'Awaiting Admin Review'}
                 </p>
@@ -408,12 +408,12 @@ export default function PendingApprovalPage() {
               )}
             </div>
 
-            <div className="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4">
+            <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-4">
               <div className="flex gap-3">
-                <Clock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <Clock className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-amber-100 mb-1">What to Expect</p>
-                  <p className="text-sm text-amber-200/80">
+                  <p className="font-medium text-blue-100 mb-1">What to Expect</p>
+                  <p className="text-sm text-blue-200/80">
                     Once approved, you'll receive an email with a link to access your organization dashboard. This usually happens within 24 hours.
                   </p>
                 </div>
