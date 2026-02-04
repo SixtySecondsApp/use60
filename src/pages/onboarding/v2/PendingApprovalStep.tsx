@@ -494,7 +494,7 @@ export function PendingApprovalStep() {
     >
       <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+        <div className="bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
               <Clock className="w-4 h-4 text-white" />
