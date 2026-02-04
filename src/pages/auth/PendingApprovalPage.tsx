@@ -143,9 +143,38 @@ export default function PendingApprovalPage() {
       console.log('[PendingApprovalPage] Switching to organization:', membership.org_id);
       switchOrg(membership.org_id);
 
-      // 4. Show success message and navigate to dashboard
-      // Note: We skip marking onboarding as complete because the user already completed onboarding
-      // This page is for users who completed onboarding but are waiting for approval
+      // 4. Mark onboarding as complete to prevent redirect loop
+      // Users who went through personal email → join request flow may not have completed enrichment/skills steps
+      if (user?.id) {
+        try {
+          const { error: onboardingError } = await supabase
+            .from('user_onboarding_progress')
+            .upsert(
+              {
+                user_id: user.id,
+                onboarding_step: 'complete',
+                completed_at: new Date().toISOString(),
+              },
+              { onConflict: 'user_id' }
+            );
+
+          if (onboardingError) {
+            console.error('[PendingApprovalPage] Error marking onboarding complete:', onboardingError);
+          } else {
+            console.log('[PendingApprovalPage] Marked onboarding as complete');
+            // Clear onboarding localStorage to ensure fresh state on next login
+            try {
+              localStorage.removeItem(`sixty_onboarding_${user.id}`);
+            } catch (e) {
+              console.warn('Failed to clear onboarding localStorage:', e);
+            }
+          }
+        } catch (error) {
+          console.error('[PendingApprovalPage] Failed to mark onboarding complete:', error);
+        }
+      }
+
+      // 5. Show success message and navigate to dashboard
       toast.success('Welcome! Redirecting to your dashboard...');
       setTimeout(() => {
         navigate('/dashboard', { replace: true });

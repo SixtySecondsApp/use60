@@ -287,7 +287,7 @@ interface OnboardingV2State {
   // Context setters
   setOrganizationId: (id: string) => void;
   setDomain: (domain: string) => void;
-  setUserEmail: (email: string) => void;
+  setUserEmail: (email: string) => Promise<void>;
 
   // Actions
   setStep: (step: OnboardingV2Step) => void;
@@ -452,14 +452,126 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       persistOnboardingState(userEmail, get());
     }
   },
-  setUserEmail: (email) => {
+  setUserEmail: async (email) => {
     const isPersonal = isPersonalEmailDomain(email);
-    set({
-      userEmail: email,
-      isPersonalEmail: isPersonal,
-      // If personal email, start at website_input step
-      currentStep: isPersonal ? 'website_input' : 'enrichment_loading',
-    });
+
+    // For business emails, check if an organization exists for that domain before enrichment
+    if (!isPersonal) {
+      try {
+        const domain = extractDomain(email);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('No session');
+
+        console.log('[onboardingV2] Business email detected, checking for existing org with domain:', domain);
+
+        let existingOrgs: any[] = [];
+
+        // Strategy 1: Exact match by company_domain
+        const { data: exactMatch } = await supabase
+          .from('organizations')
+          .select('id, name, company_domain')
+          .eq('company_domain', domain)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (exactMatch) {
+          existingOrgs = [exactMatch];
+        } else {
+          // Strategy 2: Fuzzy domain matching RPC
+          const { data: fuzzyMatches } = await supabase.rpc('find_similar_organizations_by_domain', {
+            p_search_domain: domain,
+            p_limit: 5,
+          });
+
+          // Get all matches with score > 0.7
+          if (fuzzyMatches && fuzzyMatches.length > 0) {
+            existingOrgs = fuzzyMatches.filter((m: any) => m.similarity_score > 0.7);
+          }
+        }
+
+        // Handle matches
+        if (existingOrgs.length === 1) {
+          // Single match: auto-join the org
+          console.log('[onboardingV2] Found single matching org, auto-joining:', existingOrgs[0].name);
+          const org = existingOrgs[0];
+
+          try {
+            // Create membership directly for auto-join
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('first_name, last_name')
+              .eq('id', session.user.id)
+              .maybeSingle();
+
+            const { error: memberError } = await supabase
+              .from('organization_memberships')
+              .insert({
+                org_id: org.id,
+                user_id: session.user.id,
+                role: 'member',
+              });
+
+            if (memberError) throw memberError;
+
+            // Update email and move to enrichment with the auto-joined org
+            set({
+              userEmail: email,
+              isPersonalEmail: isPersonal,
+              organizationId: org.id,
+              currentStep: 'enrichment_loading',
+              domain,
+            });
+
+            console.log('[onboardingV2] Successfully auto-joined organization:', org.id);
+          } catch (error) {
+            console.error('[onboardingV2] Error auto-joining org:', error);
+            // Fall back to enrichment if auto-join fails
+            set({
+              userEmail: email,
+              isPersonalEmail: isPersonal,
+              currentStep: 'enrichment_loading',
+              domain,
+            });
+          }
+        } else if (existingOrgs.length > 1) {
+          // Multiple matches: show selection step
+          console.log('[onboardingV2] Found multiple matching orgs, showing selection:', existingOrgs.length);
+          set({
+            userEmail: email,
+            isPersonalEmail: isPersonal,
+            currentStep: 'organization_selection',
+            similarOrganizations: existingOrgs,
+            matchSearchTerm: domain,
+            domain,
+          });
+        } else {
+          // No match: proceed to enrichment as normal
+          console.log('[onboardingV2] No existing org found for domain, proceeding to enrichment');
+          set({
+            userEmail: email,
+            isPersonalEmail: isPersonal,
+            currentStep: 'enrichment_loading',
+            domain,
+          });
+        }
+      } catch (error) {
+        console.error('[onboardingV2] Error checking for existing org:', error);
+        // Fall back to enrichment on error
+        set({
+          userEmail: email,
+          isPersonalEmail: isPersonal,
+          currentStep: 'enrichment_loading',
+        });
+      }
+    } else {
+      // Personal email: proceed to website input
+      set({
+        userEmail: email,
+        isPersonalEmail: isPersonal,
+        currentStep: 'website_input',
+      });
+    }
+
     // Persist state after email is set
     if (email) {
       persistOnboardingState(email, get());

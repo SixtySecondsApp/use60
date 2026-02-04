@@ -243,6 +243,17 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
     }
   }, [organizationId, domain, userEmail, setOrganizationId, setDomain, setUserEmail]);
 
+  // Alternative initialization path for business emails with domain check
+  useEffect(() => {
+    const initBusinessEmail = async () => {
+      if (userEmail && !isPersonalEmailDomain(userEmail)) {
+        // setUserEmail is now async and handles domain checking internally
+        await setUserEmail(userEmail);
+      }
+    };
+    initBusinessEmail();
+  }, [userEmail, setUserEmail]);
+
   // Check for existing organization when business email signs up
   useEffect(() => {
     const checkBusinessEmailOrg = async () => {
