@@ -47,8 +47,8 @@ export async function getAllOrganizations(): Promise<OrganizationWithMemberCount
           .select('*', { count: 'exact' })
           .eq('org_id', org.id);
 
-        // Add member_status filter if column exists
-        countQuery = countQuery.eq('member_status', 'active');
+        // Exclude removed members (includes active and NULL status for backwards compatibility)
+        countQuery = countQuery.neq('member_status', 'removed');
 
         let { count, error: countError } = await countQuery;
 
@@ -121,7 +121,7 @@ export async function getOrganization(orgId: string): Promise<OrganizationWithMe
       .from('organization_memberships')
       .select('*', { count: 'exact' })
       .eq('org_id', orgId)
-      .eq('member_status', 'active');
+      .neq('member_status', 'removed');
 
     let { count, error: countError } = await countQuery;
 

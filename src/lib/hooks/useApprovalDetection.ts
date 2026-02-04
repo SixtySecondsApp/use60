@@ -64,6 +64,7 @@ export function useApprovalDetection(
     queryFn: async () => {
       if (!userId || !orgId) return null;
 
+      // Try to query with member_status filter first (for ORGREM support)
       let query = supabase
         .from('organization_memberships')
         .select('org_id, user_id, role, created_at')
@@ -71,7 +72,20 @@ export function useApprovalDetection(
         .eq('org_id', orgId)
         .eq('member_status', 'active'); // Only return active memberships, not removed ones
 
-      const { data, error } = await query.maybeSingle();
+      let result = await query.maybeSingle();
+
+      // If member_status column doesn't exist, fall back to basic query
+      if (result.error?.code === '42703') {
+        console.log('[useApprovalDetection] member_status column not available, using basic query');
+        const basicQuery = supabase
+          .from('organization_memberships')
+          .select('org_id, user_id, role, created_at')
+          .eq('user_id', userId)
+          .eq('org_id', orgId);
+        result = await basicQuery.maybeSingle();
+      }
+
+      const { data, error } = result;
 
       if (error) {
         console.error('[useApprovalDetection] Error fetching membership:', error);

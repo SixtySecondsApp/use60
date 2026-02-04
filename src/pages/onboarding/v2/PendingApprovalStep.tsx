@@ -494,7 +494,7 @@ export function PendingApprovalStep() {
     >
       <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
         {/* Header */}
-        <div className="bg-amber-600 px-6 py-4">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
               <Clock className="w-4 h-4 text-white" />
@@ -503,7 +503,7 @@ export function PendingApprovalStep() {
               <h2 className="font-bold text-white">
                 Request Pending Approval
               </h2>
-              <p className="text-amber-100 text-sm">Your admin will review your request shortly</p>
+              <p className="text-blue-100 text-sm">Your admin will review your request shortly</p>
             </div>
           </div>
         </div>
@@ -514,7 +514,7 @@ export function PendingApprovalStep() {
             <p className="text-gray-300 text-center leading-relaxed mb-6">
               Your request to join{' '}
               {showOrgLoadError ? (
-                <span className="font-semibold text-amber-300">the requested organization</span>
+                <span className="font-semibold text-blue-300">the requested organization</span>
               ) : (
                 <span className="font-semibold text-white">{orgName}</span>
               )}
@@ -523,12 +523,12 @@ export function PendingApprovalStep() {
             </p>
 
             {showOrgLoadError && (
-              <div className="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4 mb-6">
+              <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-4 mb-6">
                 <div className="flex gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-medium text-amber-100 mb-1">Organization Name Unavailable</p>
-                    <p className="text-sm text-amber-200/80">
+                    <p className="font-medium text-blue-100 mb-1">Organization Name Unavailable</p>
+                    <p className="text-sm text-blue-200/80">
                       We couldn&apos;t load the organization name. You can still wait for approval or restart onboarding.
                     </p>
                   </div>
@@ -620,12 +620,12 @@ export function PendingApprovalStep() {
             </div>
 
             {/* What happens next */}
-            <div className="bg-amber-900/20 border border-amber-800/50 rounded-xl p-4 mb-6">
+            <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-4 mb-6">
               <div className="flex gap-3">
-                <CheckCircle2 className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-amber-100 mb-1">What Happens Next</p>
-                  <p className="text-sm text-amber-200/80">
+                  <p className="font-medium text-blue-100 mb-1">What Happens Next</p>
+                  <p className="text-sm text-blue-200/80">
                     Once approved (usually within 24 hours), you&apos;ll receive an email with a link to activate
                     your account and access the dashboard. The admin can approve your request from their
                     Team Members settings page.
