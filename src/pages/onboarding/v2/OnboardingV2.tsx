@@ -16,7 +16,7 @@
 import { useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { useOnboardingV2Store, type OnboardingV2Step } from '@/lib/stores/onboardingV2Store';
+import { useOnboardingV2Store, type OnboardingV2Step, isPersonalEmailDomain } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
