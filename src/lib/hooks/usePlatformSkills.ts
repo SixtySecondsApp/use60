@@ -18,6 +18,7 @@ import {
   rollbackPlatformSkill,
   previewSkillCompilation,
   getOrganizationContext,
+  syncSkillAfterSave,
   type PlatformSkill,
   type CreatePlatformSkillInput,
   type UpdatePlatformSkillInput,
@@ -25,6 +26,8 @@ import {
   type PlatformSkillHistory,
   type PlatformSkillFrontmatter,
 } from '@/lib/services/platformSkillService';
+import { ensureStandardFolders } from '@/lib/services/skillFolderService';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
 
 // ============================================================================
@@ -175,6 +178,7 @@ export function useOrganizationContext(organizationId: string | null) {
  */
 export function useCreatePlatformSkill() {
   const queryClient = useQueryClient();
+  const activeOrgId = useOrgStore((state) => state.activeOrgId);
 
   return useMutation({
     mutationFn: async (params: { input: CreatePlatformSkillInput; userId: string }) => {
@@ -188,6 +192,25 @@ export function useCreatePlatformSkill() {
       // Invalidate all skill queries
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.all });
       toast.success(`Skill "${data?.frontmatter?.name || data?.skill_key}" created`);
+
+      // Create standard folders (references/, scripts/, assets/) for the new skill
+      if (data) {
+        ensureStandardFolders(data.id).catch((err) =>
+          console.warn('[useCreatePlatformSkill] Failed to create standard folders:', err)
+        );
+      }
+
+      // Generate embedding + compile org skills in the background
+      if (data) {
+        syncSkillAfterSave(data, activeOrgId).then(({ embeddingOk, compileOk, errors }) => {
+          if (embeddingOk && compileOk) {
+            toast.success('Skill synced — embedding generated & compiled for your org');
+          } else if (errors.length > 0) {
+            console.warn('[useCreatePlatformSkill] Post-save sync issues:', errors);
+            toast.warning('Skill saved, but some sync steps had issues. Check console for details.');
+          }
+        });
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -200,6 +223,7 @@ export function useCreatePlatformSkill() {
  */
 export function useUpdatePlatformSkill() {
   const queryClient = useQueryClient();
+  const activeOrgId = useOrgStore((state) => state.activeOrgId);
 
   return useMutation({
     mutationFn: async (params: { skillId: string; input: UpdatePlatformSkillInput }) => {
@@ -217,6 +241,18 @@ export function useUpdatePlatformSkill() {
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.byKey(data.skill_key) });
       }
       toast.success('Skill updated successfully');
+
+      // Re-generate embedding + recompile org skills in the background
+      if (data) {
+        syncSkillAfterSave(data, activeOrgId).then(({ embeddingOk, compileOk, errors }) => {
+          if (embeddingOk && compileOk) {
+            toast.success('Skill synced — embedding updated & recompiled for your org');
+          } else if (errors.length > 0) {
+            console.warn('[useUpdatePlatformSkill] Post-save sync issues:', errors);
+            toast.warning('Skill saved, but some sync steps had issues. Check console for details.');
+          }
+        });
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message);

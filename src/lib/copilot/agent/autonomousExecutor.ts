@@ -84,7 +84,6 @@ export interface ExecutorResult {
  * Convert a skill's frontmatter to a Claude tool definition
  */
 function skillToTool(skill: {
-  id: string;
   skill_key: string;
   category: string;
   frontmatter: SkillFrontmatterV2;
@@ -155,7 +154,7 @@ function skillToTool(skill: {
       properties,
       required: required.length > 0 ? required : undefined,
     },
-    _skillId: skill.id,
+    _skillId: skill.skill_key, // Uses skill_key (RPC doesn't return UUID id)
     _skillKey: skill.skill_key,
     _category: skill.category,
     _isSequence: skill.category === 'agent-sequence',
@@ -186,38 +185,45 @@ export class AutonomousExecutor {
   }
 
   /**
-   * Initialize by loading all available skills as tools
+   * Initialize by loading all available skills as tools.
+   * Only loads Tier 1 (metadata/frontmatter) — content_template is lazy-loaded
+   * on first execution to reduce startup token cost.
    */
   async initialize(): Promise<void> {
-    // Load all active skills
+    // Load from organization_skills via RPC (compiled, org-specific skills)
     const { data: skills, error } = await supabase
-      .from('platform_skills')
-      .select('id, skill_key, category, frontmatter, content_template')
-      .eq('is_active', true)
-      .neq('category', 'hitl'); // Exclude HITL skills from direct invocation
+      .rpc('get_organization_skills_for_agent', {
+        p_org_id: this.config.organizationId,
+      }) as { data: Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }> | null; error: { message: string } | null };
 
     if (error) {
       console.error('[AutonomousExecutor.initialize] Error loading skills:', error);
       throw new Error(`Failed to load skills: ${error.message}`);
     }
 
-    // Convert skills to tool definitions
-    this.tools = (skills || []).map((skill) =>
+    // Filter out HITL skills and convert to tool definitions
+    const activeSkills = (skills || []).filter(
+      (s) => s.category !== 'hitl'
+    );
+
+    this.tools = activeSkills.map((skill) =>
       skillToTool({
-        id: skill.id,
         skill_key: skill.skill_key,
         category: skill.category,
         frontmatter: skill.frontmatter as SkillFrontmatterV2,
-        content: skill.content_template,
+        content: '', // Content used only during execution, not in tool definition
       })
     );
 
-    // Cache skill content for execution
-    for (const skill of skills || []) {
-      this.skillContentCache.set(skill.skill_key, skill.content_template);
+    // Pre-cache content from the RPC response (already compiled for this org)
+    this.skillContentCache.clear();
+    for (const skill of activeSkills) {
+      if (skill.content) {
+        this.skillContentCache.set(skill.skill_key, skill.content);
+      }
     }
 
-    console.log(`[AutonomousExecutor] Initialized with ${this.tools.length} tools`);
+    console.log(`[AutonomousExecutor] Initialized with ${this.tools.length} tools from organization_skills`);
   }
 
   /**
@@ -403,10 +409,23 @@ export class AutonomousExecutor {
       throw new Error(`Unknown tool: ${toolName}`);
     }
 
-    // Get skill content
-    const skillContent = this.skillContentCache.get(tool._skillKey);
+    // Tier 2: Load skill content (normally pre-cached from initialize RPC response)
+    let skillContent = this.skillContentCache.get(tool._skillKey);
     if (!skillContent) {
-      throw new Error(`Skill content not found: ${tool._skillKey}`);
+      // Fallback: fetch from organization_skills (compiled content for this org)
+      const { data, error: contentError } = await supabase
+        .from('organization_skills')
+        .select('compiled_content')
+        .eq('skill_id', tool._skillKey)
+        .eq('organization_id', this.config.organizationId)
+        .maybeSingle();
+
+      if (contentError || !data?.compiled_content) {
+        throw new Error(`Failed to load content for skill: ${tool._skillKey}`);
+      }
+
+      skillContent = data.compiled_content;
+      this.skillContentCache.set(tool._skillKey, skillContent);
     }
 
     // Build context for skill execution
