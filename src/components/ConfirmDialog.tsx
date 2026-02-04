@@ -1,11 +1,13 @@
 /**
  * Custom Confirmation Dialog
  * A nice modal dialog for confirming actions instead of browser's native confirm()
+ * Rendered in a portal so it breaks out of parent containers and covers full screen
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { createPortal } from 'react-dom';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -36,7 +38,8 @@ export function ConfirmDialog({
     onConfirm();
   };
 
-  return (
+  // Render in a portal so it breaks out of parent containers and covers full screen
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -79,7 +82,7 @@ export function ConfirmDialog({
                         ? 'bg-red-500/20'
                         : confirmVariant === 'warning'
                         ? 'bg-amber-500/20'
-                        : 'bg-violet-500/20'
+                        : 'bg-blue-500/20'
                     }`}
                   >
                     <AlertTriangle
@@ -88,7 +91,7 @@ export function ConfirmDialog({
                           ? 'text-red-400'
                           : confirmVariant === 'warning'
                           ? 'text-amber-400'
-                          : 'text-violet-400'
+                          : 'text-blue-400'
                       }`}
                     />
                   </div>
@@ -98,7 +101,7 @@ export function ConfirmDialog({
                 </div>
 
                 {/* Description */}
-                <p className="text-gray-300 mb-6 leading-relaxed">{description}</p>
+                <p className="text-gray-300 mb-6 leading-relaxed whitespace-pre-wrap">{description}</p>
 
                 {/* Actions */}
                 <div className="flex gap-3">
@@ -111,13 +114,7 @@ export function ConfirmDialog({
                   </Button>
                   <Button
                     onClick={handleConfirm}
-                    className={`flex-1 text-white font-medium border-0 ${
-                      confirmVariant === 'destructive'
-                        ? 'bg-red-600 hover:bg-red-700'
-                        : confirmVariant === 'warning'
-                        ? 'bg-amber-600 hover:bg-amber-700'
-                        : 'bg-violet-600 hover:bg-violet-700'
-                    }`}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium border-0"
                     disabled={loading}
                   >
                     {loading ? 'Processing...' : confirmText}
@@ -128,6 +125,7 @@ export function ConfirmDialog({
           </div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
