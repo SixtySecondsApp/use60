@@ -6,12 +6,35 @@
  * User then proceeds to verify/amend the AI-generated skills in the tabbed config step.
  */
 
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ChevronRight } from 'lucide-react';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
+import { supabase } from '@/lib/supabase/clientV2';
 
 export function EnrichmentResultStep() {
-  const { enrichment, setStep } = useOnboardingV2Store();
+  const { enrichment, setStep, organizationId, setEnrichment } = useOnboardingV2Store();
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load enrichment from database if not in store
+  useEffect(() => {
+    if (!enrichment && organizationId) {
+      setIsLoading(true);
+      supabase
+        .from('organization_enrichment')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (data) {
+            setEnrichment(data);
+          } else if (error) {
+            console.error('Failed to load enrichment:', error);
+          }
+          setIsLoading(false);
+        });
+    }
+  }, [organizationId, enrichment, setEnrichment]);
 
   const handleContinue = () => {
     // Go to skills_config where user can verify/amend AI-generated skill data
@@ -19,6 +42,13 @@ export function EnrichmentResultStep() {
   };
 
   if (!enrichment) {
+    if (isLoading) {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-4 py-8 text-center">
+          <p className="text-gray-400">Loading enrichment data...</p>
+        </div>
+      );
+    }
     return null;
   }
 
