@@ -16,11 +16,17 @@ export async function leaveOrganization(
   userId: string
 ): Promise<LeaveOrganizationResult> {
   try {
-    // Use RPC function which has SECURITY DEFINER to bypass RLS
+    // First, try using RPC function which has SECURITY DEFINER to bypass RLS
     const { data, error: rpcError } = await supabase
       .rpc('user_leave_organization', {
         p_org_id: orgId,
       });
+
+    // If RPC function doesn't exist (PGRST202), try fallback direct update
+    if (rpcError && (rpcError.code === 'PGRST202' || rpcError.message?.includes('Could not find the function'))) {
+      console.warn('[leaveOrganization] RPC not available, trying fallback direct update...');
+      return await leaveOrganizationFallback(orgId, userId);
+    }
 
     if (rpcError) {
       console.error('RPC error leaving organization:', rpcError);
@@ -45,7 +51,7 @@ export async function leaveOrganization(
       };
     }
 
-    console.log('[leaveOrganization] ✓ Successfully left organization:', {
+    console.log('[leaveOrganization] ✓ Successfully left organization via RPC:', {
       orgId: data.orgId,
       userId: data.userId,
       removedAt: data.removedAt,
@@ -58,6 +64,103 @@ export async function leaveOrganization(
     };
   } catch (error: any) {
     console.error('Error leaving organization:', error);
+    return {
+      success: false,
+      error: error.message || 'An unexpected error occurred',
+    };
+  }
+}
+
+/**
+ * Fallback approach if RPC function is not available
+ * Attempts direct table updates (may fail due to RLS)
+ */
+async function leaveOrganizationFallback(
+  orgId: string,
+  userId: string
+): Promise<LeaveOrganizationResult> {
+  try {
+    // First, check if user is an owner
+    const { data: membership, error: fetchError } = await supabase
+      .from('organization_memberships')
+      .select('role, member_status')
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (fetchError) {
+      return {
+        success: false,
+        error: 'Failed to fetch membership information',
+      };
+    }
+
+    if (!membership) {
+      return {
+        success: false,
+        error: 'You are not a member of this organization',
+      };
+    }
+
+    if (membership.role === 'owner') {
+      return {
+        success: false,
+        error: 'Organization owners must transfer ownership before leaving. Please promote another member to owner and try again.',
+      };
+    }
+
+    if (membership.member_status === 'removed') {
+      return {
+        success: false,
+        error: 'You have already been removed from this organization',
+      };
+    }
+
+    // Perform soft delete: mark membership as removed
+    const { error: updateError } = await supabase
+      .from('organization_memberships')
+      .update({
+        member_status: 'removed',
+        removed_at: new Date().toISOString(),
+        removed_by: userId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('org_id', orgId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Membership update error (fallback):', updateError);
+      return {
+        success: false,
+        error: 'Failed to leave organization',
+      };
+    }
+
+    // Set redirect flag - non-blocking, continue even if this fails
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          redirect_to_onboarding: true,
+        })
+        .eq('id', userId);
+    } catch (error) {
+      console.error('Failed to set redirect flag (fallback):', error);
+      // Don't fail - membership is already updated
+    }
+
+    console.log('[leaveOrganization] ✓ Successfully left organization via fallback:', {
+      orgId,
+      userId,
+    });
+
+    return {
+      success: true,
+      orgId,
+      userId,
+    };
+  } catch (error: any) {
+    console.error('Error in fallback leave organization:', error);
     return {
       success: false,
       error: error.message || 'An unexpected error occurred',
