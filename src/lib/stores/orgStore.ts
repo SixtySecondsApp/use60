@@ -142,14 +142,45 @@ export const useOrgStore = create<OrgStore>()(
           }
 
           // Fetch memberships with organization details
-          const { data: memberships, error: membershipsError } = await (supabase as any)
+          // Try with member_status filter first (for ORGREM-016 support)
+          let memberships: any[] = [];
+          let membershipsError: any = null;
+
+          // Try to query with member_status filter (only active memberships)
+          const { data: dataWithStatus, error: errorWithStatus } = await (supabase as any)
             .from('organization_memberships')
             .select(`
               *,
               organization:organizations(*)
             `)
             .eq('user_id', user.id)
+            .eq('member_status', 'active')
             .order('created_at', { ascending: true });
+
+          if (!errorWithStatus) {
+            // member_status column exists and query succeeded
+            memberships = dataWithStatus || [];
+          } else if (errorWithStatus?.code === '42703' || errorWithStatus?.code === '400') {
+            // Column doesn't exist (42703 = column doesn't exist, 400 = bad request)
+            // Fall back to fetching all memberships (assume all are active)
+            logger.log('[OrgStore] member_status column not available, falling back to basic query');
+            const { data: basicData, error: basicError } = await (supabase as any)
+              .from('organization_memberships')
+              .select(`
+                *,
+                organization:organizations(*)
+              `)
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: true });
+
+            if (basicError) {
+              membershipsError = basicError;
+            } else {
+              memberships = basicData || [];
+            }
+          } else {
+            membershipsError = errorWithStatus;
+          }
 
           if (membershipsError) throw membershipsError;
 

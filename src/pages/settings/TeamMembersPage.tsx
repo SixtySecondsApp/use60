@@ -175,7 +175,7 @@ export default function TeamMembersPage() {
         .order('created_at', { ascending: true });
 
       // rejoin_requests table may not exist yet if ORGREM migration hasn't been deployed
-      if (error?.code === 'PGRST116' || error?.code === '42P01') {
+      if (error?.code === 'PGRST116' || error?.code === '42P01' || error?.code === 'PGRST204' || error?.message?.includes('rejoin_requests')) {
         // Table doesn't exist yet - return empty array (feature not deployed)
         return [];
       }

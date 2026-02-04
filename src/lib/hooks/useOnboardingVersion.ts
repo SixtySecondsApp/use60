@@ -126,11 +126,21 @@ export function useOnboardingVersionReadOnly(): {
   useEffect(() => {
     async function fetchVersion() {
       try {
-        const { data, error } = await supabase
+        // Add a timeout to prevent infinite loading
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        );
+
+        const fetchPromise = supabase
           .from('app_settings')
           .select('value')
           .eq('key', SETTING_KEY)
           .maybeSingle();
+
+        const { data, error } = await Promise.race([
+          fetchPromise,
+          timeoutPromise
+        ]);
 
         if (!error && data?.value) {
           const parsedValue = data.value as OnboardingVersion;
@@ -139,7 +149,9 @@ export function useOnboardingVersionReadOnly(): {
           }
         }
       } catch (err) {
-        console.error('Error fetching onboarding version:', err);
+        console.warn('Error fetching onboarding version (using default):', err);
+        // Default to v1 on error or timeout
+        setVersion(DEFAULT_VERSION);
       } finally {
         setLoading(false);
       }

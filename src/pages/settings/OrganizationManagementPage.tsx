@@ -178,7 +178,7 @@ export default function OrganizationManagementPage() {
         .eq('status', 'pending')
         .order('created_at', { ascending: true });
 
-      if (error?.code === 'PGRST116' || error?.code === '42P01') {
+      if (error?.code === 'PGRST116' || error?.code === '42P01' || error?.code === 'PGRST204' || error?.message?.includes('rejoin_requests')) {
         return [];
       }
 
