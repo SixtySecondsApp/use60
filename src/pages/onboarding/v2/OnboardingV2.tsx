@@ -295,7 +295,13 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
           .maybeSingle();
 
         if (error) {
-          console.warn('[OnboardingV2] RPC error checking org (may not exist yet):', error);
+          // Check if the error is because the function doesn't exist
+          if (error.code === 'PGRST202' || error.message?.includes('Could not find the function')) {
+            console.warn('[OnboardingV2] RPC function not available in this environment - skipping org check');
+            // Don't retry - function doesn't exist
+            return;
+          }
+          console.warn('[OnboardingV2] RPC error checking org:', error);
           return;
         }
 
