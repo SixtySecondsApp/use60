@@ -125,7 +125,7 @@ export async function createInvitation({
   orgId,
   email,
   role,
-}: CreateInvitationParams): Promise<{ data: Invitation | null; error: string | null }> {
+}: CreateInvitationParams): Promise<{ data: Invitation | null; error: string | null; warning?: string }> {
   try {
     logger.log('[InvitationService] Creating invitation:', { orgId, email, role });
 
@@ -231,9 +231,14 @@ export async function createInvitation({
     const invitationData = data as unknown as Invitation;
     logger.log('[InvitationService] Invitation created:', invitationData?.id);
 
-    // Send invitation email
+    // Send invitation email and track result
     const inviterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'A team member';
-    await sendInvitationEmail(invitationData, inviterName);
+    const emailSent = await sendInvitationEmail(invitationData, inviterName);
+
+    if (!emailSent) {
+      logger.warn('[InvitationService] Invitation created but email failed to send:', invitationData?.id);
+      return { data: invitationData, error: null, warning: 'Invitation created but email delivery failed. You can resend from the invitation list.' };
+    }
 
     return { data: invitationData, error: null };
   } catch (err: any) {

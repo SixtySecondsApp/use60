@@ -461,7 +461,7 @@ export default function TeamMembersPage() {
     if (!activeOrgId || !newInviteEmail.trim()) return;
 
     setIsSendingInvite(true);
-    const { data, error } = await createInvitation({
+    const { data, error, warning } = await createInvitation({
       orgId: activeOrgId,
       email: newInviteEmail.trim(),
       role: newInviteRole,
@@ -470,7 +470,11 @@ export default function TeamMembersPage() {
     if (error) {
       toast.error(error);
     } else if (data) {
-      toast.success(`Invitation sent to ${newInviteEmail}`);
+      if (warning) {
+        toast.warning(warning);
+      } else {
+        toast.success(`Invitation sent to ${newInviteEmail}`);
+      }
       setInvitations([data, ...invitations]);
       setNewInviteEmail('');
       setNewInviteRole('member');

@@ -482,7 +482,7 @@ export default function OrganizationManagementPage() {
     if (!activeOrgId || !newInviteEmail.trim()) return;
 
     setIsSendingInvite(true);
-    const { data, error } = await createInvitation({
+    const { data, error, warning } = await createInvitation({
       orgId: activeOrgId,
       email: newInviteEmail.trim(),
       role: newInviteRole,
@@ -491,7 +491,11 @@ export default function OrganizationManagementPage() {
     if (error) {
       toast.error(error);
     } else if (data) {
-      toast.success(`Invitation sent to ${newInviteEmail}`);
+      if (warning) {
+        toast.warning(warning);
+      } else {
+        toast.success(`Invitation sent to ${newInviteEmail}`);
+      }
       setInvitations([data, ...invitations]);
       setNewInviteEmail('');
       setNewInviteRole('member');
@@ -721,7 +725,7 @@ export default function OrganizationManagementPage() {
     >
       <div className="space-y-6">
         {/* Organization Header */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-gray-900/50 to-gray-800/30 dark:from-gray-800/50 dark:to-gray-900/30 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 backdrop-blur-xl">
+        <div className="relative overflow-hidden bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900/30 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 backdrop-blur-xl">
           {/* Accent gradient bar at top */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-[#37bd7e]" />
 
@@ -823,7 +827,7 @@ export default function OrganizationManagementPage() {
 
             {/* Organization Stats */}
             <div className="flex gap-3">
-              <div className="bg-white/10 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-300 dark:border-gray-700/50 rounded-xl px-6 py-3 text-center min-w-[100px]">
+              <div className="bg-gray-50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-300 dark:border-gray-700/50 rounded-xl px-6 py-3 text-center min-w-[100px]">
                 <div className="text-2xl sm:text-3xl font-bold text-[#37bd7e]">
                   {activeMemberCount}
                 </div>
@@ -831,7 +835,7 @@ export default function OrganizationManagementPage() {
                   Members
                 </div>
               </div>
-              <div className="bg-white/10 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-300 dark:border-gray-700/50 rounded-xl px-6 py-3 text-center min-w-[100px]">
+              <div className="bg-gray-50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-300 dark:border-gray-700/50 rounded-xl px-6 py-3 text-center min-w-[100px]">
                 <div className="text-2xl sm:text-3xl font-bold text-[#37bd7e]">
                   {pendingCount}
                 </div>
