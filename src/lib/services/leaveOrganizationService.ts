@@ -10,79 +10,31 @@ export interface LeaveOrganizationResult {
 /**
  * Leave an organization
  * User must not be the owner - owners must transfer ownership first
+ * Uses RPC function for atomic updates
  */
 export async function leaveOrganization(
   orgId: string,
   userId: string
 ): Promise<LeaveOrganizationResult> {
   try {
-    // First, check if user is an owner
-    const { data: membership, error: fetchError } = await supabase
-      .from('organization_memberships')
-      .select('role, member_status')
-      .eq('org_id', orgId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Use RPC function for atomic update of membership and profile
+    const { data, error } = await supabase.rpc('user_leave_organization', {
+      p_org_id: orgId,
+    });
 
-    if (fetchError) {
+    if (error) {
+      console.error('RPC error leaving organization:', error);
       return {
         success: false,
-        error: 'Failed to fetch membership information',
+        error: error.message || 'Failed to leave organization',
       };
     }
 
-    if (!membership) {
+    if (!data?.success) {
       return {
         success: false,
-        error: 'You are not a member of this organization',
+        error: data?.error || 'Failed to leave organization',
       };
-    }
-
-    if (membership.role === 'owner') {
-      return {
-        success: false,
-        error: 'Organization owners must transfer ownership before leaving. Please promote another member to owner and try again.',
-      };
-    }
-
-    if (membership.member_status === 'removed') {
-      return {
-        success: false,
-        error: 'You have already been removed from this organization',
-      };
-    }
-
-    // Perform soft delete: mark membership as removed
-    const { error: updateError } = await supabase
-      .from('organization_memberships')
-      .update({
-        member_status: 'removed',
-        removed_at: new Date().toISOString(),
-        removed_by: userId, // User removed themselves
-        updated_at: new Date().toISOString(),
-      })
-      .eq('org_id', orgId)
-      .eq('user_id', userId);
-
-    if (updateError) {
-      return {
-        success: false,
-        error: 'Failed to leave organization',
-      };
-    }
-
-    // Set redirect flag so user goes to onboarding screen on next page load
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({
-        redirect_to_onboarding: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
-
-    if (profileError) {
-      console.error('Failed to set redirect flag:', profileError);
-      // Don't fail the whole operation if this fails - it's non-critical
     }
 
     return {

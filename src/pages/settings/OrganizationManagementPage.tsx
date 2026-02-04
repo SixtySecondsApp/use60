@@ -638,13 +638,7 @@ export default function OrganizationManagementPage() {
       setShowLeaveConfirmation(false);
       toast.success('You have left the organization. Redirecting...');
 
-      // Clear org context and switch to no organization
-      // This prevents trying to load data for an org user no longer has access to
-      if (switchOrg) {
-        switchOrg(''); // Clear active org
-      }
-
-      // Wait a bit longer to ensure redirect flag is set in database
+      // Wait a bit to ensure redirect flag is set in database, then redirect
       setTimeout(() => {
         // Redirect to removed-user page to allow user to rejoin or choose different org
         window.location.href = '/onboarding/removed-user';
