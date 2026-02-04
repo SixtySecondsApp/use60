@@ -1052,10 +1052,13 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // If organizationId is empty/null (personal email user), create org first
       if (!finalOrgId || finalOrgId === '') {
         finalOrgId = await get().createOrganizationFromManualData(session.user.id, manualData);
-        // Only set organizationId if we got a real ID back (not null from selection step)
-        if (finalOrgId) {
-          set({ organizationId: finalOrgId });
+        // Only proceed if we got a real ID back (not null from selection step)
+        if (!finalOrgId) {
+          // Organization selection step shown, stop here and let user choose
+          set({ isEnrichmentLoading: false });
+          return;
         }
+        set({ organizationId: finalOrgId });
       }
 
       // Call edge function with manual data
