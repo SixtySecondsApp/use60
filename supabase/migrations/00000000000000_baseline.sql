@@ -4950,6 +4950,7 @@ ALTER FUNCTION "public"."create_client_from_won_deal"() OWNER TO "postgres";
 
 CREATE OR REPLACE FUNCTION "public"."create_default_email_categorization_settings"() RETURNS "trigger"
     LANGUAGE "plpgsql"
+    SECURITY DEFINER
     AS $$
 BEGIN
   INSERT INTO org_email_categorization_settings (org_id, is_enabled, label_mode)

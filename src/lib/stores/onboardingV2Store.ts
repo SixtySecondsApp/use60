@@ -468,7 +468,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
         console.log('[onboardingV2] Business email detected, checking for existing org with domain:', domain);
 
-        let existingOrgs: any[] = [];
+        let hasExactMatch = false;
+        let exactMatchOrg: any = null;
+        let fuzzyMatches: any[] = [];
 
         // Strategy 1: Exact match by company_domain
         const { data: exactMatch } = await supabase
@@ -479,38 +481,34 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           .maybeSingle();
 
         if (exactMatch) {
-          existingOrgs = [exactMatch];
+          hasExactMatch = true;
+          exactMatchOrg = exactMatch;
+          console.log('[onboardingV2] Found EXACT domain match for org:', exactMatch.name);
         } else {
           // Strategy 2: Fuzzy domain matching RPC
-          const { data: fuzzyMatches } = await supabase.rpc('find_similar_organizations_by_domain', {
+          // IMPORTANT: Fuzzy matches require join requests, not auto-join
+          const { data: fuzzyResults } = await supabase.rpc('find_similar_organizations_by_domain', {
             p_search_domain: domain,
             p_limit: 5,
           });
 
-          // Get all matches with score > 0.7
-          if (fuzzyMatches && fuzzyMatches.length > 0) {
-            existingOrgs = fuzzyMatches.filter((m: any) => m.similarity_score > 0.7);
+          // Get all fuzzy matches with score > 0.7
+          if (fuzzyResults && fuzzyResults.length > 0) {
+            fuzzyMatches = fuzzyResults.filter((m: any) => m.similarity_score > 0.7);
+            console.log('[onboardingV2] Found fuzzy matches (require join request):', fuzzyMatches.length);
           }
         }
 
         // Handle matches
-        if (existingOrgs.length === 1) {
-          // Single match: auto-join the org
-          console.log('[onboardingV2] Found single matching org, auto-joining:', existingOrgs[0].name);
-          const org = existingOrgs[0];
-
+        if (hasExactMatch && exactMatchOrg) {
+          // EXACT domain match: auto-join directly
+          console.log('[onboardingV2] EXACT match - auto-joining org:', exactMatchOrg.name);
           try {
-            // Create membership directly for auto-join
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('first_name, last_name')
-              .eq('id', session.user.id)
-              .maybeSingle();
-
+            // Create membership directly for auto-join (only for exact domain match)
             const { error: memberError } = await supabase
               .from('organization_memberships')
               .insert({
-                org_id: org.id,
+                org_id: exactMatchOrg.id,
                 user_id: session.user.id,
                 role: 'member',
               });
@@ -521,12 +519,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             set({
               userEmail: email,
               isPersonalEmail: isPersonal,
-              organizationId: org.id,
+              organizationId: exactMatchOrg.id,
               currentStep: 'enrichment_loading',
               domain,
             });
 
-            console.log('[onboardingV2] Successfully auto-joined organization:', org.id);
+            console.log('[onboardingV2] Successfully auto-joined organization (exact match):', exactMatchOrg.id);
           } catch (error) {
             console.error('[onboardingV2] Error auto-joining org:', error);
             // Fall back to enrichment if auto-join fails
@@ -537,14 +535,14 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
               domain,
             });
           }
-        } else if (existingOrgs.length > 1) {
-          // Multiple matches: show selection step
-          console.log('[onboardingV2] Found multiple matching orgs, showing selection:', existingOrgs.length);
+        } else if (fuzzyMatches.length > 0) {
+          // FUZZY matches: require join request (never auto-join)
+          console.log('[onboardingV2] Fuzzy matches found - showing selection for user to request join:', fuzzyMatches.length);
           set({
             userEmail: email,
             isPersonalEmail: isPersonal,
             currentStep: 'organization_selection',
-            similarOrganizations: existingOrgs,
+            similarOrganizations: fuzzyMatches,
             matchSearchTerm: domain,
             domain,
           });
@@ -1067,6 +1065,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           organization_id: finalOrgId,
           manual_data: manualData,
         },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (response.error) throw response.error;
@@ -1090,6 +1091,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
+      if (!session.access_token) throw new Error('No access token in session');
 
       const response = await supabase.functions.invoke('deep-enrich-organization', {
         body: {
@@ -1097,6 +1099,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           organization_id: organizationId,
           domain: domain,
           force: force,
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
         },
       });
 
@@ -1147,10 +1152,16 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
     const poll = async () => {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error('No session during polling');
+
         const response = await supabase.functions.invoke('deep-enrich-organization', {
           body: {
             action: 'status',
             organization_id: organizationId,
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
           },
         });
 

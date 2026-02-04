@@ -149,6 +149,7 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('[deep-enrich-organization] No authorization header found');
       throw new Error('No authorization header');
     }
 
@@ -160,11 +161,20 @@ serve(async (req) => {
     });
 
     const token = authHeader.replace('Bearer ', '');
+    console.log('[deep-enrich-organization] Validating JWT token...');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    if (userError || !user) {
-      throw new Error('Invalid authentication token');
+    if (userError) {
+      console.error('[deep-enrich-organization] JWT validation error:', userError.message);
+      throw new Error(`Invalid JWT token: ${userError.message}`);
     }
+
+    if (!user) {
+      console.error('[deep-enrich-organization] No user found in JWT');
+      throw new Error('No user found in authentication token');
+    }
+
+    console.log('[deep-enrich-organization] JWT validated for user:', user.id);
 
     const requestBody = await req.json();
     const { action, organization_id, domain, manual_data, force } = requestBody;
