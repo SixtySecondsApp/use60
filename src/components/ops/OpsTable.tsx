@@ -1,6 +1,20 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   Plus,
   Sparkles,
   ArrowUpDown,
@@ -20,8 +34,11 @@ import {
   FunctionSquare,
   Zap,
   Play,
+  GripVertical,
 } from 'lucide-react';
 import { OpsTableCell } from './OpsTableCell';
+import { evaluateFormattingRules, formattingStyleToCSS } from '@/lib/utils/conditionalFormatting';
+import type { FormattingRule } from '@/lib/utils/conditionalFormatting';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,6 +76,9 @@ interface OpsTableProps {
   onAddColumn: () => void;
   onColumnHeaderClick?: (columnId: string) => void;
   isLoading?: boolean;
+  formattingRules?: FormattingRule[];
+  columnOrder?: string[] | null;
+  onColumnReorder?: (columnKeys: string[]) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +115,84 @@ const HEADER_HEIGHT = 34;
 const OVERSCAN = 10;
 
 // ---------------------------------------------------------------------------
+// Sortable Column Header
+// ---------------------------------------------------------------------------
+
+function SortableColumnHeader({
+  col,
+  isHovered,
+  onMouseEnter,
+  onMouseLeave,
+  onClick,
+  renderIcon,
+}: {
+  col: Column;
+  isHovered: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  onClick: () => void;
+  renderIcon: (col: Column) => React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: col.id });
+
+  const style: React.CSSProperties = {
+    width: col.width,
+    minWidth: col.width,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`
+        relative flex items-center gap-1 px-2 border-r border-gray-800 shrink-0 select-none
+        ${col.is_enrichment ? 'bg-violet-500/5' : ''}
+        group cursor-pointer hover:bg-gray-800/40 transition-colors
+      `}
+      style={style}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onClick={onClick}
+      data-column-id={col.id}
+    >
+      {/* Drag handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className={`shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${
+          isHovered ? 'opacity-60' : 'opacity-0'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical className="w-3 h-3 text-gray-500" />
+      </div>
+      {renderIcon(col)}
+      <span className="truncate text-xs font-medium text-gray-300">
+        {col.label}
+      </span>
+      <ChevronDown
+        className={`
+          w-3 h-3 text-gray-500 shrink-0 ml-auto transition-opacity
+          ${isHovered ? 'opacity-100' : 'opacity-0'}
+        `}
+      />
+      {/* Resize handle (visual only) */}
+      <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/60 transition-colors" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -108,12 +206,47 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   onAddColumn,
   onColumnHeaderClick,
   isLoading = false,
+  formattingRules = [],
+  columnOrder,
+  onColumnReorder,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
 
-  // Only render visible columns
-  const visibleColumns = useMemo(() => columns.filter((c) => c.is_visible), [columns]);
+  // Drag-and-drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  // Only render visible columns, optionally reordered by columnOrder
+  const visibleColumns = useMemo(() => {
+    const visible = columns.filter((c) => c.is_visible);
+    if (!columnOrder || columnOrder.length === 0) return visible;
+    const orderMap = new Map(columnOrder.map((key, idx) => [key, idx]));
+    return [...visible].sort((a, b) => {
+      const aIdx = orderMap.get(a.key) ?? a.position + 1000;
+      const bIdx = orderMap.get(b.key) ?? b.position + 1000;
+      return aIdx - bIdx;
+    });
+  }, [columns, columnOrder]);
+
+  // Drag-end handler for column reordering
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id || !onColumnReorder) return;
+
+      const oldIndex = visibleColumns.findIndex((c) => c.id === active.id);
+      const newIndex = visibleColumns.findIndex((c) => c.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const newOrder = [...visibleColumns];
+      const [removed] = newOrder.splice(oldIndex, 1);
+      newOrder.splice(newIndex, 0, removed);
+      onColumnReorder(newOrder.map((c) => c.key));
+    },
+    [visibleColumns, onColumnReorder],
+  );
 
   // Total width of all columns + checkbox + add-column button
   const totalWidth = useMemo(
@@ -218,34 +351,22 @@ export const OpsTable: React.FC<OpsTableProps> = ({
               />
             </div>
 
-            {/* Column headers */}
-            {visibleColumns.map((col) => (
-              <div
-                key={col.id}
-                className={`
-                  relative flex items-center gap-1.5 px-2 border-r border-gray-800 shrink-0 select-none
-                  ${col.is_enrichment ? 'bg-violet-500/5' : ''}
-                  group cursor-pointer hover:bg-gray-800/40 transition-colors
-                `}
-                style={{ width: col.width, minWidth: col.width }}
-                onMouseEnter={() => setHoveredColumnId(col.id)}
-                onMouseLeave={() => setHoveredColumnId(null)}
-                onClick={() => onColumnHeaderClick?.(col.id)}
-              >
-                {renderColumnIcon(col)}
-                <span className="truncate text-xs font-medium text-gray-300">
-                  {col.label}
-                </span>
-                <ChevronDown
-                  className={`
-                    w-3 h-3 text-gray-500 shrink-0 ml-auto transition-opacity
-                    ${hoveredColumnId === col.id ? 'opacity-100' : 'opacity-0'}
-                  `}
-                />
-                {/* Resize handle (visual only) */}
-                <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/60 transition-colors" />
-              </div>
-            ))}
+            {/* Column headers (draggable) */}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={visibleColumns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+                {visibleColumns.map((col) => (
+                  <SortableColumnHeader
+                    key={col.id}
+                    col={col}
+                    isHovered={hoveredColumnId === col.id}
+                    onMouseEnter={() => setHoveredColumnId(col.id)}
+                    onMouseLeave={() => setHoveredColumnId(null)}
+                    onClick={() => onColumnHeaderClick?.(col.id)}
+                    renderIcon={renderColumnIcon}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
 
             {/* Add column button */}
             <div
@@ -312,6 +433,13 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                       confidence: null,
                       status: 'none' as const,
                     };
+                    // Apply conditional formatting
+                    const cellStyles = formattingRules.length > 0
+                      ? evaluateFormattingRules(formattingRules, row.cells)
+                      : {};
+                    const fmtStyle = cellStyles[col.key]
+                      ? formattingStyleToCSS(cellStyles[col.key])
+                      : undefined;
                     return (
                       <div
                         key={col.id}
@@ -319,7 +447,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           flex items-center px-2 border-r border-gray-800/50 shrink-0 overflow-hidden
                           ${col.is_enrichment ? 'bg-violet-500/[0.03]' : ''}
                         `}
-                        style={{ width: col.width, minWidth: col.width }}
+                        style={{ width: col.width, minWidth: col.width, ...fmtStyle }}
                       >
                         <OpsTableCell
                           cell={{

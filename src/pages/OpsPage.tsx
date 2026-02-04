@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Table2, Plus, Clock, Rows3, Sparkles, Loader2, Upload } from 'lucide-react';
+import { Table2, Plus, Clock, Rows3, Sparkles, Loader2, Upload, Download, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/lib/hooks/useUser';
 import { useOrg } from '@/lib/contexts/OrgContext';
@@ -9,6 +9,8 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { OpsTableService } from '@/lib/services/opsTableService';
 import { formatDistanceToNow } from 'date-fns';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
+import { HubSpotImportWizard } from '@/components/ops/HubSpotImportWizard';
+import { CrossOpImportWizard } from '@/components/ops/CrossOpImportWizard';
 
 const tableService = new OpsTableService(supabase);
 
@@ -29,6 +31,8 @@ function OpsPage() {
 
   const queryClient = useQueryClient();
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [showHubSpotImport, setShowHubSpotImport] = useState(false);
+  const [showCrossOpImport, setShowCrossOpImport] = useState(false);
 
   const createTableMutation = useMutation({
     mutationFn: () => {
@@ -75,7 +79,10 @@ function OpsPage() {
     const colorMap: Record<string, string> = {
       ai_enrichment: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
       csv_import: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+      csv: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
       api: 'bg-green-500/20 text-green-300 border-green-500/30',
+      hubspot: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+      ops_table: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
       manual: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30',
     };
     const colors = colorMap[label] ?? colorMap.manual;
@@ -111,6 +118,20 @@ function OpsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowCrossOpImport(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
+          >
+            <Copy className="h-4 w-4" />
+            Import from Op
+          </button>
+          <button
+            onClick={() => setShowHubSpotImport(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-orange-700/50 bg-orange-900/20 px-4 py-2 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200"
+          >
+            <Download className="h-4 w-4" />
+            HubSpot
+          </button>
           <button
             onClick={() => setShowCSVImport(true)}
             className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
@@ -198,6 +219,24 @@ function OpsPage() {
         onOpenChange={setShowCSVImport}
         onComplete={(tableId) => {
           setShowCSVImport(false);
+          navigate(`/ops/${tableId}`);
+        }}
+      />
+
+      <HubSpotImportWizard
+        open={showHubSpotImport}
+        onOpenChange={setShowHubSpotImport}
+        onComplete={(tableId) => {
+          setShowHubSpotImport(false);
+          navigate(`/ops/${tableId}`);
+        }}
+      />
+
+      <CrossOpImportWizard
+        open={showCrossOpImport}
+        onOpenChange={setShowCrossOpImport}
+        onComplete={(tableId) => {
+          setShowCrossOpImport(false);
           navigate(`/ops/${tableId}`);
         }}
       />

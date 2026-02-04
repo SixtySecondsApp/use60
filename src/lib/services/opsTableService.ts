@@ -10,7 +10,7 @@ export interface OpsTableRecord {
   created_by: string;
   name: string;
   description: string | null;
-  source_type: 'manual' | 'apollo' | 'csv' | 'copilot';
+  source_type: 'manual' | 'apollo' | 'csv' | 'copilot' | 'hubspot' | 'ops_table';
   source_query: Record<string, unknown> | null;
   row_count: number;
   created_at: string;
@@ -112,6 +112,7 @@ export interface SavedView {
   filter_config: FilterCondition[];
   sort_config: { key: string; dir: 'asc' | 'desc' } | null;
   column_config: string[] | null; // array of column keys in display order
+  formatting_rules: any[] | null; // conditional formatting rules
   position: number;
   created_at: string;
   updated_at: string;
@@ -159,7 +160,7 @@ const CELL_COLUMNS =
   'id, row_id, column_id, value, confidence, source, status, error_message';
 
 const VIEW_COLUMNS =
-  'id, table_id, created_by, name, is_default, is_system, filter_config, sort_config, column_config, position, created_at, updated_at';
+  'id, table_id, created_by, name, is_default, is_system, filter_config, sort_config, column_config, formatting_rules, position, created_at, updated_at';
 
 // ---------------------------------------------------------------------------
 // Service
@@ -721,6 +722,7 @@ export class OpsTableService {
     filterConfig?: FilterCondition[];
     sortConfig?: { key: string; dir: 'asc' | 'desc' } | null;
     columnConfig?: string[] | null;
+    formattingRules?: any[] | null;
     position?: number;
   }): Promise<SavedView> {
     const { data, error } = await this.supabase
@@ -734,6 +736,7 @@ export class OpsTableService {
         filter_config: params.filterConfig ?? [],
         sort_config: params.sortConfig ?? null,
         column_config: params.columnConfig ?? null,
+        formatting_rules: params.formattingRules ?? null,
         position: params.position ?? 0,
       })
       .select(VIEW_COLUMNS)

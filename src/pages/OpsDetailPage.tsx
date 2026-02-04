@@ -18,6 +18,10 @@ import {
   MessageSquare,
   Plus,
   Upload,
+  RefreshCw,
+  Download,
+  Copy,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -36,6 +40,10 @@ import type { SavedView, FilterCondition, OpsTableColumn } from '@/lib/services/
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
 import { useIntegrationPolling } from '@/lib/hooks/useIntegrationStatus';
+import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
+import { useOpsRules } from '@/lib/hooks/useOpsRules';
+import { RuleBuilder } from '@/components/ops/RuleBuilder';
+import { RuleList } from '@/components/ops/RuleList';
 
 // ---------------------------------------------------------------------------
 // Service singleton
@@ -51,6 +59,8 @@ const SOURCE_BADGE: Record<string, { label: string; className: string; icon: Rea
   apollo: { label: 'Apollo', className: 'bg-purple-500/10 text-purple-400 border-purple-500/20', icon: Sparkles },
   csv: { label: 'CSV', className: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: FileSpreadsheet },
   copilot: { label: 'Copilot', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: Bot },
+  hubspot: { label: 'HubSpot', className: 'bg-orange-500/10 text-orange-400 border-orange-500/20', icon: Download },
+  ops_table: { label: 'Ops Import', className: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20', icon: Copy },
   manual: { label: 'Manual', className: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', icon: FileText },
 };
 
@@ -87,6 +97,9 @@ function OpsDetailPage() {
   } | null>(null);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotPush, setShowHubSpotPush] = useState(false);
+  const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
+  const [showRuleBuilder, setShowRuleBuilder] = useState(false);
+  const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
 
   // ---- Data queries ----
 
@@ -123,6 +136,12 @@ function OpsDetailPage() {
 
   // ---- Enrichment hook ----
   const { startEnrichment } = useEnrichment(tableId ?? '');
+
+  // ---- HubSpot sync hook ----
+  const { sync: syncHubSpot, isSyncing: isHubSpotSyncing } = useHubSpotSync(tableId);
+
+  // ---- Rules hook ----
+  const { rules, createRule, toggleRule, deleteRule, isCreating: isRuleCreating } = useOpsRules(tableId);
 
   // ---- Derived data ----
 
@@ -364,7 +383,7 @@ function OpsDetailPage() {
   // ---- View mutations ----
 
   const createViewMutation = useMutation({
-    mutationFn: (params: { name: string }) =>
+    mutationFn: (params: { name: string; formattingRules?: any[] }) =>
       tableService.createView({
         tableId: tableId!,
         createdBy: table!.created_by,
@@ -372,6 +391,7 @@ function OpsDetailPage() {
         filterConfig: filterConditions,
         sortConfig: sortState,
         columnConfig: null,
+        formattingRules: params.formattingRules,
       }),
     onSuccess: (newView) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
@@ -414,6 +434,7 @@ function OpsDetailPage() {
     if (view) {
       setFilterConditions(view.filter_config ?? []);
       setSortState(view.sort_config ?? null);
+      setColumnOrder(view.column_config ?? null);
     }
   }, [views, setSearchParams]);
 
@@ -709,6 +730,14 @@ function OpsDetailPage() {
                 {sourceBadge.label}
               </span>
 
+              {/* Last synced (HubSpot tables) */}
+              {table.source_type === 'hubspot' && (table.source_query as any)?.last_synced_at && (
+                <span className="inline-flex items-center gap-1 text-orange-400/70">
+                  <RefreshCw className="h-3 w-3" />
+                  Synced {formatDistanceToNow(new Date((table.source_query as any).last_synced_at), { addSuffix: true })}
+                </span>
+              )}
+
               {/* Row count */}
               <span className="inline-flex items-center gap-1">
                 <Rows3 className="h-3 w-3" />
@@ -731,6 +760,21 @@ function OpsDetailPage() {
 
           {/* Right: action buttons */}
           <div className="flex shrink-0 items-center gap-2">
+            {/* HubSpot sync button (only for hubspot-sourced tables) */}
+            {table.source_type === 'hubspot' && (
+              <button
+                onClick={syncHubSpot}
+                disabled={isHubSpotSyncing}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-orange-700/40 bg-orange-900/20 px-3 py-1.5 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200 disabled:opacity-50"
+              >
+                {isHubSpotSyncing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                Sync from HubSpot
+              </button>
+            )}
             <button
               onClick={() => addRowMutation.mutate()}
               disabled={addRowMutation.isPending}
@@ -754,20 +798,100 @@ function OpsDetailPage() {
         </div>
       </div>
 
-      {/* Table area */}
-      <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
-        <OpsTable
-          columns={columns}
-          rows={rows}
-          selectedRows={selectedRows}
-          onSelectRow={handleSelectRow}
-          onSelectAll={handleSelectAll}
-          onCellEdit={handleCellEdit}
-          onAddColumn={() => setShowAddColumn(true)}
-          onColumnHeaderClick={handleColumnHeaderClick}
-          isLoading={isDataLoading}
-        />
+      {/* Tab bar */}
+      <div className="shrink-0 border-b border-gray-800 bg-gray-950 px-6">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setActiveTab('data')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'data'
+                ? 'border-violet-500 text-white'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            Data
+          </button>
+          <button
+            onClick={() => setActiveTab('rules')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 flex items-center gap-1.5 ${
+              activeTab === 'rules'
+                ? 'border-violet-500 text-white'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            Rules
+            {rules.length > 0 && (
+              <span className="ml-1 text-[10px] font-medium bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded-full">
+                {rules.length}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Table area */}
+      {activeTab === 'data' && (
+        <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
+          <OpsTable
+            columns={columns}
+            rows={rows}
+            selectedRows={selectedRows}
+            onSelectRow={handleSelectRow}
+            onSelectAll={handleSelectAll}
+            onCellEdit={handleCellEdit}
+            onAddColumn={() => setShowAddColumn(true)}
+            onColumnHeaderClick={handleColumnHeaderClick}
+            isLoading={isDataLoading}
+            formattingRules={
+              activeViewId
+                ? (views.find((v) => v.id === activeViewId)?.formatting_rules ?? [])
+                : []
+            }
+            columnOrder={columnOrder}
+            onColumnReorder={setColumnOrder}
+          />
+        </div>
+      )}
+
+      {/* Rules tab */}
+      {activeTab === 'rules' && (
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+          <div className="max-w-2xl mx-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">Automation Rules</h2>
+              {!showRuleBuilder && (
+                <button
+                  onClick={() => setShowRuleBuilder(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New Rule
+                </button>
+              )}
+            </div>
+
+            {showRuleBuilder && (
+              <RuleBuilder
+                columns={columns}
+                userId={table.created_by}
+                onSave={(rule) => {
+                  createRule(rule);
+                  setShowRuleBuilder(false);
+                }}
+                onCancel={() => setShowRuleBuilder(false)}
+                isSaving={isRuleCreating}
+              />
+            )}
+
+            <RuleList
+              rules={rules}
+              onToggle={toggleRule}
+              onDelete={deleteRule}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Add Column Modal */}
       <AddColumnModal
@@ -868,8 +992,9 @@ function OpsDetailPage() {
       <SaveViewDialog
         isOpen={showSaveViewDialog}
         onClose={() => setShowSaveViewDialog(false)}
-        onSave={(name) => {
-          createViewMutation.mutate({ name });
+        columns={columns}
+        onSave={(name, formattingRules) => {
+          createViewMutation.mutate({ name, formattingRules });
           setShowSaveViewDialog(false);
         }}
       />

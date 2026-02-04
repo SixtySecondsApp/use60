@@ -3,7 +3,7 @@
 **Plan**: `.sixty/plan-ops-expansion.json`
 **Consult**: `.sixty/consult/ops-expansion.md`
 **Branch**: `feat/dynamic-tables`
-**Stories**: 27 total | 16 complete | 0 in progress
+**Stories**: 27 total | 27 complete | 0 in progress
 
 ---
 
@@ -32,20 +32,20 @@
 - [x] OPS-016 — Re-enrich action
 
 ## Phase 4: HubSpot Pull
-- [ ] OPS-017 — Connection check + list browser
-- [ ] OPS-018 — Field mapping + column creation
-- [ ] OPS-019 — Batch import edge function
-- [ ] OPS-020 — Incremental sync
+- [x] OPS-017 — Connection check + list browser
+- [x] OPS-018 — Field mapping + column creation
+- [x] OPS-019 — Batch import edge function
+- [x] OPS-020 — Incremental sync
 
 ## Phase 5: Cross-Op Import
-- [ ] OPS-021 — Source table selector + filter builder
-- [ ] OPS-022 — Deep copy edge function
+- [x] OPS-021 — Source table selector + filter builder
+- [x] OPS-022 — Deep copy edge function
 
 ## Phase 6: Simple Rule Builder
-- [ ] OPS-023 — Rules schema + evaluation engine
-- [ ] OPS-024 — Trigger hooks (enrichment, cell update, row create)
-- [ ] OPS-025 — Rule builder UI + execution log
+- [x] OPS-023 — Rules schema + evaluation engine
+- [x] OPS-024 — Trigger hooks (enrichment, cell update, row create)
+- [x] OPS-025 — Rule builder UI + execution log
 
 ## Phase 7: Views Enhancement
-- [ ] OPS-026 — Conditional formatting
-- [ ] OPS-027 — Column reordering (drag-drop)
+- [x] OPS-026 — Conditional formatting
+- [x] OPS-027 — Column reordering (drag-drop)

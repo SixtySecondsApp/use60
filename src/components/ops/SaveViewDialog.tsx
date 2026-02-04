@@ -6,6 +6,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { ConditionalFormattingEditor } from './ConditionalFormattingEditor';
+import type { FormattingRule } from '@/lib/utils/conditionalFormatting';
+import type { OpsTableColumn } from '@/lib/services/opsTableService';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,8 +17,10 @@ import { Button } from '@/components/ui/button';
 interface SaveViewDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (name: string) => void;
+  onSave: (name: string, formattingRules?: FormattingRule[]) => void;
   defaultName?: string;
+  columns?: OpsTableColumn[];
+  existingFormattingRules?: FormattingRule[];
 }
 
 // ---------------------------------------------------------------------------
@@ -27,28 +32,32 @@ export function SaveViewDialog({
   onClose,
   onSave,
   defaultName = '',
+  columns,
+  existingFormattingRules,
 }: SaveViewDialogProps) {
   const [name, setName] = useState(defaultName);
+  const [formattingRules, setFormattingRules] = useState<FormattingRule[]>(existingFormattingRules ?? []);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Reset name when dialog opens
+  // Reset when dialog opens
   useEffect(() => {
     if (isOpen) {
       setName(defaultName);
+      setFormattingRules(existingFormattingRules ?? []);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [isOpen, defaultName]);
+  }, [isOpen, defaultName, existingFormattingRules]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    onSave(trimmed);
+    onSave(trimmed, formattingRules.length > 0 ? formattingRules : undefined);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="border-gray-700 bg-gray-900 sm:max-w-md">
+      <DialogContent className="border-gray-700 bg-gray-900 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-white">Save View</DialogTitle>
         </DialogHeader>
@@ -71,6 +80,15 @@ export function SaveViewDialog({
               className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/20"
             />
           </div>
+
+          {/* Conditional formatting (only if columns provided) */}
+          {columns && columns.length > 0 && (
+            <ConditionalFormattingEditor
+              columns={columns}
+              rules={formattingRules}
+              onChange={setFormattingRules}
+            />
+          )}
 
           <div className="flex items-center justify-end gap-2">
             <Button
