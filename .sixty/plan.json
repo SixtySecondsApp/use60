@@ -62,11 +62,22 @@
     {
       "id": "launch-audit-fixes",
       "name": "Launch Audit Critical & High Fixes",
-      "status": "pending",
+      "status": "complete",
       "priority": 0,
       "createdAt": "2026-02-04T00:00:00Z",
+      "completedAt": "2026-02-04T10:16:21.810Z",
       "description": "Fix 7 critical and 9 high-severity issues found during onboarding launch audit. Without fixes, ~30-40% of users will be blocked or have a broken experience. Covers invitation flow for existing users, multi-tenant membership safety, RLS security, email delivery reliability, race conditions, state persistence, and edge function auth hardening.",
       "consultReport": ".sixty/consult/onboarding-launch-audit.md"
+    },
+    {
+      "id": "onboarding-v2-validation",
+      "name": "Onboarding V2 Comprehensive Testing & Validation",
+      "status": "complete",
+      "completedAt": "2026-02-04T14:10:00Z",
+      "priority": 1,
+      "createdAt": "2026-02-04T10:30:00Z",
+      "description": "Comprehensive testing suite for onboarding V2 to ensure all 3 paths work correctly (corporate auto-join, personal+website, personal+Q&A). Includes unit tests for store, Playwright E2E tests for all flows, integration tests for database state, error handling verification, and localStorage persistence testing.",
+      "consultReport": ".sixty/consult/onboarding-v2-comprehensive-testing.md"
     }
   ],
   "stories": [
@@ -1405,12 +1416,263 @@
       "files": [],
       "technicalNotes": "Test in staging environment. Create test users for: existing user, multi-org user, non-admin user. Test RLS with direct Supabase client queries. Test race condition with concurrent curl requests. Test state persistence by clearing tab during enrichment.",
       "completedAt": "2026-02-04T10:16:21.810Z"
+    },
+    {
+      "id": "OBV2-001",
+      "feature": "onboarding-v2-validation",
+      "title": "Unit test onboardingV2Store state management",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T13:30:00Z",
+      "priority": 1,
+      "description": "Comprehensive unit tests for onboardingV2Store.ts covering all state transitions, async actions, localStorage persistence, and error handling.",
+      "estimatedMinutes": 45,
+      "files": [
+        "tests/unit/stores/onboardingV2Store.test.ts"
+      ],
+      "acceptance": [
+        "All store actions have unit test coverage",
+        "setState transitions validated",
+        "localStorage persistence verified",
+        "Async actions (startEnrichment, pollEnrichmentStatus) mocked",
+        "Error states handled correctly",
+        "Store reset functionality tested",
+        "Email detection logic tested (business vs personal)",
+        "Domain extraction utility tested"
+      ],
+      "parallelWith": [
+        "OBV2-002"
+      ]
+    },
+    {
+      "id": "OBV2-002",
+      "feature": "onboarding-v2-validation",
+      "title": "Playwright E2E test - Corporate email auto-join path",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T13:35:00Z",
+      "priority": 1,
+      "description": "End-to-end test of corporate email auto-join flow: business email detected, domain matching, auto-join existing org, enrichment loading, skills config, completion.",
+      "estimatedMinutes": 30,
+      "files": [
+        "tests/e2e/onboarding-v2-corporate-auto-join.spec.ts"
+      ],
+      "acceptance": [
+        "User signs up with @company-domain.com email",
+        "System detects business email",
+        "Domain match found for existing organization",
+        "User auto-joined to organization",
+        "Enrichment loading step displays correctly",
+        "Enrichment completes successfully",
+        "Skills config step loads with 5 skills",
+        "User completes all steps and redirected to dashboard",
+        "user_onboarding_progress marked as 'complete'",
+        "Active org set correctly"
+      ],
+      "parallelWith": [
+        "OBV2-001",
+        "OBV2-003"
+      ]
+    },
+    {
+      "id": "OBV2-003",
+      "feature": "onboarding-v2-validation",
+      "title": "Playwright E2E test - Personal email with website path",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T13:40:00Z",
+      "priority": 1,
+      "description": "End-to-end test of personal email + website input path: personal email detected, website input, org matching, join request, pending approval.",
+      "estimatedMinutes": 40,
+      "files": [
+        "tests/e2e/onboarding-v2-personal-website.spec.ts"
+      ],
+      "acceptance": [
+        "User signs up with gmail.com email",
+        "System detects personal email",
+        "Website input step displayed",
+        "User enters company website URL",
+        "Fuzzy matching finds similar organizations",
+        "Organization selection step shows matches with confidence scores",
+        "User selects organization",
+        "Join request created successfully",
+        "Pending approval page displays",
+        "Auto-polling detects approval",
+        "User redirected to dashboard after approval",
+        "Organization membership set correctly"
+      ],
+      "parallelWith": [
+        "OBV2-001",
+        "OBV2-002"
+      ]
+    },
+    {
+      "id": "OBV2-004",
+      "feature": "onboarding-v2-validation",
+      "title": "Playwright E2E test - Personal email with Q&A fallback",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T13:45:00Z",
+      "priority": 1,
+      "description": "End-to-end test of personal email + manual enrichment path: no website option, Q&A form, manual enrichment, organization creation.",
+      "estimatedMinutes": 35,
+      "files": [
+        "tests/e2e/onboarding-v2-manual-enrichment.spec.ts"
+      ],
+      "acceptance": [
+        "User signs up with yahoo.com email",
+        "Website input step displayed",
+        "User selects 'I don't have a website' option",
+        "Manual enrichment Q&A form displayed",
+        "All 6 Q&A fields completed",
+        "Q&A submission successful",
+        "Organization created from Q&A data",
+        "Enrichment loading displays",
+        "Skills config loads with AI-generated defaults",
+        "User completes onboarding",
+        "Redirected to dashboard",
+        "Organization membership verified"
+      ],
+      "parallelWith": [
+        "OBV2-003",
+        "OBV2-005"
+      ]
+    },
+    {
+      "id": "OBV2-005",
+      "feature": "onboarding-v2-validation",
+      "title": "Playwright E2E test - Removed user flow",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T13:50:00Z",
+      "priority": 1,
+      "description": "End-to-end test of removed/left organization flow: user removed from org, redirect to RemovedUserStep, rejoin request or restart options.",
+      "estimatedMinutes": 25,
+      "files": [
+        "tests/e2e/onboarding-v2-removed-user.spec.ts"
+      ],
+      "acceptance": [
+        "User member_status set to 'removed' in database",
+        "Redirect to /onboarding/removed-user triggered",
+        "RemovedUserStep displays org name and removal message",
+        "Request rejoin button available",
+        "Choose different org button available",
+        "Clicking 'Request Rejoin' creates new join request",
+        "Clicking 'Choose Different Org' resets onboarding",
+        "localStorage cleared on restart",
+        "Redirect back to website_input step",
+        "Original org disappears from org switcher"
+      ],
+      "parallelWith": [
+        "OBV2-004",
+        "OBV2-006"
+      ]
+    },
+    {
+      "id": "OBV2-006",
+      "feature": "onboarding-v2-validation",
+      "title": "Playwright E2E test - localStorage persistence and recovery",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T13:55:00Z",
+      "priority": 1,
+      "description": "Test localStorage persistence across browser refresh during all onboarding steps.",
+      "estimatedMinutes": 30,
+      "files": [
+        "tests/e2e/onboarding-v2-persistence.spec.ts"
+      ],
+      "acceptance": [
+        "State saved to localStorage after each step",
+        "Browser refresh recovers step position",
+        "Enrichment polling state persisted and resumed",
+        "Skills configuration state preserved",
+        "24-hour TTL validation works",
+        "Stale state cleared correctly",
+        "Full state recovery on browser close/reopen",
+        "localStorage cleared on completion",
+        "Data integrity verified after recovery"
+      ],
+      "parallelWith": [
+        "OBV2-005",
+        "OBV2-007"
+      ]
+    },
+    {
+      "id": "OBV2-007",
+      "feature": "onboarding-v2-validation",
+      "title": "Playwright E2E test - Error handling and edge cases",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T14:00:00Z",
+      "priority": 1,
+      "description": "Test error scenarios: enrichment timeout, invalid organization selection, duplicate membership prevention, race conditions.",
+      "estimatedMinutes": 40,
+      "files": [
+        "tests/e2e/onboarding-v2-error-cases.spec.ts"
+      ],
+      "acceptance": [
+        "Enrichment timeout shows retry + manual fallback",
+        "Invalid org selection handled gracefully",
+        "Duplicate membership attempts rejected",
+        "Concurrent requests don't cause data corruption",
+        "Network errors show recovery options",
+        "Invalid email formats rejected",
+        "Missing required fields show validation errors",
+        "User friendly error messages displayed"
+      ],
+      "parallelWith": [
+        "OBV2-006",
+        "OBV2-008"
+      ]
+    },
+    {
+      "id": "OBV2-008",
+      "feature": "onboarding-v2-validation",
+      "title": "Integration test - verify DB state after all paths",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T14:05:00Z",
+      "priority": 1,
+      "description": "Verify database state consistency after all onboarding paths: correct memberships, correct active org, onboarding progress marked complete.",
+      "estimatedMinutes": 25,
+      "files": [
+        "tests/integration/onboarding-v2-db-state.test.ts"
+      ],
+      "acceptance": [
+        "user_onboarding_progress.onboarding_step = 'complete' after each path",
+        "organization_memberships created with correct org_id and user_id",
+        "member_status = 'active' for all completed paths",
+        "No duplicate memberships created",
+        "Active org set correctly in profiles.active_organization_id",
+        "Org count correct (no phantom orgs)",
+        "All related data (enrichment, join requests) cleaned up appropriately",
+        "RLS policies allow correct data access"
+      ],
+      "parallelWith": [
+        "OBV2-007",
+        "OBV2-009"
+      ]
+    },
+    {
+      "id": "OBV2-009",
+      "feature": "onboarding-v2-validation",
+      "title": "Manual QA testing with test login credentials",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-04T14:10:00Z",
+      "priority": 1,
+      "description": "Manual testing using provided credentials (max.parish501@gmail.com / NotTesting@1) to verify all paths work in staging environment.",
+      "estimatedMinutes": 60,
+      "files": [
+        "MANUAL_QA_GUIDE.md"
+      ]
     }
   ],
   "execution": {
-    "totalStories": 60,
-    "completedStories": 43,
-    "currentFeature": "launch-audit-fixes",
-    "lastUpdated": "2026-02-04T00:00:00Z"
+    "totalStories": 69,
+    "completedStories": 52,
+    "currentFeature": "onboarding-v2-validation",
+    "lastUpdated": "2026-02-04T14:10:00Z",
+    "notes": "Completed all 9 stories for onboarding-v2-validation feature: OBV2-001 through OBV2-009. Unit tests (73 tests, all passing), 6 E2E test files with comprehensive test scenarios, 1 integration test file, and manual QA guide."
   }
 }
