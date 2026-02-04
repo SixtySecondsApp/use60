@@ -40,7 +40,7 @@ export interface ExecutorConfig {
   userId: string;
   /** Optional organization context to inject */
   orgContext?: Record<string, unknown>;
-  /** Model to use (default: claude-sonnet-4-20250514) */
+  /** Model to use (default: claude-haiku-4-5) */
   model?: string;
   /** Maximum tool use iterations (default: 10) */
   maxIterations?: number;
@@ -177,7 +177,7 @@ export class AutonomousExecutor {
       organizationId: config.organizationId,
       userId: config.userId,
       orgContext: config.orgContext || {},
-      model: config.model || 'claude-sonnet-4-20250514',
+      model: config.model || 'claude-haiku-4-5',
       maxIterations: config.maxIterations || 10,
       systemPromptAdditions: config.systemPromptAdditions || '',
     };

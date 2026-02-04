@@ -412,7 +412,7 @@ export class CopilotMemoryService {
   async extractMemories(
     messages: CopilotMessage[],
     anthropicClient: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> } },
-    model: string = 'claude-sonnet-4-20250514'
+    model: string = 'claude-haiku-4-5'
   ): Promise<ExtractedMemory[]> {
     if (messages.length === 0) return [];
 

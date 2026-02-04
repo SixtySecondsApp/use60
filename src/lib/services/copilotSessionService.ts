@@ -423,7 +423,7 @@ export class CopilotSessionService {
     userId: string,
     anthropicClient: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> } },
     memoryService: { extractMemories: (messages: CopilotMessage[], client: unknown, model: string) => Promise<Array<{ category: string; subject: string; content: string; confidence: number }>>; linkMemoriesToEntities: (userId: string, memories: unknown[]) => Promise<unknown[]>; storeMemories: (memories: unknown[]) => Promise<unknown[]> },
-    model: string = 'claude-sonnet-4-20250514'
+    model: string = 'claude-haiku-4-5'
   ): Promise<CompactionResult> {
     try {
       // 1. Load all messages

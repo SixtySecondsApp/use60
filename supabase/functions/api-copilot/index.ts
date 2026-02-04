@@ -2494,7 +2494,7 @@ Return your response as JSON in this exact format:
       'anthropic-version': ANTHROPIC_VERSION
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5',
       max_tokens: 1500, // More tokens for transcript analysis
       messages: [{
         role: 'user',
@@ -7585,7 +7585,7 @@ Return your response as JSON in this exact format:
       'anthropic-version': ANTHROPIC_VERSION
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5',
       max_tokens: 1024,
       messages: [{
         role: 'user',

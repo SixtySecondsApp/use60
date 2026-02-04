@@ -21,7 +21,6 @@ import * as Sentry from '@sentry/react';
 import {
   httpClientIntegration,
   extraErrorDataIntegration,
-  feedbackIntegration,
 } from '@sentry/react';
 
 // Get Sentry DSN from environment
@@ -137,10 +136,6 @@ export function initSentry() {
         depth: 6, // Deep object inspection
       }),
 
-      // Feedback integration (disabled by default, available for admin use)
-      feedbackIntegration({
-        autoInject: false, // No automatic UI injection
-      }),
     ],
 
     // Filter out noisy errors
