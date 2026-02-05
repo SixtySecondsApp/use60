@@ -204,15 +204,15 @@ export default function InactiveOrganizationScreen() {
               <span className="ml-2 text-gray-600 dark:text-gray-400">Checking request status...</span>
             </div>
           ) : existingRequest ? (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-              <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
                 <Clock className="h-4 w-4" />
                 Reactivation Request Pending
               </h3>
-              <p className="text-sm text-amber-800 dark:text-amber-200">
+              <p className="text-sm text-red-800 dark:text-red-200">
                 Your request to reactivate this organization is being reviewed by an administrator.
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+              <p className="text-xs text-red-700 dark:text-red-300 mt-2">
                 Submitted: {new Date(existingRequest.requested_at).toLocaleString()}
               </p>
             </div>
