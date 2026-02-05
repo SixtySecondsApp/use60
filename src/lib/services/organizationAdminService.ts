@@ -41,14 +41,13 @@ export async function getAllOrganizations(): Promise<OrganizationWithMemberCount
     // Get member counts for each org
     const orgsWithCounts = await Promise.all(
       (orgs || []).map(async (org) => {
-        // Try with member_status filter first, fallback without it
+        // Count only ACTIVE members (consistent with other queries)
+        // This filters out removed members and NULL status values
         let countQuery = supabase
           .from('organization_memberships')
           .select('*', { count: 'exact' })
-          .eq('org_id', org.id);
-
-        // Exclude removed members (includes active and NULL status for backwards compatibility)
-        countQuery = countQuery.neq('member_status', 'removed');
+          .eq('org_id', org.id)
+          .eq('member_status', 'active');
 
         let { count, error: countError } = await countQuery;
 
@@ -118,12 +117,12 @@ export async function getOrganization(orgId: string): Promise<OrganizationWithMe
       throw orgError;
     }
 
-    // Get member count (with fallback for older schema without member_status)
+    // Get member count (only ACTIVE members for consistency)
     let countQuery = supabase
       .from('organization_memberships')
       .select('*', { count: 'exact' })
       .eq('org_id', orgId)
-      .neq('member_status', 'removed');
+      .eq('member_status', 'active');
 
     let { count, error: countError } = await countQuery;
 
