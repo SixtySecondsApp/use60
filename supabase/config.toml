@@ -3,7 +3,7 @@
 
 [project]
 # Project reference ID - set via: supabase link --project-ref <id>
-# project_id = "your-project-ref-id"
+project_id = "caerqjzvuerejfrdtygb"  # Staging environment
 
 # Database Configuration
 [db]

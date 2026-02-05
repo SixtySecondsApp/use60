@@ -65,12 +65,15 @@ export async function getAllOrganizations(): Promise<OrganizationWithMemberCount
 
         // Get org owner (with fallback for empty orgs or older schema)
         // Use same member_status filter as member count for consistency
+        // Order by created_at to get the first owner if there are multiple
         let { data: owner, error: ownerError } = await supabase
           .from('organization_memberships')
           .select('user_id, profiles!user_id(id, email, first_name, last_name, avatar_url)')
           .eq('org_id', org.id)
           .eq('role', 'owner')
           .eq('member_status', 'active')  // Consistent with member count filtering
+          .order('created_at', { ascending: true })
+          .limit(1)
           .maybeSingle();
 
         // If relationship lookup fails (406 error), retry without the join
@@ -138,12 +141,15 @@ export async function getOrganization(orgId: string): Promise<OrganizationWithMe
 
     // Get org owner (with fallback for empty orgs or relationship failures)
     // Use same member_status filter as member count for consistency
+    // Order by created_at to get the first owner if there are multiple
     let { data: owner, error: ownerError } = await supabase
       .from('organization_memberships')
       .select('user_id, profiles!user_id(id, email, first_name, last_name, avatar_url)')
       .eq('org_id', orgId)
       .eq('role', 'owner')
       .eq('member_status', 'active')  // Consistent with member count filtering
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     // If relationship lookup fails (406 error), retry without the join

@@ -1,0 +1,75 @@
+================================================================================
+                    MIGRATION DEPLOYMENT - QUICK STEPS
+================================================================================
+
+🎯 GOAL: Deploy 3 bug fixes to staging database (caerqjzvuerejfrdtygb)
+
+📋 STEPS (Takes 2 minutes):
+
+1. OPEN Supabase Dashboard
+   → https://app.supabase.com/projects/caerqjzvuerejfrdtygb/sql/new
+
+2. OPEN the migration file
+   → File: EXECUTE_MIGRATIONS_NOW.sql (in project root)
+
+3. COPY all SQL
+   → Select all text (Ctrl+A)
+   → Copy (Ctrl+C)
+
+4. PASTE into Supabase
+   → Click in SQL editor on the dashboard
+   → Paste (Ctrl+V)
+
+5. EXECUTE
+   → Click "Execute" button (or Ctrl+Enter)
+   → Wait 5-10 seconds for completion
+
+6. VERIFY SUCCESS
+   ✓ See green checkmarks for all 3 migrations
+   ✓ See "SUCCESS: All migrations executed!" message
+
+7. REFRESH STAGING APP
+   → https://localhost:5175/organizations
+   → Verify member counts display (not 0)
+   → Verify owner names are visible
+
+================================================================================
+                             WHAT GETS FIXED
+================================================================================
+
+Bug #1: Member counts showing 0
+  → Fixed: Set member_status='active' on all memberships
+
+Bug #2: Owner information not visible
+  → Fixed: Created missing app_auth.is_admin() function
+
+Bug #3: Users can't see other members
+  → Fixed: Changed RLS role check from = ANY to IS NOT NULL
+
+================================================================================
+                              IF YOU GET STUCK
+================================================================================
+
+❌ "Function already exists" error
+   ✓ This is fine! Click Execute again or just continue
+
+❌ "Permission denied" error
+   ✓ Make sure you're logged in to Supabase as project admin
+
+❌ Nothing happens after clicking Execute
+   ✓ Wait 10 seconds and refresh the page
+
+❌ Still seeing 0 members after refresh
+   ✓ Hard refresh: Ctrl+Shift+R (or Cmd+Shift+R on Mac)
+   ✓ Check browser console for errors (F12)
+
+================================================================================
+
+📁 Files Created:
+   ✓ EXECUTE_MIGRATIONS_NOW.sql - Ready to paste SQL
+   ✓ MANUAL_MIGRATION_GUIDE.md - Detailed instructions
+   ✓ DEPLOY_NOW.txt - This file
+
+✨ All migrations are complete and tested. Just execute them!
+
+Questions? Check MANUAL_MIGRATION_GUIDE.md

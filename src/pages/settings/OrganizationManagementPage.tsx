@@ -1603,6 +1603,7 @@ export default function OrganizationManagementPage() {
                   orgId={activeOrgId!}
                   currentLogoUrl={activeOrg?.logo_url}
                   orgName={activeOrg?.name || 'Organization'}
+                  onRefresh={refreshOrgs}
                   size="lg"
                 />
               </div>

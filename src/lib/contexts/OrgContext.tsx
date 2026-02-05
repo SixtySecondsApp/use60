@@ -196,6 +196,20 @@ export function OrgProvider({ children }: OrgProviderProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user?.id, authLoading]);
 
+  // Set up realtime subscriptions to organization changes
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    const unsubscribe = storeActions.subscribeToOrgChanges(user.id);
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user?.id]);
+
   // Switch to a different organization
   const switchOrg = useCallback((orgId: string) => {
     logger.log('[OrgContext] Switching to org:', orgId);

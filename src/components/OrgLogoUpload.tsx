@@ -22,6 +22,7 @@ interface OrgLogoUploadProps {
   orgId: string;
   onUploadComplete?: (logoUrl: string) => void;
   onRemoveComplete?: () => void;
+  onRefresh?: () => void | Promise<void>;
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -31,6 +32,7 @@ export function OrgLogoUpload({
   orgId,
   onUploadComplete,
   onRemoveComplete,
+  onRefresh,
   size = 'md',
 }: OrgLogoUploadProps) {
   const [uploading, setUploading] = useState(false);
@@ -170,8 +172,18 @@ export function OrgLogoUpload({
       toast.success('Organization logo updated successfully');
       logger.log('[OrgLogoUpload] Logo upload completed successfully');
 
+      // Invalidate related queries to ensure activeOrg is refreshed
+      queryClient.invalidateQueries({ queryKey: ['organization', orgId] });
+      queryClient.invalidateQueries({ queryKey: ['active-org'] });
+      queryClient.invalidateQueries({ queryKey: ['organizations'] });
+
       if (onUploadComplete) {
         onUploadComplete(logoUrlWithTimestamp);
+      }
+
+      // Call refresh callback if provided to refresh the full org data
+      if (onRefresh) {
+        await onRefresh();
       }
     } catch (error: any) {
       logger.error('[OrgLogoUpload] Logo upload failed:', error);
@@ -191,15 +203,20 @@ export function OrgLogoUpload({
 
       // Optimistic update: Update cache AND Zustand store immediately
       const updatedOrg = {
+        logo_url: null,
         remove_logo: true,
         updated_at: now,
       };
       updateOrgInAllStores(updatedOrg);
 
+      // Clear the display logo URL immediately for instant UI feedback
+      setDisplayLogoUrl(null);
+
       // Update the database in the background
       const { error: updateError } = await supabase
         .from('organizations')
         .update({
+          logo_url: null,
           remove_logo: true,
           updated_at: now,
         })
@@ -215,12 +232,24 @@ export function OrgLogoUpload({
 
       setShowRemoveDialog(false);
 
+      // Invalidate related queries to ensure activeOrg is refreshed
+      queryClient.invalidateQueries({ queryKey: ['organization', orgId] });
+      queryClient.invalidateQueries({ queryKey: ['active-org'] });
+      queryClient.invalidateQueries({ queryKey: ['organizations'] });
+
       if (onRemoveComplete) {
         onRemoveComplete();
+      }
+
+      // Call refresh callback if provided to refresh the full org data
+      if (onRefresh) {
+        await onRefresh();
       }
     } catch (error: any) {
       logger.error('[OrgLogoUpload] Logo removal failed:', error);
       toast.error(error.message || 'Failed to remove logo. Please try again.');
+      // Restore the display logo URL if removal fails
+      setDisplayLogoUrl(currentLogoUrl);
     } finally {
       setUploading(false);
     }

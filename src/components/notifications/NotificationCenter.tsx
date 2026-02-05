@@ -255,46 +255,49 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
       overflow-hidden flex flex-col
     ">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-blue-500/20 dark:bg-blue-500/20">
+      <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 rounded-xl bg-blue-500/20 dark:bg-blue-500/20 flex-shrink-0">
               <Bell className="w-5 h-5 text-blue-500" />
             </div>
-            <div>
-              <h2 className="font-bold text-gray-900 dark:text-white">Notifications</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-500">
+            <div className="min-w-0">
+              <h2 className="font-bold text-sm sm:text-base text-gray-900 dark:text-white truncate">Notifications</h2>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-500">
                 {unreadCount} unread
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="p-2 rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-500"
+                className="p-2 rounded-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
                 title="Mark all as read"
+                aria-label="Mark all notifications as read"
               >
-                <CheckCheck className="w-4 h-4" />
+                <CheckCheck className="w-5 h-5" />
               </button>
             )}
             <button
-              className="p-2 rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-500"
+              className="p-2 rounded-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
               title="Settings"
+              aria-label="Notification settings"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-5 h-5" />
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-500"
+              className="p-2 rounded-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
+              aria-label="Close notifications"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-1 px-1">
           {TABS.map((tab) => {
             const count = tabCounts[tab.id];
             const unreadInTab = groupedNotifications[tab.id]?.filter(n => !n.read).length || 0;
@@ -309,18 +312,18 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
                   }
                 }}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors",
+                  "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 flex-shrink-0",
                   activeTab === tab.id
                     ? "bg-blue-500/20 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
-                    : "text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    : "text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50"
                 )}
               >
-                {tab.icon && <tab.icon className="w-3.5 h-3.5" />}
-                {tab.label}
+                {tab.icon && <tab.icon className="w-4 h-4 flex-shrink-0" />}
+                <span className="hidden sm:inline">{tab.label}</span>
                 {count > 0 && (
                   <span
                     className={cn(
-                      "px-1.5 py-0.5 rounded-full text-xs",
+                      "px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0",
                       activeTab === tab.id
                         ? "bg-blue-500/30 dark:bg-blue-500/30"
                         : "bg-gray-200 dark:bg-gray-800"
@@ -379,22 +382,22 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
                             className={cn(
-                              "p-4 transition-colors cursor-pointer group",
+                              "px-4 sm:px-5 py-4 sm:py-5 transition-colors cursor-pointer group",
                               !notification.read && "bg-blue-50/50 dark:bg-gray-800/30",
                               "hover:bg-gray-50 dark:hover:bg-gray-800/50"
                             )}
                             onClick={() => handleNotificationClick(notification)}
                           >
-                            <div className="flex gap-3">
-                              <div className={cn("p-2 rounded-lg flex-shrink-0", colors.bg)}>
-                                <Icon className={cn("w-4 h-4", colors.text)} />
+                            <div className="flex gap-3 sm:gap-4">
+                              <div className={cn("p-2.5 rounded-lg flex-shrink-0", colors.bg)}>
+                                <Icon className={cn("w-5 h-5", colors.text)} />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
                                     <p
                                       className={cn(
-                                        "text-sm font-medium",
+                                        "text-sm sm:text-base font-medium leading-snug",
                                         !notification.read
                                           ? "text-gray-900 dark:text-white"
                                           : "text-gray-700 dark:text-gray-300"
@@ -402,38 +405,42 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
                                     >
                                       {notification.title}
                                     </p>
-                                    <p className="text-sm mt-0.5 text-gray-500 dark:text-gray-400 line-clamp-2">
+                                    <p className="text-xs sm:text-sm mt-1 text-gray-500 dark:text-gray-400 line-clamp-2 leading-normal">
                                       {notification.message}
                                     </p>
                                   </div>
                                   {!notification.read && (
-                                    <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-2" />
+                                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
                                   )}
                                 </div>
 
-                                <div className="flex items-center justify-between mt-2">
-                                  <span className="text-xs text-gray-500 dark:text-gray-500">
+                                <div className="flex items-center justify-between gap-2 mt-3">
+                                  <span className="text-xs text-gray-500 dark:text-gray-500 flex-shrink-0">
                                     {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                                   </span>
 
-                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         markAsRead(notification.id);
                                       }}
-                                      className="p-1 rounded-lg transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                      className="p-1.5 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                                      title="Mark as read"
+                                      aria-label="Mark as read"
                                     >
-                                      <Check className="w-3.5 h-3.5" />
+                                      <Check className="w-4 h-4" />
                                     </button>
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         deleteNotification(notification.id);
                                       }}
-                                      className="p-1 rounded-lg transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                      className="p-1.5 rounded-lg transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+                                      title="Delete notification"
+                                      aria-label="Delete notification"
                                     >
-                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
                                 </div>
@@ -441,14 +448,14 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
                                 {notification.metadata?.priority && (
                                   <div
                                     className={cn(
-                                      "mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
+                                      "mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
                                       notification.metadata.priority === 'critical'
                                         ? "bg-rose-500/20 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400"
                                         : "bg-amber-500/20 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400"
                                     )}
                                   >
-                                    <AlertCircle className="w-3 h-3" />
-                                    {notification.metadata.priority}
+                                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    <span>{notification.metadata.priority}</span>
                                   </div>
                                 )}
                               </div>
@@ -467,10 +474,10 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
 
       {/* Footer */}
       {notifications.length > 0 && (
-        <div className="p-3 border-t border-gray-200 dark:border-gray-800">
+        <div className="p-4 sm:p-5 border-t border-gray-200 dark:border-gray-800">
           <button
             onClick={loadMore}
-            className="w-full py-2 rounded-xl text-sm font-medium transition-colors text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-200 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50"
           >
             Load More
           </button>

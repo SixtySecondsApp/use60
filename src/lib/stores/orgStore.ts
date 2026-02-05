@@ -72,6 +72,8 @@ interface OrgStore {
   getUserRole: (orgId: string) => 'owner' | 'admin' | 'member' | 'readonly' | null;
   getActiveOrgRole: () => 'owner' | 'admin' | 'member' | 'readonly' | null;
   isOrgMember: (orgId: string) => boolean;
+  subscribeToOrgChanges: (userId: string) => (() => void) | null;
+  updateOrganization: (org: Organization) => void;
   clear: () => void;
 }
 
@@ -376,6 +378,58 @@ export const useOrgStore = create<OrgStore>()(
        */
       isOrgMember: (orgId: string): boolean => {
         return get().getUserRole(orgId) !== null;
+      },
+
+      /**
+       * Update a single organization in the store (for realtime updates)
+       */
+      updateOrganization: (org: Organization) => {
+        const { organizations } = get();
+        const updatedOrgs = organizations.map((o) =>
+          o.id === org.id ? { ...o, ...org } : o
+        );
+        set({ organizations: updatedOrgs });
+        logger.log('[OrgStore] Organization updated:', org.id);
+      },
+
+      /**
+       * Subscribe to realtime changes on the organizations table
+       * Returns an unsubscribe function
+       */
+      subscribeToOrgChanges: (userId: string) => {
+        try {
+          logger.log('[OrgStore] Setting up realtime subscription to organizations table');
+
+          const channel = supabase
+            .channel('org-changes')
+            .on(
+              'postgres_changes',
+              {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'organizations',
+              },
+              (payload: any) => {
+                logger.log('[OrgStore] Organization UPDATE detected:', payload);
+
+                // Update the organization in the store
+                const updatedOrg = payload.new as Organization;
+                get().updateOrganization(updatedOrg);
+              }
+            )
+            .subscribe((status) => {
+              logger.log('[OrgStore] Subscription status:', status);
+            });
+
+          // Return unsubscribe function
+          return () => {
+            supabase.removeChannel(channel);
+            logger.log('[OrgStore] Unsubscribed from organization changes');
+          };
+        } catch (error) {
+          logger.error('[OrgStore] Error setting up org subscription:', error);
+          return null;
+        }
       },
 
       /**
