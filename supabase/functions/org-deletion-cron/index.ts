@@ -94,36 +94,50 @@ serve(async (req) => {
 
           console.log(`[org-deletion-cron] Sending day-25 warning for org ${org.id} to ${memberEmails.length} members + owner`);
 
-          // Send day-25 warning emails
-          const warningResponse = await fetch(
-            `${Deno.env.get('SUPABASE_URL')}/functions/v1/encharge-send-email`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
-              },
-              body: JSON.stringify({
-                template_type: 'organization-deletion-warning',
-                to_emails: [ownerEmail, ...memberEmails],
-                variables: {
-                  org_name: org.name,
-                  days_remaining: 5,
-                  deletion_date: new Date(org.deletion_scheduled_at).toLocaleDateString(),
-                  reactivation_url: `${Deno.env.get('FRONTEND_URL')}/settings/organization?orgId=${org.id}&action=reactivate`,
-                  support_email: 'support@use60.com'
-                }
-              })
-            }
-          );
+          // Send day-25 warning emails to owner and members
+          const allEmails = [ownerEmail, ...memberEmails];
+          let emailsSent = 0;
 
-          if (warningResponse.ok) {
+          for (const email of allEmails) {
+            try {
+              const warningResponse = await fetch(
+                `${Deno.env.get('SUPABASE_URL')}/functions/v1/encharge-send-email`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+                  },
+                  body: JSON.stringify({
+                    template_type: 'organization_deletion_warning',
+                    to_email: email,
+                    to_name: email.split('@')[0],
+                    variables: {
+                      recipient_name: email.split('@')[0],
+                      organization_name: org.name,
+                      days_remaining: 5,
+                      deletion_date: new Date(org.deletion_scheduled_at).toLocaleDateString(),
+                      reactivation_url: `${Deno.env.get('FRONTEND_URL')}/settings/organization?orgId=${org.id}&action=reactivate`,
+                      support_email: 'support@use60.com'
+                    }
+                  })
+                }
+              );
+
+              if (warningResponse.ok) {
+                emailsSent++;
+              } else {
+                const errorText = await warningResponse.text();
+                console.error(`[org-deletion-cron] Failed to send warning to ${email} for org ${org.id}:`, errorText);
+              }
+            } catch (emailErr) {
+              console.error(`[org-deletion-cron] Error sending warning to ${email}:`, emailErr);
+            }
+          }
+
+          if (emailsSent > 0) {
             result.warning_sent++;
-            console.log(`[org-deletion-cron] Warning sent for org ${org.id}`);
-          } else {
-            const errorText = await warningResponse.text();
-            console.error(`[org-deletion-cron] Failed to send warning for org ${org.id}:`, errorText);
-            result.errors.push(`Failed to send warning for org ${org.id}`);
+            console.log(`[org-deletion-cron] Warning sent to ${emailsSent} recipients for org ${org.id}`);
           }
         } catch (err) {
           console.error(`[org-deletion-cron] Error processing warning for org ${org.id}:`, err);
@@ -195,10 +209,12 @@ serve(async (req) => {
                     'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
                   },
                   body: JSON.stringify({
-                    template_type: 'organization-permanently-deleted',
+                    template_type: 'organization_permanently_deleted',
                     to_email: ownerData.user_id.email,
+                    to_name: ownerData.user_id.email.split('@')[0],
                     variables: {
-                      org_name: org.name,
+                      recipient_name: ownerData.user_id.email.split('@')[0],
+                      organization_name: org.name,
                       deleted_date: now.toLocaleDateString(),
                       support_email: 'support@use60.com'
                     }

@@ -1,102 +1,100 @@
+#!/usr/bin/env node
+
 import { readFileSync } from 'fs';
-import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-dotenv.config({ path: join(__dirname, '.env.staging') });
+// Staging credentials from .env.staging
+const PROJECT_ID = 'caerqjzvuerejfrdtygb';
+const ACCESS_TOKEN = 'sbp_8e5eef8735fc3f15ed2544a5ad9508a902f2565f';
+const API_URL = `https://api.supabase.com/v1/projects/${PROJECT_ID}/database/query`;
 
-const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
-const projectId = process.env.SUPABASE_PROJECT_ID;
+// Migrations to apply (in order)
+const migrations = [
+  '20260205130000_fix_join_requests_rls_member_status.sql',
+  '20260205130100_fix_join_requests_rpc_member_status.sql',
+  '20260205140000_add_org_deletion_scheduler.sql',
+  '20260205140100_rpc_deactivate_organization_by_owner.sql',
+  '20260205150000_fix_fuzzy_matching_active_members.sql',
+];
 
-console.log('🔧 Running migrations via Supabase Management API...\n');
-console.log('Project ID:', projectId);
-console.log('Access Token:', accessToken ? `${accessToken.substring(0, 10)}...` : 'MISSING');
+console.log('🚀 Applying onboarding bug fix migrations to STAGING database...');
+console.log(`   Project: ${PROJECT_ID}`);
+console.log('   Method: Supabase Management API');
+console.log('');
 
-if (!accessToken || !projectId) {
-  console.error('\n❌ Missing SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_ID in .env.staging');
-  process.exit(1);
-}
+let successCount = 0;
+let failedCount = 0;
+let skippedCount = 0;
 
-async function runMigrationSQL(sql) {
-  const response = await fetch(
-    `https://api.supabase.com/v1/projects/${projectId}/database/query`,
-    {
+for (let i = 0; i < migrations.length; i++) {
+  const migration = migrations[i];
+  const migrationNum = i + 1;
+
+  console.log(`📝 Migration ${migrationNum}/${migrations.length}: ${migration}`);
+
+  try {
+    // Read migration file
+    const migrationPath = join(__dirname, 'supabase', 'migrations', migration);
+    const sql = readFileSync(migrationPath, 'utf8');
+
+    // Execute SQL via Management API
+    const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ query: sql })
-    }
-  );
+      body: JSON.stringify({ query: sql }),
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`API error (${response.status}): ${error}`);
-  }
+    const result = await response.json();
 
-  return await response.json();
-}
+    if (!response.ok) {
+      const errorMsg = result.error || result.message || 'Unknown error';
 
-async function runMigration(filename) {
-  console.log(`\n📄 Running: ${filename}`);
-  try {
-    const sql = readFileSync(join(__dirname, 'supabase', 'migrations', filename), 'utf-8');
-    console.log(`   Executing... (${sql.length} chars)`);
-
-    const result = await runMigrationSQL(sql);
-
-    console.log(`   ✅ Success!`);
-    return true;
-  } catch (error) {
-    console.error(`   ❌ Failed: ${error.message}`);
-    return false;
-  }
-}
-
-async function main() {
-  try {
-    const migrations = [
-      '20260203160000_add_org_logo_columns.sql',
-      '20260203160100_setup_org_logos_bucket_rls.sql'
-    ];
-
-    let successCount = 0;
-
-    for (const migration of migrations) {
-      const success = await runMigration(migration);
-      if (success) successCount++;
-    }
-
-    if (successCount === migrations.length) {
-      console.log('\n🎉 All migrations completed successfully!\n');
-
-      // Verify
-      console.log('🔍 Verifying migrations...');
-
-      const verifySQL = `
-        SELECT column_name, data_type, is_nullable
-        FROM information_schema.columns
-        WHERE table_name = 'organizations'
-        AND column_name IN ('logo_url', 'remove_logo')
-        ORDER BY column_name;
-      `;
-
-      const result = await runMigrationSQL(verifySQL);
-      console.log(`   ✅ Found ${result.length || 0} new columns in organizations table`);
-
-      console.log('\n✨ Feature is now live on staging!');
-      console.log('👉 Test it at: Settings → Organization Management → Settings tab\n');
+      // Check if it's a safe "already exists" error
+      if (errorMsg.includes('already exists') ||
+          errorMsg.includes('duplicate') ||
+          errorMsg.includes('42710') ||
+          errorMsg.includes('42P07')) {
+        console.log(`   ⚠️  Already applied, skipping...`);
+        skippedCount++;
+      } else {
+        console.error(`   ❌ Failed: ${errorMsg}`);
+        failedCount++;
+      }
     } else {
-      console.log(`\n⚠️  ${successCount}/${migrations.length} migrations succeeded.`);
+      console.log(`   ✅ Applied successfully`);
+      successCount++;
     }
-  } catch (error) {
-    console.error('\n❌ Error:', error.message);
-    process.exit(1);
+  } catch (err) {
+    console.error(`   ❌ Error: ${err.message}`);
+    failedCount++;
   }
+
+  console.log('');
 }
 
-main();
+console.log('');
+console.log('✨ Migration Summary:');
+console.log(`   Total: ${migrations.length}`);
+console.log(`   Success: ${successCount}`);
+console.log(`   Skipped: ${skippedCount}`);
+console.log(`   Failed: ${failedCount}`);
+console.log('');
+
+if (failedCount === 0) {
+  console.log('🎉 All migrations applied successfully!');
+  console.log('');
+  console.log('🧪 Next steps:');
+  console.log('   1. Test onboarding flow with company website');
+  console.log('   2. Verify no auto-join (should create join request)');
+  console.log('   3. Test empty org filtering');
+  console.log('   4. Check error messages are user-friendly');
+} else {
+  console.log('⚠️  Some migrations failed. Please review errors above.');
+}

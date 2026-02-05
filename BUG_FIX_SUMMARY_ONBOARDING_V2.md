@@ -168,12 +168,25 @@ console.log(`[Pipeline] Step 3/3: ✓ Generated ${Object.keys(skills).length} sk
 
 ## Files Modified
 
+### First Commit (f3d155b6)
 | File | Changes |
 |------|---------|
 | `src/lib/stores/onboardingV2Store.ts` | Fixed auto-join, org naming, manual enrichment update |
 | `supabase/functions/deep-enrich-organization/index.ts` | Improved error messages, added timeouts, better logging |
 
-**Total Lines Changed**: 121 insertions, 33 deletions
+**Lines Changed**: 121 insertions, 33 deletions
+
+### Second Commit (ea409a33)
+| File | Changes |
+|------|---------|
+| `src/lib/stores/onboardingV2Store.ts` | Added member count validation |
+| `src/pages/onboarding/v2/OnboardingV2.tsx` | Removed conflicting useEffect check |
+| `supabase/migrations/20260205150000_fix_fuzzy_matching_active_members.sql` | Filter active members in RPC |
+
+**Lines Changed**: 79 insertions, 50 deletions
+
+### Total
+**200 insertions, 83 deletions** across 4 files
 
 ---
 
@@ -202,18 +215,53 @@ console.log(`[Pipeline] Step 3/3: ✓ Generated ${Object.keys(skills).length} sk
 - [ ] Existing org with exact domain → join request flow
 - [ ] Business email + exact match → join request → pending approval
 - [ ] Network timeout → graceful failure with clear message
+- [ ] Organization with 0 active members → treated as new org (not join request)
+- [ ] Multiple users signing up concurrently → no race conditions
+- [ ] Switching between steps → no duplicate org checks
 
 ---
 
-## Remaining Bugs (Lower Priority)
+## Additional Bugs Fixed (Second Commit)
 
-| Bug | Priority | Status |
-|-----|----------|--------|
-| BUG-005: Multiple conflicting checks | P2 | Pending |
-| BUG-006: Can join empty orgs | P2 | Pending |
-| BUG-007: PGRST116 error handling | P3 | Pending |
+**Commit**: ea409a33
 
-These can be addressed in a follow-up PR.
+### ✅ BUG-005 [P2] Remove Conflicting Organization Checks
+
+**File**: `src/pages/onboarding/v2/OnboardingV2.tsx:272-320`
+
+**Problem**: Three separate places checked for existing organizations with different logic, causing race conditions. The useEffect had skip logic that prevented checks during critical steps like `enrichment_loading`.
+
+**Fix**: Removed entire useEffect. Organization checking now consolidated into store methods only (`setUserEmail` and `submitWebsite`).
+
+**Result**: No more race conditions, duplicate checks, or inconsistent behavior.
+
+---
+
+### ✅ BUG-006 [P2] Validate Member Count Before Join
+
+**Files**:
+- `src/lib/stores/onboardingV2Store.ts:688-697`
+- `supabase/migrations/20260205150000_fix_fuzzy_matching_active_members.sql`
+
+**Problem**: Users could request to join empty organizations with no admins to approve them.
+
+**Fixes Applied**:
+1. Added member count validation before creating join request
+2. Updated `find_similar_organizations_by_domain` RPC to filter active members only
+
+**Result**: Users can only join organizations with active members.
+
+---
+
+### ✅ BUG-007 [P3] PGRST116 Error Handling
+
+**Status**: Resolved by BUG-005 fix
+
+**Problem**: User reported PGRST116 error on `check_existing_org_by_email_domain`.
+
+**Fix**: Removed the useEffect that was calling this RPC. The error no longer occurs.
+
+**Result**: No PGRST116 errors blocking users.
 
 ---
 
@@ -226,14 +274,34 @@ These can be addressed in a follow-up PR.
 | **Manual Data** | Ignored after retry | Updates org name correctly ✅ |
 | **Error Messages** | Generic "timeout" | Specific, actionable messages ✅ |
 | **Debugging** | No visibility | Step-by-step progress logs ✅ |
+| **Race Conditions** | 3 conflicting org checks | Single consolidated check ✅ |
+| **Empty Orgs** | Could join with no admins | Only orgs with active members ✅ |
+| **PGRST116 Errors** | Blocking users | Resolved, no longer occurs ✅ |
 
 ---
 
 ## Deployment Notes
 
-**No database migrations required** for these fixes - they only modify application logic.
+### Migrations Required
 
-The edge function changes will be automatically deployed with the next Supabase function deployment.
+**Yes** - One new migration needs to be applied:
+- `20260205150000_fix_fuzzy_matching_active_members.sql` - Updates RPC to filter active members
+
+Apply with:
+```bash
+# Local
+supabase db push
+
+# Production (via Supabase Dashboard or CLI)
+supabase db push --linked
+```
+
+### Edge Function Deployment
+
+The edge function changes in `deep-enrich-organization` will be automatically deployed with the next Supabase function deployment:
+```bash
+supabase functions deploy deep-enrich-organization
+```
 
 ---
 

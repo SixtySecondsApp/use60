@@ -93,10 +93,15 @@ serve(async (req) => {
               'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
             },
             body: JSON.stringify({
-              template_type: 'organization-deactivated-owner',
+              template_type: 'organization_deactivated_owner',
               to_email: ownerEmail,
               to_name: payload.deactivated_by_name,
-              variables: ownerEmailVariables
+              variables: {
+                ...ownerEmailVariables,
+                recipient_name: ownerEmail.split('@')[0],
+                organization_name: payload.org_name,
+                deletion_date: new Date(payload.reactivation_deadline).toLocaleDateString()
+              }
             })
           }
         );
@@ -113,33 +118,48 @@ serve(async (req) => {
       }
     }
 
-    // Send member notification emails (batch)
+    // Send member notification emails (individual)
     if (payload.member_emails.length > 0) {
       try {
         console.log('[send-org-deactivation-email] Sending member emails to:', payload.member_emails.length, 'members');
 
-        const memberEmailResponse = await fetch(
-          `${Deno.env.get('SUPABASE_URL')}/functions/v1/encharge-send-email`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
-            },
-            body: JSON.stringify({
-              template_type: 'organization-deactivated-member',
-              to_emails: payload.member_emails,
-              variables: memberEmailVariables
-            })
-          }
-        );
+        let memberEmailsSent = 0;
+        for (const memberEmail of payload.member_emails) {
+          try {
+            const memberEmailResponse = await fetch(
+              `${Deno.env.get('SUPABASE_URL')}/functions/v1/encharge-send-email`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+                },
+                body: JSON.stringify({
+                  template_type: 'organization_deactivated_member',
+                  to_email: memberEmail,
+                  to_name: memberEmail.split('@')[0],
+                  variables: {
+                    ...memberEmailVariables,
+                    recipient_name: memberEmail.split('@')[0],
+                    organization_name: payload.org_name,
+                    organization_owner_email: ownerEmail || 'support@use60.com'
+                  }
+                })
+              }
+            );
 
-        if (!memberEmailResponse.ok) {
-          const errorText = await memberEmailResponse.text();
-          console.error('[send-org-deactivation-email] Member emails failed:', errorText);
-        } else {
-          console.log('[send-org-deactivation-email] Member emails sent successfully');
+            if (memberEmailResponse.ok) {
+              memberEmailsSent++;
+            } else {
+              const errorText = await memberEmailResponse.text();
+              console.error('[send-org-deactivation-email] Member email failed for', memberEmail, ':', errorText);
+            }
+          } catch (singleMemberError) {
+            console.error('[send-org-deactivation-email] Error sending member email to', memberEmail, ':', singleMemberError);
+          }
         }
+
+        console.log('[send-org-deactivation-email] Member emails sent successfully to', memberEmailsSent, 'of', payload.member_emails.length, 'members');
       } catch (memberEmailError) {
         console.error('[send-org-deactivation-email] Error sending member emails:', memberEmailError);
         // Don't fail the entire request if member emails fail
