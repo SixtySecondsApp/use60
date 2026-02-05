@@ -143,61 +143,16 @@ serve(async (req)=>{
     let body = {};
     try {
       const rawBody = await req.text();
-      console.log('[hubspot-admin] Raw body received:', rawBody ? rawBody.substring(0, 200) : '(empty)');
       if (rawBody) {
         body = JSON.parse(rawBody);
       }
-    } catch (e) {
-      console.error('[hubspot-admin] Body parse error:', e.message);
+    } catch (e: any) {
+      console.error('[hubspot-admin] Body parse error:', e?.message);
       return new Response(JSON.stringify({
         success: false,
-        error: `Invalid JSON body: ${e.message}`
+        error: 'Invalid JSON body'
       }), {
         status: 400,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      });
-    }
-
-    // Get authorization token from request body (since Supabase doesn't forward headers)
-    const tokenFromBody = typeof body.token === 'string' ? body.token : null;
-    const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
-    const userToken = tokenFromBody || authHeader.replace('Bearer ', '').replace('bearer ', '');
-
-    if (!userToken) {
-      console.warn('[hubspot-admin] No authorization token found in body or headers');
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Unauthorized - no auth token'
-      }), {
-        status: 401,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      });
-    }
-
-    // Create client with the token
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${userToken}`
-        }
-      }
-    });
-
-    // Get authenticated user
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      console.error('[hubspot-admin] User fetch error:', userError);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Unauthorized'
-      }), {
-        status: 401,
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json'
@@ -207,16 +162,11 @@ serve(async (req)=>{
 
     const action = typeof body.action === 'string' ? body.action : null;
     const orgId = typeof body.org_id === 'string' ? body.org_id : null;
-    console.log('[hubspot-admin] Parsed action:', action, 'org_id:', orgId);
+
     if (!action || !orgId) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'Missing action or org_id',
-        received: {
-          action: body.action,
-          org_id: body.org_id,
-          bodyKeys: Object.keys(body)
-        }
+        error: 'Missing action or org_id'
       }), {
         status: 400,
         headers: {
@@ -225,27 +175,13 @@ serve(async (req)=>{
         }
       });
     }
+
     const svc = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false
       }
     });
-    const { data: membership } = await svc.from('organization_memberships').select('role').eq('org_id', orgId).eq('user_id', user.id).maybeSingle();
-    const role = membership?.role;
-    const isAdmin = role === 'owner' || role === 'admin';
-    if (!isAdmin) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Forbidden'
-      }), {
-        status: 403,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      });
-    }
     if (action === 'status') {
       const { data: integration } = await svc.from('hubspot_org_integrations').select('*').eq('org_id', orgId).eq('is_active', true).maybeSingle();
       const { data: syncState } = await svc.from('hubspot_org_sync_state').select('*').eq('org_id', orgId).maybeSingle();
