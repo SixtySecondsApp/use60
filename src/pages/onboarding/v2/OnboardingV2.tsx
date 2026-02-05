@@ -269,55 +269,9 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
     initBusinessEmail();
   }, [userEmail, setUserEmail]);
 
-  // Check for existing organization when business email signs up
-  // Auto-detect matching organizations for business emails and prompt to join
-  useEffect(() => {
-    const checkBusinessEmailOrg = async () => {
-      const stepsToSkip = ['pending_approval', 'enrichment_loading', 'enrichment_result', 'skills_config', 'complete', 'organization_selection'];
-      if (stepsToSkip.includes(currentStep)) {
-        return;
-      }
-
-      if (!userEmail || !domain) return;
-
-      const { setStep } = useOnboardingV2Store.getState();
-
-      try {
-        const { data: existingOrg, error } = await supabase
-          .rpc('check_existing_org_by_email_domain', {
-            p_email: userEmail,
-          })
-          .maybeSingle();
-
-        if (error) {
-          // RPC might not be deployed yet - fail silently and let user proceed manually
-          console.warn('[OnboardingV2] RPC check_existing_org_by_email_domain not available');
-          return;
-        }
-
-        // Only show org if it has active members (prevents joining empty/ghost orgs)
-        if (existingOrg && existingOrg.should_request_join && existingOrg.member_count > 0) {
-          console.log('[OnboardingV2] Found existing org for business email:', existingOrg.org_name);
-          setStep('organization_selection');
-          useOnboardingV2Store.setState({
-            similarOrganizations: [{
-              id: existingOrg.org_id,
-              name: existingOrg.org_name,
-              company_domain: existingOrg.org_domain,
-              member_count: existingOrg.member_count,
-              similarity_score: 1.0,
-            }],
-            matchSearchTerm: existingOrg.org_domain,
-          });
-        }
-      } catch (error) {
-        // Fail silently - user can still proceed with manual flow
-        console.warn('[OnboardingV2] Exception checking for existing org:', error);
-      }
-    };
-
-    checkBusinessEmailOrg();
-  }, [userEmail, domain, currentStep]);
+  // Note: Organization existence checking is now handled exclusively in the store methods
+  // (setUserEmail and submitWebsite) to prevent race conditions and duplicate checks.
+  // This useEffect was removed to consolidate logic and eliminate conflicting behavior.
 
   // Auto-start enrichment for corporate email path (if no existing org found)
   useEffect(() => {

@@ -688,7 +688,17 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       if (existingOrg) {
         console.log('[onboardingV2] Found existing organization:', existingOrg.name);
 
-        // Organization exists - create join request instead
+        // Check if organization has active members before allowing join request
+        const memberCount = existingOrg.member_count || 0;
+        if (memberCount === 0) {
+          console.log('[onboardingV2] Organization has no active members, treating as new org');
+          // Continue to create new org instead of join request
+          existingOrg = null;
+        }
+      }
+
+      if (existingOrg) {
+        // Organization exists with active members - create join request instead
         const { data: profileData } = await supabase
           .from('profiles')
           .select('first_name, last_name')
