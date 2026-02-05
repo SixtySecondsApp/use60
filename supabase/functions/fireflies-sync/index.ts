@@ -141,7 +141,6 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
-    const { action, api_key, sync_type, start_date, end_date, limit } = body
 
     // Get Supabase URL and keys (automatically available in edge functions)
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''

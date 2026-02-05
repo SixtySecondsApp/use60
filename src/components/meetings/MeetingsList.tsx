@@ -95,6 +95,8 @@ interface Meeting {
   // Source type for voice vs Fathom meetings
   source_type?: 'fathom' | 'voice'
   voice_recording_id?: string | null
+  // Meeting provider (fathom, fireflies, etc.)
+  provider?: string
   // Processing status columns for real-time UI updates
   thumbnail_status?: ProcessingStatus
   transcript_status?: ProcessingStatus
@@ -400,6 +402,8 @@ const MeetingsList: React.FC = () => {
       try {
         for (const m of meetings) {
           if (m.thumbnail_url || !(m.share_url || m.fathom_recording_id)) continue
+          // Skip non-Fathom meetings (no embeddable video)
+          if (m.provider && m.provider !== 'fathom') continue
 
           // Build embed URL from share_url or recording id
           let embedUrl: string | null = null
@@ -1001,6 +1005,11 @@ const MeetingsList: React.FC = () => {
                                 <Mic className="h-3 w-3" />
                               </div>
                             )}
+                            {meeting.provider === 'fireflies' && meeting.source_type !== 'voice' && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 dark:bg-orange-500/20 rounded text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5">
+                                <Mic className="h-3 w-3" />
+                              </div>
+                            )}
                             <span className="break-words line-clamp-2">{meeting.title || 'Untitled'}</span>
                           </div>
                         </TableCell>
@@ -1122,6 +1131,21 @@ const MeetingsList: React.FC = () => {
                           <div className="px-2 py-1 bg-emerald-500/90 backdrop-blur-sm rounded-md text-[10px] text-white flex items-center gap-1">
                             <Mic className="h-3 w-3" />
                             Voice
+                          </div>
+                        </div>
+                      </>
+                    ) : meeting.provider === 'fireflies' ? (
+                      /* Fireflies Meeting - Transcript Display */
+                      <>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-orange-500/10 via-orange-600/5 to-amber-500/10 dark:from-orange-500/20 dark:via-orange-600/10 dark:to-amber-500/20">
+                          <Mic className="h-10 w-10 text-orange-500/60 dark:text-orange-400/60 mb-2" />
+                          <span className="text-sm font-medium text-orange-600 dark:text-orange-400">Fireflies Transcript</span>
+                        </div>
+                        {/* Fireflies badge - top left */}
+                        <div className="absolute top-2 left-2">
+                          <div className="px-2 py-1 bg-orange-500/90 backdrop-blur-sm rounded-md text-[10px] text-white flex items-center gap-1">
+                            <Mic className="h-3 w-3" />
+                            Fireflies
                           </div>
                         </div>
                       </>
