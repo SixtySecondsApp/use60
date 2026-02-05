@@ -302,7 +302,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     }>;
   }, [activeOrgId, enabled]);
 
-  const getLists = useCallback(async () => {
+  const getSegments = useCallback(async () => {
     if (!enabled) throw new Error('HubSpot integration is disabled');
     if (!activeOrgId) throw new Error('No active organization selected');
     const { data: sessionData } = await supabase.auth.getSession();
@@ -316,8 +316,8 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       },
       body: JSON.stringify({ action: 'get_lists', org_id: activeOrgId }),
     });
-    if (resp.error) throw new Error(resp.error.message || 'Failed to fetch lists');
-    if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch lists');
+    if (resp.error) throw new Error(resp.error.message || 'Failed to fetch segments');
+    if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch segments');
     return resp.data.lists as Array<{
       id: string;
       name: string;
@@ -413,7 +413,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     getProperties,
     getPipelines,
     getForms,
-    getLists,
+    getSegments,
     previewContacts,
     triggerSync,
   };

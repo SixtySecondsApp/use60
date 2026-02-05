@@ -38,7 +38,7 @@ interface HubSpotImportWizardProps {
   onComplete?: (tableId: string) => void;
 }
 
-interface HubSpotList {
+interface HubSpotSegment {
   id: string;
   name: string;
   listType: 'STATIC' | 'DYNAMIC';
@@ -96,22 +96,22 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
     isConnected,
     loading: hubspotLoading,
     connectHubSpot,
-    getLists,
+    getSegments,
     getProperties,
     previewContacts,
   } = useHubSpotIntegration();
 
   // Wizard state
   const [step, setStep] = useState(1);
-  const [sourceMode, setSourceMode] = useState<'list' | 'filter'>('list');
+  const [sourceMode, setSourceMode] = useState<'segment' | 'filter'>('segment');
   const [tableName, setTableName] = useState('');
   const [limit, setLimit] = useState(1000);
 
-  // List selection
-  const [lists, setLists] = useState<HubSpotList[]>([]);
-  const [loadingLists, setLoadingLists] = useState(false);
-  const [listSearch, setListSearch] = useState('');
-  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  // Segment selection
+  const [segments, setSegments] = useState<HubSpotSegment[]>([]);
+  const [loadingSegments, setLoadingSegments] = useState(false);
+  const [segmentSearch, setSegmentSearch] = useState('');
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
 
   // Properties for filters
   const [properties, setProperties] = useState<HubSpotProperty[]>([]);
@@ -134,23 +134,23 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
   // Auto-advance to step 1 content if connected
   useEffect(() => {
     if (open && isConnected && step === 1) {
-      // Load lists when opening in list mode
-      if (sourceMode === 'list' && lists.length === 0) {
-        loadLists();
+      // Load segments when opening in segment mode
+      if (sourceMode === 'segment' && segments.length === 0) {
+        loadSegments();
       }
     }
   }, [open, isConnected, step, sourceMode]);
 
-  // Load lists
-  const loadLists = async () => {
-    setLoadingLists(true);
+  // Load segments
+  const loadSegments = async () => {
+    setLoadingSegments(true);
     try {
-      const fetchedLists = await getLists();
-      setLists(fetchedLists);
+      const fetchedSegments = await getSegments();
+      setSegments(fetchedSegments);
     } catch (e: any) {
-      toast.error(e.message || 'Failed to load HubSpot lists');
+      toast.error(e.message || 'Failed to load HubSpot segments');
     } finally {
-      setLoadingLists(false);
+      setLoadingSegments(false);
     }
   };
 
@@ -169,22 +169,22 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
   };
 
   // Handle source mode change
-  const handleSourceModeChange = (mode: 'list' | 'filter') => {
+  const handleSourceModeChange = (mode: 'segment' | 'filter') => {
     setSourceMode(mode);
-    setSelectedListId(null);
+    setSelectedSegmentId(null);
     setFilters([]);
-    if (mode === 'list' && lists.length === 0) {
-      loadLists();
+    if (mode === 'segment' && segments.length === 0) {
+      loadSegments();
     }
     if (mode === 'filter' && properties.length === 0) {
       loadProperties();
     }
   };
 
-  // Handle list selection
-  const handleSelectList = (list: HubSpotList) => {
-    setSelectedListId(list.id);
-    setTableName(list.name);
+  // Handle segment selection
+  const handleSelectSegment = (segment: HubSpotSegment) => {
+    setSelectedSegmentId(segment.id);
+    setTableName(segment.name);
   };
 
   // Filter management
@@ -207,7 +207,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
     try {
       const validFilters = filters.filter((f) => f.propertyName && f.operator);
       const result = await previewContacts({
-        list_id: sourceMode === 'list' ? selectedListId || undefined : undefined,
+        list_id: sourceMode === 'segment' ? selectedSegmentId || undefined : undefined,
         filters: sourceMode === 'filter' && validFilters.length > 0 ? validFilters : undefined,
         filter_logic: sourceMode === 'filter' && validFilters.length > 1 ? filterLogic : undefined,
         limit: 5,
@@ -226,12 +226,12 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
     await loadPreview();
   };
 
-  // Filtered lists for search
-  const filteredLists = useMemo(() => {
-    if (!listSearch) return lists;
-    const q = listSearch.toLowerCase();
-    return lists.filter((l) => l.name.toLowerCase().includes(q));
-  }, [lists, listSearch]);
+  // Filtered segments for search
+  const filteredSegments = useMemo(() => {
+    if (!segmentSearch) return segments;
+    const q = segmentSearch.toLowerCase();
+    return segments.filter((s) => s.name.toLowerCase().includes(q));
+  }, [segments, segmentSearch]);
 
   // Default table name
   useEffect(() => {
@@ -242,12 +242,12 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
 
   const reset = () => {
     setStep(1);
-    setSourceMode('list');
+    setSourceMode('segment');
     setTableName('');
     setLimit(1000);
-    setLists([]);
-    setListSearch('');
-    setSelectedListId(null);
+    setSegments([]);
+    setSegmentSearch('');
+    setSelectedSegmentId(null);
     setFilters([]);
     setPreviewData(null);
     setIsImporting(false);
@@ -298,7 +298,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
         org_id: activeOrg.id,
         user_id: user.id,
         table_name: tableName.trim(),
-        list_id: sourceMode === 'list' ? selectedListId : undefined,
+        list_id: sourceMode === 'segment' ? selectedSegmentId : undefined,
         filters: sourceMode === 'filter' && validFilters.length > 0 ? validFilters : undefined,
         filter_logic: sourceMode === 'filter' && validFilters.length > 1 ? filterLogic : undefined,
         limit,
@@ -331,7 +331,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
 
   const canProceedFromSource =
     tableName.trim().length > 0 &&
-    ((sourceMode === 'list' && selectedListId) || sourceMode === 'filter');
+    ((sourceMode === 'segment' && selectedSegmentId) || sourceMode === 'filter');
 
   // ---------------------------------------------------------------------------
   // Render
@@ -418,15 +418,15 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                 <label className="mb-1 block text-sm font-medium text-gray-300">Import from</label>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleSourceModeChange('list')}
+                    onClick={() => handleSourceModeChange('segment')}
                     className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                      sourceMode === 'list'
+                      sourceMode === 'segment'
                         ? 'bg-orange-600 text-white'
                         : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
                     }`}
                   >
                     <Users className="w-4 h-4" />
-                    HubSpot List
+                    HubSpot Segment
                   </button>
                   <button
                     onClick={() => handleSourceModeChange('filter')}
@@ -443,7 +443,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
               </div>
 
               {/* Segment selector (replaced deprecated HubSpot lists) */}
-              {sourceMode === 'list' && (
+              {sourceMode === 'segment' && (
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-300">Select a segment</label>
 
@@ -452,52 +452,52 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                     <input
                       type="text"
-                      value={listSearch}
-                      onChange={(e) => setListSearch(e.target.value)}
+                      value={segmentSearch}
+                      onChange={(e) => setSegmentSearch(e.target.value)}
                       placeholder="Search segments..."
                       className="w-full rounded-lg border border-gray-700 bg-gray-800 pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-500"
                     />
                   </div>
 
-                  {loadingLists ? (
+                  {loadingSegments ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
                     </div>
                   ) : (
                     <>
                       <div className="max-h-[200px] overflow-y-auto space-y-1 rounded-lg border border-gray-800 p-2">
-                        {filteredLists.map((list) => (
+                        {filteredSegments.map((segment) => (
                           <button
-                            key={list.id}
-                            onClick={() => handleSelectList(list)}
+                            key={segment.id}
+                            onClick={() => handleSelectSegment(segment)}
                             className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                              selectedListId === list.id
+                              selectedSegmentId === segment.id
                                 ? 'bg-orange-500/10 text-orange-300 border border-orange-500/20'
                                 : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
                             }`}
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <Users className="w-4 h-4 shrink-0 text-gray-500" />
-                              <span className="truncate font-medium">{list.name}</span>
+                              <span className="truncate font-medium">{segment.name}</span>
                               <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${
-                                list.listType === 'DYNAMIC'
+                                segment.listType === 'DYNAMIC'
                                   ? 'bg-blue-500/20 text-blue-400'
                                   : 'bg-gray-700 text-gray-400'
                               }`}>
-                                {list.listType === 'DYNAMIC' ? 'Active' : 'Static'}
+                                {segment.listType === 'DYNAMIC' ? 'Active' : 'Static'}
                               </span>
                             </div>
                             <span className="text-xs text-gray-500 shrink-0 ml-2">
-                              {list.membershipCount.toLocaleString()} contacts
+                              {segment.membershipCount.toLocaleString()} contacts
                             </span>
                           </button>
                         ))}
-                        {filteredLists.length === 0 && (
+                        {filteredSegments.length === 0 && (
                           <div className="py-6 text-center space-y-2">
                             <p className="text-xs text-gray-500">
-                              {lists.length === 0 ? 'No segments found in HubSpot' : 'No segments match your search'}
+                              {segments.length === 0 ? 'No segments found in HubSpot' : 'No segments match your search'}
                             </p>
-                            {lists.length === 0 && (
+                            {segments.length === 0 && (
                               <p className="text-xs text-gray-600 px-2">
                                 Create a segment in HubSpot or use "Filter by Property" below to import by contact criteria.
                               </p>
@@ -505,7 +505,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                           </div>
                         )}
                       </div>
-                      {lists.length === 0 && (
+                      {segments.length === 0 && (
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                           <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
                           <div className="text-xs text-blue-300">
