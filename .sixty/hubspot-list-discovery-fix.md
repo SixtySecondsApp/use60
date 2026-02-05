@@ -2,17 +2,20 @@
 
 **Date**: February 5, 2026
 **Issue**: HubSpot list discovery returning no lists even when connected
-**Status**: ✅ FIXED
+**Status**: ✅ FIXED - Critical API migration
 
 ---
 
 ## Root Cause Analysis
 
-The issue was **not** with the API integration itself, but rather:
+**Primary Issue**: HubSpot **deprecated the `/crm/v3/lists` endpoint** in favor of the segments API (`/crm/v3/objects/contacts/segments`).
 
-1. **Empty HubSpot Account**: The test HubSpot account simply has **no static or dynamic lists created**
-2. **Missing Error Context**: Users saw "No lists found in HubSpot" with no explanation of alternatives
-3. **Poor Error Messages**: Backend errors weren't descriptive enough for debugging
+The code was calling an outdated endpoint that no longer returns data.
+
+**Secondary Issues**:
+1. **Outdated API**: Lists were replaced by segments in HubSpot's newer API
+2. **Missing Error Context**: Users saw "No lists found" with no explanation
+3. **Backwards Compatibility**: Old endpoint was broken, needed migration
 
 ---
 
@@ -20,39 +23,52 @@ The issue was **not** with the API integration itself, but rather:
 
 ### 1. Backend: `supabase/functions/hubspot-admin/index.ts`
 
-#### Improved List Mapping (Lines 516-546)
-**Before:**
+#### API Endpoint Migration (Lines 481-510)
+**Critical Change - Using New Segments Endpoint:**
+
+**Before (Deprecated)**:
+```typescript
+const path = `/crm/v3/lists?limit=${limit}&after=${after}`;
+```
+
+**After (Current)**:
+```typescript
+const path = `/crm/v3/objects/contacts/segments?limit=${limit}&after=${after}`;
+```
+
+**Why**: HubSpot migrated from Lists to Segments. The old endpoint returns empty results.
+
+#### Updated List Mapping (Lines 516-546)
+**Before (Lists API)**:
 ```typescript
 lists: allLists.map((l: any) => ({
-  id: l.listId?.toString() || l.hs_list_id?.toString() || l.id,
+  id: l.listId?.toString(),
   name: l.name,
   listType: l.processingType || 'STATIC',
-  membershipCount: l.additionalProperties?.hs_list_size || 0,
-  createdAt: l.createdAt,
-  updatedAt: l.updatedAt,
+  membershipCount: l.listMembershipCount || 0,
 }))
 ```
 
-**After:**
+**After (Segments API)**:
 ```typescript
-// Filter out archived lists and ensure required fields
-const formattedLists = allLists
-  .filter((l: any) => !l.archived) // Skip archived lists
-  .map((l: any) => ({
-    id: l.listId?.toString() || l.id?.toString() || String(Math.random()),
-    name: l.name || 'Untitled List',
-    listType: l.processingType === 'SNAPSHOT' ? 'DYNAMIC' : 'STATIC',
-    membershipCount: Number(l.listMembershipCount || l.additionalProperties?.hs_list_size || 0),
-    createdAt: l.createdAt,
-    updatedAt: l.updatedAt,
+// Format segments to match list interface
+const formattedLists = allSegments
+  .filter((s: any) => !s.archived) // Skip archived segments
+  .map((s: any) => ({
+    id: s.id?.toString() || String(Math.random()),
+    name: s.name || 'Untitled Segment',
+    listType: 'DYNAMIC', // Segments are dynamic by nature
+    membershipCount: Number(s.membershipCount || 0),
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
   }));
 ```
 
 **Benefits:**
-- Correctly maps HubSpot's `listMembershipCount` field
-- Filters archived lists automatically
-- Safer fallbacks for missing fields
-- Better type handling for membership count
+- ✅ Uses correct segment API field names (id, membershipCount)
+- ✅ Segments are always dynamic (no static/dynamic distinction)
+- ✅ Filters archived segments automatically
+- ✅ Maintains backwards compatibility (returns as 'lists')
 
 #### Enhanced Error Handling (Lines 531-556)
 **Added specific error messages for:**
@@ -74,7 +90,14 @@ if (e.status === 403) {
 
 ### 2. Frontend: `src/components/ops/HubSpotImportWizard.tsx`
 
-#### Better Empty State Messaging (Lines 467-487)
+#### Updated UI Labels (Lines 445-487)
+**Changed all references from "lists" to "segments":**
+- Label: "Select a list" → "Select a segment"
+- Placeholder: "Search lists..." → "Search segments..."
+- Empty state: "No lists found" → "No segments found"
+- Info box: "No HubSpot Lists?" → "No HubSpot Segments?"
+
+#### Better Empty State Messaging
 **Added:**
 - Info box explaining what lists are
 - Guidance to use "Filter by Property" as alternative
@@ -116,13 +139,18 @@ if (e.status === 403) {
 
 ## How Users Can Import Contacts Now
 
-### Option 1: Using HubSpot Lists (if they exist)
-1. Create a list in HubSpot
+### Option 1: Using HubSpot Segments (Recommended)
+1. Create a segment in HubSpot (Lists → Segments in HubSpot UI)
 2. Open Ops → New Table → HubSpot
-3. List will appear in dropdown
+3. Segment will appear in dropdown
 4. Select and import
 
-### Option 2: Using Filter by Property (recommended for test accounts)
+**HubSpot Segments** allow you to:
+- Define audiences by properties (Company, Job Title, Email, etc.)
+- Create dynamic or static segments
+- Reuse segments across HubSpot
+
+### Option 2: Using Filter by Property (for complex criteria)
 1. Open Ops → New Table → HubSpot
 2. Click "Filter by Property"
 3. Add filters like:
@@ -130,6 +158,11 @@ if (e.status === 403) {
    - Lifecycle Stage equals "Lead"
    - Email domain contains "@gmail.com"
 4. Preview and import
+
+**Filter by Property** is useful when:
+- You don't have a pre-existing segment in HubSpot
+- You want a one-time import with specific criteria
+- You need complex multi-condition filtering
 
 ---
 
