@@ -470,17 +470,20 @@ serve(async (req)=>{
         accessToken
       });
       try {
-        // Fetch all lists with pagination (HubSpot v3 uses cursor-based pagination)
-        const allLists: any[] = [];
+        // Fetch all segments (HubSpot migrated from lists to segments)
+        const allSegments: any[] = [];
         let after: string | undefined;
         const limit = 100; // HubSpot v3 max per page
         let hasMore = true;
 
-        console.log('[hubspot-admin] Starting get_lists fetch...');
+        console.log('[hubspot-admin] Starting get_segments fetch (lists endpoint deprecated)...');
 
         while (hasMore) {
-          const path = after ? `/crm/v3/lists?limit=${limit}&after=${after}` : `/crm/v3/lists?limit=${limit}`;
-          console.log('[hubspot-admin] Fetching lists from path:', path);
+          // Use /crm/v3/objects/contacts/segments instead of deprecated /crm/v3/lists
+          const path = after
+            ? `/crm/v3/objects/contacts/segments?limit=${limit}&after=${after}`
+            : `/crm/v3/objects/contacts/segments?limit=${limit}`;
+          console.log('[hubspot-admin] Fetching segments from path:', path);
 
           const response = await client.request<{
             results: any[];
@@ -490,47 +493,47 @@ serve(async (req)=>{
             path,
           });
 
-          console.log('[hubspot-admin] Lists response:', JSON.stringify({
+          console.log('[hubspot-admin] Segments response:', JSON.stringify({
             resultsCount: response?.results?.length ?? 0,
             hasNext: !!response?.paging?.next?.after,
-            sampleList: response?.results?.[0] ? {
-              listId: response.results[0].listId,
+            sampleSegment: response?.results?.[0] ? {
+              id: response.results[0].id,
               name: response.results[0].name,
               keys: Object.keys(response.results[0]),
             } : null,
           }));
 
-          const lists = response?.results || [];
-          allLists.push(...lists);
+          const segments = response?.results || [];
+          allSegments.push(...segments);
           after = response?.paging?.next?.after;
           hasMore = !!after;
 
           // Safety limit
-          if (allLists.length > 5000) break;
+          if (allSegments.length > 5000) break;
         }
 
-        console.log('[hubspot-admin] Total lists found:', allLists.length);
+        console.log('[hubspot-admin] Total segments found:', allSegments.length);
 
-        // Filter out archived lists and ensure required fields
-        const formattedLists = allLists
-          .filter((l: any) => !l.archived) // Skip archived lists
-          .map((l: any) => ({
-            id: l.listId?.toString() || l.id?.toString() || String(Math.random()),
-            name: l.name || 'Untitled List',
-            listType: l.processingType === 'SNAPSHOT' ? 'DYNAMIC' : 'STATIC',
-            membershipCount: Number(l.listMembershipCount || l.additionalProperties?.hs_list_size || 0),
-            createdAt: l.createdAt,
-            updatedAt: l.updatedAt,
+        // Format segments to match list interface
+        const formattedLists = allSegments
+          .filter((s: any) => !s.archived) // Skip archived segments
+          .map((s: any) => ({
+            id: s.id?.toString() || String(Math.random()),
+            name: s.name || 'Untitled Segment',
+            listType: 'DYNAMIC', // Segments are dynamic by nature
+            membershipCount: Number(s.membershipCount || 0),
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
           }));
 
-        console.log('[hubspot-admin] Formatted lists count:', formattedLists.length);
+        console.log('[hubspot-admin] Formatted segments count:', formattedLists.length);
         if (formattedLists.length === 0) {
-          console.warn('[hubspot-admin] No lists found after filtering. Raw sample:', JSON.stringify(allLists.slice(0, 2)));
+          console.warn('[hubspot-admin] No segments found. Raw sample:', JSON.stringify(allSegments.slice(0, 2)));
         }
 
         return new Response(JSON.stringify({
           success: true,
-          lists: formattedLists,
+          lists: formattedLists, // Keep as 'lists' for backwards compatibility
         }), {
           status: 200,
           headers: {
@@ -547,9 +550,9 @@ serve(async (req)=>{
         });
 
         // Provide more specific error messages
-        let errorMsg = 'Failed to fetch lists';
+        let errorMsg = 'Failed to fetch segments';
         if (e.status === 403) {
-          errorMsg = 'Permission denied: missing crm.lists.read scope. Please reconnect HubSpot.';
+          errorMsg = 'Permission denied: missing required scope. Please reconnect HubSpot.';
         } else if (e.status === 401) {
           errorMsg = 'Authentication failed: HubSpot token may have expired. Please reconnect.';
         } else if (e.message?.includes('socket hang up') || e.message?.includes('ECONNREFUSED')) {

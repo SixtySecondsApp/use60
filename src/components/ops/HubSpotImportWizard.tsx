@@ -442,10 +442,10 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                 </div>
               </div>
 
-              {/* List selector */}
+              {/* Segment selector (replaced deprecated HubSpot lists) */}
               {sourceMode === 'list' && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-300">Select a list</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-300">Select a segment</label>
 
                   {/* Search */}
                   <div className="relative mb-2">
@@ -454,7 +454,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                       type="text"
                       value={listSearch}
                       onChange={(e) => setListSearch(e.target.value)}
-                      placeholder="Search lists..."
+                      placeholder="Search segments..."
                       className="w-full rounded-lg border border-gray-700 bg-gray-800 pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-500"
                     />
                   </div>
@@ -495,11 +495,11 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                         {filteredLists.length === 0 && (
                           <div className="py-6 text-center space-y-2">
                             <p className="text-xs text-gray-500">
-                              {lists.length === 0 ? 'No lists found in HubSpot' : 'No lists match your search'}
+                              {lists.length === 0 ? 'No segments found in HubSpot' : 'No segments match your search'}
                             </p>
                             {lists.length === 0 && (
                               <p className="text-xs text-gray-600 px-2">
-                                Create a list in HubSpot or use "Filter by Property" below to import by contact criteria.
+                                Create a segment in HubSpot or use "Filter by Property" below to import by contact criteria.
                               </p>
                             )}
                           </div>
@@ -509,7 +509,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                           <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
                           <div className="text-xs text-blue-300">
-                            <p className="font-medium mb-1">No HubSpot Lists?</p>
+                            <p className="font-medium mb-1">No HubSpot Segments?</p>
                             <p className="text-blue-400/80">
                               Use "Filter by Property" above to import contacts based on specific criteria (e.g., Company, Job Title, Email domain).
                             </p>
