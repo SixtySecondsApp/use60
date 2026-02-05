@@ -795,6 +795,7 @@ function OpsDetailPage() {
               totalEligible: previewData.totalEligible,
               samples: previewData.samples,
             });
+            setQueryInput('');
             break;
           }
 
@@ -817,6 +818,7 @@ function OpsDetailPage() {
               totalDuplicates: dedupResult.totalDuplicates,
             });
             setIsDeduplicateLoading(false);
+            setQueryInput('');
             break;
           }
 
