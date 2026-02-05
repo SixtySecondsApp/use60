@@ -1748,7 +1748,7 @@ export default function OrganizationManagementPage() {
                   <Button
                     onClick={() => setShowDeactivateDialog(true)}
                     disabled={canDeactivate !== true}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    className="!bg-red-600 hover:!bg-red-700 !text-white"
                   >
                     <XCircle className="w-4 h-4 mr-2" />
                     Deactivate and Leave Organization
