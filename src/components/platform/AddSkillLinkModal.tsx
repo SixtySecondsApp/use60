@@ -6,11 +6,11 @@
  * - Skill search input
  * - Results grouped by category
  * - Preview of selected skill before linking
- * - Folder selector for placement
+ * - Linked skills always placed in references/ folder
  * - Prevents linking to self or already-linked skills
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Link2, Loader2, Search, Check, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,13 +25,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { SkillFolder, SkillSearchResult } from '@/lib/types/skills';
 import { searchSkillsForLinking } from '@/lib/services/skillFolderService';
@@ -50,6 +43,14 @@ interface AddSkillLinkModalProps {
   folders: SkillFolder[];
   targetFolderId?: string;
   onAddLink: (linkedSkillId: string, folderId?: string) => Promise<void>;
+}
+
+/** Find the references folder ID from the folders list */
+function getReferencesFolderId(folders: SkillFolder[]): string | undefined {
+  const ref = folders.find(
+    (f) => !f.parent_folder_id && f.name.toLowerCase() === 'references'
+  );
+  return ref?.id;
 }
 
 // Category display names and colors
@@ -138,7 +139,6 @@ export function AddSkillLinkModal({
 }: AddSkillLinkModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillSearchResult | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState<string>(targetFolderId || 'root');
   const [searchResults, setSearchResults] = useState<SkillSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
@@ -151,7 +151,6 @@ export function AddSkillLinkModal({
     if (open) {
       setSearchQuery('');
       setSelectedSkill(null);
-      setSelectedFolder(targetFolderId || 'root');
       setSearchResults([]);
       setError(null);
     }
@@ -254,10 +253,9 @@ export function AddSkillLinkModal({
 
     setIsLinking(true);
     try {
-      await onAddLink(
-        selectedSkill.id,
-        selectedFolder === 'root' ? undefined : selectedFolder
-      );
+      // Linked skills always go in the references/ folder
+      const refFolderId = getReferencesFolderId(folders);
+      await onAddLink(selectedSkill.id, refFolderId);
       onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to link skill');
@@ -371,23 +369,10 @@ export function AddSkillLinkModal({
             </div>
           )}
 
-          {/* Folder selector */}
-          <div className="space-y-2">
-            <Label htmlFor="link-folder">Place in Folder (optional)</Label>
-            <Select value={selectedFolder} onValueChange={setSelectedFolder}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select folder" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="root">Root (no folder)</SelectItem>
-                {folders.map((folder) => (
-                  <SelectItem key={folder.id} value={folder.id}>
-                    {folder.path || folder.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Linked skills are automatically placed in the references/ folder */}
+          <p className="text-xs text-muted-foreground">
+            Linked skills are placed in the <code className="px-1 py-0.5 bg-white/10 rounded font-mono">references/</code> folder.
+          </p>
 
           {error && (
             <div className="flex items-center gap-2 text-sm text-red-400">

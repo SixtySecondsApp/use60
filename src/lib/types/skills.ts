@@ -209,9 +209,90 @@ export interface SkillFrontmatterV1 {
 }
 
 /**
- * Union type for frontmatter (supports both versions)
+ * Workflow step definition for sequences (V3)
  */
-export type SkillFrontmatter = SkillFrontmatterV1 | SkillFrontmatterV2;
+export interface SkillWorkflowStep {
+  skill_key: string;
+  label?: string;
+  execution_mode?: 'sequential' | 'parallel';
+  parallel_group?: string;
+  input_mapping?: Record<string, string>;
+  hitl_before?: boolean;
+  hitl_after?: boolean;
+}
+
+/**
+ * Agent Skills Standard frontmatter (V3)
+ *
+ * Compliant with the Agent Skills specification (agentskills.io).
+ * Standard fields (`name`, `description`) are top-level.
+ * All 60-specific extensions live under `metadata`.
+ */
+export interface SkillFrontmatterV3 {
+  // ── Standard (spec-required) ──────────────────────────────────
+  name: string;
+  description: string;
+
+  // ── 60-specific extensions ────────────────────────────────────
+  metadata: {
+    author?: string;
+    version?: string;
+    category: SkillCategory;
+    skill_type: SkillType;
+    is_active?: boolean;
+
+    // AI matching
+    triggers?: SkillTrigger[];
+    intent_patterns?: string[];
+    keywords?: string[];
+
+    // Context requirements
+    required_context?: string[];
+    optional_context?: string[];
+
+    // Input/Output schemas
+    inputs?: SkillIOSchema[];
+    outputs?: SkillIOSchema[];
+
+    // Dependencies
+    dependencies?: string[];
+    child_skills?: string[];
+
+    // Sequence workflow (sequences only)
+    workflow?: SkillWorkflowStep[];
+    linked_skills?: string[];
+
+    // Execution hints
+    execution_mode?: 'sync' | 'async' | 'streaming';
+    timeout_ms?: number;
+    retry_count?: number;
+
+    // Tags
+    tags?: string[];
+
+    // Extensible
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * Union type for frontmatter (supports all versions)
+ */
+export type SkillFrontmatter = SkillFrontmatterV1 | SkillFrontmatterV2 | SkillFrontmatterV3;
+
+/**
+ * DB record shape produced by the SKILL.md parser (scripts/lib/skillParser.ts)
+ */
+export interface ParsedSkillRecord {
+  skill_key: string;
+  category: string;
+  frontmatter: Record<string, unknown>;
+  content_template: string;
+  is_active: boolean;
+  source_format: 'skill_md';
+  source_path: string;
+  source_hash: string;
+}
 
 // =============================================================================
 // Skill Link Types (for Sequences / Mega Skills)

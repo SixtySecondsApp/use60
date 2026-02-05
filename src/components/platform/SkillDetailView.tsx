@@ -134,11 +134,14 @@ export function SkillDetailView({
     Array<{ skill_key: string; name: string; category: string }>
   >([]);
 
-  // Load skill data
+  // Load skill data (ensures standard folders exist on first load)
   const loadSkill = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
+      // Ensure standard folders exist before loading tree
+      await skillFolderService.ensureStandardFolders(skillId);
+
       const data = await skillFolderService.getSkillWithFolders(skillId);
       if (!data) {
         setError('Skill not found');
@@ -323,8 +326,15 @@ export function SkillDetailView({
     [skill, loadSkill, handleSelect]
   );
 
+  // Standard folder names that cannot be deleted
+  const STANDARD_FOLDER_NAMES = ['references', 'scripts', 'assets'];
+
   // Delete handlers
   const handleDeleteFolder = useCallback((folder: SkillFolder) => {
+    if (!folder.parent_folder_id && STANDARD_FOLDER_NAMES.includes(folder.name.toLowerCase())) {
+      toast.error(`Cannot delete standard folder "${folder.name}"`);
+      return;
+    }
     setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name });
   }, []);
 

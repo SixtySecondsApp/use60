@@ -2,14 +2,13 @@
  * CreateFolderModal Component
  *
  * Modal for creating new folders within a skill.
+ * Only allows the 3 standard folder names: references, scripts, assets.
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { FolderPlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +26,13 @@ import {
 } from '@/components/ui/select';
 import type { SkillFolder } from '@/lib/types/skills';
 
+/** The only allowed root-level folder names for skills */
+const STANDARD_FOLDERS: { name: string; description: string }[] = [
+  { name: 'references', description: 'Linked skill content and external references' },
+  { name: 'scripts', description: 'Automation scripts and helpers' },
+  { name: 'assets', description: 'Images, data files, and other static assets' },
+];
+
 interface CreateFolderModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -42,32 +48,43 @@ export function CreateFolderModal({
   parentFolderId,
   onCreate,
 }: CreateFolderModalProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedParent, setSelectedParent] = useState<string>(parentFolderId || 'root');
+  const [selectedFolder, setSelectedFolder] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Filter out standard folders that already exist at root level
+  const existingRootNames = useMemo(
+    () => new Set(
+      folders
+        .filter((f) => !f.parent_folder_id)
+        .map((f) => f.name.toLowerCase())
+    ),
+    [folders]
+  );
+
+  const availableFolders = useMemo(
+    () => STANDARD_FOLDERS.filter((sf) => !existingRootNames.has(sf.name)),
+    [existingRootNames]
+  );
+
+  const selectedDescription = STANDARD_FOLDERS.find(
+    (sf) => sf.name === selectedFolder
+  )?.description;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!name.trim()) {
-      setError('Folder name is required');
+    if (!selectedFolder) {
+      setError('Please select a folder to create');
       return;
     }
 
     setIsLoading(true);
     try {
-      await onCreate(
-        name.trim(),
-        description.trim() || undefined,
-        selectedParent === 'root' ? undefined : selectedParent
-      );
-      // Reset form
-      setName('');
-      setDescription('');
-      setSelectedParent('root');
+      const desc = STANDARD_FOLDERS.find((sf) => sf.name === selectedFolder)?.description;
+      await onCreate(selectedFolder, desc, undefined);
+      setSelectedFolder('');
       onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create folder');
@@ -82,52 +99,38 @@ export function CreateFolderModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderPlus className="h-5 w-5 text-amber-400" />
-            Create New Folder
+            Create Standard Folder
           </DialogTitle>
           <DialogDescription>
-            Create a folder to organize your skill documents.
+            Skills use a standard folder structure. Select which folder to add.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="folder-name">Folder Name</Label>
-            <Input
-              id="folder-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., prompts, examples, templates"
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="folder-description">Description (optional)</Label>
-            <Textarea
-              id="folder-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Brief description of folder contents..."
-              rows={2}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="parent-folder">Parent Folder</Label>
-            <Select value={selectedParent} onValueChange={setSelectedParent}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select parent folder" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="root">Root (no parent)</SelectItem>
-                {folders.map((folder) => (
-                  <SelectItem key={folder.id} value={folder.id}>
-                    {folder.path || folder.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {availableFolders.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">
+              All standard folders already exist for this skill.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="folder-select">Folder</Label>
+              <Select value={selectedFolder} onValueChange={setSelectedFolder}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a standard folder" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableFolders.map((sf) => (
+                    <SelectItem key={sf.name} value={sf.name}>
+                      {sf.name}/
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedDescription && (
+                <p className="text-xs text-muted-foreground">{selectedDescription}</p>
+              )}
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 
@@ -140,7 +143,10 @@ export function CreateFolderModal({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading || availableFolders.length === 0 || !selectedFolder}
+            >
               {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create Folder
             </Button>
