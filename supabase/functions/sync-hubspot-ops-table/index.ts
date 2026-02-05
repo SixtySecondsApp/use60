@@ -267,63 +267,101 @@ serve(async (req: Request) => {
 
       if (results.length === 0) break
 
+      // Split results into existing (update) and new (insert) buckets
+      const toUpdate: Array<{ record: any; rowId: string }> = []
+      const toInsert: any[] = []
+
       for (const record of results) {
         const existingRowId = sourceIdToRowId.get(record.id)
-
         if (existingRowId) {
-          // Update existing row's cells
+          toUpdate.push({ record, rowId: existingRowId })
+        } else {
+          toInsert.push(record)
+        }
+      }
+
+      const CHUNK_SIZE = 500
+
+      // --- Batch UPDATE existing rows ---
+      if (toUpdate.length > 0) {
+        // Batch upsert cells for all existing rows (uses UNIQUE(row_id, column_id) constraint)
+        const cellUpserts: Array<{ row_id: string; column_id: string; value: string }> = []
+        for (const { record, rowId } of toUpdate) {
           for (const [propName, colId] of propertyToColumnId) {
             const value = record.properties?.[propName]
             if (value !== null && value !== undefined) {
-              const { data: existing } = await supabase
-                .from('dynamic_table_cells')
-                .select('id')
-                .eq('row_id', existingRowId)
-                .eq('column_id', colId)
-                .maybeSingle()
-
-              if (existing) {
-                await supabase
-                  .from('dynamic_table_cells')
-                  .update({ value: String(value) })
-                  .eq('id', existing.id)
-              } else {
-                await supabase
-                  .from('dynamic_table_cells')
-                  .insert({ row_id: existingRowId, column_id: colId, value: String(value) })
-              }
+              cellUpserts.push({ row_id: rowId, column_id: colId, value: String(value) })
             }
           }
+        }
 
-          await supabase
-            .from('dynamic_table_rows')
-            .update({ source_data: record })
-            .eq('id', existingRowId)
+        // Upsert cells in chunks of 500 to avoid payload limits
+        for (let i = 0; i < cellUpserts.length; i += CHUNK_SIZE) {
+          const chunk = cellUpserts.slice(i, i + CHUNK_SIZE)
+          const { error: upsertErr } = await supabase
+            .from('dynamic_table_cells')
+            .upsert(chunk, { onConflict: 'row_id,column_id' })
+          if (upsertErr) {
+            console.error('[sync-hubspot-ops-table] Cell upsert error:', upsertErr)
+          }
+        }
 
-          updatedRows++
-        } else {
-          // Insert new row
-          const { data: newRow } = await supabase
-            .from('dynamic_table_rows')
-            .insert({ table_id, source_id: record.id, source_data: record })
-            .select('id')
-            .single()
+        // Batch update source_data on rows (must be individual updates since each has different data)
+        // Use Promise.all to parallelize
+        await Promise.all(
+          toUpdate.map(({ record, rowId }) =>
+            supabase
+              .from('dynamic_table_rows')
+              .update({ source_data: record })
+              .eq('id', rowId)
+          )
+        )
 
-          if (newRow) {
-            const cellInserts: any[] = []
+        updatedRows += toUpdate.length
+      }
+
+      // --- Batch INSERT new rows ---
+      if (toInsert.length > 0) {
+        const rowInserts = toInsert.map((record) => ({
+          table_id,
+          source_id: record.id,
+          source_data: record,
+        }))
+
+        const { data: newRowsData } = await supabase
+          .from('dynamic_table_rows')
+          .insert(rowInserts)
+          .select('id, source_id')
+
+        if (newRowsData && newRowsData.length > 0) {
+          // Build a map of source_id → new row id
+          const newSourceToRowId = new Map<string, string>()
+          for (const r of newRowsData) {
+            newSourceToRowId.set(r.source_id, r.id)
+            sourceIdToRowId.set(r.source_id, r.id)
+          }
+
+          // Batch insert all cells for new rows
+          const cellInserts: Array<{ row_id: string; column_id: string; value: string }> = []
+          for (const record of toInsert) {
+            const rowId = newSourceToRowId.get(record.id)
+            if (!rowId) continue
             for (const [propName, colId] of propertyToColumnId) {
               const value = record.properties?.[propName]
               if (value !== null && value !== undefined) {
-                cellInserts.push({ row_id: newRow.id, column_id: colId, value: String(value) })
+                cellInserts.push({ row_id: rowId, column_id: colId, value: String(value) })
               }
             }
-            if (cellInserts.length > 0) {
-              await supabase.from('dynamic_table_cells').insert(cellInserts)
-            }
-            sourceIdToRowId.set(record.id, newRow.id)
           }
-          newRows++
+
+          // Insert cells in chunks of 500
+          for (let i = 0; i < cellInserts.length; i += CHUNK_SIZE) {
+            const chunk = cellInserts.slice(i, i + CHUNK_SIZE)
+            await supabase.from('dynamic_table_cells').insert(chunk)
+          }
         }
+
+        newRows += toInsert.length
       }
 
       if (!after) break

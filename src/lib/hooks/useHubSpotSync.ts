@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-import { getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 
 export function useHubSpotSync(tableId: string | undefined) {
@@ -10,26 +9,21 @@ export function useHubSpotSync(tableId: string | undefined) {
     mutationFn: async () => {
       if (!tableId) throw new Error('No table ID');
 
-      // Use direct fetch to ensure body is sent correctly
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const token = await getSupabaseAuthToken();
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('No active session');
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/sync-hubspot-ops-table`, {
-        method: 'POST',
+      const resp = await supabase.functions.invoke('sync-hubspot-ops-table', {
         headers: {
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token || anonKey}`,
-          'apikey': anonKey,
         },
         body: JSON.stringify({ table_id: tableId }),
       });
 
-      const data = await response.json();
-      if (!response.ok || data?.error) {
-        throw new Error(data?.error || `HTTP ${response.status}`);
-      }
-      return data as { new_rows: number; updated_rows: number; last_synced_at: string };
+      if (resp.error) throw new Error(resp.error.message || 'Failed to sync');
+      if (resp.data?.error) throw new Error(resp.data.error);
+      return resp.data as { new_rows: number; updated_rows: number; last_synced_at: string };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
