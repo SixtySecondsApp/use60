@@ -261,6 +261,8 @@ interface OnboardingV2State {
   // Polling timeout protection
   pollingStartTime: number | null;
   pollingAttempts: number;
+  // Retry tracking for enrichment failures
+  enrichmentRetryCount: number;
 
   // Skill configurations (legacy)
   skillConfigs: SkillConfigs;
@@ -424,6 +426,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   // Polling timeout protection
   pollingStartTime: null as number | null,
   pollingAttempts: 0,
+  // Retry tracking for enrichment failures
+  enrichmentRetryCount: 0,
 
   // Skill state (legacy)
   skillConfigs: defaultSkillConfigs,
@@ -492,42 +496,64 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             p_limit: 5,
           });
 
-          // Get all fuzzy matches with score > 0.7
+          // Get all fuzzy matches with score > 0.8 (80% threshold per user requirement)
           if (fuzzyResults && fuzzyResults.length > 0) {
-            fuzzyMatches = fuzzyResults.filter((m: any) => m.similarity_score > 0.7);
+            fuzzyMatches = fuzzyResults.filter((m: any) => m.similarity_score > 0.8);
             console.log('[onboardingV2] Found fuzzy matches (require join request):', fuzzyMatches.length);
           }
         }
 
         // Handle matches
         if (hasExactMatch && exactMatchOrg) {
-          // EXACT domain match: auto-join directly
-          console.log('[onboardingV2] EXACT match - auto-joining org:', exactMatchOrg.name);
+          // EXACT domain match: create join request (requires admin approval)
+          console.log('[onboardingV2] EXACT match - creating join request for:', exactMatchOrg.name);
           try {
-            // Create membership directly for auto-join (only for exact domain match)
-            const { error: memberError } = await supabase
-              .from('organization_memberships')
-              .insert({
-                org_id: exactMatchOrg.id,
-                user_id: session.user.id,
-                role: 'member',
-              });
+            // Get user profile data for join request
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('first_name, last_name')
+              .eq('id', session.user.id)
+              .maybeSingle();
 
-            if (memberError) throw memberError;
+            // Create join request instead of auto-joining
+            const joinRequestResult = await supabase.rpc('create_join_request', {
+              p_org_id: exactMatchOrg.id,
+              p_user_id: session.user.id,
+              p_user_profile: profileData
+                ? {
+                    first_name: profileData.first_name,
+                    last_name: profileData.last_name,
+                  }
+                : null,
+            });
 
-            // Update email and move to enrichment with the auto-joined org
+            if (joinRequestResult.error) throw joinRequestResult.error;
+
+            // Update user profile status to pending_approval
+            await supabase
+              .from('profiles')
+              .update({ profile_status: 'pending_approval' })
+              .eq('id', session.user.id);
+
+            // Move to pending approval step
             set({
               userEmail: email,
               isPersonalEmail: isPersonal,
               organizationId: exactMatchOrg.id,
-              currentStep: 'enrichment_loading',
+              currentStep: 'pending_approval',
               domain,
+              pendingJoinRequest: {
+                requestId: joinRequestResult.data[0].join_request_id,
+                orgId: exactMatchOrg.id,
+                orgName: exactMatchOrg.name,
+                status: 'pending',
+              },
             });
 
-            console.log('[onboardingV2] Successfully auto-joined organization (exact match):', exactMatchOrg.id);
+            console.log('[onboardingV2] Join request created for exact match:', exactMatchOrg.id);
           } catch (error) {
-            console.error('[onboardingV2] Error auto-joining org:', error);
-            // Fall back to enrichment if auto-join fails
+            console.error('[onboardingV2] Error creating join request for exact match:', error);
+            // Fall back to enrichment if join request fails
             set({
               userEmail: email,
               isPersonalEmail: isPersonal,
@@ -638,8 +664,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         });
 
         if (fuzzyMatches && fuzzyMatches.length > 0) {
-          // Filter matches with score > 0.7
-          const highScoreMatches = fuzzyMatches.filter((m: any) => m.similarity_score > 0.7);
+          // Filter matches with score > 0.8 (80% threshold per user requirement)
+          const highScoreMatches = fuzzyMatches.filter((m: any) => m.similarity_score > 0.8);
 
           if (highScoreMatches.length > 1) {
             // Multiple matches: show selection step
@@ -735,7 +761,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // No existing org found - check if we need to create one or use the provided one
       if (!finalOrgId || finalOrgId === '') {
         // No org ID provided - create new one
-        const organizationName = domain || 'My Organization';
+        // Use placeholder name - will be updated after enrichment discovers actual company name
+        const organizationName = 'My Organization';
         const { data: newOrg, error: createError } = await supabase
           .from('organizations')
           .insert({
@@ -820,8 +847,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         p_limit: 5,
       });
 
-      // Check if we found a high-confidence match (similarity > 0.7)
-      const highConfidenceMatch = similarOrgs && similarOrgs.length > 0 && similarOrgs[0].similarity_score > 0.7;
+      // Check if we found a high-confidence match (similarity > 0.8, per user requirement)
+      const highConfidenceMatch = similarOrgs && similarOrgs.length > 0 && similarOrgs[0].similarity_score > 0.8;
 
       // If we found similar orgs, show selection step
       if (similarOrgs && similarOrgs.length > 0 && !highConfidenceMatch) {
@@ -1059,6 +1086,18 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           return;
         }
         set({ organizationId: finalOrgId });
+      } else if (manualData.company_name) {
+        // Organization already exists (from failed enrichment retry) - update name with manual data
+        try {
+          await supabase
+            .from('organizations')
+            .update({ name: manualData.company_name })
+            .eq('id', finalOrgId);
+          console.log('[submitManualEnrichment] Updated org name to:', manualData.company_name);
+        } catch (updateError) {
+          console.error('[submitManualEnrichment] Failed to update org name:', updateError);
+          // Continue anyway - not critical
+        }
       }
 
       // Call edge function with manual data
@@ -1084,8 +1123,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
   // Start enrichment (website-based)
   startEnrichment: async (organizationId, domain, force = false) => {
-    // If retrying (force=true), reset polling state to allow fresh attempt
-    const resetState = force ? { pollingStartTime: null, pollingAttempts: 0 } : {};
+    const currentRetryCount = get().enrichmentRetryCount;
+    // If retrying (force=true), reset polling state and increment retry count
+    const resetState = force
+      ? { pollingStartTime: null, pollingAttempts: 0, enrichmentRetryCount: currentRetryCount + 1 }
+      : { enrichmentRetryCount: 0 }; // Reset retry count for fresh start
     set({ isEnrichmentLoading: true, enrichmentError: null, enrichmentSource: 'website', ...resetState });
 
     try {
@@ -1172,6 +1214,20 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         const { status, enrichment, skills } = data;
 
         if (status === 'completed' && enrichment) {
+          // Update organization name with enriched company name
+          if (enrichment.company_name && organizationId) {
+            try {
+              await supabase
+                .from('organizations')
+                .update({ name: enrichment.company_name })
+                .eq('id', organizationId);
+              console.log('[pollEnrichmentStatus] Updated org name to:', enrichment.company_name);
+            } catch (updateError) {
+              console.error('[pollEnrichmentStatus] Failed to update org name:', updateError);
+              // Continue anyway - not critical
+            }
+          }
+
           // Load skills into state
           const generatedSkills = enrichment.generated_skills || defaultSkillConfigs;
 
@@ -1537,6 +1593,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       if (error) throw error;
 
+      // Check RPC result - it returns success/message
+      const result = data?.[0];
+      if (!result?.success) {
+        throw new Error(result?.message || 'Failed to create join request');
+      }
+
       // Update profile status
       await supabase
         .from('profiles')
@@ -1624,6 +1686,10 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       isEnrichmentLoading: false,
       enrichmentError: null,
       enrichmentSource: null,
+      // Polling timeout protection
+      pollingStartTime: null,
+      pollingAttempts: 0,
+      enrichmentRetryCount: 0,
       // Skills (legacy)
       skillConfigs: defaultSkillConfigs,
       configuredSkills: [],

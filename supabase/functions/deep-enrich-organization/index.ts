@@ -569,8 +569,9 @@ async function runEnrichmentPipeline(
 ): Promise<void> {
   try {
     // Step 1: Scrape website content
-    console.log(`[Pipeline] Starting scrape for ${domain}`);
+    console.log(`[Pipeline] Step 1/3: Scraping ${domain}`);
     const scrapedContent = await scrapeWebsite(domain);
+    console.log(`[Pipeline] Step 1/3: ✓ Scraped ${scrapedContent.length} chars`);
 
     // Update status
     await supabase
@@ -579,8 +580,9 @@ async function runEnrichmentPipeline(
       .eq('id', enrichmentId);
 
     // Step 2: Extract structured data (Prompt 1)
-    console.log(`[Pipeline] Extracting structured data`);
+    console.log(`[Pipeline] Step 2/3: Extracting data with AI`);
     const enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
+    console.log(`[Pipeline] Step 2/3: ✓ Extracted company: ${enrichmentData.company_name}`);
 
     // Update with enrichment data
     await supabase
@@ -603,8 +605,9 @@ async function runEnrichmentPipeline(
       .eq('id', enrichmentId);
 
     // Step 3: Generate skill configurations (Prompt 2)
-    console.log(`[Pipeline] Generating skill configurations`);
+    console.log(`[Pipeline] Step 3/3: Generating skills`);
     const skills = await generateSkillConfigs(supabase, enrichmentData, domain);
+    console.log(`[Pipeline] Step 3/3: ✓ Generated ${Object.keys(skills).length} skills`);
 
     // Save generated skills
     await supabase
@@ -625,17 +628,29 @@ async function runEnrichmentPipeline(
     // Save skill-derived context (brand_tone, words_to_avoid, etc.)
     await saveSkillDerivedContext(supabase, organizationId, skills, 'enrichment', 0.85);
 
-    console.log(`[Pipeline] Enrichment complete for ${domain}`);
+    console.log(`[Pipeline] ✓ Enrichment complete for ${domain}`);
 
   } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    console.error('[runEnrichmentPipeline] Error:', errorMessage);
+    const rawMessage = extractErrorMessage(error);
+    console.error('[runEnrichmentPipeline] Error:', rawMessage);
+
+    // Make error messages more user-friendly
+    let userMessage = rawMessage;
+    if (rawMessage.includes('Could not scrape') || rawMessage.includes('content from')) {
+      userMessage = 'Unable to access website. It may be blocking automated access or temporarily unavailable. Please try entering your company details manually.';
+    } else if (rawMessage.includes('GEMINI_API_KEY') || rawMessage.includes('API key')) {
+      userMessage = 'AI service configuration error. Please contact support or try entering details manually.';
+    } else if (rawMessage.includes('Failed to parse') || rawMessage.includes('Invalid JSON')) {
+      userMessage = 'AI response was invalid. Please try again or enter details manually.';
+    } else if (rawMessage.includes('fetch') || rawMessage.includes('network') || rawMessage.includes('timeout')) {
+      userMessage = 'Network error while accessing website. Please check the URL and try again.';
+    }
 
     await supabase
       .from('organization_enrichment')
       .update({
         status: 'failed',
-        error_message: errorMessage,
+        error_message: userMessage,
       })
       .eq('id', enrichmentId);
   }
@@ -686,12 +701,19 @@ async function scrapeWebsite(domain: string): Promise<string> {
     fetchedUrls.add(url);
 
     try {
+      // Add 10 second timeout per page
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; Use60Bot/1.0; +https://use60.com)',
         },
         redirect: 'follow',
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const html = await response.text();
@@ -702,7 +724,7 @@ async function scrapeWebsite(domain: string): Promise<string> {
         }
       }
     } catch (e) {
-      // Silently skip failed fetches
+      // Silently skip failed fetches (including timeouts)
     }
     return false;
   }
