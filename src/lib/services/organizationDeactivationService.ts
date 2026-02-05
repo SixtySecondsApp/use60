@@ -130,7 +130,7 @@ export async function getAllOrgMembers(orgId: string): Promise<OrgMember[]> {
         `
         user_id,
         role,
-        profiles!organization_memberships_user_id_fkey(id, email, full_name)
+        profiles!organization_memberships_profiles_fk(id, email, full_name)
       `
       )
       .eq('org_id', orgId)
@@ -146,7 +146,19 @@ export async function getAllOrgMembers(orgId: string): Promise<OrgMember[]> {
     }));
   } catch (error) {
     logger.error('[OrganizationDeactivationService] Error fetching org members:', error);
-    throw error;
+
+    // Check for common error patterns
+    if (error?.code === 'PGRST200') {
+      // Schema relationship error - system configuration issue
+      logger.error('PostgREST schema relationship error - check FK constraints');
+      throw new Error('System configuration error. Please contact support.');
+    }
+
+    if (error?.message?.includes('network')) {
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+
+    throw error; // Re-throw unknown errors
   }
 }
 
