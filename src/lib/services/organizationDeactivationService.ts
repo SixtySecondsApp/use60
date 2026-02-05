@@ -47,27 +47,8 @@ export async function validateOwnerCanDeactivate(orgId: string): Promise<string 
       return 'Only organization owners can deactivate';
     }
 
-    // Check if owner has at least one other active organization
-    const { data: otherOrgs, error: orgsError } = await supabase
-      .from('organization_memberships')
-      .select(
-        `
-        org_id,
-        organizations!inner(id, is_active)
-      `
-      )
-      .eq('user_id', currentUser.user.id)
-      .eq('role', 'owner')
-      .eq('organizations.is_active', true);
-
-    if (orgsError) throw orgsError;
-
-    // Filter out current org
-    const otherActiveOrgs = (otherOrgs || []).filter((om) => om.org_id !== orgId);
-
-    if (otherActiveOrgs.length === 0) {
-      return 'You must maintain at least one active organization';
-    }
+    // FIXED: Removed check for other active organizations
+    // Users can now deactivate their only organization
 
     return null; // Can deactivate
   } catch (error) {
@@ -281,8 +262,6 @@ export function showDeactivationError(error: string): void {
     'Not authenticated': 'Please log in to deactivate an organization',
     'Not a member of this organization': 'You are not a member of this organization',
     'Only organization owners can deactivate': 'Only organization owners can deactivate',
-    'You must maintain at least one active organization':
-      'You must keep at least one active organization. Create or switch to another organization first.',
     'Organization is already deactivated': 'This organization is already deactivated',
     'Organization not found': 'Organization not found'
   };
