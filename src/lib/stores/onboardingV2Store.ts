@@ -793,10 +793,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         // Add user as owner of the new organization
         const { error: memberError } = await supabase
           .from('organization_memberships')
-          .insert({
+          .upsert({
             org_id: newOrg.id,
             user_id: session.user.id,
             role: 'owner',
+          }, {
+            onConflict: 'org_id,user_id'
           });
 
         if (memberError) throw memberError;
@@ -949,10 +951,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // Add user as owner of the new organization
       const { error: memberError } = await supabase
         .from('organization_memberships')
-        .insert({
+        .upsert({
           org_id: newOrg.id,
           user_id: userId,
           role: 'owner',
+        }, {
+          onConflict: 'org_id,user_id'
         });
 
       if (memberError) throw memberError;
