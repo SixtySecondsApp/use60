@@ -109,6 +109,7 @@ import { HubSpotClient } from '../_shared/hubspot.ts';
   }
 }
 serve(async (req)=>{
+  console.log('[hubspot-admin] Request received:', req.method, req.url);
   if (req.method === 'OPTIONS') return new Response('ok', {
     headers: corsHeaders
   });
