@@ -47,12 +47,21 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
 
   // Guard: Redirect to website_input if no organizationId (cannot proceed without it)
   useEffect(() => {
+    // Skip guard during manual enrichment initialization (organizationId set asynchronously)
+    if (enrichmentSource === 'manual' && isEnrichmentLoading && !enrichment) {
+      // Manual enrichment just started, organizationId may be pending async resolution
+      return;
+    }
+
     if (!organizationId || organizationId === '') {
-      console.error('[EnrichmentLoadingStep] No organizationId - cannot proceed with enrichment. Redirecting to website_input');
+      console.error(
+        `[EnrichmentLoadingStep] No organizationId for ${enrichmentSource || 'unknown'} enrichment. ` +
+        `Redirecting to website_input. Loading: ${isEnrichmentLoading}, Has enrichment: ${!!enrichment}`
+      );
       setStep('website_input');
       return;
     }
-  }, [organizationId, setStep]);
+  }, [organizationId, setStep, enrichmentSource, isEnrichmentLoading, enrichment]);
 
   // Start enrichment on mount (only for website-based enrichment, not manual)
   // Manual enrichment is already started in submitManualEnrichment

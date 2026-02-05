@@ -1079,27 +1079,31 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     const { manualData } = get();
     if (!manualData) return;
 
+    // Set loading state but DON'T transition step yet
     set({
       isEnrichmentLoading: true,
       enrichmentError: null,
       enrichmentSource: 'manual',
-      currentStep: 'enrichment_loading',
     });
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
 
-      // If organizationId is empty/null (personal email user), create org first
+      // Ensure organizationId exists FIRST
       if (!finalOrgId || finalOrgId === '') {
         finalOrgId = await get().createOrganizationFromManualData(session.user.id, manualData);
         // Only proceed if we got a real ID back (not null from selection step)
         if (!finalOrgId) {
-          // Organization selection step shown, stop here and let user choose
-          set({ isEnrichmentLoading: false });
+          // Organization selection step shown, ensure clean state
+          set({
+            isEnrichmentLoading: false,
+            enrichmentError: null, // Clear any previous errors
+            // currentStep already set by createOrganizationFromManualData
+          });
+          console.log('[submitManualEnrichment] Organization selection required, waiting for user choice');
           return;
         }
-        set({ organizationId: finalOrgId });
       } else if (manualData.company_name) {
         // Organization already exists (from failed enrichment retry) - update name with manual data
         try {
@@ -1114,6 +1118,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         }
       }
 
+      // NOW set organizationId and step atomically (after orgId is confirmed)
+      set({
+        organizationId: finalOrgId,
+        currentStep: 'enrichment_loading',
+      });
+
       // Call edge function with manual data
       const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
         body: {
@@ -1125,6 +1135,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Failed to process data');
+
+      // Validate organizationId before polling
+      if (!finalOrgId || finalOrgId === '') {
+        throw new Error('Cannot start polling without valid organizationId');
+      }
 
       // Start polling for status (manual enrichment still runs AI skill generation)
       get().pollEnrichmentStatus(finalOrgId);
@@ -1184,6 +1199,17 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     const POLL_INTERVAL = 2000; // 2 seconds
 
     const state = get();
+
+    // Guard: Stop polling if organizationId cleared or step changed away from enrichment flow
+    if (!state.organizationId && state.currentStep !== 'enrichment_loading') {
+      console.log('[pollEnrichmentStatus] Stopping - organizationId cleared or step changed');
+      set({
+        isEnrichmentLoading: false,
+        pollingStartTime: null,
+        pollingAttempts: 0,
+      });
+      return;
+    }
 
     // Initialize polling metadata on first call
     if (!state.pollingStartTime) {
