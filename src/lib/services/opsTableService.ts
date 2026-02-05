@@ -1016,4 +1016,387 @@ export class OpsTableService {
 
     return { affectedCount: 0, success: false };
   }
+
+  // -----------------------------------------------------------------------
+  // Deduplication
+  // -----------------------------------------------------------------------
+
+  /**
+   * Find duplicate groups by a column and return group info for preview.
+   */
+  async findDuplicateGroups(
+    tableId: string,
+    groupByColumnKey: string,
+    keepStrategy: 'most_recent' | 'most_filled' | 'first' | 'last'
+  ): Promise<{
+    groups: { value: string; keepRowId: string; deleteRowIds: string[] }[];
+    totalDuplicates: number;
+  }> {
+    // Get column ID
+    const { data: columns, error: colError } = await this.supabase
+      .from('dynamic_table_columns')
+      .select('id, key')
+      .eq('table_id', tableId);
+
+    if (colError) throw colError;
+
+    const col = (columns ?? []).find((c: { key: string }) => c.key === groupByColumnKey);
+    if (!col) throw new Error(`Column "${groupByColumnKey}" not found`);
+
+    // Get all cells for this column
+    const { data: allRows, error: rowError } = await this.supabase
+      .from('dynamic_table_rows')
+      .select('id, row_index, created_at')
+      .eq('table_id', tableId)
+      .order('row_index', { ascending: true });
+
+    if (rowError) throw rowError;
+
+    const { data: cells, error: cellError } = await this.supabase
+      .from('dynamic_table_cells')
+      .select('row_id, value')
+      .eq('column_id', (col as { id: string }).id);
+
+    if (cellError) throw cellError;
+
+    // Build map: value → row IDs
+    const valueToRows = new Map<string, { id: string; row_index: number; created_at: string }[]>();
+    const rowMap = new Map<string, { id: string; row_index: number; created_at: string }>();
+    for (const row of (allRows ?? []) as { id: string; row_index: number; created_at: string }[]) {
+      rowMap.set(row.id, row);
+    }
+
+    for (const cell of (cells ?? []) as { row_id: string; value: string | null }[]) {
+      const val = (cell.value ?? '').trim().toLowerCase();
+      if (!val) continue;
+      const row = rowMap.get(cell.row_id);
+      if (!row) continue;
+
+      if (!valueToRows.has(val)) {
+        valueToRows.set(val, []);
+      }
+      valueToRows.get(val)!.push(row);
+    }
+
+    // Find groups with duplicates
+    const groups: { value: string; keepRowId: string; deleteRowIds: string[] }[] = [];
+    let totalDuplicates = 0;
+
+    for (const [value, rows] of valueToRows) {
+      if (rows.length <= 1) continue;
+
+      // Sort by strategy to determine keeper
+      let sorted: typeof rows;
+      switch (keepStrategy) {
+        case 'most_recent':
+          sorted = [...rows].sort((a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          break;
+        case 'first':
+          sorted = [...rows].sort((a, b) => a.row_index - b.row_index);
+          break;
+        case 'last':
+          sorted = [...rows].sort((a, b) => b.row_index - a.row_index);
+          break;
+        case 'most_filled':
+        default:
+          // For most_filled, we'd need cell counts — fall back to most_recent
+          sorted = [...rows].sort((a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          break;
+      }
+
+      const keepRowId = sorted[0].id;
+      const deleteRowIds = sorted.slice(1).map((r) => r.id);
+      totalDuplicates += deleteRowIds.length;
+
+      groups.push({ value, keepRowId, deleteRowIds });
+    }
+
+    return { groups, totalDuplicates };
+  }
+
+  /**
+   * Execute deduplication — delete the duplicate rows.
+   */
+  async executeDeduplicate(
+    tableId: string,
+    groupByColumnKey: string,
+    keepStrategy: 'most_recent' | 'most_filled' | 'first' | 'last'
+  ): Promise<{ deletedCount: number }> {
+    const { groups } = await this.findDuplicateGroups(tableId, groupByColumnKey, keepStrategy);
+    const allDeleteIds = groups.flatMap((g) => g.deleteRowIds);
+
+    if (allDeleteIds.length > 0) {
+      await this.deleteRows(allDeleteIds);
+    }
+
+    return { deletedCount: allDeleteIds.length };
+  }
+
+  // -----------------------------------------------------------------------
+  // Conditional Update
+  // -----------------------------------------------------------------------
+
+  /**
+   * Apply different values based on different conditions.
+   */
+  async executeConditionalUpdate(
+    tableId: string,
+    targetColumnKey: string,
+    rules: { conditions: FilterCondition[]; newValue: string }[]
+  ): Promise<{ updatedCount: number }> {
+    const { data: columns, error: colError } = await this.supabase
+      .from('dynamic_table_columns')
+      .select('id, key, column_type')
+      .eq('table_id', tableId);
+
+    if (colError) throw colError;
+
+    const keyToColumnId = new Map<string, string>();
+    const keyToColumnType = new Map<string, string>();
+    for (const col of (columns ?? []) as { id: string; key: string; column_type: string }[]) {
+      keyToColumnId.set(col.key, col.id);
+      keyToColumnType.set(col.key, col.column_type);
+    }
+
+    const targetColumnId = keyToColumnId.get(targetColumnKey);
+    if (!targetColumnId) throw new Error(`Column "${targetColumnKey}" not found`);
+
+    let totalUpdated = 0;
+    const processedRowIds = new Set<string>();
+
+    // Process rules in order — first match wins
+    for (const rule of rules) {
+      if (rule.conditions.length === 0) continue;
+
+      const matchingRowIds = await this.getFilteredRowIds(
+        tableId,
+        rule.conditions,
+        keyToColumnId,
+        keyToColumnType
+      );
+
+      // Only update rows not already processed by a previous rule
+      const newMatchIds = matchingRowIds.filter((id) => !processedRowIds.has(id));
+
+      // Batch upsert
+      if (newMatchIds.length > 0) {
+        const upserts = newMatchIds.map((rowId) => ({
+          row_id: rowId,
+          column_id: targetColumnId,
+          value: rule.newValue,
+        }));
+
+        // Process in chunks of 500
+        for (let i = 0; i < upserts.length; i += 500) {
+          const chunk = upserts.slice(i, i + 500);
+          const { error } = await this.supabase
+            .from('dynamic_table_cells')
+            .upsert(chunk, { onConflict: 'row_id,column_id' });
+
+          if (error) throw error;
+        }
+
+        totalUpdated += newMatchIds.length;
+        for (const id of newMatchIds) {
+          processedRowIds.add(id);
+        }
+      }
+    }
+
+    return { updatedCount: totalUpdated };
+  }
+
+  // -----------------------------------------------------------------------
+  // CSV Export
+  // -----------------------------------------------------------------------
+
+  /**
+   * Generate CSV content from rows and trigger download (client-side).
+   */
+  static generateCSVExport(
+    rows: OpsTableRow[],
+    columns: OpsTableColumn[],
+    filename: string = 'export'
+  ): void {
+    const visibleCols = columns.filter((c) => c.is_visible);
+
+    // Header row
+    const headers = visibleCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    const csvLines = [headers.join(',')];
+
+    // Data rows
+    for (const row of rows) {
+      const values = visibleCols.map((col) => {
+        const val = row.cells[col.key]?.value ?? '';
+        return `"${val.replace(/"/g, '""')}"`;
+      });
+      csvLines.push(values.join(','));
+    }
+
+    const csvContent = csvLines.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  // -----------------------------------------------------------------------
+  // Column Stats & Unique Values
+  // -----------------------------------------------------------------------
+
+  /**
+   * Get unique values for a column (for batch view creation).
+   */
+  async getColumnUniqueValues(
+    tableId: string,
+    columnKey: string
+  ): Promise<string[]> {
+    const { data: columns, error: colError } = await this.supabase
+      .from('dynamic_table_columns')
+      .select('id, key')
+      .eq('table_id', tableId);
+
+    if (colError) throw colError;
+
+    const col = (columns ?? []).find((c: { key: string }) => c.key === columnKey);
+    if (!col) return [];
+
+    const { data: cells, error: cellError } = await this.supabase
+      .from('dynamic_table_cells')
+      .select('value')
+      .eq('column_id', (col as { id: string }).id)
+      .not('value', 'is', null);
+
+    if (cellError) throw cellError;
+
+    const unique = new Set<string>();
+    for (const cell of (cells ?? []) as { value: string | null }[]) {
+      if (cell.value && cell.value.trim()) {
+        unique.add(cell.value.trim());
+      }
+    }
+
+    return [...unique].sort();
+  }
+
+  /**
+   * Get summary stats for a column or the whole table.
+   */
+  async getColumnStats(
+    tableId: string,
+    groupByColumnKey?: string,
+    metricsColumnKeys?: string[]
+  ): Promise<{
+    totalRows: number;
+    groups?: { value: string; count: number; percentage: number }[];
+    columnStats?: Record<string, { filled: number; empty: number; fillRate: number }>;
+  }> {
+    // Get total rows
+    const { data: allRows, error: rowError } = await this.supabase
+      .from('dynamic_table_rows')
+      .select('id')
+      .eq('table_id', tableId);
+
+    if (rowError) throw rowError;
+
+    const totalRows = (allRows ?? []).length;
+    const rowIds = (allRows ?? []).map((r: { id: string }) => r.id);
+
+    if (totalRows === 0) {
+      return { totalRows: 0 };
+    }
+
+    // Get columns
+    const { data: columns, error: colError } = await this.supabase
+      .from('dynamic_table_columns')
+      .select('id, key, column_type')
+      .eq('table_id', tableId);
+
+    if (colError) throw colError;
+
+    const colList = (columns ?? []) as { id: string; key: string; column_type: string }[];
+
+    // Group-by breakdown
+    let groups: { value: string; count: number; percentage: number }[] | undefined;
+
+    if (groupByColumnKey) {
+      const groupCol = colList.find((c) => c.key === groupByColumnKey);
+      if (groupCol) {
+        const { data: groupCells, error: groupError } = await this.supabase
+          .from('dynamic_table_cells')
+          .select('row_id, value')
+          .eq('column_id', groupCol.id)
+          .in('row_id', rowIds);
+
+        if (!groupError) {
+          const counts = new Map<string, number>();
+          const seenRowIds = new Set<string>();
+
+          for (const cell of (groupCells ?? []) as { row_id: string; value: string | null }[]) {
+            const val = (cell.value ?? '').trim() || '(empty)';
+            seenRowIds.add(cell.row_id);
+            counts.set(val, (counts.get(val) || 0) + 1);
+          }
+
+          // Count rows with no cell for this column as (empty)
+          const missingCount = totalRows - seenRowIds.size;
+          if (missingCount > 0) {
+            counts.set('(empty)', (counts.get('(empty)') || 0) + missingCount);
+          }
+
+          groups = [...counts.entries()]
+            .map(([value, count]) => ({
+              value,
+              count,
+              percentage: Math.round((count / totalRows) * 1000) / 10,
+            }))
+            .sort((a, b) => b.count - a.count);
+        }
+      }
+    }
+
+    // Column fill-rate stats
+    let columnStats: Record<string, { filled: number; empty: number; fillRate: number }> | undefined;
+
+    const metricsCols = metricsColumnKeys
+      ? colList.filter((c) => metricsColumnKeys.includes(c.key))
+      : colList.slice(0, 10); // Default to first 10 columns
+
+    if (metricsCols.length > 0) {
+      columnStats = {};
+
+      for (const col of metricsCols) {
+        const { data: cells, error: cellErr } = await this.supabase
+          .from('dynamic_table_cells')
+          .select('row_id, value')
+          .eq('column_id', col.id)
+          .in('row_id', rowIds);
+
+        if (cellErr) continue;
+
+        let filled = 0;
+        for (const cell of (cells ?? []) as { value: string | null }[]) {
+          if (cell.value && cell.value.trim()) filled++;
+        }
+
+        const empty = totalRows - filled;
+        columnStats[col.key] = {
+          filled,
+          empty,
+          fillRate: Math.round((filled / totalRows) * 1000) / 10,
+        };
+      }
+    }
+
+    return { totalRows, groups, columnStats };
+  }
 }

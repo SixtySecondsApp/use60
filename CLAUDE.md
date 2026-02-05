@@ -184,14 +184,16 @@ packages/
 ## Common Commands
 
 ```bash
-npm run dev           # Start main app (port 5175)
-npm run build         # Production build
-npm run test          # Run tests
-npm run playwright    # E2E tests
+npm run dev              # Start main app (port 5175) — uses .env.development
+npm run dev:staging      # Start with staging Supabase — uses .env.staging
+npm run dev:production   # Start with production Supabase — uses .env.production
+npm run build            # Production build
+npm run test             # Run tests
+npm run playwright       # E2E tests
 
 # Landing pages
 cd packages/landing
-npm run dev           # Start landing (port 5173)
+npm run dev              # Start landing (port 5173)
 ```
 
 ## Autonomous Copilot System
@@ -769,6 +771,34 @@ SELECT * FROM generate_gdpr_compliance_report(org_id);
 | **Monthly** | GDPR compliance report, update org settings |
 | **Quarterly** | Rotate API keys, test incident response |
 | **Annually** | Rotate service role keys, penetration testing |
+
+## Claude Code Statusline
+
+Custom statusline at `.claude/statusline.sh` shows real-time session info:
+
+```
+Opus 4.6 | ctx ████░░░░░░ 42% | day █████░░░░░ $106/$200 | wk ██░░░░░░░░ $196/$750 | staging | feat/branch | 3 changes
+```
+
+| Section | Source | Notes |
+|---------|--------|-------|
+| **Model** | Input JSON | Current Claude model |
+| **Context** | Input JSON | Context window % used (green/yellow/red) |
+| **Daily cost** | `ccusage` (cached) | Spend vs daily limit bar |
+| **Weekly cost** | `ccusage` (cached) | Spend vs weekly limit bar |
+| **Environment** | Running Vite `--mode` | Detects dev/staging/PROD from process |
+| **Branch** | `git` | Current branch (dimmed) |
+| **Changes** | `git` | Uncommitted file count (yellow) |
+
+**Color thresholds**: Green <50%, Yellow 50-80%, Red >80%. Environment shows green `dev`, yellow `staging`, red `PROD`.
+
+**Configure limits** at top of `.claude/statusline.sh`:
+```bash
+DAILY_LIMIT=200    # daily budget in USD
+WEEKLY_LIMIT=750   # weekly budget in USD
+```
+
+**Dependencies**: `jq`, `ccusage` (or `npx ccusage@latest`). Cost data refreshes every 2 minutes via non-blocking background cache.
 
 ## Supabase Project References
 

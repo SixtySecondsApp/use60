@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import {
   ArrowLeft,
-  Send,
   Loader2,
   Pencil,
   Check,
@@ -15,7 +14,6 @@ import {
   FileSpreadsheet,
   Bot,
   FileText,
-  MessageSquare,
   Plus,
   Upload,
   RefreshCw,
@@ -45,6 +43,10 @@ import { useOpsRules } from '@/lib/hooks/useOpsRules';
 import { RuleBuilder } from '@/components/ops/RuleBuilder';
 import { RuleList } from '@/components/ops/RuleList';
 import { AiQueryPreviewModal, type AiQueryOperation } from '@/components/ops/AiQueryPreviewModal';
+import { AiQuerySummaryCard, type SummaryData } from '@/components/ops/AiQuerySummaryCard';
+import { AiTransformPreviewModal, type TransformPreviewData } from '@/components/ops/AiTransformPreviewModal';
+import { AiDeduplicatePreviewModal, type DeduplicatePreviewData } from '@/components/ops/AiDeduplicatePreviewModal';
+import { AiQueryBar } from '@/components/ops/AiQueryBar';
 
 // ---------------------------------------------------------------------------
 // Service singleton
@@ -111,6 +113,16 @@ function OpsDetailPage() {
   const [isAiQueryLoading, setIsAiQueryLoading] = useState(false);
   const [isAiQueryExecuting, setIsAiQueryExecuting] = useState(false);
   const [showAiQueryPreview, setShowAiQueryPreview] = useState(false);
+
+  // ---- New AI Query Commander state ----
+  const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
+  const [transformPreviewData, setTransformPreviewData] = useState<TransformPreviewData | null>(null);
+  const [showTransformPreview, setShowTransformPreview] = useState(false);
+  const [isTransformExecuting, setIsTransformExecuting] = useState(false);
+  const [deduplicatePreviewData, setDeduplicatePreviewData] = useState<DeduplicatePreviewData | null>(null);
+  const [showDeduplicatePreview, setShowDeduplicatePreview] = useState(false);
+  const [isDeduplicateLoading, setIsDeduplicateLoading] = useState(false);
+  const [isDeduplicateExecuting, setIsDeduplicateExecuting] = useState(false);
 
   // ---- Data queries ----
 
@@ -643,40 +655,290 @@ function OpsDetailPage() {
               label: c.label,
               column_type: c.column_type,
             })),
+            rowCount: table?.row_count,
           },
         });
 
         if (error) throw error;
 
-        const operation = data as AiQueryOperation;
+        const result = data as Record<string, unknown>;
+        const resultType = (result.type as string) || result.action;
 
-        // For filter actions, apply directly without preview modal
-        if (operation.action === 'filter') {
-          setFilterConditions(operation.conditions);
-          setQueryInput('');
-          toast.success(operation.summary);
-          return;
+        switch (resultType) {
+          // === EXISTING: Filter (non-destructive, apply directly) ===
+          case 'filter': {
+            setFilterConditions(result.conditions as FilterCondition[]);
+            setQueryInput('');
+            toast.success(result.summary as string);
+            break;
+          }
+
+          // === EXISTING: Delete/Update (destructive, show preview) ===
+          case 'delete':
+          case 'update': {
+            const operation = result as unknown as AiQueryOperation;
+            setAiQueryOperation(operation);
+            setShowAiQueryPreview(true);
+            setIsAiQueryLoading(true);
+            const preview = await tableService.previewAiQuery(tableId, operation);
+            setAiQueryPreviewRows(preview.matchingRows);
+            setAiQueryTotalCount(preview.totalCount);
+            setIsAiQueryLoading(false);
+            break;
+          }
+
+          // === NEW: Sort ===
+          case 'sort': {
+            const sortConfig = (result.sortConfig as { key: string; dir: 'asc' | 'desc' }[]) || [];
+            if (sortConfig.length > 0) {
+              setSortState(sortConfig[0]); // Apply first sort (multi-sort needs UI support)
+            }
+            setQueryInput('');
+            toast.success(result.summary as string);
+            break;
+          }
+
+          // === NEW: Create Column ===
+          case 'create_column': {
+            const colDef = result.columnDef as {
+              key: string;
+              label: string;
+              columnType: string;
+              enrichmentPrompt?: string;
+              autoRun?: boolean;
+            };
+            addColumnMutation.mutate({
+              key: colDef.key,
+              label: colDef.label,
+              columnType: colDef.columnType,
+              isEnrichment: colDef.columnType === 'enrichment',
+              enrichmentPrompt: colDef.enrichmentPrompt,
+              autoRunRows: colDef.autoRun ? 'all' : undefined,
+            });
+            setQueryInput('');
+            toast.success(result.summary as string);
+            break;
+          }
+
+          // === NEW: Create View ===
+          case 'create_view': {
+            const viewConditions = (result.filterConditions as FilterCondition[]) || [];
+            setFilterConditions(viewConditions);
+            createViewMutation.mutate({ name: result.viewName as string });
+            setQueryInput('');
+            break;
+          }
+
+          // === NEW: Batch Create Views ===
+          case 'batch_create_views': {
+            const splitCol = result.splitByColumn as string;
+            const uniqueValues = await tableService.getColumnUniqueValues(tableId, splitCol);
+            const colLabel = columns.find((c) => c.key === splitCol)?.label || splitCol;
+            for (const val of uniqueValues) {
+              await tableService.createView({
+                tableId,
+                createdBy: table!.created_by,
+                name: `${colLabel}: ${val}`,
+                filterConfig: [{ column_key: splitCol, operator: 'equals', value: val }],
+                sortConfig: null,
+                columnConfig: null,
+              });
+            }
+            queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
+            setQueryInput('');
+            toast.success(`Created ${uniqueValues.length} views by ${colLabel}`);
+            break;
+          }
+
+          // === NEW: Summarize ===
+          case 'summarize': {
+            const stats = await tableService.getColumnStats(
+              tableId,
+              result.groupByColumn as string | undefined,
+              result.metricsColumns as string[] | undefined,
+            );
+            setSummaryData({
+              question: result.question as string,
+              totalRows: stats.totalRows,
+              groups: stats.groups,
+              columnStats: stats.columnStats,
+              summary: result.summary as string,
+            });
+            setQueryInput('');
+            break;
+          }
+
+          // === NEW: Transform ===
+          case 'transform': {
+            const colKey = result.columnKey as string;
+            const colObj = columns.find((c) => c.key === colKey);
+            setShowTransformPreview(true);
+            setTransformPreviewData(null);
+            // Get preview
+            const { data: previewData, error: previewErr } = await supabase.functions.invoke(
+              'ops-table-transform-column',
+              {
+                body: {
+                  tableId,
+                  columnKey: colKey,
+                  transformPrompt: result.transformPrompt as string,
+                  conditions: result.conditions,
+                  previewOnly: true,
+                },
+              }
+            );
+            if (previewErr) throw previewErr;
+            setTransformPreviewData({
+              columnKey: colKey,
+              columnLabel: colObj?.label || colKey,
+              transformPrompt: result.transformPrompt as string,
+              totalEligible: previewData.totalEligible,
+              samples: previewData.samples,
+            });
+            break;
+          }
+
+          // === NEW: Deduplicate ===
+          case 'deduplicate': {
+            const groupCol = result.groupByColumn as string;
+            const groupColObj = columns.find((c) => c.key === groupCol);
+            setShowDeduplicatePreview(true);
+            setIsDeduplicateLoading(true);
+            const dedupResult = await tableService.findDuplicateGroups(
+              tableId,
+              groupCol,
+              (result.keepStrategy as 'most_recent' | 'most_filled' | 'first' | 'last') || 'most_recent',
+            );
+            setDeduplicatePreviewData({
+              groupByColumn: groupCol,
+              groupByLabel: groupColObj?.label || groupCol,
+              keepStrategy: (result.keepStrategy as string) || 'most_recent',
+              groups: dedupResult.groups,
+              totalDuplicates: dedupResult.totalDuplicates,
+            });
+            setIsDeduplicateLoading(false);
+            break;
+          }
+
+          // === NEW: Conditional Update ===
+          case 'conditional_update': {
+            const cRules = (result.rules as { conditions: FilterCondition[]; newValue: string; label?: string }[]) || [];
+            const targetCol = result.targetColumn as string;
+            // Show as standard preview with rule summary
+            const totalMatching = cRules.reduce((sum, r) => sum + r.conditions.length, 0);
+            setAiQueryOperation({
+              action: 'update',
+              conditions: cRules[0]?.conditions || [],
+              targetColumn: targetCol,
+              newValue: cRules.map((r) => r.label || r.newValue).join('; '),
+              summary: result.summary as string,
+            });
+            setShowAiQueryPreview(true);
+            setIsAiQueryLoading(true);
+            // Preview first rule's matches
+            if (cRules[0]) {
+              const preview = await tableService.previewAiQuery(tableId, {
+                action: 'update',
+                conditions: cRules[0].conditions,
+                targetColumn: targetCol,
+                newValue: cRules[0].newValue,
+              });
+              setAiQueryPreviewRows(preview.matchingRows);
+              setAiQueryTotalCount(preview.totalCount);
+            }
+            setIsAiQueryLoading(false);
+            break;
+          }
+
+          // === NEW: Apply Formatting ===
+          case 'formatting': {
+            const fmtRules = (result.rules as {
+              conditions: FilterCondition[];
+              style: { bg_color?: string; text_color?: string };
+              label?: string;
+            }[]) || [];
+            // Convert to formatting rules and save to current view
+            const formattingRules = fmtRules.map((rule) => ({
+              conditions: rule.conditions,
+              style: rule.style,
+              label: rule.label,
+            }));
+            if (activeViewId) {
+              // Save to existing view
+              await tableService.updateView(activeViewId, {
+                filterConfig: filterConditions,
+                sortConfig: sortState,
+              });
+              queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
+            }
+            // Also create a new view with the formatting
+            createViewMutation.mutate({
+              name: `Formatted: ${result.summary}`,
+              formattingRules,
+            });
+            setQueryInput('');
+            toast.success(result.summary as string);
+            break;
+          }
+
+          // === NEW: Export ===
+          case 'export': {
+            const exportConditions = (result.conditions as FilterCondition[]) || [];
+            let exportRows = rows;
+            if (exportConditions.length > 0) {
+              // Apply filter and get matching rows
+              const filteredData = await tableService.getTableData(tableId, {
+                perPage: 10000,
+                filters: exportConditions,
+              });
+              exportRows = filteredData.rows;
+            }
+            const exportCols = (result.columns as string[])
+              ? columns.filter((c) => (result.columns as string[]).includes(c.key))
+              : columns.filter((c) => c.is_visible);
+            OpsTableService.generateCSVExport(
+              exportRows,
+              exportCols,
+              (result.filename as string) || table?.name || 'export'
+            );
+            setQueryInput('');
+            toast.success(`Exported ${exportRows.length} rows to CSV`);
+            break;
+          }
+
+          // === NEW: Cross Column Validate ===
+          case 'cross_column_validate': {
+            // Create an enrichment column with a validation prompt
+            const srcCol = result.sourceColumn as string;
+            const tgtCol = result.targetColumn as string;
+            const srcLabel = columns.find((c) => c.key === srcCol)?.label || srcCol;
+            const tgtLabel = columns.find((c) => c.key === tgtCol)?.label || tgtCol;
+            addColumnMutation.mutate({
+              key: (result.flagColumnLabel as string || 'validation_result').toLowerCase().replace(/\s+/g, '_'),
+              label: (result.flagColumnLabel as string) || 'Validation Result',
+              columnType: 'enrichment',
+              isEnrichment: true,
+              enrichmentPrompt: `Compare the value in {${srcCol}} against {${tgtCol}}. ${result.validationPrompt}. Respond with only "Match" or "Mismatch".`,
+              autoRunRows: 'all',
+            });
+            setQueryInput('');
+            toast.success(`Creating validation column: ${srcLabel} vs ${tgtLabel}`);
+            break;
+          }
+
+          default: {
+            toast.error(`Unknown action type: ${resultType}`);
+          }
         }
-
-        // For destructive actions (delete/update), show preview modal
-        setAiQueryOperation(operation);
-        setShowAiQueryPreview(true);
-        setIsAiQueryLoading(true);
-
-        // Fetch preview of matching rows
-        const preview = await tableService.previewAiQuery(tableId, operation);
-        setAiQueryPreviewRows(preview.matchingRows);
-        setAiQueryTotalCount(preview.totalCount);
       } catch (err) {
         console.error('[AI Query] Error:', err);
         const message = err instanceof Error ? err.message : 'Failed to parse query';
         toast.error(message);
       } finally {
         setIsAiQueryParsing(false);
-        setIsAiQueryLoading(false);
       }
     },
-    [queryInput, tableId, columns],
+    [queryInput, tableId, columns, table, rows, activeViewId, filterConditions, sortState, queryClient, addColumnMutation, createViewMutation],
   );
 
   const handleAiQueryConfirm = useCallback(async () => {
@@ -716,6 +978,53 @@ function OpsDetailPage() {
     setAiQueryPreviewRows([]);
     setAiQueryTotalCount(0);
   }, []);
+
+  const handleTransformConfirm = useCallback(async () => {
+    if (!transformPreviewData || !tableId) return;
+    setIsTransformExecuting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ops-table-transform-column', {
+        body: {
+          tableId,
+          columnKey: transformPreviewData.columnKey,
+          transformPrompt: transformPreviewData.transformPrompt,
+          previewOnly: false,
+        },
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      toast.success(`Transformed ${data.transformedCount} cells`);
+      setShowTransformPreview(false);
+      setTransformPreviewData(null);
+      setQueryInput('');
+    } catch (err) {
+      toast.error('Failed to transform column');
+    } finally {
+      setIsTransformExecuting(false);
+    }
+  }, [transformPreviewData, tableId, queryClient]);
+
+  const handleDeduplicateConfirm = useCallback(async () => {
+    if (!deduplicatePreviewData || !tableId) return;
+    setIsDeduplicateExecuting(true);
+    try {
+      const result = await tableService.executeDeduplicate(
+        tableId,
+        deduplicatePreviewData.groupByColumn,
+        deduplicatePreviewData.keepStrategy as 'most_recent' | 'most_filled' | 'first' | 'last',
+      );
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      toast.success(`Removed ${result.deletedCount} duplicates`);
+      setShowDeduplicatePreview(false);
+      setDeduplicatePreviewData(null);
+      setQueryInput('');
+    } catch (err) {
+      toast.error('Failed to deduplicate');
+    } finally {
+      setIsDeduplicateExecuting(false);
+    }
+  }, [deduplicatePreviewData, tableId, queryClient]);
 
   // ---- Active column for menu ----
 
@@ -807,34 +1116,26 @@ function OpsDetailPage() {
         )}
 
         {/* Query bar */}
-        <form onSubmit={handleQuerySubmit} className="mb-5">
-          <div className="flex items-center gap-2 rounded-xl border border-gray-800 bg-gray-900/60 px-4 py-2.5 transition-colors focus-within:border-violet-500/40 focus-within:ring-1 focus-within:ring-violet-500/20">
-            {isAiQueryParsing ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-400" />
-            ) : (
-              <MessageSquare className="h-4 w-4 shrink-0 text-gray-500" />
-            )}
-            <input
-              type="text"
-              value={queryInput}
-              onChange={(e) => setQueryInput(e.target.value)}
-              disabled={isAiQueryParsing}
-              placeholder="Ask anything... e.g. 'Delete rows with blank emails' or 'Show only verified contacts'"
-              className="min-w-0 flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-500 outline-none disabled:opacity-50"
+        <div className="mb-5">
+          <AiQueryBar
+            value={queryInput}
+            onChange={setQueryInput}
+            onSubmit={handleQuerySubmit}
+            isLoading={isAiQueryParsing}
+            columns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+            tableId={tableId!}
+          />
+        </div>
+
+        {/* AI Summary Card */}
+        {summaryData && (
+          <div className="mb-5">
+            <AiQuerySummaryCard
+              data={summaryData}
+              onDismiss={() => setSummaryData(null)}
             />
-            <button
-              type="submit"
-              disabled={!queryInput.trim() || isAiQueryParsing}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              {isAiQueryParsing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Send className="h-3.5 w-3.5" />
-              )}
-            </button>
           </div>
-        </form>
+        )}
 
         {/* Metadata header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1183,6 +1484,32 @@ function OpsDetailPage() {
           createViewMutation.mutate({ name, formattingRules });
           setShowSaveViewDialog(false);
         }}
+      />
+
+      {/* Transform Preview Modal */}
+      <AiTransformPreviewModal
+        isOpen={showTransformPreview}
+        onClose={() => {
+          setShowTransformPreview(false);
+          setTransformPreviewData(null);
+        }}
+        onConfirm={handleTransformConfirm}
+        data={transformPreviewData}
+        isLoading={!transformPreviewData}
+        isExecuting={isTransformExecuting}
+      />
+
+      {/* Deduplicate Preview Modal */}
+      <AiDeduplicatePreviewModal
+        isOpen={showDeduplicatePreview}
+        onClose={() => {
+          setShowDeduplicatePreview(false);
+          setDeduplicatePreviewData(null);
+        }}
+        onConfirm={handleDeduplicateConfirm}
+        data={deduplicatePreviewData}
+        isLoading={isDeduplicateLoading}
+        isExecuting={isDeduplicateExecuting}
       />
 
       {/* CSV Import Wizard */}

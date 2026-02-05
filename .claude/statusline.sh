@@ -1,54 +1,90 @@
 #!/bin/bash
 # Custom Claude Code statusline
-# Format: Model | 💭 context bar % | block $cost (Xh Xm left) | daily $X | weekly $X | N changes
-# Only shows sections with live data. ccusage runs in background to avoid blocking.
+# Format: Model | ctx ████░░ 42% | day ████░░ $106/$200 | wk ████░░ $196/$750 | 3 changes
+#
+# ── Configure your limits here ──────────────────────────────
+DAILY_LIMIT=200    # daily budget in USD (adjust to your plan)
+WEEKLY_LIMIT=750   # weekly budget in USD (adjust to your plan)
+# ────────────────────────────────────────────────────────────
 
-# ---- read input (must be first) ----
+# ── read input (must be first) ──
 input=$(cat)
 
-# ---- progress bar helper ----
+# ── ANSI colors ──
+C_GREEN=$'\033[32m'
+C_YELLOW=$'\033[33m'
+C_RED=$'\033[31m'
+C_DIM=$'\033[2m'
+C_RESET=$'\033[0m'
+
+# ── color for percentage (green <50, yellow 50-80, red >80) ──
+color_for_pct() {
+  local pct="${1:-0}"
+  if ((pct >= 80)); then echo "$C_RED"
+  elif ((pct >= 50)); then echo "$C_YELLOW"
+  else echo "$C_GREEN"
+  fi
+}
+
+# ── progress bar helper ──
+# Usage: progress_bar <percentage> <width> [color: yes|no]
 progress_bar() {
-  local pct="${1:-0}" width="${2:-10}"
-  [[ "$pct" =~ ^[0-9]+$ ]] || return
+  local pct="${1:-0}" width="${2:-10}" use_color="${3:-yes}"
+  # Handle decimals — truncate to int
+  pct="${pct%%.*}"
+  [[ "$pct" =~ ^-?[0-9]+$ ]] || pct=0
   ((pct < 0)) && pct=0
   ((pct > 100)) && pct=100
   local filled=$(( pct * width / 100 ))
   local empty=$(( width - filled ))
-  local bar=""
+  local color=""
+  local reset=""
+  if [ "$use_color" = "yes" ]; then
+    color=$(color_for_pct "$pct")
+    reset="$C_RESET"
+  fi
+  local bar="${color}"
   for ((i=0; i<filled; i++)); do bar+="█"; done
+  bar+="${reset}${C_DIM}"
   for ((i=0; i<empty; i++)); do bar+="░"; done
+  bar+="${reset}"
   echo "$bar"
 }
 
-# ---- parse input JSON ----
+# ── parse input JSON ──
 model_name=""
-context_remaining=""
+context_used=""
 if command -v jq >/dev/null 2>&1; then
   model_name=$(echo "$input" | jq -r '.model.display_name // ""' 2>/dev/null)
   context_remaining=$(echo "$input" | jq -r '.context_window.remaining_percentage // ""' 2>/dev/null)
+  if [ -n "$context_remaining" ]; then
+    # Convert remaining → used (strip decimals first)
+    context_remaining_int="${context_remaining%%.*}"
+    if [[ "$context_remaining_int" =~ ^[0-9]+$ ]]; then
+      context_used=$((100 - context_remaining_int))
+    fi
+  fi
 fi
 
-# ---- context window (instant, from input JSON) ----
+# ── context window (instant, from input JSON) ──
 context_section=""
-if [ -n "$context_remaining" ] && [[ "$context_remaining" =~ ^[0-9]+$ ]]; then
-  bar=$(progress_bar "$context_remaining" 10)
-  context_section="💭 ${bar} ${context_remaining}%"
+if [ -n "$context_used" ]; then
+  bar=$(progress_bar "$context_used" 10)
+  clr=$(color_for_pct "$context_used")
+  context_section="ctx ${bar} ${clr}${context_used}%${C_RESET}"
 fi
 
-# ---- ccusage cache config ----
+# ── ccusage cache config ──
 CACHE_DIR="${HOME}/.claude"
-BLOCKS_CACHE="${CACHE_DIR}/.statusline_blocks"
 DAILY_CACHE="${CACHE_DIR}/.statusline_daily"
 WEEKLY_CACHE="${CACHE_DIR}/.statusline_weekly"
 LOCK_FILE="${CACHE_DIR}/.statusline_refresh.lock"
-BLOCKS_TTL=60
-SUMMARY_TTL=300
+SUMMARY_TTL=120  # refresh every 2 minutes
 
-block_section=""
 daily_section=""
 weekly_section=""
 
-# ---- read cached data (never blocks) ----
+# ── read cached data (never blocks) ──
 read_cache() {
   local cache_file="$1" ttl="$2"
   [ -f "$cache_file" ] || return
@@ -57,7 +93,7 @@ read_cache() {
   [ -n "$cache_time" ] && [ $((now - cache_time)) -lt "$ttl" ] && tail -n +2 "$cache_file"
 }
 
-# ---- background refresh (non-blocking) ----
+# ── background refresh (non-blocking) ──
 needs_refresh() {
   local cache_file="$1" ttl="$2"
   [ ! -f "$cache_file" ] && return 0
@@ -73,7 +109,6 @@ refresh_in_background() {
   if [ -f "$LOCK_FILE" ]; then
     local lock_time=$(cat "$LOCK_FILE" 2>/dev/null)
     local now=$(date +%s)
-    # Stale lock (>5 min), remove it
     if [ -n "$lock_time" ] && [ $((now - lock_time)) -gt 300 ]; then
       rm -f "$LOCK_FILE"
     else
@@ -81,26 +116,17 @@ refresh_in_background() {
     fi
   fi
 
-  local do_blocks=0 do_daily=0 do_weekly=0
-  needs_refresh "$BLOCKS_CACHE" "$BLOCKS_TTL" && do_blocks=1
+  local do_daily=0 do_weekly=0
   needs_refresh "$DAILY_CACHE" "$SUMMARY_TTL" && do_daily=1
   needs_refresh "$WEEKLY_CACHE" "$SUMMARY_TTL" && do_weekly=1
 
-  [ "$do_blocks" -eq 0 ] && [ "$do_daily" -eq 0 ] && [ "$do_weekly" -eq 0 ] && return
+  [ "$do_daily" -eq 0 ] && [ "$do_weekly" -eq 0 ] && return
 
-  # Run refresh in background subshell
   (
     date +%s > "$LOCK_FILE"
 
     ccusage_cmd="ccusage"
     command -v ccusage >/dev/null 2>&1 || ccusage_cmd="npx ccusage@latest"
-
-    if [ "$do_blocks" -eq 1 ]; then
-      output=$($ccusage_cmd blocks --json 2>/dev/null)
-      if [ -n "$output" ]; then
-        { date +%s; echo "$output"; } > "$BLOCKS_CACHE"
-      fi
-    fi
 
     if [ "$do_daily" -eq 1 ]; then
       today=$(date +%Y%m%d)
@@ -129,45 +155,37 @@ refresh_in_background() {
   disown 2>/dev/null
 }
 
-# ---- parse cached ccusage data (instant reads) ----
+# ── parse cached ccusage data (instant reads) ──
 if command -v jq >/dev/null 2>&1; then
-  # Block data
-  blocks_data=$(read_cache "$BLOCKS_CACHE" "$BLOCKS_TTL")
-  if [ -n "$blocks_data" ]; then
-    active_block=$(echo "$blocks_data" | jq -c '.blocks[] | select(.isActive == true)' 2>/dev/null | head -n1)
-    if [ -n "$active_block" ]; then
-      block_cost=$(echo "$active_block" | jq -r '.costUSD // ""' 2>/dev/null)
-      remaining_min=$(echo "$active_block" | jq -r '.projection.remainingMinutes // ""' 2>/dev/null)
-      if [ -n "$block_cost" ] && [[ "$block_cost" =~ ^[0-9.]+$ ]]; then
-        cost_fmt=$(printf '%.2f' "$block_cost")
-        if [ -n "$remaining_min" ] && [[ "$remaining_min" =~ ^[0-9]+$ ]]; then
-          rh=$((remaining_min / 60))
-          rm=$((remaining_min % 60))
-          block_section="block \$${cost_fmt} (${rh}h ${rm}m left)"
-        else
-          block_section="block \$${cost_fmt}"
-        fi
-      fi
-    fi
-  fi
-
   # Daily cost
   daily_data=$(read_cache "$DAILY_CACHE" "$SUMMARY_TTL")
   if [ -n "$daily_data" ]; then
-    daily_cost=$(echo "$daily_data" | jq -r '.daily[0].totalCost // ""' 2>/dev/null)
+    daily_cost=$(echo "$daily_data" | jq -r '.daily[0].totalCost // 0' 2>/dev/null)
     if [ -n "$daily_cost" ] && [[ "$daily_cost" =~ ^[0-9.]+$ ]]; then
-      cost_fmt=$(printf '%.2f' "$daily_cost")
-      daily_section="daily \$${cost_fmt}"
+      daily_cost_int="${daily_cost%%.*}"
+      [ -z "$daily_cost_int" ] && daily_cost_int=0
+      daily_pct=$((daily_cost_int * 100 / DAILY_LIMIT))
+      ((daily_pct > 100)) && daily_pct=100
+      bar=$(progress_bar "$daily_pct" 10)
+      clr=$(color_for_pct "$daily_pct")
+      cost_fmt=$(printf '%.0f' "$daily_cost")
+      daily_section="day ${bar} ${clr}\$${cost_fmt}/\$${DAILY_LIMIT}${C_RESET}"
     fi
   fi
 
   # Weekly cost
   weekly_data=$(read_cache "$WEEKLY_CACHE" "$SUMMARY_TTL")
   if [ -n "$weekly_data" ]; then
-    weekly_cost=$(echo "$weekly_data" | jq -r '[.weekly[].totalCost] | add // ""' 2>/dev/null)
+    weekly_cost=$(echo "$weekly_data" | jq -r '[.weekly[].totalCost] | add // 0' 2>/dev/null)
     if [ -n "$weekly_cost" ] && [[ "$weekly_cost" =~ ^[0-9.]+$ ]]; then
-      cost_fmt=$(printf '%.2f' "$weekly_cost")
-      weekly_section="weekly \$${cost_fmt}"
+      weekly_cost_int="${weekly_cost%%.*}"
+      [ -z "$weekly_cost_int" ] && weekly_cost_int=0
+      weekly_pct=$((weekly_cost_int * 100 / WEEKLY_LIMIT))
+      ((weekly_pct > 100)) && weekly_pct=100
+      bar=$(progress_bar "$weekly_pct" 10)
+      clr=$(color_for_pct "$weekly_pct")
+      cost_fmt=$(printf '%.0f' "$weekly_cost")
+      weekly_section="wk ${bar} ${clr}\$${cost_fmt}/\$${WEEKLY_LIMIT}${C_RESET}"
     fi
   fi
 
@@ -175,23 +193,50 @@ if command -v jq >/dev/null 2>&1; then
   refresh_in_background
 fi
 
-# ---- git changes count ----
+# ── supabase environment (from .env VITE_SUPABASE_URL) ──
+env_section=""
+PROJECT_DIR=$(echo "$input" | jq -r '.workspace.project_dir // ""' 2>/dev/null)
+[ -z "$PROJECT_DIR" ] && PROJECT_DIR=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$PROJECT_DIR" ]; then
+  # Detect from running Vite process --mode flag (source of truth)
+  vite_mode=$(ps aux 2>/dev/null | grep "[v]ite --mode" | grep -o '\-\-mode [a-z]*' | head -1 | awk '{print $2}')
+  if [ -n "$vite_mode" ]; then
+    envfile="$PROJECT_DIR/.env.${vite_mode}"
+  else
+    envfile="$PROJECT_DIR/.env"
+  fi
+  supa_url=$(grep "^VITE_SUPABASE_URL=" "$envfile" 2>/dev/null | cut -d= -f2)
+  case "$supa_url" in
+    *wbgmnyekgqklggilgqag*) env_section="${C_GREEN}dev${C_RESET}" ;;
+    *caerqjzvuerejfrdtygb*) env_section="${C_YELLOW}staging${C_RESET}" ;;
+    *ygdpgliavpxeugaajgrb*) env_section="${C_RED}PROD${C_RESET}" ;;
+  esac
+fi
+
+# ── git branch + uncommitted changes ──
+branch_section=""
 changes_section=""
 if git rev-parse --git-dir >/dev/null 2>&1; then
+  branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+  [ -n "$branch" ] && branch_section="${C_DIM}${branch}${C_RESET}"
+
   staged=$(git diff --cached --numstat 2>/dev/null | wc -l | tr -d ' ')
   unstaged=$(git diff --numstat 2>/dev/null | wc -l | tr -d ' ')
   untracked=$(git ls-files --others --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
-  total_changes=$((staged + unstaged + untracked))
-  changes_section="${total_changes} changes"
+  total=$((staged + unstaged + untracked))
+  if [ "$total" -gt 0 ]; then
+    changes_section="${C_YELLOW}${total} changes${C_RESET}"
+  fi
 fi
 
-# ---- render: join non-empty sections with " | " ----
+# ── render: join non-empty sections with " | " ──
 parts=()
 [ -n "$model_name" ] && parts+=("$model_name")
 [ -n "$context_section" ] && parts+=("$context_section")
-[ -n "$block_section" ] && parts+=("$block_section")
 [ -n "$daily_section" ] && parts+=("$daily_section")
 [ -n "$weekly_section" ] && parts+=("$weekly_section")
+[ -n "$env_section" ] && parts+=("$env_section")
+[ -n "$branch_section" ] && parts+=("$branch_section")
 [ -n "$changes_section" ] && parts+=("$changes_section")
 
 output=""
