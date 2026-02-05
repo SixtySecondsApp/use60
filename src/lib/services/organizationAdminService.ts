@@ -64,12 +64,13 @@ export async function getAllOrganizations(): Promise<OrganizationWithMemberCount
         if (countError) console.error('Error counting members:', countError);
 
         // Get org owner (with fallback for empty orgs or older schema)
+        // Use same member_status filter as member count for consistency
         let { data: owner, error: ownerError } = await supabase
           .from('organization_memberships')
           .select('user_id, profiles!user_id(id, email, first_name, last_name, avatar_url)')
           .eq('org_id', org.id)
           .eq('role', 'owner')
-          .neq('member_status', 'removed')
+          .eq('member_status', 'active')  // Consistent with member count filtering
           .maybeSingle();
 
         // If relationship lookup fails (406 error), retry without the join
@@ -136,12 +137,13 @@ export async function getOrganization(orgId: string): Promise<OrganizationWithMe
     }
 
     // Get org owner (with fallback for empty orgs or relationship failures)
+    // Use same member_status filter as member count for consistency
     let { data: owner, error: ownerError } = await supabase
       .from('organization_memberships')
       .select('user_id, profiles!user_id(id, email, first_name, last_name, avatar_url)')
       .eq('org_id', orgId)
       .eq('role', 'owner')
-      .neq('member_status', 'removed')
+      .eq('member_status', 'active')  // Consistent with member count filtering
       .maybeSingle();
 
     // If relationship lookup fails (406 error), retry without the join
