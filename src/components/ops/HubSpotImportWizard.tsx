@@ -268,7 +268,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
       userId: user?.id,
       orgId: activeOrg?.id,
       tableName,
-      selectedListId,
+      selectedSegmentId,
       sourceMode,
       limit
     });
