@@ -84,7 +84,8 @@ async function callFirefliesAPI(apiKey: string, query: string, variables: Record
 }
 
 // Convert sentences to plain text transcript
-function sentencesToText(sentences: FirefliesSentence[]): string {
+function sentencesToText(sentences: FirefliesSentence[] | null | undefined): string {
+  if (!sentences || !Array.isArray(sentences)) return ''
   return sentences.map(s => `${s.speaker_name}: ${s.raw_text}`).join('\n')
 }
 

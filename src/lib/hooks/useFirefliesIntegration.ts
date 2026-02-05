@@ -48,6 +48,7 @@ export function useFirefliesIntegration() {
   const [integration, setIntegration] = useState<FirefliesIntegration | null>(null);
   const [syncState, setSyncState] = useState<FirefliesSyncState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lifetimeMeetingsCount, setLifetimeMeetingsCount] = useState<number>(0);
   const [syncInProgress, setSyncInProgress] = useState(false);
@@ -64,7 +65,8 @@ export function useFirefliesIntegration() {
 
     const fetchIntegration = async () => {
       try {
-        setLoading(true);
+        // Only show loading spinner on first load, not on refetches
+        if (!initialLoadDone) setLoading(true);
         setError(null);
 
         // Get active user integration (per-user)
@@ -113,6 +115,7 @@ export function useFirefliesIntegration() {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
+        setInitialLoadDone(true);
       }
     };
 
