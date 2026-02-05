@@ -79,6 +79,7 @@ interface OpsTableProps {
   formattingRules?: FormattingRule[];
   columnOrder?: string[] | null;
   onColumnReorder?: (columnKeys: string[]) => void;
+  onColumnResize?: (columnId: string, width: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +126,8 @@ function SortableColumnHeader({
   onMouseLeave,
   onClick,
   renderIcon,
+  onResizeStart,
+  resizingWidth,
 }: {
   col: Column;
   isHovered: boolean;
@@ -132,6 +135,8 @@ function SortableColumnHeader({
   onMouseLeave: () => void;
   onClick: () => void;
   renderIcon: (col: Column) => React.ReactNode;
+  onResizeStart?: (e: React.MouseEvent, columnId: string) => void;
+  resizingWidth?: number;
 }) {
   const {
     attributes,
@@ -142,11 +147,12 @@ function SortableColumnHeader({
     isDragging,
   } = useSortable({ id: col.id });
 
+  const currentWidth = resizingWidth ?? col.width;
   const style: React.CSSProperties = {
-    width: col.width,
-    minWidth: col.width,
+    width: currentWidth,
+    minWidth: currentWidth,
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: resizingWidth ? 'none' : transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 50 : undefined,
   };
@@ -186,8 +192,15 @@ function SortableColumnHeader({
           ${isHovered ? 'opacity-100' : 'opacity-0'}
         `}
       />
-      {/* Resize handle (visual only) */}
-      <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/60 transition-colors" />
+      {/* Resize handle */}
+      <div
+        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/60 transition-colors z-10"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onResizeStart?.(e, col.id);
+        }}
+      />
     </div>
   );
 }
@@ -209,9 +222,54 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   formattingRules = [],
   columnOrder,
   onColumnReorder,
+  onColumnResize,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
+
+  // Column resize state
+  const [resizingColumnId, setResizingColumnId] = useState<string | null>(null);
+  const [resizingWidth, setResizingWidth] = useState<number | null>(null);
+  const resizeStartX = useRef<number>(0);
+  const resizeStartWidth = useRef<number>(0);
+
+  // Column resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent, columnId: string) => {
+    const column = columns.find((c) => c.id === columnId);
+    if (!column) return;
+
+    resizeStartX.current = e.clientX;
+    resizeStartWidth.current = column.width;
+    setResizingColumnId(columnId);
+    setResizingWidth(column.width);
+  }, [columns]);
+
+  // Global mouse move/up handlers for resizing
+  React.useEffect(() => {
+    if (!resizingColumnId) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - resizeStartX.current;
+      const newWidth = Math.max(60, resizeStartWidth.current + delta); // Min width 60px
+      setResizingWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (resizingColumnId && resizingWidth) {
+        onColumnResize?.(resizingColumnId, resizingWidth);
+      }
+      setResizingColumnId(null);
+      setResizingWidth(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingColumnId, resizingWidth, onColumnResize]);
 
   // Drag-and-drop sensors
   const sensors = useSensors(
@@ -363,6 +421,8 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                     onMouseLeave={() => setHoveredColumnId(null)}
                     onClick={() => onColumnHeaderClick?.(col.id)}
                     renderIcon={renderColumnIcon}
+                    onResizeStart={handleResizeStart}
+                    resizingWidth={resizingColumnId === col.id ? resizingWidth ?? undefined : undefined}
                   />
                 ))}
               </SortableContext>
@@ -440,6 +500,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                     const fmtStyle = cellStyles[col.key]
                       ? formattingStyleToCSS(cellStyles[col.key])
                       : undefined;
+                    const cellWidth = resizingColumnId === col.id ? (resizingWidth ?? col.width) : col.width;
                     return (
                       <div
                         key={col.id}
@@ -447,7 +508,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           flex items-center px-2 border-r border-gray-800/50 shrink-0 overflow-hidden
                           ${col.is_enrichment ? 'bg-violet-500/[0.03]' : ''}
                         `}
-                        style={{ width: col.width, minWidth: col.width, ...fmtStyle }}
+                        style={{ width: cellWidth, minWidth: cellWidth, ...fmtStyle }}
                       >
                         <OpsTableCell
                           cell={{

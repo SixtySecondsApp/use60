@@ -107,7 +107,7 @@ function scoreConfidence(text: string): number {
 }
 
 /**
- * Call Claude API with a timeout, automatic retry on 429/5xx, and backoff.
+ * Call Claude API directly (fallback when no OpenRouter model specified).
  * Returns the text content or throws on error/timeout.
  */
 async function callClaude(prompt: string, apiKey: string): Promise<string> {
@@ -158,6 +158,57 @@ async function callClaude(prompt: string, apiKey: string): Promise<string> {
   }
 }
 
+/**
+ * Call OpenRouter API with a specified model.
+ * OpenRouter uses OpenAI-compatible API format.
+ */
+async function callOpenRouter(prompt: string, apiKey: string, modelId: string): Promise<string> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), ROW_TIMEOUT_MS)
+
+  try {
+    const response = await fetchWithRetry(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://app.use60.com',
+          'X-Title': 'use60 Sales Intelligence',
+        },
+        body: JSON.stringify({
+          model: modelId,
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      },
+      {
+        maxRetries: 3,
+        baseDelayMs: 2000,
+        signal: controller.signal,
+        logPrefix: LOG_PREFIX,
+      }
+    )
+
+    if (!response.ok) {
+      const errorBody = await response.text()
+      throw new Error(`OpenRouter API error ${response.status}: ${errorBody}`)
+    }
+
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content
+
+    if (!content) {
+      throw new Error('No content in OpenRouter response')
+    }
+
+    return content.trim()
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -179,9 +230,11 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+    const openrouterApiKey = Deno.env.get('OPENROUTER_API_KEY') ?? ''
 
-    if (!anthropicApiKey) {
-      console.error(`${LOG_PREFIX} ANTHROPIC_API_KEY not configured`)
+    // At least one AI provider must be configured
+    if (!anthropicApiKey && !openrouterApiKey) {
+      console.error(`${LOG_PREFIX} No AI provider configured (ANTHROPIC_API_KEY or OPENROUTER_API_KEY)`)
       return new Response(
         JSON.stringify({ error: 'AI enrichment is not configured' }),
         { status: 500, headers: JSON_HEADERS }
@@ -241,7 +294,7 @@ serve(async (req) => {
     // Verify the column exists, belongs to this table, and is an enrichment column
     const { data: column, error: columnError } = await serviceClient
       .from('dynamic_table_columns')
-      .select('id, key, label, is_enrichment, enrichment_prompt')
+      .select('id, key, label, is_enrichment, enrichment_prompt, enrichment_model')
       .eq('id', column_id)
       .eq('table_id', table_id)
       .maybeSingle()
@@ -268,6 +321,28 @@ serve(async (req) => {
         { status: 400, headers: JSON_HEADERS }
       )
     }
+
+    // Determine which AI provider to use
+    const enrichmentModel = column.enrichment_model as string | null
+    const useOpenRouter = enrichmentModel && openrouterApiKey
+
+    // Validate we have the required API key for the selected provider
+    if (useOpenRouter && !openrouterApiKey) {
+      console.error(`${LOG_PREFIX} OpenRouter model specified but OPENROUTER_API_KEY not configured`)
+      return new Response(
+        JSON.stringify({ error: 'OpenRouter is not configured' }),
+        { status: 500, headers: JSON_HEADERS }
+      )
+    }
+    if (!useOpenRouter && !anthropicApiKey) {
+      console.error(`${LOG_PREFIX} No model specified and ANTHROPIC_API_KEY not configured`)
+      return new Response(
+        JSON.stringify({ error: 'Default AI provider (Anthropic) is not configured' }),
+        { status: 500, headers: JSON_HEADERS }
+      )
+    }
+
+    console.log(`${LOG_PREFIX} Using AI provider: ${useOpenRouter ? `OpenRouter (${enrichmentModel})` : 'Anthropic Claude'}`)
 
     // -----------------------------------------------------------------
     // 3. Fetch rows to enrich (with batch limits)
@@ -492,8 +567,10 @@ ${resolvedPrompt}
 
 Respond with ONLY the enrichment result. Be concise and factual. If you cannot determine the answer with confidence, respond with "N/A".`
 
-        // Call Claude
-        const result = await callClaude(prompt, anthropicApiKey)
+        // Call AI provider (OpenRouter if model specified, otherwise Claude)
+        const result = useOpenRouter
+          ? await callOpenRouter(prompt, openrouterApiKey, enrichmentModel!)
+          : await callClaude(prompt, anthropicApiKey)
         const confidence = scoreConfidence(result)
 
         // Upsert cell with result

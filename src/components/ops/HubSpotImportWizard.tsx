@@ -16,9 +16,8 @@ import {
   AlertCircle,
   Search,
   ListFilter,
-  Columns,
-  Eye,
-  Link2,
+  Users,
+  Zap,
   Plus,
   Trash2,
 } from 'lucide-react';
@@ -39,20 +38,11 @@ interface HubSpotImportWizardProps {
   onComplete?: (tableId: string) => void;
 }
 
-interface HubSpotProperty {
+interface HubSpotList {
+  id: string;
   name: string;
-  label: string;
-  type: string;
-  fieldType: string;
-  description: string;
-  groupName: string;
-  options: { label: string; value: string }[];
-}
-
-interface FieldMapping {
-  hubspotProperty: string;
-  columnLabel: string;
-  columnType: string;
+  listType: 'STATIC' | 'DYNAMIC';
+  membershipCount: number;
 }
 
 interface HubSpotFilter {
@@ -61,20 +51,27 @@ interface HubSpotFilter {
   value: string;
 }
 
+interface PreviewContact {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  company: string;
+}
+
+interface HubSpotProperty {
+  name: string;
+  label: string;
+  type: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const STEPS = [
-  { id: 1, label: 'Connect', icon: Link2 },
-  { id: 2, label: 'Select', icon: ListFilter },
-  { id: 3, label: 'Map Fields', icon: Columns },
-  { id: 4, label: 'Import', icon: CheckCircle2 },
-] as const;
-
-const OBJECT_TYPES = [
-  { value: 'contacts', label: 'Contacts' },
-  { value: 'companies', label: 'Companies' },
+  { id: 1, label: 'Select Source' },
+  { id: 2, label: 'Preview & Import' },
 ] as const;
 
 const FILTER_OPERATORS = [
@@ -87,171 +84,107 @@ const FILTER_OPERATORS = [
   { value: 'LT', label: 'Less than' },
 ] as const;
 
-const HUBSPOT_TYPE_MAP: Record<string, string> = {
-  string: 'text',
-  number: 'number',
-  date: 'date',
-  datetime: 'date',
-  enumeration: 'dropdown',
-  bool: 'checkbox',
-  phone_number: 'phone',
-};
-
-const COMMON_PROPERTIES: Record<string, string[]> = {
-  contacts: [
-    'email',
-    'firstname',
-    'lastname',
-    'company',
-    'jobtitle',
-    'phone',
-    'lifecyclestage',
-    'hs_lead_status',
-    'city',
-    'state',
-    'country',
-  ],
-  companies: [
-    'name',
-    'domain',
-    'industry',
-    'numberofemployees',
-    'annualrevenue',
-    'city',
-    'state',
-    'country',
-    'phone',
-    'description',
-  ],
-};
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotImportWizardProps) {
-  const { user } = useUser();
+  const { userData: user } = useUser();
   const { activeOrg } = useOrg();
   const queryClient = useQueryClient();
-  const { isConnected, loading: hubspotLoading, connectHubSpot, getProperties } = useHubSpotIntegration();
+  const {
+    isConnected,
+    loading: hubspotLoading,
+    connectHubSpot,
+    getLists,
+    getProperties,
+    previewContacts,
+  } = useHubSpotIntegration();
 
   // Wizard state
   const [step, setStep] = useState(1);
-  const [objectType, setObjectType] = useState<'contacts' | 'companies'>('contacts');
+  const [sourceMode, setSourceMode] = useState<'list' | 'filter'>('list');
   const [tableName, setTableName] = useState('');
   const [limit, setLimit] = useState(1000);
 
-  // Properties
+  // List selection
+  const [lists, setLists] = useState<HubSpotList[]>([]);
+  const [loadingLists, setLoadingLists] = useState(false);
+  const [listSearch, setListSearch] = useState('');
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+
+  // Properties for filters
   const [properties, setProperties] = useState<HubSpotProperty[]>([]);
   const [loadingProperties, setLoadingProperties] = useState(false);
-  const [propertySearch, setPropertySearch] = useState('');
 
-  // Filters
+  // Filter mode
   const [filters, setFilters] = useState<HubSpotFilter[]>([]);
+  const [filterLogic, setFilterLogic] = useState<'AND' | 'OR'>('AND');
 
-  // Field mappings
-  const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>([]);
+  // Preview state
+  const [previewData, setPreviewData] = useState<{ totalCount: number; contacts: PreviewContact[] } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   // Import state
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ table_id: string; rows_imported: number; columns_created: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ table_id: string; rows_imported: number } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importAllColumns, setImportAllColumns] = useState(true); // Default to importing all columns
 
-  // Auto-advance to step 2 if connected
+  // Auto-advance to step 1 content if connected
   useEffect(() => {
     if (open && isConnected && step === 1) {
-      setStep(2);
+      // Load lists when opening in list mode
+      if (sourceMode === 'list' && lists.length === 0) {
+        loadLists();
+      }
     }
-  }, [open, isConnected, step]);
+  }, [open, isConnected, step, sourceMode]);
 
-  // Load properties when object type changes
-  useEffect(() => {
-    if (!open || !isConnected || step < 2) return;
+  // Load lists
+  const loadLists = async () => {
+    setLoadingLists(true);
+    try {
+      const fetchedLists = await getLists();
+      setLists(fetchedLists);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load HubSpot lists');
+    } finally {
+      setLoadingLists(false);
+    }
+  };
 
+  // Load properties for filters
+  const loadProperties = async () => {
+    if (properties.length > 0) return;
     setLoadingProperties(true);
-    getProperties(objectType as 'contacts')
-      .then((props) => {
-        setProperties(props);
-        // Auto-select common properties as field mappings
-        const common = COMMON_PROPERTIES[objectType] ?? [];
-        const autoMappings: FieldMapping[] = [];
-        for (const propName of common) {
-          const prop = props.find((p) => p.name === propName);
-          if (prop) {
-            autoMappings.push({
-              hubspotProperty: prop.name,
-              columnLabel: prop.label,
-              columnType: HUBSPOT_TYPE_MAP[prop.type] ?? 'text',
-            });
-          }
-        }
-        setFieldMappings(autoMappings);
-      })
-      .catch((e) => toast.error(e.message || 'Failed to load properties'))
-      .finally(() => setLoadingProperties(false));
-  }, [open, isConnected, objectType, step, getProperties]);
-
-  // Default table name
-  useEffect(() => {
-    if (!tableName) {
-      setTableName(`HubSpot ${objectType === 'contacts' ? 'Contacts' : 'Companies'}`);
+    try {
+      const props = await getProperties('contacts');
+      setProperties(props);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load properties');
+    } finally {
+      setLoadingProperties(false);
     }
-  }, [objectType, tableName]);
+  };
 
-  const reset = () => {
-    setStep(isConnected ? 2 : 1);
-    setObjectType('contacts');
-    setTableName('');
-    setLimit(1000);
-    setProperties([]);
+  // Handle source mode change
+  const handleSourceModeChange = (mode: 'list' | 'filter') => {
+    setSourceMode(mode);
+    setSelectedListId(null);
     setFilters([]);
-    setFieldMappings([]);
-    setIsImporting(false);
-    setImportResult(null);
-    setImportError(null);
-    setPropertySearch('');
-  };
-
-  const handleClose = () => {
-    if (isImporting) return;
-    reset();
-    onOpenChange(false);
-  };
-
-  // Filtered properties for the picker
-  const filteredProperties = useMemo(() => {
-    if (!propertySearch) return properties;
-    const q = propertySearch.toLowerCase();
-    return properties.filter(
-      (p) =>
-        p.label.toLowerCase().includes(q) ||
-        p.name.toLowerCase().includes(q)
-    );
-  }, [properties, propertySearch]);
-
-  // Check if property is already mapped
-  const isMapped = (propName: string) =>
-    fieldMappings.some((m) => m.hubspotProperty === propName);
-
-  // Add/remove field mapping
-  const toggleMapping = (prop: HubSpotProperty) => {
-    if (isMapped(prop.name)) {
-      setFieldMappings((prev) => prev.filter((m) => m.hubspotProperty !== prop.name));
-    } else {
-      setFieldMappings((prev) => [
-        ...prev,
-        {
-          hubspotProperty: prop.name,
-          columnLabel: prop.label,
-          columnType: HUBSPOT_TYPE_MAP[prop.type] ?? 'text',
-        },
-      ]);
+    if (mode === 'list' && lists.length === 0) {
+      loadLists();
+    }
+    if (mode === 'filter' && properties.length === 0) {
+      loadProperties();
     }
   };
 
-  // Update mapping label/type
-  const updateMapping = (index: number, updates: Partial<FieldMapping>) => {
-    setFieldMappings((prev) => prev.map((m, i) => (i === index ? { ...m, ...updates } : m)));
+  // Handle list selection
+  const handleSelectList = (list: HubSpotList) => {
+    setSelectedListId(list.id);
+    setTableName(list.name);
   };
 
   // Filter management
@@ -267,35 +200,127 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
     setFilters((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Load preview when moving to step 2
+  const loadPreview = async () => {
+    setLoadingPreview(true);
+    setPreviewData(null);
+    try {
+      const validFilters = filters.filter((f) => f.propertyName && f.operator);
+      const result = await previewContacts({
+        list_id: sourceMode === 'list' ? selectedListId || undefined : undefined,
+        filters: sourceMode === 'filter' && validFilters.length > 0 ? validFilters : undefined,
+        filter_logic: sourceMode === 'filter' && validFilters.length > 1 ? filterLogic : undefined,
+        limit: 5,
+      });
+      setPreviewData(result);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load preview');
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  // Handle continue to step 2
+  const handleContinueToPreview = async () => {
+    setStep(2);
+    await loadPreview();
+  };
+
+  // Filtered lists for search
+  const filteredLists = useMemo(() => {
+    if (!listSearch) return lists;
+    const q = listSearch.toLowerCase();
+    return lists.filter((l) => l.name.toLowerCase().includes(q));
+  }, [lists, listSearch]);
+
+  // Default table name
+  useEffect(() => {
+    if (!tableName && sourceMode === 'filter') {
+      setTableName('HubSpot Contacts');
+    }
+  }, [sourceMode, tableName]);
+
+  const reset = () => {
+    setStep(1);
+    setSourceMode('list');
+    setTableName('');
+    setLimit(1000);
+    setLists([]);
+    setListSearch('');
+    setSelectedListId(null);
+    setFilters([]);
+    setPreviewData(null);
+    setIsImporting(false);
+    setImportResult(null);
+    setImportError(null);
+    setImportAllColumns(true);
+  };
+
+  const handleClose = () => {
+    if (isImporting) return;
+    reset();
+    onOpenChange(false);
+  };
+
   // Import execution
   const handleImport = async () => {
-    if (!user?.id || !activeOrg?.id || !tableName.trim() || fieldMappings.length === 0) return;
+    console.log('[HubSpotImportWizard] handleImport called', {
+      userId: user?.id,
+      orgId: activeOrg?.id,
+      tableName,
+      selectedListId,
+      sourceMode,
+      limit
+    });
 
-    setStep(4);
+    if (!user?.id) {
+      console.error('[HubSpotImportWizard] Missing user.id');
+      toast.error('Missing user - please refresh and try again');
+      return;
+    }
+    if (!activeOrg?.id) {
+      console.error('[HubSpotImportWizard] Missing activeOrg.id');
+      toast.error('Missing organization - please refresh and try again');
+      return;
+    }
+    if (!tableName.trim()) {
+      console.error('[HubSpotImportWizard] Missing tableName');
+      toast.error('Please enter a table name');
+      return;
+    }
+
     setIsImporting(true);
     setImportError(null);
 
     try {
       const validFilters = filters.filter((f) => f.propertyName && f.operator);
+      const requestBody = {
+        org_id: activeOrg.id,
+        user_id: user.id,
+        table_name: tableName.trim(),
+        list_id: sourceMode === 'list' ? selectedListId : undefined,
+        filters: sourceMode === 'filter' && validFilters.length > 0 ? validFilters : undefined,
+        filter_logic: sourceMode === 'filter' && validFilters.length > 1 ? filterLogic : undefined,
+        limit,
+        import_all_columns: importAllColumns,
+      };
+      console.log('[HubSpotImportWizard] Calling import-from-hubspot with:', requestBody);
+
       const { data, error } = await supabase.functions.invoke('import-from-hubspot', {
-        body: {
-          org_id: activeOrg.id,
-          user_id: user.id,
-          table_name: tableName.trim(),
-          object_type: objectType,
-          properties: fieldMappings.map((m) => m.hubspotProperty),
-          field_mappings: fieldMappings,
-          filters: validFilters.length > 0 ? validFilters : undefined,
-          limit,
-        },
+        body: requestBody,
       });
+
+      console.log('[HubSpotImportWizard] Response:', { data, error });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      setImportResult(data);
       queryClient.invalidateQueries({ queryKey: ['ops-tables'] });
-      toast.success(`Imported ${data.rows_imported} rows from HubSpot`);
+      toast.success(`Imported ${data.rows_imported} contacts from HubSpot`);
+
+      // Auto-close and navigate to the new table
+      onComplete?.(data.table_id);
+      handleClose();
     } catch (e: any) {
       setImportError(e?.message || 'Import failed');
       toast.error('HubSpot import failed: ' + (e?.message || 'Unknown error'));
@@ -304,39 +329,44 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
     }
   };
 
-  const canProceedFromSelect = tableName.trim().length > 0;
-  const canProceedFromMapping = fieldMappings.length > 0;
+  const canProceedFromSource =
+    tableName.trim().length > 0 &&
+    ((sourceMode === 'list' && selectedListId) || sourceMode === 'filter');
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-[650px] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="sr-only">
           <DialogTitle>Import from HubSpot</DialogTitle>
-          <DialogDescription>Import contacts or companies from HubSpot</DialogDescription>
+          <DialogDescription>Import contacts from HubSpot</DialogDescription>
         </DialogHeader>
 
         {/* Step indicator */}
-        <div className="px-6 pt-5 pb-4 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Import from HubSpot</h2>
-          <div className="flex items-center gap-1">
+        <div className="px-6 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Import from HubSpot</h2>
+          <div className="flex items-center gap-2">
             {STEPS.map((s, i) => (
               <React.Fragment key={s.id}>
                 <div className="flex items-center gap-1.5">
-                  <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium ${
+                  <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
                     step > s.id
                       ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
                       : step === s.id
                         ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
                   }`}>
-                    {step > s.id ? <CheckCircle2 className="w-4 h-4" /> : s.id}
+                    {step > s.id ? <CheckCircle2 className="w-3.5 h-3.5" /> : s.id}
                   </div>
-                  <span className={`text-xs font-medium hidden sm:inline ${
+                  <span className={`text-xs font-medium ${
                     step >= s.id ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'
                   }`}>{s.label}</span>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <div className={`flex-1 h-px mx-2 ${
+                  <div className={`flex-1 h-px ${
                     step > s.id ? 'bg-emerald-300 dark:bg-emerald-700' : 'bg-gray-200 dark:bg-gray-700'
                   }`} />
                 )}
@@ -346,78 +376,229 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
         </div>
 
         {/* Step content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* Step 1: Connection check */}
-          {step === 1 && (
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Connection check */}
+          {!isConnected && !hubspotLoading && (
             <div className="flex flex-col items-center justify-center py-10 space-y-4">
-              {hubspotLoading ? (
-                <>
-                  <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-                  <p className="text-sm text-gray-400">Checking HubSpot connection...</p>
-                </>
-              ) : isConnected ? (
-                <>
-                  <CheckCircle2 className="w-10 h-10 text-emerald-500" />
-                  <p className="text-sm text-gray-300">HubSpot is connected</p>
-                  <Button onClick={() => setStep(2)}>Continue</Button>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="w-10 h-10 text-orange-400" />
-                  <p className="text-sm text-gray-300">HubSpot is not connected</p>
-                  <p className="text-xs text-gray-500 text-center max-w-sm">
-                    Connect your HubSpot account to import contacts and companies.
-                  </p>
-                  <Button onClick={connectHubSpot} className="bg-orange-600 hover:bg-orange-500">
-                    Connect HubSpot
-                  </Button>
-                </>
-              )}
+              <AlertCircle className="w-10 h-10 text-orange-400" />
+              <p className="text-sm text-gray-300">HubSpot is not connected</p>
+              <p className="text-xs text-gray-500 text-center max-w-sm">
+                Connect your HubSpot account to import contacts.
+              </p>
+              <Button onClick={connectHubSpot} className="bg-orange-600 hover:bg-orange-500">
+                Connect HubSpot
+              </Button>
             </div>
           )}
 
-          {/* Step 2: Object type, filters, name */}
-          {step === 2 && (
-            <div className="space-y-5">
+          {hubspotLoading && (
+            <div className="flex flex-col items-center justify-center py-10 space-y-4">
+              <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+              <p className="text-sm text-gray-400">Checking HubSpot connection...</p>
+            </div>
+          )}
+
+          {/* Step 1: Select Source */}
+          {isConnected && step === 1 && (
+            <div className="space-y-4">
               {/* Table name */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">Table name</label>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Table name</label>
                 <input
                   type="text"
                   value={tableName}
                   onChange={(e) => setTableName(e.target.value)}
-                  placeholder="e.g. HubSpot Contacts Q1"
+                  placeholder="e.g. Q1 Marketing Leads"
                   className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-500"
                 />
               </div>
 
-              {/* Object type */}
+              {/* Source mode toggle */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">Object type</label>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Import from</label>
                 <div className="flex gap-2">
-                  {OBJECT_TYPES.map((t) => (
-                    <button
-                      key={t.value}
-                      onClick={() => {
-                        setObjectType(t.value);
-                        setFieldMappings([]);
-                        setTableName(`HubSpot ${t.label}`);
-                      }}
-                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                        objectType === t.value
-                          ? 'bg-orange-600 text-white'
-                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => handleSourceModeChange('list')}
+                    className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                      sourceMode === 'list'
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    HubSpot List
+                  </button>
+                  <button
+                    onClick={() => handleSourceModeChange('filter')}
+                    className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                      sourceMode === 'filter'
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                  >
+                    <ListFilter className="w-4 h-4" />
+                    Filter by Property
+                  </button>
                 </div>
               </div>
 
+              {/* List selector */}
+              {sourceMode === 'list' && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-300">Select a list</label>
+
+                  {/* Search */}
+                  <div className="relative mb-2">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    <input
+                      type="text"
+                      value={listSearch}
+                      onChange={(e) => setListSearch(e.target.value)}
+                      placeholder="Search lists..."
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-500"
+                    />
+                  </div>
+
+                  {loadingLists ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="max-h-[200px] overflow-y-auto space-y-1 rounded-lg border border-gray-800 p-2">
+                        {filteredLists.map((list) => (
+                          <button
+                            key={list.id}
+                            onClick={() => handleSelectList(list)}
+                            className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                              selectedListId === list.id
+                                ? 'bg-orange-500/10 text-orange-300 border border-orange-500/20'
+                                : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Users className="w-4 h-4 shrink-0 text-gray-500" />
+                              <span className="truncate font-medium">{list.name}</span>
+                              <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${
+                                list.listType === 'DYNAMIC'
+                                  ? 'bg-blue-500/20 text-blue-400'
+                                  : 'bg-gray-700 text-gray-400'
+                              }`}>
+                                {list.listType === 'DYNAMIC' ? 'Active' : 'Static'}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-500 shrink-0 ml-2">
+                              {list.membershipCount.toLocaleString()} contacts
+                            </span>
+                          </button>
+                        ))}
+                        {filteredLists.length === 0 && (
+                          <div className="py-6 text-center space-y-2">
+                            <p className="text-xs text-gray-500">
+                              {lists.length === 0 ? 'No lists found in HubSpot' : 'No lists match your search'}
+                            </p>
+                            {lists.length === 0 && (
+                              <p className="text-xs text-gray-600 px-2">
+                                Create a list in HubSpot or use "Filter by Property" below to import by contact criteria.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {lists.length === 0 && (
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                          <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                          <div className="text-xs text-blue-300">
+                            <p className="font-medium mb-1">No HubSpot Lists?</p>
+                            <p className="text-blue-400/80">
+                              Use "Filter by Property" above to import contacts based on specific criteria (e.g., Company, Job Title, Email domain).
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Filter builder */}
+              {sourceMode === 'filter' && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-300">Filter criteria (optional)</label>
+                    <button
+                      onClick={addFilter}
+                      className="inline-flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300"
+                    >
+                      <Plus className="w-3 h-3" /> Add filter
+                    </button>
+                  </div>
+                  {filters.length === 0 && (
+                    <p className="text-xs text-gray-500 mb-2">No filters — all contacts will be imported.</p>
+                  )}
+                  {loadingProperties ? (
+                    <div className="flex items-center gap-2 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+                      <span className="text-xs text-gray-500">Loading properties...</span>
+                    </div>
+                  ) : (
+                    filters.map((f, i) => (
+                      <React.Fragment key={i}>
+                        {i > 0 && (
+                          <div className="flex items-center gap-2 my-1">
+                            <div className="flex-1 h-px bg-gray-800" />
+                            <button
+                              type="button"
+                              onClick={() => setFilterLogic(filterLogic === 'AND' ? 'OR' : 'AND')}
+                              className="px-2 py-0.5 text-[10px] font-semibold uppercase rounded bg-gray-800 text-gray-400 hover:text-white transition-colors"
+                            >
+                              {filterLogic}
+                            </button>
+                            <div className="flex-1 h-px bg-gray-800" />
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={f.propertyName}
+                            onChange={(e) => updateFilter(i, { propertyName: e.target.value })}
+                            className="w-[180px] min-w-0 shrink-0 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-white outline-none"
+                          >
+                            <option value="">Property...</option>
+                            {properties.map((p) => (
+                              <option key={p.name} value={p.name}>{p.label}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={f.operator}
+                            onChange={(e) => updateFilter(i, { operator: e.target.value })}
+                            className="w-[120px] min-w-0 shrink-0 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-white outline-none"
+                          >
+                            {FILTER_OPERATORS.map((op) => (
+                              <option key={op.value} value={op.value}>{op.label}</option>
+                            ))}
+                          </select>
+                          {f.operator !== 'HAS_PROPERTY' && f.operator !== 'NOT_HAS_PROPERTY' && (
+                            <input
+                              type="text"
+                              value={f.value}
+                              onChange={(e) => updateFilter(i, { value: e.target.value })}
+                              placeholder="Value"
+                              className="flex-1 min-w-0 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-white placeholder-gray-500 outline-none"
+                            />
+                          )}
+                          <button onClick={() => removeFilter(i)} className="shrink-0 text-gray-500 hover:text-red-400">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </React.Fragment>
+                    ))
+                  )}
+                </div>
+              )}
+
               {/* Record limit */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">Max records</label>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Max records</label>
                 <select
                   value={limit}
                   onChange={(e) => setLimit(Number(e.target.value))}
@@ -431,164 +612,43 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                 </select>
               </div>
 
-              {/* Filters */}
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-300">Filters (optional)</label>
-                  <button
-                    onClick={addFilter}
-                    className="inline-flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300"
-                  >
-                    <Plus className="w-3 h-3" /> Add filter
-                  </button>
-                </div>
-                {filters.length === 0 && (
-                  <p className="text-xs text-gray-500">No filters — all {objectType} will be imported.</p>
-                )}
-                {filters.map((f, i) => (
-                  <div key={i} className="mb-2 flex items-center gap-2">
-                    <select
-                      value={f.propertyName}
-                      onChange={(e) => updateFilter(i, { propertyName: e.target.value })}
-                      className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-white outline-none"
-                    >
-                      <option value="">Property...</option>
-                      {properties.map((p) => (
-                        <option key={p.name} value={p.name}>{p.label}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={f.operator}
-                      onChange={(e) => updateFilter(i, { operator: e.target.value })}
-                      className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-white outline-none"
-                    >
-                      {FILTER_OPERATORS.map((op) => (
-                        <option key={op.value} value={op.value}>{op.label}</option>
-                      ))}
-                    </select>
-                    {f.operator !== 'HAS_PROPERTY' && f.operator !== 'NOT_HAS_PROPERTY' && (
-                      <input
-                        type="text"
-                        value={f.value}
-                        onChange={(e) => updateFilter(i, { value: e.target.value })}
-                        placeholder="Value"
-                        className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-white placeholder-gray-500 outline-none"
-                      />
-                    )}
-                    <button onClick={() => removeFilter(i)} className="text-gray-500 hover:text-red-400">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Field mapping */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-300">
-                  Select properties to import ({fieldMappings.length} selected)
-                </p>
-              </div>
-
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              {/* Include common properties toggle */}
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-gray-800/50 border border-gray-700">
                 <input
-                  type="text"
-                  value={propertySearch}
-                  onChange={(e) => setPropertySearch(e.target.value)}
-                  placeholder="Search properties..."
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-500"
+                  type="checkbox"
+                  id="importAllColumns"
+                  checked={importAllColumns}
+                  onChange={(e) => setImportAllColumns(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-600 text-orange-600 bg-gray-800 focus:ring-orange-500 focus:ring-offset-0 cursor-pointer"
                 />
+                <label htmlFor="importAllColumns" className="cursor-pointer">
+                  <p className="text-sm font-medium text-gray-200">Include common properties</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {importAllColumns
+                      ? 'First Name, Last Name, Company, Job Title, Phone, Lifecycle Stage, Lead Status'
+                      : 'Only imports email — add more columns later from HubSpot properties'}
+                  </p>
+                </label>
               </div>
-
-              {loadingProperties ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
-                </div>
-              ) : (
-                <div className="max-h-[320px] overflow-y-auto space-y-1 rounded-lg border border-gray-800 p-2">
-                  {filteredProperties.map((prop) => {
-                    const mapped = isMapped(prop.name);
-                    return (
-                      <button
-                        key={prop.name}
-                        onClick={() => toggleMapping(prop)}
-                        className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                          mapped
-                            ? 'bg-orange-500/10 text-orange-300 border border-orange-500/20'
-                            : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={mapped}
-                          readOnly
-                          className="w-4 h-4 rounded border-gray-600 text-orange-600 bg-gray-800"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium">{prop.label}</div>
-                          <div className="truncate text-xs text-gray-500">{prop.name} · {prop.type}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {filteredProperties.length === 0 && (
-                    <p className="py-4 text-center text-xs text-gray-500">No properties found</p>
-                  )}
-                </div>
-              )}
-
-              {/* Mapped fields summary */}
-              {fieldMappings.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Column mapping</p>
-                  {fieldMappings.map((m, i) => (
-                    <div key={m.hubspotProperty} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500 w-32 truncate">{m.hubspotProperty}</span>
-                      <span className="text-gray-600">→</span>
-                      <input
-                        type="text"
-                        value={m.columnLabel}
-                        onChange={(e) => updateMapping(i, { columnLabel: e.target.value })}
-                        className="flex-1 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-white outline-none"
-                      />
-                      <select
-                        value={m.columnType}
-                        onChange={(e) => updateMapping(i, { columnType: e.target.value })}
-                        className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-white outline-none"
-                      >
-                        <option value="text">Text</option>
-                        <option value="email">Email</option>
-                        <option value="phone">Phone</option>
-                        <option value="number">Number</option>
-                        <option value="url">URL</option>
-                        <option value="date">Date</option>
-                        <option value="checkbox">Checkbox</option>
-                        <option value="dropdown">Dropdown</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
-          {/* Step 4: Import progress / result */}
-          {step === 4 && (
-            <div className="flex flex-col items-center justify-center py-8 space-y-6">
+          {/* Step 2: Preview & Import */}
+          {isConnected && step === 2 && (
+            <div className="space-y-4">
               {importResult ? (
-                <>
+                // Import complete
+                <div className="flex flex-col items-center justify-center py-8 space-y-6">
                   <div className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div className="text-center space-y-1">
                     <h3 className="text-lg font-semibold text-white">Import Complete</h3>
                     <p className="text-sm text-gray-400">
-                      Imported {importResult.rows_imported.toLocaleString()} rows with {importResult.columns_created} columns
+                      Imported {importResult.rows_imported.toLocaleString()} contacts with email as the key identifier.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Add columns to pull more HubSpot properties (First Name, Company, etc.)
                     </p>
                   </div>
                   <Button
@@ -601,9 +661,10 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                     <ExternalLink className="w-4 h-4" />
                     Open Table
                   </Button>
-                </>
+                </div>
               ) : importError ? (
-                <>
+                // Import error
+                <div className="flex flex-col items-center justify-center py-8 space-y-6">
                   <div className="flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30">
                     <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
                   </div>
@@ -611,18 +672,93 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                     <h3 className="text-lg font-semibold text-white">Import Failed</h3>
                     <p className="text-sm text-red-400">{importError}</p>
                   </div>
-                  <Button onClick={() => { setStep(3); setImportError(null); }} variant="outline">
-                    Back to Mapping
+                  <Button onClick={() => { setStep(1); setImportError(null); }} variant="outline">
+                    Back to Selection
                   </Button>
-                </>
-              ) : (
-                <>
+                </div>
+              ) : isImporting ? (
+                // Importing
+                <div className="flex flex-col items-center justify-center py-8 space-y-4">
                   <Loader2 className="w-10 h-10 text-orange-500 animate-spin" />
                   <div className="text-center space-y-1">
                     <h3 className="text-sm font-medium text-gray-300">Importing from HubSpot...</h3>
                     <p className="text-xs text-gray-500">
-                      Fetching up to {limit.toLocaleString()} {objectType} and creating table
+                      Fetching up to {limit.toLocaleString()} contacts
                     </p>
+                  </div>
+                </div>
+              ) : (
+                // Preview
+                <>
+                  {/* Preview header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-orange-400" />
+                      <h3 className="text-sm font-semibold text-white">
+                        {loadingPreview ? 'Loading preview...' : (
+                          previewData
+                            ? `Importing ${Math.min(previewData.totalCount, limit).toLocaleString()} contacts`
+                            : 'Preview'
+                        )}
+                      </h3>
+                    </div>
+                    {previewData && previewData.totalCount > limit && (
+                      <span className="text-xs text-gray-500">
+                        (limited from {previewData.totalCount.toLocaleString()})
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Preview table */}
+                  {loadingPreview ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+                    </div>
+                  ) : previewData && previewData.contacts.length > 0 ? (
+                    <div className="rounded-lg border border-gray-800 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-900/50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Email</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">First Name</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Last Name</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Company</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {previewData.contacts.map((contact) => (
+                            <tr key={contact.id} className="hover:bg-gray-800/30">
+                              <td className="px-3 py-2 text-gray-300 font-medium">{contact.email || '—'}</td>
+                              <td className="px-3 py-2 text-gray-400">{contact.firstName || '—'}</td>
+                              <td className="px-3 py-2 text-gray-400">{contact.lastName || '—'}</td>
+                              <td className="px-3 py-2 text-gray-400">{contact.company || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {previewData.totalCount > 5 && (
+                        <div className="px-3 py-2 text-xs text-gray-500 bg-gray-900/30 border-t border-gray-800">
+                          ... and {(Math.min(previewData.totalCount, limit) - 5).toLocaleString()} more
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                      <Users className="w-8 h-8 mb-2 text-gray-700" />
+                      <p className="text-sm">No contacts found matching your criteria</p>
+                    </div>
+                  )}
+
+                  {/* Info about email key */}
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-blue-300">
+                      <p className="font-medium mb-1">Email is the key identifier</p>
+                      <p className="text-blue-400/80">
+                        Your table will be created with email addresses. Add more columns (First Name, Company, etc.)
+                        in the table by selecting "HubSpot Property" when adding a column.
+                      </p>
+                    </div>
                   </div>
                 </>
               )}
@@ -631,32 +767,32 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex justify-between">
+        <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-800 flex justify-between">
           <Button
             variant="ghost"
-            onClick={step <= 2 ? handleClose : () => setStep((s) => Math.max(2, s - 1))}
+            onClick={step === 1 ? handleClose : () => setStep(1)}
             disabled={isImporting}
           >
-            {step <= 2 ? 'Cancel' : <><ArrowLeft className="w-4 h-4 mr-1" /> Back</>}
+            {step === 1 ? 'Cancel' : <><ArrowLeft className="w-4 h-4 mr-1" /> Back</>}
           </Button>
 
-          {step === 2 && (
+          {isConnected && step === 1 && (
             <Button
-              onClick={() => setStep(3)}
-              disabled={!canProceedFromSelect}
+              onClick={handleContinueToPreview}
+              disabled={!canProceedFromSource}
               className="gap-1 bg-orange-600 hover:bg-orange-500"
             >
               Continue <ArrowRight className="w-4 h-4" />
             </Button>
           )}
 
-          {step === 3 && (
+          {isConnected && step === 2 && !importResult && !importError && !isImporting && (
             <Button
               onClick={handleImport}
-              disabled={!canProceedFromMapping}
+              disabled={!previewData || previewData.contacts.length === 0}
               className="gap-1 bg-orange-600 hover:bg-orange-500"
             >
-              Import {objectType === 'contacts' ? 'Contacts' : 'Companies'}
+              Import {previewData ? Math.min(previewData.totalCount, limit).toLocaleString() : ''} Contacts
             </Button>
           )}
         </div>

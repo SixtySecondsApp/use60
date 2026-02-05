@@ -44,6 +44,7 @@ import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
 import { useOpsRules } from '@/lib/hooks/useOpsRules';
 import { RuleBuilder } from '@/components/ops/RuleBuilder';
 import { RuleList } from '@/components/ops/RuleList';
+import { AiQueryPreviewModal, type AiQueryOperation } from '@/components/ops/AiQueryPreviewModal';
 
 // ---------------------------------------------------------------------------
 // Service singleton
@@ -89,7 +90,8 @@ function OpsDetailPage() {
   const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get('view'));
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([]);
   const [showSaveViewDialog, setShowSaveViewDialog] = useState(false);
-  const [systemViewsCreated, setSystemViewsCreated] = useState(false);
+  // Use ref instead of state to prevent StrictMode double-creation race condition
+  const systemViewsCreatedRef = useRef(false);
   const [filterPopoverColumn, setFilterPopoverColumn] = useState<{
     column: OpsTableColumn;
     anchorRect: DOMRect;
@@ -100,6 +102,15 @@ function OpsDetailPage() {
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+
+  // ---- AI Query state ----
+  const [aiQueryOperation, setAiQueryOperation] = useState<AiQueryOperation | null>(null);
+  const [aiQueryPreviewRows, setAiQueryPreviewRows] = useState<any[]>([]);
+  const [aiQueryTotalCount, setAiQueryTotalCount] = useState(0);
+  const [isAiQueryParsing, setIsAiQueryParsing] = useState(false);
+  const [isAiQueryLoading, setIsAiQueryLoading] = useState(false);
+  const [isAiQueryExecuting, setIsAiQueryExecuting] = useState(false);
+  const [showAiQueryPreview, setShowAiQueryPreview] = useState(false);
 
   // ---- Data queries ----
 
@@ -128,7 +139,7 @@ function OpsDetailPage() {
     enabled: !!tableId,
   });
 
-  const { data: views = [] } = useQuery({
+  const { data: views = [], isLoading: isViewsLoading } = useQuery({
     queryKey: ['ops-table-views', tableId],
     queryFn: () => tableService.getViews(tableId!),
     enabled: !!tableId,
@@ -153,10 +164,13 @@ function OpsDetailPage() {
 
   // Auto-create system views when a table has zero views
   useEffect(() => {
-    if (!tableId || !table || views.length > 0 || systemViewsCreated) return;
+    // Wait for views query to finish loading before deciding to create
+    if (isViewsLoading) return;
+    if (!tableId || !table || views.length > 0 || systemViewsCreatedRef.current) return;
     if (columns.length === 0) return;
 
-    setSystemViewsCreated(true);
+    // Mark as created immediately (sync) to prevent double-creation
+    systemViewsCreatedRef.current = true;
 
     const systemViewConfigs = generateSystemViews(columns);
 
@@ -185,7 +199,7 @@ function OpsDetailPage() {
       // Silently fail — views will just not be auto-created
       // User can still manually create views
     });
-  }, [tableId, table, views.length, columns, systemViewsCreated, queryClient]);
+  }, [tableId, table, views.length, columns, isViewsLoading, queryClient]);
 
   // Rows are now filtered and sorted server-side via getTableData()
   const rows = useMemo(() => tableData?.rows ?? [], [tableData?.rows]);
@@ -217,6 +231,7 @@ function OpsDetailPage() {
       formulaExpression?: string;
       integrationType?: string;
       integrationConfig?: Record<string, unknown>;
+      hubspotPropertyName?: string;
     }) => {
       const column = await tableService.addColumn({
         tableId: tableId!,
@@ -229,11 +244,12 @@ function OpsDetailPage() {
         formulaExpression: params.formulaExpression,
         integrationType: params.integrationType,
         integrationConfig: params.integrationConfig,
+        hubspotPropertyName: params.hubspotPropertyName,
         position: (table?.columns?.length ?? 0),
       });
-      return { column, autoRunRows: params.autoRunRows };
+      return { column, autoRunRows: params.autoRunRows, hubspotPropertyName: params.hubspotPropertyName };
     },
-    onSuccess: ({ column, autoRunRows: runRows }) => {
+    onSuccess: async ({ column, autoRunRows: runRows, hubspotPropertyName }) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       toast.success('Column added');
@@ -257,6 +273,37 @@ function OpsDetailPage() {
       if (column.column_type === 'formula' && column.formula_expression) {
         recalcFormulaMutation.mutate(column.id);
       }
+
+      // Auto-populate HubSpot property columns
+      if (hubspotPropertyName && tableId) {
+        toast.loading('Populating column values from HubSpot...', { id: 'populate-hubspot' });
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (token) {
+            const resp = await supabase.functions.invoke('populate-hubspot-column', {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                table_id: tableId,
+                column_id: column.id,
+                property_name: hubspotPropertyName,
+              }),
+            });
+            if (resp.error) {
+              toast.error('Failed to populate column values', { id: 'populate-hubspot' });
+            } else {
+              toast.success(`Populated ${resp.data?.cells_populated ?? 0} cells`, { id: 'populate-hubspot' });
+              queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+            }
+          }
+        } catch (e) {
+          console.error('[OpsDetailPage] Populate HubSpot column error:', e);
+          toast.error('Failed to populate column values', { id: 'populate-hubspot' });
+        }
+      }
     },
     onError: () => toast.error('Failed to add column'),
   });
@@ -269,6 +316,33 @@ function OpsDetailPage() {
       toast.success('Column renamed');
     },
     onError: () => toast.error('Failed to rename column'),
+  });
+
+  const resizeColumnMutation = useMutation({
+    mutationFn: ({ columnId, width }: { columnId: string; width: number }) =>
+      tableService.updateColumn(columnId, { width }),
+    onMutate: async ({ columnId, width }) => {
+      // Optimistically update the column width in cache
+      await queryClient.cancelQueries({ queryKey: ['ops-table', tableId] });
+      const previousTable = queryClient.getQueryData(['ops-table', tableId]);
+      queryClient.setQueryData(['ops-table', tableId], (old: any) => {
+        if (!old?.columns) return old;
+        return {
+          ...old,
+          columns: old.columns.map((col: any) =>
+            col.id === columnId ? { ...col, width } : col
+          ),
+        };
+      });
+      return { previousTable };
+    },
+    onError: (_err, _vars, context) => {
+      // Rollback on error
+      if (context?.previousTable) {
+        queryClient.setQueryData(['ops-table', tableId], context.previousTable);
+      }
+      toast.error('Failed to resize column');
+    },
   });
 
   const hideColumnMutation = useMutation({
@@ -552,14 +626,96 @@ function OpsDetailPage() {
   }, [filterConditions, columns]);
 
   const handleQuerySubmit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!queryInput.trim()) return;
-      // Placeholder: will be wired to copilot in a later story
-      toast.info('Query bar will be connected to the copilot soon.');
+      if (!queryInput.trim() || !tableId) return;
+
+      setIsAiQueryParsing(true);
+
+      try {
+        // Call the AI query edge function to parse the natural language
+        const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+          body: {
+            tableId,
+            query: queryInput.trim(),
+            columns: columns.map((c) => ({
+              key: c.key,
+              label: c.label,
+              column_type: c.column_type,
+            })),
+          },
+        });
+
+        if (error) throw error;
+
+        const operation = data as AiQueryOperation;
+
+        // For filter actions, apply directly without preview modal
+        if (operation.action === 'filter') {
+          setFilterConditions(operation.conditions);
+          setQueryInput('');
+          toast.success(operation.summary);
+          return;
+        }
+
+        // For destructive actions (delete/update), show preview modal
+        setAiQueryOperation(operation);
+        setShowAiQueryPreview(true);
+        setIsAiQueryLoading(true);
+
+        // Fetch preview of matching rows
+        const preview = await tableService.previewAiQuery(tableId, operation);
+        setAiQueryPreviewRows(preview.matchingRows);
+        setAiQueryTotalCount(preview.totalCount);
+      } catch (err) {
+        console.error('[AI Query] Error:', err);
+        const message = err instanceof Error ? err.message : 'Failed to parse query';
+        toast.error(message);
+      } finally {
+        setIsAiQueryParsing(false);
+        setIsAiQueryLoading(false);
+      }
     },
-    [queryInput],
+    [queryInput, tableId, columns],
   );
+
+  const handleAiQueryConfirm = useCallback(async () => {
+    if (!aiQueryOperation || !tableId) return;
+
+    setIsAiQueryExecuting(true);
+
+    try {
+      const result = await tableService.executeAiQuery(tableId, aiQueryOperation);
+
+      if (result.success) {
+        // Refresh table data
+        queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+        queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+
+        const actionVerb = aiQueryOperation.action === 'delete' ? 'Deleted' : 'Updated';
+        toast.success(`${actionVerb} ${result.affectedCount} row${result.affectedCount !== 1 ? 's' : ''}`);
+      }
+
+      // Close modal and reset state
+      setShowAiQueryPreview(false);
+      setAiQueryOperation(null);
+      setAiQueryPreviewRows([]);
+      setAiQueryTotalCount(0);
+      setQueryInput('');
+    } catch (err) {
+      console.error('[AI Query] Execute error:', err);
+      toast.error('Failed to execute operation');
+    } finally {
+      setIsAiQueryExecuting(false);
+    }
+  }, [aiQueryOperation, tableId, queryClient]);
+
+  const handleAiQueryCancel = useCallback(() => {
+    setShowAiQueryPreview(false);
+    setAiQueryOperation(null);
+    setAiQueryPreviewRows([]);
+    setAiQueryTotalCount(0);
+  }, []);
 
   // ---- Active column for menu ----
 
@@ -653,20 +809,29 @@ function OpsDetailPage() {
         {/* Query bar */}
         <form onSubmit={handleQuerySubmit} className="mb-5">
           <div className="flex items-center gap-2 rounded-xl border border-gray-800 bg-gray-900/60 px-4 py-2.5 transition-colors focus-within:border-violet-500/40 focus-within:ring-1 focus-within:ring-violet-500/20">
-            <MessageSquare className="h-4 w-4 shrink-0 text-gray-500" />
+            {isAiQueryParsing ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-400" />
+            ) : (
+              <MessageSquare className="h-4 w-4 shrink-0 text-gray-500" />
+            )}
             <input
               type="text"
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
-              placeholder="Ask anything... e.g. 'Remove anyone without a verified email'"
-              className="min-w-0 flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-500 outline-none"
+              disabled={isAiQueryParsing}
+              placeholder="Ask anything... e.g. 'Delete rows with blank emails' or 'Show only verified contacts'"
+              className="min-w-0 flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-500 outline-none disabled:opacity-50"
             />
             <button
               type="submit"
-              disabled={!queryInput.trim()}
+              disabled={!queryInput.trim() || isAiQueryParsing}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-30"
             >
-              <Send className="h-3.5 w-3.5" />
+              {isAiQueryParsing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
             </button>
           </div>
         </form>
@@ -850,6 +1015,7 @@ function OpsDetailPage() {
             }
             columnOrder={columnOrder}
             onColumnReorder={setColumnOrder}
+            onColumnResize={(columnId, width) => resizeColumnMutation.mutate({ columnId, width })}
           />
         </div>
       )}
@@ -898,7 +1064,14 @@ function OpsDetailPage() {
         isOpen={showAddColumn}
         onClose={() => setShowAddColumn(false)}
         onAdd={(col) => addColumnMutation.mutate(col)}
+        onAddMultiple={async (cols) => {
+          // Add multiple HubSpot property columns sequentially
+          for (const col of cols) {
+            await addColumnMutation.mutateAsync(col);
+          }
+        }}
         existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        sourceType={table?.source_type as 'manual' | 'csv' | 'hubspot' | null}
       />
 
       {/* Column Header Menu */}
@@ -986,6 +1159,19 @@ function OpsDetailPage() {
         selectedRows={rows.filter((r) => selectedRows.has(r.id))}
         onPush={(config) => pushToHubSpotMutation.mutate(config)}
         isPushing={pushToHubSpotMutation.isPending}
+      />
+
+      {/* AI Query Preview Modal */}
+      <AiQueryPreviewModal
+        isOpen={showAiQueryPreview}
+        onClose={handleAiQueryCancel}
+        onConfirm={handleAiQueryConfirm}
+        operation={aiQueryOperation}
+        previewRows={aiQueryPreviewRows}
+        totalCount={aiQueryTotalCount}
+        columns={columns}
+        isLoading={isAiQueryLoading}
+        isExecuting={isAiQueryExecuting}
       />
 
       {/* Save View Dialog */}

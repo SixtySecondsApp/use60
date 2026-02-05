@@ -129,6 +129,14 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: BarChart3,
       href: '/platform/cost-analysis',
       color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30',
+    },
+    {
+      id: 'ai-usage',
+      title: 'AI Usage & Models',
+      description: 'Track AI usage across features, orgs, users. Configure models globally.',
+      icon: Brain,
+      href: '/platform/ai-usage',
+      color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
       badge: 'New',
     },
     {

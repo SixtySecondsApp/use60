@@ -15,6 +15,7 @@ export const ProactiveSimulator = lazyWithRetry(() => import('@/pages/platform/P
 export const DealTruthSimulator = lazyWithRetry(() => import('@/pages/platform/DealTruthSimulator'));
 export const PricingControl = lazyWithRetry(() => import('@/pages/platform/PricingControl'));
 export const CostAnalysis = lazyWithRetry(() => import('@/pages/platform/CostAnalysis'));
+export const AIUsageAdmin = lazyWithRetry(() => import('@/pages/platform/AIUsageAdmin'));
 export const ApiUsageDashboard = lazyWithRetry(() => import('@/pages/platform/ApiUsageDashboard'));
 export const LaunchChecklist = lazyWithRetry(() => import('@/pages/platform/LaunchChecklist'));
 export const ActivationDashboard = lazyWithRetry(() => import('@/pages/platform/ActivationDashboard'));

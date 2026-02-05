@@ -47,15 +47,18 @@ export interface OpsTableColumn {
     | 'checkbox'
     | 'formula'
     | 'integration'
-    | 'action';
+    | 'action'
+    | 'hubspot_property';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
+  enrichment_model: string | null;
   dropdown_options: DropdownOption[] | null;
   formula_expression: string | null;
   integration_type: string | null;
   integration_config: Record<string, unknown> | null;
   action_type: string | null;
   action_config: Record<string, unknown> | null;
+  hubspot_property_name: string | null;
   position: number;
   width: number;
   is_visible: boolean;
@@ -151,7 +154,7 @@ const TABLE_COLUMNS =
   'id, organization_id, created_by, name, description, source_type, source_query, row_count, created_at, updated_at';
 
 const COLUMN_COLUMNS =
-  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, dropdown_options, formula_expression, integration_type, integration_config, action_type, action_config, position, width, is_visible, created_at';
+  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, enrichment_model, dropdown_options, formula_expression, integration_type, integration_config, action_type, action_config, hubspot_property_name, position, width, is_visible, created_at';
 
 const ROW_COLUMNS =
   'id, table_id, row_index, source_id, source_data, created_at';
@@ -265,12 +268,14 @@ export class OpsTableService {
     columnType: OpsTableColumn['column_type'];
     isEnrichment?: boolean;
     enrichmentPrompt?: string;
+    enrichmentModel?: string;
     dropdownOptions?: DropdownOption[];
     formulaExpression?: string;
     integrationType?: string;
     integrationConfig?: Record<string, unknown>;
     actionType?: string;
     actionConfig?: Record<string, unknown>;
+    hubspotPropertyName?: string;
     position?: number;
   }): Promise<OpsTableColumn> {
     const { data, error } = await this.supabase
@@ -282,12 +287,14 @@ export class OpsTableService {
         column_type: params.columnType,
         is_enrichment: params.isEnrichment ?? false,
         enrichment_prompt: params.enrichmentPrompt ?? null,
+        enrichment_model: params.enrichmentModel ?? null,
         dropdown_options: params.dropdownOptions ?? null,
         formula_expression: params.formulaExpression ?? null,
         integration_type: params.integrationType ?? null,
         integration_config: params.integrationConfig ?? null,
         action_type: params.actionType ?? null,
         action_config: params.actionConfig ?? null,
+        hubspot_property_name: params.hubspotPropertyName ?? null,
         position: params.position ?? 0,
       })
       .select(COLUMN_COLUMNS)
@@ -780,19 +787,27 @@ export class OpsTableService {
     // First check if it's a system view
     const { data: view, error: fetchError } = await this.supabase
       .from('dynamic_table_views')
-      .select('is_system')
+      .select('is_system, created_by')
       .eq('id', viewId)
       .maybeSingle();
 
     if (fetchError) throw fetchError;
-    if (view?.is_system) throw new Error('Cannot delete system views');
+    if (!view) throw new Error('View not found');
+    if (view.is_system) throw new Error('Cannot delete system views');
 
-    const { error } = await this.supabase
+    const { data: deletedRows, error } = await this.supabase
       .from('dynamic_table_views')
       .delete()
-      .eq('id', viewId);
+      .eq('id', viewId)
+      .select('id');
 
     if (error) throw error;
+
+    // RLS may silently block deletion if user doesn't own the view
+    // The delete succeeds but affects 0 rows
+    if (!deletedRows || deletedRows.length === 0) {
+      throw new Error('Cannot delete this view - you may not have permission');
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -841,5 +856,164 @@ export class OpsTableService {
         cells,
       };
     });
+  }
+
+  // -----------------------------------------------------------------------
+  // AI Query Operations
+  // -----------------------------------------------------------------------
+
+  /**
+   * Preview an AI-parsed operation without executing it.
+   * Returns matching rows for confirmation before destructive actions.
+   */
+  async previewAiQuery(
+    tableId: string,
+    operation: {
+      action: 'filter' | 'delete' | 'update';
+      conditions: FilterCondition[];
+      targetColumn?: string;
+      newValue?: string;
+    }
+  ): Promise<{ matchingRows: OpsTableRow[]; totalCount: number }> {
+    // Get columns for mapping
+    const { data: columns, error: colError } = await this.supabase
+      .from('dynamic_table_columns')
+      .select('id, key, column_type')
+      .eq('table_id', tableId);
+
+    if (colError) throw colError;
+
+    const keyToColumnId = new Map<string, string>();
+    const keyToColumnType = new Map<string, string>();
+    for (const col of (columns ?? []) as { id: string; key: string; column_type: string }[]) {
+      keyToColumnId.set(col.key, col.id);
+      keyToColumnType.set(col.key, col.column_type);
+    }
+
+    // Get matching row IDs
+    const matchingRowIds = await this.getFilteredRowIds(
+      tableId,
+      operation.conditions,
+      keyToColumnId,
+      keyToColumnType
+    );
+
+    const totalCount = matchingRowIds.length;
+
+    // Limit preview to first 100 rows for performance
+    const previewRowIds = matchingRowIds.slice(0, 100);
+
+    if (previewRowIds.length === 0) {
+      return { matchingRows: [], totalCount: 0 };
+    }
+
+    // Fetch full row data for preview
+    const { data: rowData, error: rowError } = await this.supabase
+      .from('dynamic_table_rows')
+      .select(`
+        id,
+        table_id,
+        row_index,
+        source_id,
+        source_data,
+        created_at,
+        dynamic_table_cells (
+          id,
+          row_id,
+          column_id,
+          value,
+          confidence,
+          source,
+          status,
+          error_message
+        )
+      `)
+      .in('id', previewRowIds)
+      .order('row_index', { ascending: true });
+
+    if (rowError) throw rowError;
+
+    const matchingRows = this.mapRows(
+      (rowData ?? []) as RawRow[],
+      (columns ?? []) as { id: string; key: string }[]
+    );
+
+    return { matchingRows, totalCount };
+  }
+
+  /**
+   * Execute an AI-parsed operation.
+   * For delete: removes matching rows
+   * For update: updates specified column for matching rows
+   * For filter: returns the conditions to apply to the view (no mutation)
+   */
+  async executeAiQuery(
+    tableId: string,
+    operation: {
+      action: 'filter' | 'delete' | 'update';
+      conditions: FilterCondition[];
+      targetColumn?: string;
+      newValue?: string;
+    }
+  ): Promise<{ affectedCount: number; success: boolean; filterConditions?: FilterCondition[] }> {
+    // For filter action, just return the conditions (no mutation needed)
+    if (operation.action === 'filter') {
+      return {
+        affectedCount: 0,
+        success: true,
+        filterConditions: operation.conditions,
+      };
+    }
+
+    // Get columns for mapping
+    const { data: columns, error: colError } = await this.supabase
+      .from('dynamic_table_columns')
+      .select('id, key, column_type')
+      .eq('table_id', tableId);
+
+    if (colError) throw colError;
+
+    const keyToColumnId = new Map<string, string>();
+    const keyToColumnType = new Map<string, string>();
+    for (const col of (columns ?? []) as { id: string; key: string; column_type: string }[]) {
+      keyToColumnId.set(col.key, col.id);
+      keyToColumnType.set(col.key, col.column_type);
+    }
+
+    // Get matching row IDs
+    const matchingRowIds = await this.getFilteredRowIds(
+      tableId,
+      operation.conditions,
+      keyToColumnId,
+      keyToColumnType
+    );
+
+    if (matchingRowIds.length === 0) {
+      return { affectedCount: 0, success: true };
+    }
+
+    // Execute the action
+    if (operation.action === 'delete') {
+      await this.deleteRows(matchingRowIds);
+      return { affectedCount: matchingRowIds.length, success: true };
+    }
+
+    if (operation.action === 'update' && operation.targetColumn && operation.newValue !== undefined) {
+      const targetColumnId = keyToColumnId.get(operation.targetColumn);
+      if (!targetColumnId) {
+        throw new Error(`Column "${operation.targetColumn}" not found`);
+      }
+
+      // Batch update or upsert cells for all matching rows
+      let updatedCount = 0;
+      for (const rowId of matchingRowIds) {
+        await this.upsertCell(rowId, targetColumnId, operation.newValue);
+        updatedCount++;
+      }
+
+      return { affectedCount: updatedCount, success: true };
+    }
+
+    return { affectedCount: 0, success: false };
   }
 }

@@ -164,3 +164,6 @@ setup-staging-*.mjs
 # Quick-add model (design drafts)
 docs/quick-add-model/
 src/components/quick-add/CLAUDE.md
+
+# Design drafts
+dynamic tables/

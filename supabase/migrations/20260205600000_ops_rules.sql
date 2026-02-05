@@ -45,7 +45,7 @@ CREATE POLICY "org_members_crud_rules"
   USING (
     EXISTS (
       SELECT 1 FROM public.dynamic_tables dt
-      JOIN public.organization_members om ON om.organization_id = dt.organization_id
+      JOIN public.organization_memberships om ON om.org_id = dt.organization_id
       WHERE dt.id = ops_rules.table_id
         AND om.user_id = auth.uid()
     )
@@ -59,7 +59,7 @@ CREATE POLICY "org_members_read_executions"
     EXISTS (
       SELECT 1 FROM public.ops_rules r
       JOIN public.dynamic_tables dt ON dt.id = r.table_id
-      JOIN public.organization_members om ON om.organization_id = dt.organization_id
+      JOIN public.organization_memberships om ON om.org_id = dt.organization_id
       WHERE r.id = ops_rule_executions.rule_id
         AND om.user_id = auth.uid()
     )

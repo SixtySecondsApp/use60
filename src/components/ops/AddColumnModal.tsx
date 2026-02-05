@@ -1,31 +1,39 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { X, Sparkles, Newspaper, Cpu, Swords, AlertTriangle, AtSign, Plus, Trash2 } from 'lucide-react';
 import type { DropdownOption } from '@/lib/services/opsTableService';
+import { HubSpotPropertyPicker } from './HubSpotPropertyPicker';
+import { OpenRouterModelPicker } from './OpenRouterModelPicker';
 
 interface ExistingColumn {
   key: string;
   label: string;
 }
 
+interface ColumnConfig {
+  key: string;
+  label: string;
+  columnType: string;
+  isEnrichment: boolean;
+  enrichmentPrompt?: string;
+  enrichmentModel?: string;
+  autoRunRows?: number | 'all';
+  dropdownOptions?: DropdownOption[];
+  formulaExpression?: string;
+  integrationType?: string;
+  integrationConfig?: Record<string, unknown>;
+  hubspotPropertyName?: string;
+}
+
 interface AddColumnModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (column: {
-    key: string;
-    label: string;
-    columnType: string;
-    isEnrichment: boolean;
-    enrichmentPrompt?: string;
-    autoRunRows?: number | 'all';
-    dropdownOptions?: DropdownOption[];
-    formulaExpression?: string;
-    integrationType?: string;
-    integrationConfig?: Record<string, unknown>;
-  }) => void;
+  onAdd: (column: ColumnConfig) => void;
+  onAddMultiple?: (columns: ColumnConfig[]) => void;
   existingColumns?: ExistingColumn[];
+  sourceType?: 'manual' | 'csv' | 'hubspot' | null;
 }
 
-const COLUMN_TYPES = [
+const BASE_COLUMN_TYPES = [
   { value: 'text', label: 'Text' },
   { value: 'email', label: 'Email' },
   { value: 'url', label: 'URL' },
@@ -38,6 +46,8 @@ const COLUMN_TYPES = [
   { value: 'integration', label: 'Integration' },
   { value: 'enrichment', label: 'Enrichment' },
 ];
+
+const HUBSPOT_COLUMN_TYPE = { value: 'hubspot_property', label: 'HubSpot Property' };
 
 const INTEGRATION_TYPES = [
   { value: 'reoon_email_verify', label: 'Reoon Email Verification' },
@@ -75,7 +85,11 @@ function toSnakeCase(str: string): string {
     .replace(/\s+/g, '_');
 }
 
-export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }: AddColumnModalProps) {
+export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existingColumns = [], sourceType }: AddColumnModalProps) {
+  const isHubSpotTable = sourceType === 'hubspot';
+  const COLUMN_TYPES = useMemo(() => {
+    return isHubSpotTable ? [HUBSPOT_COLUMN_TYPE, ...BASE_COLUMN_TYPES] : BASE_COLUMN_TYPES;
+  }, [isHubSpotTable]);
   const [label, setLabel] = useState('');
   const [columnType, setColumnType] = useState('text');
   const [enrichmentPrompt, setEnrichmentPrompt] = useState('');
@@ -87,6 +101,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
   const [integrationType, setIntegrationType] = useState('reoon_email_verify');
   const [integrationSourceColumn, setIntegrationSourceColumn] = useState('');
   const [apifyActorId, setApifyActorId] = useState('');
+  const [hubspotPropertyName, setHubspotPropertyName] = useState('');
+  const [hubspotPropertyColumnType, setHubspotPropertyColumnType] = useState('text');
+  const [enrichmentModel, setEnrichmentModel] = useState('anthropic/claude-3.5-sonnet');
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -103,13 +120,15 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
   const isDropdownOrTags = columnType === 'dropdown' || columnType === 'tags';
   const isFormula = columnType === 'formula';
   const isIntegration = columnType === 'integration';
+  const isHubSpotProperty = columnType === 'hubspot_property';
   const key = toSnakeCase(label);
   const canAdd =
     label.trim().length > 0
     && (!isEnrichment || enrichmentPrompt.trim().length > 0)
     && (!isDropdownOrTags || dropdownOptions.length > 0)
     && (!isFormula || formulaExpression.trim().length > 0)
-    && (!isIntegration || (integrationType === 'apify_actor' ? apifyActorId.trim().length > 0 : integrationSourceColumn.length > 0));
+    && (!isIntegration || (integrationType === 'apify_actor' ? apifyActorId.trim().length > 0 : integrationSourceColumn.length > 0))
+    && (!isHubSpotProperty || hubspotPropertyName.length > 0);
 
   // Filter columns for the @mention dropdown (exclude enrichment columns being created)
   const filteredColumns = useMemo(() => {
@@ -124,7 +143,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
 
   const reset = useCallback(() => {
     setLabel('');
-    setColumnType('text');
+    setColumnType(isHubSpotTable ? 'hubspot_property' : 'text');
     setEnrichmentPrompt('');
     setAutoRunRows('all');
     setDropdownOptions([{ value: 'option_1', label: 'Option 1', color: '#8b5cf6' }]);
@@ -132,10 +151,13 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
     setIntegrationType('reoon_email_verify');
     setIntegrationSourceColumn('');
     setApifyActorId('');
+    setHubspotPropertyName('');
+    setHubspotPropertyColumnType('text');
+    setEnrichmentModel('anthropic/claude-3.5-sonnet');
     setMentionOpen(false);
     setMentionQuery('');
     setMentionIndex(0);
-  }, []);
+  }, [isHubSpotTable]);
 
   useEffect(() => {
     if (isOpen) {
@@ -167,10 +189,11 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
     onAdd({
       key,
       label: label.trim(),
-      columnType,
+      columnType: isHubSpotProperty ? hubspotPropertyColumnType : columnType,
       isEnrichment,
       ...(isEnrichment ? {
         enrichmentPrompt: enrichmentPrompt.trim(),
+        enrichmentModel,
         autoRunRows: parsedAutoRun,
       } : {}),
       ...(isDropdownOrTags ? { dropdownOptions } : {}),
@@ -181,6 +204,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
           ? { actor_id: apifyActorId.trim(), input_template: {}, result_path: '' }
           : { source_column_key: integrationSourceColumn },
       } : {}),
+      ...(isHubSpotProperty ? { hubspotPropertyName } : {}),
     });
     onClose();
   };
@@ -521,6 +545,55 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
             </div>
           )}
 
+          {/* HubSpot Property Section */}
+          {isHubSpotProperty && (
+            <div className="space-y-3">
+              <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                Select HubSpot Properties
+              </label>
+              <p className="text-xs text-gray-500 -mt-2">
+                Select multiple properties to add them all at once
+              </p>
+              <HubSpotPropertyPicker
+                multiSelect={true}
+                onSelect={(property) => {
+                  // Single select fallback
+                  setHubspotPropertyName(property.name);
+                  setHubspotPropertyColumnType(property.columnType);
+                  if (!label.trim()) {
+                    setLabel(property.label);
+                  }
+                }}
+                onSelectMultiple={(properties) => {
+                  // Handle multiple properties
+                  if (onAddMultiple && properties.length > 0) {
+                    const columns = properties.map((p) => ({
+                      key: p.name,
+                      label: p.label,
+                      columnType: p.columnType,
+                      isEnrichment: false,
+                      hubspotPropertyName: p.name,
+                    }));
+                    onAddMultiple(columns);
+                    onClose();
+                  } else if (properties.length === 1) {
+                    // Fallback to single add
+                    const p = properties[0];
+                    onAdd({
+                      key: p.name,
+                      label: p.label,
+                      columnType: p.columnType,
+                      isEnrichment: false,
+                      hubspotPropertyName: p.name,
+                    });
+                    onClose();
+                  }
+                }}
+                excludeProperties={existingColumns.map((c) => c.key)}
+              />
+            </div>
+          )}
+
           {/* Enrichment Section */}
           {isEnrichment && (
             <div className="space-y-4">
@@ -581,6 +654,12 @@ export function AddColumnModal({ isOpen, onClose, onAdd, existingColumns = [] }:
                   )}
                 </div>
               </div>
+
+              {/* AI Model Selection */}
+              <OpenRouterModelPicker
+                value={enrichmentModel}
+                onChange={setEnrichmentModel}
+              />
 
               {/* Auto-run preference */}
               <div>

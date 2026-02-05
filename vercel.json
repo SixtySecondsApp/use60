@@ -209,6 +209,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/hubspot-token-refresh",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/waitlist-daily-digest",
       "schedule": "0 9 * * *"
     }

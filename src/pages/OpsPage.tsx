@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Table2, Plus, Clock, Rows3, Sparkles, Loader2, Upload, Download, Copy } from 'lucide-react';
+import { Table2, Plus, Clock, Rows3, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/lib/hooks/useUser';
 import { useOrg } from '@/lib/contexts/OrgContext';
@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 import { HubSpotImportWizard } from '@/components/ops/HubSpotImportWizard';
 import { CrossOpImportWizard } from '@/components/ops/CrossOpImportWizard';
+import { CreateTableModal } from '@/components/ops/CreateTableModal';
 
 const tableService = new OpsTableService(supabase);
 
@@ -30,6 +31,7 @@ function OpsPage() {
   const { activeOrg } = useOrg();
 
   const queryClient = useQueryClient();
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotImport, setShowHubSpotImport] = useState(false);
   const [showCrossOpImport, setShowCrossOpImport] = useState(false);
@@ -117,41 +119,18 @@ function OpsPage() {
             AI-powered lead enrichment and data processing
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowCrossOpImport(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
-          >
-            <Copy className="h-4 w-4" />
-            Import from Op
-          </button>
-          <button
-            onClick={() => setShowHubSpotImport(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-orange-700/50 bg-orange-900/20 px-4 py-2 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200"
-          >
-            <Download className="h-4 w-4" />
-            HubSpot
-          </button>
-          <button
-            onClick={() => setShowCSVImport(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
-          >
-            <Upload className="h-4 w-4" />
-            Upload CSV
-          </button>
-          <button
-            onClick={() => createTableMutation.mutate()}
-            disabled={createTableMutation.isPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
-          >
-            {createTableMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            New Table
-          </button>
-        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          disabled={createTableMutation.isPending}
+          className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
+        >
+          {createTableMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          New Table
+        </button>
       </div>
 
       {/* Table Grid */}
@@ -200,7 +179,7 @@ function OpsPage() {
             Create your first ops table to start enriching leads and processing data with AI.
           </p>
           <button
-            onClick={() => createTableMutation.mutate()}
+            onClick={() => setShowCreateModal(true)}
             disabled={createTableMutation.isPending}
             className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
           >
@@ -213,6 +192,15 @@ function OpsPage() {
           </button>
         </div>
       )}
+
+      <CreateTableModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSelectCSV={() => setShowCSVImport(true)}
+        onSelectHubSpot={() => setShowHubSpotImport(true)}
+        onSelectOpsTable={() => setShowCrossOpImport(true)}
+        onSelectBlank={() => createTableMutation.mutate()}
+      />
 
       <CSVImportOpsTableWizard
         open={showCSVImport}
