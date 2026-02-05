@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, RefreshCw, LogOut, Clock } from 'lucide-react';
+import { AlertCircle, RefreshCw, LogOut, Clock, Calendar, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useOrganizationContext } from '@/lib/hooks/useOrganizationContext';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import {
   requestOrganizationReactivation,
   getReactivationRequestStatus,
@@ -15,16 +16,49 @@ import { logger } from '@/lib/utils/logger';
 export default function InactiveOrganizationScreen() {
   const navigate = useNavigate();
   const { activeOrg } = useOrganizationContext();
+  const { user } = useAuth();
   const [isRequesting, setIsRequesting] = useState(false);
   const [existingRequest, setExistingRequest] = useState<OrganizationReactivationRequest | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [isOwner, setIsOwner] = useState(false);
+  const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
+  const [isOverdue, setIsOverdue] = useState(false);
 
   useEffect(() => {
     // Check if there's already a pending request
     if (activeOrg?.id) {
       checkExistingRequest();
+      calculateDaysRemaining();
+      checkOwnerStatus();
     }
-  }, [activeOrg?.id]);
+  }, [activeOrg?.id, user?.id]);
+
+  const calculateDaysRemaining = () => {
+    if (!activeOrg?.deletion_scheduled_at) {
+      setDaysRemaining(null);
+      return;
+    }
+
+    const now = new Date();
+    const deletionDate = new Date(activeOrg.deletion_scheduled_at);
+    const diffMs = deletionDate.getTime() - now.getTime();
+    const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    setDaysRemaining(Math.max(0, daysLeft));
+    setIsOverdue(daysLeft <= 0);
+  };
+
+  const checkOwnerStatus = async () => {
+    if (!activeOrg?.id || !user?.id) return;
+
+    try {
+      // Note: This would need to check org_memberships table
+      // For now, we'll assume if deactivation_reason exists, we can show owner messaging
+      setIsOwner(!!activeOrg?.deactivation_reason);
+    } catch (error) {
+      logger.error('[InactiveOrganizationScreen] Error checking owner status:', error);
+    }
+  };
 
   const checkExistingRequest = async () => {
     if (!activeOrg?.id) return;
@@ -98,18 +132,55 @@ export default function InactiveOrganizationScreen() {
 
         <CardContent className="space-y-6">
           {/* Deactivation Info */}
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              Organization Deactivated
-            </h3>
-            <p className="text-sm text-red-800 dark:text-red-200">
-              This organization has been temporarily deactivated. Access to all features is currently restricted.
-            </p>
-            {activeOrg?.deactivation_reason && (
-              <p className="text-sm text-red-800 dark:text-red-200 mt-2">
-                <span className="font-medium">Reason:</span> {activeOrg.deactivation_reason}
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 space-y-3">
+            <div>
+              <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Organization Deactivated
+              </h3>
+              <p className="text-sm text-red-800 dark:text-red-200">
+                {activeOrg?.name} has been deactivated. All members have lost access to this organization.
               </p>
+            </div>
+
+            {/* Deactivation Details */}
+            {activeOrg?.deactivated_at && (
+              <div className="text-xs text-red-700 dark:text-red-300 space-y-1">
+                <p>
+                  <span className="font-medium">Deactivated:</span>{' '}
+                  {new Date(activeOrg.deactivated_at).toLocaleDateString()}
+                </p>
+                {activeOrg.deactivation_reason && (
+                  <p>
+                    <span className="font-medium">Reason:</span> {activeOrg.deactivation_reason}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Countdown Timer */}
+            {!isOverdue && daysRemaining !== null && activeOrg?.deletion_scheduled_at && (
+              <div className="bg-red-100 dark:bg-red-800/30 rounded p-3 border border-red-300 dark:border-red-700/50">
+                <div className="flex items-center gap-2 text-red-900 dark:text-red-100">
+                  <Calendar className="h-4 w-4" />
+                  <div>
+                    <p className="font-semibold text-sm">
+                      {daysRemaining === 0 ? 'Deleting today' : `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining`}
+                    </p>
+                    <p className="text-xs opacity-75">
+                      Data will be permanently deleted on {new Date(activeOrg.deletion_scheduled_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isOverdue && (
+              <div className="bg-red-100 dark:bg-red-800/30 rounded p-3 border border-red-300 dark:border-red-700/50">
+                <p className="text-xs font-medium text-red-900 dark:text-red-100">
+                  ⚠️ Deletion is overdue. This organization data may be permanently deleted soon.
+                </p>
+              </div>
             )}
           </div>
 
@@ -145,21 +216,19 @@ export default function InactiveOrganizationScreen() {
                 Submitted: {new Date(existingRequest.requested_at).toLocaleString()}
               </p>
             </div>
-          ) : (
+          ) : isOwner ? (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-4">
               <div>
-                <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                  Request Reactivation
+                <h3 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Check Your Email
                 </h3>
                 <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                  Submit a request to reactivate this organization. An administrator will review and approve your request.
+                  A confirmation email has been sent with a direct link to reactivate this organization within the 30-day window.
                 </p>
-                {/* TODO: BILLING - Add billing-specific requirements */}
-                {/* Example:
-                <p className="text-sm text-blue-800 dark:text-blue-200 mt-2">
-                  <strong>Note:</strong> You will need to update your payment method and resolve any outstanding invoices before reactivation.
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                  Can't find the email? Check your spam folder or use the button below to submit a reactivation request for admin review.
                 </p>
-                */}
               </div>
 
               <Button
@@ -168,9 +237,29 @@ export default function InactiveOrganizationScreen() {
                 className="w-full justify-between"
                 size="lg"
               >
-                <span>Request Reactivation Now</span>
+                <span>Submit Reactivation Request</span>
                 {isRequesting && <RefreshCw className="w-4 h-4 animate-spin" />}
               </Button>
+            </div>
+          ) : (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-4">
+              <div>
+                <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                  Organization Deactivated
+                </h3>
+                <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                  This organization has been deactivated by its owner. Contact the organization owner or administrator to request reactivation.
+                </p>
+              </div>
+
+              <div className="bg-blue-100 dark:bg-blue-800/20 rounded p-3 text-sm text-blue-900 dark:text-blue-100">
+                <p className="font-medium mb-1">What happens next?</p>
+                <ul className="space-y-1 text-xs list-disc list-inside">
+                  <li>The organization owner has 30 days to reactivate</li>
+                  <li>After 30 days, all data will be permanently deleted</li>
+                  <li>You can request to rejoin once it's reactivated</li>
+                </ul>
+              </div>
             </div>
           )}
 

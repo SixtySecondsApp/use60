@@ -110,6 +110,44 @@ export default function Organizations() {
   // Select mode state
   const isSelectModeActive = selectedOrgs.size > 0;
 
+  // Helper to calculate days remaining for deactivated orgs
+  const getDaysRemainingForOrg = (org: OrganizationWithMemberCount): { daysLeft: number; isOverdue: boolean } | null => {
+    if (!org.deletion_scheduled_at) return null;
+
+    const now = new Date();
+    const deletionDate = new Date(org.deletion_scheduled_at);
+    const diffMs = deletionDate.getTime() - now.getTime();
+    const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    return { daysLeft: Math.max(0, daysLeft), isOverdue: daysLeft <= 0 };
+  };
+
+  // Helper to get status badge content
+  const getStatusBadgeContent = (org: OrganizationWithMemberCount): { variant: string; label: string; tooltip?: string } => {
+    if (!org.is_active && org.deletion_scheduled_at) {
+      const remaining = getDaysRemainingForOrg(org);
+      if (!remaining) {
+        return { variant: 'destructive', label: 'Deactivated' };
+      }
+      if (remaining.isOverdue) {
+        return {
+          variant: 'outline',
+          label: 'Deleted',
+          tooltip: 'Data deletion scheduled'
+        };
+      }
+      return {
+        variant: 'destructive',
+        label: `Deactivated (${remaining.daysLeft}d)`,
+        tooltip: `Will be deleted on ${new Date(org.deletion_scheduled_at).toLocaleDateString()}`
+      };
+    }
+    if (!org.is_active) {
+      return { variant: 'destructive', label: 'Inactive' };
+    }
+    return { variant: 'success', label: 'Active' };
+  };
+
   // Helper to sort members by role hierarchy
   const sortMembersByRole = (members: any[]): any[] => {
     const roleOrder = { owner: 0, admin: 1, member: 2, readonly: 3 };
@@ -757,12 +795,22 @@ export default function Organizations() {
 
                         {/* Status Badge */}
                         <TableCell>
-                          <Badge
-                            variant={org.is_active ? 'success' : 'destructive'}
-                            className="text-xs"
-                          >
-                            {org.is_active ? 'Active' : 'Inactive'}
-                          </Badge>
+                          {(() => {
+                            const badgeContent = getStatusBadgeContent(org);
+                            return (
+                              <div
+                                className="relative inline-block"
+                                title={badgeContent.tooltip}
+                              >
+                                <Badge
+                                  variant={badgeContent.variant}
+                                  className="text-xs"
+                                >
+                                  {badgeContent.label}
+                                </Badge>
+                              </div>
+                            );
+                          })()}
                         </TableCell>
 
                         {/* Actions */}
