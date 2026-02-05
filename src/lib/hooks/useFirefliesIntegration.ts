@@ -271,22 +271,38 @@ export function useFirefliesIntegration() {
         throw new Error(response.data?.error || 'Invalid API key');
       }
 
-      // API key is valid - create the integration
-      const { error: insertError } = await supabaseAny
+      // API key is valid - create or reactivate the integration
+      // First check if an inactive integration exists (from a previous disconnect)
+      const { data: existingIntegration } = await supabaseAny
         .from('fireflies_integrations')
-        .insert({
-          user_id: user.id,
-          api_key: apiKey,
-          fireflies_user_email: email || null,
-          is_active: true,
-        });
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (insertError) {
-        // Check if integration already exists
-        if (insertError.code === '23505') {
-          throw new Error('You already have a Fireflies integration. Disconnect first to reconnect.');
-        }
-        throw insertError;
+      if (existingIntegration) {
+        // Reactivate existing integration with new API key
+        const { error: updateError } = await supabaseAny
+          .from('fireflies_integrations')
+          .update({
+            api_key: apiKey,
+            fireflies_user_email: email || null,
+            is_active: true,
+          })
+          .eq('id', existingIntegration.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new integration
+        const { error: insertError } = await supabaseAny
+          .from('fireflies_integrations')
+          .insert({
+            user_id: user.id,
+            api_key: apiKey,
+            fireflies_user_email: email || null,
+            is_active: true,
+          });
+
+        if (insertError) throw insertError;
       }
 
       toast.success('Fireflies Connected!', {
