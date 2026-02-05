@@ -1399,4 +1399,292 @@ export class OpsTableService {
 
     return { totalRows, groups, columnStats };
   }
+
+  // ===========================================================================
+  // OI-013: Insights & Workflows Methods
+  // ===========================================================================
+
+  async getActiveInsights(tableId: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-insights-engine',
+      {
+        body: { tableId, action: 'get_active' },
+      }
+    );
+
+    if (error) throw error;
+    return data.insights;
+  }
+
+  async dismissInsight(insightId: string) {
+    const { error } = await this.supabase
+      .from('ops_table_insights')
+      .update({
+        dismissed_at: new Date().toISOString(),
+        dismissed_by: (await this.supabase.auth.getUser()).data.user?.id,
+      })
+      .eq('id', insightId);
+
+    if (error) throw error;
+  }
+
+  async getWorkflows(tableId: string) {
+    const { data, error } = await this.supabase
+      .from('ops_table_workflows')
+      .select('*')
+      .eq('table_id', tableId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  }
+
+  async saveWorkflow(workflow: any) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-workflow-engine',
+      {
+        body: {
+          tableId: workflow.tableId,
+          action: 'save',
+          workflow,
+        },
+      }
+    );
+
+    if (error) throw error;
+    return data.workflow;
+  }
+
+  async executeWorkflow(workflowId: string, tableId: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-workflow-engine',
+      {
+        body: { tableId, action: 'execute', workflowId },
+      }
+    );
+
+    if (error) throw error;
+    return data;
+  }
+
+  async toggleWorkflow(workflowId: string, isActive: boolean) {
+    const { error } = await this.supabase
+      .from('ops_table_workflows')
+      .update({ is_active: isActive })
+      .eq('id', workflowId);
+
+    if (error) throw error;
+  }
+
+  // ===========================================================================
+  // OI-017: Recipe Methods
+  // ===========================================================================
+
+  async getRecipes(tableId: string) {
+    const { data, error } = await this.supabase
+      .from('ops_table_recipes')
+      .select('*')
+      .eq('table_id', tableId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  }
+
+  async saveRecipe(recipe: any) {
+    const { data, error } = await this.supabase
+      .from('ops_table_recipes')
+      .insert(recipe)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async executeRecipe(recipeId: string) {
+    const { data: recipe, error: recipeError } = await this.supabase
+      .from('ops_table_recipes')
+      .select('*')
+      .eq('id', recipeId)
+      .single();
+
+    if (recipeError) throw recipeError;
+
+    // Execute via ai-query with saved parsed_config
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-ai-query',
+      {
+        body: {
+          tableId: recipe.table_id,
+          action: 'execute_recipe',
+          recipeId,
+        },
+      }
+    );
+
+    if (error) throw error;
+
+    // Update run count
+    await this.supabase
+      .from('ops_table_recipes')
+      .update({
+        run_count: (recipe.run_count || 0) + 1,
+        last_run_at: new Date().toISOString(),
+      })
+      .eq('id', recipeId);
+
+    return data;
+  }
+
+  async toggleRecipeShare(recipeId: string, isShared: boolean) {
+    const { error } = await this.supabase
+      .from('ops_table_recipes')
+      .update({ is_shared: isShared })
+      .eq('id', recipeId);
+
+    if (error) throw error;
+  }
+
+  async deleteRecipe(recipeId: string) {
+    const { error } = await this.supabase
+      .from('ops_table_recipes')
+      .delete()
+      .eq('id', recipeId);
+
+    if (error) throw error;
+  }
+
+  // ===========================================================================
+  // OI-023: Cross-Query Methods
+  // ===========================================================================
+
+  async getAvailableDataSources(orgId: string) {
+    const { data, error } = await this.supabase.rpc(
+      'get_available_data_sources',
+      { p_org_id: orgId }
+    );
+
+    if (error) throw error;
+    return data;
+  }
+
+  async executeCrossQuery(tableId: string, query: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-cross-query',
+      {
+        body: { tableId, query },
+      }
+    );
+
+    if (error) throw error;
+    return data;
+  }
+
+  async keepEnrichedColumn(tableId: string, columnConfig: any) {
+    // Persist a temporary enriched column to the schema
+    const { data, error } = await this.supabase
+      .from('dynamic_table_columns')
+      .insert({
+        table_id: tableId,
+        key: columnConfig.key,
+        name: columnConfig.name,
+        column_type: columnConfig.column_type || 'text',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  // ===========================================================================
+  // OI-030: Chat Session Methods
+  // ===========================================================================
+
+  async createChatSession(tableId: string) {
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await this.supabase
+      .from('ops_table_chat_sessions')
+      .insert({
+        table_id: tableId,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async getChatSession(sessionId: string) {
+    const { data, error } = await this.supabase
+      .from('ops_table_chat_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async appendMessage(sessionId: string, message: any) {
+    const { data: session } = await this.getChatSession(sessionId);
+    const messages = [...(session.messages || []), message];
+
+    const { error } = await this.supabase
+      .from('ops_table_chat_sessions')
+      .update({ messages })
+      .eq('id', sessionId);
+
+    if (error) throw error;
+  }
+
+  async clearChatSession(sessionId: string) {
+    const { error } = await this.supabase
+      .from('ops_table_chat_sessions')
+      .delete()
+      .eq('id', sessionId);
+
+    if (error) throw error;
+  }
+
+  // ===========================================================================
+  // OI-034: Prediction Methods
+  // ===========================================================================
+
+  async getActivePredictions(tableId: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-predictions',
+      {
+        body: { tableId, action: 'get_active' },
+      }
+    );
+
+    if (error) throw error;
+    return data.predictions;
+  }
+
+  async dismissPrediction(predictionId: string) {
+    const { error } = await this.supabase
+      .from('ops_table_predictions')
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq('id', predictionId);
+
+    if (error) throw error;
+  }
+
+  async runPredictions(tableId: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-predictions',
+      {
+        body: { tableId, action: 'analyze' },
+      }
+    );
+
+    if (error) throw error;
+    return data;
+  }
 }
