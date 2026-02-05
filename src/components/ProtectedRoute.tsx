@@ -169,11 +169,10 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
 
         if (!error && data) {
           const status = data.profile_status || 'active';
-          console.log('[ProtectedRoute] Profile status check:', { userId: user.id, status });
           setProfileStatus(status);
         }
       } catch (err) {
-        console.error('[ProtectedRoute] Error checking profile status:', err);
+        // Silently fail - not critical
       } finally {
         setIsCheckingProfileStatus(false);
       }
@@ -213,7 +212,6 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
           hasActiveMembership = dataWithStatus.length > 0;
         } else if (errorWithStatus) {
           // Column doesn't exist (42703 or 400 Bad Request) - check all memberships (assume all are active)
-          console.log('[ProtectedRoute] member_status column not available, falling back to basic query');
           const { data: basicData, error: basicError } = await supabase
             .from('organization_memberships')
             .select('org_id', { count: 'exact' })
@@ -222,14 +220,13 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
           if (!basicError && basicData) {
             hasActiveMembership = basicData.length > 0;
           } else if (basicError) {
-            console.error('[ProtectedRoute] Basic membership query also failed:', basicError);
+            // Silently fail - use default
           }
         }
 
-        console.log('[ProtectedRoute] Organization membership check:', { userId: user.id, hasActiveMembership });
         setHasOrgMembership(hasActiveMembership);
       } catch (err) {
-        console.error('Error checking organization membership:', err);
+        // Silently fail
       } finally {
         setIsCheckingOrgMembership(false);
       }
@@ -261,7 +258,6 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
           .maybeSingle();
 
         if (joinRequest) {
-          console.log('[ProtectedRoute] Found pending join request');
           setHasPendingRequest(true);
           setIsCheckingPendingRequest(false);
           return;
@@ -276,16 +272,13 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
           .maybeSingle();
 
         if (rejoinRequest) {
-          console.log('[ProtectedRoute] Found pending rejoin request');
           setHasPendingRequest(true);
           setIsCheckingPendingRequest(false);
           return;
         }
 
-        console.log('[ProtectedRoute] No pending join/rejoin requests found');
         setHasPendingRequest(false);
       } catch (err) {
-        console.error('[ProtectedRoute] Error checking pending requests:', err);
         setHasPendingRequest(false);
       } finally {
         setIsCheckingPendingRequest(false);
@@ -294,6 +287,17 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
 
     checkPendingRequest();
   }, [isAuthenticated, user, loading, isPublicRoute]);
+
+  // Force re-check of pending request when user cancels from pending-approval page
+  // This ensures hasPendingRequest state is updated after the database deletion
+  useEffect(() => {
+    const fromCancelRequest = location.state?.fromCancelRequest;
+    if (fromCancelRequest && isAuthenticated && user) {
+      // Clear the stale hasPendingRequest state immediately
+      setHasPendingRequest(false);
+      setIsCheckingPendingRequest(false);
+    }
+  }, [location.state, isAuthenticated, user]);
 
   // Check if active organization is inactive
   useEffect(() => {
@@ -347,12 +351,10 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
     if (isAuthenticated && profileStatus === 'pending_approval' && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute) {
       // If user has active membership, they were approved - allow access and don't redirect
       if (hasOrgMembership === true) {
-        console.log('[ProtectedRoute] User has active membership despite pending status, allowing access', { userId: user?.id, currentPath: location.pathname });
         // Don't redirect - user was approved and membership was created
         // Profile status will be updated by the approval flow
       } else if (hasOrgMembership === false) {
         // User is truly pending approval with no memberships - redirect to pending page
-        console.log('[ProtectedRoute] User pending approval with no membership, redirecting to pending approval page', { userId: user?.id, currentPath: location.pathname });
         navigate('/auth/pending-approval', { replace: true });
         return;
       }
@@ -379,10 +381,11 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
 
     // CRITICAL: If user has a pending join/rejoin request, they must stay on pending-approval page
     // Only block if we've finished checking both org membership AND pending requests
-    if (isAuthenticated && emailVerified && !isCheckingOrgMembership && !isCheckingPendingRequest && hasPendingRequest === true && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute) {
+    // EXCEPTION: Skip this check if user just canceled their request (fromCancelRequest flag)
+    const fromCancelRequest = location.state?.fromCancelRequest;
+    if (isAuthenticated && emailVerified && !isCheckingOrgMembership && !isCheckingPendingRequest && hasPendingRequest === true && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute && !fromCancelRequest) {
       // Only allow pending-approval page, block everything else including onboarding
       if (location.pathname !== '/auth/pending-approval') {
-        console.log('[ProtectedRoute] User has pending request but trying to access:', location.pathname, ' - redirecting to pending approval');
         navigate('/auth/pending-approval', { replace: true });
         return;
       }
@@ -399,13 +402,11 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       if (hasOrgMembership === false && !isOnboardingExempt) {
         // Check if user has a pending join or rejoin request
         if (hasPendingRequest === true) {
-          console.log('[ProtectedRoute] User has no active org membership but has pending request, redirecting to pending approval');
           navigate('/auth/pending-approval', { replace: true });
           return;
         }
 
         // No pending request - send to onboarding
-        console.log('[ProtectedRoute] User has no active org membership and no pending request, redirecting to onboarding');
         navigate('/onboarding', { replace: true });
         return;
       }

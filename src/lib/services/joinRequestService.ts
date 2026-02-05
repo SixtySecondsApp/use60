@@ -61,15 +61,12 @@ export async function approveJoinRequest(
   adminUserId: string
 ): Promise<ApproveRequestResult> {
   try {
-    console.log('[joinRequestService] Approving join request via RPC:', requestId);
-
     // Call RPC function - auth is handled automatically via session
     const { data, error } = await supabase.rpc('approve_join_request', {
       p_request_id: requestId,
     });
 
     if (error) {
-      console.error('[joinRequestService] RPC error:', error);
       return {
         success: false,
         error: error.message || 'Failed to approve join request',
@@ -80,7 +77,6 @@ export async function approveJoinRequest(
     const result = data?.[0];
 
     if (!result) {
-      console.error('[joinRequestService] No result from RPC');
       return {
         success: false,
         error: 'Failed to approve join request',
@@ -88,33 +84,24 @@ export async function approveJoinRequest(
     }
 
     if (!result.success) {
-      console.error('[joinRequestService] RPC returned failure:', result.message);
       return {
         success: false,
         error: result.message || 'Failed to approve join request',
       };
     }
 
-    console.log('[joinRequestService] ✅ Join request approved successfully');
-
     // Update profile status to active
     if (result.user_id) {
-      const { error: profileError } = await supabase
+      await supabase
         .from('profiles')
         .update({ profile_status: 'active' })
         .eq('id', result.user_id);
-
-      if (profileError) {
-        console.error('[joinRequestService] Failed to update profile status:', profileError);
-        // Don't fail - membership was already created
-      }
     }
 
     return {
       success: true,
     };
   } catch (err) {
-    console.error('[joinRequestService] Exception in approveJoinRequest:', err);
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Unknown error',
@@ -352,15 +339,6 @@ export async function acceptJoinRequest(
  */
 export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest[]> {
   try {
-    console.log('[joinRequestService] ===== FETCHING JOIN REQUESTS =====');
-    console.log('[joinRequestService] Org ID:', orgId);
-
-    // Check auth state
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('[joinRequestService] Auth session exists:', !!session);
-    console.log('[joinRequestService] User ID:', session?.user?.id);
-    console.log('[joinRequestService] User email:', session?.user?.email);
-
     // Step 1: Fetch join requests (without embedded profile join)
     // Note: Only selecting columns that exist in base migration
     // join_request_token and join_request_expires_at columns may not exist yet
@@ -382,19 +360,10 @@ export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest
       .order('requested_at', { ascending: false });
 
     if (error) {
-      console.error('[joinRequestService] ❌ Query failed with error:', error);
-      console.error('[joinRequestService] Error code:', error.code);
-      console.error('[joinRequestService] Error message:', error.message);
-      console.error('[joinRequestService] Error details:', error.details);
-      console.error('[joinRequestService] Error hint:', error.hint);
       return [];
     }
 
-    console.log('[joinRequestService] ✅ Join requests query succeeded');
-    console.log('[joinRequestService] Number of results:', joinRequests?.length || 0);
-
     if (!joinRequests || joinRequests.length === 0) {
-      console.warn('[joinRequestService] ⚠️ No pending requests found for org:', orgId);
       return [];
     }
 
@@ -414,7 +383,6 @@ export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest
     // No need to fetch profiles separately (would be blocked by RLS anyway)
     return joinRequests as JoinRequest[];
   } catch (err) {
-    console.error('[joinRequestService] ❌ Exception in getPendingJoinRequests:', err);
     return [];
   }
 }
@@ -432,7 +400,6 @@ export async function getUserJoinRequests(userId: string): Promise<JoinRequest[]
       .order('requested_at', { ascending: false });
 
     if (error) {
-      console.error('[joinRequestService] Failed to get user join requests:', error);
       return [];
     }
 
@@ -460,7 +427,6 @@ export async function cancelJoinRequest(
     });
 
     if (error) {
-      console.warn('[joinRequestService] RPC call failed, trying direct deletion:', error.message);
       // Fall through to direct deletion approach
     } else if (data?.[0]?.success) {
       return { success: true };
@@ -488,7 +454,13 @@ export async function cancelJoinRequest(
 
       if (!deleteError) {
         console.log('[joinRequestService] ✅ Deleted from organization_join_requests');
-        await resetOnboardingState(userId);
+        const resetResult = await resetOnboardingState(userId);
+        if (!resetResult.success) {
+          return {
+            success: false,
+            error: resetResult.error || 'Failed to reset onboarding state after cancellation',
+          };
+        }
         return { success: true };
       } else {
         console.warn('[joinRequestService] Failed to delete from organization_join_requests:', deleteError);
@@ -514,7 +486,13 @@ export async function cancelJoinRequest(
 
       if (!deleteError) {
         console.log('[joinRequestService] ✅ Deleted from rejoin_requests');
-        await resetOnboardingState(userId);
+        const resetResult = await resetOnboardingState(userId);
+        if (!resetResult.success) {
+          return {
+            success: false,
+            error: resetResult.error || 'Failed to reset onboarding state after cancellation',
+          };
+        }
         return { success: true };
       } else {
         console.error('[joinRequestService] Failed to delete from rejoin_requests:', deleteError);
@@ -543,16 +521,24 @@ export async function cancelJoinRequest(
 /**
  * Helper function to reset onboarding state after canceling a request
  */
-async function resetOnboardingState(userId: string): Promise<void> {
+async function resetOnboardingState(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
     // Reset profile status to active
-    await supabase
+    const { error: profileError } = await supabase
       .from('profiles')
       .update({ profile_status: 'active' })
       .eq('id', userId);
 
+    if (profileError) {
+      console.error('[joinRequestService] Failed to reset profile status:', profileError);
+      return {
+        success: false,
+        error: `Failed to reset profile status: ${profileError.message}`,
+      };
+    }
+
     // Reset onboarding progress
-    await supabase
+    const { error: progressError } = await supabase
       .from('user_onboarding_progress')
       .upsert(
         {
@@ -563,8 +549,21 @@ async function resetOnboardingState(userId: string): Promise<void> {
         { onConflict: 'user_id' }
       );
 
+    if (progressError) {
+      console.error('[joinRequestService] Failed to reset onboarding progress:', progressError);
+      return {
+        success: false,
+        error: `Failed to reset onboarding progress: ${progressError.message}`,
+      };
+    }
+
     console.log('[joinRequestService] Reset onboarding state for user:', userId);
+    return { success: true };
   } catch (err) {
     console.error('[joinRequestService] Error resetting onboarding state:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error resetting onboarding state',
+    };
   }
 }

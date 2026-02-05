@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { cancelJoinRequest } from '@/lib/services/joinRequestService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApprovalDetection } from '@/lib/hooks/useApprovalDetection';
+import { notificationService, Notification } from '@/lib/services/notificationService';
 
 export default function PendingApprovalPage() {
   const navigate = useNavigate();
@@ -217,14 +218,41 @@ export default function PendingApprovalPage() {
     }
   };
 
-  // Handle approval detection
+  // Handle approval detection (polling-based)
   useEffect(() => {
     if (isApproved && membership && !isLoadingDashboard) {
-      console.log('[PendingApprovalPage] Approval detected!', membership);
+      console.log('[PendingApprovalPage] Approval detected via polling!', membership);
       handleApprovalDetected(membership);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isApproved, membership, isLoadingDashboard]);
+
+  // Listen for real-time approval notification (faster than polling)
+  useEffect(() => {
+    if (!user?.id || isLoadingDashboard) return;
+
+    const handleNotification = (notification: Notification) => {
+      // Check if this is an approval notification for our org
+      if (
+        notification.entity_type === 'join_approval' &&
+        notification.metadata?.org_id === joinRequest?.orgId
+      ) {
+        console.log('[PendingApprovalPage] Approval notification received!', notification);
+        // Trigger approval flow with org_id from notification
+        handleApprovalDetected({ org_id: notification.metadata.org_id });
+      }
+    };
+
+    // Subscribe to real-time notifications
+    notificationService.subscribeToNotifications(user.id);
+    notificationService.addNotificationListener(handleNotification);
+
+    return () => {
+      notificationService.removeNotificationListener(handleNotification);
+      // Don't unsubscribe here - other components may need it
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, joinRequest?.orgId, isLoadingDashboard]);
 
   const handleLogout = async () => {
     try {
@@ -328,7 +356,11 @@ export default function PendingApprovalPage() {
       if (result.success) {
         toast.success('Join request cancelled. Redirecting to onboarding...');
         setTimeout(() => {
-          navigate('/onboarding?step=website_input', { replace: true });
+          // Pass flag to ProtectedRoute to skip stale pending request check
+          navigate('/onboarding?step=website_input', {
+            replace: true,
+            state: { fromCancelRequest: true }
+          });
         }, 1000);
       } else {
         console.error('[PendingApprovalPage] Cancel failed:', result.error);
@@ -435,7 +467,8 @@ export default function PendingApprovalPage() {
             <Button
               onClick={checkApprovalStatus}
               disabled={checking || isLoadingDashboard}
-              className="w-full bg-violet-600 hover:bg-violet-700 border !border-violet-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2"
+              variant="outline"
+              className="w-full border-violet-600 text-violet-600 hover:bg-violet-600/10 dark:border-violet-500 dark:text-violet-400 dark:hover:bg-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {checking ? (
                 <>
@@ -451,7 +484,8 @@ export default function PendingApprovalPage() {
                 <Button
                   onClick={() => setShowCancelDialog(true)}
                   disabled={canceling || isLoadingDashboard}
-                  className="w-full bg-gray-700 hover:bg-gray-600 border !border-gray-700 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  variant="outline"
+                  className="w-full border-gray-600 text-gray-600 hover:bg-gray-600/10 dark:border-gray-500 dark:text-gray-400 dark:hover:bg-gray-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {canceling ? (
                     <>
@@ -479,7 +513,8 @@ export default function PendingApprovalPage() {
                     }
                     navigate('/onboarding?step=website_input', { replace: true });
                   }}
-                  className="w-full bg-violet-600 hover:bg-violet-700 border !border-violet-600 text-white"
+                  variant="outline"
+                  className="w-full border-violet-600 text-violet-600 hover:bg-violet-600/10 dark:border-violet-500 dark:text-violet-400 dark:hover:bg-violet-500/10"
                 >
                   Restart Onboarding
                 </Button>
@@ -490,7 +525,8 @@ export default function PendingApprovalPage() {
             )}
             <Button
               onClick={handleLogout}
-              className="w-full bg-red-600 hover:bg-red-700 text-white border !border-red-600 !focus-visible:ring-0 !focus-visible:ring-offset-0"
+              variant="outline"
+              className="w-full border-red-600 text-red-600 hover:bg-red-600/10 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-500/10"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Log Out
