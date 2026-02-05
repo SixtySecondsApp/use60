@@ -377,6 +377,49 @@ serve(async (req: Request) => {
       })
       .eq('id', table_id)
 
+    // OI-011: Trigger insights analysis after sync (fire-and-forget)
+    try {
+      fetch(`${SUPABASE_URL}/functions/v1/ops-table-insights-engine`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader,
+        },
+        body: JSON.stringify({ tableId: table_id, action: 'analyze' }),
+      }).catch(err => console.error('[sync] Insights trigger failed:', err));
+    } catch (e) {
+      // Silent fail - don't block sync
+    }
+
+    // OI-003: Trigger on_sync workflows (fire-and-forget)
+    try {
+      const { data: workflows } = await supabase
+        .from('ops_table_workflows')
+        .select('id')
+        .eq('table_id', table_id)
+        .eq('trigger_type', 'on_sync')
+        .eq('is_active', true);
+
+      if (workflows && workflows.length > 0) {
+        for (const workflow of workflows) {
+          fetch(`${SUPABASE_URL}/functions/v1/ops-table-workflow-engine`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: JSON.stringify({
+              tableId: table_id,
+              action: 'execute',
+              workflowId: workflow.id,
+            }),
+          }).catch(err => console.error('[sync] Workflow trigger failed:', err));
+        }
+      }
+    } catch (e) {
+      // Silent fail - don't block sync
+    }
+
     return new Response(
       JSON.stringify({ new_rows: newRows, updated_rows: updatedRows, last_synced_at: now }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

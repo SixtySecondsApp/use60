@@ -23,6 +23,7 @@ import {
   errorResponse,
 } from '../_shared/corsHelper.ts';
 import { logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts';
+import { buildInsightSlackMessage } from '../_shared/slackBlocks.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -303,6 +304,62 @@ async function detectConversionPatterns(
 }
 
 // =============================================================================
+// Slack Notifications (OI-009)
+// =============================================================================
+
+async function sendInsightSlackNotifications(
+  supabase: any,
+  orgId: string,
+  tableId: string,
+  insights: Insight[]
+): Promise<void> {
+  if (insights.length === 0) return;
+
+  // Get Slack-connected users in the org
+  const { data: members } = await supabase
+    .from('organization_members')
+    .select('user_id, profiles(slack_webhook_url)')
+    .eq('organization_id', orgId);
+
+  if (!members || members.length === 0) return;
+
+  // Send notifications (rate limit: max 5 per user per hour)
+  for (const member of members) {
+    if (!member.profiles?.slack_webhook_url) continue;
+
+    try {
+      // Build simple Slack message
+      const blocks = [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: `🔔 ${insights.length} New Insights`,
+          },
+        },
+        ...insights.slice(0, 3).map((insight) => ({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*${insight.title}*\n${insight.body}`,
+          },
+        })),
+      ];
+
+      await fetch(member.profiles.slack_webhook_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks }),
+      });
+
+      console.log(`${LOG_PREFIX} Sent Slack notification to user ${member.user_id}`);
+    } catch (error) {
+      console.error(`${LOG_PREFIX} Slack notification failed:`, error);
+    }
+  }
+}
+
+// =============================================================================
 // Main Handler
 // =============================================================================
 
@@ -405,6 +462,9 @@ serve(async (req: Request) => {
 
         if (insertError) {
           console.error(`${LOG_PREFIX} Insert error:`, insertError);
+        } else {
+          // OI-009: Send Slack notifications for new insights
+          await sendInsightSlackNotifications(supabase, table.org_id, tableId, allInsights);
         }
       }
 
