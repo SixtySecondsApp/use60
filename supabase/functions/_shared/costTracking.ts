@@ -4,7 +4,7 @@
  * Use this in edge functions to log AI costs automatically
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 /**
  * Log AI cost event from an edge function
