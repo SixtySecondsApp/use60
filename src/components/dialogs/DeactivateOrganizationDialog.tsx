@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertCircle, Loader2, Building2, Users, Calendar, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -118,12 +118,15 @@ export function DeactivateOrganizationDialog({
     }
   };
 
-  if (!open) return null;
+  // Initialize dialog state when it opens
+  useEffect(() => {
+    if (open) {
+      handleOpen();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  // Initialize on open
-  if (step === 'confirm-warning' && validationError === null && confirmText === '' && reason === 'Billing issues') {
-    handleOpen();
-  }
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
