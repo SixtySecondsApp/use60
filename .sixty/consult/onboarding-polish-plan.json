@@ -1,0 +1,675 @@
+{
+  "feature": {
+    "id": "onboarding-polish",
+    "name": "Onboarding Flow Polish & Bug Fixes - Post-Consult",
+    "status": "pending",
+    "priority": 1,
+    "createdAt": "2025-02-05T00:00:00Z",
+    "description": "Complete and polish the onboarding flow based on comprehensive 60/consult analysis. Addresses critical bugs (empty org prevention, missing notifications), UX improvements (fuzzy matching, enrichment timeout), and security enhancements (token hashing, rate limiting). Estimated 40-60 hours total, phased for 3-4 week go-live timeline.",
+    "consultReport": ".sixty/consult/onboarding-analysis.md",
+    "estimatedHours": "40-60",
+    "goLiveRequired": ["OBP-001", "OBP-002", "OBP-003", "OBP-004", "OBP-005", "OBP-006", "OBP-007"],
+    "postLaunchOK": ["OBP-008", "OBP-009", "OBP-010", "OBP-011", "OBP-012"]
+  },
+
+  "stories": [
+    {
+      "id": "OBP-001",
+      "feature": "onboarding-polish",
+      "title": "Verify and test empty organization prevention",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["organizations", "organization_memberships"]
+      },
+      "blocks": ["OBP-002"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Migration 20260121000014_auto_cleanup_empty_orgs.sql tested on local DB",
+        "Empty org cleanup RPC function executes without errors",
+        "Join request to 0-member org returns error with helpful message",
+        "approve_join_request RPC validates member_count > 0 before approval",
+        "User sees 'Organization Inactive' message with option to create/reactivate"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/migrations/20260121000014_auto_cleanup_empty_orgs.sql",
+        "src/lib/services/joinRequestService.ts",
+        "src/pages/auth/OnboardingV2.tsx",
+        "src/lib/stores/onboardingV2Store.ts"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "CRITICAL BLOCKER - Prevents users from joining ghost organizations with 0 members. Migration exists but needs verification. Risk analysis confirmed this is a high-severity bug that could trap users in unusable orgs.",
+
+      "testingNotes": "Test scenarios: (1) Empty org exists, user tries to join → blocked with message. (2) Org with 1 member, that member leaves → org auto-cleaned. (3) User requests to join cleaned org → redirected to org creation.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-002",
+      "feature": "onboarding-polish",
+      "title": "Add in-app notification for admins on join request",
+      "type": "feature",
+      "status": "pending",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": ["OBP-001"],
+        "files": ["src/lib/services/notificationService.ts"],
+        "schema": ["notifications", "organization_join_requests"]
+      },
+      "blocks": ["OBP-003"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Notification created in DB when join request submitted",
+        "Notification appears in notification bell for org admins/owners only",
+        "Clicking notification navigates to /settings/organization-management?tab=requests",
+        "Badge count on 'Requests' tab shows pending join + rejoin requests",
+        "Notification marked read when admin views requests tab",
+        "Real-time notification updates via Supabase Realtime"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/services/joinRequestService.ts",
+        "src/lib/hooks/useNotifications.ts",
+        "src/components/NotificationBell.tsx",
+        "src/pages/settings/OrganizationManagementPage.tsx"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "CRITICAL UX - Admins have no way to know join requests arrived. Current implementation only shows requests when admin manually navigates to settings. User requirement: add notification + quick navigation. Uses existing notification infrastructure confirmed in codebase scout.",
+
+      "testingNotes": "Test: (1) User submits join request → admin sees notification immediately. (2) Admin clicks notification → redirected to requests tab. (3) Badge count updates in real-time. (4) Non-admins don't see notification.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-003",
+      "feature": "onboarding-polish",
+      "title": "Add in-app notification for users on approval",
+      "type": "feature",
+      "status": "pending",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": ["OBP-002"],
+        "files": ["src/lib/services/notificationService.ts"],
+        "schema": ["notifications"]
+      },
+      "blocks": [],
+      "parallelWith": ["OBP-004"],
+
+      "acceptance": [
+        "Notification created when join request approved",
+        "Notification appears in user's notification bell",
+        "Notification message: 'You've been approved to join [Org Name]'",
+        "Clicking notification refreshes orgs and switches to new org",
+        "Auto-redirect to dashboard if user is on PendingApprovalPage",
+        "Replace hardcoded 2.5s delay with proper membership detection"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/services/joinRequestService.ts",
+        "src/pages/auth/PendingApprovalPage.tsx",
+        "src/lib/hooks/useApprovalDetection.ts",
+        "src/components/NotificationBell.tsx"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "CRITICAL UX - Users only know approval via email currently. Also fixes race condition identified in risk analysis: PendingApprovalPage uses hardcoded 2.5s delay (commit 4d7a2c17) which causes race conditions. Replace with proper state sync.",
+
+      "testingNotes": "Test: (1) Admin approves → user sees notification immediately. (2) User on pending page → auto-redirected to dashboard. (3) User not on pending page → notification appears for next login. (4) No race condition with org switching.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-004",
+      "feature": "onboarding-polish",
+      "title": "Fix personal email fuzzy matching threshold",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["OBP-003"],
+
+      "acceptance": [
+        "Fuzzy organization matching threshold changed from 0.7 (70%) to 0.8 (80%)",
+        "Personal email users see organization matches with 80%+ similarity",
+        "Confidence indicator shows match percentage in UI",
+        "Manual organization name input tested with typos (e.g., 'Acme Corp' vs 'ACME CORP')",
+        "Website URL input normalizes domains before matching (strip https://, www.)",
+        "Edge case: 'acme.com' vs 'acmee.com' → NOT matched (correct behavior)"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/auth/onboardingV2/OrganizationSelectionStep.tsx",
+        "src/pages/auth/onboardingV2/ManualEnrichmentStep.tsx"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "USER REQUIREMENT - Increase fuzzy matching threshold from 70% to 80% as specified. Current implementation in onboardingV2Store.ts line 488-499 filters by 0.7. Simple change, no file conflicts with OBP-003, can run in parallel.",
+
+      "testingNotes": "Test cases: (1) 'Acme Corp' matches 'ACME CORP' (85% similarity). (2) 'Acme' does NOT match 'Beta Corp' (30% similarity). (3) 'acme.com' typed as 'https://www.acme.com' → normalized and matched. (4) Typo 'Acmme Corp' → 75% similarity → NOT shown.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-005",
+      "feature": "onboarding-polish",
+      "title": "Implement enrichment timeout and retry UX",
+      "type": "feature",
+      "status": "pending",
+      "priority": 5,
+
+      "dependencies": {
+        "stories": ["OBP-004"],
+        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "schema": ["organization_enrichments"]
+      },
+      "blocks": [],
+      "parallelWith": ["OBP-006"],
+
+      "acceptance": [
+        "Enrichment polling times out after 5 minutes with clear error message",
+        "'Retry Enrichment' button appears on timeout",
+        "Fallback to manual Q&A offered if enrichment fails 2+ times",
+        "Loading state shows progress: 'Analyzing website... (2:30 elapsed)'",
+        "Edge function timeout handled gracefully (not infinite hang)",
+        "Error message: 'Unable to analyze website. You can retry or answer a few questions manually.'"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/auth/onboardingV2/EnrichmentLoadingStep.tsx",
+        "src/pages/auth/onboardingV2/ManualEnrichmentStep.tsx"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "HIGH PRIORITY - Risk analysis found enrichment could hang indefinitely if API fails. Current implementation (onboardingV2Store.ts line 1205) has polling but unclear timeout behavior. Better UX needed for failure cases. Can run parallel with OBP-006 (no file overlap).",
+
+      "testingNotes": "Test: (1) API times out → user sees timeout message + retry button. (2) Retry 2x → fallback to manual Q&A offered. (3) Loading shows elapsed time. (4) Edge function error handled gracefully.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-006",
+      "feature": "onboarding-polish",
+      "title": "Add business email auto-join flow integration",
+      "type": "feature",
+      "status": "pending",
+      "priority": 6,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/auth/signup.tsx"],
+        "schema": ["organizations"]
+      },
+      "blocks": [],
+      "parallelWith": ["OBP-005"],
+
+      "acceptance": [
+        "On signup, extract domain from business email (filter out PERSONAL_EMAIL_DOMAINS list)",
+        "Query organizations table for matching company_domain",
+        "If exact domain match found, auto-create join request",
+        "User redirected to PendingApprovalPage instead of onboarding enrichment",
+        "Skip enrichment flow entirely for auto-join users",
+        "Migration 20260126000011_add_business_email_org_check.sql verified working",
+        "Edge case: Personal email (gmail.com) → NOT auto-joined, goes to onboarding"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/auth/signup.tsx",
+        "src/lib/utils/domainUtils.ts",
+        "src/lib/services/joinRequestService.ts",
+        "supabase/migrations/20260126000011_add_business_email_org_check.sql"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "USER REQUIREMENT - Business emails should auto-detect org and request to join. Migration exists but not integrated into signup flow. Codebase scout found domainUtils.ts with PERSONAL_EMAIL_DOMAINS list (23 domains). Can run parallel with OBP-005 (different files).",
+
+      "testingNotes": "Test: (1) User signs up with john@acme.com, acme.com org exists → auto-join request created, redirected to pending page. (2) User signs up with john@gmail.com → goes to onboarding enrichment. (3) Multiple orgs with same domain → show selection UI.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-007",
+      "feature": "onboarding-polish",
+      "title": "Test and document full onboarding flow end-to-end",
+      "type": "test",
+      "status": "pending",
+      "priority": 7,
+
+      "dependencies": {
+        "stories": ["OBP-001", "OBP-002", "OBP-003", "OBP-004", "OBP-005", "OBP-006"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Test 1: Personal email → manual org search → enrichment → org creation → dashboard",
+        "Test 2: Personal email → fuzzy match (80%+) → join request → admin notification → approval → user notification → dashboard",
+        "Test 3: Business email → auto-detect org → join request → approval → dashboard",
+        "Test 4: Enrichment timeout → retry → fallback to manual Q&A → org creation",
+        "Test 5: Empty org join attempt → error message → org creation offered",
+        "Test 6: Admin receives notification → clicks → approves → user notified → dashboard loads without race condition",
+        "All tests pass without console errors or infinite loops",
+        "Document test scenarios in .sixty/onboarding-testing-checklist.md"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "files": [
+        ".sixty/onboarding-testing-checklist.md"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "GO-LIVE BLOCKER - Must verify all pieces work together before launch. Depends on all core stories. Creates documentation for QA and future regression testing. Should catch any integration bugs not visible in individual story testing.",
+
+      "testingNotes": "Use real Supabase environment (not mocks). Test with multiple user accounts and organizations. Verify email delivery, notification real-time updates, and localStorage state persistence. Document all edge cases discovered.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-008",
+      "feature": "onboarding-polish",
+      "title": "Add RLS policy for join request DELETE and cleanup stale data",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 8,
+
+      "dependencies": {
+        "stories": ["OBP-007"],
+        "files": [],
+        "schema": ["organization_join_requests", "rejoin_requests"]
+      },
+      "blocks": [],
+      "parallelWith": ["OBP-009"],
+
+      "acceptance": [
+        "RLS DELETE policy added for organization_join_requests table",
+        "Admins can delete approved/rejected requests older than 30 days",
+        "Edge function or cron job created to auto-cleanup old requests",
+        "Enrichment data cascade-deletes when organization deleted (verify existing ON DELETE CASCADE)",
+        "Test DELETE policy with non-admin user (should fail with permission error)",
+        "Verify organization_skills also cascade-deletes with enrichment"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/migrations/new_add_join_request_delete_policy.sql",
+        "supabase/functions/cleanup-old-requests/index.ts"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "MEDIUM PRIORITY (Post-Launch OK) - Prevents dead data accumulation. Risk analysis found missing DELETE policy in RLS (lines 35-72 of join request migration). Not a blocker but good housekeeping. Can run parallel with OBP-009 (different schema concerns).",
+
+      "testingNotes": "Test: (1) Admin deletes old approved request → succeeds. (2) Member tries to delete request → fails with RLS error. (3) Edge function runs successfully. (4) Org deleted → enrichment and skills cascade-delete.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-009",
+      "feature": "onboarding-polish",
+      "title": "Hash join request magic link tokens for security",
+      "type": "security",
+      "status": "pending",
+      "priority": 9,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/services/joinRequestService.ts"],
+        "schema": ["organization_join_requests"]
+      },
+      "blocks": [],
+      "parallelWith": ["OBP-008"],
+
+      "acceptance": [
+        "join_request_token_hash column added to organization_join_requests table",
+        "Tokens hashed using SHA256 before storing in database",
+        "Token validation compares hashed value (not plaintext)",
+        "Existing plaintext tokens migrated or invalidated with warning email",
+        "Test: Generate token → hash stored in DB → validate token → success",
+        "Test: Modify hashed token in DB → validation fails"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/migrations/new_hash_join_request_tokens.sql",
+        "src/lib/services/joinRequestService.ts",
+        "supabase/functions/generate-waitlist-token/index.ts",
+        "supabase/functions/validate-waitlist-token/index.ts"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "SECURITY IMPROVEMENT (Post-Launch OK) - Tokens stored in plaintext in join_request_token column. Risk analysis flagged this as high-severity security issue. If DB breached, all tokens compromised. Follow Supabase pattern for hashing auth tokens. Can run parallel with OBP-008 (different tables/concerns).",
+
+      "testingNotes": "Test: (1) New token generated → hash stored, plaintext NOT stored. (2) Token validation with hash → succeeds. (3) Invalid token → fails. (4) Migration runs without breaking existing functionality. (5) Old plaintext tokens handled gracefully.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-010",
+      "feature": "onboarding-polish",
+      "title": "Add rate limiting to signup code validation",
+      "type": "security",
+      "status": "pending",
+      "priority": 10,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/auth/signup.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Signup code validation limited to 5 attempts per IP per hour",
+        "Failed attempts logged to database or analytics",
+        "User sees 'Too many attempts, try again in 52 minutes' message",
+        "Rate limit tracked via Supabase RPC or edge function",
+        "Test: 6 consecutive failed attempts → rate limit triggered",
+        "Rate limit resets after 1 hour"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/auth/signup.tsx",
+        "supabase/functions/validate-access-code/index.ts",
+        "supabase/migrations/new_rate_limit_tracking.sql"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "SECURITY IMPROVEMENT (Post-Launch OK) - Prevent brute force attacks on access codes. Risk analysis noted no rate limiting exists currently. Medium priority, can be done post-launch if timeline tight. Requires edge function modification.",
+
+      "testingNotes": "Test: (1) 5 failed validation attempts → allowed. (2) 6th attempt → rate limit error. (3) Wait 1 hour → rate limit resets. (4) Multiple IPs don't share rate limit. (5) Successful validation doesn't count toward limit.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-011",
+      "feature": "onboarding-polish",
+      "title": "Optimize enrichment polling with exponential backoff",
+      "type": "performance",
+      "status": "pending",
+      "priority": 11,
+
+      "dependencies": {
+        "stories": ["OBP-005"],
+        "files": ["src/lib/stores/onboardingV2Store.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Enrichment polling starts at 2s interval",
+        "Interval increases exponentially: 2s → 3s → 5s → 8s → 10s (max)",
+        "Reduces HTTP requests from 150 to ~50 over 5 minutes",
+        "Loading UI shows 'Checking status... (next check in 8s)' during polls",
+        "No performance impact on other users",
+        "Backoff resets on retry button click"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/auth/onboardingV2/EnrichmentLoadingStep.tsx"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "PERFORMANCE OPTIMIZATION (Post-Launch OK) - Reduce server load from polling. Current implementation (line 1205) polls every 2s for up to 5 minutes = 150 requests. Performance analysis noted this could hammer server with many simultaneous users. Low priority, nice-to-have. Depends on OBP-005 timeout work.",
+
+      "testingNotes": "Test: (1) Start enrichment → polls at 2s, 3s, 5s, 8s, 10s, 10s... (2) Total requests < 50. (3) Retry button → backoff resets to 2s. (4) Multiple users onboarding → no server overload.",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBP-012",
+      "feature": "onboarding-polish",
+      "title": "Clean up debug logging for production",
+      "type": "maintenance",
+      "status": "pending",
+      "priority": 12,
+
+      "dependencies": {
+        "stories": ["OBP-007"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "All console.log statements replaced with logger utility",
+        "Debug logs only show when VITE_DEBUG_LOGS=true",
+        "Error logs always show in development, silent in production unless critical",
+        "No sensitive data (emails, tokens, user IDs) logged",
+        "Grep codebase for 'console.log' returns only intentional logs (< 5 instances)",
+        "Logger pattern verified: logger.log(), logger.error(), logger.warn()"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/auth/PendingApprovalPage.tsx",
+        "src/lib/hooks/useApprovalDetection.ts",
+        "src/lib/services/joinRequestService.ts",
+        "src/pages/auth/OnboardingV2.tsx"
+      ],
+
+      "designRef": null,
+      "ticketId": null,
+
+      "reasoning": "MAINTENANCE (Post-Launch OK) - Clean up debug logs before production deploy. Codebase scout noted 'lots of debug logs throughout' in findings. Low priority, can be done anytime before production deploy. Prevents console clutter and potential data leaks.",
+
+      "testingNotes": "Test: (1) VITE_DEBUG_LOGS=false → no console output except errors. (2) VITE_DEBUG_LOGS=true → debug logs appear. (3) Production build → no debug logs. (4) Grep confirms < 5 console.log instances remain.",
+
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 12,
+    "completedStories": 0,
+    "estimatedHoursTotal": "4.5-6",
+    "estimatedHoursGoLive": "3-4",
+    "estimatedHoursPostLaunch": "1.5-2",
+    "currentFeature": "onboarding-polish",
+    "lastUpdated": "2025-02-05T00:00:00Z",
+
+    "phases": {
+      "phase_1_critical_blockers": {
+        "name": "Critical Blockers (Go-Live Required)",
+        "stories": ["OBP-001", "OBP-002", "OBP-003", "OBP-004", "OBP-005", "OBP-006"],
+        "estimatedHours": "2.5-3.5",
+        "description": "Must be complete before launch. Addresses critical bugs and user requirements.",
+        "deliverables": [
+          "Empty org prevention verified and working",
+          "In-app notifications for admins and users",
+          "80% fuzzy matching threshold",
+          "Enrichment timeout with retry/fallback",
+          "Business email auto-join flow"
+        ]
+      },
+      "phase_2_validation": {
+        "name": "Testing & Validation",
+        "stories": ["OBP-007"],
+        "estimatedHours": "0.5",
+        "description": "End-to-end testing and documentation before go-live",
+        "deliverables": [
+          "6 test scenarios passed",
+          "Testing checklist documentation",
+          "No console errors or infinite loops"
+        ]
+      },
+      "phase_3_polish": {
+        "name": "Polish & Security (Post-Launch OK)",
+        "stories": ["OBP-008", "OBP-009", "OBP-010", "OBP-011", "OBP-012"],
+        "estimatedHours": "1.5-2",
+        "description": "Nice-to-haves that can ship after initial launch",
+        "deliverables": [
+          "RLS DELETE policies",
+          "Token hashing for security",
+          "Rate limiting on access codes",
+          "Exponential backoff polling",
+          "Production logging cleanup"
+        ]
+      }
+    }
+  },
+
+  "parallelOpportunities": [
+    {
+      "group": ["OBP-003", "OBP-004"],
+      "reason": "No file overlap - notifications (NotificationBell, PendingApprovalPage) vs fuzzy matching (onboardingV2Store, OrganizationSelectionStep)",
+      "timeSaved": "15-20 minutes",
+      "riskLevel": "low"
+    },
+    {
+      "group": ["OBP-005", "OBP-006"],
+      "reason": "Independent features - enrichment timeout (onboardingV2Store, EnrichmentLoadingStep) vs auto-join (signup.tsx, domainUtils)",
+      "timeSaved": "20-25 minutes",
+      "riskLevel": "low"
+    },
+    {
+      "group": ["OBP-008", "OBP-009"],
+      "reason": "Different schema concerns - RLS policies (join_requests table) vs token hashing (migration + services)",
+      "timeSaved": "15-20 minutes",
+      "riskLevel": "low"
+    }
+  ],
+
+  "riskMitigation": {
+    "emptyOrgPrevention": {
+      "risk": "Users joining 0-member orgs and getting stuck",
+      "severity": "critical",
+      "mitigation": "OBP-001 validates before any join request approval, adds user-friendly error messages",
+      "testingRequired": "Multiple scenarios with empty/cleaned orgs"
+    },
+    "raceCondition": {
+      "risk": "Approval redirect timing issues (current 2.5s delay)",
+      "severity": "high",
+      "mitigation": "OBP-003 replaces hardcoded delay with proper membership detection and notifications",
+      "testingRequired": "Concurrent approval/dashboard navigation testing"
+    },
+    "enrichmentHang": {
+      "risk": "Enrichment API failure causing infinite hang",
+      "severity": "high",
+      "mitigation": "OBP-005 adds 5-minute timeout with retry and manual fallback",
+      "testingRequired": "Simulate API timeout scenarios"
+    },
+    "tokenSecurity": {
+      "risk": "Magic link tokens stored in plaintext (DB breach exposure)",
+      "severity": "medium",
+      "mitigation": "OBP-009 implements SHA256 hashing following Supabase auth patterns",
+      "testingRequired": "Token validation with hashed values"
+    }
+  },
+
+  "meta": {
+    "createdBy": "60/consult",
+    "consultDuration": "~2 hours",
+    "agentsUsed": ["codebase_scout", "patterns_analyst", "risk_scanner", "scope_sizer"],
+    "filesAnalyzed": 95,
+    "migrationsReviewed": 8,
+    "rpcsAnalyzed": 6,
+    "consultFindings": {
+      "currentImplementation": "~75% complete",
+      "criticalBugs": 4,
+      "highPriorityGaps": 6,
+      "securityIssues": 3,
+      "performanceIssues": 2
+    }
+  }
+}

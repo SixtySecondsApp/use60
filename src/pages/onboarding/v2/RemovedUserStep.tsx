@@ -103,15 +103,26 @@ export function RemovedUserStep({ orgName: propOrgName, orgId: propOrgId }: Remo
         throw new Error(data.error || 'Failed to create rejoin request');
       }
 
-      logger.log('✅ Rejoin request created:', data.requestId);
+      // Check if auto-approved (admin already sent invitation)
+      if (data.auto_approved) {
+        logger.log('✅ Auto-approved rejoin:', data.message);
+        toast.success(data.message || 'Welcome back! Redirecting to dashboard...');
 
-      setRequestSubmitted(true);
-      toast.success('Rejoin request submitted! An admin will review your request.');
+        // Redirect to dashboard immediately on auto-approval
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 2000);
+      } else {
+        // Normal flow - pending approval
+        logger.log('✅ Rejoin request created:', data.requestId);
+        setRequestSubmitted(true);
+        toast.success(data.message || 'Rejoin request submitted! An admin will review your request.');
 
-      // Redirect to pending approval page
-      setTimeout(() => {
-        navigate('/auth/pending-approval');
-      }, 2000);
+        // Redirect to pending approval page
+        setTimeout(() => {
+          navigate('/auth/pending-approval');
+        }, 2000);
+      }
 
     } catch (error: any) {
       logger.error('Error requesting rejoin:', error);

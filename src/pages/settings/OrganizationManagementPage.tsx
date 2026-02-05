@@ -43,16 +43,13 @@ import {
   rejectJoinRequest,
   type JoinRequest,
 } from '@/lib/services/joinRequestService';
-import {
-  getPendingReactivationRequests,
-  approveReactivationRequest,
-  rejectReactivationRequest,
-  type OrganizationReactivationRequest,
-} from '@/lib/services/organizationReactivationService';
 import { leaveOrganization, isLastOwner } from '@/lib/services/leaveOrganizationService';
 import { toast } from 'sonner';
 import { CURRENCIES, type CurrencyCode } from '@/lib/services/currencyService';
 import { OrgLogoUpload } from '@/components/OrgLogoUpload';
+import { logger } from '@/lib/utils/logger';
+import { DeactivateOrganizationDialog } from '@/components/dialogs/DeactivateOrganizationDialog';
+import { validateOwnerCanDeactivate } from '@/lib/services/organizationDeactivationService';
 
 interface TeamMember {
   user_id: string;
@@ -102,7 +99,7 @@ export default function OrganizationManagementPage() {
   const queryClient = useQueryClient();
 
   // Active tab state
-  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'requests' | 'reactivations' | 'settings'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'requests' | 'settings'>('members');
 
   // Organization name editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -133,6 +130,11 @@ export default function OrganizationManagementPage() {
   const [isLeavingTeam, setIsLeavingTeam] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
+
+  // Deactivation state
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
+  const [canDeactivate, setCanDeactivate] = useState<boolean | null>(null);
+  const [deactivationError, setDeactivationError] = useState<string | null>(null);
 
   // Update org name when activeOrg changes
   useEffect(() => {
@@ -195,13 +197,20 @@ export default function OrganizationManagementPage() {
     },
     enabled: !!activeOrgId && !!user?.id,
     retry: 2,
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
 
   // Fetch rejoin requests
-  const { data: rejoinRequests = [], isLoading: isLoadingRejoinRequests } = useQuery({
+  const { data: rejoinRequests = [], isLoading: isLoadingRejoinRequests, refetch: refetchRejoinRequests } = useQuery({
     queryKey: ['rejoin-requests', activeOrgId],
     queryFn: async () => {
-      if (!activeOrgId) return [];
+      if (!activeOrgId) {
+        logger.log('[OrganizationManagement] No activeOrgId for rejoin requests query');
+        return [];
+      }
+
+      logger.log('[OrganizationManagement] Fetching rejoin requests for org:', activeOrgId);
+      logger.log('[OrganizationManagement] Query enabled:', !!activeOrgId && !!user?.id && permissions.canManageTeam);
 
       const { data, error } = await supabase
         .from('rejoin_requests')
@@ -215,7 +224,8 @@ export default function OrganizationManagementPage() {
             id,
             email,
             first_name,
-            last_name
+            last_name,
+            avatar_url
           )
         `)
         .eq('org_id', activeOrgId)
@@ -223,24 +233,27 @@ export default function OrganizationManagementPage() {
         .order('created_at', { ascending: true });
 
       if (error?.code === 'PGRST116' || error?.code === '42P01' || error?.code === 'PGRST204' || error?.message?.includes('rejoin_requests')) {
+        logger.log('[OrganizationManagement] Rejoin requests table not found or no access');
         return [];
       }
 
-      if (error) throw error;
+      if (error) {
+        logger.error('[OrganizationManagement] Error fetching rejoin requests:', error);
+        throw error;
+      }
+
+      logger.log('[OrganizationManagement] Rejoin requests fetched:', data?.length || 0);
+      if (data && data.length > 0) {
+        logger.log('[OrganizationManagement] First request:', data[0]);
+      }
 
       return data || [];
     },
     enabled: !!activeOrgId && !!user?.id && permissions.canManageTeam,
     retry: 2,
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
 
-  // Fetch reactivation requests (TODO: PLATFORM_ADMIN - Only enable for platform admins)
-  const { data: reactivationRequests = [], refetch: refetchReactivationRequests } = useQuery({
-    queryKey: ['organization-reactivation-requests'],
-    queryFn: getPendingReactivationRequests,
-    enabled: !!user?.id, // TODO: PLATFORM_ADMIN - Only enable for platform admins
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
 
   // Approve mutation
   const approveMutation = useMutation({
@@ -474,6 +487,28 @@ export default function OrganizationManagementPage() {
     };
     checkOwnerStatus();
   }, [activeOrgId, user?.id]);
+
+  // Check if user can deactivate organization
+  useEffect(() => {
+    const checkCanDeactivate = async () => {
+      if (activeOrgId && permissions.isOwner) {
+        try {
+          const error = await validateOwnerCanDeactivate(activeOrgId);
+          if (error) {
+            setCanDeactivate(false);
+            setDeactivationError(error);
+          } else {
+            setCanDeactivate(true);
+            setDeactivationError(null);
+          }
+        } catch (err) {
+          console.error('Error checking deactivation eligibility:', err);
+          setCanDeactivate(false);
+        }
+      }
+    };
+    checkCanDeactivate();
+  }, [activeOrgId, permissions.isOwner]);
 
   // Handle saving org name
   const handleSaveOrgName = async () => {
@@ -718,20 +753,22 @@ export default function OrganizationManagementPage() {
     if (!member || member.member_status !== 'removed') return;
 
     try {
-      // Create a rejoin request for the member
-      const { data, error } = await supabase
-        .from('rejoin_requests')
-        .insert([
-          {
-            org_id: activeOrgId,
-            user_id: userId,
-            status: 'pending',
-            created_at: new Date().toISOString(),
-          },
-        ])
-        .select();
+      // Record the invitation in database (enables auto-accept)
+      const { data: invitationData, error: invitationError } = await supabase.rpc(
+        'record_rejoin_invitation',
+        {
+          p_org_id: activeOrgId,
+          p_user_id: userId,
+        }
+      );
 
-      if (error) throw error;
+      if (invitationError) throw invitationError;
+
+      if (!invitationData?.success) {
+        throw new Error(invitationData?.error || 'Failed to record invitation');
+      }
+
+      console.log('✅ Invitation recorded:', invitationData);
 
       // Send rejoin invitation email
       const org = await supabase
@@ -756,7 +793,7 @@ export default function OrganizationManagementPage() {
         }),
       });
 
-      toast.success('Rejoin invitation sent');
+      toast.success('Rejoin invitation sent - user will be auto-approved when they request to rejoin');
       queryClient.invalidateQueries({ queryKey: ['rejoin-requests', activeOrgId] });
     } catch (err: any) {
       console.error('Error sending rejoin invite:', err);
@@ -1055,29 +1092,6 @@ export default function OrganizationManagementPage() {
                       : 'bg-yellow-200 dark:bg-yellow-700 text-yellow-900 dark:text-yellow-300'
                   }`}>
                     {joinRequests.length + rejoinRequests.length}
-                  </span>
-                )}
-              </div>
-            </button>
-            {/* TODO: PLATFORM_ADMIN - Only show this tab to platform admins */}
-            <button
-              onClick={() => setActiveTab('reactivations')}
-              className={`flex-1 min-w-[140px] px-5 py-3 rounded-xl font-medium text-sm transition-all ${
-                activeTab === 'reactivations'
-                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <RefreshCw className="w-4 h-4" />
-                Reactivations
-                {reactivationRequests.length > 0 && (
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                    activeTab === 'reactivations'
-                      ? 'bg-white/20'
-                      : 'bg-amber-200 dark:bg-amber-700 text-amber-900 dark:text-amber-300'
-                  }`}>
-                    {reactivationRequests.length}
                   </span>
                 )}
               </div>
@@ -1516,12 +1530,15 @@ export default function OrganizationManagementPage() {
                           className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                         >
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-blue-200 dark:bg-blue-500/20 flex items-center justify-center">
-                              <span className="text-blue-900 dark:text-blue-400 font-medium">
+                            <Avatar className="h-10 w-10">
+                              {request.profiles?.avatar_url && (
+                                <AvatarImage src={request.profiles.avatar_url} />
+                              )}
+                              <AvatarFallback className="bg-blue-200 dark:bg-blue-500/20 text-blue-900 dark:text-blue-400 font-medium">
                                 {request.profiles?.first_name?.[0]?.toUpperCase() ||
                                   request.profiles?.email?.[0].toUpperCase() || '?'}
-                              </span>
-                            </div>
+                              </AvatarFallback>
+                            </Avatar>
                             <div>
                               <p className="text-gray-900 dark:text-white font-medium">
                                 {request.profiles?.first_name && request.profiles?.last_name
@@ -1566,122 +1583,6 @@ export default function OrganizationManagementPage() {
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Tab Content - Reactivation Requests */}
-        {activeTab === 'reactivations' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                Organization Reactivation Requests
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Review and approve requests from inactive organizations to reactivate their accounts.
-              </p>
-              {/* TODO: BILLING - Add note about verifying billing status before approving */}
-            </div>
-
-            {reactivationRequests.length === 0 ? (
-              <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
-                <RefreshCw className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 dark:text-gray-400 font-medium">
-                  No pending reactivation requests
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
-                  Requests from inactive organizations will appear here
-                </p>
-              </div>
-            ) : (
-              <div className="border dark:border-gray-800 rounded-xl overflow-hidden">
-                {reactivationRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="p-6 border-b last:border-b-0 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 space-y-3">
-                        {/* Organization Info */}
-                        <div>
-                          <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
-                            {request.organization?.name || 'Unknown Organization'}
-                          </h3>
-                          {request.organization?.company_domain && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                              {request.organization.company_domain}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Request Details */}
-                        <div className="flex flex-wrap gap-4 text-sm">
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-700 dark:text-gray-300">
-                              Requested by: {request.requester?.full_name || request.requester?.email || 'Unknown'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-700 dark:text-gray-300">
-                              {new Date(request.requested_at).toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* TODO: BILLING - Show billing status here */}
-                        {/* Example:
-                        <Alert variant="warning">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>
-                            Outstanding balance: $299.00 | Last payment failed: 12/15/2025
-                          </AlertDescription>
-                        </Alert>
-                        */}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={async () => {
-                            try {
-                              await approveReactivationRequest(request.id);
-                              toast.success('Organization reactivated');
-                              refetchReactivationRequests();
-                            } catch (error) {
-                              toast.error('Failed to approve request');
-                            }
-                          }}
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          Approve
-                        </Button>
-                        <Button
-                          onClick={async () => {
-                            // TODO: Add rejection reason input
-                            try {
-                              await rejectReactivationRequest(request.id, 'Rejected by admin');
-                              toast.success('Request rejected');
-                              refetchReactivationRequests();
-                            } catch (error) {
-                              toast.error('Failed to reject request');
-                            }
-                          }}
-                          size="sm"
-                          variant="outline"
-                          className="border-red-300 text-red-600 hover:bg-red-50"
-                        >
-                          <XCircle className="w-4 h-4 mr-1" />
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -1810,6 +1711,51 @@ export default function OrganizationManagementPage() {
                 </div>
               </div>
             </div>
+
+            {/* Danger Zone - Deactivate Organization (Owner Only) */}
+            {permissions.isOwner && (
+              <div className="bg-red-50 dark:bg-red-900/10 border-2 border-red-300 dark:border-red-800/50 rounded-2xl p-6 space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-red-900 dark:text-red-100 flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-5 h-5" />
+                    Danger Zone
+                  </h2>
+                  <p className="text-sm text-red-800 dark:text-red-200">
+                    Deactivate your organization. All members will lose access immediately.
+                  </p>
+                </div>
+
+                {/* Status message */}
+                {canDeactivate === false && deactivationError && (
+                  <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded-lg p-3 text-sm text-red-800 dark:text-red-200">
+                    <strong>Cannot deactivate:</strong> {deactivationError}
+                  </div>
+                )}
+
+                {canDeactivate === true && (
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3">
+                    <div className="flex gap-2">
+                      <AlertCircle className="w-5 h-5 text-yellow-700 dark:text-yellow-200 flex-shrink-0" />
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        <strong>Recovery available:</strong> You'll have 30 days to reactivate this organization. After 30 days, all data will be permanently deleted.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Deactivate Button */}
+                <div className="flex items-center gap-3 pt-2">
+                  <Button
+                    onClick={() => setShowDeactivateDialog(true)}
+                    disabled={canDeactivate !== true}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Deactivate and Leave Organization
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1844,6 +1790,20 @@ export default function OrganizationManagementPage() {
         confirmText="Yes, Delete Member"
         cancelText="Cancel"
         confirmVariant="destructive"
+      />
+
+      {/* Deactivate Organization Dialog */}
+      <DeactivateOrganizationDialog
+        orgId={activeOrgId || ''}
+        orgName={activeOrg?.name || 'Organization'}
+        open={showDeactivateDialog}
+        onClose={() => setShowDeactivateDialog(false)}
+        onDeactivateSuccess={() => {
+          // Refresh orgs and navigate away
+          refreshOrgs().catch(err => {
+            console.error('Error refreshing orgs after deactivation:', err);
+          });
+        }}
       />
     </SettingsPageWrapper>
   );

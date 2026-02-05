@@ -14,13 +14,14 @@ export function JoinRequestsPage() {
   const [filter, setFilter] = useState<'pending' | 'all'>('pending');
 
   // Fetch join requests
-  const { data: joinRequests, isLoading } = useQuery({
+  const { data: joinRequests, isLoading, error } = useQuery({
     queryKey: ['join-requests', activeOrgId, filter],
     queryFn: () => {
-      if (!activeOrgId) return [];
+      if (!activeOrgId) throw new Error('No active organization');
       return getPendingJoinRequests(activeOrgId);
     },
     enabled: !!activeOrgId,
+    retry: 2,
   });
 
   // Approve mutation
@@ -100,8 +101,18 @@ export function JoinRequestsPage() {
         </div>
       )}
 
+      {/* Error State */}
+      {error && (
+        <div className="mb-4 bg-red-500/20 border border-red-500 rounded-lg p-4">
+          <p className="text-red-400 font-medium">Failed to load join requests</p>
+          <p className="text-red-300 text-sm mt-1">
+            {error instanceof Error ? error.message : 'Unknown error occurred'}
+          </p>
+        </div>
+      )}
+
       {/* Empty State */}
-      {!isLoading && (!joinRequests || joinRequests.length === 0) && (
+      {!isLoading && !error && (!joinRequests || joinRequests.length === 0) && (
         <div className="text-center py-12 bg-gray-900 rounded-xl border border-gray-800">
           <Users className="w-12 h-12 text-gray-600 mx-auto mb-3" />
           <p className="text-gray-400">
@@ -111,7 +122,7 @@ export function JoinRequestsPage() {
       )}
 
       {/* Join Requests List */}
-      {!isLoading && joinRequests && joinRequests.length > 0 && (
+      {!isLoading && !error && joinRequests && joinRequests.length > 0 && (
         <div className="space-y-3">
           {joinRequests.map((request) => (
             <motion.div

@@ -17,6 +17,11 @@ import {
   Lock,
   ArrowUpDown,
   CheckSquare,
+  RefreshCw,
+  Clock,
+  User,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { toast } from 'sonner';
@@ -40,6 +45,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useQuery } from '@tanstack/react-query';
+import {
+  getPendingReactivationRequests,
+  approveReactivationRequest,
+  rejectReactivationRequest,
+  type OrganizationReactivationRequest,
+} from '@/lib/services/organizationReactivationService';
 import {
   getAllOrganizations,
   renameOrganization,
@@ -60,8 +72,10 @@ interface EditingState {
 
 type SortField = 'name' | 'company_domain' | 'member_count' | 'created_at';
 type SortDirection = 'asc' | 'desc';
+type TabId = 'organizations' | 'reactivations';
 
 export default function Organizations() {
+  const [activeTab, setActiveTab] = useState<TabId>('organizations');
   const [organizations, setOrganizations] = useState<OrganizationWithMemberCount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,6 +133,13 @@ export default function Organizations() {
     };
   };
 
+  // Fetch reactivation requests
+  const { data: reactivationRequests = [], refetch: refetchReactivationRequests } = useQuery({
+    queryKey: ['organization-reactivation-requests'],
+    queryFn: getPendingReactivationRequests,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   // Load organizations
   useEffect(() => {
     loadOrganizations();
@@ -134,6 +155,28 @@ export default function Organizations() {
       console.error(error);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleApproveReactivation(requestId: string) {
+    try {
+      await approveReactivationRequest(requestId);
+      toast.success('Organization reactivated');
+      refetchReactivationRequests();
+    } catch (error: any) {
+      toast.error('Failed to approve request');
+      console.error(error);
+    }
+  }
+
+  async function handleRejectReactivation(requestId: string, reason?: string) {
+    try {
+      await rejectReactivationRequest(requestId, reason || 'Rejected by admin');
+      toast.success('Request rejected');
+      refetchReactivationRequests();
+    } catch (error: any) {
+      toast.error('Failed to reject request');
+      console.error(error);
     }
   }
 
@@ -417,78 +460,117 @@ export default function Organizations() {
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Organizations</h1>
           </div>
           <p className="text-gray-600 dark:text-gray-400">
-            Manage all organizations and their members • {filteredOrgs.length} organization{filteredOrgs.length !== 1 ? 's' : ''}
-            {filteredOrgs.length > itemsPerPage && ` • Page ${currentPage} of ${totalPages}`}
+            Manage all organizations and their members
           </p>
         </div>
 
-        {/* Search */}
-        <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3">
-          <Search className="w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by name or domain..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400"
-          />
+        {/* Tabs */}
+        <div className="flex gap-2 border-b border-gray-200 dark:border-gray-800">
+          <button
+            onClick={() => setActiveTab('organizations')}
+            className={cn(
+              'px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap',
+              activeTab === 'organizations'
+                ? 'border-[#37bd7e] text-gray-900 dark:text-white'
+                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              Organizations
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveTab('reactivations')}
+            className={cn(
+              'px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap',
+              activeTab === 'reactivations'
+                ? 'border-[#37bd7e] text-gray-900 dark:text-white'
+                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Reactivation Requests
+              {reactivationRequests.length > 0 && (
+                <Badge variant="destructive" className="text-xs ml-1">
+                  {reactivationRequests.length}
+                </Badge>
+              )}
+            </div>
+          </button>
         </div>
 
-        {/* Bulk Actions Bar */}
-        <AnimatePresence>
-          {selectedOrgs.size > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              transition={{
-                duration: 0.2,
-                ease: [0.23, 1, 0.32, 1],
-              }}
-              className="bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-violet-600/10 backdrop-blur-xl border border-violet-500/20 rounded-xl p-4 shadow-2xl shadow-violet-500/10"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/30">
-                    <CheckSquare className="w-4 h-4 text-violet-400" />
+        {/* Organizations Tab */}
+        {activeTab === 'organizations' && (
+          <>
+            {/* Search */}
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3">
+              <Search className="w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by name or domain..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400"
+              />
+            </div>
+
+            {/* Bulk Actions Bar */}
+            <AnimatePresence>
+              {selectedOrgs.size > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  transition={{
+                    duration: 0.2,
+                    ease: [0.23, 1, 0.32, 1],
+                  }}
+                  className="bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-violet-600/10 backdrop-blur-xl border border-violet-500/20 rounded-xl p-4 shadow-2xl shadow-violet-500/10"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/30">
+                        <CheckSquare className="w-4 h-4 text-violet-400" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        {selectedOrgs.size} selected
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => setBulkToggleDialogOpen(true)}
+                        variant="tertiary"
+                        size="sm"
+                      >
+                        <ToggleRight className="w-4 h-4 mr-2" />
+                        Toggle Status
+                      </Button>
+                      <Button onClick={() => setBulkDeleteDialogOpen(true)} variant="destructive" size="sm">
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setSelectedOrgs(new Set());
+                          setIsSelectAllChecked(false);
+                        }}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
-                    {selectedOrgs.size} selected
-                  </span>
-                </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={() => setBulkToggleDialogOpen(true)}
-                    variant="tertiary"
-                    size="sm"
-                  >
-                    <ToggleRight className="w-4 h-4 mr-2" />
-                    Toggle Status
-                  </Button>
-                  <Button onClick={() => setBulkDeleteDialogOpen(true)} variant="destructive" size="sm">
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setSelectedOrgs(new Set());
-                      setIsSelectAllChecked(false);
-                    }}
-                    variant="ghost"
-                    size="sm"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Table */}
-        <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
-          {filteredOrgs.length === 0 ? (
+            {/* Table */}
+            <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
+              {filteredOrgs.length === 0 ? (
             <div className="text-center py-12">
               <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -964,7 +1046,104 @@ export default function Organizations() {
             )}
             </>
           )}
-        </div>
+            </div>
+          </>
+        )}
+
+        {/* Reactivation Requests Tab */}
+        {activeTab === 'reactivations' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                Organization Reactivation Requests
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Review and approve requests from inactive organizations to reactivate their accounts.
+              </p>
+            </div>
+
+            {reactivationRequests.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
+                <RefreshCw className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 dark:text-gray-400 font-medium">
+                  No pending reactivation requests
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+                  Requests from inactive organizations will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="border dark:border-gray-800 rounded-xl overflow-hidden">
+                {reactivationRequests.map((request: OrganizationReactivationRequest) => (
+                  <div
+                    key={request.id}
+                    className="p-6 border-b last:border-b-0 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        {/* Organization Info */}
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                            {request.organization?.name || 'Unknown Organization'}
+                          </h3>
+                          {request.organization?.company_domain && (
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              {request.organization.company_domain}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Request Details */}
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <User className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              Requested by: {request.requester?.full_name || request.requester?.email || 'Unknown'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              {new Date(request.requested_at).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => handleApproveReactivation(request.id)}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Approve
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const reason = window.prompt(
+                              'Optional: Provide a reason for rejection (will be included in email to user)'
+                            );
+                            if (reason !== null) {
+                              handleRejectReactivation(request.id, reason || undefined);
+                            }
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="border-red-300 text-red-600 hover:bg-red-50"
+                        >
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Bulk Delete Dialog */}
         <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>

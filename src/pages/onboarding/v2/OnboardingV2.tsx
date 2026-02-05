@@ -270,15 +270,11 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
   }, [userEmail, setUserEmail]);
 
   // Check for existing organization when business email signs up
-  // NOTE: This RPC check is disabled as the required function may not be deployed
-  // Users can still proceed through organization selection manually
-  // Uncomment when check_existing_org_by_email_domain RPC is available in all environments
-  /*
+  // Auto-detect matching organizations for business emails and prompt to join
   useEffect(() => {
     const checkBusinessEmailOrg = async () => {
       const stepsToSkip = ['pending_approval', 'enrichment_loading', 'enrichment_result', 'skills_config', 'complete', 'organization_selection'];
       if (stepsToSkip.includes(currentStep)) {
-        console.log('[OnboardingV2] Skipping business email org check for step:', currentStep);
         return;
       }
 
@@ -287,7 +283,6 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
       const { setStep } = useOnboardingV2Store.getState();
 
       try {
-        console.log('[OnboardingV2] Checking for existing org with email domain:', domain);
         const { data: existingOrg, error } = await supabase
           .rpc('check_existing_org_by_email_domain', {
             p_email: userEmail,
@@ -295,11 +290,13 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
           .maybeSingle();
 
         if (error) {
-          console.warn('[OnboardingV2] RPC error checking org:', error);
+          // RPC might not be deployed yet - fail silently and let user proceed manually
+          console.warn('[OnboardingV2] RPC check_existing_org_by_email_domain not available');
           return;
         }
 
-        if (existingOrg && existingOrg.should_request_join) {
+        // Only show org if it has active members (prevents joining empty/ghost orgs)
+        if (existingOrg && existingOrg.should_request_join && existingOrg.member_count > 0) {
           console.log('[OnboardingV2] Found existing org for business email:', existingOrg.org_name);
           setStep('organization_selection');
           useOnboardingV2Store.setState({
@@ -314,13 +311,13 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
           });
         }
       } catch (error) {
-        console.error('[OnboardingV2] Exception checking for existing org:', error);
+        // Fail silently - user can still proceed with manual flow
+        console.warn('[OnboardingV2] Exception checking for existing org:', error);
       }
     };
 
     checkBusinessEmailOrg();
   }, [userEmail, domain, currentStep]);
-  */
 
   // Auto-start enrichment for corporate email path (if no existing org found)
   useEffect(() => {

@@ -80,7 +80,9 @@ export function OrganizationSelectionStep() {
       await submitJoinRequest(org.id, org.name);
       toast.success('Join request submitted!');
     } catch (err) {
-      toast.error('Failed to submit join request');
+      // Show specific error message from RPC (e.g., "This organization is inactive")
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit join request';
+      toast.error(errorMessage);
       console.error(err);
     } finally {
       setSubmitting(false);

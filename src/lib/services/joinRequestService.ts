@@ -339,7 +339,38 @@ export async function acceptJoinRequest(
  */
 export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest[]> {
   try {
-    // Step 1: Fetch join requests (without embedded profile join)
+    // Step 1: Verify user has permission FIRST (fail fast with clear error)
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('Not authenticated');
+    }
+
+    const { data: membership } = await supabase
+      .from('organization_memberships')
+      .select('role, member_status')
+      .eq('org_id', orgId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!membership || !['owner', 'admin'].includes(membership.role)) {
+      console.warn('[joinRequestService] User lacks permission to view join requests:', {
+        userId: user.id,
+        orgId,
+        role: membership?.role,
+      });
+      throw new Error('You do not have permission to view join requests for this organization');
+    }
+
+    if (membership.member_status !== 'active') {
+      console.warn('[joinRequestService] User has inactive membership:', {
+        userId: user.id,
+        orgId,
+        member_status: membership.member_status,
+      });
+      throw new Error('Your membership is not active');
+    }
+
+    // Step 2: Fetch join requests (permission verified)
     // Note: Only selecting columns that exist in base migration
     // join_request_token and join_request_expires_at columns may not exist yet
     const { data: joinRequests, error } = await supabase
@@ -360,10 +391,18 @@ export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest
       .order('requested_at', { ascending: false });
 
     if (error) {
-      return [];
+      console.error('[joinRequestService] Supabase error fetching join requests:', {
+        orgId,
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+      throw new Error(`Failed to fetch join requests: ${error.message}`);
     }
 
     if (!joinRequests || joinRequests.length === 0) {
+      console.log('[joinRequestService] No pending join requests found for org:', orgId);
       return [];
     }
 
@@ -379,11 +418,14 @@ export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest
       });
     });
 
+    console.log('[joinRequestService] Found', joinRequests.length, 'pending join requests');
+
     // Return join requests as-is - they already have user_profile data from the table
     // No need to fetch profiles separately (would be blocked by RLS anyway)
     return joinRequests as JoinRequest[];
   } catch (err) {
-    return [];
+    console.error('[joinRequestService] Exception in getPendingJoinRequests:', err);
+    throw err; // Re-throw so useQuery can catch and display error
   }
 }
 

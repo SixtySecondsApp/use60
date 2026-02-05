@@ -99,13 +99,29 @@ export async function getPendingReactivationRequests(): Promise<OrganizationReac
       .from('organization_reactivation_requests')
       .select(`
         *,
-        organization:organizations(name, company_domain),
-        requester:profiles!organization_reactivation_requests_requested_by_fkey(full_name, email)
+        organization:organizations(name, company_domain)
       `)
       .eq('status', 'pending')
       .order('requested_at', { ascending: false });
 
     if (error) throw error;
+
+    // Get user details for requesters separately
+    if (data && data.length > 0) {
+      const requesterIds = data.map(r => r.requested_by);
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', requesterIds);
+
+      if (!profileError && profiles) {
+        const profileMap = new Map(profiles.map(p => [p.id, p]));
+        return data.map(req => ({
+          ...req,
+          requester: profileMap.get(req.requested_by) || { full_name: 'Unknown', email: 'unknown@example.com' }
+        })) as OrganizationReactivationRequest[];
+      }
+    }
 
     return data || [];
   } catch (error) {

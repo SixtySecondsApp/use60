@@ -1,0 +1,208 @@
+{
+  "feature": "onboarding-v2",
+  "issue": "comprehensive-flow-bugs",
+  "createdAt": "2026-02-05T00:00:00Z",
+  "reportedSymptoms": [
+    "Enrichment instantly fails with 'timeout after 5 minutes' message",
+    "PGRST116 error on check_existing_org_by_email_domain",
+    "Organization created with name='google.com', website='acme.com' (backwards)",
+    "Enrichment skipped after retries",
+    "Auto-joined to new org without enrichment completing"
+  ],
+  "rootCauses": [
+    {
+      "id": "BUG-004",
+      "summary": "Auto-join without approval (security risk)",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "line": 507,
+      "confidence": 0.99
+    },
+    {
+      "id": "BUG-002",
+      "summary": "Organization created with domain as name instead of company name",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "line": 742,
+      "confidence": 0.99
+    }
+  ],
+  "bugs": [
+    {
+      "id": "BUG-004",
+      "title": "Fix auto-join without approval (SECURITY)",
+      "severity": "high",
+      "priority": "P1",
+      "status": "fixed",
+      "fixedAt": "2026-02-05T00:00:00Z",
+      "commit": "f3d155b6",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "507-541",
+      "description": "Exact domain matches bypass join request approval flow. Anyone with an email from that domain can join instantly without admin approval. Security risk for ex-employees, contractors, and unauthorized access.",
+      "approach": "Replace auto-membership insert with join request creation for exact matches. All matches (exact and fuzzy) should require admin approval.",
+      "estimatedMinutes": 15,
+      "dependencies": [],
+      "blocks": ["BUG-005"],
+      "testCases": [
+        "Exact domain match creates join request (not membership)",
+        "User sent to pending_approval step",
+        "Admin must approve before membership created",
+        "No unauthorized auto-join"
+      ],
+      "securityImpact": "HIGH"
+    },
+    {
+      "id": "BUG-002",
+      "title": "Don't use domain as organization name",
+      "severity": "critical",
+      "priority": "P0",
+      "status": "fixed",
+      "fixedAt": "2026-02-05T00:00:00Z",
+      "commit": "f3d155b6",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "742",
+      "description": "When user enters website, organization is created with domain as name (e.g., 'acme.com') instead of waiting for enrichment to discover company name (e.g., 'Acme Software Inc.').",
+      "approach": "Use placeholder name 'My Organization' when creating org, update to enriched company name when enrichment completes successfully.",
+      "estimatedMinutes": 10,
+      "dependencies": [],
+      "blocks": ["BUG-003"],
+      "testCases": [
+        "Website entered → org created with placeholder name",
+        "Enrichment succeeds → org name updated to company name",
+        "Enrichment fails → manual entry updates org name",
+        "No orgs with domain names like 'google.com'"
+      ]
+    },
+    {
+      "id": "BUG-003",
+      "title": "Update org name with manual enrichment data",
+      "severity": "high",
+      "priority": "P1",
+      "status": "fixed",
+      "fixedAt": "2026-02-05T00:00:00Z",
+      "commit": "f3d155b6",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1040-1086",
+      "description": "After enrichment retries fail and user provides manual company data, the existing organization name is never updated with the manually entered company name.",
+      "approach": "Before calling edge function in submitManualEnrichment, update organization name with manualData.company_name if organization ID already exists.",
+      "estimatedMinutes": 15,
+      "dependencies": ["BUG-002"],
+      "blocks": [],
+      "testCases": [
+        "Enrichment fails → manual entry → org name updated to manual input",
+        "User enters 'Acme Software' → org name is 'Acme Software' (not domain)",
+        "Enrichment and manual paths both result in correct org name"
+      ]
+    },
+    {
+      "id": "BUG-001",
+      "title": "Fix enrichment error messages and timeouts",
+      "severity": "critical",
+      "priority": "P0",
+      "status": "fixed",
+      "fixedAt": "2026-02-05T00:00:00Z",
+      "commit": "f3d155b6",
+      "file": "supabase/functions/deep-enrich-organization/index.ts",
+      "lines": "564-642, 648-730",
+      "description": "Enrichment fails immediately (2-10 seconds) but shows misleading 'timeout after 5 minutes' message. Users have no visibility into actual failure reason (website blocked, network timeout, AI error).",
+      "approach": "Add specific error messages for common failure modes, add fetch timeouts to website scraping (10s per page), improve logging to track where pipeline fails.",
+      "estimatedMinutes": 30,
+      "dependencies": [],
+      "blocks": [],
+      "testCases": [
+        "Website blocking bots → 'website blocking automated access' message",
+        "Network timeout → 'website unreachable' message",
+        "AI API error → 'AI service error' message",
+        "Actual 5 min timeout → 'timeout' message accurate"
+      ]
+    },
+    {
+      "id": "BUG-005",
+      "title": "Remove conflicting organization checks",
+      "severity": "medium",
+      "priority": "P2",
+      "status": "pending",
+      "file": "src/pages/onboarding/v2/OnboardingV2.tsx",
+      "lines": "272-320",
+      "description": "Three separate places check for existing organizations with different logic, causing race conditions and inconsistent behavior. Skip logic prevents checks during critical steps.",
+      "approach": "Remove useEffect check from OnboardingV2.tsx (most problematic). Consolidate logic into store methods only. Remove or fix skip conditions.",
+      "estimatedMinutes": 20,
+      "dependencies": ["BUG-001", "BUG-002", "BUG-003", "BUG-004"],
+      "blocks": [],
+      "testCases": [
+        "Business email → exactly one org check → correct flow",
+        "Personal email + website → exactly one org check",
+        "No race conditions between checks",
+        "No duplicate organizations created"
+      ]
+    },
+    {
+      "id": "BUG-006",
+      "title": "Validate member count before join request",
+      "severity": "medium",
+      "priority": "P2",
+      "status": "pending",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "666-735",
+      "description": "submitWebsite creates join request without checking if org has active members. Users can request to join empty/ghost organizations with no admins to approve them.",
+      "approach": "Add member count check before creating join request. Update find_similar_organizations_by_domain RPC to filter active members only. If org has 0 members, allow creating new org.",
+      "estimatedMinutes": 15,
+      "dependencies": [],
+      "blocks": [],
+      "testCases": [
+        "Org with 0 members → don't show join option → create new",
+        "Org with 1+ active members → join request allowed",
+        "Org with only inactive members → treated as empty",
+        "No users stuck in pending approval with no admin"
+      ],
+      "migrationRequired": true,
+      "migrationFile": "supabase/migrations/YYYYMMDDHHMMSS_fix_fuzzy_matching_active_members.sql"
+    },
+    {
+      "id": "BUG-007",
+      "title": "Verify RPC deployment and improve error handling",
+      "severity": "low",
+      "priority": "P3",
+      "status": "pending",
+      "file": "src/pages/onboarding/v2/OnboardingV2.tsx",
+      "lines": "286-296",
+      "description": "User reported PGRST116 error on check_existing_org_by_email_domain. Code already uses .maybeSingle() correctly, but RPC may not be deployed or error handling could be improved.",
+      "approach": "Verify RPC is deployed to Supabase. Add better error handling and logging. Ensure users aren't blocked if RPC fails.",
+      "estimatedMinutes": 10,
+      "dependencies": ["BUG-001", "BUG-002", "BUG-003", "BUG-004", "BUG-005", "BUG-006"],
+      "blocks": [],
+      "testCases": [
+        "RPC not deployed → fails silently → user continues",
+        "RPC deployed, 0 results → returns null → user continues",
+        "RPC deployed, 1 result → returns org → join request flow",
+        "No PGRST116 errors blocking users"
+      ]
+    }
+  ],
+  "testPlan": {
+    "manual": [
+      "Personal email + website → enrichment succeeds → org name correct",
+      "Personal email + website → enrichment fails → manual entry → org name updated",
+      "Business email + exact match → join request → pending approval",
+      "Business email + fuzzy match → org selection → join request",
+      "Website unreachable → clear error message (not timeout)",
+      "Exact domain match → NO auto-join",
+      "Cannot join empty orgs",
+      "Multiple retries → manual entry → org name correct"
+    ],
+    "automated": [
+      "Unit test: extractDomain() → org name placeholder",
+      "Unit test: submitManualEnrichment updates existing org",
+      "Integration test: enrichment success → org name updated",
+      "Integration test: join request created for exact matches",
+      "E2E test: full onboarding flow (personal email)",
+      "E2E test: full onboarding flow (business email)"
+    ]
+  },
+  "totalEstimatedMinutes": 115,
+  "securityRisks": [
+    "BUG-004: Unauthorized access via auto-join"
+  ],
+  "dataCorruptionRisks": [
+    "BUG-002: All organizations have domain names instead of company names",
+    "BUG-003: Manual enrichment data lost"
+  ]
+}

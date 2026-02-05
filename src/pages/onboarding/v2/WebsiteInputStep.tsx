@@ -92,7 +92,9 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
       await submitJoinRequest(org.id, org.name);
       toast.success(`Join request submitted for ${org.name}!`);
     } catch (err) {
-      toast.error('Failed to submit join request');
+      // Show specific error message from RPC (e.g., "This organization is inactive")
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit join request';
+      toast.error(errorMessage);
       console.error(err);
       setSelectedOrgId(null);
     } finally {
