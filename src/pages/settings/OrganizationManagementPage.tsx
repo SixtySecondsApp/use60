@@ -1733,10 +1733,10 @@ export default function OrganizationManagementPage() {
                 )}
 
                 {canDeactivate === true && (
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3">
+                  <div className="bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg p-3">
                     <div className="flex gap-2">
-                      <AlertCircle className="w-5 h-5 text-yellow-700 dark:text-yellow-200 flex-shrink-0" />
-                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                      <AlertCircle className="w-5 h-5 text-red-700 dark:text-red-200 flex-shrink-0" />
+                      <p className="text-sm text-red-800 dark:text-red-200">
                         <strong>Recovery available:</strong> You'll have 30 days to reactivate this organization. After 30 days, all data will be permanently deleted.
                       </p>
                     </div>
