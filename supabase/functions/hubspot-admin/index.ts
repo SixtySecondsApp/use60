@@ -109,14 +109,24 @@ import { HubSpotClient } from '../_shared/hubspot.ts';
   }
 }
 serve(async (req)=>{
-  console.log('[hubspot-admin] Request received:', req.method, req.url);
-  if (req.method === 'OPTIONS') return new Response('ok', {
-    headers: corsHeaders
-  });
-  if (req.method !== 'POST') {
+  console.log('[hubspot-admin] Request received:', { method: req.method, url: req.url, methodType: typeof req.method });
+
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+
+  // Accept POST requests
+  const isPost = req.method?.toUpperCase() === 'POST';
+  console.log('[hubspot-admin] Is POST?', isPost, 'method:', req.method);
+
+  if (!isPost) {
+    console.error('[hubspot-admin] Wrong method:', req.method);
     return new Response(JSON.stringify({
       success: false,
-      error: 'Method not allowed'
+      error: `Method not allowed: ${req.method}`
     }), {
       status: 405,
       headers: {

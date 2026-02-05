@@ -68,6 +68,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       if (!token) throw new Error('No active session');
 
       const resp = await supabase.functions.invoke('hubspot-admin', {
+        method: 'POST',
         body: JSON.stringify({ action: 'status', org_id: activeOrgId, token }),
       });
 
@@ -166,6 +167,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       setSaving(true);
       try {
         const resp = await supabase.functions.invoke('hubspot-admin', {
+          method: 'POST',
           body: JSON.stringify({ action: 'save_settings', org_id: activeOrgId, settings, token }),
         });
         if (resp.error) throw new Error(resp.error.message || 'Failed to save settings');
@@ -188,6 +190,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       if (!token) throw new Error('No active session');
 
       const resp = await supabase.functions.invoke('hubspot-admin', {
+        method: 'POST',
         body: JSON.stringify({ action: 'enqueue', org_id: activeOrgId, ...args, token }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to enqueue job');
@@ -214,6 +217,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       if (!token) throw new Error('No active session');
 
       const resp = await supabase.functions.invoke('hubspot-admin', {
+        method: 'POST',
         body: JSON.stringify({
           action: 'get_properties',
           org_id: activeOrgId,
@@ -244,10 +248,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     if (!token) throw new Error('No active session');
 
     const resp = await supabase.functions.invoke('hubspot-admin', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      method: 'POST',
       body: JSON.stringify({ action: 'get_pipelines', org_id: activeOrgId, token }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch pipelines');
@@ -273,10 +274,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     if (!token) throw new Error('No active session');
 
     const resp = await supabase.functions.invoke('hubspot-admin', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      method: 'POST',
       body: JSON.stringify({ action: 'get_forms', org_id: activeOrgId, token }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch forms');
@@ -299,10 +297,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     if (!token) throw new Error('No active session');
 
     const resp = await supabase.functions.invoke('hubspot-admin', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      method: 'POST',
       body: JSON.stringify({ action: 'get_lists', org_id: activeOrgId, token }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch segments');
@@ -326,6 +321,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       if (!token) throw new Error('No active session');
 
       const resp = await supabase.functions.invoke('hubspot-admin', {
+        method: 'POST',
         body: JSON.stringify({ action: 'preview_contacts', org_id: activeOrgId, ...args, token }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to preview contacts');
@@ -357,6 +353,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       if (!token) throw new Error('No active session');
 
       const resp = await supabase.functions.invoke('hubspot-admin', {
+        method: 'POST',
         body: JSON.stringify({ action: 'trigger_sync', org_id: activeOrgId, ...args, token }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to trigger sync');
