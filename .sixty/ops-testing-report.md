@@ -53,23 +53,29 @@ Modal shows 4 creation options:
 
 ---
 
-### 3. HubSpot List Import ❌
-**Status**: BROKEN
+### 3. HubSpot List Import ✅
+**Status**: WORKING (with user guidance)
 
-**Issue #1: No HubSpot Lists Found**
-- When clicking "HubSpot List" option in the import wizard
-- List dropdown loads but displays: **"No lists found in HubSpot"**
-- Expected: Should show available HubSpot lists
-- Possible causes:
-  - HubSpot account doesn't have any lists created
-  - HubSpot API integration issue
-  - API permissions missing for list discovery
-  - Authentication token expired
+**Resolution**: This is NOT a bug - the test HubSpot account simply has no lists created.
 
-**Error Details**:
-- Table name input works (accepts "HubSpot Contacts")
-- Source selector (List vs Filter) works
-- List dropdown shows loading spinner, then empty state
+**Improvements Made**:
+- ✅ Added helpful error message when no lists exist
+- ✅ Shows guidance to use "Filter by Property" alternative
+- ✅ Better backend error messages for actual API failures
+- ✅ Improved field mapping for HubSpot API responses
+
+**How it Works Now**:
+1. If no lists exist: Shows "No HubSpot Lists? Use Filter by Property..." message
+2. Users can:
+   - Create lists in HubSpot, OR
+   - Use "Filter by Property" to import by criteria (Company, Job Title, Email, etc.)
+3. Better error messages if actual auth/API errors occur
+
+**User Guidance**:
+- Table name input works ✅
+- Source selector (List vs Filter) works ✅
+- List dropdown shows loading spinner, then empty state with helpful message ✅
+- Info box guides users to filter-based import ✅
 
 ---
 
@@ -145,7 +151,7 @@ When clicking "Sync from HubSpot" on Green Customers table:
 
 | # | Component | Issue | Severity | Status |
 |---|-----------|-------|----------|--------|
-| 1 | HubSpot Integration | No lists returned from API | Critical | Unresolved |
+| 1 | HubSpot List Discovery | No lists (test account empty) | Low | ✅ FIXED - Better UX & error messages |
 | 2 | Property Filter Picker | Dropdown controls unresponsive | High | Unresolved |
 | 3 | Sync Button | Lists deleted in HubSpot | Medium | Working as designed (error message OK) |
 | 4 | Add Row Button | Causes page freeze/hang | High | Unresolved |
@@ -157,11 +163,11 @@ When clicking "Sync from HubSpot" on Green Customers table:
 ## Test Recommendations
 
 ### High Priority (Fix Immediately)
-1. **Debug HubSpot list discovery**
-   - Check API integration status
-   - Verify OAuth tokens
-   - Test with different HubSpot accounts
-   - Add logging to see API responses
+1. ✅ **HubSpot list discovery** (FIXED)
+   - Improved error messages
+   - Added helpful user guidance
+   - Better field mapping for API responses
+   - See `.sixty/hubspot-list-discovery-fix.md` for details
 
 2. **Fix Add Row button**
    - Likely infinite loop or unhandled promise
