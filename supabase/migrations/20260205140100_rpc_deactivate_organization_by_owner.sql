@@ -38,10 +38,12 @@ begin
     return jsonb_build_object('success', false, 'error', 'Organization is already deactivated');
   end if;
 
-  -- Check if user is owner of this organization
+  -- Check if user is owner of this organization (must not be removed)
   select role into v_user_role
   from organization_memberships
-  where org_id = p_org_id and user_id = v_user_id;
+  where org_id = p_org_id
+    and user_id = v_user_id
+    and (member_status is null or member_status != 'removed');
 
   if v_user_role is null then
     return jsonb_build_object('success', false, 'error', 'Not a member of this organization');

@@ -53,6 +53,9 @@ import {
   type OrganizationReactivationRequest,
 } from '@/lib/services/organizationReactivationService';
 import {
+  deactivateOrganizationAsOwner,
+} from '@/lib/services/organizationDeactivationService';
+import {
   getAllOrganizations,
   renameOrganization,
   toggleOrganizationStatus,
@@ -297,14 +300,33 @@ export default function Organizations() {
 
   async function handleToggleStatus(orgId: string, newStatus: boolean) {
     try {
-      const result = await toggleOrganizationStatus(orgId, newStatus);
-      if (result.success) {
-        setOrganizations((prev) =>
-          prev.map((org) => (org.id === orgId ? { ...org, is_active: newStatus } : org))
-        );
-        toast.success(newStatus ? 'Organization activated' : 'Organization deactivated');
+      // For deactivation, use the full workflow (RPC with notifications and reactivation request)
+      if (!newStatus) {
+        const result = await deactivateOrganizationAsOwner(orgId, 'Deactivated by admin');
+        if (result.success) {
+          setOrganizations((prev) =>
+            prev.map((org) =>
+              org.id === orgId
+                ? { ...org, is_active: false, deactivated_at: new Date().toISOString(), deletion_scheduled_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() }
+                : org
+            )
+          );
+          refetchReactivationRequests();
+          toast.success('Organization deactivated. Reactivation requests are pending admin review.');
+        } else {
+          toast.error(result.error || 'Failed to deactivate organization');
+        }
       } else {
-        toast.error(result.error || 'Failed to update status');
+        // For reactivation, use simple toggle (approval is handled in reactivation requests tab)
+        const result = await toggleOrganizationStatus(orgId, newStatus);
+        if (result.success) {
+          setOrganizations((prev) =>
+            prev.map((org) => (org.id === orgId ? { ...org, is_active: newStatus, deactivated_at: null, deletion_scheduled_at: null } : org))
+          );
+          toast.success('Organization reactivated');
+        } else {
+          toast.error(result.error || 'Failed to reactivate organization');
+        }
       }
     } catch (error: any) {
       toast.error(error.message);

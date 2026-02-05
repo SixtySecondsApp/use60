@@ -134,7 +134,7 @@ export async function getAllOrgMembers(orgId: string): Promise<OrgMember[]> {
       `
       )
       .eq('org_id', orgId)
-      .is('member_status', null); // Get active members only (NULL means active)
+      .neq('member_status', 'removed'); // Exclude removed members, include active and NULL status for backwards compatibility
 
     if (membershipsError) throw membershipsError;
 

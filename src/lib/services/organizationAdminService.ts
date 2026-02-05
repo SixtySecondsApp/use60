@@ -81,8 +81,10 @@ export async function getAllOrganizations(): Promise<OrganizationWithMemberCount
             .eq('org_id', org.id)
             .eq('role', 'owner')
             .neq('member_status', 'removed')
-            .maybeSingle();
-          owner = fallbackOwner ? undefined : undefined; // Skip owner display if relationship fails
+            .limit(1);
+          if (fallbackOwner && fallbackOwner.length > 0) {
+            owner = { user_id: fallbackOwner[0].user_id };
+          }
         }
 
         return {
@@ -151,8 +153,10 @@ export async function getOrganization(orgId: string): Promise<OrganizationWithMe
         .eq('org_id', orgId)
         .eq('role', 'owner')
         .neq('member_status', 'removed')
-        .maybeSingle();
-      owner = fallbackOwner ? undefined : undefined; // Skip owner display if relationship fails
+        .limit(1);
+      if (fallbackOwner && fallbackOwner.length > 0) {
+        owner = { user_id: fallbackOwner[0].user_id };
+      }
     }
 
     return {

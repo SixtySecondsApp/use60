@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, RefreshCw, LogOut, Clock, Calendar, Mail } from 'lucide-react';
+import { AlertCircle, RefreshCw, LogOut, Clock, Calendar, Mail, UserX } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useOrganizationContext } from '@/lib/hooks/useOrganizationContext';
@@ -10,6 +10,7 @@ import {
   getReactivationRequestStatus,
   type OrganizationReactivationRequest
 } from '@/lib/services/organizationReactivationService';
+import { removeOrganizationMember } from '@/lib/services/organizationAdminService';
 import { toast } from 'sonner';
 import { logger } from '@/lib/utils/logger';
 
@@ -23,6 +24,7 @@ export default function InactiveOrganizationScreen() {
   const [isOwner, setIsOwner] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
   const [isOverdue, setIsOverdue] = useState(false);
+  const [isLeavingOrg, setIsLeavingOrg] = useState(false);
 
   useEffect(() => {
     // Check if there's already a pending request
@@ -105,6 +107,34 @@ export default function InactiveOrganizationScreen() {
   const handleChooseDifferentOrg = () => {
     // TODO: Implement org switcher or redirect to onboarding
     navigate('/onboarding');
+  };
+
+  const handleLeaveOrganization = async () => {
+    if (!activeOrg?.id || !user?.id) return;
+
+    try {
+      setIsLeavingOrg(true);
+      const result = await removeOrganizationMember(activeOrg.id, user.id);
+
+      if (result.success) {
+        toast.success('You have left the organization', {
+          description: 'You no longer have access to this organization.'
+        });
+        // Redirect to organization selection/onboarding
+        navigate('/onboarding');
+      } else {
+        toast.error('Failed to leave organization', {
+          description: result.error || 'Please try again or contact support.'
+        });
+      }
+    } catch (error) {
+      logger.error('[InactiveOrganizationScreen] Error leaving organization:', error);
+      toast.error('Error leaving organization', {
+        description: 'Please try again or contact support.'
+      });
+    } finally {
+      setIsLeavingOrg(false);
+    }
   };
 
   const handleSignOut = () => {
@@ -260,6 +290,20 @@ export default function InactiveOrganizationScreen() {
                   <li>You can request to rejoin once it's reactivated</li>
                 </ul>
               </div>
+
+              <Button
+                onClick={handleLeaveOrganization}
+                disabled={isLeavingOrg}
+                variant="outline"
+                className="w-full justify-between"
+                size="lg"
+              >
+                <span className="flex items-center gap-2">
+                  <UserX className="w-4 h-4" />
+                  Leave Organization
+                </span>
+                {isLeavingOrg && <RefreshCw className="w-4 h-4 animate-spin" />}
+              </Button>
             </div>
           )}
 
