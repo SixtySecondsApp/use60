@@ -476,53 +476,18 @@ serve(async (req) => {
         }
       } while (after)
 
-      // The v3 /crm/v3/lists/search endpoint does NOT return size/membershipCount.
-      // Batch-fetch individual lists via GET /crm/v3/lists?listIds=... to get the size field.
+      // The search response includes additionalProperties.hs_list_size with the contact count
       const nonArchivedLists = allLists.filter((l: any) => !l.archived)
-      const listIds = nonArchivedLists
-        .map((l: any) => String(l.listId || l.id || ''))
-        .filter(Boolean)
-
-      const sizeMap: Record<string, number> = {}
-
-      if (listIds.length > 0) {
-        // Batch fetch in chunks of 50 (URL length safety)
-        for (let i = 0; i < listIds.length; i += 50) {
-          const batch = listIds.slice(i, i + 50)
-          const params = batch.map((id: string) => `listIds=${encodeURIComponent(id)}`).join('&')
-          try {
-            const batchResp = await fetch(
-              `https://api.hubapi.com/crm/v3/lists?${params}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            )
-            if (batchResp.ok) {
-              const batchData = await batchResp.json()
-              for (const list of (batchData.lists || [])) {
-                const id = String(list.listId || '')
-                if (id) sizeMap[id] = typeof list.size === 'number' ? list.size : 0
-              }
-            } else {
-              console.warn('[hubspot-admin] Batch list fetch returned', batchResp.status)
-            }
-          } catch (e: any) {
-            console.warn('[hubspot-admin] Failed to batch-fetch list sizes:', e?.message)
-          }
-        }
-      }
 
       const formattedLists = nonArchivedLists
         .map((l: any) => {
           const id = String(l.listId || l.id || '')
+          const hsListSize = Number(l.additionalProperties?.hs_list_size)
           return {
             id,
             name: l.name || 'Untitled',
             listType: l.processingType === 'MANUAL' ? 'STATIC' : 'DYNAMIC',
-            membershipCount: sizeMap[id] ?? l.size ?? l.membershipCount ?? 0,
+            membershipCount: !isNaN(hsListSize) ? hsListSize : 0,
             createdAt: l.createdAt,
             updatedAt: l.updatedAt,
           }
