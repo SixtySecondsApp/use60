@@ -42,6 +42,13 @@ interface AgentSkillsRequest {
   include_documents?: boolean;
   /** V2: Resolve @ references in content */
   resolve_references?: boolean;
+  /**
+   * Progressive disclosure tier:
+   * - 'metadata': Frontmatter only (name, description, triggers, I/O) — ~100 tokens/skill
+   * - 'instructions': Frontmatter + content_template (default, backward-compatible)
+   * - 'full': Everything + resolved references from skill_documents
+   */
+  tier?: 'metadata' | 'instructions' | 'full';
 }
 
 /** V2: Skill document (child document within a skill folder) */
@@ -160,6 +167,7 @@ serve(async (req) => {
       query,
       include_documents = false,
       resolve_references = false,
+      tier = 'instructions',
     } = requestBody;
 
     // Validate organization_id
@@ -184,21 +192,21 @@ serve(async (req) => {
 
     switch (action) {
       case 'list':
-        response = await listSkills(supabase, organization_id, category, enabled_only, kind);
+        response = await listSkills(supabase, organization_id, category, enabled_only, kind, tier);
         break;
 
       case 'get':
         if (!skill_key) {
           return errorResponse('skill_key is required for get action', req, 400);
         }
-        response = await getSkill(supabase, organization_id, skill_key, include_documents, resolve_references);
+        response = await getSkill(supabase, organization_id, skill_key, include_documents || tier === 'full', resolve_references || tier === 'full');
         break;
 
       case 'search':
         if (!query) {
           return errorResponse('query is required for search action', req, 400);
         }
-        response = await searchSkills(supabase, organization_id, query, category, enabled_only, kind);
+        response = await searchSkills(supabase, organization_id, query, category, enabled_only, kind, tier);
         break;
 
       default:
@@ -225,7 +233,8 @@ async function listSkills(
   organizationId: string,
   category?: string,
   enabledOnly = true,
-  kind: 'skill' | 'sequence' | 'all' = 'all'
+  kind: 'skill' | 'sequence' | 'all' = 'all',
+  tier: 'metadata' | 'instructions' | 'full' = 'instructions'
 ): Promise<AgentSkillsResponse> {
   try {
     // Use the RPC function to get compiled skills
@@ -252,7 +261,8 @@ async function listSkills(
         kind: isSequence ? 'sequence' : 'skill',
         category,
         frontmatter,
-        content: s.content || '',
+        // Tier: 'metadata' omits content to save tokens (~100 tokens/skill vs ~5000)
+        content: tier === 'metadata' ? '' : (s.content || ''),
         step_count: stepCount,
         is_enabled: s.is_enabled ?? true,
         version: s.version ?? 1,
@@ -534,7 +544,8 @@ async function searchSkills(
   query: string,
   category?: string,
   enabledOnly = true,
-  kind: 'skill' | 'sequence' | 'all' = 'all'
+  kind: 'skill' | 'sequence' | 'all' = 'all',
+  tier: 'metadata' | 'instructions' | 'full' = 'instructions'
 ): Promise<AgentSkillsResponse> {
   try {
     // Get all skills first
@@ -587,7 +598,7 @@ async function searchSkills(
           kind: isSequence ? 'sequence' : 'skill',
           category,
           frontmatter,
-          content: s.content || '',
+          content: tier === 'metadata' ? '' : (s.content || ''),
           step_count: stepCount,
           is_enabled: s.is_enabled ?? true,
           version: s.version ?? 1,

@@ -28,6 +28,56 @@ import type {
 } from '../types/skills';
 
 // =============================================================================
+// Standard Folders
+// =============================================================================
+
+/** The only allowed root-level folder names */
+const STANDARD_FOLDER_NAMES = ['references', 'scripts', 'assets'] as const;
+
+const STANDARD_FOLDER_DESCRIPTIONS: Record<string, string> = {
+  references: 'Linked skill content and external references',
+  scripts: 'Automation scripts and helpers',
+  assets: 'Images, data files, and other static assets',
+};
+
+/**
+ * Ensure the 3 standard folders exist for a skill.
+ * Creates any that are missing. Safe to call multiple times.
+ */
+export async function ensureStandardFolders(skillId: string): Promise<void> {
+  // Get existing root-level folders
+  const { data: existing, error: fetchError } = await supabase
+    .from('skill_folders')
+    .select('name')
+    .eq('skill_id', skillId)
+    .is('parent_folder_id', null);
+
+  if (fetchError) {
+    console.error('[skillFolderService.ensureStandardFolders] Error fetching:', fetchError);
+    return;
+  }
+
+  const existingNames = new Set((existing || []).map((f: { name: string }) => f.name.toLowerCase()));
+  const missing = STANDARD_FOLDER_NAMES.filter((name) => !existingNames.has(name));
+
+  if (missing.length === 0) return;
+
+  const inserts = missing.map((name, i) => ({
+    skill_id: skillId,
+    name,
+    description: STANDARD_FOLDER_DESCRIPTIONS[name],
+    parent_folder_id: null,
+    sort_order: i,
+  }));
+
+  const { error: insertError } = await supabase.from('skill_folders').insert(inserts);
+
+  if (insertError) {
+    console.error('[skillFolderService.ensureStandardFolders] Error creating:', insertError);
+  }
+}
+
+// =============================================================================
 // Folder Operations
 // =============================================================================
 
@@ -940,6 +990,9 @@ export async function reorderSkillLinks(
 // =============================================================================
 
 export const skillFolderService = {
+  // Standard folders
+  ensureStandardFolders,
+
   // Folders
   getSkillFolderTree,
   createFolder,

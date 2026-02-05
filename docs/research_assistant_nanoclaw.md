@@ -74,10 +74,7 @@ NanoClaw's most distinctive architectural decision is its contribution model. So
 
 This is a fundamentally different model from Sixty's DB-driven platform skills. The key insight isn't the specific mechanism — it's the **separation of capability definition from core runtime**.
 
-**What we can adopt:**
-- Skills that are pure instructions (our YAML frontmatter already does this partially)
-- A "skill template" system where new integrations follow a cookbook pattern
-- CI validation that skill definitions conform to schema
+
 
 **What doesn't apply:**
 - Fork-and-modify doesn't work for a multi-tenant SaaS — our users share one codebase

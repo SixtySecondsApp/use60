@@ -242,20 +242,16 @@ function TreeNode({
         <Icon className={cn('h-4 w-4 flex-shrink-0 transition-transform duration-200', iconColor, isSelected && 'scale-110')} />
 
         {/* Name - linked skills show with special formatting */}
-        <span className={cn(
-          'flex-1 truncate text-sm transition-colors',
-          isSelected ? 'text-white font-medium' : 'text-gray-300',
-          isLinkedSkill && 'font-mono text-indigo-300'
-        )}>
+        <span
+          className={cn(
+            'truncate text-sm transition-colors min-w-0',
+            isSelected ? 'text-white font-medium' : 'text-gray-300',
+            isLinkedSkill && 'font-mono text-indigo-300'
+          )}
+          title={node.name}
+        >
           {node.name}
         </span>
-
-        {/* Category badge for linked skills */}
-        {isLinkedSkill && node.linked_skill_category && (
-          <span className="px-1.5 py-0.5 text-[10px] bg-indigo-500/20 text-indigo-300 rounded font-medium uppercase tracking-wide">
-            {node.linked_skill_category}
-          </span>
-        )}
 
         {/* Context menu */}
         <DropdownMenu>

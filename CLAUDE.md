@@ -253,6 +253,371 @@ SequenceOrchestrator → Level 1 abstract tools (research, draft, crm_action, et
 - Memory extraction happens automatically during compaction via Claude
 - Event-driven memories created by PostgreSQL triggers on entity changes
 
+## Skills System (Agent Skills Standard)
+
+Skills follow the [Agent Skills specification](https://agentskills.io) — the open standard created by Anthropic and adopted by 25+ agent platforms. Full adoption plan: [`SKILLS_STANDARD_ADOPTION.md`](SKILLS_STANDARD_ADOPTION.md).
+
+### Folder Structure (Strictly Enforced)
+
+Every skill directory has **exactly the same structure** — 3 standard subdirectories, no more, no less:
+
+```
+skills/
+├── atomic/                          # Self-contained skills (18 currently)
+│   └── <skill-name>/               # kebab-case, must match skill_key
+│       ├── SKILL.md                 # REQUIRED — YAML frontmatter + markdown body
+│       ├── references/              # Detailed docs, linked skill content, frameworks
+│       │   └── .gitkeep            # Empty folders tracked via .gitkeep
+│       ├── scripts/                 # Executable code (Python, JS, Bash)
+│       │   └── .gitkeep
+│       └── assets/                  # Output schemas, templates, data files
+│           └── .gitkeep
+│
+└── sequences/                       # Multi-skill orchestration chains (12 currently)
+    └── seq-<name>/                  # Always prefixed with "seq-"
+        ├── SKILL.md                 # REQUIRED — includes workflow + linked_skills
+        ├── references/              # Linked skill content auto-populated here
+        │   ├── meeting-prep-brief.md      # ← from linked_skills metadata
+        │   └── meeting-command-center.md
+        ├── scripts/
+        │   └── .gitkeep
+        └── assets/
+            └── .gitkeep
+```
+
+**These 3 subdirectories are the ONLY directories allowed:**
+
+| Directory | Purpose | Content |
+|-----------|---------|---------|
+| `references/` | Detailed docs loaded on-demand (tier 3) | Linked skill markdown, frameworks, scoring methodology, examples |
+| `scripts/` | Executable code | Python, JS, Bash scripts (Phase 4 — not yet active) |
+| `assets/` | Static resources | Output schemas, templates, data files |
+
+**Do NOT create any other directories.** No `examples/`, no `tests/`, no `docs/`, no custom folders. This is enforced by the validation script.
+
+### Linked Skills → References (How Sequences Reference Other Skills)
+
+When a sequence declares `linked_skills` in its metadata, the linked skill's markdown body is placed in that sequence's `references/` folder:
+
+```yaml
+# seq-next-meeting-command-center/SKILL.md
+metadata:
+  linked_skills:
+    - meeting-prep-brief            # → references/meeting-prep-brief.md
+    - meeting-command-center-plan   # → references/meeting-command-center-plan.md
+```
+
+```
+seq-next-meeting-command-center/
+├── SKILL.md
+├── references/
+│   ├── meeting-prep-brief.md              ← body from atomic/meeting-prep-brief/SKILL.md
+│   └── meeting-command-center-plan.md     ← body from atomic/meeting-command-center-plan/SKILL.md
+├── scripts/.gitkeep
+└── assets/.gitkeep
+```
+
+**Rules for reference files:**
+- File is named `<skill-key>.md` (matches the linked skill's directory name)
+- Contains the markdown body only (YAML frontmatter is stripped)
+- Includes a header: `> This reference is auto-populated from skills/atomic/<key>/SKILL.md`
+- **Do not edit reference files directly** — edit the source atomic skill, then re-sync
+- Synced to `skill_documents` table by `sync-skills.ts` and `sync-skills-from-github` edge function
+- Loaded on-demand at tier 3 (during skill execution, not at startup)
+
+### Naming Conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Skill directory | `kebab-case`, max 64 chars | `meeting-prep-brief` |
+| Sequence directory | `seq-` prefix + `kebab-case` | `seq-meeting-prep` |
+| `skill_key` | **Auto-derived from directory name** — NOT from `frontmatter.name` | Dir `meeting-prep-brief/` → key `meeting-prep-brief` |
+| SKILL.md | Always uppercase `SKILL.md` | Never `skill.md` or `Skill.md` |
+| Reference files | `kebab-case.md` | `scoring-framework.md` |
+
+### YAML Frontmatter Format
+
+**Every SKILL.md starts with YAML frontmatter between `---` markers.** The frontmatter is the skill's identity — it determines how the copilot finds, matches, and executes the skill.
+
+#### Required Fields (minimum viable skill)
+
+```yaml
+---
+name: Meeting Prep Brief                    # Display name (shown in UI)
+description: |                              # CRITICAL for discovery — this is what
+  Prepare a comprehensive pre-meeting       # gets embedded for semantic search.
+  brief with agenda and talking points.     # Write it like you're telling a colleague
+  Use when a user has an upcoming meeting.  # WHAT the skill does and WHEN to use it.
+metadata:
+  category: sales-ai                        # One of the 7 categories below
+  skill_type: atomic                        # atomic | sequence | composite
+---
+```
+
+That's it. **4 fields.** Triggers are optional — the embedding system discovers skills from the description alone.
+
+#### Categories (exactly 7)
+
+| Category | Used For |
+|----------|----------|
+| `sales-ai` | AI-powered sales intelligence and automation |
+| `writing` | Email drafting, reply composition |
+| `enrichment` | Lead/company research, data enrichment |
+| `workflows` | Automated process triggers |
+| `data-access` | How Copilot fetches contacts, deals, meetings, emails |
+| `output-format` | How Copilot formats responses for Slack, email, etc. |
+| `agent-sequence` | Multi-step skill chains that orchestrate other skills |
+
+#### Optional Fields (add as needed)
+
+```yaml
+metadata:
+  # ── Identity ──
+  author: sixty-ai
+  version: "1"
+  is_active: true                            # Default: true
+
+  # ── Triggers (optional — for high-confidence routing) ──
+  triggers:
+    - pattern: meeting_scheduled             # Event or intent pattern
+    - pattern: before_meeting
+  keywords:                                  # Additional search terms
+    - prep
+    - brief
+
+  # ── Context Requirements ──
+  required_context:                          # Variables the skill NEEDS
+    - meeting_id
+    - event_id
+  optional_context:                          # Variables it CAN USE if available
+    - contact_name
+
+  # ── Input/Output Schema (for tool definitions) ──
+  inputs:
+    - name: meeting_id
+      type: string
+      required: true
+      description: The meeting to prepare for
+  outputs:
+    - name: brief
+      type: object
+      description: Structured meeting brief
+
+  # ── Execution ──
+  requires_capabilities:                     # System capabilities needed
+    - calendar
+    - crm
+  priority: high                             # critical | high | medium | low
+  execution_mode: sync                       # sync | async | streaming
+  timeout_ms: 30000
+
+  # ── Tags ──
+  tags:
+    - meetings
+    - preparation
+    - pre-meeting
+```
+
+#### Sequence-Only Fields
+
+Sequences **must** include `linked_skills` and `workflow`:
+
+```yaml
+metadata:
+  category: agent-sequence
+  skill_type: sequence
+  linked_skills:                             # Child skills this sequence invokes
+    - meeting-prep-brief
+    - meeting-command-center-plan
+  workflow:
+    - order: 1
+      action: get_meetings                   # CRM action
+      input_mapping:
+        meeting_id: "${trigger.params.meeting_id}"
+      output_key: meeting_data
+      on_failure: stop
+    - order: 2
+      skill_key: meeting-prep-brief          # Reference to atomic skill
+      input_mapping:
+        meeting_data: "${outputs.meeting_data}"
+      output_key: brief
+      on_failure: stop
+```
+
+When a sequence references another skill via `linked_skills`, that skill's content is loaded from `skill_documents` or `platform_skills` at execution time. This enables cross-skill references without duplicating content.
+
+### Markdown Body (After Frontmatter)
+
+The body contains the actual instructions the copilot follows. Keep it under **5,000 tokens** — move detail into `references/`.
+
+```markdown
+---
+name: Deal Rescue Plan
+description: ...
+metadata: ...
+---
+# Deal Rescue Plan
+
+## Goal
+Turn an at-risk deal into an executable rescue plan.
+
+## Inputs
+- `deal`: from execute_action(get_deal, include_health=true)
+- `recent_activity` (optional)
+
+## Steps
+1. Diagnose why the deal is at risk
+2. Identify missing information
+3. Generate ranked rescue actions with ROI rationale
+4. Create Mutual Action Plan tasks
+
+## Organization Context
+Company: ${company_name}
+Competitors: ${competitors|join(', ')}
+Key differentiators: ${value_propositions|join('; ')}
+
+## Output Contract
+Return a SkillResult with:
+- `data.diagnosis`: { why_at_risk, missing_info, confidence }
+- `data.rescue_plan`: ranked array of actions
+- `data.map_tasks`: array of { title, description, due_date, priority }
+```
+
+#### Variable Syntax
+
+| Syntax | Description | Example |
+|--------|-------------|---------|
+| `${variable}` | Simple substitution | `${company_name}` → "Acme Corp" |
+| `${var\|join(', ')}` | Join array | `${competitors\|join(', ')}` → "WidgetCo, FooCorp" |
+| `${var\|upper}` | Uppercase | `${brand_tone\|upper}` → "PROFESSIONAL" |
+| `${var\|lower}` | Lowercase | `${domain\|lower}` → "acme.com" |
+| `${var\|first}` | First element | `${products\|first}` → first product |
+| `${var\|count}` | Array length | `${competitors\|count}` → 3 |
+| `${var\|'fallback'}` | Default value | `${tagline\|'Sales intelligence'}` |
+
+Variables are resolved per-org at compile time. Unresolved variables remain as `${...}` in the compiled output.
+
+### Dual Authoring Paths
+
+| Path | Who | How |
+|------|-----|-----|
+| **UI Editor** | Campaigns/Ops team | `/platform/skills/:category/new` — form fields, save button, no YAML knowledge needed |
+| **SKILL.md files** | Developers | Edit files in `skills/` dir, run `npm run sync-skills` |
+
+Both paths write to the same `platform_skills` table. Both trigger embedding generation and org compilation on save.
+
+### On Save Pipeline (Both Paths)
+
+```
+Skill saved to platform_skills
+  │
+  ├─ 1. Embedding generated (OpenAI text-embedding-3-small, 1536-dim)
+  │     → stored on platform_skills.description_embedding
+  │     → enables semantic routing (cosine > 0.6 threshold)
+  │
+  ├─ 2. Org compilation (compile-organization-skills edge function)
+  │     → resolves ${variables} using org context
+  │     → saved to organization_skills table
+  │     → this is what the copilot reads at runtime
+  │
+  └─ 3. Skill immediately discoverable by copilot
+```
+
+### CLI Scripts (Developer Path)
+
+```bash
+npm run validate-skills        # Validate all SKILL.md files (syntax, token budget, required fields)
+npm run sync-skills            # Parse → validate → upsert DB → compile orgs → generate embeddings
+npm run sync-skills:dry        # Preview without DB writes
+# Single skill:
+npm run sync-skills -- --skill meeting-prep-brief
+```
+
+### Routing Chain (How Copilot Finds Skills)
+
+```
+User message
+  ├─ 1. Check sequences by triggers (confidence > 0.7) → match? → execute
+  ├─ 2. Check skills by triggers (confidence > 0.5) → match? → execute
+  └─ 3. Embedding similarity on descriptions (cosine > 0.6) → match? → execute
+       (no triggers required — description-only skills work via this fallback)
+```
+
+**The description field is the most important field for discovery.** Write it like you're telling a colleague what the skill does and when they should use it. This text gets embedded and used for semantic matching.
+
+### Production Skill Pipeline (How Skills Reach the Copilot)
+
+**Two tables, two roles:**
+
+| Table | Role | What's Stored |
+|-------|------|---------------|
+| `platform_skills` | Master templates | Raw frontmatter + `${variable}` templates + embeddings |
+| `organization_skills` | Runtime (what copilot reads) | Compiled frontmatter + resolved content per org |
+
+**Correct runtime path** (`get-agent-skills` edge function):
+```sql
+-- Uses get_organization_skills_for_agent RPC
+SELECT COALESCE(os.compiled_frontmatter, ps.frontmatter) as frontmatter,
+       COALESCE(os.compiled_content, ps.content_template) as content
+FROM organization_skills os
+JOIN platform_skills ps ON ps.skill_key = os.skill_id
+WHERE os.organization_id = p_org_id AND os.is_active = true
+```
+
+**KNOWN ISSUE**: `autonomousExecutor.ts` and `copilotRoutingService.ts` currently read from `platform_skills` directly instead of `organization_skills`. This means org-specific variable resolution is bypassed in the frontend routing path. The edge function path (`get-agent-skills` RPC) works correctly. This needs to be fixed so both paths read from `organization_skills`.
+
+### Progressive Disclosure (3-Tier Loading)
+
+| Tier | What | Token Budget | When Loaded |
+|------|------|-------------|-------------|
+| 1. Metadata | `name` + `description` | ~50-100 tokens | Startup (all skills) |
+| 2. Instructions | `SKILL.md` body | <5,000 tokens | On activation |
+| 3. Resources | `references/` files | Unlimited | On demand during execution |
+
+**Rule**: If SKILL.md body exceeds ~3,000 tokens, extract detail into `references/` files. The main body should be the core workflow; references hold deep context (frameworks, scoring methodology, examples).
+
+### Database Tables
+
+| Table | Purpose |
+|-------|---------|
+| `platform_skills` | Master templates — frontmatter (JSONB), content_template, description_embedding (vector) |
+| `organization_skills` | **Runtime source** — compiled frontmatter + content with org variables resolved |
+| `skill_documents` | `references/` files — loaded on demand per skill |
+| `platform_skills_history` | Version history for rollback |
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/services/platformSkillService.ts` | CRUD + `syncSkillAfterSave()` (embedding + org compile) |
+| `src/lib/hooks/usePlatformSkills.ts` | React Query hooks, auto-calls sync on create/update |
+| `src/lib/services/embeddingService.ts` | `findSemanticMatches()` via `match_skills_by_embedding` RPC |
+| `src/lib/services/copilotRoutingService.ts` | 3-step routing chain (sequences → triggers → embeddings) |
+| `src/lib/copilot/agent/autonomousExecutor.ts` | Lazy tier-2 loading, skill→tool conversion |
+| `scripts/lib/skillParser.ts` | YAML parser (gray-matter), SHA-256 hash, token estimation |
+| `scripts/lib/generateEmbeddings.ts` | Batch embedding generation (OpenAI) |
+| `scripts/sync-skills.ts` | CLI sync: parse → validate → upsert → compile → embed |
+| `scripts/validate-skills.ts` | Validates all 30 SKILL.md files |
+| `supabase/functions/compile-organization-skills/index.ts` | Resolves `${variables}` per org |
+| `supabase/functions/get-agent-skills/index.ts` | Loads org-compiled skills for copilot (correct path) |
+| `supabase/functions/generate-embedding/index.ts` | OpenAI embedding wrapper |
+| `supabase/functions/sync-skills-from-github/index.ts` | Pull skills from GitHub repo |
+
+### Adding a New Skill (Checklist)
+
+1. **Create directory** with the standard 3 folders:
+   ```bash
+   mkdir -p skills/atomic/my-new-skill/{references,scripts,assets}
+   touch skills/atomic/my-new-skill/{references,scripts,assets}/.gitkeep
+   ```
+2. **Create SKILL.md** with at minimum: `name`, `description`, `metadata.category`, `metadata.skill_type`
+3. **Write a clear description** — this is the most important field for copilot discovery
+4. **Add references** if body exceeds ~3,000 tokens (move detail to `references/`)
+5. **For sequences**: Add `linked_skills` + `workflow` to metadata, then populate `references/` with linked skill content
+6. **Validate**: `npm run validate-skills`
+7. **Sync**: `npm run sync-skills` (generates embedding + compiles for all orgs)
+8. **Or use the UI Editor**: `/platform/skills/:category/new` (embedding + compile happen on save)
+
 ## Key Integrations
 
 - **Fathom**: Meeting transcripts → auto-indexed for AI search
@@ -296,7 +661,8 @@ See `docs/` for detailed guides:
 
 | File | Purpose |
 |------|---------|
-| `SKILL_FRONTMATTER_GUIDE.md` | V2 skill frontmatter spec (triggers, schemas, sequences) |
+| `SKILL_FRONTMATTER_GUIDE.md` | V2/V3 skill frontmatter spec (triggers, schemas, sequences) |
+| `SKILLS_STANDARD_ADOPTION.md` | Agent Skills standard adoption plan (skills.sh, agentskills.io) |
 | `OAUTH_RELAY_SETUP.md` | OAuth relay pattern for localhost development |
 | `research_assistant_*.md` | Competitive research (OpenClaw/Moltbot, NanoClaw) |
 
