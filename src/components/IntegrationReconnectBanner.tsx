@@ -60,16 +60,13 @@ export function IntegrationReconnectBanner({
     }
   });
 
-  // Staging: Query for unresolved integration alerts for current user
+  // Staging: Query for unresolved integration alerts (org-level alerts)
   const { data: alerts, isLoading } = useQuery({
-    queryKey: ['integration-alerts', user?.id],
+    queryKey: ['integration-alerts'],
     queryFn: async () => {
-      if (!user?.id) return [];
-
       const { data, error } = await supabase
         .from('integration_alerts')
         .select('id, integration_name, title, message, severity, created_at')
-        .eq('user_id', user.id)
         .is('resolved_at', null)
         .in('alert_type', ['token_revoked', 'token_expired', 'connection_failed'])
         .order('created_at', { ascending: false });
@@ -81,7 +78,6 @@ export function IntegrationReconnectBanner({
 
       return data || [];
     },
-    enabled: !!user?.id,
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: 60 * 1000, // Refetch every minute
   });
@@ -287,19 +283,16 @@ export function IntegrationReconnectBanner({
 }
 
 /**
- * Hook to check if there are any unresolved integration alerts
+ * Hook to check if there are any unresolved integration alerts (org-level)
  * Used by AppLayout to adjust padding when banner is visible
  */
-export function useHasIntegrationAlerts(userId: string | undefined): boolean {
+export function useHasIntegrationAlerts(): boolean {
   const { data: alerts } = useQuery({
-    queryKey: ['integration-alerts', userId],
+    queryKey: ['integration-alerts-check'],
     queryFn: async () => {
-      if (!userId) return [];
-
       const { data, error } = await supabase
         .from('integration_alerts')
         .select('id')
-        .eq('user_id', userId)
         .is('resolved_at', null)
         .in('alert_type', ['token_revoked', 'token_expired', 'connection_failed'])
         .limit(1);
@@ -307,7 +300,6 @@ export function useHasIntegrationAlerts(userId: string | undefined): boolean {
       if (error) return [];
       return data || [];
     },
-    enabled: !!userId,
     staleTime: 30 * 1000,
   });
 

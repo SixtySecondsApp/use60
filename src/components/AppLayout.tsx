@@ -89,7 +89,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { signOut } = useAuth();
   const { activeOrgId } = useOrg();
   const trialStatus = useTrialStatus(activeOrgId);
-  const hasIntegrationAlerts = useHasIntegrationAlerts(userData?.id);
+  const hasIntegrationAlerts = useHasIntegrationAlerts();
   const location = useLocation();
 
   // Check if user has integration that needs reconnection (must be before isIntegrationBannerVisible)
