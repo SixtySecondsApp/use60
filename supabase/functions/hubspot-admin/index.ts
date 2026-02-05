@@ -140,12 +140,34 @@ serve(async (req)=>{
         }
       });
     }
-    // Get authorization token from headers
+    let body = {};
+    try {
+      const rawBody = await req.text();
+      console.log('[hubspot-admin] Raw body received:', rawBody ? rawBody.substring(0, 200) : '(empty)');
+      if (rawBody) {
+        body = JSON.parse(rawBody);
+      }
+    } catch (e) {
+      console.error('[hubspot-admin] Body parse error:', e.message);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Invalid JSON body: ${e.message}`
+      }), {
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+
+    // Get authorization token from request body (since Supabase doesn't forward headers)
+    const tokenFromBody = typeof body.token === 'string' ? body.token : null;
     const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
-    const userToken = authHeader.replace('Bearer ', '').replace('bearer ', '');
+    const userToken = tokenFromBody || authHeader.replace('Bearer ', '').replace('bearer ', '');
 
     if (!userToken) {
-      console.warn('[hubspot-admin] No authorization token found');
+      console.warn('[hubspot-admin] No authorization token found in body or headers');
       return new Response(JSON.stringify({
         success: false,
         error: 'Unauthorized - no auth token'
@@ -182,26 +204,7 @@ serve(async (req)=>{
         }
       });
     }
-    let body = {};
-    try {
-      const rawBody = await req.text();
-      console.log('[hubspot-admin] Raw body received:', rawBody ? rawBody.substring(0, 200) : '(empty)');
-      if (rawBody) {
-        body = JSON.parse(rawBody);
-      }
-    } catch (e) {
-      console.error('[hubspot-admin] Body parse error:', e.message);
-      return new Response(JSON.stringify({
-        success: false,
-        error: `Invalid JSON body: ${e.message}`
-      }), {
-        status: 400,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      });
-    }
+
     const action = typeof body.action === 'string' ? body.action : null;
     const orgId = typeof body.org_id === 'string' ? body.org_id : null;
     console.log('[hubspot-admin] Parsed action:', action, 'org_id:', orgId);
