@@ -450,7 +450,7 @@ serve(async (req)=>{
         });
       }
     }
-    // Get HubSpot lists (all lists — static and dynamic/active)
+    // Get HubSpot segments (replaced deprecated lists endpoint)
     if (action === 'get_lists') {
       // Get valid access token (auto-refreshes if expired)
       const { accessToken, error: tokenError } = await getValidAccessToken(svc, orgId);
@@ -470,48 +470,36 @@ serve(async (req)=>{
         accessToken
       });
       try {
-        // Fetch all segments (HubSpot migrated from lists to segments)
-        const allSegments: any[] = [];
-        let after: string | undefined;
+        // Fetch all segments with pagination using new API endpoint
+        const allSegments = [];
+        let after;
         const limit = 100; // HubSpot v3 max per page
         let hasMore = true;
-
         console.log('[hubspot-admin] Starting get_segments fetch (lists endpoint deprecated)...');
-
-        while (hasMore) {
+        while(hasMore){
           // Use /crm/v3/objects/contacts/segments instead of deprecated /crm/v3/lists
-          const path = after
-            ? `/crm/v3/objects/contacts/segments?limit=${limit}&after=${after}`
-            : `/crm/v3/objects/contacts/segments?limit=${limit}`;
+          const path = after ? `/crm/v3/objects/contacts/segments?limit=${limit}&after=${after}` : `/crm/v3/objects/contacts/segments?limit=${limit}`;
           console.log('[hubspot-admin] Fetching segments from path:', path);
-
-          const response = await client.request<{
-            results: any[];
-            paging?: { next?: { after: string } };
-          }>({
+          const response = await client.request({
             method: 'GET',
-            path,
+            path
           });
-
           console.log('[hubspot-admin] Segments response:', JSON.stringify({
             resultsCount: response?.results?.length ?? 0,
             hasNext: !!response?.paging?.next?.after,
             sampleSegment: response?.results?.[0] ? {
               id: response.results[0].id,
               name: response.results[0].name,
-              keys: Object.keys(response.results[0]),
-            } : null,
+              keys: Object.keys(response.results[0])
+            } : null
           }));
-
           const segments = response?.results || [];
           allSegments.push(...segments);
           after = response?.paging?.next?.after;
           hasMore = !!after;
-
           // Safety limit
           if (allSegments.length > 5000) break;
         }
-
         console.log('[hubspot-admin] Total segments found:', allSegments.length);
 
         // Format segments to match list interface
@@ -521,28 +509,25 @@ serve(async (req)=>{
             id: s.id?.toString() || String(Math.random()),
             name: s.name || 'Untitled Segment',
             listType: 'DYNAMIC', // Segments are dynamic by nature
-            membershipCount: Number(s.membershipCount || 0),
+            membershipCount: 0, // Segments API doesn't include membership count
             createdAt: s.createdAt,
-            updatedAt: s.updatedAt,
+            updatedAt: s.updatedAt
           }));
 
         console.log('[hubspot-admin] Formatted segments count:', formattedLists.length);
-        if (formattedLists.length === 0) {
-          console.warn('[hubspot-admin] No segments found. Raw sample:', JSON.stringify(allSegments.slice(0, 2)));
-        }
 
         return new Response(JSON.stringify({
           success: true,
-          lists: formattedLists, // Keep as 'lists' for backwards compatibility
+          lists: formattedLists // Keep as 'lists' for backwards compatibility
         }), {
           status: 200,
           headers: {
             ...corsHeaders,
-            'Content-Type': 'application/json',
-          },
+            'Content-Type': 'application/json'
+          }
         });
       } catch (e: any) {
-        console.error('[hubspot-admin] get_lists error:', {
+        console.error('[hubspot-admin] get_segments error:', {
           message: e.message,
           status: e.status,
           responseBody: e?.responseBody,
@@ -576,7 +561,6 @@ serve(async (req)=>{
     if (action === 'preview_contacts') {
       const listId = body.list_id;
       const filters = body.filters;
-      const filterLogic = body.filter_logic;
       const previewLimit = Math.min(body.limit || 5, 10) // Max 10 for preview
       ;
       const { accessToken, error: tokenError } = await getValidAccessToken(svc, orgId);
@@ -606,50 +590,52 @@ serve(async (req)=>{
           'company'
         ];
         if (listId) {
-          // Two-step approach for list-based preview:
-          // 1. Get member IDs from the list
+          // Two-step approach for segment-based preview:
+          // 1. Get contact IDs from the segment
           // 2. Batch-read contacts with their properties
-          const membershipResponse = await client.request({
-            method: 'GET',
-            path: `/crm/v3/lists/${listId}/memberships`,
-            query: {
-              limit: previewLimit
-            }
-          });
-          const memberIds = membershipResponse?.results?.map((m)=>m.recordId) ?? [];
-          if (memberIds.length > 0) {
-            // Batch-read contacts with properties
-            const batchResponse = await client.request({
-              method: 'POST',
-              path: '/crm/v3/objects/contacts/batch/read',
-              body: {
-                propertiesWithHistory: [],
-                inputs: memberIds.map((id)=>({
-                    id
-                  })),
-                properties: previewProperties
+          try {
+            const membershipResponse = await client.request({
+              method: 'GET',
+              path: `/crm/v3/objects/contacts/segments/${listId}/memberships`,
+              query: {
+                limit: previewLimit
               }
             });
-            results = batchResponse?.results ?? [];
-          }
-          // Get total count from list metadata
-          try {
-            const listInfo = await client.request({
-              method: 'GET',
-              path: `/crm/v3/lists/${listId}`
-            });
-            totalCount = listInfo?.additionalProperties?.hs_list_size ?? results.length;
-          } catch  {
+            const memberIds = membershipResponse?.results?.map((m: any)=>m.recordId) ?? [];
+            if (memberIds.length > 0) {
+              // Batch-read contacts with properties
+              const batchResponse = await client.request({
+                method: 'POST',
+                path: '/crm/v3/objects/contacts/batch/read',
+                body: {
+                  propertiesWithHistory: [],
+                  inputs: memberIds.map((id: string)=>({
+                      id
+                    })),
+                  properties: previewProperties
+                }
+              });
+              results = batchResponse?.results ?? [];
+            }
+            // Segments API doesn't provide total count, so use results length
             totalCount = results.length;
+          } catch (segmentError: any) {
+            // If segment memberships fails, return empty (segment may have no members)
+            console.warn('[hubspot-admin] Segment membership fetch failed:', segmentError.message);
+            totalCount = 0;
           }
         } else {
           // Use search API with filters
           const searchBody = {
-            filterGroups: filters?.length
-              ? filterLogic === 'OR'
-                ? filters.map((f: any) => ({ filters: [{ propertyName: f.propertyName, operator: f.operator, value: f.value }] }))
-                : [{ filters: filters.map((f: any) => ({ propertyName: f.propertyName, operator: f.operator, value: f.value })) }]
-              : [],
+            filterGroups: filters?.length ? [
+              {
+                filters: filters.map((f)=>({
+                    propertyName: f.propertyName,
+                    operator: f.operator,
+                    value: f.value
+                  }))
+              }
+            ] : [],
             properties: previewProperties,
             limit: previewLimit
           };
