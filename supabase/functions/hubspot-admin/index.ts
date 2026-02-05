@@ -141,36 +141,47 @@ serve(async (req)=>{
       });
     }
     // Get authorization token from headers
-    // Note: Supabase edge functions may not forward the Authorization header
-    // in the request, so we try multiple approaches
     const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
     const userToken = authHeader.replace('Bearer ', '').replace('bearer ', '');
 
-    console.log('[hubspot-admin] Auth check:', {
-      hasAuthHeader: !!authHeader,
-      tokenLength: userToken.length,
-      allHeaders: Array.from(req.headers.entries()).map(([k]) => k)
-    });
-
-    // Create client with the token if available, otherwise use anon key
-    let userClient;
-    if (userToken) {
-      userClient = createClient(supabaseUrl, anonKey, {
-        global: {
-          headers: {
-            Authorization: `Bearer ${userToken}`
-          }
+    if (!userToken) {
+      console.warn('[hubspot-admin] No authorization token found');
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Unauthorized - no auth token'
+      }), {
+        status: 401,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
         }
       });
-    } else {
-      // Fallback: use anon key without additional auth
-      console.warn('[hubspot-admin] No auth token found, using anon client');
-      userClient = createClient(supabaseUrl, anonKey);
     }
 
-    // Try to get user info for logging
+    // Create client with the token
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${userToken}`
+        }
+      }
+    });
+
+    // Get authenticated user
     const { data: { user }, error: userError } = await userClient.auth.getUser();
-    console.log('[hubspot-admin] User context:', { userId: user?.id, error: userError?.message });
+    if (userError || !user) {
+      console.error('[hubspot-admin] User fetch error:', userError);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Unauthorized'
+      }), {
+        status: 401,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
     let body = {};
     try {
       const rawBody = await req.text();
