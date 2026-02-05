@@ -71,7 +71,8 @@
     "deploy:functions:staging": "./scripts/deploy-functions-staging.sh",
     "deploy:functions:production": "./scripts/deploy-functions-production.sh",
     "deploy:migrations:staging": "./scripts/deploy-migrations.sh staging",
-    "deploy:migrations:production": "./scripts/deploy-migrations.sh production"
+    "deploy:migrations:production": "./scripts/deploy-migrations.sh production",
+    "kill": "lsof -ti :5175,:5173,:3001 | xargs kill -9 2>/dev/null; pkill -9 -f 'vite|next-server' 2>/dev/null; echo 'All servers stopped.'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.1",
