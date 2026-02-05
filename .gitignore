@@ -125,6 +125,9 @@ dev-utils/
 # Temporary debugging/migration files
 production_dump.sql
 test-results.json
+test-results*.xml
+test-results*.json
+verification-report-*.json
 migration_preview.txt
 
 # One-off SQL scripts (should be in migrations)
@@ -166,4 +169,4 @@ docs/quick-add-model/
 src/components/quick-add/CLAUDE.md
 
 # Design drafts
-dynamic tables/
+dynamic-tables/
