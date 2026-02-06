@@ -171,80 +171,12 @@ export default function DocsPage() {
       {/* Mobile menu toggle */}
       <button
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        className="fixed top-4 left-4 z-50 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-lg lg:hidden"
+        className="fixed top-4 right-4 z-50 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-lg lg:hidden"
       >
         {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      {/* Sidebar Navigation */}
-      <aside
-        className={`
-          fixed lg:sticky top-0 left-0 h-screen w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700
-          overflow-y-auto transition-transform duration-300 z-40
-          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        `}
-      >
-        <div className="p-6">
-          <div className="flex items-center space-x-2 mb-6">
-            <BookOpen className="w-6 h-6 text-blue-600" />
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-              Documentation
-            </h1>
-          </div>
-
-          {/* Search */}
-          <div className="mb-6">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search docs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg
-                  bg-white dark:bg-slate-700 text-slate-900 dark:text-white
-                  placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Category-grouped navigation */}
-          {isLoading ? (
-            <div className="text-center py-8 text-slate-500">Loading...</div>
-          ) : (
-            <nav className="space-y-6">
-              {Object.entries(filteredArticles).map(([category, articles]) => (
-                <div key={category}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                    {category}
-                  </h3>
-                  <ul className="space-y-1">
-                    {articles.map((article) => (
-                      <li key={article.slug}>
-                        <button
-                          onClick={() => handleArticleClick(article.slug)}
-                          className={`
-                            w-full text-left px-3 py-2 rounded-lg text-sm transition-colors
-                            ${
-                              selectedSlug === article.slug
-                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-medium'
-                                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                            }
-                          `}
-                        >
-                          {article.title}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </nav>
-          )}
-        </div>
-      </aside>
-
-      {/* Main Content */}
+      {/* Main Content - Article Display */}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-6 lg:px-12 py-12">
           {isLoadingArticle ? (
@@ -305,6 +237,74 @@ export default function DocsPage() {
           )}
         </div>
       </main>
+
+      {/* Sidebar Navigation - Right Side */}
+      <aside
+        className={`
+          fixed lg:sticky top-0 right-0 h-screen w-80 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700
+          overflow-y-auto transition-transform duration-300 z-40
+          ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+        `}
+      >
+        <div className="p-6">
+          <div className="flex items-center space-x-2 mb-6">
+            <BookOpen className="w-6 h-6 text-blue-600" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              Navigation
+            </h2>
+          </div>
+
+          {/* Search */}
+          <div className="mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search docs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg
+                  bg-white dark:bg-slate-700 text-slate-900 dark:text-white
+                  placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Category-grouped navigation */}
+          {isLoading ? (
+            <div className="text-center py-8 text-slate-500">Loading...</div>
+          ) : (
+            <nav className="space-y-6">
+              {Object.entries(filteredArticles).map(([category, articles]) => (
+                <div key={category}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                    {category}
+                  </h3>
+                  <ul className="space-y-1">
+                    {articles.map((article) => (
+                      <li key={article.slug}>
+                        <button
+                          onClick={() => handleArticleClick(article.slug)}
+                          className={`
+                            w-full text-left px-3 py-2 rounded-lg text-sm transition-colors
+                            ${
+                              selectedSlug === article.slug
+                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-medium'
+                                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            }
+                          `}
+                        >
+                          {article.title}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </nav>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
