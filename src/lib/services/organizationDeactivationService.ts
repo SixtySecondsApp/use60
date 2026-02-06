@@ -298,7 +298,8 @@ export function showDeactivationError(error: string): void {
     'Not a member of this organization': 'You are not a member of this organization',
     'Only organization owners can deactivate': 'Only organization owners can deactivate',
     'Organization is already deactivated': 'This organization is already deactivated',
-    'Organization not found': 'Organization not found'
+    'Organization not found': 'Organization not found',
+    'You must maintain at least one active organization': 'You can now deactivate your organization. You\'ll be redirected to create a new one or explore our features.'
   };
 
   const message = errorMessages[error] || error;
