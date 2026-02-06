@@ -20,6 +20,7 @@ import { useOnboardingV2Store, type OnboardingV2Step, isPersonalEmailDomain } fr
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
+import { RotateCcw } from 'lucide-react';
 import { WebsiteInputStep } from './WebsiteInputStep';
 import { ManualEnrichmentStep } from './ManualEnrichmentStep';
 import { OrganizationSelectionStep } from './OrganizationSelectionStep';
@@ -62,6 +63,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
   const [showResumeChoice, setShowResumeChoice] = useState(false);
   const [savedStateForChoice, setSavedStateForChoice] = useState<any>(null);
   const [isStartingFresh, setIsStartingFresh] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
   const {
     currentStep,
     domain: storeDomain,
@@ -85,20 +87,24 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
   // 2. localStorage is already cleared in SetPassword to prevent cached org bypass
   // 3. This validation was breaking the onboarding flow by clearing valid organizationIds
 
-  // Restore state from localStorage on mount (session recovery)
+  // Consolidated restoration effect: localStorage first, then database fallback
+  // Previously two separate effects competed and caused "Restored your progress" spam
   useEffect(() => {
-    const restoreState = async () => {
+    const restoreProgress = async () => {
       if (!user) return;
 
-      // Check for saved state in localStorage
+      // --- Priority 1: Restore from localStorage (richest state) ---
       const savedState = localStorage.getItem(`sixty_onboarding_${user.email || user.id}`);
 
       if (savedState) {
         // Validate session is still active before restoring
         const { data: { session } } = await supabase.auth.getSession();
 
-        if (session) {
-          // Session is active - restore state
+        if (!session) {
+          // Session expired - clear stale state and fall through to database/defaults
+          console.log('[OnboardingV2] Session expired, clearing stale state');
+          localStorage.removeItem(`sixty_onboarding_${user.email || user.id}`);
+        } else {
           try {
             const parsed = JSON.parse(savedState);
             console.log('[OnboardingV2] Restored state from localStorage:', parsed);
@@ -123,12 +129,36 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
               return;
             }
 
-            // If returning to a resumable step with an existing org, show choice dialog
+            // If returning to a resumable step with an existing org...
             if (
               parsed.organizationId &&
               orgStillExists &&
               RESUMABLE_STEPS.includes(parsed.currentStep)
             ) {
+              // If already resumed before, silently restore without showing dialog
+              if (parsed.resumed) {
+                console.log('[OnboardingV2] Already resumed, silently restoring state for step:', parsed.currentStep);
+                if (parsed.domain) setDomain(parsed.domain);
+                if (parsed.organizationId) setOrganizationId(parsed.organizationId);
+                if (parsed.websiteUrl) useOnboardingV2Store.setState({ websiteUrl: parsed.websiteUrl });
+                if (parsed.manualData) useOnboardingV2Store.setState({ manualData: parsed.manualData });
+                if (parsed.enrichment) useOnboardingV2Store.setState({ enrichment: parsed.enrichment });
+                if (parsed.skillConfigs) useOnboardingV2Store.setState({ skillConfigs: parsed.skillConfigs });
+                if (parsed.pollingStartTime) {
+                  useOnboardingV2Store.setState({
+                    pollingStartTime: parsed.pollingStartTime,
+                    pollingAttempts: parsed.pollingAttempts || 0,
+                  });
+                }
+                if (parsed.currentStep === 'enrichment_loading' && parsed.isEnrichmentLoading) {
+                  setStep('enrichment_loading');
+                } else if (parsed.currentStep) {
+                  setStep(parsed.currentStep);
+                }
+                return;
+              }
+
+              // First time seeing resumable state — show choice dialog
               console.log('[OnboardingV2] Showing resume/start-fresh choice for step:', parsed.currentStep);
               setSavedStateForChoice(parsed);
               setShowResumeChoice(true);
@@ -160,27 +190,18 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
               setStep(parsed.currentStep);
               toast.info('Restored your progress');
             }
+
+            // localStorage restored successfully — skip database fallback
+            return;
           } catch (error) {
             console.error('[OnboardingV2] Failed to parse saved state:', error);
-            // Clear invalid state
+            // Clear invalid state and fall through to database
             localStorage.removeItem(`sixty_onboarding_${user.email || user.id}`);
           }
-        } else {
-          // Session expired - clear stale state
-          console.log('[OnboardingV2] Session expired, clearing stale state');
-          localStorage.removeItem(`sixty_onboarding_${user.email || user.id}`);
         }
       }
-    };
 
-    restoreState();
-  }, [user]);
-
-  // Read step from database on mount for resumption after logout
-  useEffect(() => {
-    const loadProgressFromDatabase = async () => {
-      if (!user) return;
-
+      // --- Priority 2: Restore from database (cross-session recovery) ---
       try {
         const { data: progress } = await supabase
           .from('user_onboarding_progress')
@@ -202,7 +223,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
         console.error('[OnboardingV2] Error loading progress from database:', error);
       }
 
-      // Fallback: determine initial step based on onboarding context
+      // --- Priority 3: Determine initial step from context ---
       const isFreshStart = userEmail && !domain && !organizationId;
 
       if (isFreshStart) {
@@ -231,7 +252,8 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
       }
     };
 
-    loadProgressFromDatabase();
+    restoreProgress();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Sync store step changes to URL
@@ -302,7 +324,9 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
 
   // Handle "Resume" choice — apply saved state and continue
   const handleResume = () => {
-    if (!savedStateForChoice) return;
+    if (!savedStateForChoice || isResuming) return;
+    setIsResuming(true);
+
     const parsed = savedStateForChoice;
 
     if (parsed.domain) setDomain(parsed.domain);
@@ -321,10 +345,23 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
 
     if (parsed.currentStep === 'enrichment_loading' && parsed.isEnrichmentLoading) {
       setStep('enrichment_loading');
-      toast.info('Resuming enrichment from where you left off...');
     } else if (parsed.currentStep) {
       setStep(parsed.currentStep);
-      toast.info('Restored your progress');
+    }
+
+    // Mark as resumed in localStorage so dialog doesn't reappear
+    if (user) {
+      const key = `sixty_onboarding_${user.email || user.id}`;
+      const currentState = localStorage.getItem(key);
+      if (currentState) {
+        try {
+          const stored = JSON.parse(currentState);
+          stored.resumed = true;
+          localStorage.setItem(key, JSON.stringify(stored));
+        } catch {
+          // Ignore parse errors
+        }
+      }
     }
 
     setShowResumeChoice(false);
@@ -402,7 +439,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
         >
           <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 p-8 text-center">
             <div className="w-16 h-16 rounded-full bg-violet-500/20 flex items-center justify-center mx-auto mb-6">
-              <span className="text-3xl">👋</span>
+              <RotateCcw className="w-8 h-8 text-violet-400" />
             </div>
             <h2 className="text-xl font-bold text-white mb-3">Welcome back</h2>
             <p className="text-gray-400 mb-6">
@@ -411,9 +448,10 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
             <div className="flex flex-col gap-3">
               <button
                 onClick={handleResume}
-                className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors"
+                disabled={isResuming}
+                className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
               >
-                Resume where I left off
+                {isResuming ? 'Resuming...' : 'Resume where I left off'}
               </button>
               <button
                 onClick={handleStartFresh}

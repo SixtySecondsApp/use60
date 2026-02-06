@@ -37,6 +37,7 @@ export function persistOnboardingState(userId: string, state: Partial<Onboarding
       enrichmentError: state.enrichmentError,
       pollingStartTime: state.pollingStartTime,
       pollingAttempts: state.pollingAttempts,
+      resumed: (state as any).resumed ?? false,
       savedAt: new Date().toISOString(),
     };
     localStorage.setItem(key, JSON.stringify(persistData));

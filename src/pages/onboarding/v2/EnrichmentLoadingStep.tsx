@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Loader } from 'lucide-react';
+import { AlertTriangle, Check, Loader } from 'lucide-react';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 
 interface EnrichmentLoadingStepProps {
@@ -165,7 +165,7 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
       >
         <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6">
-            <span className="text-3xl">⚠️</span>
+            <AlertTriangle className="w-8 h-8 text-red-400" />
           </div>
           <h2 className="text-xl font-bold text-white mb-2">
             {hasRetriedMultipleTimes ? 'Unable to analyze website' : 'Enrichment failed'}
