@@ -83,7 +83,7 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
 
   return (
     <div className="
-      w-full h-full sm:w-96 sm:h-auto sm:max-h-[600px]
+      w-full h-full sm:w-[480px] sm:h-auto sm:max-h-[700px]
       bg-white dark:bg-gray-900/95 backdrop-blur-sm
       border-0 sm:border border-gray-200 dark:border-gray-700/50
       rounded-none sm:rounded-lg shadow-2xl
@@ -93,9 +93,7 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
       <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between mb-4 gap-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="p-2 rounded-lg bg-blue-500/20 dark:bg-blue-500/20 flex-shrink-0">
-              <Bell className="w-5 h-5 text-blue-500" />
-            </div>
+            <Bell className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
             <div className="min-w-0">
               <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100 truncate">Notifications</h3>
               {unreadCount > 0 && (

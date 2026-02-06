@@ -42,8 +42,14 @@ export function OrgLogoUpload({
   const queryClient = useQueryClient();
 
   // Update display logo URL when prop changes
+  // Add cache-buster query parameter to ensure image displays correctly
   useEffect(() => {
-    setDisplayLogoUrl(currentLogoUrl);
+    if (currentLogoUrl && !currentLogoUrl.includes('?v=')) {
+      // Add cache-buster to URLs from database that don't already have one
+      setDisplayLogoUrl(`${currentLogoUrl}?v=${Date.now()}`);
+    } else {
+      setDisplayLogoUrl(currentLogoUrl);
+    }
   }, [currentLogoUrl]);
 
   // Helper to update both React Query cache and Zustand store
@@ -142,11 +148,12 @@ export function OrgLogoUpload({
 
       logger.log('[OrgLogoUpload] File uploaded, URL:', publicUrl);
 
-      // Update organization with new logo URL (with cache-busting timestamp) and clear remove_logo flag
-      const logoUrlWithTimestamp = `${publicUrl}?v=${Date.now()}`;
+      // Update organization with new logo URL and clear remove_logo flag
       const now = new Date().toISOString();
 
       // Optimistic update: Update cache AND Zustand store immediately
+      // Add cache-buster for UI display only (don't store in DB)
+      const logoUrlWithTimestamp = `${publicUrl}?v=${Date.now()}`;
       const updatedOrg = {
         logo_url: logoUrlWithTimestamp,
         remove_logo: false,
@@ -154,11 +161,11 @@ export function OrgLogoUpload({
       };
       updateOrgInAllStores(updatedOrg);
 
-      // Update the database in the background
+      // Update the database - store URL WITHOUT timestamp to ensure consistency on refresh
       const { error: updateError } = await supabase
         .from('organizations')
         .update({
-          logo_url: logoUrlWithTimestamp,
+          logo_url: publicUrl,
           remove_logo: false,
           updated_at: now,
         })

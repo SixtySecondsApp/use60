@@ -1,10 +1,6 @@
 # Supabase Project Configuration
 # This file is used by Supabase CLI for local development and branching
 
-[project]
-# Project reference ID - set via: supabase link --project-ref <id>
-project_id = "caerqjzvuerejfrdtygb"  # Staging environment
-
 # Database Configuration
 [db]
 # Connection pooler settings for branching

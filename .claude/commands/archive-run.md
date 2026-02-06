@@ -1,4 +1,26 @@
+---
+requires-profile: true
+---
+
 # /archive-run — Archive the current PRD run
+
+---
+
+## STEP 0: Select Model Profile
+
+Before proceeding, ask the user to select which model profile to use:
+- **Economy** — Fastest, lowest cost
+- **Balanced** — Good balance of speed & accuracy
+- **Thorough** — Most accurate, highest cost
+
+Use the `AskUserQuestion` tool with these options.
+
+**Note**: Based on selection, appropriate models will be assigned:
+- Economy: Recommended for straightforward archiving
+- Balanced: Standard archiving
+- Thorough: Comprehensive archiving with detailed analysis
+
+---
 
 Archive the current `prd.json` and `progress.txt` to make way for a new feature run.
 

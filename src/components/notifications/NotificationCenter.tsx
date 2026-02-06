@@ -26,7 +26,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { id: 'all', label: 'All' },
+  { id: 'all', label: 'All', icon: Bell },
   { id: 'ai', label: 'AI', icon: Sparkles },
   { id: 'tasks', label: 'Tasks', icon: Target },
   { id: 'content', label: 'Content', icon: FileText },
@@ -220,27 +220,27 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
     const colors: Record<string, { bg: string; text: string }> = {
       purple: {
         bg: isDark ? 'bg-purple-500/20' : 'bg-purple-100',
-        text: 'text-purple-500',
+        text: 'text-purple-600 dark:text-purple-400',
       },
       amber: {
         bg: isDark ? 'bg-amber-500/20' : 'bg-amber-100',
-        text: 'text-amber-500',
+        text: 'text-amber-600 dark:text-amber-400',
       },
       blue: {
         bg: isDark ? 'bg-blue-500/20' : 'bg-blue-100',
-        text: 'text-blue-500',
+        text: 'text-blue-600 dark:text-blue-400',
       },
       emerald: {
         bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-100',
-        text: 'text-emerald-500',
+        text: 'text-emerald-600 dark:text-emerald-400',
       },
       rose: {
         bg: isDark ? 'bg-rose-500/20' : 'bg-rose-100',
-        text: 'text-rose-500',
+        text: 'text-rose-600 dark:text-rose-400',
       },
       gray: {
-        bg: isDark ? 'bg-gray-800' : 'bg-gray-100',
-        text: 'text-gray-500',
+        bg: isDark ? 'bg-gray-500/20' : 'bg-gray-100',
+        text: 'text-gray-600 dark:text-gray-400',
       },
     };
     return colors[color] || colors.gray;
@@ -248,7 +248,7 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
 
   return (
     <div className="
-      w-full h-full sm:w-96 sm:h-auto sm:max-h-[600px]
+      w-full h-full sm:w-[480px] sm:h-auto sm:max-h-[700px]
       bg-white dark:bg-gray-900/95 backdrop-blur-sm
       border-0 sm:border border-gray-200 dark:border-gray-700/50
       rounded-none sm:rounded-lg shadow-2xl
@@ -258,9 +258,7 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
       <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between mb-4 gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2.5 rounded-xl bg-blue-500/20 dark:bg-blue-500/20 flex-shrink-0">
-              <Bell className="w-5 h-5 text-blue-500" />
-            </div>
+            <Bell className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
             <div className="min-w-0">
               <h2 className="font-bold text-sm sm:text-base text-gray-900 dark:text-white truncate">Notifications</h2>
               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-500">
@@ -297,7 +295,7 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-1 px-1">
+        <div className="grid grid-cols-5 gap-1.5">
           {TABS.map((tab) => {
             const count = tabCounts[tab.id];
             const unreadInTab = groupedNotifications[tab.id]?.filter(n => !n.read).length || 0;
@@ -312,18 +310,18 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
                   }
                 }}
                 className={cn(
-                  "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 flex-shrink-0",
+                  "flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-all duration-200",
                   activeTab === tab.id
                     ? "bg-blue-500/20 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
                     : "text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50"
                 )}
+                title={tab.label}
               >
                 {tab.icon && <tab.icon className="w-4 h-4 flex-shrink-0" />}
-                <span className="hidden sm:inline">{tab.label}</span>
                 {count > 0 && (
                   <span
                     className={cn(
-                      "px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0",
+                      "rounded-full text-xs font-bold flex-shrink-0 min-w-[20px] h-5 flex items-center justify-center",
                       activeTab === tab.id
                         ? "bg-blue-500/30 dark:bg-blue-500/30"
                         : "bg-gray-200 dark:bg-gray-800"
@@ -389,7 +387,7 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
                             onClick={() => handleNotificationClick(notification)}
                           >
                             <div className="flex gap-3 sm:gap-4">
-                              <div className={cn("p-2.5 rounded-lg flex-shrink-0", colors.bg)}>
+                              <div className={cn("p-2.5 rounded-lg flex-shrink-0 flex items-center justify-center", colors.bg)}>
                                 <Icon className={cn("w-5 h-5", colors.text)} />
                               </div>
                               <div className="flex-1 min-w-0">
