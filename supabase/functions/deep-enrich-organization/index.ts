@@ -164,7 +164,12 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
-      throw new Error('Invalid authentication token');
+      // CRITICAL FIX (BUG-004): Include userError details in thrown error for better debugging
+      const errorDetails = userError
+        ? `${userError.message || 'Unknown auth error'} (${userError.name || 'AuthError'})`
+        : 'No user found in token';
+      console.error('[deep-enrich-organization] Auth validation failed:', errorDetails, { userError, hasUser: !!user });
+      throw new Error(`Invalid authentication token: ${errorDetails}`);
     }
 
     const requestBody = await req.json();
@@ -201,10 +206,17 @@ serve(async (req) => {
     const errorMessage = extractErrorMessage(error);
     console.error('[deep-enrich-organization] Error:', errorMessage);
 
+    // CRITICAL FIX (BUG-005): Use proper HTTP status codes for errors
+    // Determine status code based on error type
+    const isAuthError = errorMessage.toLowerCase().includes('authentication') ||
+                       errorMessage.toLowerCase().includes('token') ||
+                       errorMessage.toLowerCase().includes('unauthorized');
+    const statusCode = isAuthError ? 401 : 500;
+
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
       {
-        status: 200,
+        status: statusCode,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );

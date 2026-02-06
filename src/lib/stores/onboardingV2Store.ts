@@ -1240,8 +1240,18 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
     const poll = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) throw new Error('No session during polling');
+        // CRITICAL FIX (BUG-001): Refresh session to get fresh JWT before edge function call
+        // This prevents "Invalid JWT" errors during the 5-minute polling window
+        const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+
+        if (sessionError || !session?.access_token) {
+          console.error('[pollEnrichmentStatus] Failed to refresh session:', sessionError);
+          throw new Error('Your session has expired. Please refresh the page and try again.');
+        }
+
+        // Log token expiry for debugging JWT issues
+        const expiresAt = session.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'unknown';
+        console.log('[pollEnrichmentStatus] Token expires at:', expiresAt);
 
         // Poll status via Supabase SDK
         const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
@@ -1252,6 +1262,14 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         });
 
         if (error) throw error;
+
+        // CRITICAL FIX (BUG-002): Check application-level error before destructuring
+        // Edge function may return { success: false, error: "..." } with HTTP 200
+        if (!data || data.success === false) {
+          const errorMsg = data?.error || 'Failed to get enrichment status';
+          console.error('[pollEnrichmentStatus] Edge function error:', errorMsg);
+          throw new Error(errorMsg);
+        }
 
         const { status, enrichment, skills } = data;
 
@@ -1304,10 +1322,25 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to get enrichment status';
-        console.error('[pollEnrichmentStatus] Error:', message);
+        const errorDetails = error instanceof Error ? {
+          message: error.message,
+          name: error.name,
+          stack: error.stack?.split('\n')[0]
+        } : { message: String(error) };
+
+        console.error('[pollEnrichmentStatus] Error:', errorDetails);
+
+        // IMPROVEMENT (BUG-006): Provide user-friendly error messages based on error type
+        let userMessage = message;
+        if (message.includes('session') || message.includes('authentication') || message.includes('JWT') || message.includes('token')) {
+          userMessage = 'Your session has expired. Please refresh the page and try again.';
+        } else if (message.includes('network') || message.includes('fetch')) {
+          userMessage = 'Network error. Please check your connection and try again.';
+        }
+
         set({
           isEnrichmentLoading: false,
-          enrichmentError: message,
+          enrichmentError: userMessage,
           pollingStartTime: null,
           pollingAttempts: 0,
         });
