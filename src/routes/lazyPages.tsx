@@ -156,7 +156,6 @@ export const SalesCoachingPage = lazyWithRetry(() => import('@/pages/settings/Sa
 export const APIKeysPage = lazyWithRetry(() => import('@/pages/settings/APIKeysPage'));
 export const EmailSyncPage = lazyWithRetry(() => import('@/pages/settings/EmailSyncPage'));
 export const TaskSyncPage = lazyWithRetry(() => import('@/pages/settings/TaskSyncPage'));
-export const MeetingSyncPage = lazyWithRetry(() => import('@/pages/settings/MeetingSyncPage'));
 export const TeamMembersPage = lazyWithRetry(() => import('@/pages/settings/TeamMembersPage'));
 export const OrganizationManagementPage = lazyWithRetry(() => import('@/pages/settings/OrganizationManagementPage'));
 export const CallTypeSettings = lazyWithRetry(() => import('@/pages/settings/CallTypeSettings'));
