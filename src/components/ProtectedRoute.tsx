@@ -300,10 +300,20 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   }, [location.state, isAuthenticated, user]);
 
   // Check if active organization is inactive
+  // IMPORTANT: Only check once per org to prevent spam/load issues
+  // Store the last checked org ID to avoid redundant checks
+  const lastCheckedOrgRef = useRef<string | null>(null);
+
   useEffect(() => {
     const checkOrgActiveStatus = async () => {
       if (!activeOrgId || !user?.id || !isAuthenticated || loading || isPublicRoute) {
         setIsOrgActive(null);
+        setIsCheckingOrgActive(false);
+        return;
+      }
+
+      // Skip if we already checked this org ID recently
+      if (lastCheckedOrgRef.current === activeOrgId) {
         setIsCheckingOrgActive(false);
         return;
       }
@@ -320,9 +330,11 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
 
         logger.log('[ProtectedRoute] Organization active status:', org?.is_active);
         setIsOrgActive(org?.is_active ?? true);
+        lastCheckedOrgRef.current = activeOrgId; // Mark this org as checked
       } catch (error) {
         logger.error('[ProtectedRoute] Error checking org status:', error);
         setIsOrgActive(true); // Fail open to avoid blocking users
+        lastCheckedOrgRef.current = activeOrgId; // Still mark as checked to avoid spam
       } finally {
         setIsCheckingOrgActive(false);
       }
