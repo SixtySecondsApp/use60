@@ -150,3 +150,15 @@ verify_jwt = false
 # Test auth endpoint - for debugging JWT issues
 [functions.test-auth]
 verify_jwt = false
+
+# Generate waitlist magic token - called from frontend with custom secret auth
+# Uses EDGE_FUNCTION_SECRET for inter-function calls, or admin user JWT
+# We handle auth verification manually inside the function
+[functions.generate-waitlist-token]
+verify_jwt = false
+
+# Send emails via AWS SES - called from frontend with custom secret auth
+# Uses EDGE_FUNCTION_SECRET for inter-function calls, or user JWT for direct calls
+# We handle auth verification manually inside the function
+[functions.encharge-send-email]
+verify_jwt = false
