@@ -1,6 +1,7 @@
 -- Migration: Fix Organization Settings Change Notification Trigger
--- Issue: Trigger was referencing non-existent 'domain' column
--- Solution: Use correct 'company_domain' column in all references
+-- Issue 1: Trigger was referencing non-existent 'domain' column
+-- Issue 2: Trigger was referencing non-existent 'full_name' column in profiles
+-- Solution: Use correct 'company_domain' and construct name from first_name/last_name
 
 DROP TRIGGER IF EXISTS org_settings_changed_notification ON organizations;
 DROP FUNCTION IF EXISTS notify_on_org_settings_changed();
@@ -22,7 +23,7 @@ BEGIN
      OLD.company_domain != NEW.company_domain THEN
 
     -- Get name of person who made the change
-    SELECT full_name INTO v_actioned_by_name FROM profiles WHERE id = auth.uid();
+    SELECT COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email) INTO v_actioned_by_name FROM profiles WHERE id = auth.uid();
 
     -- Build change description
     v_change_description := CASE
