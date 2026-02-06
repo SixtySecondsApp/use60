@@ -133,6 +133,20 @@ serve(async (req: Request) => {
       )
     }
 
+    // Extract user ID from auth header (for sync history)
+    let syncedByUserId: string | null = null
+    const authHeader = req.headers.get('Authorization')
+    if (authHeader) {
+      try {
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? serviceRoleKey
+        const userClient = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: authHeader } },
+        })
+        const { data: { user } } = await userClient.auth.getUser()
+        syncedByUserId = user?.id ?? null
+      } catch { /* non-critical */ }
+    }
+
     const sourceQuery = table.source_query as Record<string, any> ?? {}
     const objectType = sourceQuery.object_type ?? 'contacts'
     const lastSyncedAt = sourceQuery.last_synced_at ?? sourceQuery.imported_at
@@ -184,6 +198,17 @@ serve(async (req: Request) => {
     let after: string | undefined
     let newRows = 0
     let updatedRows = 0
+
+    // Track all HubSpot contact IDs seen during sync (for removed contact detection)
+    const allHubSpotContactIds = new Set<string>()
+    const syncStartTime = Date.now()
+
+    // Snapshot tracking for sync history
+    const cellChanges: Array<{ row_id: string; column_id: string; old_value: string | null; new_value: string }> = []
+    const rowActions: Array<{ id: string; action: 'added' | 'removed' | 'returned'; source_id: string }> = []
+
+    // Pre-fetch existing cell values for snapshot (for updated rows only)
+    // We'll do this lazily per-page to avoid loading all cells upfront
 
     // If this is a list-based table, verify the list still exists
     if (listId) {
@@ -267,6 +292,11 @@ serve(async (req: Request) => {
 
       if (results.length === 0) break
 
+      // Track all contact IDs for removed detection
+      for (const record of results) {
+        allHubSpotContactIds.add(record.id)
+      }
+
       // Split results into existing (update) and new (insert) buckets
       const toUpdate: Array<{ record: any; rowId: string }> = []
       const toInsert: any[] = []
@@ -284,14 +314,45 @@ serve(async (req: Request) => {
 
       // --- Batch UPDATE existing rows ---
       if (toUpdate.length > 0) {
+        // Fetch existing cell values + pushed timestamps for these rows (for snapshot + loop prevention)
+        const updateRowIds = toUpdate.map(u => u.rowId)
+        const { data: existingCells } = await supabase
+          .from('dynamic_table_cells')
+          .select('row_id, column_id, value, hubspot_last_pushed_at')
+          .in('row_id', updateRowIds)
+
+        const existingCellMap = new Map<string, { value: string | null; hubspot_last_pushed_at: string | null }>()
+        for (const cell of existingCells ?? []) {
+          existingCellMap.set(`${cell.row_id}:${cell.column_id}`, {
+            value: cell.value,
+            hubspot_last_pushed_at: cell.hubspot_last_pushed_at,
+          })
+        }
+
         // Batch upsert cells for all existing rows (uses UNIQUE(row_id, column_id) constraint)
         const cellUpserts: Array<{ row_id: string; column_id: string; value: string }> = []
         for (const { record, rowId } of toUpdate) {
           for (const [propName, colId] of propertyToColumnId) {
             const value = record.properties?.[propName]
-            if (value !== null && value !== undefined) {
-              cellUpserts.push({ row_id: rowId, column_id: colId, value: String(value) })
+            if (value === null || value === undefined) continue
+
+            const cellKey = `${rowId}:${colId}`
+            const existing = existingCellMap.get(cellKey)
+
+            // Write-back loop prevention: skip cells recently pushed by user
+            if (existing?.hubspot_last_pushed_at && lastSyncedAt) {
+              const pushedAt = new Date(existing.hubspot_last_pushed_at).getTime()
+              const lastSync = new Date(lastSyncedAt).getTime()
+              if (pushedAt > lastSync) continue
             }
+
+            const newValue = String(value)
+            // Track change for snapshot
+            if (existing && existing.value !== newValue) {
+              cellChanges.push({ row_id: rowId, column_id: colId, old_value: existing.value, new_value: newValue })
+            }
+
+            cellUpserts.push({ row_id: rowId, column_id: colId, value: newValue })
           }
         }
 
@@ -339,6 +400,7 @@ serve(async (req: Request) => {
           for (const r of newRowsData) {
             newSourceToRowId.set(r.source_id, r.id)
             sourceIdToRowId.set(r.source_id, r.id)
+            rowActions.push({ id: r.id, action: 'added', source_id: r.source_id })
           }
 
           // Batch insert all cells for new rows
@@ -367,8 +429,76 @@ serve(async (req: Request) => {
       if (!after) break
     }
 
-    // 6. Update table metadata
+    // 6. Removed contact detection (list-based tables only)
+    let removedCount = 0
+    let returnedCount = 0
+
+    if (listId && allHubSpotContactIds.size > 0) {
+      // Fetch all rows with their source_id and hubspot_removed_at
+      const { data: allRows } = await supabase
+        .from('dynamic_table_rows')
+        .select('id, source_id, hubspot_removed_at')
+        .eq('table_id', table_id)
+
+      const toRemove: string[] = []
+      const toReturn: string[] = []
+
+      for (const row of allRows ?? []) {
+        if (!row.source_id) continue
+        const inCurrentList = allHubSpotContactIds.has(row.source_id)
+
+        if (!inCurrentList && !row.hubspot_removed_at) {
+          // Contact was removed from the HubSpot list
+          toRemove.push(row.id)
+          rowActions.push({ id: row.id, action: 'removed', source_id: row.source_id })
+        } else if (inCurrentList && row.hubspot_removed_at) {
+          // Contact returned to the list
+          toReturn.push(row.id)
+          rowActions.push({ id: row.id, action: 'returned', source_id: row.source_id })
+        }
+      }
+
+      if (toRemove.length > 0) {
+        await supabase
+          .from('dynamic_table_rows')
+          .update({ hubspot_removed_at: new Date().toISOString() })
+          .in('id', toRemove)
+        removedCount = toRemove.length
+      }
+
+      if (toReturn.length > 0) {
+        await supabase
+          .from('dynamic_table_rows')
+          .update({ hubspot_removed_at: null })
+          .in('id', toReturn)
+        returnedCount = toReturn.length
+      }
+    }
+
+    // 7. Record sync history
+    const syncDurationMs = Date.now() - syncStartTime
     const now = new Date().toISOString()
+
+    try {
+      await supabase.from('hubspot_sync_history').insert({
+        table_id,
+        synced_by: syncedByUserId,
+        synced_at: now,
+        new_contacts_count: newRows,
+        updated_contacts_count: updatedRows,
+        removed_contacts_count: removedCount,
+        returned_contacts_count: returnedCount,
+        snapshot: {
+          cells: cellChanges.slice(0, 5000), // Cap snapshot size
+          rows: rowActions.slice(0, 2000),
+        },
+        sync_duration_ms: syncDurationMs,
+      })
+    } catch (historyErr) {
+      console.error('[sync-hubspot-ops-table] Failed to record sync history:', historyErr)
+    }
+
+    // 8. Update table metadata
     await supabase
       .from('dynamic_tables')
       .update({
@@ -379,11 +509,11 @@ serve(async (req: Request) => {
 
     // OI-011: Trigger insights analysis after sync (fire-and-forget)
     try {
-      fetch(`${SUPABASE_URL}/functions/v1/ops-table-insights-engine`, {
+      fetch(`${supabaseUrl}/functions/v1/ops-table-insights-engine`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authHeader,
+          ...(authHeader ? { 'Authorization': authHeader } : {}),
         },
         body: JSON.stringify({ tableId: table_id, action: 'analyze' }),
       }).catch(err => console.error('[sync] Insights trigger failed:', err));
@@ -402,11 +532,11 @@ serve(async (req: Request) => {
 
       if (workflows && workflows.length > 0) {
         for (const workflow of workflows) {
-          fetch(`${SUPABASE_URL}/functions/v1/ops-table-workflow-engine`, {
+          fetch(`${supabaseUrl}/functions/v1/ops-table-workflow-engine`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': authHeader,
+              ...(authHeader ? { 'Authorization': authHeader } : {}),
             },
             body: JSON.stringify({
               tableId: table_id,
@@ -421,7 +551,13 @@ serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ new_rows: newRows, updated_rows: updatedRows, last_synced_at: now }),
+      JSON.stringify({
+        new_rows: newRows,
+        updated_rows: updatedRows,
+        removed_rows: removedCount,
+        returned_rows: returnedCount,
+        last_synced_at: now,
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   } catch (error: any) {
