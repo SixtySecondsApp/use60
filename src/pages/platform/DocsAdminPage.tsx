@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tantml/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-import { BookOpen, Plus, Trash2, Eye, EyeOff, Edit2 } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Eye, EyeOff, Edit2, X, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { MarkdownEditor } from '@/components/docs/MarkdownEditor';
+import { MarkdownPreview } from '@/components/docs/MarkdownPreview';
 
 interface Article {
   id: string;
@@ -19,6 +21,14 @@ interface GroupedArticles {
 
 export default function DocsAdminPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editorData, setEditorData] = useState({
+    title: '',
+    slug: '',
+    category: '',
+    content: '',
+    published: false,
+    order_index: 0,
+  });
   const queryClient = useQueryClient();
 
   // Fetch all articles (published and drafts)
@@ -99,6 +109,77 @@ export default function DocsAdminPage() {
     togglePublishedMutation.mutate({ articleId, published });
   };
 
+  // Save article mutation
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const action = editingId === 'new' ? 'create' : 'update';
+      const body: any = {
+        action,
+        ...editorData,
+      };
+
+      if (editingId !== 'new') {
+        body.article_id = editingId;
+      }
+
+      const { error } = await supabase.functions.invoke('docs-api', { body });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['docs-admin-articles'] });
+      toast.success(editingId === 'new' ? 'Article created' : 'Article saved');
+      setEditingId(null);
+    },
+    onError: (error) => {
+      toast.error(`Failed to save article: ${error.message}`);
+    },
+  });
+
+  const handleEdit = async (articleId: string) => {
+    if (articleId === 'new') {
+      setEditorData({
+        title: '',
+        slug: '',
+        category: '',
+        content: '',
+        published: false,
+        order_index: 0,
+      });
+      setEditingId('new');
+      return;
+    }
+
+    // Load article data
+    const { data, error } = await supabase
+      .from('docs_articles')
+      .select('*')
+      .eq('id', articleId)
+      .single();
+
+    if (error) {
+      toast.error('Failed to load article');
+      return;
+    }
+
+    setEditorData({
+      title: data.title,
+      slug: data.slug,
+      category: data.category,
+      content: data.content,
+      published: data.published,
+      order_index: data.order_index || 0,
+    });
+    setEditingId(articleId);
+  };
+
+  const handleSave = () => {
+    if (!editorData.title || !editorData.slug || !editorData.category || !editorData.content) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    saveMutation.mutate();
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <div className="max-w-7xl mx-auto px-6 py-8">
@@ -111,7 +192,7 @@ export default function DocsAdminPage() {
             </h1>
           </div>
           <button
-            onClick={() => setEditingId('new')}
+            onClick={() => handleEdit('new')}
             className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700
               text-white font-medium rounded-lg transition-colors"
           >
@@ -177,7 +258,7 @@ export default function DocsAdminPage() {
                           <td className="px-6 py-4 text-sm text-right">
                             <div className="flex items-center justify-end space-x-2">
                               <button
-                                onClick={() => setEditingId(article.id)}
+                                onClick={() => handleEdit(article.id)}
                                 className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                                 title="Edit"
                               >
@@ -220,22 +301,99 @@ export default function DocsAdminPage() {
           </div>
         )}
 
-        {/* TODO: Article editor modal (DOC-007) */}
+        {/* Article Editor Modal */}
         {editingId && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-slate-800 rounded-lg p-6 max-w-2xl w-full">
-              <h3 className="text-xl font-bold mb-4">
-                {editingId === 'new' ? 'Create New Article' : 'Edit Article'}
-              </h3>
-              <p className="text-slate-500 mb-4">
-                Article editor coming in DOC-007...
-              </p>
-              <button
-                onClick={() => setEditingId(null)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg"
-              >
-                Close
-              </button>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg w-full max-w-7xl h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+                <h3 className="text-xl font-bold">
+                  {editingId === 'new' ? 'Create New Article' : 'Edit Article'}
+                </h3>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleSave}
+                    disabled={saveMutation.isPending}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700
+                      disabled:opacity-50 text-white font-medium rounded-lg transition-colors"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{saveMutation.isPending ? 'Saving...' : 'Save'}</span>
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Metadata Panel */}
+              <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Title *
+                    </label>
+                    <input
+                      type="text"
+                      value={editorData.title}
+                      onChange={(e) => setEditorData({ ...editorData, title: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg
+                        bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      placeholder="Article title"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Slug *
+                    </label>
+                    <input
+                      type="text"
+                      value={editorData.slug}
+                      onChange={(e) => setEditorData({ ...editorData, slug: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg
+                        bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      placeholder="url-friendly-slug"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Category *
+                    </label>
+                    <input
+                      type="text"
+                      value={editorData.category}
+                      onChange={(e) => setEditorData({ ...editorData, category: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg
+                        bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      placeholder="Getting Started"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Split-Pane Editor */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Editor */}
+                <div className="flex-1 border-r border-slate-200 dark:border-slate-700">
+                  <MarkdownEditor
+                    value={editorData.content}
+                    onChange={(content) => setEditorData({ ...editorData, content })}
+                  />
+                </div>
+
+                {/* Preview */}
+                <div className="flex-1">
+                  <div className="h-full flex flex-col">
+                    <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                      <h4 className="font-semibold text-sm">Preview</h4>
+                    </div>
+                    <MarkdownPreview content={editorData.content} />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

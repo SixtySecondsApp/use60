@@ -262,7 +262,6 @@ export default function DocsPage() {
               </div>
 
               <ReactMarkdown
-                children={processTemplateVars(article.content, orgData)}
                 components={{
                   code({ node, inline, className, children, ...props }) {
                     if (inline) {
@@ -291,7 +290,7 @@ export default function DocsPage() {
                   ),
                 }}
               >
-                {article.content}
+                {processTemplateVars(article.content, orgData)}
               </ReactMarkdown>
 
               {/* Feedback Section */}
