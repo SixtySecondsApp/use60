@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tantml/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-import { BookOpen, Plus, Trash2, Eye, EyeOff, Edit2, X, Save } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Eye, EyeOff, Edit2, X, Save, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { MarkdownEditor } from '@/components/docs/MarkdownEditor';
 import { MarkdownPreview } from '@/components/docs/MarkdownPreview';
+import { VersionHistory } from '@/components/docs/VersionHistory';
 
 interface Article {
   id: string;
@@ -21,6 +22,7 @@ interface GroupedArticles {
 
 export default function DocsAdminPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [editorData, setEditorData] = useState({
     title: '',
     slug: '',
@@ -384,13 +386,43 @@ export default function DocsAdminPage() {
                   />
                 </div>
 
-                {/* Preview */}
+                {/* Preview / Version History */}
                 <div className="flex-1">
                   <div className="h-full flex flex-col">
-                    <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-                      <h4 className="font-semibold text-sm">Preview</h4>
+                    <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <button
+                          onClick={() => setShowVersionHistory(false)}
+                          className={`text-sm font-medium ${!showVersionHistory ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                          Preview
+                        </button>
+                        {editingId !== 'new' && (
+                          <button
+                            onClick={() => setShowVersionHistory(true)}
+                            className={`flex items-center space-x-1 text-sm font-medium ${showVersionHistory ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            <History className="w-4 h-4" />
+                            <span>Version History</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <MarkdownPreview content={editorData.content} />
+                    <div className="flex-1 overflow-auto">
+                      {!showVersionHistory ? (
+                        <MarkdownPreview content={editorData.content} />
+                      ) : (
+                        <div className="p-4">
+                          <VersionHistory
+                            articleId={editingId!}
+                            onRevert={(versionId) => {
+                              // TODO: Implement revert functionality
+                              toast.info('Revert functionality coming soon');
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
