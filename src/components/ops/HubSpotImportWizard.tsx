@@ -125,6 +125,9 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
   const [previewData, setPreviewData] = useState<{ totalCount: number; contacts: PreviewContact[] } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
+  // Sync direction
+  const [syncDirection, setSyncDirection] = useState<'pull_only' | 'bidirectional'>('pull_only');
+
   // Import state
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ table_id: string; rows_imported: number } | null>(null);
@@ -254,6 +257,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
     setImportResult(null);
     setImportError(null);
     setImportAllColumns(true);
+    setSyncDirection('pull_only');
   };
 
   const handleClose = () => {
@@ -303,6 +307,7 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
         filter_logic: sourceMode === 'filter' && validFilters.length > 1 ? filterLogic : undefined,
         limit,
         import_all_columns: importAllColumns,
+        sync_direction: syncDirection,
       };
       console.log('[HubSpotImportWizard] Calling import-from-hubspot with:', requestBody);
 
@@ -629,6 +634,39 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
                       : 'Only imports email — add more columns later from HubSpot properties'}
                   </p>
                 </label>
+              </div>
+
+              {/* Sync direction */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Sync direction</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSyncDirection('pull_only')}
+                    className={`flex-1 flex flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-left text-sm transition-colors border ${
+                      syncDirection === 'pull_only'
+                        ? 'bg-orange-500/10 border-orange-500/30 text-orange-300'
+                        : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                  >
+                    <span className="font-medium text-xs">Pull only</span>
+                    <span className="text-[10px] text-gray-500 leading-tight">
+                      HubSpot → Table. Changes stay local.
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setSyncDirection('bidirectional')}
+                    className={`flex-1 flex flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-left text-sm transition-colors border ${
+                      syncDirection === 'bidirectional'
+                        ? 'bg-orange-500/10 border-orange-500/30 text-orange-300'
+                        : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                  >
+                    <span className="font-medium text-xs">Bi-directional</span>
+                    <span className="text-[10px] text-gray-500 leading-tight">
+                      Edits write back to HubSpot instantly.
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

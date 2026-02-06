@@ -39,7 +39,7 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
     const body = await req.json()
-    const { org_id, user_id, table_name, list_id, filters, filter_logic, limit, import_all_columns } = body
+    const { org_id, user_id, table_name, list_id, filters, filter_logic, limit, import_all_columns, sync_direction } = body
 
     if (!org_id || !user_id || !table_name) {
       return new Response(
@@ -75,6 +75,7 @@ serve(async (req: Request) => {
         source_query: {
           list_id,
           filters,
+          sync_direction: sync_direction || 'pull_only',
           imported_at: new Date().toISOString(),
         },
       })
@@ -152,6 +153,8 @@ serve(async (req: Request) => {
         // 1. Get member IDs from the list
         // 2. Batch-read contacts with their properties
         const pageLimit = Math.min(PAGE_SIZE, maxRecords - totalImported)
+
+        console.log(`[import-from-hubspot] Fetching list memberships for list_id=${list_id}, pageLimit=${pageLimit}`)
         const membershipResponse = await hubspot.request<any>({
           method: 'GET',
           path: `/crm/v3/lists/${list_id}/memberships`,
@@ -161,10 +164,16 @@ serve(async (req: Request) => {
           },
         })
 
+        console.log(`[import-from-hubspot] Membership response:`, {
+          hasResults: !!membershipResponse?.results,
+          count: membershipResponse?.results?.length ?? 0,
+        })
+
         const memberIds = membershipResponse?.results?.map((m: any) => m.recordId) ?? []
         if (memberIds.length === 0) break
 
         // Batch-read contacts with properties
+        console.log(`[import-from-hubspot] Batch reading ${memberIds.length} contacts`)
         const batchResponse = await hubspot.request<any>({
           method: 'POST',
           path: '/crm/v3/objects/contacts/batch/read',
@@ -173,6 +182,11 @@ serve(async (req: Request) => {
             inputs: memberIds.map((id: string) => ({ id })),
             properties: propertyNames,
           },
+        })
+
+        console.log(`[import-from-hubspot] Batch response:`, {
+          hasResults: !!batchResponse?.results,
+          count: batchResponse?.results?.length ?? 0,
         })
 
         results = batchResponse?.results ?? []
