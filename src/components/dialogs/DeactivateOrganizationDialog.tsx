@@ -87,7 +87,9 @@ export function DeactivateOrganizationDialog({
       const result = await deactivateOrganizationAsOwner(orgId, finalReason);
 
       if (result.success) {
-        toast.success('Organization deactivated. Check your email for reactivation options.');
+        toast.success('Organization deactivated', {
+          description: 'All members have been notified.'
+        });
 
         // Clear localStorage for this org
         try {
@@ -97,17 +99,14 @@ export function DeactivateOrganizationDialog({
           console.warn('Failed to clear localStorage:', e);
         }
 
+        // Close dialog
+        onClose();
+
         // Trigger callback
         onDeactivateSuccess();
 
-        // Close and redirect
-        onClose();
-
-        // Redirect to learnmore page instead of non-existent org selection page.
-        // ProtectedRoute will handle inactive org detection and redirect if needed.
-        setTimeout(() => {
-          window.location.href = '/learnmore';
-        }, 1500);
+        // Immediately redirect to inactive organization page
+        window.location.href = '/inactive-organization';
       } else {
         showDeactivationError(result.error || 'Failed to deactivate organization');
       }

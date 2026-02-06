@@ -491,6 +491,13 @@ export default function OrganizationManagementPage() {
   // Check if user can deactivate organization
   useEffect(() => {
     const checkCanDeactivate = async () => {
+      // Check if org is already deactivated
+      if (!activeOrg?.is_active) {
+        setCanDeactivate(false);
+        setDeactivationError('This organization is already deactivated');
+        return;
+      }
+
       if (activeOrgId && permissions.isOwner) {
         try {
           const error = await validateOwnerCanDeactivate(activeOrgId);
@@ -508,7 +515,7 @@ export default function OrganizationManagementPage() {
       }
     };
     checkCanDeactivate();
-  }, [activeOrgId, permissions.isOwner]);
+  }, [activeOrgId, activeOrg?.is_active, permissions.isOwner]);
 
   // Handle saving org name
   const handleSaveOrgName = async () => {

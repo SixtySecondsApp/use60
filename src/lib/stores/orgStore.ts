@@ -202,7 +202,8 @@ export const useOrgStore = create<OrgStore>()(
 
           const orgs: Organization[] = orgMemberships
             .map((m) => m.organization)
-            .filter((org): org is Organization => org !== undefined);
+            .filter((org): org is Organization => org !== undefined)
+            .filter((org) => org.is_active !== false); // Filter out inactive organizations
 
           // Choose active org (priority order):
           // 1) persisted activeOrgId if valid

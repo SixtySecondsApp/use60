@@ -59,7 +59,7 @@ export interface OrgContextType {
   permissions: OrgPermissions;
 
   // Actions
-  switchOrg: (orgId: string) => void;
+  switchOrg: (orgId: string) => Promise<void>;
   refreshOrgs: () => Promise<void>;
   createOrg: (name: string) => Promise<Organization | null>;
   setSessionOrg: (orgId: string) => Promise<void>;
@@ -210,8 +210,19 @@ export function OrgProvider({ children }: OrgProviderProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user?.id]);
 
+  // Check if active org is inactive and redirect to inactive page
+  useEffect(() => {
+    if (!activeOrg || !activeOrgId) return;
+
+    // If org is inactive, redirect immediately
+    if (activeOrg.is_active === false) {
+      logger.log('[OrgContext] Active org is inactive, redirecting to inactive page');
+      window.location.href = '/inactive-organization';
+    }
+  }, [activeOrg, activeOrgId]);
+
   // Switch to a different organization
-  const switchOrg = useCallback((orgId: string) => {
+  const switchOrg = useCallback(async (orgId: string) => {
     logger.log('[OrgContext] Switching to org:', orgId);
 
     // Validate user has access to this org
@@ -220,12 +231,23 @@ export function OrgProvider({ children }: OrgProviderProps) {
       return;
     }
 
+    // Check if org is active before switching
+    const org = organizations.find((o) => o.id === orgId);
+    if (org && org.is_active === false) {
+      logger.error('[OrgContext] Cannot switch to inactive org:', orgId);
+      // Set as active org anyway (to allow ProtectedRoute to detect and redirect)
+      storeActions.setActiveOrg(orgId);
+      // Redirect to inactive page
+      window.location.href = '/inactive-organization';
+      return;
+    }
+
     storeActions.setActiveOrg(orgId);
 
     // Invalidate all org-scoped queries to refetch with new RLS context
     logger.log('[OrgContext] Invalidating all org queries for cache refresh');
     invalidateAllOrgQueries(queryClient);
-  }, [isOrgMember, queryClient, storeActions]);
+  }, [isOrgMember, organizations, queryClient, storeActions]);
 
   // Refresh organizations from server
   const refreshOrgs = useCallback(async () => {

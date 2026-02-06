@@ -13,6 +13,7 @@ import {
 import { removeOrganizationMember } from '@/lib/services/organizationAdminService';
 import { toast } from 'sonner';
 import { logger } from '@/lib/utils/logger';
+import { supabase } from '@/lib/supabase/clientV2';
 
 export default function InactiveOrganizationScreen() {
   const navigate = useNavigate();
@@ -54,11 +55,23 @@ export default function InactiveOrganizationScreen() {
     if (!activeOrg?.id || !user?.id) return;
 
     try {
-      // Note: This would need to check org_memberships table
-      // For now, we'll assume if deactivation_reason exists, we can show owner messaging
-      setIsOwner(!!activeOrg?.deactivation_reason);
+      const { data, error } = await supabase
+        .from('organization_memberships')
+        .select('role')
+        .eq('org_id', activeOrg.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        logger.error('[InactiveOrganizationScreen] Error checking owner status:', error);
+        setIsOwner(false);
+        return;
+      }
+
+      setIsOwner(data?.role === 'owner');
     } catch (error) {
       logger.error('[InactiveOrganizationScreen] Error checking owner status:', error);
+      setIsOwner(false);
     }
   };
 
