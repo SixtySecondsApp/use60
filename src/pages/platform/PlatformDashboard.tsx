@@ -149,14 +149,6 @@ const platformSections: Record<string, PlatformSection[]> = {
       href: '/platform/users',
       color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
     },
-    {
-      id: 'organizations',
-      title: 'Organization Management',
-      description: 'Manage organizations, members, and roles',
-      icon: Building2,
-      href: '/platform/organizations',
-      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
-    },
   ],
   'CRM Configuration': [
     {

@@ -547,7 +547,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
 
               {/* Scrollable Navigation */}
-              <div className="flex-1 overflow-y-auto scrollbar-accent pb-4">
+              <div className="flex-1 overflow-y-auto scrollbar-none pb-4">
                 <nav className="p-4 sm:p-6 space-y-1 sm:space-y-2">
                   {menuItems.map((item) => {
                     // Handle dividers
@@ -795,7 +795,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           'fixed left-0 bottom-0 bg-white dark:bg-gray-900/50 backdrop-blur-xl p-6',
           'border-r border-[#E2E8F0] dark:border-gray-800/50 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.04)] dark:shadow-none',
           'transition-all duration-300 ease-in-out flex-shrink-0',
-          'overflow-y-auto overflow-x-hidden',
+          'overflow-x-hidden',
+          isCollapsed ? 'overflow-y-hidden' : 'overflow-y-auto',
           isCollapsed ? 'w-[96px]' : 'w-[256px]',
           'hidden lg:block z-[100]',
           isImpersonating ? 'top-[44px] h-[calc(100vh-44px)]' : 'top-0 h-screen'
@@ -854,8 +855,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="border-t border-[#E2E8F0] dark:border-gray-800 mb-6" />
 
           <div className={cn(
-            'flex-1 overflow-y-auto scrollbar-accent',
-            !isCollapsed ? 'pr-2 -mr-2' : 'pr-0'
+            'flex-1 overflow-y-auto',
+            isCollapsed ? 'scrollbar-none pr-0' : 'scrollbar-accent pr-2 -mr-2'
           )}>
             <nav className={cn(
               'pb-6',
