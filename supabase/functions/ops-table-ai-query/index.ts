@@ -61,6 +61,15 @@ interface RequestBody {
   columns: ColumnInfo[];
   rowCount?: number;
   sampleValues?: Record<string, string[]>;
+  sessionId?: string; // OI-026: Conversational context
+  recipeId?: string; // OI-015: Execute saved recipe
+  saveAsRecipe?: { // OI-015: Save current query as recipe
+    name: string;
+    description?: string;
+    triggerType?: string;
+  };
+  action?: string; // OI-015: Action type for save_recipe/execute_recipe
+  parsedAction?: any; // OI-015: Parsed action config for saving
 }
 
 type FilterOperator =
@@ -494,6 +503,30 @@ const CROSS_COLUMN_VALIDATE_TOOL: Anthropic.Tool = {
   },
 };
 
+// OI-021: Cross-table query tool
+const CROSS_TABLE_QUERY_TOOL: Anthropic.Tool = {
+  name: 'cross_table_query',
+  description:
+    'Query data across multiple sources: other ops tables, CRM entities (contacts, deals, companies, activities), and meetings with transcripts. Use this when the user wants to cross-reference, enrich, or compare data from different sources.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      query: {
+        type: 'string',
+        description:
+          'Natural language description of the cross-table operation. Examples: "Cross-reference with deals table", "Pull Fathom meeting notes for these contacts", "Compare against outreach table, show net-new only"',
+      },
+      target_sources: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Optional specific data sources to query. Available: other ops table names, "contacts", "deals", "companies", "activities", "meetings"',
+      },
+    },
+    required: ['query'],
+  },
+};
+
 // --- All tools combined ---
 
 const ALL_TOOLS: Anthropic.Tool[] = [
@@ -511,6 +544,7 @@ const ALL_TOOLS: Anthropic.Tool[] = [
   CONDITIONAL_UPDATE_TOOL,
   EXPORT_ROWS_TOOL,
   CROSS_COLUMN_VALIDATE_TOOL,
+  CROSS_TABLE_QUERY_TOOL, // OI-021
 ];
 
 // =============================================================================
@@ -520,7 +554,10 @@ const ALL_TOOLS: Anthropic.Tool[] = [
 function buildSystemPrompt(
   columns: ColumnInfo[],
   rowCount?: number,
-  sampleValues?: Record<string, string[]>
+  sampleValues?: Record<string, string[]>,
+  conversationHistory: Array<{ role: string; content: string }> = [],
+  tableContext: Record<string, any> = {},
+  availableDataSources: Array<{ source_name: string; source_type: string }> = []
 ): string {
   const columnList = columns
     .map((c) => `  - ${c.key} (label: "${c.label}", type: ${c.column_type})`)
@@ -534,10 +571,43 @@ function buildSystemPrompt(
     sampleSection = `\n\nSample values (first 3 rows):\n${samples}`;
   }
 
+  // OI-026: Build conversational context section
+  let contextSection = '';
+  if (conversationHistory.length > 0 || Object.keys(tableContext).length > 0) {
+    const recentMessages = conversationHistory.slice(-10);
+    const conversationText = recentMessages
+      .map((m) => `${m.role}: ${m.content}`)
+      .join('\n');
+
+    contextSection = `\n\nCURRENT TABLE STATE:
+- Current filters: ${JSON.stringify(tableContext.current_filters || [])}
+- Current sort: ${JSON.stringify(tableContext.current_sort || null)}
+- Visible columns: ${tableContext.visible_columns?.join(', ') || 'all'}
+- Row count: ${tableContext.row_count || 'unknown'}
+
+CONVERSATION HISTORY (last 10 messages):
+${conversationText || 'No previous messages'}
+
+When the user asks follow-up questions like "just the senior ones" or "how many?", use the context above to understand what they're referring to. Build upon previous filters and operations where appropriate.`;
+  }
+
+  // OI-021: Build available data sources section for cross-table queries
+  let dataSourcesSection = '';
+  if (availableDataSources.length > 0) {
+    const sourcesList = availableDataSources
+      .map((s) => `  - ${s.source_name} (${s.source_type})`)
+      .join('\n');
+
+    dataSourcesSection = `\n\nAVAILABLE DATA SOURCES FOR CROSS-TABLE QUERIES:
+${sourcesList}
+
+Use the cross_table_query tool to join or enrich data from these sources.`;
+  }
+
   return `You are an AI assistant that parses natural language queries into structured table operations.
 
 The user has a table with ${rowCount ?? 'unknown'} rows and the following columns:
-${columnList}${sampleSection}
+${columnList}${sampleSection}${contextSection}${dataSourcesSection}
 
 Select the appropriate tool based on user intent:
 
@@ -1143,11 +1213,113 @@ serve(async (req: Request) => {
       return errorResponse('Invalid authorization', req, 401);
     }
 
+    // OI-026: Load or create chat session for conversational context
+    let conversationHistory: Array<{ role: string; content: string }> = [];
+    let tableContext: Record<string, any> = {};
+    let currentSessionId = body.sessionId;
+
+    if (body.sessionId) {
+      const { data: session } = await supabase
+        .from('ops_table_chat_sessions')
+        .select('*')
+        .eq('id', body.sessionId)
+        .maybeSingle();
+
+      if (session) {
+        conversationHistory = session.messages || [];
+        tableContext = session.context || {};
+      }
+    } else {
+      // Create new session
+      const { data: newSession } = await supabase
+        .from('ops_table_chat_sessions')
+        .insert({
+          table_id: tableId,
+          user_id: user.id,
+          messages: [],
+          context: {},
+        })
+        .select()
+        .maybeSingle();
+
+      if (newSession) {
+        currentSessionId = newSession.id;
+      }
+    }
+
+    // OI-015: Handle save_recipe action
+    if (body.action === 'save_recipe' && body.saveAsRecipe) {
+      const { saveAsRecipe, parsedAction } = body;
+
+      const { data: recipe, error: saveError } = await supabase
+        .from('ops_table_recipes')
+        .insert({
+          org_id: (await supabase.from('dynamic_tables').select('org_id').eq('id', tableId).single()).data?.org_id,
+          table_id: tableId,
+          created_by: user.id,
+          name: saveAsRecipe.name,
+          description: saveAsRecipe.description,
+          query_text: body.query,
+          parsed_config: parsedAction, // Store the AI-parsed action
+          trigger_type: saveAsRecipe.triggerType || 'one_shot',
+          run_count: 0,
+        })
+        .select()
+        .single();
+
+      if (saveError) throw saveError;
+
+      return jsonResponse({ type: 'recipe_saved', recipe }, req);
+    }
+
+    // OI-015: Handle execute_recipe action
+    if (body.action === 'execute_recipe' && body.recipeId) {
+      const { recipeId } = body;
+
+      // Load recipe
+      const { data: recipe, error: recipeError } = await supabase
+        .from('ops_table_recipes')
+        .select('*')
+        .eq('id', recipeId)
+        .single();
+
+      if (recipeError) throw recipeError;
+
+      // Use stored parsed_config to build result (skip AI parsing)
+      const result = {
+        ...recipe.parsed_config,
+        summary: `Executed recipe: ${recipe.name}`,
+      };
+
+      // Increment run count
+      await supabase
+        .from('ops_table_recipes')
+        .update({
+          run_count: (recipe.run_count || 0) + 1,
+          last_run_at: new Date().toISOString(),
+        })
+        .eq('id', recipeId);
+
+      return jsonResponse(result, req);
+    }
+
+    // OI-021: Load available data sources for cross-table queries
+    const { data: availableDataSources } = await supabase
+      .rpc('get_available_data_sources', { p_table_id: tableId })
+      .returns<Array<{ source_name: string; source_type: string }>>() || { data: [] };
+
     // Initialize Anthropic client
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-    // Build system prompt with column context
-    const systemPrompt = buildSystemPrompt(columns, rowCount, sampleValues);
+    // Build system prompt with column context, conversation history, and available data sources
+    const systemPrompt = buildSystemPrompt(
+      columns,
+      rowCount,
+      sampleValues,
+      conversationHistory,
+      tableContext,
+      availableDataSources || []
+    );
 
     // Call Claude with tool use
     const response = await anthropic.messages.create({
@@ -1249,6 +1421,33 @@ serve(async (req: Request) => {
       case 'cross_column_validate':
         result = buildCrossColumnValidateResponse(toolInput, columns, summary);
         break;
+      // OI-021: Cross-table query handler
+      case 'cross_table_query': {
+        const { query: crossQuery, target_sources } = toolInput;
+
+        // Delegate to cross-query edge function
+        const { data: crossResult, error: crossError } = await supabase.functions.invoke(
+          'ops-table-cross-query',
+          {
+            body: { tableId, query: crossQuery, dataSources: target_sources },
+          }
+        );
+
+        if (crossError) {
+          throw new Error(`Cross-table query failed: ${crossError.message}`);
+        }
+
+        result = {
+          type: 'cross_query' as const,
+          joinConfig: crossResult.joinConfig,
+          enrichedRows: crossResult.enrichedRows,
+          newColumns: crossResult.newColumns,
+          matched: crossResult.matched,
+          netNew: crossResult.netNew,
+          summary: summary || 'Cross-table query completed',
+        };
+        break;
+      }
       default:
         return errorResponse(`Unknown tool: ${toolName}`, req, 400);
     }
@@ -1259,6 +1458,45 @@ serve(async (req: Request) => {
     }
 
     console.log(`${LOG_PREFIX} Parsed operation:`, JSON.stringify(result));
+
+    // OI-026: Update chat session with new messages and context
+    if (currentSessionId) {
+      const newUserMessage = {
+        role: 'user',
+        content: query,
+        timestamp: new Date().toISOString(),
+        action_result: null,
+      };
+
+      const newAssistantMessage = {
+        role: 'assistant',
+        content: `Executed ${result.type || result.action} action`,
+        timestamp: new Date().toISOString(),
+      };
+
+      const updatedMessages = [...conversationHistory, newUserMessage, newAssistantMessage];
+
+      // Update context with current table state
+      const updatedContext = {
+        current_filters: result.conditions || result.filterConditions || tableContext.current_filters,
+        current_sort: result.sortConfig || tableContext.current_sort,
+        visible_columns: result.visibleColumns || tableContext.visible_columns,
+        row_count: rowCount,
+        last_query_result: result,
+      };
+
+      await supabase
+        .from('ops_table_chat_sessions')
+        .update({
+          messages: updatedMessages,
+          context: updatedContext,
+        })
+        .eq('id', currentSessionId);
+
+      // Add session info to response
+      result.sessionId = currentSessionId;
+      result.sessionMessages = updatedMessages;
+    }
 
     return jsonResponse(result, req);
   } catch (error) {

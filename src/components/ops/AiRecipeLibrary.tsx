@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tantml:react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Play, Share, Trash2, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -48,8 +48,9 @@ export function AiRecipeLibrary({ tableId, open, onOpenChange, onRun }: AiRecipe
     },
   });
 
-  const myRecipes = recipes.filter((r: any) => r.created_by === 'current-user-id'); // TODO: Get actual user ID
-  const sharedRecipes = recipes.filter((r: any) => r.is_shared && r.created_by !== 'current-user-id');
+  const myRecipes = recipes.filter((r: any) => !r.is_shared || r.created_by === r._currentUserId);
+  const sharedRecipes = recipes.filter((r: any) => r.is_shared);
+  const autoRunRecipes = recipes.filter((r: any) => r.trigger_type === 'on_sync' || r.trigger_type === 'scheduled');
 
   const RecipeCard = ({ recipe }: { recipe: any }) => (
     <div className="border rounded-lg p-4 space-y-3">
@@ -121,6 +122,7 @@ export function AiRecipeLibrary({ tableId, open, onOpenChange, onRun }: AiRecipe
           <TabsList>
             <TabsTrigger value="my">My Recipes ({myRecipes.length})</TabsTrigger>
             <TabsTrigger value="shared">Shared ({sharedRecipes.length})</TabsTrigger>
+            <TabsTrigger value="auto-run">Auto-Run ({autoRunRecipes.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="my" className="space-y-4 mt-4">
@@ -142,6 +144,18 @@ export function AiRecipeLibrary({ tableId, open, onOpenChange, onRun }: AiRecipe
               </p>
             ) : (
               sharedRecipes.map((recipe: any) => (
+                <RecipeCard key={recipe.id} recipe={recipe} />
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="auto-run" className="space-y-4 mt-4">
+            {autoRunRecipes.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                No auto-run recipes. Set a recipe trigger to &quot;on_sync&quot; or &quot;scheduled&quot; to see it here.
+              </p>
+            ) : (
+              autoRunRecipes.map((recipe: any) => (
                 <RecipeCard key={recipe.id} recipe={recipe} />
               ))
             )}

@@ -317,9 +317,9 @@ async function sendInsightSlackNotifications(
 
   // Get Slack-connected users in the org
   const { data: members } = await supabase
-    .from('organization_members')
+    .from('organization_memberships')
     .select('user_id, profiles(slack_webhook_url)')
-    .eq('organization_id', orgId);
+    .eq('org_id', orgId);
 
   if (!members || members.length === 0) return;
 

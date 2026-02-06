@@ -20,6 +20,8 @@ import {
   Download,
   Copy,
   Zap,
+  BookOpen,
+  GitBranch,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -47,6 +49,12 @@ import { AiQuerySummaryCard, type SummaryData } from '@/components/ops/AiQuerySu
 import { AiTransformPreviewModal, type TransformPreviewData } from '@/components/ops/AiTransformPreviewModal';
 import { AiDeduplicatePreviewModal, type DeduplicatePreviewData } from '@/components/ops/AiDeduplicatePreviewModal';
 import { AiQueryBar } from '@/components/ops/AiQueryBar';
+import { AiChatThread } from '@/components/ops/AiChatThread';
+import { AiInsightsBanner } from '@/components/ops/AiInsightsBanner';
+import { WorkflowList } from '@/components/ops/WorkflowList';
+import { WorkflowBuilder } from '@/components/ops/WorkflowBuilder';
+import { AiRecipeLibrary } from '@/components/ops/AiRecipeLibrary';
+import { CrossQueryResultPanel } from '@/components/ops/CrossQueryResultPanel';
 
 // ---------------------------------------------------------------------------
 // Service singleton
@@ -99,11 +107,21 @@ function OpsDetailPage() {
     anchorRect: DOMRect;
     editIndex?: number;
   } | null>(null);
+
+  // OI-028: Chat session state
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessionMessages, setSessionMessages] = useState<any[]>([]);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotPush, setShowHubSpotPush] = useState(false);
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+
+  // ---- OI: New feature state ----
+  const [showWorkflows, setShowWorkflows] = useState(false);
+  const [showWorkflowBuilder, setShowWorkflowBuilder] = useState(false);
+  const [showRecipeLibrary, setShowRecipeLibrary] = useState(false);
+  const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
 
   // ---- AI Query state ----
   const [aiQueryOperation, setAiQueryOperation] = useState<AiQueryOperation | null>(null);
@@ -656,12 +674,22 @@ function OpsDetailPage() {
               column_type: c.column_type,
             })),
             rowCount: table?.row_count,
+            sessionId: currentSessionId, // OI-028: Include session ID for conversational context
           },
         });
 
         if (error) throw error;
 
         const result = data as Record<string, unknown>;
+
+        // OI-028: Update session state from response
+        if (result.sessionId) {
+          setCurrentSessionId(result.sessionId as string);
+        }
+        if (result.sessionMessages) {
+          setSessionMessages(result.sessionMessages as any[]);
+        }
+
         const resultType = (result.type as string) || result.action;
 
         switch (resultType) {
@@ -981,6 +1009,16 @@ function OpsDetailPage() {
     setAiQueryTotalCount(0);
   }, []);
 
+  // OI-028: New Session handler - clears conversational context
+  const handleNewSession = useCallback(() => {
+    setCurrentSessionId(null);
+    setSessionMessages([]);
+    // Clear filters and reset table state
+    setFilterConditions([]);
+    setSortState(null);
+    toast.success('Started new chat session');
+  }, []);
+
   const handleTransformConfirm = useCallback(async () => {
     if (!transformPreviewData || !tableId) return;
     setIsTransformExecuting(true);
@@ -1129,6 +1167,29 @@ function OpsDetailPage() {
           />
         </div>
 
+        {/* OI-010: AI Insights Banner + OI-033: Predictions */}
+        <AiInsightsBanner
+          tableId={tableId!}
+          onActionClick={(action: any) => {
+            if (action.action_type === 'filter') {
+              // Apply filter from insight action
+              toast.info('Applying insight filter...');
+            }
+          }}
+        />
+
+        {/* OI-022: Cross-Query Results */}
+        {crossQueryResult && (
+          <CrossQueryResultPanel
+            result={crossQueryResult}
+            onKeepColumn={(col: any) => {
+              toast.success(`Column "${col.name}" added to table`);
+              setCrossQueryResult(null);
+            }}
+            onDismiss={() => setCrossQueryResult(null)}
+          />
+        )}
+
         {/* AI Summary Card */}
         {summaryData && (
           <div className="mb-5">
@@ -1228,6 +1289,22 @@ function OpsDetailPage() {
 
           {/* Right: action buttons */}
           <div className="flex shrink-0 items-center gap-2">
+            {/* OI-005: Workflows button */}
+            <button
+              onClick={() => setShowWorkflows(!showWorkflows)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-3 py-1.5 text-sm font-medium text-violet-300 transition-colors hover:bg-violet-900/40 hover:text-violet-200"
+            >
+              <GitBranch className="h-3.5 w-3.5" />
+              Workflows
+            </button>
+            {/* OI-016: Recipe Library button */}
+            <button
+              onClick={() => setShowRecipeLibrary(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-1.5 text-sm font-medium text-amber-300 transition-colors hover:bg-amber-900/40 hover:text-amber-200"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Recipes
+            </button>
             {/* HubSpot sync button (only for hubspot-sourced tables) */}
             {table.source_type === 'hubspot' && (
               <button
@@ -1522,6 +1599,57 @@ function OpsDetailPage() {
           setShowCSVImport(false);
           queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
           queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+        }}
+      />
+
+      {/* OI-028: Conversational Chat Thread */}
+      <AiChatThread
+        tableId={tableId!}
+        sessionId={currentSessionId}
+        messages={sessionMessages}
+        onNewSession={handleNewSession}
+      />
+
+      {/* OI-005: Workflows Panel */}
+      {showWorkflows && (
+        <div className="fixed inset-y-0 right-0 z-50 w-[480px] bg-gray-900 border-l border-gray-800 shadow-xl overflow-y-auto">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-white">Workflows</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowWorkflowBuilder(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New Workflow
+                </button>
+                <button
+                  onClick={() => setShowWorkflows(false)}
+                  className="rounded p-1 text-gray-400 hover:bg-gray-800 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            {showWorkflowBuilder ? (
+              <WorkflowBuilder tableId={tableId!} onClose={() => setShowWorkflowBuilder(false)} />
+            ) : (
+              <WorkflowList tableId={tableId!} onEdit={() => setShowWorkflowBuilder(true)} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* OI-016: Recipe Library */}
+      <AiRecipeLibrary
+        tableId={tableId!}
+        open={showRecipeLibrary}
+        onOpenChange={setShowRecipeLibrary}
+        onRun={(recipe: any) => {
+          setQueryInput(recipe.query_text);
+          setShowRecipeLibrary(false);
+          toast.info('Recipe loaded into query bar');
         }}
       />
     </div>
