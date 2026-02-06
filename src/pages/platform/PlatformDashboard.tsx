@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
   Building2,
@@ -28,6 +28,7 @@ import {
   TrendingUp,
   DollarSign,
   ChevronRight,
+  ChevronDown,
   Layers,
   Globe,
   MessageSquare,
@@ -44,8 +45,8 @@ import {
   Eye,
   GitBranch,
   Bot,
-  FlaskConical,
-  Video,
+  Search,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -129,23 +130,6 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: BarChart3,
       href: '/platform/cost-analysis',
       color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30',
-    },
-    {
-      id: 'ai-usage',
-      title: 'AI Usage & Models',
-      description: 'Track AI usage across features, orgs, users. Configure models globally.',
-      icon: Brain,
-      href: '/platform/ai-usage',
-      color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
-      badge: 'New',
-    },
-    {
-      id: 'api-usage',
-      title: '60 Notetaker Build',
-      description: 'Monitor MeetingBaaS, Gladia, and Deepgram usage against plan limits',
-      icon: Activity,
-      href: '/platform/60-notetaker-build',
-      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
       badge: 'New',
     },
     {
@@ -164,6 +148,14 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: Users,
       href: '/platform/users',
       color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
+    },
+    {
+      id: 'organizations',
+      title: 'Organization Management',
+      description: 'Manage organizations, members, and roles',
+      icon: Building2,
+      href: '/platform/organizations',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
     },
   ],
   'CRM Configuration': [
@@ -225,15 +217,6 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: GitBranch,
       href: '/platform/agent-sequences',
       color: 'text-violet-600 bg-violet-100 dark:bg-violet-900/30',
-      badge: 'New',
-    },
-    {
-      id: 'copilot-lab',
-      title: 'Copilot Lab',
-      description: 'Test, discover, and improve AI copilot capabilities',
-      icon: FlaskConical,
-      href: '/platform/copilot-lab',
-      color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30',
       badge: 'New',
     },
     {
@@ -321,14 +304,6 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: Bot,
       href: '/platform/integrations/notetaker-branding',
       color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
-    },
-    {
-      id: 'notetaker-video-quality',
-      title: 'Video Quality',
-      description: 'Configure recording compression quality (480p / 720p / 1080p)',
-      icon: Video,
-      href: '/platform/integrations/notetaker-video-quality',
-      color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
     },
   ],
   'Email & Communications': [
@@ -502,10 +477,30 @@ export default function PlatformDashboard() {
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [customers, setCustomers] = useState<CustomerWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    // Load from localStorage, default all collapsed
+    const saved = localStorage.getItem('platform-dashboard-sections');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return Object.keys(platformSections).reduce((acc, key) => {
+      acc[key] = false;
+      return acc;
+    }, {} as Record<string, boolean>);
+  });
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSections(prev => {
+      const updated = { ...prev, [sectionTitle]: !prev[sectionTitle] };
+      localStorage.setItem('platform-dashboard-sections', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   async function loadData() {
     setIsLoading(true);
@@ -554,6 +549,22 @@ export default function PlatformDashboard() {
       bgColor: 'bg-amber-500/10',
     },
   ];
+
+  // Filter sections and items based on search query
+  const filteredSections = Object.entries(platformSections)
+    .map(([sectionTitle, items]) => {
+      if (!searchQuery) {
+        return [sectionTitle, items] as const;
+      }
+
+      const filteredItems = items.filter(item =>
+        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      return [sectionTitle, filteredItems] as const;
+    })
+    .filter(([, items]) => items.length > 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
@@ -620,48 +631,118 @@ export default function PlatformDashboard() {
           ))}
         </div>
 
-            {/* Section Cards */}
-            <div className="space-y-8">
-          {Object.entries(platformSections).map(([sectionTitle, items], sectionIndex) => (
-            <motion.div
-              key={sectionTitle}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.2 + sectionIndex * 0.1 }}
-            >
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                {sectionTitle}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {items.map((item) => (
-                  <Card
-                    key={item.id}
-                    className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-indigo-200 dark:hover:border-indigo-800 group"
-                    onClick={() => navigate(item.href)}
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className={cn('p-3 rounded-xl', item.color)}>
-                          <item.icon className="w-5 h-5" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {item.badge && (
-                            <Badge variant="outline" className="text-xs">
-                              {item.badge}
-                            </Badge>
-                          )}
-                          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                        </div>
-                      </div>
-                      <CardTitle className="text-base mt-3">{item.title}</CardTitle>
-                      <CardDescription className="text-sm">{item.description}</CardDescription>
-                    </CardHeader>
-                  </Card>
-                ))}
-              </div>
-            </motion.div>
-          ))}
+        {/* Search Bar */}
+        <div className="mb-8">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search admin features..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg pl-10 pr-10 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Section Cards */}
+        <div className="space-y-6">
+          {filteredSections.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-600 dark:text-gray-400">No features match your search.</p>
             </div>
+          ) : (
+            filteredSections.map(([sectionTitle, items], sectionIndex) => {
+              const isExpanded = expandedSections[sectionTitle] ?? false;
+
+              return (
+                <motion.div
+                  key={sectionTitle}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.2 + sectionIndex * 0.1 }}
+                >
+                  {/* Section Header - Clickable */}
+                  <button
+                    onClick={() => toggleSection(sectionTitle)}
+                    className="w-full flex items-center justify-between mb-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
+                  >
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-left">
+                      {sectionTitle}
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {items.length} {items.length === 1 ? 'item' : 'items'}
+                      </span>
+                      <motion.div
+                        initial={false}
+                        animate={{ rotate: isExpanded ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-indigo-600" />
+                      </motion.div>
+                    </div>
+                  </button>
+
+                  {/* Section Content - Collapsible */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden mb-6"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {items.map((item) => (
+                            <motion.div
+                              key={item.id}
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <Card
+                                className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-indigo-200 dark:hover:border-indigo-800 group"
+                                onClick={() => navigate(item.href)}
+                              >
+                                <CardHeader className="pb-3">
+                                  <div className="flex items-start justify-between">
+                                    <div className={cn('p-3 rounded-xl', item.color)}>
+                                      <item.icon className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {item.badge && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {item.badge}
+                                        </Badge>
+                                      )}
+                                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                    </div>
+                                  </div>
+                                  <CardTitle className="text-base mt-3">{item.title}</CardTitle>
+                                  <CardDescription className="text-sm">{item.description}</CardDescription>
+                                </CardHeader>
+                              </Card>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })
+          )}
+        </div>
 
             {/* Recent Customers Preview */}
             {customers.length > 0 && (
