@@ -17,6 +17,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const EDGE_FUNCTION_SECRET = Deno.env.get('EDGE_FUNCTION_SECRET');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,54 +45,65 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate the request - require service role OR valid user JWT with admin access
+    // Authenticate the request - require EDGE_FUNCTION_SECRET, service role, or valid user JWT with admin access
     const authHeader = req.headers.get('Authorization');
     const apikeyHeader = req.headers.get('apikey');
 
-    // Allow service role (for backend calls)
-    const isServiceRole = authHeader?.replace(/^Bearer\s+/i, '') === SUPABASE_SERVICE_ROLE_KEY ||
-                          apikeyHeader === SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!isServiceRole) {
-      // If not service role, validate as user JWT and check admin status
-      if (!authHeader) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Unauthorized: authentication required' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Check for EDGE_FUNCTION_SECRET (inter-function calls from other edge functions)
+    const isEdgeFunctionAuth = (() => {
+      if (!authHeader || !EDGE_FUNCTION_SECRET) return false;
       const token = authHeader.replace(/^Bearer\s+/i, '');
-      const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+      return token === EDGE_FUNCTION_SECRET;
+    })();
 
-      if (authError || !user) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Unauthorized: invalid authentication',
-            details: { message: authError?.message || 'User not found' }
-          }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+    if (isEdgeFunctionAuth) {
+      // Authenticated via EDGE_FUNCTION_SECRET - proceed
+    } else {
+      // Check if service role
+      const isServiceRole = authHeader?.replace(/^Bearer\s+/i, '') === SUPABASE_SERVICE_ROLE_KEY ||
+                            apikeyHeader === SUPABASE_SERVICE_ROLE_KEY;
 
-      // Check if user is an admin
-      const { data: profile, error: profileError } = await supabaseClient
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
+      if (!isServiceRole) {
+        // If not service role or edge function secret, validate as user JWT and check admin status
+        if (!authHeader) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Unauthorized: authentication required' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
-      if (profileError || !profile?.is_admin) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Unauthorized: admin access required',
-            details: { message: 'Only administrators can generate waitlist tokens' }
-          }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const token = authHeader.replace(/^Bearer\s+/i, '');
+        const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+
+        if (authError || !user) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Unauthorized: invalid authentication',
+              details: { message: authError?.message || 'User not found' }
+            }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if user is an admin
+        const { data: profile, error: profileError } = await supabaseClient
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError || !profile?.is_admin) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Unauthorized: admin access required',
+              details: { message: 'Only administrators can generate waitlist tokens' }
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
     }
 

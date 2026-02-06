@@ -250,11 +250,15 @@ export async function bulkGrantAccess(
       for (const entry of entries) {
         try {
           // Generate custom waitlist token (not a Supabase magic link)
+          const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
           const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-waitlist-token', {
             body: {
               email: entry.email,
               waitlist_entry_id: entry.id,
             },
+            headers: edgeFunctionSecret
+              ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+              : {},
           });
 
           if (tokenError) {
