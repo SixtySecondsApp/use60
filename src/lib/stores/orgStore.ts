@@ -200,32 +200,40 @@ export const useOrgStore = create<OrgStore>()(
             organization: m.organization,
           }));
 
+          // Keep ALL organizations including inactive ones in the store
+          // We need inactive org data to display on the InactiveOrganizationScreen
           const orgs: Organization[] = orgMemberships
             .map((m) => m.organization)
-            .filter((org): org is Organization => org !== undefined)
-            .filter((org) => org.is_active !== false); // Filter out inactive organizations
+            .filter((org): org is Organization => org !== undefined);
 
           // Choose active org (priority order):
-          // 1) persisted activeOrgId if valid
-          // 2) VITE_DEFAULT_ORG_ID if it exists in memberships
-          // 3) org with name matching "Sixty Seconds" (case-insensitive) with most meetings
-          // 4) org with most meetings (fallback)
-          // 5) first org
+          // 1) persisted activeOrgId if valid (even if inactive - user may need to see inactive page)
+          // 2) VITE_DEFAULT_ORG_ID if it exists and is active
+          // 3) org with name matching "Sixty Seconds" (case-insensitive) with most meetings (active only)
+          // 4) org with most meetings (active only, fallback)
+          // 5) first ACTIVE org
+          // 6) first org (if all are inactive)
           let activeOrgId = get().activeOrgId;
 
           const isValidPersisted = !!activeOrgId && orgs.some((o) => o.id === activeOrgId);
           if (!isValidPersisted) activeOrgId = null;
 
+          // If persisted org exists but is inactive, keep it so user can see inactive page
+          // The redirect will happen in OrgContext
+
           const envDefaultOrgId = getDefaultOrgId();
-          if (!activeOrgId && envDefaultOrgId && orgs.some((o) => o.id === envDefaultOrgId)) {
+          if (!activeOrgId && envDefaultOrgId && orgs.some((o) => o.id === envDefaultOrgId && o.is_active !== false)) {
             activeOrgId = envDefaultOrgId;
           }
 
           if (!activeOrgId && orgs.length > 1) {
+            // Filter to only active orgs when selecting default
+            const activeOrgs = orgs.filter((o) => o.is_active !== false);
+
             // Count meetings per org (lightweight: head:true)
             // Prefer orgs with transcripts since Meeting Intelligence relies on transcript data.
             const counts = await Promise.all(
-              orgs.map(async (org) => {
+              activeOrgs.map(async (org) => {
                 try {
                   const { count } = await (supabase as any)
                     .from('meetings')
@@ -256,7 +264,9 @@ export const useOrgStore = create<OrgStore>()(
           }
 
           if (!activeOrgId) {
-            activeOrgId = orgs[0]?.id || null;
+            // Prefer first active org, fallback to any org if all are inactive
+            const firstActiveOrg = orgs.find((o) => o.is_active !== false);
+            activeOrgId = firstActiveOrg?.id || orgs[0]?.id || null;
           }
 
           // Get role for active org

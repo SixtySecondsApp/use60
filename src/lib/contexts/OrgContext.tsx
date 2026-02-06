@@ -231,17 +231,18 @@ export function OrgProvider({ children }: OrgProviderProps) {
       return;
     }
 
-    // Check if org is active before switching
+    // Check if org is active before allowing switch
     const org = organizations.find((o) => o.id === orgId);
     if (org && org.is_active === false) {
-      logger.error('[OrgContext] Cannot switch to inactive org:', orgId);
-      // Set as active org anyway (to allow ProtectedRoute to detect and redirect)
+      logger.warn('[OrgContext] Attempting to switch to inactive org - redirecting to inactive page');
+      // Set as active org (needed for inactive page to display org data)
       storeActions.setActiveOrg(orgId);
       // Redirect to inactive page
       window.location.href = '/inactive-organization';
       return;
     }
 
+    // Only switch if org is active
     storeActions.setActiveOrg(orgId);
 
     // Invalidate all org-scoped queries to refetch with new RLS context
