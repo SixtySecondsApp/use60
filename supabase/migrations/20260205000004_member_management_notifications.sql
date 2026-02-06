@@ -20,11 +20,11 @@ BEGIN
   -- Only trigger when status changes from active to removed
   IF OLD.member_status = 'active' AND NEW.member_status = 'removed' THEN
     -- Get user and org names
-    SELECT full_name INTO v_user_name FROM profiles WHERE id = OLD.user_id;
+    SELECT COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email) INTO v_user_name FROM profiles WHERE id = OLD.user_id;
     SELECT name INTO v_org_name FROM organizations WHERE id = OLD.org_id;
 
     -- Get name of person who performed the action
-    SELECT full_name INTO v_actioned_by_name FROM profiles WHERE id = auth.uid();
+    SELECT COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email) INTO v_actioned_by_name FROM profiles WHERE id = auth.uid();
 
     -- Notify org admins and owners
     PERFORM notify_org_members(
@@ -80,11 +80,11 @@ BEGIN
   -- Only trigger when role actually changes
   IF OLD.role != NEW.role THEN
     -- Get user and org names
-    SELECT full_name INTO v_user_name FROM profiles WHERE id = NEW.user_id;
+    SELECT COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email) INTO v_user_name FROM profiles WHERE id = NEW.user_id;
     SELECT name INTO v_org_name FROM organizations WHERE id = NEW.org_id;
 
     -- Get name of person who performed the action
-    SELECT full_name INTO v_actioned_by_name FROM profiles WHERE id = auth.uid();
+    SELECT COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email) INTO v_actioned_by_name FROM profiles WHERE id = auth.uid();
 
     -- Notify org admins and owners
     PERFORM notify_org_members(

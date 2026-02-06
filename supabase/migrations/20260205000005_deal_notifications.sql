@@ -27,7 +27,7 @@ BEGIN
   -- Only proceed if we found an org and deal value exceeds threshold
   IF v_org_id IS NOT NULL AND NEW.value >= v_threshold THEN
     -- Get owner name
-    SELECT full_name INTO v_owner_name FROM profiles WHERE id = NEW.owner_id;
+    SELECT COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email) INTO v_owner_name FROM profiles WHERE id = NEW.owner_id;
 
     -- Notify org owners and admins
     PERFORM notify_org_members(
@@ -90,7 +90,7 @@ BEGIN
 
     IF v_org_id IS NOT NULL THEN
       -- Get owner name
-      SELECT full_name INTO v_owner_name FROM profiles WHERE id = NEW.owner_id;
+      SELECT COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email) INTO v_owner_name FROM profiles WHERE id = NEW.owner_id;
 
       -- Notify org owners and admins
       PERFORM notify_org_members(

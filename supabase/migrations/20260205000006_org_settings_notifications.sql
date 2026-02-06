@@ -23,7 +23,7 @@ BEGIN
      OLD.company_domain != NEW.company_domain THEN
 
     -- Get name of person who made the change
-    SELECT full_name INTO v_actioned_by_name FROM profiles WHERE id = auth.uid();
+    SELECT COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email) INTO v_actioned_by_name FROM profiles WHERE id = auth.uid();
 
     -- Build change description
     v_change_description := CASE

@@ -124,26 +124,47 @@ export async function deactivateOrganizationAsOwner(
  */
 export async function getAllOrgMembers(orgId: string): Promise<OrgMember[]> {
   try {
+    // Step 1: Get memberships
     const { data: memberships, error: membershipsError } = await supabase
       .from('organization_memberships')
-      .select(
-        `
-        user_id,
-        role,
-        profiles!organization_memberships_profiles_fk(id, email, full_name)
-      `
-      )
+      .select('user_id, role')
       .eq('org_id', orgId)
       .neq('member_status', 'removed'); // Exclude removed members, include active and NULL status for backwards compatibility
 
     if (membershipsError) throw membershipsError;
+    if (!memberships?.length) return [];
 
-    return (memberships || []).map((m) => ({
-      id: m.user_id,
-      email: m.profiles?.email || 'unknown@example.com',
-      full_name: m.profiles?.full_name || 'Unknown User',
-      role: m.role as OrgMember['role']
-    }));
+    const userIds = memberships.map((m) => m.user_id);
+
+    // Step 2: Get profiles with first_name and last_name
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, email, first_name, last_name')
+      .in('id', userIds);
+
+    if (profilesError) throw profilesError;
+
+    // Step 3: Join and create full_name
+    const profileMap = new Map(
+      profiles?.map((p) => [
+        p.id,
+        {
+          id: p.id,
+          email: p.email,
+          full_name: [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email,
+        }
+      ]) || []
+    );
+
+    return memberships.map((m) => {
+      const profile = profileMap.get(m.user_id);
+      return {
+        id: m.user_id,
+        email: profile?.email || 'unknown@example.com',
+        full_name: profile?.full_name || 'Unknown User',
+        role: m.role as OrgMember['role']
+      };
+    });
   } catch (error) {
     logger.error('[OrganizationDeactivationService] Error fetching org members:', error);
 
@@ -188,11 +209,13 @@ async function triggerDeactivationNotifications(orgId: string, reason: string): 
     // Get deactivator info
     const { data: deactivatorProfile } = await supabase
       .from('profiles')
-      .select('full_name, email')
+      .select('first_name, last_name, email')
       .eq('id', org.deactivated_by)
       .single();
 
-    const deactivatorName = deactivatorProfile?.full_name || 'An administrator';
+    const deactivatorName = deactivatorProfile
+      ? [deactivatorProfile.first_name, deactivatorProfile.last_name].filter(Boolean).join(' ') || deactivatorProfile.email || 'An administrator'
+      : 'An administrator';
 
     // Calculate deadline
     const deadlineDate = new Date(org.deactivated_at);
