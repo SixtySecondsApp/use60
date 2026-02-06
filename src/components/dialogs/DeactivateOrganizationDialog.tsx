@@ -103,9 +103,10 @@ export function DeactivateOrganizationDialog({
         // Close and redirect
         onClose();
 
-        // Redirect to onboarding/org selection
+        // Redirect to learnmore page instead of non-existent org selection page.
+        // ProtectedRoute will handle inactive org detection and redirect if needed.
         setTimeout(() => {
-          window.location.href = '/onboarding/select-organization';
+          window.location.href = '/learnmore';
         }, 1500);
       } else {
         showDeactivationError(result.error || 'Failed to deactivate organization');
