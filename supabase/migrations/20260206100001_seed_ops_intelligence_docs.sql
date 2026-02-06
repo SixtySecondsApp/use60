@@ -331,9 +331,413 @@ Query across multiple Ops tables.
 
 ', true, 2);
 
--- Note: Additional articles (Conversations, Workflows, Recipes, etc.) would be inserted here
--- For brevity in this migration, showing template for 2 articles
--- Full implementation would include all 6 feature articles
+-- Additional articles for DOC-010, DOC-011, DOC-012
+
+-- Conversations
+('ops-conversations', 'Conversations - Multi-Turn Context', 'Conversations', E'# Conversations - Multi-Turn Context
+
+Ask follow-up questions without repeating context. The AI remembers your conversation history.
+
+## How Context Works
+
+:::beginner
+When you ask a question, the AI remembers it for the next ~10 queries. This means you can say:
+
+1. "Show law firms"
+2. "Just the ones in California" ← AI knows you mean law firms
+3. "How many attended meetings?" ← AI knows you mean CA law firms
+:::
+
+:::intermediate
+Context includes:
+- Previous queries and results
+- Current filters and sorts
+- Selected rows and columns
+- External actions (emails sent, tasks created)
+
+Example conversation:
+```
+You: "Filter to enterprise deals"
+AI: Filtered to 45 deals
+You: "Who owns these?"
+AI: 12 owners - Sarah (18), Mike (15), ...
+You: "Create tasks for Sarah''s deals"
+AI: Created 18 tasks assigned to Sarah
+```
+:::
+
+:::advanced
+Context is stored per session and persists across page reloads for 24 hours. To reset context, click "New Session" in the chat thread.
+
+You can also pass context explicitly using references:
+```
+"Compare @current_view to @Q4_Pipeline showing net-new and changes"
+```
+:::
+
+## Session Management
+
+:::beginner
+- Click the message count badge to expand chat history
+- Scroll through previous queries and results
+- Click "New Session" to start fresh
+:::
+
+:::intermediate
+Sessions auto-save and can be resumed later. Useful for complex analysis that takes multiple steps:
+
+1. Start session: "Show Q1 pipeline"
+2. Continue tomorrow: "How did these deals progress?"
+3. AI remembers the Q1 pipeline context
+:::
+
+:::advanced
+Export session transcripts for documentation:
+```
+"Export this session to PDF with all queries and results"
+```
+:::
+
+', true, 3),
+
+-- Workflows
+('ops-workflows', 'Workflows - Automation', 'Workflows', E'# Workflows - Automation
+
+Automate repetitive tasks with AI-powered workflows.
+
+## Creating Workflows
+
+:::beginner
+1. Click **Workflows** button in toolbar
+2. Describe your workflow in natural language:
+   "When a contact is added from a law firm, assign to legal team and send Slack alert"
+3. Click **Parse Workflow**
+4. Review the steps (displayed as cards)
+5. Save and activate
+:::
+
+:::intermediate
+Workflows support 4 trigger types:
+
+- **Manual**: Run on-demand via "Run Now" button
+- **On Sync**: Execute when new data syncs from CRM
+- **On Cell Change**: Trigger when specific columns update
+- **On Schedule**: Run daily/weekly (e.g., every Monday at 9am)
+
+Example workflow:
+```
+WHEN: On Sync (new contacts)
+IF: Company contains "Law"
+THEN:
+  - Set industry to "Legal"
+  - Assign to legal_team
+  - Create task "Research firm background"
+  - Send Slack to #sales: "New law firm: {company}"
+```
+:::
+
+:::advanced
+Chain multiple workflows for complex automation:
+
+```
+Workflow 1: Data Enrichment
+  On Sync → Add industry → Score lead
+
+Workflow 2: Routing
+  On Cell Change (lead_score) → If >80 → Assign to enterprise_team
+
+Workflow 3: Follow-up
+  On Schedule (daily) → If no activity 7 days → Send email
+
+```
+:::
+
+## Monitoring Executions
+
+:::beginner
+View execution history in the Workflows panel:
+- Green check = success
+- Red X = failed
+- Yellow warning = partial success
+:::
+
+:::intermediate
+Click on an execution to see detailed logs:
+- Which rows were processed
+- What actions were taken
+- Any errors or warnings
+- Execution time
+:::
+
+:::advanced
+Set up alerts for workflow failures:
+```
+"Alert #ops-team on Slack if any workflow fails 3 times"
+```
+:::
+
+', true, 4),
+
+-- Recipes
+('ops-recipes', 'Recipes - Saved Queries', 'Recipes', E'# Recipes - Saved Queries
+
+Save and share queries for common tasks.
+
+## Saving Recipes
+
+:::beginner
+After executing a successful query, click the bookmark icon:
+1. Name your recipe (e.g., "Active Law Firms")
+2. Select trigger: One Shot or Auto-Run
+3. Save
+
+Find it later in the Recipe Library (book icon).
+:::
+
+:::intermediate
+Recipes can have parameters:
+```
+Recipe: "High Value Deals by Rep"
+Query: "Filter to deals > ${{min_value}} owned by {{rep_name}}"
+Parameters: min_value, rep_name
+```
+
+When you run it, you''ll be prompted to fill in the parameters.
+:::
+
+:::advanced
+Create recipe templates for your team:
+```
+Recipe: "Monthly Pipeline Review"
+- Filter to stage IN (Qualified, Demo, Proposal)
+- Sort by close_date ascending
+- Create view grouped by owner
+- Export to Google Sheets
+- Send to #sales-ops Slack
+
+Trigger: Auto-Run (1st of each month at 9am)
+```
+:::
+
+## Sharing Recipes
+
+:::beginner
+Toggle the "Share" button on a recipe to make it visible to your team.
+:::
+
+:::intermediate
+Shared recipes appear in the "Shared" tab. Team members can:
+- Run the recipe on their own tables
+- Modify parameters
+- Clone and customize
+:::
+
+:::advanced
+Create recipe collections:
+```
+Collection: "New Rep Onboarding"
+- Recipe: "Your Accounts"
+- Recipe: "This Week''s Meetings"
+- Recipe: "Open Tasks"
+- Recipe: "Pipeline Health Check"
+```
+
+Assign collection to new team members for instant productivity.
+:::
+
+', true, 5),
+
+-- Cross-Table
+('ops-cross-table', 'Cross-Table Queries & Enrichment', 'Cross-Table', E'# Cross-Table Queries & Enrichment
+
+Query across multiple data sources to enrich your tables.
+
+## Available Data Sources
+
+:::beginner
+Ops Intelligence can pull data from:
+- **CRM**: Contacts, deals, companies (HubSpot, Salesforce)
+- **Meetings**: Transcripts, attendees, sentiment (Fathom, 60 Notetaker)
+- **Email**: Sent/received, open rates, replies (Gmail sync)
+- **Tasks**: Completed, overdue, assigned
+- **Other Ops Tables**: Any table you''ve created
+:::
+
+:::intermediate
+Example enrichment queries:
+
+```
+"Add a column showing last meeting date for each contact"
+"Add meeting count and avg sentiment from transcripts"
+"Show email engagement: sent, opened, replied"
+```
+
+The AI will:
+1. Find matching records in the other data source
+2. Create temporary enriched columns (blue highlight)
+3. Show "Keep" button to persist to schema
+:::
+
+:::advanced
+Complex joins and aggregations:
+```
+"For each {{table_name}} contact:
+ - Count meetings attended
+ - Sum deal values they''re associated with
+ - Get latest email reply date
+ - Calculate engagement score:
+   (meetings * 3) + (emails * 1) + (deals * 5)"
+```
+:::
+
+## Comparison Mode
+
+:::beginner
+Compare two tables to find differences:
+```
+"Compare to Q4 Pipeline table"
+```
+
+Shows:
+- Net-new: Contacts in current but not Q4
+- Removed: Contacts in Q4 but not current
+- Changed: Contacts with updated values
+:::
+
+:::intermediate
+Comparison with specific fields:
+```
+"Compare deal values vs Q4:
+ - Show which deals increased
+ - Show which decreased
+ - Show total delta"
+```
+:::
+
+:::advanced
+Multi-table comparison with custom logic:
+```
+"Compare current pipeline to Q3 and Q4:
+ - Show 3-quarter trend
+ - Identify consistently growing accounts
+ - Flag accounts declining 2 quarters in a row"
+```
+:::
+
+', true, 6),
+
+-- Insights & Predictions
+('ops-insights', 'Proactive Insights & Predictions', 'Insights & Predictions', E'# Proactive Insights & Predictions
+
+AI-powered insights appear automatically in the banner above your table.
+
+## Insight Types
+
+:::beginner
+Look for the colored cards in the insights banner:
+
+- 🔥 **Cluster Detection** (blue): Multiple contacts at same company
+- ⚠️ **Stale Leads** (amber): No activity in X days
+- 📊 **Data Quality** (amber): Empty columns, missing info
+- 📈 **Conversion Patterns** (green): Timing and behavior trends
+:::
+
+:::intermediate
+Each insight includes:
+- Specific data (counts, names, values)
+- Suggested action buttons
+- Dismiss option
+
+Example:
+```
+🔥 3 new contacts appeared at Cooley LLP this week
+
+Contacts: Sarah Smith, Mike Jones, Emily Brown
+
+[Apply Filter] [Map Org Chart] [Dismiss]
+```
+
+Clicking "Map Org Chart" runs an enrichment to find relationships.
+:::
+
+:::advanced
+Insights use predictive models trained on your org''s data:
+
+- **Going Dark Prediction**: Accounts matching lost-deal patterns
+  - Confidence: 78%
+  - Based on: 45 similar deals that went dark after 14 days no activity
+
+- **Likely to Convert**: Contacts scored by engagement signals
+  - Confidence: 82%
+  - Pattern: Contacts who attended 2+ meetings and opened 3+ emails convert 67% of time
+:::
+
+## Acting on Insights
+
+:::beginner
+Click suggested action buttons to execute immediately:
+- "Apply Filter" → Filters table to relevant rows
+- "Create Tasks" → Generates tasks for follow-up
+- "Send Email" → Opens draft with suggested content
+:::
+
+:::intermediate
+Insights trigger workflows automatically if enabled:
+```
+Insight: "5 deals been in Demo stage >30 days"
+Auto-Action: Create task for each owner + Slack reminder
+```
+:::
+
+:::advanced
+Train the insight engine with feedback:
+```
+"This insight was helpful" → Model learns
+"This was noise" → Model adjusts threshold
+```
+
+Customize insight sensitivity:
+```
+Settings → Insights → Set thresholds:
+- Stale lead warning: 45 days (default 30)
+- Cluster detection: 3+ contacts (default 2)
+- Confidence minimum: 70% (default 50%)
+```
+:::
+
+## Behavioral Patterns
+
+:::beginner
+The AI learns from your org''s successful deals:
+- Best time to reach out
+- Optimal meeting cadence
+- Email subject lines that work
+:::
+
+:::intermediate
+Example behavioral insights:
+```
+💡 Team Insight: Reps who call within 2 hours of lead creation convert 6.2x more
+Based on: 2,847 leads over 6 months
+Confidence: 94%
+
+[Set Auto-Call Reminder] [View Details]
+```
+:::
+
+:::advanced
+Create custom behavioral rules:
+```
+"Analyze my closed-won deals:
+ - Common pattern in meeting frequency
+ - Average days to close by industry
+ - Most effective email templates
+
+Generate playbook for new reps"
+```
+:::
+
+', true, 7);
 
 -- Update sequence for the id column
 SELECT setval(pg_get_serial_sequence('docs_articles', 'id'), (SELECT MAX(id) FROM docs_articles));
