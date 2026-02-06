@@ -827,6 +827,75 @@ async function extractCompanyData(
 }
 
 /**
+ * Validate and filter products to remove garbage data
+ * Removes technical terms, API features, UI components, and non-business items
+ */
+function validateAndFilterProducts(
+  products: Array<{ name: string; description: string; pricing_tier?: string }>
+): Array<{ name: string; description: string; pricing_tier?: string }> {
+  // Patterns that indicate technical/garbage data
+  const technicalPatterns = [
+    /parameter/i,
+    /api/i,
+    /endpoint/i,
+    /attribute/i,
+    /property/i,
+    /method/i,
+    /interface/i,
+    /element/i,
+    /component/i,
+    /widget/i,
+    /iframe/i,
+    /button/i,
+    /field/i,
+    /plugin/i,
+  ];
+
+  // Common false positives from documentation/dev sites
+  const excludePatterns = [
+    /プレーヤー/i, // Japanese player
+    /パラメータ/i, // Japanese parameters
+    /^response$/i,
+    /^request$/i,
+    /^callback$/i,
+    /^hook$/i,
+    /^middleware$/i,
+  ];
+
+  return products.filter((product) => {
+    const name = product.name?.trim() || '';
+
+    // Exclude empty or very short names
+    if (name.length < 2) return false;
+
+    // Exclude very long technical names (likely code/parameter descriptions)
+    if (name.length > 100) return false;
+
+    // Exclude items that look like technical documentation
+    if (technicalPatterns.some((pattern) => pattern.test(name))) {
+      return false;
+    }
+
+    // Exclude known false positives
+    if (excludePatterns.some((pattern) => pattern.test(name))) {
+      return false;
+    }
+
+    // Exclude items with non-ASCII technical characters mixed in unexpectedly
+    // (Japanese parameters in English product list)
+    const nonAsciiCount = (name.match(/[^\x00-\x7F]/g) || []).length;
+    if (nonAsciiCount > 0 && name.length < 50) {
+      // Allow some non-ASCII (like "Shopify" variants) but not technical terms
+      if (excludePatterns.some((pattern) => pattern.test(name))) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+/**
  * Transform nested AI response to flat EnrichmentData format
  * The AI returns a deeply nested structure that needs to be flattened
  */
@@ -834,11 +903,15 @@ function transformToEnrichmentData(rawData: any): EnrichmentData {
   // Handle both flat (already correct) and nested (AI response) formats
   // If it has company_name at root level, it's already in the correct format
   if (rawData.company_name) {
-    return rawData as EnrichmentData;
+    // Still validate products even if flat format
+    return {
+      ...rawData,
+      products: validateAndFilterProducts(rawData.products || []),
+    } as EnrichmentData;
   }
 
   // Transform nested structure to flat structure
-  return {
+  const enrichedData = {
     company_name: rawData.company?.name || '',
     tagline: rawData.company?.tagline || '',
     description: rawData.company?.description || '',
@@ -865,6 +938,11 @@ function transformToEnrichmentData(rawData: any): EnrichmentData {
     pricing_model: rawData.salesContext?.pricing_model || '',
     key_phrases: rawData.voice?.key_phrases || [],
   };
+
+  // Validate and filter products before returning
+  enrichedData.products = validateAndFilterProducts(enrichedData.products);
+
+  return enrichedData as EnrichmentData;
 }
 
 // ============================================================================

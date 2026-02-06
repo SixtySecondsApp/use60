@@ -892,12 +892,28 @@ Return a JSON array with:
   organization_data_collection: {
     systemPrompt: `You are an expert business intelligence analyst. Your task is to extract structured company information from website content.
 
-CRITICAL REQUIREMENTS:
-1. Extract EXACT product names as written on the website (e.g., "Stripe Payments", "Stripe Billing", "Stripe Connect" - NOT "payment processing", "billing system", "marketplace payments")
-2. Use VERBATIM quotes from their marketing copy for taglines and value propositions
-3. Extract ACTUAL customer names if visible (e.g., "Amazon, Shopify, Zoom" - NOT "major tech companies")
-4. Be specific about pricing tiers and feature names as they appear on the site
-5. Only include information you can directly observe in the provided content`,
+CRITICAL REQUIREMENTS FOR PRODUCTS:
+1. Extract ACTUAL PRODUCT NAMES - Products that the company SELLS to customers, not technical features or implementation details
+   - ✅ CORRECT: "Stripe Payments", "Stripe Billing", "Stripe Connect" (marketed products)
+   - ❌ WRONG: "Payment Gateway API", "Billing Module Parameter", "iOS Player" (technical/implementation details)
+   - ❌ WRONG: "REST Endpoint", "Webhook Handler", "Configuration Parameter" (API/technical terms)
+
+2. PRODUCT QUALITY FILTERS - Exclude technical jargon and documentation artifacts:
+   - Exclude terms with 'API', 'endpoint', 'parameter', 'attribute', 'property', 'method', 'interface', 'widget', 'plugin'
+   - Exclude pure feature names that aren't sold as standalone products
+   - Exclude non-English technical terms mixed with English (e.g., "iOS プレーヤーパラメータ")
+   - Exclude items that appear only in developer/API documentation
+
+3. QUALITY THRESHOLD - Only include products that meet these criteria:
+   - Have a clear business name (typically 2-50 characters, free of special technical markers)
+   - Are featured in marketing materials (pricing, features, use cases pages)
+   - Are mentioned in customer case studies or testimonials
+   - Represent something a customer would buy, not implementation details
+
+4. Use VERBATIM quotes from their marketing copy for taglines and value propositions
+5. Extract ACTUAL customer names if visible (e.g., "Amazon, Shopify, Zoom" - NOT "major tech companies")
+6. Be specific about pricing tiers and feature names as they appear on the site
+7. Only include information you can directly observe in the provided content`,
     userPrompt: `Analyze the following website content for \${domain} and extract structured company data.
 
 **Raw Website Content:**
@@ -921,7 +937,7 @@ CRITICAL REQUIREMENTS:
   },
   "offering": {
     "products": [
-      {"name": "Product name", "description": "Brief description", "pricing_tier": "free/starter/pro/enterprise if mentioned"}
+      {"name": "Product name (ACTUAL products sold, not technical features)", "description": "Brief description", "pricing_tier": "free/starter/pro/enterprise if mentioned"}
     ],
     "services": ["List of services offered"],
     "key_features": ["Top 5-10 features mentioned"],
@@ -959,6 +975,7 @@ CRITICAL REQUIREMENTS:
 - Use null for fields with no information
 - Be specific - use actual product names, customer names, and terms from their content
 - Extract actual quotes for content_samples and key_phrases
+- **CRITICAL FOR PRODUCTS**: Only include products that customers actually buy/use. Exclude technical implementation details, API parameters, feature names, and developer documentation terms
 - EXCEPTION for competitors: If competitors are not explicitly mentioned on the website, you MUST use your knowledge to infer 3-5 likely competitors based on the company's product category and industry. Never return an empty competitors array.
 
 Return ONLY valid JSON, no markdown formatting.`,
