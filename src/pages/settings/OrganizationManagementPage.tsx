@@ -46,7 +46,6 @@ import {
 import { leaveOrganization, isLastOwner } from '@/lib/services/leaveOrganizationService';
 import { toast } from 'sonner';
 import { CURRENCIES, type CurrencyCode } from '@/lib/services/currencyService';
-import { OrgLogoUpload } from '@/components/OrgLogoUpload';
 import { logger } from '@/lib/utils/logger';
 import { DeactivateOrganizationDialog } from '@/components/dialogs/DeactivateOrganizationDialog';
 import { validateOwnerCanDeactivate } from '@/lib/services/organizationDeactivationService';
@@ -928,21 +927,13 @@ export default function OrganizationManagementPage() {
           <div className="flex items-start justify-between gap-6 flex-wrap">
             {/* Organization Identity */}
             <div className="flex items-center gap-5">
-              {/* Organization Logo */}
+              {/* Organization Initials */}
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex-shrink-0 overflow-hidden shadow-lg shadow-[#37bd7e]/20 border border-gray-200 dark:border-gray-700/50">
-                {activeOrg?.logo_url && !activeOrg?.remove_logo ? (
-                  <img
-                    src={activeOrg.logo_url}
-                    alt={activeOrg?.name}
-                    className="w-full h-full object-cover aspect-square"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
-                    <span className="text-2xl sm:text-3xl font-bold text-white">
-                      {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'ORG'}
-                    </span>
-                  </div>
-                )}
+                <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
+                  <span className="text-2xl sm:text-3xl font-bold text-white">
+                    {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'ORG'}
+                  </span>
+                </div>
               </div>
 
               {/* Organization Info */}
@@ -1596,26 +1587,6 @@ export default function OrganizationManagementPage() {
         {/* Tab Content - Settings */}
         {activeTab === 'settings' && (
           <div className="space-y-6">
-            {/* Organization Logo */}
-            {permissions.canManageSettings && (
-              <div className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 space-y-4 backdrop-blur-xl">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-[#37bd7e]" />
-                  Organization Logo
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Upload a logo for your organization. This will be visible to all members.
-                </p>
-                <OrgLogoUpload
-                  orgId={activeOrgId!}
-                  currentLogoUrl={activeOrg?.logo_url}
-                  orgName={activeOrg?.name || 'Organization'}
-                  onRefresh={refreshOrgs}
-                  size="lg"
-                />
-              </div>
-            )}
-
             {/* Currency & Company Profile */}
             <div className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 space-y-6 backdrop-blur-xl">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">

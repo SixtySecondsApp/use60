@@ -75,7 +75,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem
 } from '@/components/ui/dropdown-menu';
-import { useBrandingSettings } from '@/lib/hooks/useBrandingSettings';
 import { useTheme } from '@/hooks/useTheme';
 import { TrialBanner } from '@/components/subscription/TrialBanner';
 import { useTrialStatus } from '@/lib/hooks/useSubscription';
@@ -156,11 +155,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     },
     []
   );
-  const { logoLight, logoDark, icon } = useBrandingSettings();
   const { resolvedTheme } = useTheme();
 
-  // Select logo based on current theme
-  const currentLogo = resolvedTheme === 'light' ? logoLight : logoDark;
+  // Sixty branded logos
+  const SIXTY_ICON = 'https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Icon.png';
+  const SIXTY_LOGO_LIGHT = 'https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Light%20Mode%20Logo.png';
+  const SIXTY_LOGO_DARK = 'https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Dark%20Mode%20Logo.png';
+  const currentSidebarLogo = resolvedTheme === 'light' ? SIXTY_LOGO_LIGHT : SIXTY_LOGO_DARK;
 
   // User permissions for dynamic navigation
   const { effectiveUserType, isAdmin, isInternal, isPlatformAdmin, isOrgAdmin } = useUserPermissions();
@@ -335,26 +336,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       isImpersonating ? "top-[44px]" : "top-0"
     )}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
-            {activeOrg?.logo_url ? (
-              <img
-                src={activeOrg.logo_url}
-                alt="Organization Logo"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
-                <span className="text-white font-semibold text-xs">
-                  {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'O'}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-              {activeOrg?.name || 'Organization'}
-            </span>
-          </div>
+          <Link to="/" className="flex-shrink-0">
+            <img
+              src={currentSidebarLogo}
+              alt="Sixty"
+              className="h-7 object-contain"
+            />
+          </Link>
         </div>
         <div className="flex items-center gap-2">
           {effectiveUserType !== 'external' && (
@@ -408,28 +396,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             >
               {/* Fixed Header */}
               <div className="flex-shrink-0 space-y-4 p-4 sm:p-6 border-b border-[#E2E8F0] dark:border-gray-800">
-                {/* Organization Branding Section */}
+                {/* Sixty Branding Section */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
-                      {activeOrg?.logo_url ? (
-                        <img
-                          src={activeOrg.logo_url}
-                          alt="Organization Logo"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
-                          <span className="text-white font-semibold text-xs">
-                            {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'O'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                      {activeOrg?.name || 'Organization'}
-                    </span>
-                  </div>
+                  <Link to="/" className="flex items-center gap-3">
+                    <img
+                      src={currentSidebarLogo}
+                      alt="Sixty"
+                      className="h-7 object-contain flex-shrink-0"
+                    />
+                  </Link>
                   <button
                     onClick={() => toggleMobileMenu()}
                     className="p-2 sm:p-3 min-h-[44px] min-w-[44px] hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
@@ -805,50 +780,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-full flex-col">
           {/* Logo Header */}
-          <div className={cn(
-            'mb-8 flex items-center',
-            isCollapsed ? 'justify-center' : 'justify-start gap-3'
-          )}>
-            {isCollapsed ? (
-              <Link to="/" className="transition-opacity hover:opacity-80">
-                <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                  {activeOrg?.logo_url ? (
-                    <img
-                      src={activeOrg.logo_url}
-                      alt="Organization Logo"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
-                      <span className="text-white font-semibold text-sm">
-                        {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'O'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </Link>
-            ) : (
-              <Link to="/" className="flex items-center gap-3 transition-opacity hover:opacity-80 flex-1 min-w-0">
-                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
-                  {activeOrg?.logo_url ? (
-                    <img
-                      src={activeOrg.logo_url}
-                      alt="Organization Logo"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
-                      <span className="text-white font-semibold text-xs">
-                        {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'O'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                  {activeOrg?.name || 'Organization'}
-                </span>
-              </Link>
-            )}
+          <div className="mb-8 flex items-center justify-center h-10">
+            <Link to="/" className="relative h-10 flex items-center justify-center transition-opacity hover:opacity-80">
+              <img
+                src={SIXTY_ICON}
+                alt="Sixty"
+                className={cn(
+                  'h-8 w-8 object-contain absolute transition-opacity duration-300',
+                  isCollapsed ? 'opacity-100' : 'opacity-0'
+                )}
+              />
+              <img
+                src={currentSidebarLogo}
+                alt="Sixty"
+                className={cn(
+                  'h-10 object-contain transition-opacity duration-300',
+                  isCollapsed ? 'opacity-0' : 'opacity-100'
+                )}
+              />
+            </Link>
           </div>
 
           {/* Separator Line */}
@@ -880,7 +830,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       className={cn(
                         'flex items-center transition-colors text-sm font-medium',
                         isCollapsed
-                          ? 'w-12 h-12 mx-auto rounded-xl justify-center'
+                          ? 'w-9 h-9 mx-auto rounded-xl justify-center'
                           : 'w-full gap-3 px-2 py-2.5 rounded-xl',
                         location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
                           ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
@@ -888,10 +838,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       )}
                     >
                       <motion.div
-                        animate={{
-                          x: isCollapsed ? 0 : 0,
-                          scale: isCollapsed ? 1.1 : 1
-                        }}
                         className={cn(
                           'relative z-10 flex items-center justify-center',
                           isCollapsed ? 'w-full h-full' : 'min-w-[20px]',
@@ -899,7 +845,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                             ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
                         )}
                       >
-                        <item.icon className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4')} />
+                        <item.icon className="w-4 h-4" />
                       </motion.div>
                       <AnimatePresence>
                         {!isCollapsed && (
@@ -943,21 +889,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Settings and Logout at bottom */}
           <div className={cn(
             'mt-auto pt-6 border-t border-[#E2E8F0] dark:border-gray-800/50',
-            isCollapsed ? 'space-y-3' : 'space-y-0'
+            isCollapsed ? 'space-y-1' : 'space-y-0'
           )}>
             <Link
               to="/settings"
               className={cn(
                 'flex items-center transition-colors text-sm font-medium',
-                isCollapsed 
-                  ? 'w-12 h-12 mx-auto rounded-xl justify-center mb-0' 
+                isCollapsed
+                  ? 'w-9 h-9 mx-auto rounded-xl justify-center mb-0'
                   : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
                 location.pathname.startsWith('/settings')
                   ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                   : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
               )}
             >
-              <Settings className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+              <Settings className="w-4 h-4 flex-shrink-0" />
               <AnimatePresence>
                 {!isCollapsed && (
                   <motion.span
@@ -978,8 +924,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 to="/platform"
                 className={cn(
                   'flex items-center transition-colors text-sm font-medium',
-                  isCollapsed 
-                    ? 'w-12 h-12 mx-auto rounded-xl justify-center mb-0' 
+                  isCollapsed
+                    ? 'w-9 h-9 mx-auto rounded-xl justify-center mb-0'
                     : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
                   location.pathname.startsWith('/platform')
                     ? 'bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-900/20 dark:text-white dark:border-purple-800/20'
@@ -1006,8 +952,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               onClick={handleLogout}
               className={cn(
                 'flex items-center transition-colors text-sm font-medium',
-                isCollapsed 
-                  ? 'w-12 h-12 mx-auto rounded-xl justify-center' 
+                isCollapsed
+                  ? 'w-9 h-9 mx-auto rounded-xl justify-center'
                   : 'w-full gap-3 px-2 py-2.5 rounded-xl',
                 isImpersonating
                   ? 'text-amber-400 hover:bg-amber-500/10'

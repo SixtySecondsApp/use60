@@ -90,7 +90,7 @@ import {
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
   LogoSettings, SlackSettings, JustCallSettings, HubSpotSettings, BullhornSettings,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
-  OrgBranding, OrgBilling,
+  OrgBilling,
   // Insights
   Insights, Heatmap, SalesFunnel, TeamAnalytics, ContentTopics,
   // Misc
@@ -330,7 +330,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/admin/savvycal-settings" element={<Navigate to="/platform/integrations/savvycal" replace />} />
                 <Route path="/admin/booking-sources" element={<Navigate to="/platform/integrations/booking-sources" replace />} />
                 <Route path="/admin/health-rules" element={<Navigate to="/platform/crm/health-rules" replace />} />
-                <Route path="/admin/branding" element={<Navigate to="/team/branding" replace />} />
+                <Route path="/admin/branding" element={<Navigate to="/settings" replace />} />
                 <Route path="/admin/internal-domains" element={<Navigate to="/platform/integrations/domains" replace />} />
                 <Route path="/admin/*" element={<Navigate to="/platform" replace />} /> {/* Catch-all for any remaining /admin routes */}
 
@@ -342,7 +342,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                     Keep /team/* paths as legacy redirects for existing links. */}
                 <Route path="/team" element={<Navigate to="/settings" replace />} />
                 <Route path="/team/team" element={<Navigate to="/settings/team-members" replace />} />
-                <Route path="/team/branding" element={<Navigate to="/settings/branding" replace />} />
+                <Route path="/team/branding" element={<Navigate to="/settings" replace />} />
                 <Route path="/team/billing" element={<Navigate to="/settings/billing" replace />} />
                 <Route path="/team/billing/success" element={<Navigate to="/settings/billing" replace />} />
                 <Route path="/team/billing/cancel" element={<Navigate to="/settings/billing" replace />} />
@@ -350,7 +350,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Legacy /org routes redirect to /team */}
                 <Route path="/org" element={<Navigate to="/settings" replace />} />
                 <Route path="/org/team" element={<Navigate to="/settings/team-members" replace />} />
-                <Route path="/org/branding" element={<Navigate to="/settings/branding" replace />} />
+                <Route path="/org/branding" element={<Navigate to="/settings" replace />} />
                 <Route path="/org/billing" element={<Navigate to="/settings/billing" replace />} />
                 <Route path="/org/billing/success" element={<Navigate to="/settings/billing" replace />} />
                 <Route path="/org/billing/cancel" element={<Navigate to="/settings/billing" replace />} />
@@ -533,7 +533,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Legacy routes for backwards compatibility */}
                 <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/organization" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
-                <Route path="/settings/branding" element={<OrgAdminRouteGuard><AppLayout><OrgBranding /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/branding" element={<Navigate to="/settings" replace />} />
                 <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><OrgBilling /></AppLayout></OrgAdminRouteGuard>} />
                 {/* Slack Settings - visible only when Slack is connected (enforced inside page) */}
                 <Route path="/settings/integrations/slack" element={<AppLayout><SlackSettings /></AppLayout>} />

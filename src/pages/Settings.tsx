@@ -40,7 +40,6 @@ import {
   Video,
   Phone,
   Workflow,
-  Paintbrush,
   CreditCard,
   Brain,
   Briefcase,
@@ -225,14 +224,6 @@ export default function Settings() {
       requiresOrgAdmin: false,
     },
     {
-      id: 'branding',
-      label: 'Branding',
-      icon: Paintbrush,
-      description: 'Manage your organization logo and branding',
-      path: '/settings/branding',
-      requiresOrgAdmin: true,
-    },
-    {
       id: 'billing',
       label: 'Billing',
       icon: CreditCard,
@@ -298,7 +289,7 @@ export default function Settings() {
       ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
-      ['organization-management', 'branding', 'billing'].includes(s.id)
+      ['organization-management', 'billing'].includes(s.id)
     );
 
     const cats = [

@@ -769,6 +769,21 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       console.log('[onboardingV2] No existing organization found, checking if we need to create one');
 
+      // Validate that the provided org ID still exists (it may have been deleted)
+      if (finalOrgId) {
+        const { data: orgCheck } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('id', finalOrgId)
+          .maybeSingle();
+
+        if (!orgCheck) {
+          console.log('[onboardingV2] Provided org ID no longer exists (deleted?), will create new:', finalOrgId);
+          finalOrgId = '';
+          set({ organizationId: null });
+        }
+      }
+
       // No existing org found - check if we need to create one or use the provided one
       if (!finalOrgId || finalOrgId === '') {
         // No org ID provided - create new one
@@ -1092,6 +1107,21 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
+
+      // Validate that the provided org ID still exists (it may have been deleted)
+      if (finalOrgId) {
+        const { data: orgCheck } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('id', finalOrgId)
+          .maybeSingle();
+
+        if (!orgCheck) {
+          console.log('[submitManualEnrichment] Provided org ID no longer exists (deleted?), will create new:', finalOrgId);
+          finalOrgId = '';
+          set({ organizationId: null });
+        }
+      }
 
       // Ensure organizationId exists FIRST
       if (!finalOrgId || finalOrgId === '') {

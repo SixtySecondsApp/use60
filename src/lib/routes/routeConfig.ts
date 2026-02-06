@@ -801,7 +801,7 @@ export const LEGACY_ROUTE_REDIRECTS: Record<string, string> = {
   '/admin/savvycal-settings': '/platform/integrations/savvycal',
   '/admin/booking-sources': '/platform/integrations/booking',
   '/admin/internal-domains': '/platform/integrations/domains',
-  '/admin/branding': '/team/branding',
+  '/admin/branding': '/settings',
   // SaaS Admin routes -> Platform
   '/saas-admin': '/platform',
   '/saas-admin/customers': '/platform/customers',
@@ -813,12 +813,12 @@ export const LEGACY_ROUTE_REDIRECTS: Record<string, string> = {
   // Legacy team routes -> settings
   '/team': '/settings',
   '/team/team': '/settings/team-members',
-  '/team/branding': '/settings/branding',
+  '/team/branding': '/settings',
   '/team/billing': '/settings/billing',
   // Legacy org routes -> settings
   '/org': '/settings',
   '/org/team': '/settings/team-members',
-  '/org/branding': '/settings/branding',
+  '/org/branding': '/settings',
   '/org/billing': '/settings/billing',
 };
 
