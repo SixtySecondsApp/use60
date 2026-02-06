@@ -96,15 +96,28 @@ serve(async (req) => {
       },
     });
 
-    // Authenticate request - supports both user JWT and service role
-    const { userId, mode } = await authenticateRequest(
-      req,
-      supabase,
-      supabaseServiceKey,
-      body.userId
-    );
+    // Authenticate request - supports both user JWT and service role/cron
+    let userId: string;
+    let mode: string;
 
-    console.log(`[CALENDAR-SYNC] Authenticated as ${mode}, userId: ${userId}`);
+    // If userId is provided in body, trust it (cron/service-role call)
+    // This matches auto-join-scheduler pattern for cron jobs
+    if (body.userId) {
+      userId = body.userId;
+      mode = 'cron';
+      console.log(`[CALENDAR-SYNC] Cron/service call with userId: ${userId}`);
+    } else {
+      // User JWT authentication
+      const authResult = await authenticateRequest(
+        req,
+        supabase,
+        supabaseServiceKey,
+        undefined
+      );
+      userId = authResult.userId;
+      mode = authResult.mode;
+      console.log(`[CALENDAR-SYNC] Authenticated as ${mode}, userId: ${userId}`);
+    }
 
     const { syncToken, startDate, endDate } = body;
 

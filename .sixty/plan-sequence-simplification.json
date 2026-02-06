@@ -1,0 +1,383 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "feature": "sequence-simplification",
+    "createdAt": "2025-02-03T00:00:00Z",
+    "branch": "improve/skills-remap-andrew"
+  },
+
+  "features": [
+    {
+      "id": "sequence-simplification",
+      "name": "Sequence Simplification - Skills as Mega Skills",
+      "status": "complete",
+      "description": "Simplify sequences by making them 'mega skills' that reference other skills via @skill-name in the folder tree. Same editor UI, dynamic skill links show as read-only previews. HITL becomes just another skill (@hitl/slack-approval). Copilot favors sequences over individual skills.",
+      "createdAt": "2025-02-03T00:00:00Z",
+      "completedAt": "2026-02-03T00:00:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "SEQ-001",
+      "feature": "sequence-simplification",
+      "title": "Create skill_links database table for dynamic skill references",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["platform_skills", "skill_folders"]
+      },
+      "blocks": ["SEQ-002", "SEQ-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "skill_links table with id, parent_skill_id, linked_skill_id, folder_id, display_order",
+        "Foreign keys to platform_skills (both parent and linked)",
+        "Optional folder_id for placement in folder tree",
+        "RLS policies matching platform_skills patterns",
+        "Unique constraint on (parent_skill_id, linked_skill_id)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 15,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "supabase/migrations/20260203000000_skill_links.sql"
+      ]
+    },
+    {
+      "id": "SEQ-002",
+      "feature": "sequence-simplification",
+      "title": "Create TypeScript types for skill links",
+      "type": "types",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["SEQ-001"],
+        "files": ["src/lib/types/skills.ts"],
+        "schema": ["skill_links"]
+      },
+      "blocks": ["SEQ-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "SkillLink interface with parent_skill_id, linked_skill_id, folder_id",
+        "Update SkillWithFolders to include linked_skills array",
+        "LinkedSkillPreview type for read-only skill data",
+        "Types exported from src/lib/types/skills.ts"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 10,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "src/lib/types/skills.ts"
+      ]
+    },
+    {
+      "id": "SEQ-003",
+      "feature": "sequence-simplification",
+      "title": "Update skillFolderService to support skill links",
+      "type": "service",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["SEQ-002"],
+        "files": ["src/lib/services/skillFolderService.ts"],
+        "schema": ["skill_links"]
+      },
+      "blocks": ["SEQ-004", "SEQ-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "getSkillWithFolders returns linked_skills with preview data",
+        "addSkillLink(parentSkillId, linkedSkillId, folderId?) - create link",
+        "removeSkillLink(linkId) - remove link",
+        "getLinkedSkillPreview(skillId) - fetch read-only skill data",
+        "searchSkillsForLinking(query) - search available skills to link"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 20,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "src/lib/services/skillFolderService.ts"
+      ]
+    },
+    {
+      "id": "SEQ-004",
+      "feature": "sequence-simplification",
+      "title": "Update SkillFolderTree to display linked skills",
+      "type": "component",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["SEQ-003"],
+        "files": ["src/components/platform/SkillFolderTree.tsx"],
+        "schema": []
+      },
+      "blocks": ["SEQ-006"],
+      "parallelWith": ["SEQ-005"],
+      "acceptance": [
+        "Linked skills show with @ prefix and link icon",
+        "Different styling to distinguish from regular documents",
+        "Click linked skill to view read-only preview",
+        "Context menu with 'Remove link' and 'Edit original' options",
+        "Drag skills from search/picker to add as links"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 25,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "src/components/platform/SkillFolderTree.tsx"
+      ]
+    },
+    {
+      "id": "SEQ-005",
+      "feature": "sequence-simplification",
+      "title": "Create AddSkillLinkModal component",
+      "type": "component",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["SEQ-003"],
+        "files": ["src/lib/services/skillFolderService.ts"],
+        "schema": []
+      },
+      "blocks": ["SEQ-006"],
+      "parallelWith": ["SEQ-004"],
+      "acceptance": [
+        "Modal with skill search input",
+        "Search results grouped by category",
+        "Preview of selected skill before adding",
+        "Folder selector for placement (optional)",
+        "Prevents linking to self or circular references"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 20,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "src/components/platform/AddSkillLinkModal.tsx"
+      ]
+    },
+    {
+      "id": "SEQ-006",
+      "feature": "sequence-simplification",
+      "title": "Update SkillDetailView for read-only linked skill preview",
+      "type": "component",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["SEQ-004", "SEQ-005"],
+        "files": ["src/components/platform/SkillDetailView.tsx"],
+        "schema": []
+      },
+      "blocks": ["SEQ-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Detect when viewing a linked skill (isLinkedSkill prop)",
+        "Show read-only content editor in preview mode",
+        "Header shows 'Linked from: parent-skill-name'",
+        "'Edit Original' button navigates to the source skill",
+        "No save button in read-only mode",
+        "Visual indicator (banner/badge) for linked content"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 20,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "src/components/platform/SkillDetailView.tsx"
+      ]
+    },
+    {
+      "id": "SEQ-007",
+      "feature": "sequence-simplification",
+      "title": "Create HITL skill template (@hitl/slack-approval)",
+      "type": "seed-data",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["SEQ-006"],
+        "files": [],
+        "schema": ["platform_skills"]
+      },
+      "blocks": ["SEQ-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Create hitl/slack-approval skill with proper frontmatter",
+        "Skill uses @output-format/slack-blocks for message formatting",
+        "Input variables: channel, message, options (approve/reject/etc)",
+        "Output: approval_status, approver, timestamp",
+        "Documentation in SKILL.md explaining HITL flow"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 20,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "supabase/migrations/20260203000001_hitl_skill_template.sql"
+      ]
+    },
+    {
+      "id": "SEQ-008",
+      "feature": "sequence-simplification",
+      "title": "Create sequence execution engine with job_id tracking",
+      "type": "service",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["SEQ-007"],
+        "files": [],
+        "schema": ["platform_skills"]
+      },
+      "blocks": ["SEQ-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "Create sequence_jobs table (id, sequence_skill_id, status, current_step, context, created_at)",
+        "startSequence(skillId, initialContext) - creates job, returns job_id",
+        "pauseJob(jobId, reason) - pauses at HITL step",
+        "resumeJob(jobId, approvalData) - continues from pause point",
+        "getJobStatus(jobId) - returns current state and step",
+        "Job context persisted between steps"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": 30,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "supabase/migrations/20260203000002_sequence_jobs.sql",
+        "src/lib/services/sequenceExecutionService.ts"
+      ]
+    },
+    {
+      "id": "SEQ-009",
+      "feature": "sequence-simplification",
+      "title": "Update copilot routing to prefer sequences",
+      "type": "service",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["SEQ-008"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SEQ-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Copilot checks sequences first (category: agent-sequence)",
+        "If sequence matches intent with confidence > 0.7, use it",
+        "If no sequence match, fall back to individual skills",
+        "Log routing decision for analytics",
+        "Sequence match considers linked skills for capability assessment"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 25,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "src/lib/services/copilotRoutingService.ts",
+        "supabase/migrations/20260203000003_copilot_routing_logs.sql"
+      ]
+    },
+    {
+      "id": "SEQ-010",
+      "feature": "sequence-simplification",
+      "title": "Simplify AgentSequencesPage to use standard skill editor",
+      "type": "integration",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": {
+        "stories": ["SEQ-009"],
+        "files": ["src/pages/platform/AgentSequencesPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "AgentSequencesPage filters skills by category: agent-sequence",
+        "Click sequence opens PlatformSkillViewPage (same as skills)",
+        "Remove duplicate SequenceCard if redundant with skill cards",
+        "Keep execution status/history display",
+        "Create sequence uses same flow as create skill (with category preset)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 25,
+      "completedAt": "2026-02-03T00:00:00Z",
+      "files": [
+        "src/pages/platform/AgentSequencesPage.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 10,
+    "currentFeature": "sequence-simplification",
+    "estimatedHours": 3.5,
+    "actualHours": 3.5,
+    "parallelGroups": [
+      {
+        "name": "Schema",
+        "stories": ["SEQ-001"],
+        "status": "complete"
+      },
+      {
+        "name": "Types",
+        "stories": ["SEQ-002"],
+        "status": "complete"
+      },
+      {
+        "name": "Service Layer",
+        "stories": ["SEQ-003"],
+        "status": "complete"
+      },
+      {
+        "name": "UI Components",
+        "stories": ["SEQ-004", "SEQ-005"],
+        "status": "complete"
+      },
+      {
+        "name": "Detail View Update",
+        "stories": ["SEQ-006"],
+        "status": "complete"
+      },
+      {
+        "name": "HITL Template",
+        "stories": ["SEQ-007"],
+        "status": "complete"
+      },
+      {
+        "name": "Execution Engine",
+        "stories": ["SEQ-008"],
+        "status": "complete"
+      },
+      {
+        "name": "Copilot Routing",
+        "stories": ["SEQ-009"],
+        "status": "complete"
+      },
+      {
+        "name": "Page Integration",
+        "stories": ["SEQ-010"],
+        "status": "complete"
+      }
+    ]
+  },
+
+  "architecture": {
+    "dataModel": {
+      "sequences": "Skills with category 'agent-sequence'",
+      "skillLinks": "Dynamic references to other skills in folder tree",
+      "hitl": "Just another skill reference (@hitl/slack-approval)",
+      "jobs": "Execution tracking with job_id for pause/resume"
+    },
+    "copilotFlow": [
+      "1. Complex task received",
+      "2. Check sequences (agent-sequence category) first",
+      "3. If sequence matches intent > 0.7 confidence, use it",
+      "4. If no match, fall back to individual skills",
+      "5. Sequence execution tracks job_id",
+      "6. HITL skills pause job, await callback to resume"
+    ],
+    "editorUX": {
+      "sameUI": "Sequences use same SkillDetailView as skills",
+      "linkedSkills": "Show as @skill-name in folder tree",
+      "readOnlyPreview": "Click linked skill to view, 'Edit Original' to modify",
+      "addLinks": "Search/select skills to add as references"
+    }
+  }
+}

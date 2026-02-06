@@ -126,12 +126,12 @@ const checkGoogleHealth: HealthChecker = async (supabase, userId) => {
   }
 };
 
-// Fathom Integration Health Check
+// Fathom Integration Health Check (Enhanced with sync status)
 const checkFathomHealth: HealthChecker = async (supabase, userId) => {
   try {
     const { data: integration, error } = await supabase
       .from('fathom_integrations')
-      .select('id, email, expires_at, is_active, updated_at')
+      .select('id, fathom_user_email, token_expires_at, is_active, updated_at')
       .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle();
@@ -146,7 +146,7 @@ const checkFathomHealth: HealthChecker = async (supabase, userId) => {
     }
 
     // Check if token is expired
-    const expiresAt = new Date(integration.expires_at);
+    const expiresAt = new Date(integration.token_expires_at);
     const now = new Date();
     const isExpired = expiresAt <= now;
 
@@ -155,26 +155,90 @@ const checkFathomHealth: HealthChecker = async (supabase, userId) => {
         connected: true,
         status: 'expired',
         details: {
-          email: integration.email,
-          expiredAt: integration.expires_at,
+          email: integration.fathom_user_email,
+          expiredAt: integration.token_expires_at,
         },
       };
     }
 
-    // Get recent meeting count
-    const { count: meetingCount } = await supabase
+    // Get sync state for detailed health info
+    const { data: syncState } = await supabase
+      .from('fathom_sync_state')
+      .select('last_sync_completed_at, last_sync_error, error_count, sync_status')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    // Get recent meeting count (last 90 days)
+    const since90d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const { count: recentMeetingCount } = await supabase
       .from('meetings')
       .select('id', { count: 'exact', head: true })
       .eq('owner_user_id', userId)
-      .not('fathom_call_id', 'is', null);
+      .not('fathom_recording_id', 'is', null)
+      .gte('meeting_start', since90d);
+
+    // Get total meeting count
+    const { count: totalMeetingCount } = await supabase
+      .from('meetings')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_user_id', userId)
+      .not('fathom_recording_id', 'is', null);
+
+    // Get recent cron job logs for this user
+    const { data: recentCronLogs } = await supabase
+      .from('cron_job_logs')
+      .select('status, message, created_at')
+      .eq('user_id', userId)
+      .in('job_name', ['fathom_hourly_sync', 'fathom_cron_sync_v2'])
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    // Calculate sync health metrics
+    const lastSyncAt = syncState?.last_sync_completed_at;
+    const hoursSinceSync = lastSyncAt
+      ? (Date.now() - new Date(lastSyncAt).getTime()) / (1000 * 60 * 60)
+      : null;
+
+    // Determine sync health status
+    let syncHealth: 'healthy' | 'stale' | 'failing' | 'unknown' = 'unknown';
+    if (hoursSinceSync !== null) {
+      if (hoursSinceSync < 2 && (syncState?.error_count ?? 0) === 0) {
+        syncHealth = 'healthy';
+      } else if (hoursSinceSync < 24 && (syncState?.error_count ?? 0) < 3) {
+        syncHealth = 'healthy';
+      } else if ((syncState?.error_count ?? 0) >= 3) {
+        syncHealth = 'failing';
+      } else if (hoursSinceSync >= 24) {
+        syncHealth = 'stale';
+      }
+    }
+
+    // Count recent cron successes vs failures
+    const cronSuccessCount = recentCronLogs?.filter(l => l.status === 'success').length ?? 0;
+    const cronFailureCount = recentCronLogs?.filter(l => l.status === 'error').length ?? 0;
 
     return {
       connected: true,
       status: 'connected',
-      lastSync: integration.updated_at,
+      lastSync: lastSyncAt || integration.updated_at,
       details: {
-        email: integration.email,
-        meetingsImported: meetingCount || 0,
+        email: integration.fathom_user_email,
+        meetingsLast90Days: recentMeetingCount || 0,
+        totalMeetings: totalMeetingCount || 0,
+        syncHealth,
+        hoursSinceLastSync: hoursSinceSync ? Math.round(hoursSinceSync * 10) / 10 : null,
+        errorCount: syncState?.error_count ?? 0,
+        lastError: syncState?.last_sync_error || null,
+        syncStatus: syncState?.sync_status || 'idle',
+        cronJobHealth: {
+          recentSuccesses: cronSuccessCount,
+          recentFailures: cronFailureCount,
+          lastCronRuns: recentCronLogs?.map(l => ({
+            status: l.status,
+            message: l.message,
+            at: l.created_at,
+          })) || [],
+        },
       },
     };
   } catch (err) {

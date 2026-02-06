@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
+import { isStaging } from '@/lib/config';
 
 // =============================================================================
 // Types
@@ -81,7 +82,8 @@ export function useBullhornIntegration(enabled: boolean = true) {
 
   const refreshStatus = useCallback(async () => {
     try {
-      if (!enabled || !isAuthenticated || !user || !activeOrgId) {
+      // Disable Bullhorn on staging - edge function not deployed
+      if (isStaging || !enabled || !isAuthenticated || !user || !activeOrgId) {
         setStatus(null);
         setLoading(false);
         return;
@@ -129,6 +131,7 @@ export function useBullhornIntegration(enabled: boolean = true) {
   // ---------------------------------------------------------------------------
 
   const connectBullhorn = useCallback(async () => {
+    if (isStaging) throw new Error('Bullhorn integration is not available on staging');
     if (!enabled) throw new Error('Bullhorn integration is disabled');
     if (!activeOrgId) throw new Error('No active organization selected');
     if (!canManage) throw new Error('Only organization owners/admins can connect Bullhorn');

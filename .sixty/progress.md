@@ -1,261 +1,261 @@
-# Progress Log — use60
+# Progress Log — Copilot Excellence Phase 2
+
+## Overview
+
+Improve Copilot from **7.5/10 to 9/10** — Claude Cowork level quality.
+
+### Previous Phase Summary
+- **Phase 1 Complete**: 27 stories executed on 2026-01-24
+- **Score Improvement**: 5.5/10 → 7.5/10 (+2.0)
+
+### This Phase
+- **5 Features**: Action Contract, UI Integration, Reliability, Testing, Excellence
+- **17 Stories**: Focused fixes based on assessment gaps
+- **Estimated Duration**: 3-4 days (with parallel execution)
 
 ---
 
-## Feature: Organization Notifications (org-notifications) ✅
-**Status**: COMPLETE
-**Created**: 2026-02-05
-**Completed**: 2026-02-05
-**Total Stories**: 14/14
-**Estimated Duration**: 8.5 hours (510 minutes)
-**Actual Duration**: ~2 hours (142 minutes)
-**Efficiency**: 76% time savings
+## Features
 
-### Summary
-Complete organization-wide notification system with role-based filtering, business event triggers, activity digests, intelligent batching, Slack integration, and user preferences UI.
-
-### Key Achievements
-- ✅ 10 database migrations (schema, RLS, triggers, functions)
-- ✅ 2 frontend components (activity feed, preferences UI)
-- ✅ 1 edge function (Slack integration)
-- ✅ Enhanced existing services (deal alerts, Slack)
-- ✅ 6 cron jobs for automation (digests, engagement, batching, queue)
+| Feature | Stories | Priority | Status |
+|---------|---------|----------|--------|
+| Action Contract Compliance | 5 | 1 | ⏳ Pending |
+| UI Integration | 3 | 2 | ⏳ Pending |
+| Reliability Improvements | 3 | 3 | ⏳ Pending |
+| Test Coverage | 3 | 4 | ⏳ Pending |
+| Excellence Features | 3 | 5 | ⏳ Pending |
 
 ---
 
-## Feature: Organization Member Management (orgmem)
-Created: 2025-02-02
-Total Stories: 11
-Estimated Duration: 3.2 hours (191 minutes)
+## Dependency Graph
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PHASE 2: COPILOT IMPROVEMENT                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ACT-001 ─┬─ (parallel) ─┬─ ACT-005 ──────────┐                │
+│  ACT-002 ─┤              │                    │                │
+│  ACT-003 ─┤              │                    ▼                │
+│  ACT-004 ─┘              │              INT-001                │
+│                          │                 │                   │
+│  REL-001 ─────────────┬──┘                 ├──┬── INT-002      │
+│  REL-003 ─────────────┤                    │  └── INT-003      │
+│                       ▼                    │                   │
+│                    REL-002 ────────────────┼─── TEST-001       │
+│                                            │       │           │
+│                                            │   ┌───┴───┐       │
+│                                            │   │       │       │
+│                                            ▼   ▼       ▼       │
+│                                        EXC-001 TEST-002 TEST-003│
+│                                            │                   │
+│                                            ▼                   │
+│                                        EXC-002                 │
+│                                            │                   │
+│                                            ▼                   │
+│                                        EXC-003                 │
+│                                                                │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Codebase Patterns & Learnings
+## Feature 1: Action Contract Compliance
 
-### Database
-- Use `maybeSingle()` when record might not exist
-- Always use explicit column selection (avoid `select('*')`)
-- RLS policies: Check both existence AND member_status = 'active'
+**Goal**: Fix all 13 response components that use direct `window.location` instead of `onActionClick`
 
-### Services
-- Service functions return `{ success: boolean, error?: string }`
-- All Supabase calls use async/await
-- Error messages are user-facing and helpful
+### Stories
 
-### React Components
-- Export interface above component
-- Use `useQuery`/`useMutation` for server state
-- `toast.error()` for error notifications
-- Confirmation dialogs use two-step approach
+| ID | Title | Status | Time | Parallel |
+|----|-------|--------|------|----------|
+| ACT-001 | Fix DealRescuePackResponse | ⏳ Pending | ~10m | Yes |
+| ACT-002 | Fix DealMapBuilderResponse | ⏳ Pending | ~10m | Yes |
+| ACT-003 | Fix PipelineFocusTasksResponse | ⏳ Pending | ~10m | Yes |
+| ACT-004 | Fix NextMeetingCommandCenterResponse | ⏳ Pending | ~10m | Yes |
+| ACT-005 | Fix remaining 5 components | ⏳ Pending | ~25m | No |
 
-### Permissions
-- `permissions.canManageTeam` for admin checks
-- `permissions.isOwner` for owner-only operations
-- All checks use `useOrg()` context
+### Pattern to Apply
 
----
+```tsx
+// BEFORE (violation)
+onClick={() => { window.location.href = '/tasks'; }}
 
-## Story Progress
-
-### ORGMEM-001: Deploy ORGREM infrastructure (IN PROGRESS)
-**Status**: IN_PROGRESS
-**Started**: 2025-02-02T12:00:00Z
-**Est**: 15 minutes
-
-**Tasks**:
-- [ ] Read ORGREM_DEPLOYMENT.sql from scratchpad
-- [ ] Deploy to staging Supabase (caerqjzvuerejfrdtygb)
-- [ ] Verify all tables and RPC functions exist
-- [ ] Confirm no 404 errors on next member removal attempt
+// AFTER (correct)
+onClick={() => {
+  if (onActionClick) return onActionClick({ action: 'open_task', data: {} });
+  window.location.href = '/tasks';
+}}
+```
 
 ---
 
-## Next Steps
+## Feature 2: UI Integration
 
-1. **Complete ORGMEM-001**: Deploy migrations to staging
-2. **Execute ORGMEM-002 & ORGMEM-003 in parallel**:
-   - Leave organization service
-   - GoodbyeScreen component
-3. **Execute ORGMEM-004 & ORGMEM-005**:
-   - Access control updates
-   - Layout restructuring
-4. **Execute remaining stories** in dependency order
+**Goal**: Wire Action Items Store and ExecutionTelemetry to the live UI
+
+### Stories
+
+| ID | Title | Status | Time | Depends On |
+|----|-------|--------|------|------------|
+| INT-001 | Wire Action Items to CopilotRightPanel | ⏳ Pending | ~25m | ACT-005 |
+| INT-002 | Connect sequence responses to store | ⏳ Pending | ~30m | INT-001 |
+| INT-003 | Integrate ExecutionTelemetry | ⏳ Pending | ~20m | INT-001 |
+
+### Key Files
+
+- `src/lib/stores/actionItemsStore.ts` — Already created
+- `src/components/copilot/ExecutionTelemetry.tsx` — Already created
+- `src/components/copilot/CopilotRightPanel.tsx` — Needs integration
 
 ---
 
-## Key Risks & Mitigations
+## Feature 3: Reliability Improvements
 
-| Risk | Mitigation |
-|------|-----------|
-| RPC function not deployed | Deploy migrations first |
-| Permission bugs | Test access control early |
-| Redirect issues | Test GoodbyeScreen thoroughly |
-| Owner leave vulnerability | Validate owner check in service |
-| Rejoin UX confusion | Clear "Rejoin" tag/badge |
+**Goal**: Add retry, fallback, and timeout handling to sequence execution
+
+### Stories
+
+| ID | Title | Status | Time | Depends On |
+|----|-------|--------|------|------------|
+| REL-001 | Add retry mechanism | ⏳ Pending | ~30m | - |
+| REL-002 | Fallback to Gemini on V1 failure | ⏳ Pending | ~25m | REL-001 |
+| REL-003 | Add timeout handling | ⏳ Pending | ~25m | - |
+
+### Retry Strategy
+
+```typescript
+// Exponential backoff: 100ms, 200ms, 400ms
+const retryDelays = [100, 200, 400];
+const maxRetries = 3;
+
+// Only retry on transient errors
+const isTransientError = (error: Error) =>
+  error.message.includes('network') ||
+  error.message.includes('timeout') ||
+  error.message.includes('ECONNRESET');
+```
+
+---
+
+## Feature 4: Test Coverage
+
+**Goal**: Write E2E tests for V1 workflows and integration tests
+
+### Stories
+
+| ID | Title | Status | Time | Depends On |
+|----|-------|--------|------|------------|
+| TEST-001 | Create golden path fixtures | ⏳ Pending | ~25m | REL-002 |
+| TEST-002 | E2E tests for V1 workflows | ⏳ Pending | ~45m | TEST-001 |
+| TEST-003 | Sequence execution tests | ⏳ Pending | ~40m | TEST-001 |
+
+### Test Workflows
+
+1. **next-meeting-prep** — Prep me for my next meeting → Command Center panel
+2. **catch-me-up** — Catch me up → Daily Brief panel
+3. **pipeline-focus** — What deals need attention? → Pipeline Focus panel
+
+---
+
+## Feature 5: Excellence Features
+
+**Goal**: Pattern matching improvements, mobile polish, documentation accuracy
+
+### Stories
+
+| ID | Title | Status | Time | Depends On |
+|----|-------|--------|------|------------|
+| EXC-001 | Improve V1 router pattern matching | ⏳ Pending | ~30m | REL-002 |
+| EXC-002 | Mobile responsiveness audit | ⏳ Pending | ~25m | INT-003 |
+| EXC-003 | Update documentation accuracy | ⏳ Pending | ~15m | ACT-005 |
+
+### Pattern Matching Improvements
+
+```typescript
+// Current: exact phrase matching
+if (message.includes('prep me for my next meeting')) { ... }
+
+// Improved: synonym support + confidence scoring
+const patterns = [
+  { phrases: ['prep me for', 'prepare me for', 'brief me on'], confidence: 'high' },
+  { phrases: ['next meeting', 'upcoming meeting', 'next call'], confidence: 'high' },
+];
+```
+
+---
+
+## Codebase Patterns
+
+### Action Contract (CRITICAL)
+
+All response components MUST use `onActionClick`:
+
+```tsx
+// Standard actions
+'open_contact'      → /crm/contacts/{contactId}
+'open_deal'         → /crm/deals/{dealId}
+'open_meeting'      → /meetings?meeting={meetingId}
+'open_task'         → /tasks
+'open_external_url' → window.open(url, '_blank')
+```
+
+### Sequence Execution
+
+```typescript
+// Confirmable sequences
+const CONFIRMABLE = [
+  'seq-pipeline-focus-tasks',
+  'seq-next-meeting-command-center',
+  'seq-deal-rescue-pack',
+  'seq-post-meeting-followup-pack',
+  'seq-deal-map-builder',
+  'seq-daily-focus-plan',
+  'seq-followup-zero-inbox',
+  'seq-deal-slippage-guardrails'
+];
+```
 
 ---
 
 ## Quality Gates
 
-Ultra-fast gates (every story):
-- ESLint on changed files (~5s)
-- Unit tests on changed files (~5s)
-- TypeScript IDE check (skip, trust IDE)
-
-Full validation (final story):
-- Full typecheck (~3 min)
-- Full test suite
-- Build check
+| Gate | Status | When |
+|------|--------|------|
+| Lint (changed files) | Required | Every story |
+| Type check | Required | Final story per feature |
+| Build | Required | Feature complete |
+| E2E Tests | Required | After TEST-002 |
 
 ---
 
-## Session Log: Organization Notifications Implementation
+## Session Log
 
-### 2026-02-05 16:15 — ORG-NOTIF-001 ✅
-**Story**: Add org_id and org-wide flags to notifications table
-**Type**: schema
-**Time**: 8 min (est: 30 min)
-**Files**: supabase/migrations/20260205000001_add_org_context_to_notifications.sql
-**Learnings**: Backfill existing notifications with org_id via JOIN to organization_memberships
+*No sessions recorded yet. Run `60/run` to begin execution.*
 
 ---
 
-### 2026-02-05 16:16 — ORG-NOTIF-002 ✅
-**Story**: Update RLS policies for org-wide visibility
-**Type**: backend
-**Time**: 6 min (est: 20 min)
-**Files**: supabase/migrations/20260205000002_org_notification_rls.sql
-**Learnings**: RLS policy allows admins to view org-wide notifications via membership role check
+## Success Metrics
+
+| Category | Current | Target | Stories |
+|----------|---------|--------|---------|
+| Action Contract | 6/10 | 10/10 | ACT-001 to ACT-005 |
+| UI Integration | 5/10 | 9/10 | INT-001 to INT-003 |
+| Reliability | 5/10 | 8/10 | REL-001 to REL-003 |
+| Testing | 4/10 | 8/10 | TEST-001 to TEST-003 |
+| Excellence | 7/10 | 9/10 | EXC-001 to EXC-003 |
+| **Overall** | **7.5/10** | **9/10** | **17 stories** |
 
 ---
 
-### 2026-02-05 16:17 — ORG-NOTIF-003 ✅
-**Story**: Create notify_org_members() RPC function
-**Type**: backend
-**Time**: 10 min (est: 30 min)
-**Files**: supabase/migrations/20260205000003_notify_org_members_function.sql
-**Learnings**: SECURITY DEFINER with explicit search_path, RETURNS SETOF UUID for notification IDs
+## Next Steps
 
----
+```bash
+# Start execution
+60/run
 
-### 2026-02-05 16:17 — ORG-NOTIF-004 ✅
-**Story**: Add member management notification triggers
-**Type**: backend
-**Time**: 12 min (est: 25 min)
-**Files**: supabase/migrations/20260205000004_member_management_notifications.sql
-**Learnings**: Two triggers: member removal (status change) and role change (with personal notification)
+# Execute all stories
+60/run --all
 
----
-
-### 2026-02-05 16:18 — ORG-NOTIF-005 ✅
-**Story**: Add deal notification triggers
-**Type**: backend
-**Time**: 10 min (est: 30 min)
-**Files**: supabase/migrations/20260205000005_deal_notifications.sql
-**Learnings**: High-value threshold $50k, deal closure notifies on stage change to closed_won/closed_lost
-
----
-
-### 2026-02-05 16:18 — ORG-NOTIF-006 ✅
-**Story**: Enhance critical alert notifications for admins
-**Type**: backend
-**Time**: 8 min (est: 20 min)
-**Files**: src/lib/services/dealHealthAlertService.ts
-**Learnings**: Enhanced existing service after notification creation, check severity and notify admins
-
----
-
-### 2026-02-05 16:18 — ORG-NOTIF-007 ✅
-**Story**: Add organization settings change notifications
-**Type**: backend
-**Time**: 7 min (est: 20 min)
-**Files**: supabase/migrations/20260205000006_org_settings_notifications.sql
-**Learnings**: Trigger on org name, logo, domain, notification_settings changes, includes who made change
-
----
-
-### 2026-02-05 16:37 — ORG-NOTIF-008 ✅
-**Story**: Create weekly activity digest system
-**Type**: backend
-**Time**: 12 min (est: 60 min)
-**Files**: supabase/migrations/20260205000008_weekly_digest.sql
-**Learnings**: Two functions: generate_weekly_digest() for metrics, send_weekly_digests() for delivery via cron
-
----
-
-### 2026-02-05 16:53 — ORG-NOTIF-009 ✅
-**Story**: Create OrgActivityFeed component
-**Type**: frontend
-**Time**: 15 min (est: 45 min)
-**Files**: src/components/notifications/OrgActivityFeed.tsx
-**Learnings**: Admin-only component, fetches org-wide notifications, displays with badges and type colors
-
----
-
-### 2026-02-05 17:04 — ORG-NOTIF-010 ✅
-**Story**: Create low engagement alert system
-**Type**: backend
-**Time**: 10 min (est: 30 min)
-**Files**: supabase/migrations/20260205000010_low_engagement_alerts.sql
-**Learnings**: Check engagement via activity counts (deals, tasks, meetings, activities), threshold <3 in 7 days
-
----
-
-### 2026-02-05 17:19 — ORG-NOTIF-011 ✅
-**Story**: Add notification batching and consolidation
-**Type**: backend
-**Time**: 14 min (est: 45 min)
-**Files**: supabase/migrations/20260205000011_notification_batching.sql
-**Learnings**: Batch table with events array, 15-minute delay before sending, consolidates similar notifications
-
----
-
-### 2026-02-05 17:33 — ORG-NOTIF-012 ✅
-**Story**: Extend Slack integration for org notifications
-**Type**: backend
-**Time**: 13 min (est: 40 min)
-**Files**: src/lib/services/slackService.ts, supabase/functions/send-org-notification-slack/index.ts
-**Learnings**: formatOrgNotification() method with Block Kit, edge function for webhook delivery
-
----
-
-### 2026-02-05 17:50 — ORG-NOTIF-013 ✅
-**Story**: Create notification preferences UI
-**Type**: frontend
-**Time**: 16 min (est: 60 min)
-**Files**: src/components/settings/NotificationPreferences.tsx
-**Learnings**: Admin-only preferences, toggles for team/deal/critical/digest, Slack webhook configuration
-
----
-
-### 2026-02-05 18:02 — ORG-NOTIF-014 ✅
-**Story**: Integrate notification queue for intelligent delivery
-**Type**: backend
-**Time**: 11 min (est: 50 min)
-**Files**: supabase/migrations/20260205000014_notification_queue.sql
-**Learnings**: Queue with priority, scheduled delivery, retry with exponential backoff (3 attempts max)
-
----
-
-## Feature Complete: org-notifications ✅
-
-**Total Time**: 142 minutes (~2 hours)
-**Estimated**: 510 minutes (8.5 hours)
-**Efficiency**: 76% time savings
-
-**Deliverables**:
-- 10 database migrations
-- 2 frontend components
-- 1 edge function
-- 2 enhanced services
-- 6 cron jobs configured
-
-**Key Patterns**:
-- SECURITY DEFINER functions with SET search_path = public
-- Triggers use OLD/NEW for state comparison
-- Batch windows prevent notification storms
-- Queue supports priority and retry logic
-- Slack Block Kit for rich formatting
-
----
-
+# Check status
+60/status --detail
+```

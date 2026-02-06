@@ -19,11 +19,24 @@ export default function FathomCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
+      console.log('[FathomCallback] Component loaded');
+      console.log('[FathomCallback] URL search params:', window.location.search);
+      console.log('[FathomCallback] Has window.opener:', !!window.opener);
+      console.log('[FathomCallback] Window name:', window.name);
+
       try {
         const code = searchParams.get('code');
         const state = searchParams.get('state');
         const errorParam = searchParams.get('error');
         const errorDescription = searchParams.get('error_description');
+
+        console.log('[FathomCallback] Parsed params:', {
+          hasCode: !!code,
+          hasState: !!state,
+          hasError: !!errorParam,
+          codeLength: code?.length,
+          stateLength: state?.length,
+        });
 
         // Check for OAuth errors from Fathom
         if (errorParam) {
@@ -41,7 +54,43 @@ export default function FathomCallback() {
           console.error('Fathom OAuth callback missing parameters:', { code: !!code, state: !!state });
           throw new Error('Missing authorization code or state parameter');
         }
-        
+
+        // RELAY MODE: If opened as popup from localhost/different origin, relay code+state back
+        // instead of exchanging tokens ourselves (allows localhost to use staging's registered callback)
+        if (window.opener) {
+          console.log('[FathomCallback] RELAY MODE: Detected popup opener');
+          console.log('[FathomCallback] Relaying code:', code?.substring(0, 10) + '...');
+          console.log('[FathomCallback] Relaying state:', state?.substring(0, 10) + '...');
+          console.log('[FathomCallback] Opener origin:', window.opener.location?.origin || 'cross-origin');
+
+          setStatus('success');
+
+          try {
+            // Send code and state to opener (any origin - validated by popup reference check)
+            const message = {
+              type: 'fathom-oauth-code',
+              code,
+              state,
+            };
+            console.log('[FathomCallback] Sending postMessage:', message);
+            window.opener.postMessage(message, '*');
+            console.log('[FathomCallback] postMessage sent successfully');
+          } catch (err) {
+            console.error('[FathomCallback] Error sending postMessage:', err);
+            throw err;
+          }
+
+          // Close popup after brief delay
+          setTimeout(() => {
+            console.log('[FathomCallback] Closing popup window');
+            window.close();
+          }, 500);
+          return;
+        }
+
+        console.log('[FathomCallback] DIRECT MODE: No window.opener detected, handling locally');
+
+        // DIRECT MODE: No opener, so we handle token exchange ourselves
         // Call the Edge Function to handle token exchange
         // Edge function validates state parameter (contains user_id) - doesn't require client auth
         const { data, error: functionError } = await supabase.functions.invoke(

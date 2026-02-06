@@ -20,9 +20,12 @@ import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useMemo } from 'react';
 import { useSlackOrgSettings } from '@/lib/hooks/useSlackSettings';
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
+import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
+import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
 import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
 import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
 import { useBullhornIntegration } from '@/lib/hooks/useBullhornIntegration';
+import { useGoogleIntegration } from '@/lib/stores/integrationStore';
 import {
   User,
   Palette,
@@ -62,6 +65,12 @@ export default function Settings() {
   const { isConnected: isFathomConnected, loading: fathomLoading } = useFathomIntegration();
   const showFathomSettings = !fathomLoading && isFathomConnected;
 
+  const { isConnected: isFirefliesConnected, loading: firefliesLoading } = useFirefliesIntegration();
+  const showFirefliesSettings = !firefliesLoading && isFirefliesConnected;
+
+  const { isOrgEnabled: isNotetakerOrgEnabled, isLoading: notetakerLoading } = useNotetakerIntegration();
+  const showNotetakerSettings = !notetakerLoading && isNotetakerOrgEnabled;
+
   const { isConnected: isJustCallConnected, loading: justcallLoading } = useJustCallIntegration();
   const showJustCallSettings = !justcallLoading && isJustCallConnected;
 
@@ -70,6 +79,9 @@ export default function Settings() {
 
   const { isConnected: isBullhornConnected, loading: bullhornLoading } = useBullhornIntegration();
   const showBullhornSettings = !bullhornLoading && isBullhornConnected;
+
+  const { isConnected: isGoogleConnected, isLoading: googleLoading } = useGoogleIntegration();
+  const showGoogleSettings = !googleLoading && isGoogleConnected;
 
   const allSettingsSections: SettingsSection[] = [
     {
@@ -131,11 +143,25 @@ export default function Settings() {
       path: '/settings/task-sync',
     },
     {
-      id: 'meeting-sync',
-      label: 'Meeting Sync',
+      id: 'fathom',
+      label: 'Fathom',
       icon: Video,
-      description: 'Auto-log meetings from Fathom, Fireflies, and other integrations',
-      path: '/settings/meeting-sync',
+      description: 'AI meeting notes and user mapping settings',
+      path: '/settings/integrations/fathom',
+    },
+    {
+      id: 'fireflies',
+      label: 'Fireflies',
+      icon: Video,
+      description: 'AI meeting notes and transcription settings',
+      path: '/settings/integrations/fireflies',
+    },
+    {
+      id: '60-notetaker',
+      label: '60 Notetaker',
+      icon: Video,
+      description: 'Configure automated meeting recording preferences',
+      path: '/meetings/recordings/settings',
     },
     {
       id: 'call-types',
@@ -144,6 +170,13 @@ export default function Settings() {
       description: 'Configure call types for AI-powered meeting classification',
       path: '/settings/call-types',
       requiresOrgAdmin: true,
+    },
+    {
+      id: 'google-workspace',
+      label: 'Google Workspace',
+      icon: Mail,
+      description: 'Gmail, Calendar, Drive, and Tasks integration',
+      path: '/settings/integrations/google-workspace',
     },
     {
       id: 'email-sync',
@@ -229,9 +262,21 @@ export default function Settings() {
       if (section.id === 'bullhorn') {
         return showBullhornSettings;
       }
-      // Meeting Sync settings should only appear when Fathom is connected.
-      if (section.id === 'meeting-sync') {
+      // Google Workspace settings should only appear when Google is connected.
+      if (section.id === 'google-workspace') {
+        return showGoogleSettings;
+      }
+      // Fathom settings should only appear when Fathom is connected.
+      if (section.id === 'fathom') {
         return showFathomSettings;
+      }
+      // Fireflies settings should only appear when Fireflies is connected.
+      if (section.id === 'fireflies') {
+        return showFirefliesSettings;
+      }
+      // 60 Notetaker settings should only appear when Notetaker is enabled.
+      if (section.id === '60-notetaker') {
+        return showNotetakerSettings;
       }
       if (section.requiresOrgAdmin) {
         // Allow org admins AND platform admins to see team settings
@@ -239,7 +284,7 @@ export default function Settings() {
       }
       return true;
     });
-  }, [allSettingsSections, permissions, isPlatformAdmin, isSlackConnected, showFathomSettings, showJustCallSettings, showHubSpotSettings, showBullhornSettings]);
+  }, [allSettingsSections, permissions, isPlatformAdmin, isSlackConnected, showGoogleSettings, showFathomSettings, showFirefliesSettings, showNotetakerSettings, showJustCallSettings, showHubSpotSettings, showBullhornSettings]);
 
   const categories = useMemo(() => {
     const personalSections = settingsSections.filter(s =>
@@ -248,9 +293,9 @@ export default function Settings() {
     const aiSections = settingsSections.filter(s =>
       ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types'].includes(s.id)
     );
-    // Meeting Sync is now under Integrations (only shown when Fathom is connected)
+    // Meeting recorder integrations (only shown when connected)
     const integrationSections = settingsSections.filter(s =>
-      ['email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'meeting-sync'].includes(s.id)
+      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
       ['organization-management', 'branding', 'billing'].includes(s.id)

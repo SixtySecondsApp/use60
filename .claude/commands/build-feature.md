@@ -39,6 +39,27 @@ Act as an expert product consultant helping define a feature. Ask me meaningful 
 
 ---
 
+## HOOKS (Claude-level configuration)
+
+This command is hook-aware. Hooks are configured at the Claude settings level (not in a repo file).
+
+**Preflight behavior:**
+- At command start, check if hook configuration is available.
+- If hooks are unavailable or fail to load, log a warning and continue.
+- Hook failures are **never blocking** — the command always proceeds.
+
+**Build hook events emitted:**
+| Event | Payload | When |
+|-------|---------|------|
+| `build.onStart` | `{ timestamp }` | Command begins |
+| `build.onQuestionsComplete` | `{ runSlug, storyCount }` | After questions answered |
+| `build.onPrdCreated` | `{ runSlug, prdPath, storyCount }` | After PRD + prd.json written |
+| `build.onDevHubSynced` | `{ runSlug, createdTaskCount }` | After AI Dev Hub tasks created |
+| `build.onComplete` | `{ runSlug, storyCount }` | Command finishes successfully |
+| `build.onFailed` | `{ error }` | Command fails |
+
+---
+
 ## Questions to consider asking (pick the most relevant)
 
 - What problem does this feature solve?
@@ -52,6 +73,12 @@ Act as an expert product consultant helping define a feature. Ask me meaningful 
 ---
 
 ## EXECUTION (after questions answered)
+
+### Step 0: Hook preflight
+
+1. Emit `build.onStart` event with timestamp.
+2. If hook system is unavailable, log: `⚠️ Hooks unavailable — continuing without hook events.`
+3. Continue to Step 1 regardless of hook status.
 
 ### Step 1: Archive previous run (if exists)
 
@@ -178,6 +205,8 @@ For each story in `prd.json.userStories`:
 
 ### Step 7: Output summary
 
+Emit `build.onComplete` event with `{ runSlug, storyCount }`.
+
 Print:
 ```
 ✅ Feature PRD created successfully!
@@ -185,9 +214,12 @@ Print:
 📄 PRD: tasks/prd-<runSlug>.md
 📋 Task list: prd.json (<N> stories)
 🎫 AI Dev Hub: <N> tasks created in project "Use60 - go live"
+🔗 Hooks: <executed | unavailable>
 
 🚀 Next: Run `/continue-feature 10` to start implementing stories.
 ```
+
+If any step failed, emit `build.onFailed` event with `{ error }` instead.
 
 ---
 

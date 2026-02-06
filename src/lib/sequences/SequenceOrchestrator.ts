@@ -194,7 +194,7 @@ export class SequenceOrchestrator {
   // =============================================================================
 
   /**
-   * Execute a full sequence
+   * Execute a full sequence with support for parallel step groups
    */
   async executeSequence(
     sequence: AgentSequence,
@@ -217,51 +217,69 @@ export class SequenceOrchestrator {
         steps.length
       );
 
-      // Execute each step
-      for (let i = 0; i < steps.length; i++) {
-        const step = steps[i];
+      // Group steps into batches (parallel groups execute together)
+      const stepBatches = this.groupStepsIntoBatches(steps);
 
-        console.log(`[SequenceOrchestrator] Step ${i + 1}/${steps.length}: ${step.skill_key}`);
+      console.log(`[SequenceOrchestrator] Grouped ${steps.length} steps into ${stepBatches.length} batches`);
 
-        // Check for HITL before step
-        if (step.hitl_before?.enabled && this.config.enableHITL) {
-          const approved = await this.requestHITLApproval(step.hitl_before, state, i, 'before');
-          if (!approved) {
-            console.log(`[SequenceOrchestrator] HITL rejected at step ${i + 1}`);
-            break;
-          }
-        }
+      // Execute batches
+      for (let batchIndex = 0; batchIndex < stepBatches.length; batchIndex++) {
+        const batch = stepBatches[batchIndex];
+        const isParallel = batch.length > 1 || batch[0]?.execution_mode === 'parallel';
 
-        // Execute the step
-        const stepResult = await this.executeStep(step, state);
+        console.log(`[SequenceOrchestrator] Batch ${batchIndex + 1}/${stepBatches.length}: ${batch.length} step(s), mode: ${isParallel ? 'parallel' : 'sequential'}`);
 
-        // Handle step failure
-        if (stepResult.status === 'failed') {
-          console.error(`[SequenceOrchestrator] Step ${i + 1} failed:`, stepResult.error);
-
-          if (step.on_failure === 'stop') {
-            throw new Error(`Step ${step.skill_key} failed: ${stepResult.error}`);
-          } else if (step.on_failure === 'fallback' && step.fallback_skill_key) {
-            // Try fallback skill
-            const fallbackResult = await this.executeSkillStep(
-              step.fallback_skill_key,
-              this.buildStepContext(step, state),
-              step.output_key
-            );
-            await this.stateManager.mergeSkillResult(step.fallback_skill_key, fallbackResult);
-          }
-          // If on_failure === 'continue', just continue to next step
+        if (isParallel) {
+          // Execute all steps in this batch in parallel
+          await this.executeParallelBatch(batch, state, batchIndex);
         } else {
-          // Merge successful result into state
-          await this.stateManager.mergeSkillResult(step.skill_key, stepResult);
-        }
+          // Execute single step sequentially
+          const step = batch[0];
+          const stepIndex = steps.indexOf(step);
 
-        // Check for HITL after step
-        if (step.hitl_after?.enabled && this.config.enableHITL) {
-          const approved = await this.requestHITLApproval(step.hitl_after, state, i, 'after');
-          if (!approved) {
-            console.log(`[SequenceOrchestrator] HITL rejected after step ${i + 1}`);
-            break;
+          // Check for HITL before step
+          if (step.hitl_before?.enabled && this.config.enableHITL) {
+            const approved = await this.requestHITLApproval(step.hitl_before, state, stepIndex, 'before');
+            if (!approved) {
+              console.log(`[SequenceOrchestrator] HITL rejected at step ${stepIndex + 1}`);
+              break;
+            }
+          }
+
+          // Check condition
+          if (step.condition && !this.evaluateCondition(step.condition, state)) {
+            console.log(`[SequenceOrchestrator] Step ${step.skill_key} skipped due to condition`);
+            continue;
+          }
+
+          // Execute the step
+          const stepResult = await this.executeStep(step, state);
+
+          // Handle step failure
+          if (stepResult.status === 'failed') {
+            console.error(`[SequenceOrchestrator] Step ${stepIndex + 1} failed:`, stepResult.error);
+
+            if (step.on_failure === 'stop') {
+              throw new Error(`Step ${step.skill_key} failed: ${stepResult.error}`);
+            } else if (step.on_failure === 'fallback' && step.fallback_skill_key) {
+              const fallbackResult = await this.executeSkillStep(
+                step.fallback_skill_key,
+                this.buildStepContext(step, state),
+                step.output_key
+              );
+              await this.stateManager.mergeSkillResult(step.fallback_skill_key, fallbackResult);
+            }
+          } else {
+            await this.stateManager.mergeSkillResult(step.skill_key, stepResult);
+          }
+
+          // Check for HITL after step
+          if (step.hitl_after?.enabled && this.config.enableHITL) {
+            const approved = await this.requestHITLApproval(step.hitl_after, state, stepIndex, 'after');
+            if (!approved) {
+              console.log(`[SequenceOrchestrator] HITL rejected after step ${stepIndex + 1}`);
+              break;
+            }
           }
         }
       }
@@ -288,6 +306,143 @@ export class SequenceOrchestrator {
         error: errorMessage,
         duration_ms: Date.now() - startTime,
       };
+    }
+  }
+
+  /**
+   * Group steps into batches based on execution mode and parallel_group
+   * Sequential steps become single-item batches
+   * Parallel steps with the same group (or consecutive parallel steps) become multi-item batches
+   */
+  private groupStepsIntoBatches(steps: SequenceStep[]): SequenceStep[][] {
+    const batches: SequenceStep[][] = [];
+    let currentBatch: SequenceStep[] = [];
+    let currentGroup: string | undefined = undefined;
+
+    for (const step of steps) {
+      const isParallel = step.execution_mode === 'parallel';
+      const group = step.parallel_group;
+
+      if (isParallel) {
+        // If this parallel step has a group
+        if (group) {
+          // Same group as current batch - add to batch
+          if (currentGroup === group) {
+            currentBatch.push(step);
+          } else {
+            // Different group - flush current batch and start new one
+            if (currentBatch.length > 0) {
+              batches.push(currentBatch);
+            }
+            currentBatch = [step];
+            currentGroup = group;
+          }
+        } else {
+          // No group specified - consecutive parallel steps run together
+          if (currentBatch.length > 0 && currentBatch[0].execution_mode === 'parallel' && !currentGroup) {
+            currentBatch.push(step);
+          } else {
+            if (currentBatch.length > 0) {
+              batches.push(currentBatch);
+            }
+            currentBatch = [step];
+            currentGroup = undefined;
+          }
+        }
+      } else {
+        // Sequential step - flush current batch and add as single-item batch
+        if (currentBatch.length > 0) {
+          batches.push(currentBatch);
+        }
+        batches.push([step]);
+        currentBatch = [];
+        currentGroup = undefined;
+      }
+    }
+
+    // Don't forget the last batch
+    if (currentBatch.length > 0) {
+      batches.push(currentBatch);
+    }
+
+    return batches;
+  }
+
+  /**
+   * Execute a batch of steps in parallel
+   */
+  private async executeParallelBatch(
+    batch: SequenceStep[],
+    state: SequenceState,
+    batchIndex: number
+  ): Promise<void> {
+    console.log(`[SequenceOrchestrator] Executing parallel batch with ${batch.length} steps:`,
+      batch.map(s => s.skill_key).join(', ')
+    );
+
+    // Execute all steps concurrently
+    const results = await Promise.allSettled(
+      batch.map(async (step) => {
+        // Check condition
+        if (step.condition && !this.evaluateCondition(step.condition, state)) {
+          console.log(`[SequenceOrchestrator] Parallel step ${step.skill_key} skipped due to condition`);
+          return { step, result: null, skipped: true };
+        }
+
+        const result = await this.executeStep(step, state);
+        return { step, result, skipped: false };
+      })
+    );
+
+    // Process results
+    for (const settledResult of results) {
+      if (settledResult.status === 'fulfilled') {
+        const { step, result, skipped } = settledResult.value;
+
+        if (skipped || !result) {
+          continue;
+        }
+
+        if (result.status === 'failed') {
+          console.error(`[SequenceOrchestrator] Parallel step ${step.skill_key} failed:`, result.error);
+
+          if (step.on_failure === 'stop') {
+            throw new Error(`Parallel step ${step.skill_key} failed: ${result.error}`);
+          } else if (step.on_failure === 'fallback' && step.fallback_skill_key) {
+            const fallbackResult = await this.executeSkillStep(
+              step.fallback_skill_key,
+              this.buildStepContext(step, state),
+              step.output_key
+            );
+            await this.stateManager.mergeSkillResult(step.fallback_skill_key, fallbackResult);
+          }
+        } else {
+          await this.stateManager.mergeSkillResult(step.skill_key, result);
+        }
+      } else {
+        // Promise rejected
+        console.error(`[SequenceOrchestrator] Parallel step execution threw:`, settledResult.reason);
+      }
+    }
+  }
+
+  /**
+   * Evaluate a condition expression against current state
+   * Supports simple expressions like "${previous_step.success}", "${context.has_email}"
+   */
+  private evaluateCondition(condition: string, state: SequenceState): boolean {
+    try {
+      // Handle ${variable} expressions
+      const value = this.resolveExpression(condition, state);
+
+      // Convert to boolean
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'string') return value.toLowerCase() === 'true' || value === '1';
+      if (typeof value === 'number') return value !== 0;
+      return !!value;
+    } catch (error) {
+      console.warn(`[SequenceOrchestrator] Failed to evaluate condition "${condition}":`, error);
+      return true; // Default to running the step if condition evaluation fails
     }
   }
 

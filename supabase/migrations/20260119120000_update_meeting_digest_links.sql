@@ -1,0 +1,18 @@
+-- Update: Meeting Digest Truth Extractor - Link Updates
+-- Date: 2026-01-19
+--
+-- Changes:
+-- 1. Remove Google Meet/video conferencing links from output (meeting is already over)
+-- 2. Add Sixty meeting recording link with AI analysis
+--
+
+BEGIN;
+
+UPDATE platform_skills
+SET
+  is_active = true,
+  content_template = E'# Meeting Digest Truth Extractor\n\n## Goal\nExtract structured, actionable truth from meeting transcripts with strict contract output.\n\n## Required Capabilities\n- **Transcript**: To access meeting transcript/recording\n- **CRM**: To validate and enrich extracted data against CRM records\n\n## Inputs\n- `meeting_id`: The meeting identifier\n- `transcript_id` or `transcript`: Transcript content or reference\n- `organization_id`: Current organization context\n\n## Data Gathering (via execute_action)\n1. Fetch transcript: Use transcript capability to get full transcript\n2. Fetch related CRM data: `execute_action("get_deal", { id: deal_id })`\n3. Fetch contact details: `execute_action("get_contact", { id: contact_id })`\n4. Fetch company info: `execute_action("get_company_status", { company_name })`\n\n## Truth Hierarchy (enforced)\n1. **CRM data** (highest priority): If CRM says deal stage is "negotiation", trust that over transcript mentions\n2. **Transcript** (medium priority): Explicit statements in transcript\n3. **User notes** (lowest priority): Only if no CRM/transcript data\n\n## Output Contract\nReturn a SkillResult with:\n- `data.decisions`: Array of decision objects:\n  - `decision`: What was decided\n  - `decision_maker`: Who made it\n  - `confidence`: High/Medium/Low\n  - `source`: "crm" | "transcript" | "inferred"\n- `data.commitments`: Array of commitment objects:\n  - `commitment`: What was committed to\n  - `owner`: Who committed (name, email)\n  - `deadline`: When (if mentioned)\n  - `status`: "explicit" | "implied"\n  - `missing_info`: What info is missing (owner, deadline, etc.)\n- `data.meddicc_deltas`: Object with MEDDICC field changes:\n  - `metrics`: Changes to success metrics\n  - `economic_buyer`: Changes to decision maker\n  - `decision_criteria`: Changes to evaluation criteria\n  - `decision_process`: Changes to process/timeline\n  - `identify_pain`: New pain points identified\n  - `champion`: Champion status changes\n  - `competition`: Competitive mentions\n- `data.risks`: Array of risk objects:\n  - `risk`: Description of risk\n  - `severity`: High/Medium/Low\n  - `mitigation`: Suggested mitigation\n- `data.stakeholders`: Array of stakeholder objects:\n  - `name`: Stakeholder name\n  - `role`: Their role/title\n  - `influence`: High/Medium/Low\n  - `sentiment`: Positive/Neutral/Negative\n- `data.unknowns`: Array of questions/unknowns that need follow-up\n- `data.next_steps`: Array of recommended next steps with owners and deadlines\n- `data.meeting_recording_link`: Link to the Sixty meeting page with full transcript and AI analysis (format: `/meetings/{meeting_id}`)\n- `references`: Links to Sixty meeting recording, CRM records, etc.\n\n## Guidelines\n- De-duplicate contradictions using truth hierarchy\n- Flag missing information (e.g., commitment without owner)\n- Extract explicit quotes for "what we heard" sections\n- Be conservative: if uncertain, mark confidence as Low\n- **IMPORTANT**: Do NOT include Google Meet, Zoom, or any video conferencing links in the output - the meeting has already ended\n- **REQUIRED**: Always include a "Meeting Recording" link pointing to the Sixty platform meeting page: `/meetings/{meeting_id}` where users can access the full transcript and AI-generated analysis\n',
+  updated_at = now()
+WHERE skill_key = 'meeting-digest-truth-extractor';
+
+COMMIT;

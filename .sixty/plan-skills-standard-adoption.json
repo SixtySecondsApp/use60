@@ -1,0 +1,507 @@
+{
+  "feature": "skills-standard-adoption",
+  "name": "Agent Skills Standard Adoption",
+  "description": "Adopt the Agent Skills file format (SKILL.md) for all 27 skills/sequences, with progressive disclosure and embedding-based discovery. Aligns with the open standard from agentskills.io used by 40K+ skills on skills.sh.",
+  "createdAt": "2026-02-04T20:30:00Z",
+  "source": "SKILLS_STANDARD_ADOPTION.md",
+  "consultReport": ".sixty/consult/skills-standard-adoption.md",
+
+  "architecture": {
+    "principle": "Files are authoring truth, DB is runtime truth. Sync is one-directional: files → DB.",
+    "flow": "SKILL.md (git) → parse frontmatter + body → upsert platform_skills → compile organization_skills",
+    "format": "Standard-compliant YAML frontmatter (name + description top-level, everything else under metadata) + markdown body",
+    "phases": ["file-format", "progressive-disclosure", "embedding-discovery"]
+  },
+
+  "stories": [
+    {
+      "id": "SKL-001",
+      "phase": 1,
+      "title": "Create skills/ directory scaffold and add SkillFrontmatterV3 type",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["SKL-002", "SKL-003", "SKL-004"],
+      "parallelWith": ["SKL-005", "SKL-006"],
+      "acceptance": [
+        "skills/atomic/ directory with 16 empty subdirectories (one per atomic skill)",
+        "skills/sequences/ directory with 12 empty subdirectories (one per sequence)",
+        "SkillFrontmatterV3 interface added to src/lib/types/skills.ts with standard top-level fields + metadata bag",
+        "Union type updated for backward compatibility"
+      ],
+      "files": [
+        "skills/atomic/meeting-prep-brief/.gitkeep",
+        "skills/atomic/meeting-digest-truth-extractor/.gitkeep",
+        "skills/atomic/post-meeting-followup-drafter/.gitkeep",
+        "skills/atomic/deal-next-best-actions/.gitkeep",
+        "skills/atomic/objection-to-playbook/.gitkeep",
+        "skills/atomic/pipeline-focus-task-planner/.gitkeep",
+        "skills/atomic/meeting-command-center-plan/.gitkeep",
+        "skills/atomic/post-meeting-followup-pack-builder/.gitkeep",
+        "skills/atomic/deal-map-builder/.gitkeep",
+        "skills/atomic/daily-focus-planner/.gitkeep",
+        "skills/atomic/followup-triage/.gitkeep",
+        "skills/atomic/followup-reply-drafter/.gitkeep",
+        "skills/atomic/deal-slippage-diagnosis/.gitkeep",
+        "skills/atomic/daily-brief-planner/.gitkeep",
+        "skills/atomic/event-followup-analyzer/.gitkeep",
+        "skills/atomic/output-format-selector/.gitkeep",
+        "skills/sequences/seq-meeting-prep/.gitkeep",
+        "skills/sequences/seq-meeting-digest/.gitkeep",
+        "skills/sequences/seq-deal-rescue-pack/.gitkeep",
+        "skills/sequences/seq-pipeline-focus-tasks/.gitkeep",
+        "skills/sequences/seq-next-meeting-command-center/.gitkeep",
+        "skills/sequences/seq-post-meeting-followup-pack/.gitkeep",
+        "skills/sequences/seq-deal-map-builder/.gitkeep",
+        "skills/sequences/seq-daily-focus-plan/.gitkeep",
+        "skills/sequences/seq-followup-zero-inbox/.gitkeep",
+        "skills/sequences/seq-deal-slippage-guardrails/.gitkeep",
+        "skills/sequences/seq-catch-me-up/.gitkeep",
+        "skills/sequences/seq-event-follow-up/.gitkeep",
+        "src/lib/types/skills.ts"
+      ]
+    },
+    {
+      "id": "SKL-002",
+      "phase": 1,
+      "title": "Convert first 5 atomic skills to SKILL.md",
+      "type": "content",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["SKL-001"], "files": [], "schema": [] },
+      "blocks": ["SKL-008"],
+      "parallelWith": ["SKL-003", "SKL-004"],
+      "acceptance": [
+        "meeting-prep-brief/SKILL.md with standard-compliant frontmatter + markdown body extracted from seed SQL",
+        "meeting-digest-truth-extractor/SKILL.md converted",
+        "post-meeting-followup-drafter/SKILL.md converted",
+        "deal-next-best-actions/SKILL.md converted",
+        "objection-to-playbook/SKILL.md converted"
+      ],
+      "files": [
+        "skills/atomic/meeting-prep-brief/SKILL.md",
+        "skills/atomic/meeting-digest-truth-extractor/SKILL.md",
+        "skills/atomic/post-meeting-followup-drafter/SKILL.md",
+        "skills/atomic/deal-next-best-actions/SKILL.md",
+        "skills/atomic/objection-to-playbook/SKILL.md"
+      ],
+      "source_migrations": [
+        "supabase/migrations/20260114000001_seed_production_skills.sql"
+      ]
+    },
+    {
+      "id": "SKL-003",
+      "phase": 1,
+      "title": "Convert remaining 11 atomic skills to SKILL.md",
+      "type": "content",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["SKL-001"], "files": [], "schema": [] },
+      "blocks": ["SKL-008"],
+      "parallelWith": ["SKL-002", "SKL-004"],
+      "acceptance": [
+        "pipeline-focus-task-planner/SKILL.md converted",
+        "meeting-command-center-plan/SKILL.md converted",
+        "post-meeting-followup-pack-builder/SKILL.md converted",
+        "deal-map-builder/SKILL.md converted",
+        "daily-focus-planner/SKILL.md converted",
+        "All remaining atomic skills converted with standard frontmatter format"
+      ],
+      "files": [
+        "skills/atomic/pipeline-focus-task-planner/SKILL.md",
+        "skills/atomic/meeting-command-center-plan/SKILL.md",
+        "skills/atomic/post-meeting-followup-pack-builder/SKILL.md",
+        "skills/atomic/deal-map-builder/SKILL.md",
+        "skills/atomic/daily-focus-planner/SKILL.md",
+        "skills/atomic/followup-triage/SKILL.md",
+        "skills/atomic/followup-reply-drafter/SKILL.md",
+        "skills/atomic/deal-slippage-diagnosis/SKILL.md",
+        "skills/atomic/daily-brief-planner/SKILL.md",
+        "skills/atomic/event-followup-analyzer/SKILL.md",
+        "skills/atomic/output-format-selector/SKILL.md"
+      ],
+      "source_migrations": [
+        "supabase/migrations/20260114000005_seed_pipeline_focus_skill.sql",
+        "supabase/migrations/20260114000009_seed_meeting_command_center_skill_sequence.sql",
+        "supabase/migrations/20260114000013_seed_post_meeting_followup_pack.sql",
+        "supabase/migrations/20260114000015_seed_deal_map_builder_skill_sequence.sql",
+        "supabase/migrations/20260114000017_seed_daily_focus_plan_skill_sequence.sql",
+        "supabase/migrations/20260114000018_seed_followup_zero_inbox_skill_sequence.sql",
+        "supabase/migrations/20260114000019_seed_deal_slippage_guardrails_skill_sequence.sql",
+        "supabase/migrations/20260124000004_add_event_followup_sequence.sql",
+        "supabase/migrations/20260124000005_add_output_format_selector_skill.sql"
+      ]
+    },
+    {
+      "id": "SKL-004",
+      "phase": 1,
+      "title": "Convert all 12 sequences to SKILL.md",
+      "type": "content",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["SKL-001"], "files": [], "schema": [] },
+      "blocks": ["SKL-008"],
+      "parallelWith": ["SKL-002", "SKL-003"],
+      "acceptance": [
+        "All 12 seq-* directories have SKILL.md files with metadata.workflow step definitions",
+        "metadata.linked_skills lists child skills for each sequence",
+        "Sequence steps include action, skill_key, input_mapping, output_key, hitl_before fields",
+        "seq-next-meeting-command-center and seq-post-meeting-followup-pack verified as reference examples"
+      ],
+      "files": [
+        "skills/sequences/seq-meeting-prep/SKILL.md",
+        "skills/sequences/seq-meeting-digest/SKILL.md",
+        "skills/sequences/seq-deal-rescue-pack/SKILL.md",
+        "skills/sequences/seq-pipeline-focus-tasks/SKILL.md",
+        "skills/sequences/seq-next-meeting-command-center/SKILL.md",
+        "skills/sequences/seq-post-meeting-followup-pack/SKILL.md",
+        "skills/sequences/seq-deal-map-builder/SKILL.md",
+        "skills/sequences/seq-daily-focus-plan/SKILL.md",
+        "skills/sequences/seq-followup-zero-inbox/SKILL.md",
+        "skills/sequences/seq-deal-slippage-guardrails/SKILL.md",
+        "skills/sequences/seq-catch-me-up/SKILL.md",
+        "skills/sequences/seq-event-follow-up/SKILL.md"
+      ],
+      "source_migrations": [
+        "supabase/migrations/20260114000002_seed_production_sequences.sql",
+        "supabase/migrations/20260114000003_seed_deal_rescue_sequence.sql",
+        "supabase/migrations/20260114000006_seed_pipeline_focus_sequence.sql",
+        "supabase/migrations/20260114000009_seed_meeting_command_center_skill_sequence.sql",
+        "supabase/migrations/20260114000010_seed_deal_rescue_pack_skill_sequence.sql",
+        "supabase/migrations/20260114000013_seed_post_meeting_followup_pack.sql",
+        "supabase/migrations/20260114000015_seed_deal_map_builder_skill_sequence.sql",
+        "supabase/migrations/20260114000017_seed_daily_focus_plan_skill_sequence.sql",
+        "supabase/migrations/20260114000018_seed_followup_zero_inbox_skill_sequence.sql",
+        "supabase/migrations/20260114000019_seed_deal_slippage_guardrails_skill_sequence.sql",
+        "supabase/migrations/20260123000003_seed_catch_me_up_sequence.sql",
+        "supabase/migrations/20260124000004_add_event_followup_sequence.sql"
+      ]
+    },
+    {
+      "id": "SKL-005",
+      "phase": 1,
+      "title": "Build SKILL.md parser utility",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["SKL-007", "SKL-008"],
+      "parallelWith": ["SKL-001", "SKL-006"],
+      "acceptance": [
+        "scripts/lib/skillParser.ts exports parseSkillFile(filePath) and parseSkillContent(content, fileName)",
+        "Parses YAML frontmatter via gray-matter, extracts markdown body",
+        "Maps standard fields (name, description) + metadata → platform_skills DB format",
+        "Computes SHA256 source_hash for change detection",
+        "Validates: name matches directory, description present and <1024 chars, valid category"
+      ],
+      "files": [
+        "scripts/lib/skillParser.ts"
+      ],
+      "dependencies_npm": ["gray-matter"]
+    },
+    {
+      "id": "SKL-006",
+      "phase": 1,
+      "title": "Add source tracking columns to platform_skills",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["SKL-007"],
+      "parallelWith": ["SKL-001", "SKL-005"],
+      "acceptance": [
+        "Migration adds source_format TEXT column with CHECK constraint ('sql_seed', 'skill_md', 'admin_ui')",
+        "Migration adds source_path TEXT column",
+        "Migration adds source_hash TEXT column",
+        "Default value for source_format is 'sql_seed' (backward compatible)"
+      ],
+      "files": [
+        "supabase/migrations/20260204000001_add_skill_source_tracking.sql"
+      ]
+    },
+    {
+      "id": "SKL-007",
+      "phase": 1,
+      "title": "Build sync-skills npm script",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["SKL-005", "SKL-006"], "files": ["scripts/lib/skillParser.ts"], "schema": ["platform_skills.source_format"] },
+      "blocks": ["SKL-008", "SKL-013"],
+      "parallelWith": ["SKL-009"],
+      "acceptance": [
+        "scripts/sync-skills.ts globs skills/**/SKILL.md, parses, validates, upserts to platform_skills",
+        "Skips unchanged skills (detected via source_hash comparison)",
+        "Sets source_format='skill_md', source_path, source_hash on upserted rows",
+        "Auto-compiles to organization_skills for all orgs (reuses compile-org-skills.ts pattern)",
+        "package.json has 'sync-skills' script entry",
+        "Supports --dry-run flag to preview without writing"
+      ],
+      "files": [
+        "scripts/sync-skills.ts",
+        "package.json"
+      ]
+    },
+    {
+      "id": "SKL-008",
+      "phase": 1,
+      "title": "Validation test — verify all 27 SKILL.md files parse and match DB",
+      "type": "test",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["SKL-002", "SKL-003", "SKL-004", "SKL-005", "SKL-007"], "files": [], "schema": [] },
+      "blocks": ["SKL-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "scripts/validate-skills.ts parses all 27 SKILL.md files without errors",
+        "Parsed frontmatter is consumable by existing skillToTool() in autonomousExecutor.ts",
+        "Trigger matching works in copilotRoutingService.ts (no regressions)",
+        "No data loss compared to current DB content"
+      ],
+      "files": [
+        "scripts/validate-skills.ts"
+      ]
+    },
+    {
+      "id": "SKL-009",
+      "phase": 1,
+      "title": "Build sync-skills-from-github edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["SKL-005", "SKL-006"], "files": ["scripts/lib/skillParser.ts"], "schema": [] },
+      "blocks": ["SKL-016"],
+      "parallelWith": ["SKL-007"],
+      "acceptance": [
+        "supabase/functions/sync-skills-from-github/index.ts accepts POST with {repo, branch, github_token}",
+        "Uses GitHub Trees API to list skills/**/SKILL.md files",
+        "Fetches and parses each file via GitHub Contents API",
+        "Upserts to platform_skills + compiles to organization_skills",
+        "Returns JSON sync report with counts and errors"
+      ],
+      "files": [
+        "supabase/functions/sync-skills-from-github/index.ts"
+      ],
+      "required_secrets": ["GITHUB_TOKEN", "GITHUB_REPO"]
+    },
+    {
+      "id": "SKL-010",
+      "phase": 2,
+      "title": "Define token budgets and extract verbose content to references/",
+      "type": "content",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["SKL-008"], "files": [], "schema": [] },
+      "blocks": ["SKL-013"],
+      "parallelWith": ["SKL-011"],
+      "acceptance": [
+        "Token estimation added to skillParser.ts (tokens ≈ words × 1.3)",
+        "Sync script warns if SKILL.md body exceeds 5000 tokens",
+        "Verbose skills have content moved to references/ subdirectories",
+        "meeting-digest-truth-extractor has references/truth-hierarchy.md and references/meddicc-framework.md",
+        "output-format-selector has references/response-types.md",
+        "Main SKILL.md body stays under 5000 tokens for all skills"
+      ],
+      "files": [
+        "scripts/lib/skillParser.ts",
+        "skills/atomic/meeting-digest-truth-extractor/references/truth-hierarchy.md",
+        "skills/atomic/meeting-digest-truth-extractor/references/meddicc-framework.md",
+        "skills/atomic/output-format-selector/references/response-types.md",
+        "skills/atomic/objection-to-playbook/references/playbook-mapping.md"
+      ]
+    },
+    {
+      "id": "SKL-011",
+      "phase": 2,
+      "title": "Update autonomousExecutor for lazy tier-2 loading",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["SKL-008"], "files": [], "schema": [] },
+      "blocks": ["SKL-012"],
+      "parallelWith": ["SKL-010"],
+      "acceptance": [
+        "initialize() loads Tier 1 only (frontmatter — no content_template)",
+        "executeTool() lazy-loads Tier 2 (content_template) on first invocation",
+        "Tool descriptions built from Tier 1 (name + description + triggers + I/O schema)",
+        "No regression: existing skill execution still works correctly"
+      ],
+      "files": [
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ]
+    },
+    {
+      "id": "SKL-012",
+      "phase": 2,
+      "title": "Add tier parameter to get-agent-skills edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["SKL-011"], "files": [], "schema": [] },
+      "blocks": ["SKL-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "tier='metadata' returns frontmatter only (for listing)",
+        "tier='instructions' returns frontmatter + content (default, backward-compatible)",
+        "tier='full' returns everything + resolved references from skill_documents",
+        "Existing API consumers unaffected (default is 'instructions')"
+      ],
+      "files": [
+        "supabase/functions/get-agent-skills/index.ts"
+      ]
+    },
+    {
+      "id": "SKL-013",
+      "phase": 2,
+      "title": "Extend sync scripts to handle references/ files",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["SKL-010", "SKL-012", "SKL-007"], "files": [], "schema": [] },
+      "blocks": ["SKL-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "sync-skills.ts globs skills/**/references/*.md alongside SKILL.md",
+        "Reference files upserted into skill_documents table with doc_type='reference'",
+        "References linked to parent skill via skill_id",
+        "sync-skills-from-github also fetches and syncs references/ via GitHub API"
+      ],
+      "files": [
+        "scripts/sync-skills.ts",
+        "supabase/functions/sync-skills-from-github/index.ts"
+      ]
+    },
+    {
+      "id": "SKL-014",
+      "phase": 3,
+      "title": "Enable pgvector and add embedding column to platform_skills",
+      "type": "schema",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["SKL-013"], "files": [], "schema": [] },
+      "blocks": ["SKL-015", "SKL-017"],
+      "parallelWith": ["SKL-018"],
+      "acceptance": [
+        "Migration enables pgvector extension",
+        "description_embedding vector(1536) column added to platform_skills",
+        "IVFFlat index created for cosine similarity search",
+        "match_skills_by_embedding() SQL function created and tested"
+      ],
+      "files": [
+        "supabase/migrations/20260204000002_add_skill_embeddings.sql"
+      ]
+    },
+    {
+      "id": "SKL-015",
+      "phase": 3,
+      "title": "Build embedding generation utility and integrate into sync",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["SKL-014"], "files": [], "schema": ["platform_skills.description_embedding"] },
+      "blocks": ["SKL-017"],
+      "parallelWith": [],
+      "acceptance": [
+        "scripts/lib/generateEmbeddings.ts calls OpenAI text-embedding-3-small API",
+        "Input format: '<name>: <description>' per skill",
+        "sync-skills.ts regenerates embeddings for skills whose description changed (via source_hash)",
+        "Handles API errors gracefully (warn, don't fail sync)"
+      ],
+      "files": [
+        "scripts/lib/generateEmbeddings.ts",
+        "scripts/sync-skills.ts"
+      ],
+      "required_env": ["OPENAI_API_KEY"]
+    },
+    {
+      "id": "SKL-016",
+      "phase": 3,
+      "title": "Build generate-embedding edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["SKL-009"], "files": [], "schema": [] },
+      "blocks": ["SKL-017"],
+      "parallelWith": ["SKL-014"],
+      "acceptance": [
+        "supabase/functions/generate-embedding/index.ts accepts POST with {text}",
+        "Returns {embedding: number[]} using OpenAI text-embedding-3-small",
+        "src/lib/services/embeddingService.ts wraps the edge function call",
+        "Error handling for missing API key, rate limits"
+      ],
+      "files": [
+        "supabase/functions/generate-embedding/index.ts",
+        "src/lib/services/embeddingService.ts"
+      ],
+      "required_secrets": ["OPENAI_API_KEY"]
+    },
+    {
+      "id": "SKL-017",
+      "phase": 3,
+      "title": "Add vector similarity fallback to routing service",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["SKL-015", "SKL-016"], "files": [], "schema": [] },
+      "blocks": ["SKL-018"],
+      "parallelWith": [],
+      "acceptance": [
+        "copilotRoutingService.ts has new step 3: embedding similarity search (threshold ≥ 0.6)",
+        "Routing chain: sequences (0.7) → skills (0.5) → embeddings (0.6) → no match",
+        "Embedding search only triggered when steps 1 & 2 find no confident match",
+        "New skills with only name + description (no triggers) are routable via embeddings"
+      ],
+      "files": [
+        "src/lib/services/copilotRoutingService.ts"
+      ]
+    },
+    {
+      "id": "SKL-018",
+      "phase": 3,
+      "title": "Integration test for embedding-based routing",
+      "type": "test",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["SKL-017"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Test: skill with no triggers matched via embedding similarity",
+        "Test: existing trigger-based routing unaffected (no regression)",
+        "Test: embedding fallback not invoked when trigger match is confident",
+        "Test: graceful degradation when embedding service unavailable"
+      ],
+      "files": [
+        "tests/unit/services/copilotRoutingService.embedding.test.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 18,
+    "completedStories": 0,
+    "currentPhase": 1,
+    "batches": [
+      { "id": "A", "stories": ["SKL-001", "SKL-005", "SKL-006"], "parallel": true, "description": "Scaffold + parser + migration" },
+      { "id": "B", "stories": ["SKL-002", "SKL-003", "SKL-004"], "parallel": true, "description": "Convert all 27 skills to SKILL.md" },
+      { "id": "C", "stories": ["SKL-007", "SKL-009"], "parallel": true, "description": "Build sync scripts (npm + edge function)" },
+      { "id": "D", "stories": ["SKL-008"], "parallel": false, "description": "Validate all files parse correctly" },
+      { "id": "E", "stories": ["SKL-010", "SKL-011"], "parallel": true, "description": "Token budgets + lazy loading" },
+      { "id": "F", "stories": ["SKL-012"], "parallel": false, "description": "Tier parameter for edge function" },
+      { "id": "G", "stories": ["SKL-013"], "parallel": false, "description": "Sync references/ files" },
+      { "id": "H", "stories": ["SKL-014", "SKL-016"], "parallel": true, "description": "pgvector + embedding edge function" },
+      { "id": "I", "stories": ["SKL-015"], "parallel": false, "description": "Embedding generation in sync" },
+      { "id": "J", "stories": ["SKL-017"], "parallel": false, "description": "Embedding routing fallback" },
+      { "id": "K", "stories": ["SKL-018"], "parallel": false, "description": "Integration tests" }
+    ]
+  },
+
+  "verification": {
+    "parse_test": "npx tsx scripts/validate-skills.ts",
+    "sync_dry_run": "npx tsx scripts/sync-skills.ts --dry-run",
+    "build_check": "npm run build",
+    "runtime_test": "Test copilot in Copilot Lab — skills route and execute correctly",
+    "embedding_test": "Create trigger-less skill, verify natural language routing works"
+  }
+}

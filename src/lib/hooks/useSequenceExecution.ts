@@ -39,6 +39,12 @@ export interface ExecutionOptions {
   onHITLResponse?: (request: HITLRequest, response: string) => void;
   /** Whether to skip HITL in simulation mode */
   skipHITLInSimulation?: boolean;
+  /**
+   * For live mode: use api-sequence-execute backend for full sequence execution.
+   * This supports both skill and action steps but doesn't provide step-by-step UI updates.
+   * Default: false (executes step-by-step from frontend, only works for skill_key steps)
+   */
+  useLiveBackend?: boolean;
 }
 
 export interface ExecutionState {
@@ -198,13 +204,16 @@ export function useSequenceExecution() {
 
   /**
    * Execute a single step
+   * Note: This is only used in simulation mode or for skill_key steps.
+   * For live mode with action steps, use useLiveBackend option which calls api-sequence-execute.
    */
   const executeStep = useCallback(
     async (
       step: SequenceStep,
       context: Record<string, unknown>,
       isSimulation: boolean,
-      mockData: Record<string, unknown>
+      mockData: Record<string, unknown>,
+      orgId: string
     ): Promise<StepResult> => {
       const startedAt = new Date().toISOString();
       const stepIndex = step.order - 1; // Convert 1-based order to 0-based index
@@ -212,37 +221,51 @@ export function useSequenceExecution() {
       try {
         // Build input by resolving variable mappings
         const input: Record<string, unknown> = {};
-        for (const [targetKey, sourceExpr] of Object.entries(step.input_mapping)) {
+        for (const [targetKey, sourceExpr] of Object.entries(step.input_mapping || {})) {
           input[targetKey] = resolveVariable(sourceExpr, context, mockData);
         }
 
         let output: Record<string, unknown>;
+        const stepKey =
+          (typeof step.skill_key === 'string' && step.skill_key.trim())
+            ? step.skill_key.trim()
+            : (typeof step.action === 'string' && step.action.trim())
+              ? step.action.trim()
+              : `step_${step.order}`;
 
         if (isSimulation) {
           // Simulation mode: generate mock output based on skill type
-          output = generateMockOutput(step.skill_key, input, mockData);
+          output = step.action
+            ? generateMockActionOutput(step.action, input, mockData)
+            : generateMockOutput(stepKey, input, mockData);
           // Simulate network delay
           await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 500));
         } else {
-          // Live mode: call the actual skill via edge function
-          const { data, error } = await supabase.functions.invoke('execute-skill', {
+          // Live mode is currently only supported for skill_key steps in this UI simulator.
+          // (Action steps are executed by the backend sequence runner via useLiveBackend option.)
+          if (!step.skill_key) {
+            throw new Error(`Live execution not supported for action step: ${String(step.action || 'unknown')}. Use useLiveBackend option.`);
+          }
+
+          console.log('[executeStep] Calling api-skill-execute:', { skill_key: step.skill_key, orgId });
+          const { data, error } = await supabase.functions.invoke('api-skill-execute', {
             body: {
               skill_key: step.skill_key,
-              input,
-              organization_id: activeOrg?.id,
-              user_id: user?.id,
+              context: input,
+              organization_id: orgId,
             },
           });
 
           if (error) throw error;
-          if (!data?.success) throw new Error(data?.error || 'Skill execution failed');
-          output = data.result || {};
+          // api-skill-execute returns SkillResult directly with status: 'success' | 'partial' | 'failed'
+          if (data?.status === 'failed') throw new Error(data?.error || 'Skill execution failed');
+          output = data?.data || {};
         }
 
         const completedAt = new Date().toISOString();
         return {
           step_index: stepIndex,
-          skill_key: step.skill_key,
+          skill_key: stepKey,
           status: 'completed',
           input,
           output,
@@ -253,9 +276,15 @@ export function useSequenceExecution() {
         };
       } catch (err) {
         const completedAt = new Date().toISOString();
+        const stepKey =
+          (typeof step.skill_key === 'string' && step.skill_key.trim())
+            ? step.skill_key.trim()
+            : (typeof step.action === 'string' && step.action.trim())
+              ? step.action.trim()
+              : `step_${step.order}`;
         return {
           step_index: stepIndex,
-          skill_key: step.skill_key,
+          skill_key: stepKey,
           status: 'failed',
           input: {},
           output: null,
@@ -266,7 +295,7 @@ export function useSequenceExecution() {
         };
       }
     },
-    [activeOrg?.id, user?.id]
+    []
   );
 
   /**
@@ -279,12 +308,10 @@ export function useSequenceExecution() {
       stepIndex: number,
       hitlConfig: HITLConfig,
       context: Record<string, unknown>,
-      mockData: Record<string, unknown>
+      mockData: Record<string, unknown>,
+      orgId: string,
+      userId: string
     ): Promise<HITLRequest> => {
-      if (!user?.id || !activeOrg?.id) {
-        throw new Error('User and organization required');
-      }
-
       // Interpolate prompt with context variables
       const interpolatedPrompt = hitlConfig.prompt.replace(
         /\$\{([^}]+)\}/g,
@@ -303,8 +330,8 @@ export function useSequenceExecution() {
           execution_id: executionId,
           sequence_key: sequenceKey,
           step_index: stepIndex,
-          organization_id: activeOrg.id,
-          requested_by_user_id: user.id,
+          organization_id: orgId,
+          requested_by_user_id: userId,
           assigned_to_user_id: hitlConfig.assigned_to_user_id || null,
           request_type: hitlConfig.request_type,
           prompt: interpolatedPrompt,
@@ -340,7 +367,7 @@ export function useSequenceExecution() {
           .invoke('send-hitl-slack-notification', {
             body: {
               hitl_request_id: request.id,
-              organization_id: activeOrg.id,
+              organization_id: orgId,
             },
           })
           .catch((err) => console.error('Failed to send Slack notification:', err));
@@ -348,7 +375,7 @@ export function useSequenceExecution() {
 
       return request as HITLRequest;
     },
-    [user?.id, activeOrg?.id]
+    []
   );
 
   /**
@@ -398,6 +425,18 @@ export function useSequenceExecution() {
         throw new Error('User and organization required');
       }
 
+      // Capture org ID at execution start to avoid closure issues
+      const orgId = activeOrg.id;
+      const userId = user.id;
+
+      console.log('[useSequenceExecution] Starting execution:', {
+        sequenceKey: sequence.skill_key,
+        isSimulation: options.isSimulation,
+        useLiveBackend: options.useLiveBackend,
+        orgId,
+        userId,
+      });
+
       // Reset and start
       abortControllerRef.current = new AbortController();
       const steps = sequence.frontmatter.sequence_steps;
@@ -408,7 +447,7 @@ export function useSequenceExecution() {
         status: 'running',
         stepResults: steps.map((step, idx) => ({
           step_index: idx,
-          skill_key: step.skill_key,
+          skill_key: step.skill_key || step.action || `step_${idx + 1}`,
           status: 'pending' as const,
           input: {},
           output: null,
@@ -418,7 +457,7 @@ export function useSequenceExecution() {
           duration_ms: null,
         })),
         currentStepIndex: 0,
-        context: { ...options.inputContext },
+        context: { trigger: { params: options.inputContext }, outputs: {} },
         error: null,
         isExecuting: true,
         isWaitingHITL: false,
@@ -426,42 +465,139 @@ export function useSequenceExecution() {
         hitlPosition: null,
       });
 
-      // Create execution record in database (skip for simulations to avoid requiring DB setup)
+      // Create execution record in database (for both simulations and live runs)
       let executionId: string;
 
-      if (options.isSimulation) {
-        // For simulations, generate a temporary ID without hitting the database
-        executionId = `sim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      } else {
-        const { data: execution, error: createError } = await supabase
-          .from('sequence_executions')
-          .insert({
-            sequence_key: sequence.skill_key,
-            organization_id: activeOrg.id,
-            user_id: user.id,
-            status: 'running',
-            input_context: options.inputContext,
-            is_simulation: false,
-            mock_data_used: null,
-          })
-          .select()
-          .single();
+      const { data: execution, error: createError } = await supabase
+        .from('sequence_executions')
+        .insert({
+          sequence_key: sequence.skill_key,
+          organization_id: orgId,
+          user_id: userId,
+          status: 'running',
+          input_context: options.inputContext,
+          is_simulation: options.isSimulation,
+          mock_data_used: options.isSimulation ? mockData : null,
+        })
+        .select()
+        .single();
 
-        if (createError) {
-          setState((prev) => ({
-            ...prev,
-            status: 'failed',
-            error: createError.message,
-            isExecuting: false,
-          }));
-          throw createError;
-        }
-        executionId = execution.id;
+      if (createError) {
+        setState((prev) => ({
+          ...prev,
+          status: 'failed',
+          error: createError.message,
+          isExecuting: false,
+        }));
+        throw createError;
       }
+      executionId = execution.id;
 
       setState((prev) => ({ ...prev, executionId }));
 
-      let context = { ...options.inputContext };
+      // For live mode with useLiveBackend, call api-sequence-execute and let backend handle everything
+      if (!options.isSimulation && options.useLiveBackend) {
+        console.log('[useSequenceExecution] Using live backend execution via api-sequence-execute');
+        try {
+          const { data, error } = await supabase.functions.invoke('api-sequence-execute', {
+            body: {
+              organization_id: orgId,
+              sequence_key: sequence.skill_key,
+              sequence_context: options.inputContext,
+              is_simulation: false,
+            },
+          });
+
+          if (error) throw error;
+
+          // Map backend response to our state format
+          const backendResults: StepResult[] = (data?.step_results || []).map((sr: any, idx: number) => {
+            // Ensure error is always a string or null
+            let errorStr: string | null = null;
+            if (sr.error) {
+              if (typeof sr.error === 'string') {
+                errorStr = sr.error;
+              } else if (sr.error.message) {
+                errorStr = sr.error.message;
+              } else {
+                try {
+                  errorStr = JSON.stringify(sr.error);
+                } catch {
+                  errorStr = String(sr.error);
+                }
+              }
+            }
+            return {
+              step_index: idx,
+              skill_key: sr.skill_key || sr.action || `step_${idx + 1}`,
+              status: sr.status === 'success' ? 'completed' : sr.status === 'failed' ? 'failed' : 'completed',
+              input: sr.input || {},
+              output: sr.output || sr.data || null,
+              error: errorStr,
+              started_at: sr.started_at || null,
+              completed_at: sr.completed_at || null,
+              duration_ms: sr.duration_ms || null,
+            };
+          });
+
+          // Normalize the top-level error to string
+          let topLevelError: string | null = null;
+          if (data?.error) {
+            if (typeof data.error === 'string') {
+              topLevelError = data.error;
+            } else if (data.error.message) {
+              topLevelError = data.error.message;
+            } else {
+              try {
+                topLevelError = JSON.stringify(data.error);
+              } catch {
+                topLevelError = String(data.error);
+              }
+            }
+          }
+
+          setState((prev) => ({
+            ...prev,
+            executionId: data?.execution_id || executionId,
+            status: data?.status === 'failed' ? 'failed' : 'completed',
+            stepResults: backendResults.length > 0 ? backendResults : prev.stepResults,
+            currentStepIndex: steps.length - 1,
+            context: data?.final_context || { trigger: { params: options.inputContext }, outputs: {} },
+            error: topLevelError,
+            isExecuting: false,
+          }));
+
+          // Notify callbacks for each step result
+          backendResults.forEach((result, idx) => {
+            if (result.status === 'completed') {
+              options.onStepComplete?.(idx, result);
+            } else if (result.status === 'failed') {
+              options.onStepFailed?.(idx, result.error || 'Unknown error');
+            }
+          });
+
+          queryClient.invalidateQueries({ queryKey: ['agent-sequences', 'executions'] });
+
+          return {
+            success: data?.status !== 'failed',
+            results: backendResults,
+            context: data?.final_context || {},
+            error: topLevelError,
+            waitingHITL: false,
+          };
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          setState((prev) => ({
+            ...prev,
+            status: 'failed',
+            error: errorMsg,
+            isExecuting: false,
+          }));
+          return { success: false, results: [], context: {}, error: errorMsg, waitingHITL: false };
+        }
+      }
+
+      let context: Record<string, unknown> = { trigger: { params: options.inputContext }, outputs: {} };
       const results: StepResult[] = [];
 
       // Helper to check if HITL should be triggered
@@ -495,12 +631,14 @@ export function useSequenceExecution() {
         // Check for HITL BEFORE step execution
         if (shouldTriggerHITL(step.hitl_before)) {
           const hitlRequest = await createHITLRequest(
-            execution.id,
+            executionId,
             sequence.skill_key,
             i,
             step.hitl_before!,
             context,
-            mockData
+            mockData,
+            orgId,
+            userId
           );
 
           // Update state to waiting for HITL
@@ -531,12 +669,16 @@ export function useSequenceExecution() {
         }
 
         // Execute the step
-        const result = await executeStep(step, context, options.isSimulation, mockData);
+        const result = await executeStep(step, context, options.isSimulation, mockData, orgId);
         results.push(result);
 
         if (result.status === 'completed' && result.output) {
-          // Add output to context under the output_key
-          context = { ...context, [step.output_key]: result.output };
+          const outputKey = step.output_key || step.skill_key || step.action || `step_${i + 1}`;
+          const outputs =
+            context.outputs && typeof context.outputs === 'object'
+              ? (context.outputs as Record<string, unknown>)
+              : {};
+          context = { ...context, outputs: { ...outputs, [outputKey]: result.output } };
         }
 
         // Update state with result
@@ -552,12 +694,14 @@ export function useSequenceExecution() {
           // Check for HITL AFTER step execution
           if (shouldTriggerHITL(step.hitl_after)) {
             const hitlRequest = await createHITLRequest(
-              execution.id,
+              executionId,
               sequence.skill_key,
               i,
               step.hitl_after!,
               context,
-              mockData
+              mockData,
+              orgId,
+              userId
             );
 
             // Update state to waiting for HITL
@@ -609,7 +753,7 @@ export function useSequenceExecution() {
                 failed_step_index: i,
                 completed_at: new Date().toISOString(),
               })
-              .eq('id', execution.id);
+              .eq('id', executionId);
 
             return { success: false, results, context, error: result.error };
           }
@@ -634,7 +778,7 @@ export function useSequenceExecution() {
           final_output: finalOutput,
           completed_at: new Date().toISOString(),
         })
-        .eq('id', execution.id);
+        .eq('id', executionId);
 
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['agent-sequences', 'executions'] });
@@ -686,16 +830,22 @@ export function useSequenceExecution() {
  * Resolve a variable expression like "${contact.name}" or "${step1.output}"
  */
 function resolveVariable(
-  expression: string,
+  expression: unknown,
   context: Record<string, unknown>,
   mockData: Record<string, unknown>
 ): unknown {
+  // If expression is not a string, return it as-is (could be object, number, etc.)
+  if (typeof expression !== 'string') {
+    return expression;
+  }
+
   // Check if it's a variable expression
   const match = expression.match(/^\$\{(.+)\}$/);
   if (!match) return expression;
 
-  const path = match[1];
-  const parts = path.split('.');
+  // Normalize array indices: foo[0].bar -> foo.0.bar
+  const path = match[1].replace(/\[(\d+)\]/g, '.$1');
+  const parts = path.split('.').filter(Boolean);
 
   // Try to resolve from context first
   let value: unknown = context;
@@ -717,6 +867,116 @@ function resolveVariable(
   }
 
   return value;
+}
+
+/**
+ * Generate mock output for execute_action steps (capability-driven actions).
+ * Shapes are aligned with the DB adapters used by the backend execute_action tool.
+ */
+function generateMockActionOutput(
+  action: string,
+  input: Record<string, unknown>,
+  mockData: Record<string, unknown>
+): Record<string, unknown> {
+  const contact = (mockData.contact || {}) as Record<string, unknown>;
+  const deal = (mockData.deal || {}) as Record<string, unknown>;
+  const meeting = (mockData.meeting || {}) as Record<string, unknown>;
+  const company = (mockData.company || {}) as Record<string, unknown>;
+
+  switch (action) {
+    case 'get_meetings': {
+      const meetingId = (input.meeting_id || meeting.id || 'mock-meeting-1') as string;
+      const attendeeEmail = (contact.email || 'jane.smith@acme.com') as string;
+      const attendeeName = (contact.name || 'Jane Smith') as string;
+      return {
+        meetings: [
+          {
+            id: meetingId,
+            title: meeting.title || 'Mock Meeting',
+            meeting_start: meeting.date || new Date().toISOString(),
+            meeting_end: meeting.date || new Date().toISOString(),
+            duration_minutes: meeting.duration_minutes || 60,
+            summary: meeting.notes || null,
+            transcript_text: null,
+            share_url: null,
+            company_id: company.id || null,
+            primary_contact_id: contact.id || null,
+            attendees: [{ name: attendeeName, email: attendeeEmail }],
+          },
+        ],
+        matchedOn: 'meeting_id',
+      };
+    }
+    case 'get_contact': {
+      return {
+        contacts: [
+          {
+            id: input.id || contact.id || 'mock-contact-1',
+            email: contact.email || 'jane.smith@acme.com',
+            full_name: contact.name || 'Jane Smith',
+            company: contact.company || company.name || 'Acme Corporation',
+          },
+        ],
+      };
+    }
+    case 'get_deal': {
+      return {
+        deals: [
+          {
+            id: input.id || deal.id || 'mock-deal-1',
+            name: deal.name || 'Mock Deal',
+            company: deal.company || company.name || 'Acme Corporation',
+            value: deal.value || 0,
+            status: deal.status || 'open',
+            stage_id: deal.stage_id || null,
+            expected_close_date: deal.expected_close_date || null,
+            probability: deal.probability || null,
+          },
+        ],
+      };
+    }
+    case 'get_company_status': {
+      return {
+        found: true,
+        company,
+        contacts: [{ id: contact.id, email: contact.email, full_name: contact.name }],
+        deals: [{ id: deal.id, name: deal.name, value: deal.value }],
+        overall_health: 'healthy',
+      };
+    }
+    case 'create_task': {
+      return {
+        task_id: (mockData.task as any)?.id || 'mock-task-1',
+        title: input.title || 'Mock Task',
+        status: 'pending',
+        priority: input.priority || 'medium',
+        due_date: input.due_date || null,
+        message: 'Task created (mock)',
+      };
+    }
+    case 'draft_email': {
+      return {
+        draft: {
+          to: input.to || contact.email || null,
+          subject: input.subject || null,
+          body: null,
+          context: input.context || null,
+          tone: input.tone || null,
+        },
+      };
+    }
+    case 'send_notification': {
+      return {
+        queued: true,
+        channel: input.channel || 'slack',
+        message: input.message || '',
+      };
+    }
+    default: {
+      // Fall back to generic skill mock output patterns
+      return generateMockOutput(action, input, mockData);
+    }
+  }
 }
 
 /**

@@ -9,6 +9,7 @@ import { ActionButtons } from '../ActionButtons';
 import { StatsFirstView } from './StatsFirstView';
 import type { TaskResponse as TaskResponseData, TaskItem } from '../types';
 import { supabase } from '@/lib/supabase/clientV2';
+import { cleanUnresolvedVariables } from '@/lib/utils/templateUtils';
 
 interface TaskResponseProps {
   data: TaskResponseData;
@@ -191,12 +192,12 @@ const TaskCard: React.FC<{
             <h5 className={`text-sm font-medium group-hover:text-blue-400 transition-colors ${
               isCompleted ? 'line-through text-gray-500' : 'text-gray-100'
             }`}>
-              {task.title}
+              {cleanUnresolvedVariables(task.title)}
             </h5>
           </div>
           {task.description && (
             <p className={`text-xs text-gray-400 mb-2 ${isExpanded ? '' : 'line-clamp-2'}`}>
-              {task.description}
+              {cleanUnresolvedVariables(task.description)}
             </p>
           )}
           

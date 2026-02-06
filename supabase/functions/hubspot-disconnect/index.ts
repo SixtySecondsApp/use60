@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { corsHeaders } from '../_shared/cors.ts'
 
 serve(async (req) => {
@@ -23,7 +23,11 @@ serve(async (req) => {
   // user-auth (admin-only)
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
   const userToken = req.headers.get('Authorization')?.replace('Bearer ', '') || ''
+
+  console.log('[hubspot-disconnect] Auth check - anonKey exists:', !!anonKey, 'userToken exists:', !!userToken)
+
   if (!anonKey || !userToken) {
+    console.log('[hubspot-disconnect] Missing anonKey or userToken')
     return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -35,9 +39,13 @@ serve(async (req) => {
   })
   const {
     data: { user },
+    error: userError,
   } = await userClient.auth.getUser()
+
+  console.log('[hubspot-disconnect] getUser result - user:', user?.id, 'error:', userError?.message)
+
   if (!user) {
-    return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+    return new Response(JSON.stringify({ success: false, error: userError?.message || 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

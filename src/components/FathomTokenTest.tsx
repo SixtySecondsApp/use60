@@ -19,8 +19,17 @@ export function FathomTokenTest() {
     setResult(null);
 
     try {
+      // Get the current session to include authorization header
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Not authenticated - please sign in again');
+      }
+
       const { data, error } = await supabase.functions.invoke('test-fathom-token', {
         body: { org_id: activeOrgId },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) {

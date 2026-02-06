@@ -61,8 +61,13 @@ interface Meeting {
   transcript_status?: ProcessingStatus;
   summary_status?: ProcessingStatus;
   // Voice meeting fields
-  source_type?: 'fathom' | 'voice';
+  source_type?: 'fathom' | 'voice' | '60_notetaker';
   voice_recording_id?: string | null;
+  // 60 Notetaker fields
+  bot_id?: string | null;
+  video_url?: string | null;
+  audio_url?: string | null;
+  recording_id?: string | null;
 }
 
 // Voice recording data for voice meetings
@@ -1012,7 +1017,7 @@ export function MeetingDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-w-0">
         {/* Left Column - Video & Content */}
         <div className="lg:col-span-8 space-y-3 sm:space-y-4 min-w-0">
-          {/* Media Player - Voice or Fathom */}
+          {/* Media Player - Voice, 60 Notetaker, or Fathom */}
           {meeting.source_type === 'voice' && meeting.voice_recording_id ? (
             /* Voice Meeting Player with Stacked Waveforms */
             <div className="glassmorphism-card overflow-hidden">
@@ -1024,6 +1029,19 @@ export function MeetingDetail() {
                 onTimeUpdate={setVoiceCurrentTime}
                 className="p-4"
               />
+            </div>
+          ) : meeting.source_type === '60_notetaker' && meeting.video_url ? (
+            /* 60 Notetaker Video Player */
+            <div className="glassmorphism-card overflow-hidden">
+              <video
+                controls
+                preload="metadata"
+                className="w-full aspect-video bg-black"
+                poster={meeting.thumbnail_url || undefined}
+              >
+                <source src={meeting.video_url} type="video/mp4" />
+                Your browser does not support the video element.
+              </video>
             </div>
           ) : (meeting.fathom_recording_id || meeting.share_url) ? (
             /* Fathom Video Player */

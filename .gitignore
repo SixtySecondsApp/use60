@@ -66,10 +66,9 @@ ehthumbs_vista.db
 coverage/
 junit.xml
 test-results/
-test-results-*/
 playwright-report/
-playwright-report-*/
 playwright/.cache/
+playwright-report-staging/
 
 # IDE and editor specific
 .vscode-test/
@@ -126,6 +125,9 @@ dev-utils/
 # Temporary debugging/migration files
 production_dump.sql
 test-results.json
+test-results*.xml
+test-results*.json
+verification-report-*.json
 migration_preview.txt
 
 # One-off SQL scripts (should be in migrations)
@@ -149,14 +151,11 @@ verify-*.ts
 watch-*.ts
 .cursor/plans/*.plan.md
 
-# MCP local secrets (auth tokens)
+# Local-only MCP / restore artifacts (never commit)
 .mcp.local.json
-
-# Zip archives (typically temporary)
-*.zip
-
-# Env backups
 envs/
+envs.zip
+docs/*.zip
 restore-*.mjs
 
 # Data migration scripts
@@ -164,4 +163,10 @@ production-data.sql
 *.sql.dump
 check-staging-*.mjs
 setup-staging-*.mjs
-nul
+
+# Quick-add model (design drafts)
+docs/quick-add-model/
+src/components/quick-add/CLAUDE.md
+
+# Design drafts
+dynamic-tables/

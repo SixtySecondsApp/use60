@@ -9713,7 +9713,7 @@ export type Database = {
           duration_minutes: number | null
           fathom_created_at: string | null
           fathom_embed_url: string | null
-          fathom_recording_id: string
+          fathom_recording_id: string | null
           fathom_user_id: string | null
           id: string
           is_historical_import: boolean | null
@@ -9732,6 +9732,16 @@ export type Database = {
           sentiment_score: number | null
           share_url: string | null
           source_type: string
+          bot_id: string | null
+          meeting_platform: string | null
+          meeting_url: string | null
+          recording_id: string | null
+          recording_s3_key: string | null
+          recording_s3_url: string | null
+          transcript_json: Json | null
+          processing_status: string | null
+          error_message: string | null
+          speakers: Json | null
           start_time: string | null
           summary: string | null
           summary_oneliner: string | null
@@ -9747,6 +9757,7 @@ export type Database = {
             | Database["public"]["Enums"]["meeting_processing_status"]
             | null
           thumbnail_url: string | null
+          thumbnail_s3_key: string | null
           title: string | null
           transcript_doc_url: string | null
           transcript_fetch_attempts: number | null
@@ -9775,7 +9786,7 @@ export type Database = {
           duration_minutes?: number | null
           fathom_created_at?: string | null
           fathom_embed_url?: string | null
-          fathom_recording_id: string
+          fathom_recording_id?: string | null
           fathom_user_id?: string | null
           id?: string
           is_historical_import?: boolean | null
@@ -9794,6 +9805,16 @@ export type Database = {
           sentiment_score?: number | null
           share_url?: string | null
           source_type?: string
+          bot_id?: string | null
+          meeting_platform?: string | null
+          meeting_url?: string | null
+          recording_id?: string | null
+          recording_s3_key?: string | null
+          recording_s3_url?: string | null
+          transcript_json?: Json | null
+          processing_status?: string | null
+          error_message?: string | null
+          speakers?: Json | null
           start_time?: string | null
           summary?: string | null
           summary_oneliner?: string | null
@@ -9809,6 +9830,7 @@ export type Database = {
             | Database["public"]["Enums"]["meeting_processing_status"]
             | null
           thumbnail_url?: string | null
+          thumbnail_s3_key?: string | null
           title?: string | null
           transcript_doc_url?: string | null
           transcript_fetch_attempts?: number | null
@@ -9837,7 +9859,7 @@ export type Database = {
           duration_minutes?: number | null
           fathom_created_at?: string | null
           fathom_embed_url?: string | null
-          fathom_recording_id?: string
+          fathom_recording_id?: string | null
           fathom_user_id?: string | null
           id?: string
           is_historical_import?: boolean | null
@@ -9856,6 +9878,16 @@ export type Database = {
           sentiment_score?: number | null
           share_url?: string | null
           source_type?: string
+          bot_id?: string | null
+          meeting_platform?: string | null
+          meeting_url?: string | null
+          recording_id?: string | null
+          recording_s3_key?: string | null
+          recording_s3_url?: string | null
+          transcript_json?: Json | null
+          processing_status?: string | null
+          error_message?: string | null
+          speakers?: Json | null
           start_time?: string | null
           summary?: string | null
           summary_oneliner?: string | null
@@ -9871,6 +9903,7 @@ export type Database = {
             | Database["public"]["Enums"]["meeting_processing_status"]
             | null
           thumbnail_url?: string | null
+          thumbnail_s3_key?: string | null
           title?: string | null
           transcript_doc_url?: string | null
           transcript_fetch_attempts?: number | null
@@ -13267,6 +13300,8 @@ export type Database = {
           action_items: Json | null
           bot_id: string | null
           calendar_event_id: string | null
+          coach_rating: number | null
+          coach_summary: string | null
           created_at: string | null
           crm_activity_id: string | null
           crm_contacts: Json | null
@@ -13281,6 +13316,7 @@ export type Database = {
           hitl_type: string | null
           hubspot_engagement_id: string | null
           id: string
+          meeting_id: string | null
           meeting_duration_seconds: number | null
           meeting_end_time: string | null
           meeting_platform: string
@@ -13291,10 +13327,16 @@ export type Database = {
           org_id: string
           recording_s3_key: string | null
           recording_s3_url: string | null
+          sentiment_score: number | null
           speaker_identification_method: string | null
           speakers: Json | null
           status: string | null
           summary: string | null
+          talk_time_customer_pct: number | null
+          talk_time_judgement: string | null
+          talk_time_rep_pct: number | null
+          thumbnail_s3_key: string | null
+          thumbnail_url: string | null
           transcript_json: Json | null
           transcript_s3_key: string | null
           transcript_text: string | null
@@ -13305,6 +13347,8 @@ export type Database = {
           action_items?: Json | null
           bot_id?: string | null
           calendar_event_id?: string | null
+          coach_rating?: number | null
+          coach_summary?: string | null
           created_at?: string | null
           crm_activity_id?: string | null
           crm_contacts?: Json | null
@@ -13319,6 +13363,7 @@ export type Database = {
           hitl_type?: string | null
           hubspot_engagement_id?: string | null
           id?: string
+          meeting_id?: string | null
           meeting_duration_seconds?: number | null
           meeting_end_time?: string | null
           meeting_platform: string
@@ -13329,10 +13374,16 @@ export type Database = {
           org_id: string
           recording_s3_key?: string | null
           recording_s3_url?: string | null
+          sentiment_score?: number | null
           speaker_identification_method?: string | null
           speakers?: Json | null
           status?: string | null
           summary?: string | null
+          talk_time_customer_pct?: number | null
+          talk_time_judgement?: string | null
+          talk_time_rep_pct?: number | null
+          thumbnail_s3_key?: string | null
+          thumbnail_url?: string | null
           transcript_json?: Json | null
           transcript_s3_key?: string | null
           transcript_text?: string | null
@@ -13343,6 +13394,8 @@ export type Database = {
           action_items?: Json | null
           bot_id?: string | null
           calendar_event_id?: string | null
+          coach_rating?: number | null
+          coach_summary?: string | null
           created_at?: string | null
           crm_activity_id?: string | null
           crm_contacts?: Json | null
@@ -13357,6 +13410,7 @@ export type Database = {
           hitl_type?: string | null
           hubspot_engagement_id?: string | null
           id?: string
+          meeting_id?: string | null
           meeting_duration_seconds?: number | null
           meeting_end_time?: string | null
           meeting_platform?: string
@@ -13367,10 +13421,16 @@ export type Database = {
           org_id?: string
           recording_s3_key?: string | null
           recording_s3_url?: string | null
+          sentiment_score?: number | null
           speaker_identification_method?: string | null
           speakers?: Json | null
           status?: string | null
           summary?: string | null
+          talk_time_customer_pct?: number | null
+          talk_time_judgement?: string | null
+          talk_time_rep_pct?: number | null
+          thumbnail_s3_key?: string | null
+          thumbnail_url?: string | null
           transcript_json?: Json | null
           transcript_s3_key?: string | null
           transcript_text?: string | null

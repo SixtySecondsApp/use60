@@ -59,18 +59,19 @@ export default async function handler(req: any, res: any) {
       throw new Error(`Edge function error: ${response.status} - ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as Record<string, unknown>;
 
     // Log summary for monitoring
-    if (data.summary) {
+    const summary = data.summary as Record<string, unknown> | undefined;
+    if (summary) {
       console.log(
-        `[google-token-refresh] Summary: ${data.summary.refreshed} refreshed, ${data.summary.skipped} skipped, ${data.summary.failed} failed, ${data.summary.needs_reconnect} need reconnect`
+        `[google-token-refresh] Summary: ${summary.refreshed} refreshed, ${summary.skipped} skipped, ${summary.failed} failed, ${summary.needs_reconnect} need reconnect`
       );
     }
 
     return res.status(200).json({
       success: true,
-      ...data,
+      ...(typeof data === 'object' && data !== null ? data : {}),
       triggeredBy: 'vercel-cron',
       timestamp: new Date().toISOString(),
     });

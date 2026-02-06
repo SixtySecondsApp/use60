@@ -31,6 +31,7 @@ import {
   HeartPulse,
   Bot,
   Inbox,
+  Table2,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -233,6 +234,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 2,
     badge: 'New',
   },
+  {
+    path: '/ops',
+    access: 'internal',
+    label: 'Ops',
+    icon: Table2,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3,
+    displayGroup: 2,
+    badge: 'New',
+  },
   // Calendar and Email routes removed from navigation - users should use Google Calendar/Gmail directly
   // Routes still exist but redirect to Google services in App.tsx
   {
@@ -264,6 +276,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     navSection: 'tools',
     order: 2,
     displayGroup: 4,
+  },
+  {
+    path: '/action-centre',
+    access: 'internal',
+    label: 'Action Centre',
+    icon: Inbox,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3,
+    displayGroup: 4,
+    badge: 'New',
   },
   {
     path: '/email-actions',

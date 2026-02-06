@@ -166,7 +166,7 @@
     },
     {
       "path": "/api/cron/google-token-refresh",
-      "schedule": "30 */4 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/google-context-sync",
@@ -207,6 +207,10 @@
     {
       "path": "/api/cron/hubspot-process-queue",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/hubspot-token-refresh",
+      "schedule": "0 */6 * * *"
     },
     {
       "path": "/api/cron/waitlist-daily-digest",

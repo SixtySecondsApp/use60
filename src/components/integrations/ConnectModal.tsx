@@ -81,16 +81,14 @@ export function ConnectModal({
               />
             </div>
             <ArrowRightLeft className="w-5 h-5 text-gray-400" />
-            {/* Integration Logo */}
+            {/* Integration Logo - S3 only, no fallback */}
             <div className="w-12 h-12 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-center overflow-hidden">
-              {logoUrl ? (
+              {logoUrl && (
                 <img
                   src={logoUrl}
                   alt={`${integrationName} logo`}
                   className="w-8 h-8 object-contain"
                 />
-              ) : (
-                fallbackIcon
               )}
             </div>
           </div>

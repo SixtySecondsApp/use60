@@ -75,10 +75,10 @@ export function FathomSettings() {
     }
   };
 
-  const handleQuickSync = async () => {
+  const handleSyncNewMeetings = async () => {
     setSyncing(true);
     try {
-      await triggerSync({ sync_type: 'manual' });
+      await triggerSync({ sync_type: 'incremental' });
     } catch (err) {
     } finally {
       setSyncing(false);
@@ -601,7 +601,7 @@ export function FathomSettings() {
                 </Button>
 
                 <Button
-                  onClick={handleQuickSync}
+                  onClick={handleSyncNewMeetings}
                   disabled={isSyncing || syncing}
                   className="gap-2"
                   size="sm"
@@ -611,7 +611,7 @@ export function FathomSettings() {
                   ) : (
                     <RefreshCw className="h-4 w-4" />
                   )}
-                  Quick Sync
+                  Sync New Meetings
                 </Button>
 
                 <Button

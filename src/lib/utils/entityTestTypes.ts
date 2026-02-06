@@ -11,7 +11,7 @@
 /**
  * Entity types available for skill testing
  */
-export type EntityType = 'contact' | 'deal' | 'email' | 'activity';
+export type EntityType = 'contact' | 'deal' | 'email' | 'activity' | 'meeting';
 
 /**
  * Quality tier for entity categorization
@@ -71,6 +71,12 @@ export const ENTITY_TYPE_CONFIG: Record<EntityType, EntityTypeConfig> = {
     description: 'Test with activity context',
     pluralLabel: 'Activities',
   },
+  meeting: {
+    label: 'Meeting',
+    icon: 'Video',
+    description: 'Test with meeting transcript',
+    pluralLabel: 'Meetings',
+  },
 };
 
 /**
@@ -104,6 +110,13 @@ export const MODE_DESCRIPTIONS: Record<EntityType, Record<EntityTestMode, string
     average: 'Moderate activities, some data',
     bad: 'Cancelled/no-show or minimal data',
     custom: 'Search and select any activity',
+  },
+  meeting: {
+    none: 'Test without meeting context',
+    good: 'Meetings with full transcript and AI summary',
+    average: 'Meetings with transcript only',
+    bad: 'Meetings with minimal or no transcript',
+    custom: 'Search and select any meeting',
   },
 };
 

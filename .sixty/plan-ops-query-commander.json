@@ -1,0 +1,561 @@
+{
+  "feature": {
+    "id": "ops-query-commander",
+    "name": "Ops Query Commander — Clay-Killer Natural Language Command Center",
+    "description": "Expand the Ops query bar from 3 tools (filter/delete/update) to 12 tools, turning it into a full natural language command center for sales ops. Covers data cleanup, enrichment, scoring, segmentation, outreach prep, bulk actions, analytics, and view management — all from plain English.",
+    "status": "pending",
+    "createdAt": "2026-02-05T00:00:00Z",
+    "previousWork": "plan-ops-ai-query.json (complete) — established the 3-tool foundation"
+  },
+
+  "stories": [
+    {
+      "id": "QC-001",
+      "title": "Expand edge function to multi-action architecture with 12 tools",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+
+      "description": "Refactor ops-table-ai-query edge function from 3 tools to 12 tools. Upgrade model from Haiku to Sonnet for complex reasoning. Add new tool definitions for: transform_column, create_column, create_view, sort_rows, summarize_table, deduplicate_rows, conditional_update, apply_formatting, export_rows, cross_column_validate, batch_create_views, create_tasks. Each tool returns a structured response the frontend can interpret and execute.",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/ops-table-ai-query/index.ts"],
+        "schema": ["dynamic_tables", "dynamic_table_columns", "dynamic_table_cells"]
+      },
+      "blocks": ["QC-002", "QC-003", "QC-004", "QC-005", "QC-006", "QC-007"],
+
+      "acceptance": [
+        "Edge function defines 12 tool schemas with proper input_schema for each",
+        "System prompt includes column metadata, row count, and sample values for context",
+        "Uses claude-sonnet-4-5-20250929 for complex multi-tool reasoning",
+        "Each tool returns typed structured response matching a discriminated union",
+        "Backwards-compatible: existing filter/delete/update still work identically"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "Split tool definitions into separate const blocks for maintainability. Add row_count and sample_values (first 3 rows) to system prompt so Claude can make smarter decisions about grouping and deduplication. Use tool_choice: { type: 'any' } to force tool selection."
+    },
+
+    {
+      "id": "QC-002",
+      "title": "Implement transform_column backend execution",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Create a new edge function ops-table-transform-column that applies an AI transformation to every cell in a column. Takes a transformation prompt (e.g. 'Format as E.164 phone number', 'Trim whitespace', 'Extract domain from email') and processes cells in batches using Claude Haiku for speed.",
+
+      "dependencies": {
+        "stories": ["QC-001"],
+        "files": ["supabase/functions/_shared/costTracking.ts"],
+        "schema": ["dynamic_table_cells"]
+      },
+      "blocks": ["QC-008"],
+
+      "acceptance": [
+        "New edge function: ops-table-transform-column",
+        "Accepts { tableId, columnKey, transformPrompt, conditions? }",
+        "Processes cells in batches of 50 using Claude Haiku for each batch",
+        "Supports optional filter conditions to transform only matching rows",
+        "Returns { transformedCount, failedCount, sampleBefore, sampleAfter }",
+        "Logs cost to ai_cost_events with event type 'ops_transform'"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "supabase/functions/ops-table-transform-column/index.ts"
+      ],
+
+      "technicalNotes": "Use batch processing with Promise.allSettled for resilience. Each batch sends column values to Haiku with the transformation prompt. Write transformed values back via upsert with onConflict: 'row_id,column_id'. Include before/after sample in response for the preview modal."
+    },
+
+    {
+      "id": "QC-003",
+      "title": "Implement summarize_table backend execution",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add a summarize_table handler to the AI query edge function that computes aggregation stats entirely server-side (no AI needed for computation). Supports group-by with counts, percentages, and basic stats (min/max/avg for numeric columns).",
+
+      "dependencies": {
+        "stories": ["QC-001"],
+        "files": ["supabase/functions/ops-table-ai-query/index.ts"],
+        "schema": ["dynamic_table_cells", "dynamic_table_rows"]
+      },
+      "blocks": ["QC-008"],
+
+      "acceptance": [
+        "When Claude selects summarize_table tool, query parses groupByColumn and optional metrics",
+        "Server-side aggregation: counts per unique value, percentages, empty-vs-filled ratio",
+        "For numeric columns: min, max, average, sum",
+        "Returns { type: 'summary', groups: [{value, count, percentage}], stats: {...}, totalRows }",
+        "Formatted summary string included for chat-style display"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts",
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Aggregation runs entirely in the edge function by fetching all cells for the group-by column, then computing counts in-memory. No AI call needed for the computation — only for parsing the user's intent into the tool call."
+    },
+
+    {
+      "id": "QC-004",
+      "title": "Implement create_column and create_view backend handlers",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add handlers so the AI query can create new enrichment columns (with auto-run) and save current filters as named views. create_column returns the column definition; create_view saves filter/sort config as a named view.",
+
+      "dependencies": {
+        "stories": ["QC-001"],
+        "files": [
+          "supabase/functions/ops-table-ai-query/index.ts",
+          "src/lib/services/opsTableService.ts"
+        ],
+        "schema": ["dynamic_table_columns", "dynamic_table_views"]
+      },
+      "blocks": ["QC-008"],
+
+      "acceptance": [
+        "create_column tool returns { type: 'create_column', columnDef: {key, label, columnType, enrichmentPrompt?, autoRun} }",
+        "create_view tool returns { type: 'create_view', viewName, filterConditions, sortConfig }",
+        "Frontend executes using existing addColumnMutation and createViewMutation",
+        "AI auto-generates a sensible column key from the label (snake_case, deduped)"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "These tools only return instructions — the frontend executes them using existing mutations. This keeps the edge function stateless and reuses existing column/view creation logic."
+    },
+
+    {
+      "id": "QC-005",
+      "title": "Implement deduplicate_rows and conditional_update handlers",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add deduplicate_rows tool that groups by a column, picks a winner per group (by most recent, most filled, etc.), and returns row IDs to delete. Add conditional_update tool that supports multiple condition→value mappings (e.g. 'East Coast → Phil, West Coast → Drue').",
+
+      "dependencies": {
+        "stories": ["QC-001"],
+        "files": ["supabase/functions/ops-table-ai-query/index.ts"],
+        "schema": ["dynamic_table_cells", "dynamic_table_rows"]
+      },
+      "blocks": ["QC-008"],
+
+      "acceptance": [
+        "deduplicate_rows returns { type: 'deduplicate', groupByColumn, keepStrategy, duplicateGroups: [{value, keepRowId, deleteRowIds}], totalDuplicates }",
+        "keepStrategy supports: 'most_recent', 'most_filled', 'first', 'last'",
+        "conditional_update returns { type: 'conditional_update', targetColumn, rules: [{conditions, newValue}] }",
+        "Both show preview modal before execution",
+        "Deduplication preview shows groups with which row will be kept"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts",
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "For deduplication: fetch all cells for the group-by column, group by value, then for each group with >1 row, select the keeper using the strategy. Return the full group info so the preview modal can show what will be merged/deleted."
+    },
+
+    {
+      "id": "QC-006",
+      "title": "Implement sort_rows, apply_formatting, and batch_create_views handlers",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add sort_rows tool for multi-column sorting, apply_formatting for conditional highlighting (row colors based on conditions), and batch_create_views to split a table into views by unique values in a column.",
+
+      "dependencies": {
+        "stories": ["QC-001"],
+        "files": ["supabase/functions/ops-table-ai-query/index.ts"],
+        "schema": ["dynamic_table_views"]
+      },
+      "blocks": ["QC-008"],
+
+      "acceptance": [
+        "sort_rows returns { type: 'sort', sortConfig: [{key, dir}] } supporting multi-column sort",
+        "apply_formatting returns { type: 'formatting', rules: [{conditions, style: {bgColor, textColor}}] }",
+        "batch_create_views returns { type: 'batch_views', splitByColumn, viewNames: string[] }",
+        "All three are non-destructive — applied directly without preview modal"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "sort_rows is instruction-only (frontend applies). apply_formatting maps to existing formatting_rules structure in views. batch_create_views fetches unique values for the column, then returns one view config per unique value."
+    },
+
+    {
+      "id": "QC-007",
+      "title": "Implement export_rows and cross_column_validate handlers",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add export_rows tool to generate CSV downloads of filtered data. Add cross_column_validate tool that uses AI to compare two columns and flag mismatches (e.g. email domain vs company website).",
+
+      "dependencies": {
+        "stories": ["QC-001"],
+        "files": ["supabase/functions/ops-table-ai-query/index.ts"],
+        "schema": ["dynamic_table_cells"]
+      },
+      "blocks": ["QC-008"],
+
+      "acceptance": [
+        "export_rows returns { type: 'export', conditions, columns: string[], format: 'csv' }",
+        "Frontend generates CSV blob from matching rows and triggers browser download",
+        "cross_column_validate returns { type: 'validate', sourceColumn, targetColumn, validationPrompt, flagColumn? }",
+        "Validation creates a new boolean/status column with AI-assessed match results"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "export_rows is frontend-executed: filter rows, build CSV string, create blob URL, trigger download. cross_column_validate works like enrichment: creates a new column, then processes each row with Claude Haiku to compare the two column values."
+    },
+
+    {
+      "id": "QC-008",
+      "title": "Expand frontend to handle all 12 action types",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+
+      "description": "Update OpsDetailPage handleQuerySubmit to dispatch on the new action types. Each type has its own execution path: some show preview modals (destructive), some apply directly (non-destructive), some show inline results (summary), some trigger background jobs (transform, validate).",
+
+      "dependencies": {
+        "stories": ["QC-002", "QC-003", "QC-004", "QC-005", "QC-006", "QC-007"],
+        "files": ["src/pages/OpsDetailPage.tsx", "src/lib/services/opsTableService.ts"],
+        "schema": []
+      },
+      "blocks": ["QC-009", "QC-010"],
+
+      "acceptance": [
+        "handleQuerySubmit dispatches on response.type to the correct handler",
+        "filter/delete/update: unchanged (existing behavior)",
+        "sort: applies multi-column sort state",
+        "create_column: opens AddColumnModal pre-filled with AI suggestion, user confirms",
+        "create_view: calls createViewMutation with AI-generated config",
+        "summary: displays inline summary card below query bar",
+        "transform: shows preview modal with before/after samples, then calls edge function",
+        "deduplicate: shows dedup preview modal with groups, then executes",
+        "conditional_update: shows preview modal with rule breakdown, then executes",
+        "formatting: applies formatting rules to current view",
+        "batch_views: creates all views, shows count toast",
+        "export: generates and downloads CSV",
+        "validate: creates validation column and starts background AI processing"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Use a switch/case dispatcher in handleQuerySubmit. For each action type, either: (a) apply directly + toast, (b) open preview modal + wait for confirm, or (c) show inline result. Keep the existing AiQueryPreviewModal for delete/update and create new specialized modals only where needed."
+    },
+
+    {
+      "id": "QC-009",
+      "title": "Build inline summary card component for analytics queries",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Create AiQuerySummaryCard that renders below the query bar when the user asks analytics questions. Shows group-by breakdowns, percentages, and key stats in a clean card format with optional mini chart.",
+
+      "dependencies": {
+        "stories": ["QC-008"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "New component: AiQuerySummaryCard with props for summary data",
+        "Renders as a dismissible card below the query bar",
+        "Shows: title, total rows, group breakdown table, percentage bars",
+        "For numeric stats: shows min/max/avg in a clean stat row",
+        "Dismiss button removes the card",
+        "Matches existing dark theme styling"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/components/ops/AiQuerySummaryCard.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Use horizontal bar chart for percentages (CSS-only, no chart library needed). Keep it simple — this is the 'holy shit' moment where typing 'how many leads per stage?' gives instant visual analytics inline."
+    },
+
+    {
+      "id": "QC-010",
+      "title": "Build transform preview modal with before/after samples",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Create AiTransformPreviewModal that shows before/after samples of the transformation before executing on all rows. Shows 5 sample rows with original value → transformed value side by side.",
+
+      "dependencies": {
+        "stories": ["QC-008"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "New component: AiTransformPreviewModal",
+        "Shows transformation description, target column, affected row count",
+        "Before/After table with 5 sample transformations",
+        "Confirm button triggers batch transformation edge function",
+        "Progress indicator during execution (X of Y rows transformed)",
+        "Success summary showing total transformed with sample results"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/components/ops/AiTransformPreviewModal.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Preview is generated by the edge function sending first 5 cells through the transformation. The full batch runs after user confirmation. Use SSE or polling for progress updates during batch execution."
+    },
+
+    {
+      "id": "QC-011",
+      "title": "Build deduplication preview modal with group visualization",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Create AiDeduplicatePreviewModal that shows duplicate groups with the row that will be kept highlighted and the rows to be deleted marked. User can review and confirm.",
+
+      "dependencies": {
+        "stories": ["QC-008"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "New component: AiDeduplicatePreviewModal",
+        "Shows: total duplicates found, number of groups, keep strategy",
+        "Expandable group list showing each duplicate set",
+        "Kept row highlighted in green, deleted rows in red",
+        "Confirm button executes deletion of duplicate rows",
+        "Summary toast: 'Removed X duplicates across Y groups'"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/components/ops/AiDeduplicatePreviewModal.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    },
+
+    {
+      "id": "QC-012",
+      "title": "Add service layer methods for new operations",
+      "type": "service",
+      "status": "pending",
+      "priority": 3,
+
+      "description": "Add methods to opsTableService for the new operations: executeDeduplicate, executeConditionalUpdate, generateCSVExport, getColumnUniqueValues (for batch views), and getColumnStats (for summaries).",
+
+      "dependencies": {
+        "stories": ["QC-001"],
+        "files": ["src/lib/services/opsTableService.ts"],
+        "schema": []
+      },
+      "blocks": ["QC-008"],
+
+      "acceptance": [
+        "executeDeduplicate(tableId, groupByColumn, keepStrategy) → { deletedCount }",
+        "executeConditionalUpdate(tableId, targetColumn, rules[]) → { updatedCount }",
+        "generateCSVExport(rows, columns, filename) → triggers browser download",
+        "getColumnUniqueValues(tableId, columnKey) → string[]",
+        "getColumnStats(tableId, columnKey) → { count, empty, filled, uniqueValues, min?, max?, avg? }"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "executeDeduplicate reuses existing deleteRows. executeConditionalUpdate iterates rules and calls upsertCell for each match. generateCSVExport builds CSV string client-side and creates a Blob download. Keep methods small and focused."
+    },
+
+    {
+      "id": "QC-013",
+      "title": "Upgrade query bar UX with suggestions and history",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+
+      "description": "Enhance the query bar with: (1) example suggestions dropdown showing contextual query examples based on current table columns, (2) query history (last 10 queries stored in localStorage), (3) keyboard shortcut (Cmd+K) to focus the query bar.",
+
+      "dependencies": {
+        "stories": ["QC-008"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Clicking into empty query bar shows dropdown with 6 contextual suggestions",
+        "Suggestions reference actual column names from current table",
+        "Categories: Cleanup, Segment, Analyze, Enrich (1-2 per category)",
+        "Query history dropdown (up arrow or clicking history icon) shows last 10",
+        "Cmd+K focuses the query bar from anywhere on the page",
+        "Pressing Escape clears suggestions and blurs the bar"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/components/ops/AiQueryBar.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Extract the query bar into its own component (AiQueryBar) for cleanliness. Suggestions are generated statically from column names — no AI call needed. History stored in localStorage keyed by tableId."
+    },
+
+    {
+      "id": "QC-014",
+      "title": "Deploy all new edge functions to staging and test end-to-end",
+      "type": "test",
+      "status": "pending",
+      "priority": 6,
+
+      "description": "Deploy the updated ops-table-ai-query and new ops-table-transform-column edge functions to staging. Test all 12 tool types end-to-end with real table data.",
+
+      "dependencies": {
+        "stories": ["QC-008", "QC-009", "QC-010", "QC-011", "QC-012", "QC-013"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "ops-table-ai-query deployed to staging with --no-verify-jwt",
+        "ops-table-transform-column deployed to staging with --no-verify-jwt",
+        "Filter queries work: 'Show only verified contacts'",
+        "Delete queries work with preview: 'Delete rows with blank emails'",
+        "Update queries work with preview: 'Set status to archived where email is empty'",
+        "Transform works: 'Trim whitespace from all name fields'",
+        "Summary works: 'How many leads per lifecycle stage?'",
+        "Create column works: 'Add a column that scores leads by seniority'",
+        "Create view works: 'Create a view of all Marketing titles'",
+        "Sort works: 'Sort by status then by last activity'",
+        "Deduplication works: 'Remove duplicate emails, keep most recent'",
+        "Export works: 'Export all Director+ titles to CSV'"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [],
+
+      "technicalNotes": "Deploy command: npx supabase functions deploy <name> --project-ref caerqjzvuerejfrdtygb --no-verify-jwt. Pin supabase-js to @2.43.4 in all new edge functions."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 0,
+    "estimatedMinutes": 330,
+    "parallelGroups": [
+      ["QC-001"],
+      ["QC-002", "QC-003", "QC-004", "QC-005", "QC-006", "QC-007"],
+      ["QC-008", "QC-012"],
+      ["QC-009", "QC-010", "QC-011"],
+      ["QC-013"],
+      ["QC-014"]
+    ]
+  },
+
+  "technicalContext": {
+    "currentState": {
+      "edgeFunction": "ops-table-ai-query with 3 tools (filter, delete, update)",
+      "model": "claude-haiku-4-5-20250121",
+      "serviceMethods": "previewAiQuery, executeAiQuery, getFilteredRowIds",
+      "frontend": "handleQuerySubmit → parse → preview modal → confirm → execute"
+    },
+    "targetState": {
+      "edgeFunction": "ops-table-ai-query with 12 tools + ops-table-transform-column",
+      "model": "claude-sonnet-4-5-20250929 for parsing, claude-haiku-4-5-20250121 for batch transforms",
+      "newComponents": [
+        "AiQuerySummaryCard",
+        "AiTransformPreviewModal",
+        "AiDeduplicatePreviewModal",
+        "AiQueryBar (extracted)"
+      ],
+      "newServiceMethods": [
+        "executeDeduplicate",
+        "executeConditionalUpdate",
+        "generateCSVExport",
+        "getColumnUniqueValues",
+        "getColumnStats"
+      ]
+    },
+    "envVariables": [
+      "ANTHROPIC_API_KEY (existing, required for both Sonnet and Haiku)"
+    ],
+    "stagingProject": "caerqjzvuerejfrdtygb",
+    "deployFlags": "--no-verify-jwt"
+  },
+
+  "impactMatrix": {
+    "tier1_highImpact_easy": [
+      "transform_column — 'Fix all phone numbers to E.164' (Clay's core magic)",
+      "create_column — 'Add a column that scores leads by seniority' (stops being spreadsheet, starts being Clay)",
+      "summarize_table — 'How many leads per stage?' (instant inline analytics)"
+    ],
+    "tier2_highImpact_complex": [
+      "deduplicate_rows — 'Remove duplicate emails, keep most recent'",
+      "conditional_update — 'Assign East Coast to Phil, West Coast to Drue'",
+      "apply_formatting — 'Highlight VP rows in gold'",
+      "export_rows — 'Export Director+ titles to CSV'"
+    ],
+    "tier3_differentiators": [
+      "cross_column_validate — 'Flag where email domain ≠ company website'",
+      "batch_create_views — 'Split table into views by lifecycle stage'",
+      "create_tasks — 'Draft follow-up for every stuck lead' (future: needs CRM task creation)"
+    ]
+  }
+}

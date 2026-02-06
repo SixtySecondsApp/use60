@@ -1,0 +1,438 @@
+/**
+ * Copilot Routing Service
+ *
+ * Handles skill selection for the copilot with sequence-first routing:
+ * 1. Check sequences first (pre-built, tested orchestrations)
+ * 2. If sequence matches intent with confidence > 0.7, use it
+ * 3. If no sequence match, fall back to individual skills
+ *
+ * Sequences are skills with category: 'agent-sequence' that can orchestrate
+ * multiple other skills via skill links.
+ */
+
+import { supabase } from '../supabase/clientV2';
+import type { SkillFrontmatterV2, SkillTrigger } from '../types/skills';
+import { findSemanticMatches } from './embeddingService';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export interface SkillMatch {
+  skillId: string;
+  skillKey: string;
+  name: string;
+  category: string;
+  confidence: number;
+  matchedTrigger?: string;
+  isSequence: boolean;
+  linkedSkillCount?: number;
+}
+
+export interface RoutingDecision {
+  selectedSkill: SkillMatch | null;
+  candidates: SkillMatch[];
+  isSequenceMatch: boolean;
+  reason: string;
+}
+
+interface SkillRow {
+  skill_key: string;
+  category: string;
+  frontmatter: SkillFrontmatterV2;
+  is_enabled: boolean;
+}
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const SEQUENCE_CONFIDENCE_THRESHOLD = 0.7;
+const INDIVIDUAL_CONFIDENCE_THRESHOLD = 0.5;
+const SEMANTIC_SIMILARITY_THRESHOLD = 0.6;
+const MAX_CANDIDATES = 5;
+
+// =============================================================================
+// Matching Functions
+// =============================================================================
+
+/**
+ * Normalize triggers to V2 format
+ * Handles both V1 (string[]) and V2 (SkillTrigger[]) formats
+ */
+function normalizeTriggers(
+  triggers: (string | SkillTrigger)[] | undefined
+): SkillTrigger[] {
+  if (!triggers) return [];
+
+  return triggers.map((trigger) => {
+    if (typeof trigger === 'string') {
+      // V1 format: simple string
+      return {
+        pattern: trigger,
+        confidence: 0.75, // Default confidence for V1 triggers
+      };
+    }
+    // V2 format: full object
+    return trigger;
+  });
+}
+
+/**
+ * Calculate match score between user message and skill triggers
+ * Supports both V1 (string[]) and V2 (SkillTrigger[]) trigger formats
+ */
+function calculateTriggerMatch(
+  message: string,
+  rawTriggers: (string | SkillTrigger)[] | undefined,
+  keywords?: string[],
+  description?: string
+): { confidence: number; matchedTrigger?: string } {
+  const messageLower = message.toLowerCase();
+  const words = messageLower.split(/\s+/);
+
+  let bestConfidence = 0;
+  let matchedTrigger: string | undefined;
+
+  // Normalize triggers to V2 format
+  const triggers = normalizeTriggers(rawTriggers);
+
+  // Check triggers (highest priority)
+  for (const trigger of triggers) {
+    const patternLower = trigger.pattern.toLowerCase();
+
+    // Exact pattern match
+    if (messageLower.includes(patternLower)) {
+      const confidence = trigger.confidence || 0.8;
+      if (confidence > bestConfidence) {
+        bestConfidence = confidence;
+        matchedTrigger = trigger.pattern;
+      }
+    }
+
+    // Check trigger examples (V2 only)
+    if (trigger.examples) {
+      for (const example of trigger.examples) {
+        if (messageLower.includes(example.toLowerCase())) {
+          const confidence = (trigger.confidence || 0.8) * 0.9; // Slightly lower for examples
+          if (confidence > bestConfidence) {
+            bestConfidence = confidence;
+            matchedTrigger = example;
+          }
+        }
+      }
+    }
+  }
+
+  // Check keywords (medium priority)
+  if (keywords && bestConfidence < 0.5) {
+    const keywordMatches = keywords.filter((kw) =>
+      words.includes(kw.toLowerCase())
+    );
+    if (keywordMatches.length > 0) {
+      const keywordConfidence = Math.min(0.6, keywordMatches.length * 0.2);
+      if (keywordConfidence > bestConfidence) {
+        bestConfidence = keywordConfidence;
+        matchedTrigger = keywordMatches[0];
+      }
+    }
+  }
+
+  // Check description for relevant terms (lowest priority, fallback)
+  if (description && bestConfidence < 0.4) {
+    const descLower = description.toLowerCase();
+    // Count how many message words appear in description
+    const descMatches = words.filter(
+      (word) => word.length > 3 && descLower.includes(word)
+    );
+    if (descMatches.length >= 2) {
+      const descConfidence = Math.min(0.45, descMatches.length * 0.1);
+      if (descConfidence > bestConfidence) {
+        bestConfidence = descConfidence;
+        matchedTrigger = `description match: ${descMatches.slice(0, 2).join(', ')}`;
+      }
+    }
+  }
+
+  return { confidence: bestConfidence, matchedTrigger };
+}
+
+/**
+ * Get all active sequences with their linked skill counts.
+ * Reads from organization_skills (compiled, org-specific) via RPC.
+ */
+async function getActiveSequences(
+  orgId: string
+): Promise<Array<SkillRow & { linked_skill_count: number }>> {
+  const { data, error } = await supabase
+    .rpc('get_organization_skills_for_agent', {
+      p_org_id: orgId,
+    }) as { data: Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }> | null; error: { message: string } | null };
+
+  if (error) {
+    console.error('[copilotRoutingService.getActiveSequences] Error:', error);
+    return [];
+  }
+
+  // Filter to sequences and derive linked skill count from frontmatter
+  return (data || [])
+    .filter((s) => s.category === 'agent-sequence')
+    .map((seq) => {
+      const fm = seq.frontmatter as SkillFrontmatterV2;
+      const linkedSkills = (fm as Record<string, unknown>).linked_skills;
+      return {
+        skill_key: seq.skill_key,
+        category: seq.category,
+        frontmatter: fm,
+        is_enabled: seq.is_enabled,
+        linked_skill_count: Array.isArray(linkedSkills) ? linkedSkills.length : 0,
+      };
+    });
+}
+
+/**
+ * Get all active individual skills (non-sequences).
+ * Reads from organization_skills (compiled, org-specific) via RPC.
+ */
+async function getActiveIndividualSkills(orgId: string): Promise<SkillRow[]> {
+  const { data, error } = await supabase
+    .rpc('get_organization_skills_for_agent', {
+      p_org_id: orgId,
+    }) as { data: Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }> | null; error: { message: string } | null };
+
+  if (error) {
+    console.error(
+      '[copilotRoutingService.getActiveIndividualSkills] Error:',
+      error
+    );
+    return [];
+  }
+
+  // Filter out sequences and HITL skills
+  return (data || [])
+    .filter((s) => s.category !== 'agent-sequence' && s.category !== 'hitl')
+    .map((s) => ({
+      skill_key: s.skill_key,
+      category: s.category,
+      frontmatter: s.frontmatter as SkillFrontmatterV2,
+      is_enabled: s.is_enabled,
+    }));
+}
+
+// =============================================================================
+// Main Routing Function
+// =============================================================================
+
+/**
+ * Route a user message to the best matching skill
+ *
+ * Decision flow:
+ * 1. Check sequences first (agent-sequence category)
+ * 2. If sequence matches with confidence > 0.7, use it
+ * 3. Otherwise, fall back to individual skills
+ */
+export async function routeToSkill(
+  message: string,
+  context?: {
+    userId?: string;
+    orgId?: string;
+    currentView?: string;
+  }
+): Promise<RoutingDecision> {
+  const candidates: SkillMatch[] = [];
+  const orgId = context?.orgId;
+
+  if (!orgId) {
+    console.warn('[copilotRoutingService.routeToSkill] No orgId provided — cannot route');
+    return {
+      selectedSkill: null,
+      candidates: [],
+      isSequenceMatch: false,
+      reason: 'No organization ID provided for skill routing',
+    };
+  }
+
+  // Step 1: Check sequences first
+  const sequences = await getActiveSequences(orgId);
+
+  for (const seq of sequences) {
+    const frontmatter = seq.frontmatter as SkillFrontmatterV2;
+
+    const { confidence, matchedTrigger } = calculateTriggerMatch(
+      message,
+      frontmatter?.triggers,
+      frontmatter?.keywords,
+      frontmatter?.description
+    );
+
+    if (confidence > 0) {
+      candidates.push({
+        skillId: seq.skill_key,
+        skillKey: seq.skill_key,
+        name: frontmatter?.name || seq.skill_key,
+        category: seq.category,
+        confidence,
+        matchedTrigger,
+        isSequence: true,
+        linkedSkillCount: seq.linked_skill_count,
+      });
+    }
+  }
+
+  // Sort sequence candidates by confidence
+  const sequenceCandidates = candidates
+    .filter((c) => c.isSequence)
+    .sort((a, b) => b.confidence - a.confidence);
+
+  // Check if best sequence match exceeds threshold
+  const bestSequence = sequenceCandidates[0];
+  if (bestSequence && bestSequence.confidence >= SEQUENCE_CONFIDENCE_THRESHOLD) {
+    return {
+      selectedSkill: bestSequence,
+      candidates: candidates.slice(0, MAX_CANDIDATES),
+      isSequenceMatch: true,
+      reason: `Sequence "${bestSequence.name}" matched with confidence ${(bestSequence.confidence * 100).toFixed(0)}% (trigger: "${bestSequence.matchedTrigger}")`,
+    };
+  }
+
+  // Step 2: Fall back to individual skills
+  const individualSkills = await getActiveIndividualSkills(orgId);
+
+  for (const skill of individualSkills) {
+    const frontmatter = skill.frontmatter as SkillFrontmatterV2;
+
+    const { confidence, matchedTrigger } = calculateTriggerMatch(
+      message,
+      frontmatter?.triggers,
+      frontmatter?.keywords,
+      frontmatter?.description
+    );
+
+    if (confidence > 0) {
+      candidates.push({
+        skillId: skill.skill_key,
+        skillKey: skill.skill_key,
+        name: frontmatter?.name || skill.skill_key,
+        category: skill.category,
+        confidence,
+        matchedTrigger,
+        isSequence: false,
+      });
+    }
+  }
+
+  // Sort all candidates by confidence
+  candidates.sort((a, b) => b.confidence - a.confidence);
+
+  // Select best overall match
+  const bestMatch = candidates[0];
+  if (bestMatch && bestMatch.confidence >= INDIVIDUAL_CONFIDENCE_THRESHOLD) {
+    return {
+      selectedSkill: bestMatch,
+      candidates: candidates.slice(0, MAX_CANDIDATES),
+      isSequenceMatch: false,
+      reason: bestMatch.isSequence
+        ? `Sequence "${bestMatch.name}" matched below threshold (${(bestMatch.confidence * 100).toFixed(0)}%)`
+        : `Individual skill "${bestMatch.name}" matched with confidence ${(bestMatch.confidence * 100).toFixed(0)}%`,
+    };
+  }
+
+  // Step 3: Embedding-based semantic fallback
+  // Only fires when trigger-based matching has no confident result
+  try {
+    const semanticMatches = await findSemanticMatches(
+      message,
+      SEMANTIC_SIMILARITY_THRESHOLD,
+      3
+    );
+
+    if (semanticMatches.length > 0) {
+      const best = semanticMatches[0];
+      const isSequence = best.category === 'agent-sequence';
+      const semanticCandidate: SkillMatch = {
+        skillId: best.skillId,
+        skillKey: best.skillKey,
+        name: (best.frontmatter?.name as string) || best.skillKey,
+        category: best.category,
+        confidence: best.similarity,
+        matchedTrigger: 'semantic similarity',
+        isSequence,
+      };
+
+      // Add semantic candidates to the list
+      for (const match of semanticMatches) {
+        candidates.push({
+          skillId: match.skillId,
+          skillKey: match.skillKey,
+          name: (match.frontmatter?.name as string) || match.skillKey,
+          category: match.category,
+          confidence: match.similarity,
+          matchedTrigger: 'semantic similarity',
+          isSequence: match.category === 'agent-sequence',
+        });
+      }
+
+      candidates.sort((a, b) => b.confidence - a.confidence);
+
+      return {
+        selectedSkill: semanticCandidate,
+        candidates: candidates.slice(0, MAX_CANDIDATES),
+        isSequenceMatch: isSequence,
+        reason: `Semantic match: "${semanticCandidate.name}" with ${(best.similarity * 100).toFixed(0)}% similarity`,
+      };
+    }
+  } catch (err) {
+    // Non-fatal: embedding search failure falls through to no-match
+    console.warn('[copilotRoutingService] Semantic fallback error:', err);
+  }
+
+  // No confident match
+  return {
+    selectedSkill: null,
+    candidates: candidates.slice(0, MAX_CANDIDATES),
+    isSequenceMatch: false,
+    reason:
+      candidates.length > 0
+        ? `No confident match found. Best candidate: "${candidates[0]?.name}" at ${(candidates[0]?.confidence * 100).toFixed(0)}%`
+        : 'No matching skills found',
+  };
+}
+
+/**
+ * Log routing decision for analytics
+ */
+export async function logRoutingDecision(
+  userId: string,
+  message: string,
+  decision: RoutingDecision
+): Promise<void> {
+  try {
+    await supabase.from('copilot_routing_logs').insert({
+      user_id: userId,
+      message_snippet: message.slice(0, 200),
+      selected_skill_id: decision.selectedSkill?.skillId || null,
+      selected_skill_key: decision.selectedSkill?.skillKey || null,
+      is_sequence_match: decision.isSequenceMatch,
+      confidence: decision.selectedSkill?.confidence || 0,
+      candidate_count: decision.candidates.length,
+      reason: decision.reason,
+    });
+  } catch (error) {
+    // Don't throw - logging is non-critical
+    console.warn('[copilotRoutingService.logRoutingDecision] Error:', error);
+  }
+}
+
+// =============================================================================
+// Export Service Object
+// =============================================================================
+
+export const copilotRoutingService = {
+  routeToSkill,
+  logRoutingDecision,
+  calculateTriggerMatch,
+  // Re-export for direct use
+  SEMANTIC_SIMILARITY_THRESHOLD,
+};
+
+export default copilotRoutingService;

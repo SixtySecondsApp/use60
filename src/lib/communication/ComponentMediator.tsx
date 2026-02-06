@@ -557,8 +557,10 @@ export function withComponentMediator<P extends object>(
 ) {
   return function MediatedComponent(props: P) {
     const componentRef = React.useRef<IComponentCommunication>({
-      async notify(event, data) {
-        await eventBus.emit(event, data);
+      async notify(_event, _data) {
+        // No-op: Do NOT re-emit events here.
+        // The mediator calls notify() when an event fires. Re-emitting
+        // the same event causes an infinite loop: emit → mediator → notify → emit → ...
       },
       subscribe(event, handler) {
         return eventBus.on(event, handler);

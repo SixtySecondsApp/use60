@@ -102,6 +102,31 @@ case $ENVIRONMENT in
 esac
 
 # =============================================================================
+# Remote DB Password (required for remote push/list on current Supabase CLI)
+# =============================================================================
+DB_PASSWORD=""
+if [ -n "$PROJECT_REF" ]; then
+    if [ "$ENVIRONMENT" = "staging" ] || [ "$ENVIRONMENT" = "stage" ]; then
+        DB_PASSWORD="${SUPABASE_DB_PASSWORD_STAGING:-${SUPABASE_DB_PASSWORD:-}}"
+    else
+        DB_PASSWORD="${SUPABASE_DB_PASSWORD_PRODUCTION:-${SUPABASE_DB_PASSWORD:-}}"
+    fi
+
+    if [ -z "$DB_PASSWORD" ]; then
+        echo -e "${RED}Missing database password for ${ENV_NAME}.${NC}"
+        echo ""
+        echo "Set one of these environment variables and re-run:"
+        echo "  - SUPABASE_DB_PASSWORD (applies to both envs)"
+        echo "  - SUPABASE_DB_PASSWORD_STAGING"
+        echo "  - SUPABASE_DB_PASSWORD_PRODUCTION"
+        echo ""
+        echo "Example:"
+        echo "  SUPABASE_DB_PASSWORD_STAGING='***' ./scripts/deploy-migrations.sh staging"
+        exit 1
+    fi
+fi
+
+# =============================================================================
 # List Migrations
 # =============================================================================
 if [ "$LIST_ONLY" = true ]; then
@@ -124,7 +149,9 @@ if [ "$STATUS_ONLY" = true ]; then
     if [ -z "$PROJECT_REF" ]; then
         supabase migration list
     else
-        supabase migration list --project-ref "$PROJECT_REF"
+        # Link to target project and list remote migrations (Supabase CLI v2.65+)
+        supabase link --project-ref "$PROJECT_REF" --password "$DB_PASSWORD" --yes >/dev/null
+        supabase migration list --linked --password "$DB_PASSWORD" --yes
     fi
     exit 0
 fi
@@ -172,7 +199,8 @@ if [ "$DRY_RUN" = true ]; then
     if [ -z "$PROJECT_REF" ]; then
         supabase migration list | grep -E "pending|not applied" || echo "No pending migrations"
     else
-        supabase migration list --project-ref "$PROJECT_REF" | grep -E "pending|not applied" || echo "No pending migrations"
+        supabase link --project-ref "$PROJECT_REF" --password "$DB_PASSWORD" --yes >/dev/null
+        supabase db push --dry-run --linked --password "$DB_PASSWORD" --yes || true
     fi
     exit 0
 fi
@@ -190,7 +218,8 @@ if [ -z "$PROJECT_REF" ]; then
 else
     # Remote deployment
     echo -e "${BLUE}Pushing migrations to remote database...${NC}"
-    supabase db push --project-ref "$PROJECT_REF"
+    supabase link --project-ref "$PROJECT_REF" --password "$DB_PASSWORD" --yes >/dev/null
+    supabase db push --linked --password "$DB_PASSWORD" --yes
 fi
 
 # =============================================================================
@@ -203,7 +232,7 @@ echo ""
 if [ -z "$PROJECT_REF" ]; then
     supabase migration list
 else
-    supabase migration list --project-ref "$PROJECT_REF"
+    supabase migration list --linked --password "$DB_PASSWORD" --yes
 fi
 
 # =============================================================================

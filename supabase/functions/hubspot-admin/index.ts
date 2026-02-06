@@ -1,10 +1,10 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { corsHeaders } from '../_shared/cors.ts'
 import { HubSpotClient } from '../_shared/hubspot.ts'
 
 // HubSpot Admin Edge Function - v3 (added update actions)
-type Action = 'status' | 'enqueue' | 'save_settings' | 'get_properties' | 'get_pipelines' | 'get_forms' | 'trigger_sync' | 'create_contact' | 'create_deal' | 'create_task' | 'update_contact' | 'update_deal' | 'update_task' | 'delete_contact' | 'delete_deal' | 'delete_task'
+type Action = 'status' | 'enqueue' | 'save_settings' | 'get_properties' | 'get_pipelines' | 'get_forms' | 'get_lists' | 'preview_contacts' | 'trigger_sync' | 'create_contact' | 'create_deal' | 'create_task' | 'update_contact' | 'update_deal' | 'update_task' | 'delete_contact' | 'delete_deal' | 'delete_task'
 
 /**
  * Get a valid HubSpot access token, refreshing if expired or about to expire
@@ -426,6 +426,174 @@ serve(async (req) => {
       )
     } catch (e: any) {
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to fetch forms' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+  }
+
+  // Fetch HubSpot lists (segments) via v3 Lists API
+  if (action === 'get_lists') {
+    const { accessToken, error: tokenError } = await getValidAccessToken(svc, orgId)
+
+    if (!accessToken) {
+      return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const client = new HubSpotClient({ accessToken })
+    const limit = Math.min(Number(body.limit) || 100, 250)
+
+    try {
+      const allLists: any[] = []
+      let after: string | undefined = undefined
+
+      // Paginate through all lists using POST /crm/v3/lists/search
+      do {
+        const searchBody: Record<string, any> = {
+          count: limit,
+          objectTypeId: '0-1', // Contacts
+        }
+        if (after) {
+          searchBody.offset = Number(after)
+        }
+
+        const response = await client.request<{ lists: any[]; offset?: number; hasMore?: boolean; total?: number }>({
+          method: 'POST',
+          path: '/crm/v3/lists/search',
+          body: searchBody,
+        })
+
+        const lists = response.lists || []
+        allLists.push(...lists)
+
+        if (response.hasMore && response.offset) {
+          after = String(response.offset)
+        } else {
+          after = undefined
+        }
+      } while (after)
+
+      // The search response includes additionalProperties.hs_list_size with the contact count
+      const nonArchivedLists = allLists.filter((l: any) => !l.archived)
+
+      const formattedLists = nonArchivedLists
+        .map((l: any) => {
+          const id = String(l.listId || l.id || '')
+          const hsListSize = Number(l.additionalProperties?.hs_list_size)
+          return {
+            id,
+            name: l.name || 'Untitled',
+            listType: l.processingType === 'MANUAL' ? 'STATIC' : 'DYNAMIC',
+            membershipCount: !isNaN(hsListSize) ? hsListSize : 0,
+            createdAt: l.createdAt,
+            updatedAt: l.updatedAt,
+          }
+        })
+
+      return new Response(
+        JSON.stringify({ success: true, lists: formattedLists }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    } catch (e: any) {
+      console.error('[hubspot-admin] get_lists error:', e.message)
+      return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to fetch lists' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+  }
+
+  // Preview contacts from a list or by filters
+  if (action === 'preview_contacts') {
+    const { accessToken, error: tokenError } = await getValidAccessToken(svc, orgId)
+
+    if (!accessToken) {
+      return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const client = new HubSpotClient({ accessToken })
+    const listId = typeof body.list_id === 'string' ? body.list_id : null
+    const filters = Array.isArray(body.filters) ? body.filters : []
+    const filterLogic = body.filter_logic === 'OR' ? 'OR' : 'AND'
+    const previewLimit = Math.min(Number(body.limit) || 5, 10)
+
+    try {
+      let contactIds: string[] = []
+
+      // If list_id provided, get members from list
+      if (listId) {
+        try {
+          const membershipResponse = await client.request<{ results: any[] }>({
+            method: 'GET',
+            path: `/crm/v3/lists/${listId}/memberships`,
+            query: { limit: String(previewLimit) },
+          })
+          contactIds = (membershipResponse.results || []).map((m: any) => String(m.recordId || m.vid || m))
+        } catch (memberErr: any) {
+          console.error('[hubspot-admin] list membership fetch error:', memberErr.message)
+        }
+      }
+
+      // Fetch contact details
+      let contacts: any[] = []
+      let totalCount = 0
+
+      if (contactIds.length > 0) {
+        // Fetch contacts by IDs from memberships
+        const response = await client.request<{ results: any[] }>({
+          method: 'POST',
+          path: '/crm/v3/objects/contacts/batch/read',
+          body: {
+            inputs: contactIds.map((id) => ({ id })),
+            properties: ['email', 'firstname', 'lastname', 'company'],
+          },
+        })
+        contacts = (response.results || []).map((c: any) => ({
+          id: c.id,
+          email: c.properties?.email || '',
+          firstName: c.properties?.firstname || '',
+          lastName: c.properties?.lastname || '',
+          company: c.properties?.company || '',
+        }))
+        totalCount = contacts.length
+      } else if (filters.length > 0) {
+        // Use search with filters
+        const filterGroups = filterLogic === 'AND'
+          ? [{ filters: filters.map((f: any) => ({ propertyName: f.propertyName, operator: f.operator, value: f.value })) }]
+          : filters.map((f: any) => ({ filters: [{ propertyName: f.propertyName, operator: f.operator, value: f.value }] }))
+
+        const response = await client.request<{ total: number; results: any[] }>({
+          method: 'POST',
+          path: '/crm/v3/objects/contacts/search',
+          body: {
+            filterGroups,
+            properties: ['email', 'firstname', 'lastname', 'company'],
+            limit: previewLimit,
+          },
+        })
+        totalCount = response.total || 0
+        contacts = (response.results || []).map((c: any) => ({
+          id: c.id,
+          email: c.properties?.email || '',
+          firstName: c.properties?.firstname || '',
+          lastName: c.properties?.lastname || '',
+          company: c.properties?.company || '',
+        }))
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, totalCount, contacts }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    } catch (e: any) {
+      console.error('[hubspot-admin] preview_contacts error:', e.message)
+      return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to preview contacts' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })

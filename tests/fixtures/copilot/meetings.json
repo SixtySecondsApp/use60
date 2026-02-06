@@ -1,0 +1,109 @@
+{
+  "description": "Meeting fixtures for Copilot E2E tests",
+  "version": "1.0.0",
+
+  "nextMeeting": {
+    "id": "meeting-001",
+    "title": "Q1 Planning Review with Acme Corp",
+    "start_time": "2026-01-24T15:00:00Z",
+    "end_time": "2026-01-24T16:00:00Z",
+    "external_id": "cal-evt-001",
+    "meeting_url": "https://meet.google.com/abc-defg-hij",
+    "attendees": [
+      {
+        "email": "john.doe@acmecorp.com",
+        "name": "John Doe",
+        "is_organizer": false
+      },
+      {
+        "email": "sarah.johnson@acmecorp.com",
+        "name": "Sarah Johnson",
+        "is_organizer": false
+      }
+    ],
+    "attendees_count": 3,
+    "source_type": "google_calendar"
+  },
+
+  "todayMeetings": [
+    {
+      "id": "meeting-002",
+      "title": "Weekly Sync with TechStart",
+      "start_time": "2026-01-24T10:00:00Z",
+      "end_time": "2026-01-24T10:30:00Z",
+      "external_id": "cal-evt-002",
+      "meeting_url": "https://zoom.us/j/123456789",
+      "attendees": [
+        {
+          "email": "mike@techstart.io",
+          "name": "Mike Chen"
+        }
+      ],
+      "attendees_count": 2
+    },
+    {
+      "id": "meeting-003",
+      "title": "Product Demo for DataFlow Inc",
+      "start_time": "2026-01-24T14:00:00Z",
+      "end_time": "2026-01-24T15:00:00Z",
+      "external_id": "cal-evt-003",
+      "meeting_url": "https://meet.google.com/xyz-abcd-efg",
+      "attendees": [
+        {
+          "email": "lisa.wang@dataflow.com",
+          "name": "Lisa Wang"
+        },
+        {
+          "email": "tom.baker@dataflow.com",
+          "name": "Tom Baker"
+        }
+      ],
+      "attendees_count": 3
+    }
+  ],
+
+  "tomorrowMeetings": [
+    {
+      "id": "meeting-004",
+      "title": "Contract Negotiation with Enterprise Co",
+      "start_time": "2026-01-25T09:00:00Z",
+      "end_time": "2026-01-25T10:00:00Z",
+      "external_id": "cal-evt-004",
+      "attendees": [
+        {
+          "email": "legal@enterprise.co",
+          "name": "Legal Team"
+        }
+      ],
+      "attendees_count": 2
+    }
+  ],
+
+  "pastMeeting": {
+    "id": "meeting-005",
+    "title": "Discovery Call with NewCo",
+    "start_time": "2026-01-23T11:00:00Z",
+    "end_time": "2026-01-23T11:45:00Z",
+    "external_id": "cal-evt-005",
+    "attendees": [
+      {
+        "email": "alex@newco.com",
+        "name": "Alex Rodriguez"
+      }
+    ],
+    "attendees_count": 2,
+    "fathom_recording": {
+      "id": "fathom-001",
+      "summary": "Discovery call discussing NewCo's CRM needs. Key pain points: manual data entry, lack of pipeline visibility.",
+      "action_items": [
+        "Send pricing proposal by EOW",
+        "Schedule technical demo with IT team"
+      ]
+    }
+  },
+
+  "emptyState": {
+    "todayMeetings": [],
+    "tomorrowMeetings": []
+  }
+}

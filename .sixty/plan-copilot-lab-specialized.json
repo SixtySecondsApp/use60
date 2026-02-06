@@ -1,0 +1,592 @@
+{
+  "project": {
+    "name": "World-Class Copilot Lab + Specialized Sales Co-Pilot",
+    "description": "Transform Copilot Lab into a world-class testing platform and implement Specialized Sales Co-Pilot that helps senior reps be more successful, knows the company deeply, and uses HITL for external communications",
+    "createdAt": "2026-01-24T15:00:00Z",
+    "consultReport": ".sixty/consult/copilot-lab-world-class.md"
+  },
+  "features": [
+    {
+      "id": "specialized-agent",
+      "name": "Your Dedicated Team Member",
+      "status": "pending",
+      "priority": 1,
+      "description": "After onboarding, the copilot becomes a dedicated team member who knows your company inside-out, speaks your language, and has superpowers via sequences. Not a generic AI — YOUR sales analyst."
+    },
+    {
+      "id": "proactive-agent",
+      "name": "Proactive Agent Workflows",
+      "status": "pending",
+      "priority": 2,
+      "description": "Agent acts like an active team member — runs periodic analysis, sends Slack updates, does tasks autonomously, and notifies the rep. Clarifying questions when ambiguous."
+    },
+    {
+      "id": "personalization",
+      "name": "Enhanced Personalization",
+      "status": "pending",
+      "priority": 3,
+      "description": "Inject enrichment data, AI preferences, and user context into copilot"
+    },
+    {
+      "id": "re-enrichment",
+      "name": "Periodic Re-Enrichment",
+      "status": "pending",
+      "priority": 4,
+      "description": "Keep company data fresh by periodically re-scraping websites"
+    },
+    {
+      "id": "engagement-tracking",
+      "name": "Engagement Tracking",
+      "status": "pending",
+      "priority": 5,
+      "description": "Track how users engage with the agent, measure value added, optimize proactive outreach"
+    },
+    {
+      "id": "lab-quick-wins",
+      "name": "Lab Quick Wins",
+      "status": "pending",
+      "priority": 6,
+      "description": "Cost/latency display, save queries, debug mode"
+    },
+    {
+      "id": "lab-core",
+      "name": "Lab Core Features",
+      "status": "pending",
+      "priority": 7,
+      "description": "Prompt Library, Response Grading, Result Comparison"
+    }
+  ],
+  "stories": [
+    {
+      "id": "AGENT-001",
+      "feature": "specialized-agent",
+      "title": "Create compileSalesCopilotPersona function",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:30:00Z",
+      "priority": 1,
+      "description": "Create a function that compiles org enrichment data into a specialized INTERNAL sales co-pilot persona that helps reps be more successful",
+      "acceptance": [
+        "Function takes orgId and returns compiled persona string",
+        "Persona is framed as INTERNAL ASSISTANT (not customer-facing)",
+        "Includes: company knowledge (products, competitors, pain points, ICP)",
+        "Includes: brand voice for email drafting",
+        "Includes: HITL instructions (always preview before external actions)",
+        "Includes: objection handling knowledge for coaching",
+        "Persona is cached in organization_context table",
+        "Persona is refreshed when enrichment data changes"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/_shared/salesCopilotPersona.ts"
+      ],
+      "personaTemplate": "You are {rep_name}'s dedicated sales analyst at {company_name}. Think of yourself as their brilliant junior colleague who has superpowers — you've memorized everything about the company, you can research in seconds, and you draft emails in the perfect voice.\n\nYOU ARE A TEAM MEMBER, NOT A GENERIC AI.\n- Call them by name\n- Reference their specific deals and contacts\n- Be proactive with suggestions\n- Speak like a knowledgeable colleague, not a chatbot\n\nYOUR SUPERPOWERS (Sequences):\n- Meeting prep in 30 seconds\n- Pipeline health check with actionable insights\n- Follow-up emails in the company voice\n- Deal rescue plans when things stall\n- Research & competitive intel\n\nCOMPANY KNOWLEDGE (you've memorized this):\n- Products: {products}\n- Competitors: {competitors} (you know exactly how to position against them: {differentiators})\n- Customer pain points: {pain_points}\n- ICP: {icp_summary}\n- Buying signals: {buying_signals}\n\nWRITING IN THE COMPANY VOICE:\n- Tone: {brand_tone}\n- Phrases we use: {key_phrases}\n- Never say: {words_to_avoid}\n\nOBJECTION COACHING:\n{objection_responses}\n\nHITL (always get confirmation for external actions):\n- Preview emails → wait for 'Confirm' → then send\n- Preview tasks → wait for 'Confirm' → then create\n- Preview Slack posts → wait for 'Confirm' → then post"
+    },
+    {
+      "id": "AGENT-002",
+      "feature": "specialized-agent",
+      "title": "Integrate compiled persona into copilot system prompt",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:35:00Z",
+      "priority": 2,
+      "dependencies": { "stories": ["AGENT-001"] },
+      "description": "Inject the compiled agent persona into the Gemini system prompt",
+      "acceptance": [
+        "Load compiled persona from organization_context",
+        "Inject into system prompt before Gemini call",
+        "Fallback to generic prompt if no persona available",
+        "Log persona usage for debugging"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    },
+    {
+      "id": "AGENT-003",
+      "feature": "specialized-agent",
+      "title": "Generate persona during onboarding enrichment",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:40:00Z",
+      "priority": 3,
+      "dependencies": { "stories": ["AGENT-001"] },
+      "description": "Call compileAgentPersona after enrichment completes",
+      "acceptance": [
+        "After enrichment saves, compile and store persona",
+        "Store in organization_context with key 'agent_persona'",
+        "Include version/timestamp for cache invalidation"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/deep-enrich-organization/index.ts"
+      ]
+    },
+    {
+      "id": "PROACTIVE-001",
+      "feature": "proactive-agent",
+      "title": "Create clarifying questions flow",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:45:00Z",
+      "priority": 4,
+      "description": "When user intent is ambiguous, agent asks clarifying questions before executing",
+      "acceptance": [
+        "Detect ambiguous requests (e.g., 'help with Acme deal')",
+        "Generate 2-4 clarifying options based on available sequences",
+        "Present options with numbered choices",
+        "Execute selected option with full context",
+        "Track clarification patterns for optimization"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    },
+    {
+      "id": "PROACTIVE-002",
+      "feature": "proactive-agent",
+      "title": "Create periodic pipeline analysis cron",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:55:00Z",
+      "priority": 5,
+      "description": "Daily analysis of pipeline health, sends insights via Slack",
+      "acceptance": [
+        "Cron runs daily (morning, configurable)",
+        "Analyzes each user's pipeline for stalling deals, overdue tasks",
+        "Identifies opportunities where agent can add value",
+        "Sends summary to Slack with action options",
+        "Tracks which insights get actioned"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "supabase/functions/proactive-pipeline-analysis/index.ts"
+      ]
+    },
+    {
+      "id": "PROACTIVE-003",
+      "feature": "proactive-agent",
+      "title": "Create meeting prep auto-trigger",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:15:00Z",
+      "priority": 6,
+      "description": "Auto-run meeting prep 2 hours before meetings with no prep",
+      "acceptance": [
+        "Cron checks calendar for upcoming meetings (2 hours out)",
+        "Detects if meeting has prep completed",
+        "If no prep, runs meeting prep sequence automatically",
+        "Sends Slack notification with brief summary and link",
+        "User can reply to Slack for more details"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/proactive-meeting-prep/index.ts"
+      ]
+    },
+    {
+      "id": "PROACTIVE-004",
+      "feature": "proactive-agent",
+      "title": "Create task analysis and auto-completion",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:15:00Z",
+      "priority": 7,
+      "description": "Analyze overdue tasks, offer to complete or reschedule",
+      "acceptance": [
+        "Cron runs daily, identifies overdue and due-today tasks",
+        "For email follow-up tasks, offer to draft email",
+        "For research tasks, offer to run research sequence",
+        "Sends Slack with task summary and quick actions",
+        "Auto-complete task and notify if user confirms"
+      ],
+      "estimatedMinutes": 50,
+      "files": [
+        "supabase/functions/proactive-task-analysis/index.ts"
+      ]
+    },
+    {
+      "id": "PROACTIVE-005",
+      "feature": "proactive-agent",
+      "title": "Add Slack interactive actions for agent",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:20:00Z",
+      "priority": 8,
+      "description": "Handle Slack button clicks and replies for proactive messages",
+      "acceptance": [
+        "Handle button clicks (Draft Email, View Brief, More Info)",
+        "Handle threaded replies as copilot prompts",
+        "Execute sequences based on Slack actions",
+        "Send responses back to Slack thread",
+        "Support HITL confirmation flow in Slack"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "supabase/functions/slack-copilot-actions/index.ts"
+      ]
+    },
+    {
+      "id": "ENGAGE-001",
+      "feature": "engagement-tracking",
+      "title": "Create agent engagement analytics table",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:50:00Z",
+      "priority": 9,
+      "description": "Track user engagement with agent messages and actions",
+      "acceptance": [
+        "Create copilot_engagement_events table",
+        "Track: message sent, message opened, action taken, time to action",
+        "Track: proactive vs reactive, sequence used, value delivered",
+        "Calculate engagement score per user",
+        "Store for analytics dashboard"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/XXXXXX_create_engagement_tracking.sql"
+      ]
+    },
+    {
+      "id": "ENGAGE-002",
+      "feature": "engagement-tracking",
+      "title": "Add value tracking to sequences",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:10:00Z",
+      "priority": 10,
+      "description": "Track value delivered by each sequence execution",
+      "acceptance": [
+        "Log sequence execution with context (proactive/reactive)",
+        "Track outcome (email sent, task created, deal updated)",
+        "Estimate time saved (based on sequence complexity)",
+        "Link to engagement events for attribution",
+        "Surface in admin analytics"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "supabase/functions/_shared/sequenceExecutor.ts"
+      ]
+    },
+    {
+      "id": "ENGAGE-003",
+      "feature": "engagement-tracking",
+      "title": "Create agent performance dashboard",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:25:00Z",
+      "priority": 11,
+      "description": "Dashboard showing agent engagement and value metrics",
+      "acceptance": [
+        "Show: messages sent, actions taken, time saved",
+        "Show: most used sequences, highest value actions",
+        "Show: engagement trends over time",
+        "Show: proactive vs reactive breakdown",
+        "Filter by user, org, date range"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "src/pages/platform/AgentPerformanceDashboard.tsx"
+      ]
+    },
+    {
+      "id": "PERS-001",
+      "feature": "personalization",
+      "title": "Enhance buildContext with enrichment data",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:52:00Z",
+      "priority": 4,
+      "description": "Add organization_enrichment fields to copilot context",
+      "acceptance": [
+        "Fetch from organization_enrichment table",
+        "Include products (top 3), competitors (top 3), pain_points",
+        "Include buying_signals for proactive suggestions",
+        "Include target_market for audience awareness"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    },
+    {
+      "id": "PERS-002",
+      "feature": "personalization",
+      "title": "Add user/org AI preferences to context",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:52:00Z",
+      "priority": 5,
+      "description": "Include AI preferences in copilot context",
+      "acceptance": [
+        "Fetch user_ai_preferences (preferred_tone, preferred_length)",
+        "Fetch org_ai_preferences (brand_voice, blocked_phrases)",
+        "Add to contextParts in buildContext",
+        "Respect blocked_phrases as constraints"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    },
+    {
+      "id": "PERS-003",
+      "feature": "personalization",
+      "title": "Add working hours awareness",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:53:00Z",
+      "priority": 6,
+      "description": "Include user working hours for time-aware suggestions",
+      "acceptance": [
+        "Fetch working_hours_start/end from profiles",
+        "Add to contextParts",
+        "Copilot can suggest 'schedule for tomorrow' if outside working hours"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    },
+    {
+      "id": "ENRICH-001",
+      "feature": "re-enrichment",
+      "title": "Create re-enrichment cron job",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:58:00Z",
+      "priority": 7,
+      "description": "Periodically re-scrape websites to keep data fresh",
+      "acceptance": [
+        "Cron runs weekly/monthly (configurable)",
+        "Fetches orgs with company_website set",
+        "Calls deep-enrich-organization with force=true",
+        "Tracks last_enriched_at in organizations table"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/auto-re-enrich/index.ts",
+        "supabase/migrations/XXXXXX_add_last_enriched_at.sql"
+      ]
+    },
+    {
+      "id": "ENRICH-002",
+      "feature": "re-enrichment",
+      "title": "Detect and handle enrichment changes",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:30:00Z",
+      "priority": 8,
+      "dependencies": { "stories": ["ENRICH-001", "AGENT-001"] },
+      "description": "Compare new enrichment with old and regenerate persona if significant",
+      "acceptance": [
+        "Store previous enrichment hash",
+        "Compare key fields (products, competitors, pain_points)",
+        "If >20% change, regenerate agent persona",
+        "Log changes for audit trail"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/deep-enrich-organization/index.ts"
+      ]
+    },
+    {
+      "id": "ENRICH-003",
+      "feature": "re-enrichment",
+      "title": "Add manual re-enrich button in settings",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:00:00Z",
+      "notes": "Already implemented in AIIntelligencePage.tsx with 'Re-analyze Company' button and last_enriched_at display",
+      "priority": 9,
+      "description": "Allow users to manually trigger re-enrichment",
+      "acceptance": [
+        "Button in AI Intelligence settings",
+        "Shows last_enriched_at date",
+        "Triggers deep-enrich-organization with force=true",
+        "Shows loading state and success/error toast"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/settings/AIIntelligencePage.tsx"
+      ]
+    },
+    {
+      "id": "LAB-001",
+      "feature": "lab-quick-wins",
+      "title": "Add cost/latency display to playground",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:55:00Z",
+      "priority": 10,
+      "description": "Show execution cost and latency prominently",
+      "acceptance": [
+        "Display total execution time",
+        "Display estimated cost (from ai_cost_events if available)",
+        "Show token counts (input/output)",
+        "Format as badges in result header"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/copilot/lab/InteractivePlayground.tsx"
+      ]
+    },
+    {
+      "id": "LAB-002",
+      "feature": "lab-quick-wins",
+      "title": "Add save/load queries feature",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:55:00Z",
+      "priority": 11,
+      "description": "Allow saving test queries for reuse",
+      "acceptance": [
+        "Save query button stores to localStorage",
+        "Load saved queries dropdown",
+        "Include query name, description, tags",
+        "Limit to 50 saved queries"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/copilot/lab/InteractivePlayground.tsx",
+        "src/lib/hooks/useSavedQueries.ts"
+      ]
+    },
+    {
+      "id": "LAB-003",
+      "feature": "lab-quick-wins",
+      "title": "Add debug mode toggle",
+      "type": "full-stack",
+      "status": "complete",
+      "completedAt": "2026-01-24T15:55:00Z",
+      "priority": 12,
+      "description": "Toggle verbose logging and request/response inspection",
+      "acceptance": [
+        "Toggle in playground header",
+        "Backend accepts debug=true parameter",
+        "Returns full request/response payloads",
+        "Shows routing decisions and tool selection"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/components/copilot/lab/InteractivePlayground.tsx",
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    },
+    {
+      "id": "LAB-004",
+      "feature": "lab-core",
+      "title": "Create Prompt Library component",
+      "type": "full-stack",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:35:00Z",
+      "priority": 13,
+      "description": "Save prompts with expected outputs for regression testing",
+      "acceptance": [
+        "Create copilot_prompt_library table",
+        "UI to save prompt with name, expected_response_type",
+        "List saved prompts with search/filter",
+        "Run prompt and compare to expected"
+      ],
+      "estimatedMinutes": 90,
+      "files": [
+        "supabase/migrations/XXXXXX_create_prompt_library.sql",
+        "src/components/copilot/lab/PromptLibrary.tsx",
+        "src/lib/hooks/usePromptLibrary.ts"
+      ]
+    },
+    {
+      "id": "LAB-005",
+      "feature": "lab-core",
+      "title": "Create Response Grading UI",
+      "type": "full-stack",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:40:00Z",
+      "priority": 14,
+      "description": "Rate AI responses on quality dimensions",
+      "acceptance": [
+        "Create copilot_response_grades table",
+        "UI to rate accuracy, helpfulness, tone, actionability (1-5)",
+        "Store grades linked to message_id",
+        "Show aggregate scores in Quality Dashboard"
+      ],
+      "estimatedMinutes": 75,
+      "files": [
+        "supabase/migrations/XXXXXX_create_response_grades.sql",
+        "src/components/copilot/lab/ResponseGrading.tsx",
+        "src/lib/hooks/useResponseGrades.ts"
+      ]
+    },
+    {
+      "id": "LAB-006",
+      "feature": "lab-core",
+      "title": "Create Result Comparison view",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-01-24T16:45:00Z",
+      "priority": 15,
+      "description": "Compare two query results side-by-side",
+      "acceptance": [
+        "Select two saved results to compare",
+        "Side-by-side diff view",
+        "Highlight structural differences",
+        "Show timing comparison"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "src/components/copilot/lab/ResultComparison.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 24,
+    "completedStories": 24,
+    "lastUpdated": "2026-01-24T16:45:00Z",
+    "phases": [
+      {
+        "name": "Specialized Team Member",
+        "stories": ["AGENT-001", "AGENT-002", "AGENT-003"],
+        "priority": 1,
+        "description": "Transform copilot into a dedicated team member after onboarding"
+      },
+      {
+        "name": "Proactive Agent",
+        "stories": ["PROACTIVE-001", "PROACTIVE-002", "PROACTIVE-003", "PROACTIVE-004", "PROACTIVE-005"],
+        "priority": 2,
+        "description": "Agent acts proactively — periodic analysis, auto-prep, Slack notifications"
+      },
+      {
+        "name": "Engagement Tracking",
+        "stories": ["ENGAGE-001", "ENGAGE-002", "ENGAGE-003"],
+        "priority": 3,
+        "description": "Track engagement, measure value, optimize proactive outreach"
+      },
+      {
+        "name": "Enhanced Personalization",
+        "stories": ["PERS-001", "PERS-002", "PERS-003"],
+        "priority": 4,
+        "description": "Use 80% of collected data for personalization"
+      },
+      {
+        "name": "Re-Enrichment",
+        "stories": ["ENRICH-001", "ENRICH-002", "ENRICH-003"],
+        "priority": 5,
+        "description": "Keep company knowledge fresh"
+      },
+      {
+        "name": "Lab Quick Wins",
+        "stories": ["LAB-001", "LAB-002", "LAB-003"],
+        "priority": 6,
+        "description": "Cost/latency, save queries, debug mode"
+      },
+      {
+        "name": "Lab Core",
+        "stories": ["LAB-004", "LAB-005", "LAB-006"],
+        "priority": 7,
+        "description": "Prompt Library, Response Grading, Comparison"
+      }
+    ]
+  }
+}

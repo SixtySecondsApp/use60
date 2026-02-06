@@ -103,7 +103,7 @@ export const MeetingBriefingResponse: React.FC<MeetingBriefingResponseProps> = (
           </div>
           {meeting.meetingUrl && (
             <button
-              onClick={() => onActionClick?.('open_meeting_url', { url: meeting.meetingUrl })}
+              onClick={() => onActionClick?.('open_external_url', { url: meeting.meetingUrl })}
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium"
             >
               <Video className="w-4 h-4" />
@@ -243,7 +243,7 @@ export const MeetingBriefingResponse: React.FC<MeetingBriefingResponseProps> = (
               <div
                 key={prev.id}
                 className="bg-gray-700/50 rounded-lg p-3 hover:bg-gray-700 transition-colors cursor-pointer"
-                onClick={() => onActionClick?.('view_meeting', { id: prev.id })}
+                onClick={() => onActionClick?.('open_meeting', { meetingId: prev.id })}
               >
                 <div className="flex items-center justify-between">
                   <div className="font-medium text-white text-sm">{prev.title}</div>
@@ -345,7 +345,7 @@ export const MeetingBriefingResponse: React.FC<MeetingBriefingResponseProps> = (
               <div
                 key={task.id}
                 className="flex items-center justify-between bg-gray-700/50 rounded-lg p-3 hover:bg-gray-700 transition-colors cursor-pointer"
-                onClick={() => onActionClick?.('view_task', { id: task.id })}
+                onClick={() => onActionClick?.('open_task', { taskId: task.id })}
               >
                 <div className="flex items-center gap-2">
                   <div

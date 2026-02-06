@@ -16,6 +16,7 @@ import {
   Server,
   LayoutTemplate,
   Workflow,
+  GitBranch,
   FileCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,7 @@ const CATEGORY_ICONS: Record<SkillCategory, React.ElementType> = {
   workflows: Workflow,
   'data-access': Server,
   'output-format': LayoutTemplate,
+  'agent-sequence': GitBranch,
 };
 
 const CATEGORY_COLORS: Record<SkillCategory, string> = {
@@ -49,6 +51,7 @@ const CATEGORY_COLORS: Record<SkillCategory, string> = {
   workflows: 'from-orange-500 to-amber-600',
   'data-access': 'from-slate-500 to-gray-600',
   'output-format': 'from-pink-500 to-rose-600',
+  'agent-sequence': 'from-violet-500 to-indigo-600',
 };
 
 const VALID_CATEGORIES = SKILL_CATEGORIES.map(c => c.value);

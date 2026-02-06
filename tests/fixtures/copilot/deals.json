@@ -1,0 +1,125 @@
+{
+  "description": "Deal fixtures for Copilot E2E tests",
+  "version": "1.0.0",
+
+  "activeDeal": {
+    "id": "deal-001",
+    "name": "Acme Corp Enterprise License",
+    "company": "Acme Corporation",
+    "value": 75000,
+    "stage": "Proposal",
+    "stage_name": "Proposal",
+    "probability": 60,
+    "expected_close_date": "2026-02-15",
+    "contact_id": "contact-001",
+    "contact_name": "John Doe",
+    "contact_email": "john.doe@acmecorp.com",
+    "days_in_stage": 7,
+    "last_activity_date": "2026-01-22",
+    "next_step": "Schedule contract review meeting",
+    "notes": "Strong interest, need to address security concerns"
+  },
+
+  "atRiskDeal": {
+    "id": "deal-002",
+    "name": "TechStart Annual Contract",
+    "company": "TechStart Inc",
+    "value": 45000,
+    "stage": "Negotiation",
+    "stage_name": "Negotiation",
+    "probability": 40,
+    "expected_close_date": "2026-01-30",
+    "contact_id": "contact-002",
+    "contact_name": "Mike Chen",
+    "contact_email": "mike@techstart.io",
+    "days_in_stage": 21,
+    "last_activity_date": "2026-01-10",
+    "risk_factors": ["stalled", "no_recent_activity", "past_expected_close"],
+    "notes": "Budget approval pending, competitor in the mix"
+  },
+
+  "wonDeal": {
+    "id": "deal-003",
+    "name": "DataFlow Implementation",
+    "company": "DataFlow Inc",
+    "value": 120000,
+    "stage": "Closed Won",
+    "stage_name": "Closed Won",
+    "probability": 100,
+    "close_date": "2026-01-20",
+    "contact_id": "contact-003",
+    "contact_name": "Lisa Wang",
+    "contact_email": "lisa.wang@dataflow.com"
+  },
+
+  "pipelineDeals": [
+    {
+      "id": "deal-001",
+      "name": "Acme Corp Enterprise License",
+      "company": "Acme Corporation",
+      "value": 75000,
+      "stage": "Proposal",
+      "probability": 60
+    },
+    {
+      "id": "deal-002",
+      "name": "TechStart Annual Contract",
+      "company": "TechStart Inc",
+      "value": 45000,
+      "stage": "Negotiation",
+      "probability": 40
+    },
+    {
+      "id": "deal-004",
+      "name": "NewCo Starter Package",
+      "company": "NewCo",
+      "value": 25000,
+      "stage": "Discovery",
+      "probability": 20
+    },
+    {
+      "id": "deal-005",
+      "name": "Enterprise Co Premium",
+      "company": "Enterprise Co",
+      "value": 200000,
+      "stage": "Qualification",
+      "probability": 30
+    }
+  ],
+
+  "pipelineSummary": {
+    "total_value": 345000,
+    "weighted_value": 137000,
+    "deal_count": 4,
+    "stages": {
+      "Discovery": { "count": 1, "value": 25000 },
+      "Qualification": { "count": 1, "value": 200000 },
+      "Proposal": { "count": 1, "value": 75000 },
+      "Negotiation": { "count": 1, "value": 45000 }
+    }
+  },
+
+  "dealContextForMeeting": {
+    "deal_id": "deal-001",
+    "deal_name": "Acme Corp Enterprise License",
+    "value": 75000,
+    "stage": "Proposal",
+    "last_interaction": "2026-01-22",
+    "key_contacts": [
+      {
+        "name": "John Doe",
+        "role": "VP Sales",
+        "email": "john.doe@acmecorp.com"
+      },
+      {
+        "name": "Sarah Johnson",
+        "role": "CFO",
+        "email": "sarah.johnson@acmecorp.com"
+      }
+    ],
+    "open_tasks": [
+      "Follow up on pricing questions",
+      "Send updated proposal"
+    ]
+  }
+}

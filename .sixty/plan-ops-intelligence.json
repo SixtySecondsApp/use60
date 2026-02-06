@@ -1,0 +1,1387 @@
+{
+  "feature": {
+    "id": "ops-intelligence",
+    "name": "Ops Intelligence Platform — Proactive AI Layers 2-6",
+    "description": "Build 6 layers of proactive AI capability on top of the existing Query Commander: chained workflows, proactive insights, cross-table intelligence, saved recipes, conversational context, and predictive actions. Each story includes Playwright E2E tests.",
+    "status": "pending",
+    "createdAt": "2026-02-05T00:00:00Z",
+    "previousWork": "plan-ops-query-commander.json (complete) — established 14-tool AI query bar"
+  },
+
+  "stories": [
+
+    {
+      "id": "OI-001",
+      "title": "Create ops_table_workflows schema and migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "layer": 1,
+      "layerName": "Chained Workflows",
+
+      "description": "Create the database schema for storing workflow definitions. Each workflow has a trigger (on_sync, on_cell_change, on_schedule, manual), a sequence of steps with conditions and actions, and execution history tracking.",
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": ["OI-002", "OI-003", "OI-004"],
+      "parallelWith": ["OI-007", "OI-014", "OI-020", "OI-025", "OI-031"],
+
+      "acceptance": [
+        "Migration creates ops_table_workflows table with: id, org_id, table_id, name, description, trigger_type, trigger_config, steps JSONB, is_active, created_by, created_at, updated_at",
+        "Migration creates ops_table_workflow_executions table with: id, workflow_id, trigger_event, status, started_at, completed_at, step_results JSONB, error",
+        "RLS policies: users can CRUD workflows in their org, read executions for their org",
+        "Indexes on table_id, org_id, trigger_type for efficient lookup"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "supabase/migrations/20260206000001_ops_table_workflows.sql"
+      ],
+
+      "technicalNotes": "trigger_type ENUM: on_sync, on_cell_change, on_schedule, manual. steps JSONB is an ordered array of { condition, action_type, action_config, on_error }. trigger_config stores cron expressions or column watch lists. action_type includes integration-aware actions: enrich_apollo, add_to_instantly_sequence, send_slack, assign_by_territory."
+    },
+
+    {
+      "id": "OI-002",
+      "title": "Build ops-table-workflow-engine edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "layer": 1,
+      "layerName": "Chained Workflows",
+
+      "description": "Create the workflow engine edge function that parses natural language workflow descriptions into structured step sequences using Claude, then executes them. Supports actions: filter, update_cells, enrich_apollo (Apollo.io people/company enrichment), score_icp (ICP fit scoring), assign_by_territory (territory-based rep assignment), create_task, send_slack, draft_email, add_to_instantly_sequence (add contacts to Instantly outreach campaigns), move_to_table.",
+
+      "dependencies": {
+        "stories": ["OI-001"],
+        "files": ["supabase/functions/_shared/costTracking.ts", "supabase/functions/_shared/corsHelper.ts", "supabase/functions/_shared/slackBlocks.ts"],
+        "schema": ["ops_table_workflows", "ops_table_workflow_executions"]
+      },
+      "blocks": ["OI-004", "OI-005"],
+
+      "acceptance": [
+        "POST /ops-table-workflow-engine with { tableId, action: 'parse' | 'execute' | 'save', description?, workflowId? }",
+        "parse action: sends natural language to Claude Haiku, returns structured workflow definition with steps",
+        "execute action: runs workflow steps sequentially, logs to ops_table_workflow_executions",
+        "save action: persists parsed workflow to ops_table_workflows with trigger config",
+        "Each step type has a dedicated executor: filter_rows, update_cells, enrich_apollo (Apollo.io lookup by email/domain), score_icp (score against org ICP criteria), assign_by_territory (map to rep by territory config), create_task, send_slack, draft_email, add_to_instantly_sequence (push contacts to Instantly campaign via API)",
+        "Cost tracking via logAICostEvent with event type 'ops_workflow'"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "supabase/functions/ops-table-workflow-engine/index.ts"
+      ],
+
+      "technicalNotes": "Use Claude Haiku for parsing NL → structured steps. Each step executor is a separate async function. Chain with Promise reduction for sequential execution. On error, log to step_results and continue or abort based on on_error config. Integration executors: enrich_apollo uses existing Apollo integration (api/apollo-enrich or similar), add_to_instantly_sequence uses Instantly API to push contacts into campaigns, assign_by_territory reads territory config from org settings and matches by region/country/state fields."
+    },
+
+    {
+      "id": "OI-003",
+      "title": "Add workflow trigger system (sync/cell_change hooks)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "layer": 1,
+      "layerName": "Chained Workflows",
+
+      "description": "Add trigger detection to existing sync and cell-change flows. When a HubSpot sync completes or cells change, check for active workflows with matching triggers and invoke the workflow engine.",
+
+      "dependencies": {
+        "stories": ["OI-001"],
+        "files": ["supabase/functions/sync-hubspot-ops-table/index.ts"],
+        "schema": ["ops_table_workflows"]
+      },
+      "blocks": ["OI-006"],
+
+      "acceptance": [
+        "After HubSpot sync completes, query ops_table_workflows for active workflows with trigger_type='on_sync' and matching table_id",
+        "For on_cell_change triggers, add a Supabase database webhook or check in the cell update path",
+        "Trigger invokes ops-table-workflow-engine with action='execute'",
+        "Trigger fires are idempotent — same event doesn't re-trigger within cooldown window",
+        "Errors in trigger detection don't block the original operation"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "supabase/functions/sync-hubspot-ops-table/index.ts",
+        "supabase/functions/ops-table-workflow-engine/index.ts"
+      ],
+
+      "technicalNotes": "Add a post-sync hook at the end of sync-hubspot-ops-table that fetches active workflows. Use a 5-minute cooldown per workflow to prevent rapid re-triggers. For cell_change, use Supabase Realtime or a simple check in the upsert path."
+    },
+
+    {
+      "id": "OI-004",
+      "title": "Build WorkflowBuilder UI component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "layer": 1,
+      "layerName": "Chained Workflows",
+
+      "description": "Create a WorkflowBuilder component that lets users describe workflows in natural language, see the parsed steps, edit/reorder them, configure triggers, and save. Accessible from the AI query bar when a workflow-type query is detected.",
+
+      "dependencies": {
+        "stories": ["OI-001", "OI-002"],
+        "files": ["src/components/ops/AiQueryBar.tsx"],
+        "schema": ["ops_table_workflows"]
+      },
+      "blocks": ["OI-005", "OI-006"],
+
+      "acceptance": [
+        "WorkflowBuilder.tsx component with NL input, parsed step visualization, trigger selector",
+        "Steps shown as vertical pipeline cards with condition → action for each",
+        "Users can reorder steps via drag, edit conditions, toggle steps on/off",
+        "Trigger selector: manual, on_sync, on_cell_change (pick column), on_schedule (cron presets)",
+        "Save button persists via ops-table-workflow-engine with action='save'"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "src/components/ops/WorkflowBuilder.tsx"
+      ],
+
+      "technicalNotes": "Use Radix Accordion for step expansion. Trigger presets: hourly, daily, weekly, custom cron. Show a live preview of what the workflow would do on current table data."
+    },
+
+    {
+      "id": "OI-005",
+      "title": "Add workflow management panel and list view",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "layer": 1,
+      "layerName": "Chained Workflows",
+
+      "description": "Create a WorkflowList component showing all saved workflows for a table with status, last run, run count, and action buttons (run now, edit, toggle active, delete). Accessible via a 'Workflows' tab or button on the Ops detail page.",
+
+      "dependencies": {
+        "stories": ["OI-002", "OI-004"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": ["ops_table_workflows", "ops_table_workflow_executions"]
+      },
+      "blocks": ["OI-006"],
+
+      "acceptance": [
+        "WorkflowList.tsx component showing workflow cards in a grid",
+        "Each card shows: name, trigger type badge, step count, last run time, status indicator",
+        "Action buttons: Run Now, Edit (opens WorkflowBuilder), Toggle Active, Delete with confirmation",
+        "Run Now invokes ops-table-workflow-engine with action='execute'",
+        "Real-time execution status via polling or Supabase Realtime"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/components/ops/WorkflowList.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Use React Query for fetching workflows and executions. Add a 'Workflows' button next to the query bar that opens a slide-over panel. Show execution history in an expandable section per workflow."
+    },
+
+    {
+      "id": "OI-006",
+      "title": "Playwright E2E tests for Layer 1 — Chained Workflows",
+      "type": "test",
+      "status": "pending",
+      "priority": 6,
+      "layer": 1,
+      "layerName": "Chained Workflows",
+
+      "description": "Write Playwright E2E tests covering workflow creation, parsing, execution, trigger configuration, and the management UI.",
+
+      "dependencies": {
+        "stories": ["OI-003", "OI-004", "OI-005"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Test: User types workflow description → sees parsed steps → saves workflow",
+        "Test: User configures on_sync trigger → workflow appears in list as active",
+        "Test: User clicks Run Now → execution starts → status updates in real time",
+        "Test: User toggles workflow off → trigger no longer fires",
+        "Test: User deletes workflow with confirmation dialog"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "tests/e2e/ops-intelligence/workflows.spec.ts"
+      ],
+
+      "technicalNotes": "Use Playwriter MCP for browser automation. Navigate to Ops table, open workflow builder, type description, verify step cards render, save, verify in list. Mock edge function responses for deterministic testing."
+    },
+
+    {
+      "id": "OI-007",
+      "title": "Create ops_table_insights schema and migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 7,
+      "layer": 2,
+      "layerName": "Proactive Intelligence",
+
+      "description": "Create the database schema for storing AI-generated insights about table data. Insights are produced by the insights engine and surfaced via in-app banners and Slack notifications.",
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": ["OI-008", "OI-009", "OI-010"],
+      "parallelWith": ["OI-001", "OI-014", "OI-020", "OI-025", "OI-031"],
+
+      "acceptance": [
+        "Migration creates ops_table_insights table: id, org_id, table_id, insight_type, title, body, actions JSONB, severity (info/warning/critical), dismissed_at, dismissed_by, created_at",
+        "insight_type values: new_cluster, stale_leads, conversion_pattern, data_quality, anomaly",
+        "actions JSONB: array of { label, action_type, action_config } for actionable insight buttons",
+        "RLS: org members can read/dismiss insights for their org's tables",
+        "Index on (table_id, dismissed_at IS NULL) for efficient active insight queries"
+      ],
+
+      "estimatedMinutes": 12,
+
+      "files": [
+        "supabase/migrations/20260206000002_ops_table_insights.sql"
+      ],
+
+      "technicalNotes": "severity determines visual treatment: info=blue, warning=amber, critical=red. dismissed_at allows soft-delete. actions array enables one-click responses like 'Apply filter', 'Send Slack alert', 'Create task'."
+    },
+
+    {
+      "id": "OI-008",
+      "title": "Build ops-table-insights-engine edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "layer": 2,
+      "layerName": "Proactive Intelligence",
+
+      "description": "Create the insights engine that analyzes table data and generates proactive, conversational insights. Runs on demand (after sync) or on schedule. Detects: company clusters (3+ contacts same domain), stale leads (no activity in X days), data quality issues (high % empty fields), and conversion patterns. Insight body text must be conversational and action-oriented with specific counts and context — e.g. '🔥 3 new contacts appeared at Cooley LLP this week — you're now multi-threaded with 5 people there. Want me to map the org chart?' not 'New cluster detected at Cooley LLP'.",
+
+      "dependencies": {
+        "stories": ["OI-007"],
+        "files": ["supabase/functions/_shared/costTracking.ts", "supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["ops_table_insights", "dynamic_table_cells"]
+      },
+      "blocks": ["OI-010", "OI-011", "OI-012"],
+
+      "acceptance": [
+        "POST /ops-table-insights-engine with { tableId, action: 'analyze' | 'get_active' }",
+        "analyze: scans table data, generates insights, upserts to ops_table_insights",
+        "Cluster detection: groups contacts by email domain, flags 3+ as 'new_cluster' — body includes exact count, company name, and multi-threading status",
+        "Stale lead detection: checks activity timestamps, flags leads with no activity > configurable days — body includes exact count, time range, and offers draft re-engagement emails",
+        "Conversion pattern detection: analyzes stage transitions and timing — body includes specific conversion rate, time window, and count of leads currently in that window (e.g. 'Your conversion rate from Page Viewed to Booked Meeting is 4x higher when you call within 48hrs. 7 leads are in that window right now.')",
+        "Data quality: calculates fill rate per column, flags columns with >30% empty as 'data_quality'",
+        "All insight body text must be conversational, personalized, include specific numbers, and end with a suggested action question (e.g. 'Want me to...')",
+        "get_active: returns non-dismissed insights for the table",
+        "Cost tracking for any AI analysis calls"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "supabase/functions/ops-table-insights-engine/index.ts"
+      ],
+
+      "technicalNotes": "Cluster detection is SQL-based (no AI needed) — GROUP BY email domain extraction, then enrich body with exact contact count and names. Stale lead detection checks against activities table or last_modified, body includes 'N leads have gone cold in the last X days'. Conversion patterns use Claude Haiku to analyze stage transition timing and generate conversational copy with specific numbers (e.g. '4x higher when you call within 48hrs'). Data quality is pure SQL column stats. All insights use a conversational template that includes: emoji prefix, specific count, context sentence, and a 'Want me to...' call-to-action tied to the actions JSONB array."
+    },
+
+    {
+      "id": "OI-009",
+      "title": "Add Slack notification for insights",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "layer": 2,
+      "layerName": "Proactive Intelligence",
+
+      "description": "When new insights are generated, send Slack notifications to connected users using the existing Slack webhook infrastructure. Build Block Kit messages with insight cards and action buttons.",
+
+      "dependencies": {
+        "stories": ["OI-007"],
+        "files": ["supabase/functions/_shared/slackBlocks.ts", "supabase/functions/_shared/slackAuth.ts"],
+        "schema": ["ops_table_insights"]
+      },
+      "blocks": ["OI-012"],
+      "parallelWith": ["OI-008"],
+
+      "acceptance": [
+        "After insights are generated, check for Slack-connected users in the org",
+        "Build Block Kit message with conversational insight text (emoji prefix, specific counts, 'Want me to...' CTA), severity color, and action buttons",
+        "Action buttons: 'View Table', 'Dismiss', 'Apply Suggestion'",
+        "Rate limit: max 5 insight notifications per user per hour",
+        "Respects user notification preferences (if they exist)"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "supabase/functions/ops-table-insights-engine/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+
+      "technicalNotes": "Use existing slackBlocks.ts helpers to build Block Kit messages. Fetch Slack webhook URLs from user profiles or org settings. Group multiple insights into a single message to reduce noise."
+    },
+
+    {
+      "id": "OI-010",
+      "title": "Build AiInsightsBanner component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "layer": 2,
+      "layerName": "Proactive Intelligence",
+
+      "description": "Create the in-app insights banner that renders below the query bar on the Ops detail page. Shows dismissible insight cards with severity-colored left borders, emoji-prefixed conversational titles, action-oriented body text with specific counts, and clickable action buttons that directly execute the suggested action.",
+
+      "dependencies": {
+        "stories": ["OI-007", "OI-008"],
+        "files": ["src/pages/OpsDetailPage.tsx", "src/components/ops/AiQueryBar.tsx"],
+        "schema": ["ops_table_insights"]
+      },
+      "blocks": ["OI-012"],
+
+      "acceptance": [
+        "AiInsightsBanner.tsx component renders between query bar and table",
+        "Fetches active (non-dismissed) insights via React Query",
+        "Each insight card: severity color bar (left border), emoji icon, conversational title with specific counts, body text ending with action suggestion, action buttons matching the 'Want me to...' prompt",
+        "Dismiss button soft-deletes (sets dismissed_at) with optimistic update",
+        "Action buttons dispatch appropriate actions (apply filter, navigate, etc.)",
+        "Collapses to single summary line when >3 insights, expandable"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/components/ops/AiInsightsBanner.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Use Framer Motion for enter/exit animations. Severity colors: info=blue-500, warning=amber-500, critical=red-500. Collapsed state shows 'N insights available' with expand chevron. Action buttons use the same dispatch pattern as AiQueryBar."
+    },
+
+    {
+      "id": "OI-011",
+      "title": "Hook insights engine to sync and schedule",
+      "type": "backend",
+      "status": "pending",
+      "priority": 11,
+      "layer": 2,
+      "layerName": "Proactive Intelligence",
+
+      "description": "Trigger the insights engine automatically after HubSpot sync completes and optionally on a daily schedule. Add post-sync hook to sync-hubspot-ops-table.",
+
+      "dependencies": {
+        "stories": ["OI-008"],
+        "files": ["supabase/functions/sync-hubspot-ops-table/index.ts"],
+        "schema": ["ops_table_insights"]
+      },
+      "blocks": ["OI-012"],
+
+      "acceptance": [
+        "After successful HubSpot sync, invoke ops-table-insights-engine with action='analyze'",
+        "Insights generation is fire-and-forget — doesn't block sync response",
+        "Add a cron-compatible endpoint that analyzes all active tables in an org",
+        "Debounce: don't re-analyze if last analysis was <15 minutes ago"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "supabase/functions/sync-hubspot-ops-table/index.ts",
+        "supabase/functions/ops-table-insights-engine/index.ts"
+      ],
+
+      "technicalNotes": "Use Deno.env.get('SUPABASE_URL') to make internal function call. Fire-and-forget via fetch without await. Store last_analyzed_at on the table or in a separate tracking record."
+    },
+
+    {
+      "id": "OI-012",
+      "title": "Playwright E2E tests for Layer 2 — Proactive Intelligence",
+      "type": "test",
+      "status": "pending",
+      "priority": 12,
+      "layer": 2,
+      "layerName": "Proactive Intelligence",
+
+      "description": "Write Playwright E2E tests covering the insights banner display, dismissal, action buttons, and automatic generation after sync.",
+
+      "dependencies": {
+        "stories": ["OI-009", "OI-010", "OI-011"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Test: Insights banner renders below query bar when active insights exist",
+        "Test: Dismiss button removes insight card with animation",
+        "Test: Action button (e.g., Apply Filter) dispatches correct table action",
+        "Test: Banner collapses when >3 insights, expands on click",
+        "Test: No banner shown when all insights are dismissed"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "tests/e2e/ops-intelligence/insights.spec.ts"
+      ],
+
+      "technicalNotes": "Seed test data with pre-created insights in ops_table_insights. Verify DOM elements for severity colors, titles, action buttons. Test dismiss via click and verify removal."
+    },
+
+    {
+      "id": "OI-013",
+      "title": "Add opsTableService methods for insights and workflows",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 13,
+      "layer": 2,
+      "layerName": "Proactive Intelligence",
+
+      "description": "Extend the existing opsTableService with methods for managing insights (fetch active, dismiss, invoke actions) and workflows (CRUD, execute, toggle active).",
+
+      "dependencies": {
+        "stories": ["OI-007", "OI-001"],
+        "files": ["src/lib/services/opsTableService.ts"],
+        "schema": ["ops_table_insights", "ops_table_workflows"]
+      },
+      "blocks": ["OI-010", "OI-005"],
+      "parallelWith": ["OI-008", "OI-002"],
+
+      "acceptance": [
+        "getActiveInsights(tableId): fetches non-dismissed insights",
+        "dismissInsight(insightId): sets dismissed_at timestamp",
+        "getWorkflows(tableId): fetches all workflows for a table",
+        "saveWorkflow(workflow): creates or updates a workflow",
+        "executeWorkflow(workflowId): invokes the workflow engine",
+        "toggleWorkflow(workflowId, isActive): enables/disables workflow",
+        "All methods use existing supabase.functions.invoke() pattern"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Follow existing patterns in opsTableService.ts. Use React Query invalidation keys for real-time UI updates. Error handling with Sonner toasts."
+    },
+
+    {
+      "id": "OI-014",
+      "title": "Create ops_table_recipes schema and migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 14,
+      "layer": 4,
+      "layerName": "Recipes",
+
+      "description": "Create the database schema for saved natural language recipes (reusable queries/automations). Recipes can be one-shot (manual), on_sync (auto-run), or scheduled.",
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": ["OI-015", "OI-016", "OI-017"],
+      "parallelWith": ["OI-001", "OI-007", "OI-020", "OI-025", "OI-031"],
+
+      "acceptance": [
+        "Migration creates ops_table_recipes: id, org_id, table_id, created_by, name, description, query_text, parsed_config JSONB, trigger_type (one_shot/on_sync/scheduled), schedule_config, is_shared, run_count, last_run_at, created_at, updated_at",
+        "Migration creates ops_table_recipe_runs: id, recipe_id, executed_by, status, result_summary, started_at, completed_at",
+        "RLS: creator can CRUD, org members can read shared recipes, anyone in org can run shared recipes",
+        "Indexes on (table_id, is_shared), (org_id, trigger_type)"
+      ],
+
+      "estimatedMinutes": 12,
+
+      "files": [
+        "supabase/migrations/20260206000003_ops_table_recipes.sql"
+      ],
+
+      "technicalNotes": "parsed_config stores the AI-parsed action type and parameters from the original query_text. This allows recipes to be re-executed without re-parsing. trigger_type determines auto-execution behavior."
+    },
+
+    {
+      "id": "OI-015",
+      "title": "Add recipe save/execute to ops-table-ai-query",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "layer": 4,
+      "layerName": "Recipes",
+
+      "description": "Extend the AI query edge function to support saving successful queries as recipes and executing saved recipes. Add save_recipe and execute_recipe action handlers.",
+
+      "dependencies": {
+        "stories": ["OI-014"],
+        "files": ["supabase/functions/ops-table-ai-query/index.ts"],
+        "schema": ["ops_table_recipes", "ops_table_recipe_runs"]
+      },
+      "blocks": ["OI-017", "OI-018"],
+
+      "acceptance": [
+        "New endpoint: POST /ops-table-ai-query with action='save_recipe' saves current query + parsed result as recipe",
+        "New endpoint: POST /ops-table-ai-query with action='execute_recipe' replays a saved recipe's parsed_config",
+        "Recipe execution logs to ops_table_recipe_runs with status and result_summary",
+        "Increments run_count and updates last_run_at on each execution",
+        "Supports sharing toggle (is_shared) for team visibility"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "save_recipe receives { tableId, name, queryText, parsedConfig, triggerType }. execute_recipe receives { recipeId } and replays the stored parsedConfig through the existing action handlers. No AI call needed for replay."
+    },
+
+    {
+      "id": "OI-016",
+      "title": "Build AiRecipeLibrary component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "layer": 4,
+      "layerName": "Recipes",
+
+      "description": "Create a slide-out recipe library panel accessible from the query bar. Shows a grid of saved recipes with run/edit/share/delete actions, grouped by category (mine, shared, auto-run).",
+
+      "dependencies": {
+        "stories": ["OI-014"],
+        "files": ["src/components/ops/AiQueryBar.tsx", "src/pages/OpsDetailPage.tsx"],
+        "schema": ["ops_table_recipes"]
+      },
+      "blocks": ["OI-017", "OI-018"],
+
+      "acceptance": [
+        "AiRecipeLibrary.tsx slide-out panel triggered by book icon in query bar",
+        "Three tabs: My Recipes, Shared, Auto-Run",
+        "Each recipe card: name, description, query text preview, run count badge, last run timestamp",
+        "Action buttons: Run Now (fills query bar and executes), Edit, Share/Unshare toggle, Delete",
+        "Save button appears in query bar after any successful query execution"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/components/ops/AiRecipeLibrary.tsx",
+        "src/components/ops/AiQueryBar.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Use Radix Sheet for the slide-out panel. Recipe cards use the same card style as WorkflowList. Save button appears as a bookmark icon in the query bar after successful execution, opens a quick-save dialog with name + trigger type."
+    },
+
+    {
+      "id": "OI-017",
+      "title": "Add recipe service methods and auto-trigger",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 17,
+      "layer": 4,
+      "layerName": "Recipes",
+
+      "description": "Add recipe CRUD methods to opsTableService and implement auto-trigger for on_sync recipes (fire after HubSpot sync).",
+
+      "dependencies": {
+        "stories": ["OI-014", "OI-015", "OI-016"],
+        "files": ["src/lib/services/opsTableService.ts", "src/lib/hooks/useHubSpotSync.ts"],
+        "schema": ["ops_table_recipes"]
+      },
+      "blocks": ["OI-018"],
+
+      "acceptance": [
+        "getRecipes(tableId): fetches all accessible recipes (own + shared)",
+        "saveRecipe(recipe): creates new recipe",
+        "executeRecipe(recipeId): runs recipe and returns result",
+        "toggleShare(recipeId): toggles is_shared flag",
+        "deleteRecipe(recipeId): soft-deletes recipe",
+        "After HubSpot sync in useHubSpotSync, auto-execute on_sync recipes for the table"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/lib/services/opsTableService.ts",
+        "src/lib/hooks/useHubSpotSync.ts"
+      ],
+
+      "technicalNotes": "Auto-trigger: after sync completes, fetch recipes with trigger_type='on_sync' for the table and execute each sequentially. Show toast notifications for auto-run results."
+    },
+
+    {
+      "id": "OI-018",
+      "title": "Playwright E2E tests for Layer 4 — Recipes",
+      "type": "test",
+      "status": "pending",
+      "priority": 18,
+      "layer": 4,
+      "layerName": "Recipes",
+
+      "description": "Write Playwright E2E tests covering recipe saving, library browsing, execution, sharing, and auto-triggers.",
+
+      "dependencies": {
+        "stories": ["OI-015", "OI-016", "OI-017"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Test: Execute a query → save as recipe → appears in library",
+        "Test: Run saved recipe → query executes → run count increments",
+        "Test: Share recipe → appears in Shared tab for other users",
+        "Test: Delete recipe with confirmation",
+        "Test: Recipe library slide-out opens/closes correctly"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "tests/e2e/ops-intelligence/recipes.spec.ts"
+      ],
+
+      "technicalNotes": "Use Playwriter MCP. First execute a query, then click save icon, fill recipe name, save. Open library, verify recipe card, click Run Now, verify execution."
+    },
+
+    {
+      "id": "OI-019",
+      "title": "Build ops-table-cross-query edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 19,
+      "layer": 3,
+      "layerName": "Cross-Table Intelligence",
+
+      "description": "Create an edge function that joins data across multiple sources: other ops tables, CRM entities (contacts, deals, companies, activities), and meetings/Fathom transcripts. Uses Claude to parse cross-table queries and build join logic.",
+
+      "dependencies": {
+        "stories": ["OI-020"],
+        "files": ["supabase/functions/_shared/costTracking.ts", "supabase/functions/_shared/corsHelper.ts", "supabase/functions/_shared/fathomTranscript.ts"],
+        "schema": ["dynamic_tables", "dynamic_table_cells"]
+      },
+      "blocks": ["OI-022", "OI-023"],
+
+      "acceptance": [
+        "POST /ops-table-cross-query with { tableId, query, dataSources? }",
+        "Parses natural language cross-table query using Claude Haiku",
+        "Supports data sources: dynamic_tables (by name/id), contacts, deals, companies, activities, meetings",
+        "Returns enriched rows with data from joined sources",
+        "Can add new columns to current table with cross-referenced data",
+        "Handles 'show net-new only' by comparing against another table's rows",
+        "Cost tracking via logAICostEvent with event type 'ops_cross_query'"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "supabase/functions/ops-table-cross-query/index.ts"
+      ],
+
+      "technicalNotes": "Parse query to identify source tables and join keys. For CRM data, query the contacts/deals/companies tables directly. For meetings/Fathom, use fathomTranscript.ts helper for transcript search. Join logic: match by email, company name, or explicit column mapping. Return results as { enrichedRows, newColumns?, summary }."
+    },
+
+    {
+      "id": "OI-020",
+      "title": "Create cross-table data source registry",
+      "type": "schema",
+      "status": "pending",
+      "priority": 20,
+      "layer": 3,
+      "layerName": "Cross-Table Intelligence",
+
+      "description": "Create a lightweight registry that maps available data sources for cross-table queries. Includes ops tables, CRM entities, and meeting data with their joinable fields.",
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": ["OI-019", "OI-021"],
+      "parallelWith": ["OI-001", "OI-007", "OI-014", "OI-025", "OI-031"],
+
+      "acceptance": [
+        "Helper function getAvailableDataSources(orgId) returns all queryable sources",
+        "Each source: { type, name, id, fields[], joinableKeys[] }",
+        "Ops tables: dynamically discovered from dynamic_tables + columns",
+        "CRM: hardcoded sources (contacts, deals, companies, activities) with known column schemas",
+        "Meetings: available if org has Fathom or 60 Notetaker connected",
+        "Used by cross-query edge function to validate and resolve source references"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "supabase/functions/ops-table-cross-query/dataSources.ts"
+      ],
+
+      "technicalNotes": "This is a helper module within the edge function, not a database table. CRM field definitions can be hardcoded since the schema is stable. Ops table fields are fetched dynamically from dynamic_table_columns."
+    },
+
+    {
+      "id": "OI-021",
+      "title": "Add cross_table_query tool to AI query bar",
+      "type": "backend",
+      "status": "pending",
+      "priority": 21,
+      "layer": 3,
+      "layerName": "Cross-Table Intelligence",
+
+      "description": "Add a cross_table_query tool to the existing ops-table-ai-query edge function that delegates to the cross-query engine when the user's intent involves data from other tables or CRM.",
+
+      "dependencies": {
+        "stories": ["OI-019", "OI-020"],
+        "files": ["supabase/functions/ops-table-ai-query/index.ts"],
+        "schema": []
+      },
+      "blocks": ["OI-022", "OI-023"],
+
+      "acceptance": [
+        "New tool definition: cross_table_query with params { query, target_sources[] }",
+        "System prompt includes available data sources list for the org",
+        "When Claude selects this tool, delegates to ops-table-cross-query function",
+        "Results can be: enriched column data, filtered results, or comparison output",
+        "Frontend handles cross-query results with appropriate display (new columns, filtered view)"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "Add available data sources to the system prompt so Claude knows what's queryable. The tool params should be simple — the cross-query function does the heavy parsing. Return type matches existing action discriminated union."
+    },
+
+    {
+      "id": "OI-022",
+      "title": "Build cross-query results UI in OpsDetailPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 22,
+      "layer": 3,
+      "layerName": "Cross-Table Intelligence",
+
+      "description": "Add frontend handling for cross-query results: display enriched data as temporary columns, show comparison results (net-new, overlapping), and display meeting/transcript references inline.",
+
+      "dependencies": {
+        "stories": ["OI-019", "OI-021"],
+        "files": ["src/pages/OpsDetailPage.tsx", "src/components/ops/OpsTable.tsx"],
+        "schema": []
+      },
+      "blocks": ["OI-024"],
+
+      "acceptance": [
+        "Cross-query enrichment results render as highlighted temporary columns in the table",
+        "Comparison mode (net-new) shows a results panel with matched/unmatched breakdown",
+        "Meeting/transcript references show as expandable inline cards with relevant snippets",
+        "User can 'Keep' enriched columns (persists to dynamic_table_columns) or dismiss",
+        "Loading state shows which data sources are being queried"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/pages/OpsDetailPage.tsx",
+        "src/components/ops/CrossQueryResultPanel.tsx"
+      ],
+
+      "technicalNotes": "Temporary columns have a distinct visual treatment (dashed border, blue tint). Keep action calls the existing add-column service. Meeting references use a collapsible card component showing transcript excerpts."
+    },
+
+    {
+      "id": "OI-023",
+      "title": "Add cross-query service methods",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 23,
+      "layer": 3,
+      "layerName": "Cross-Table Intelligence",
+
+      "description": "Add service layer methods for cross-table queries and data source discovery to opsTableService.",
+
+      "dependencies": {
+        "stories": ["OI-019", "OI-021"],
+        "files": ["src/lib/services/opsTableService.ts"],
+        "schema": []
+      },
+      "blocks": ["OI-024"],
+      "parallelWith": ["OI-022"],
+
+      "acceptance": [
+        "getAvailableDataSources(orgId): fetches queryable sources for the org",
+        "executeCrossQuery(tableId, query): invokes cross-query edge function",
+        "keepEnrichedColumn(tableId, columnConfig): persists temporary column to schema",
+        "All methods follow existing invoke pattern with error handling"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Follow existing patterns. Use supabase.functions.invoke() for edge function calls. Return typed results matching the cross-query response format."
+    },
+
+    {
+      "id": "OI-024",
+      "title": "Playwright E2E tests for Layer 3 — Cross-Table Intelligence",
+      "type": "test",
+      "status": "pending",
+      "priority": 24,
+      "layer": 3,
+      "layerName": "Cross-Table Intelligence",
+
+      "description": "Write Playwright E2E tests covering cross-table queries, enriched column display, comparison mode, and data source selection.",
+
+      "dependencies": {
+        "stories": ["OI-022", "OI-023"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Test: Type cross-table query → enriched columns appear with blue highlight",
+        "Test: Keep button persists enriched column to table schema",
+        "Test: Comparison query shows net-new vs overlapping breakdown",
+        "Test: Meeting transcript references render with expandable snippets",
+        "Test: Loading state shows data source indicators"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "tests/e2e/ops-intelligence/cross-table.spec.ts"
+      ],
+
+      "technicalNotes": "Use Playwriter MCP. Type cross-table queries, verify enriched column headers, test Keep/Dismiss actions, verify comparison panel rendering."
+    },
+
+    {
+      "id": "OI-025",
+      "title": "Create ops_table_chat_sessions schema and migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 25,
+      "layer": 5,
+      "layerName": "Conversational Context",
+
+      "description": "Create the database schema for conversational query sessions. Each session tracks messages and accumulated context (filters, sorts, column state) for multi-turn interactions.",
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": ["OI-026", "OI-027", "OI-028"],
+      "parallelWith": ["OI-001", "OI-007", "OI-014", "OI-020", "OI-031"],
+
+      "acceptance": [
+        "Migration creates ops_table_chat_sessions: id, table_id, user_id, messages JSONB, context JSONB, created_at, updated_at, expires_at",
+        "messages: array of { role, content, timestamp, action_result? }",
+        "context: { current_filters, current_sort, visible_columns, row_count, last_query_result }",
+        "RLS: users can only access their own sessions",
+        "Auto-expire sessions after 24 hours via expires_at"
+      ],
+
+      "estimatedMinutes": 10,
+
+      "files": [
+        "supabase/migrations/20260206000004_ops_table_chat_sessions.sql"
+      ],
+
+      "technicalNotes": "messages JSONB stores the conversation history. context JSONB is updated after each action to maintain state. expires_at allows cleanup of stale sessions. Index on (table_id, user_id, expires_at)."
+    },
+
+    {
+      "id": "OI-026",
+      "title": "Add conversational context to AI query edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 26,
+      "layer": 5,
+      "layerName": "Conversational Context",
+
+      "description": "Extend the AI query edge function to accept session context (previous messages + current state) and send conversation history to Claude for multi-turn understanding. Handle session create/update/expire. Conversational actions include both table operations (filter, sort, add column) AND external execution actions (add to Instantly sequence, post to Slack, send email draft, enrich via Apollo) — enabling full conversation chains like: filter → refine → act → execute externally.",
+
+      "dependencies": {
+        "stories": ["OI-025"],
+        "files": ["supabase/functions/ops-table-ai-query/index.ts"],
+        "schema": ["ops_table_chat_sessions"]
+      },
+      "blocks": ["OI-028", "OI-029"],
+
+      "acceptance": [
+        "Accept optional sessionId in request body",
+        "If sessionId provided, load session messages and context",
+        "Include last 10 messages as conversation history in Claude system prompt",
+        "Include current context (filters, sort, columns) in system prompt",
+        "After processing, update session with new message and updated context",
+        "If no sessionId, create new session on first query",
+        "Session auto-expires after 24 hours of inactivity",
+        "External execution actions available in conversational flow: add_to_instantly_sequence (push filtered contacts to Instantly campaign), send_slack (post summary/alert to Slack channel), draft_email (draft emails for filtered contacts), enrich_apollo (enrich filtered contacts via Apollo)",
+        "External actions leverage existing integration configs — Instantly API key from org integrations, Slack webhook from org settings, Apollo from existing enrichment setup",
+        "Conversation chains like 'Show law firms → Just senior ones → How many emailed this month? → Draft cold email for the rest → Send via Instantly' work end-to-end"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "Conversation context goes into the system prompt as 'Current table state' and 'Conversation history'. This enables follow-up queries like 'just the senior ones' after 'show me all law firm contacts'. Update context.current_filters after filter actions, context.current_sort after sort actions, etc. External actions (Instantly, Slack, Apollo) reuse existing integration service code — the conversational layer just needs to pass the current filtered row set to the appropriate action executor. The AI model sees all available actions (table + external) in the tool definitions and can chain them naturally within a conversation."
+    },
+
+    {
+      "id": "OI-027",
+      "title": "Build AiChatThread expandable component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 27,
+      "layer": 5,
+      "layerName": "Conversational Context",
+
+      "description": "Create an expandable mini chat panel that shows conversation history alongside the query bar. Default: single query bar. Click expand: shows scrollable chat thread below with user queries and AI responses.",
+
+      "dependencies": {
+        "stories": ["OI-025"],
+        "files": ["src/components/ops/AiQueryBar.tsx", "src/pages/OpsDetailPage.tsx"],
+        "schema": ["ops_table_chat_sessions"]
+      },
+      "blocks": ["OI-029"],
+
+      "acceptance": [
+        "AiChatThread.tsx component: expandable panel below query bar",
+        "Collapsed state: query bar only, with thread expand icon showing message count",
+        "Expanded state: scrollable chat history (max 400px height) with user/AI message bubbles",
+        "User messages show the query text, AI messages show the action taken + result summary",
+        "New Session button resets context and starts fresh conversation",
+        "Session indicator shows 'Conversation: N messages' when session is active"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/components/ops/AiChatThread.tsx",
+        "src/components/ops/AiQueryBar.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Use Framer Motion for expand/collapse animation. Chat messages use a lightweight bubble style (not the full copilot chat design). AI responses are summarized (e.g., 'Filtered to 23 rows matching Company contains LLP'). Scroll to bottom on new message."
+    },
+
+    {
+      "id": "OI-028",
+      "title": "Add session management to query flow",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 28,
+      "layer": 5,
+      "layerName": "Conversational Context",
+
+      "description": "Integrate session management into the existing query submit flow. Track sessions per table, pass sessionId to edge function, update local state with conversation context.",
+
+      "dependencies": {
+        "stories": ["OI-025", "OI-026"],
+        "files": ["src/pages/OpsDetailPage.tsx", "src/lib/services/opsTableService.ts"],
+        "schema": ["ops_table_chat_sessions"]
+      },
+      "blocks": ["OI-029", "OI-030"],
+
+      "acceptance": [
+        "handleQuerySubmit passes sessionId to edge function when session is active",
+        "New session created automatically on first query, stored in component state",
+        "Session persists across queries until user clicks New Session or 24h expiry",
+        "Context (filters, sort, columns) sent with each query for AI awareness",
+        "Service methods: createSession, updateSession, getSession, clearSession"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Store current sessionId in useState. On first query, edge function returns sessionId in response. Subsequent queries include it. On table navigation away, session pauses but resumes on return (within 24h). New Session clears sessionId state."
+    },
+
+    {
+      "id": "OI-029",
+      "title": "Playwright E2E tests for Layer 5 — Conversational Context",
+      "type": "test",
+      "status": "pending",
+      "priority": 29,
+      "layer": 5,
+      "layerName": "Conversational Context",
+
+      "description": "Write Playwright E2E tests for conversational context: multi-turn queries, chat thread expansion, session management.",
+
+      "dependencies": {
+        "stories": ["OI-027", "OI-028"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Test: Type query → follow-up query uses context → results refine correctly",
+        "Test: Expand chat thread → shows message history",
+        "Test: New Session button clears history and resets context",
+        "Test: Session message count badge updates after each query",
+        "Test: Collapsed thread shows latest response summary"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "tests/e2e/ops-intelligence/conversational.spec.ts"
+      ],
+
+      "technicalNotes": "Multi-turn test: filter → refine → act. Verify each step builds on previous context. Test session persistence by navigating away and back."
+    },
+
+    {
+      "id": "OI-030",
+      "title": "Add chat session service methods",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 30,
+      "layer": 5,
+      "layerName": "Conversational Context",
+
+      "description": "Add dedicated chat session service methods to opsTableService for CRUD operations on chat sessions.",
+
+      "dependencies": {
+        "stories": ["OI-025", "OI-028"],
+        "files": ["src/lib/services/opsTableService.ts"],
+        "schema": ["ops_table_chat_sessions"]
+      },
+      "blocks": [],
+      "parallelWith": ["OI-027"],
+
+      "acceptance": [
+        "createChatSession(tableId): creates new session, returns sessionId",
+        "getChatSession(sessionId): fetches session with messages and context",
+        "appendMessage(sessionId, message): adds message to session",
+        "clearChatSession(sessionId): soft-deletes session",
+        "React Query hooks: useOpsTableChatSession(tableId)"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Direct Supabase queries (not edge function calls) for session CRUD since it's simple table operations. Use React Query with a staleTime of 30s for session data."
+    },
+
+    {
+      "id": "OI-031",
+      "title": "Create ops_table_predictions schema and migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 31,
+      "layer": 6,
+      "layerName": "Predictive Actions",
+
+      "description": "Create the database schema for AI-generated predictions about contacts/deals based on team-wide behavioral learning. Predictions have confidence scores, reasoning, suggested actions, and expiry dates. Includes a behavioral_patterns table that aggregates org-wide rep activity patterns (response times, call timing, stage transition rates) to power team-level learning.",
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": ["OI-032", "OI-033", "OI-034"],
+      "parallelWith": ["OI-001", "OI-007", "OI-014", "OI-020", "OI-025"],
+
+      "acceptance": [
+        "Migration creates ops_table_predictions: id, org_id, table_id, row_id, prediction_type, confidence (0-1), title, reasoning, suggested_actions JSONB, source_pattern_id, expires_at, dismissed_at, created_at",
+        "prediction_type values: likely_to_convert, going_dark, optimal_timing, similar_pattern, team_behavior",
+        "suggested_actions: array of { label, action_type, action_config }",
+        "Migration creates ops_behavioral_patterns: id, org_id, pattern_type (response_time, call_timing, stage_velocity, win_pattern, loss_pattern), pattern_data JSONB, sample_size, confidence, computed_at, expires_at",
+        "pattern_data stores org-wide aggregated insights: e.g. { metric: 'call_within_2h', conversion_lift: 6.0, sample_deals: 47, baseline_rate: 0.08, boosted_rate: 0.48 }",
+        "RLS: org members can read predictions and behavioral patterns for their org",
+        "Index on (table_id, expires_at, dismissed_at) for active predictions",
+        "Index on (org_id, pattern_type, expires_at) for active behavioral patterns"
+      ],
+
+      "estimatedMinutes": 12,
+
+      "files": [
+        "supabase/migrations/20260206000005_ops_table_predictions.sql"
+      ],
+
+      "technicalNotes": "Predictions are ephemeral — they expire based on data freshness. confidence is a float 0-1 used for ranking and display (show high-confidence first). Row-level predictions link to specific contacts/rows via row_id. Behavioral patterns are org-wide aggregates computed from all reps' historical activity — they power the 'team_behavior' prediction type (e.g. 'Reps who call Page Viewed leads within 2 hours convert 6x more'). source_pattern_id links a prediction to the behavioral pattern that generated it."
+    },
+
+    {
+      "id": "OI-032",
+      "title": "Build ops-table-predictions edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 32,
+      "layer": 6,
+      "layerName": "Predictive Actions",
+
+      "description": "Create the predictions engine that analyzes historical patterns across activities, deal stages, meetings, and email engagement to generate predictive insights for contacts in an ops table. Includes team-wide behavioral learning that aggregates all reps' activity data org-wide to discover high-converting behaviors (e.g. 'Reps who call Page Viewed leads within 2 hours convert 6x more') and auto-applies those learnings as actionable predictions.",
+
+      "dependencies": {
+        "stories": ["OI-031"],
+        "files": ["supabase/functions/_shared/costTracking.ts", "supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["ops_table_predictions"]
+      },
+      "blocks": ["OI-034", "OI-035"],
+
+      "acceptance": [
+        "POST /ops-table-predictions with { tableId, action: 'analyze' | 'compute_patterns' | 'get_active' }",
+        "analyze: scans table rows, cross-references with CRM data AND org behavioral patterns, generates predictions",
+        "compute_patterns: aggregates org-wide rep activity data to discover behavioral patterns and stores to ops_behavioral_patterns",
+        "going_dark: checks deal activity gaps, flags accounts matching lost-deal patterns from org history (e.g. 'This account looks like it's going dark — same pattern happened with 4 lost deals last quarter')",
+        "likely_to_convert: scores contacts based on engagement signals (page views, email opens, meeting attendance) cross-referenced with org win patterns — includes 'Based on similar deals, these 3 contacts are most likely to convert — here's why'",
+        "optimal_timing: analyzes org-wide historical conversion patterns for best outreach timing — 'Reps who call Page Viewed leads within 2 hours convert 6x more. Auto-prioritising your call list.'",
+        "team_behavior: surfaces org-wide behavioral insights as actionable predictions — learns from all reps' patterns, not just the current user",
+        "Each prediction includes confidence score, human-readable conversational reasoning, and auto-prioritizes call/action lists based on prediction scores",
+        "Cost tracking via logAICostEvent with event type 'ops_predictions'"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "supabase/functions/ops-table-predictions/index.ts"
+      ],
+
+      "technicalNotes": "going_dark: query activities table for last activity per contact, compare to org-wide historical lost-deal patterns (e.g., 7+ days gap after demo, same pattern as N lost deals). likely_to_convert: aggregate engagement signals, cross-reference with org win patterns, score using Claude Haiku. optimal_timing: analyze org-wide historical won-deal timestamps for day-of-week/time-of-day patterns — not just user's deals, all org deals. team_behavior (compute_patterns): runs periodic analysis across all org activities, deals, and meetings to build behavioral pattern library — stores in ops_behavioral_patterns with sample_size and confidence. Pattern types: response_time_impact (how quickly reps respond vs conversion), call_timing (best time of day/week), stage_velocity (how long top performers spend per stage), win_pattern (common traits of won deals), loss_pattern (early warning signals from lost deals). Patterns refresh weekly or after significant new data (50+ new activities)."
+    },
+
+    {
+      "id": "OI-033",
+      "title": "Add prediction cards to insights banner",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 33,
+      "layer": 6,
+      "layerName": "Predictive Actions",
+
+      "description": "Extend the AiInsightsBanner to also render prediction cards from ops_table_predictions. Predictions get special treatment with confidence score badges and suggested action buttons.",
+
+      "dependencies": {
+        "stories": ["OI-031", "OI-010"],
+        "files": ["src/components/ops/AiInsightsBanner.tsx"],
+        "schema": ["ops_table_predictions"]
+      },
+      "blocks": ["OI-035"],
+
+      "acceptance": [
+        "Prediction cards render in the insights banner alongside regular insights",
+        "Confidence score shown as percentage badge with color coding (green >80%, yellow 50-80%, red <50%)",
+        "Reasoning text shown in expandable detail section",
+        "Suggested action buttons dispatch appropriate table/CRM actions",
+        "Predictions sorted by confidence (highest first)",
+        "Expired predictions auto-hidden"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/components/ops/AiInsightsBanner.tsx"
+      ],
+
+      "technicalNotes": "Prediction cards use a distinct visual treatment from insights — e.g., purple accent vs blue/amber/red. Confidence badge uses a small circular indicator. Expandable reasoning uses Radix Collapsible."
+    },
+
+    {
+      "id": "OI-034",
+      "title": "Add prediction service methods and auto-trigger",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 34,
+      "layer": 6,
+      "layerName": "Predictive Actions",
+
+      "description": "Add prediction service methods to opsTableService and hook predictions to run after insights analysis.",
+
+      "dependencies": {
+        "stories": ["OI-031", "OI-032"],
+        "files": ["src/lib/services/opsTableService.ts"],
+        "schema": ["ops_table_predictions"]
+      },
+      "blocks": ["OI-035"],
+      "parallelWith": ["OI-033"],
+
+      "acceptance": [
+        "getActivePredictions(tableId): fetches non-expired, non-dismissed predictions",
+        "dismissPrediction(predictionId): sets dismissed_at",
+        "runPredictions(tableId): invokes predictions edge function",
+        "Predictions auto-refresh after insights analysis completes",
+        "React Query hook: useOpsTablePredictions(tableId)"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Follow same patterns as insights service methods. Predictions and insights share the banner UI but are fetched separately. Use React Query with 5-minute staleTime for predictions."
+    },
+
+    {
+      "id": "OI-035",
+      "title": "Playwright E2E tests for Layer 6 — Predictive Actions",
+      "type": "test",
+      "status": "pending",
+      "priority": 35,
+      "layer": 6,
+      "layerName": "Predictive Actions",
+
+      "description": "Write Playwright E2E tests covering prediction card display, confidence scoring, action buttons, and dismissal.",
+
+      "dependencies": {
+        "stories": ["OI-033", "OI-034"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Test: Prediction cards render in insights banner with confidence badges",
+        "Test: Confidence colors: green >80%, yellow 50-80%, red <50%",
+        "Test: Expanding prediction shows reasoning text",
+        "Test: Suggested action button dispatches correct action",
+        "Test: Dismiss removes prediction card",
+        "Test: Team behavior predictions render with org-wide context (e.g. 'Reps who call within 2hrs convert 6x more')",
+        "Test: Behavioral pattern data shown with sample size for credibility"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "tests/e2e/ops-intelligence/predictions.spec.ts"
+      ],
+
+      "technicalNotes": "Seed test data with predictions at various confidence levels. Verify badge colors, expandable reasoning, action button functionality."
+    },
+
+    {
+      "id": "OI-036",
+      "title": "Deploy all new edge functions to staging",
+      "type": "deployment",
+      "status": "pending",
+      "priority": 36,
+      "layer": 0,
+      "layerName": "Deployment",
+
+      "description": "Deploy all new edge functions to the staging Supabase project and run migrations.",
+
+      "dependencies": {
+        "stories": ["OI-002", "OI-008", "OI-009", "OI-011", "OI-015", "OI-019", "OI-026", "OI-032"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["OI-037"],
+
+      "acceptance": [
+        "All new edge functions deployed with --no-verify-jwt to staging (caerqjzvuerejfrdtygb)",
+        "All new migrations applied to staging database",
+        "Edge functions respond to health check (OPTIONS request returns CORS headers)",
+        "No import errors (all esm.sh imports pinned to working versions)"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [],
+
+      "technicalNotes": "Deploy command: npx supabase functions deploy <name> --project-ref caerqjzvuerejfrdtygb --no-verify-jwt. Pin all imports: @supabase/supabase-js@2.43.4, @anthropic-ai/sdk@0.32.1."
+    },
+
+    {
+      "id": "OI-037",
+      "title": "Vite build verification and final integration test",
+      "type": "test",
+      "status": "pending",
+      "priority": 37,
+      "layer": 0,
+      "layerName": "Deployment",
+
+      "description": "Run full Vite build to catch any TypeScript or import errors, then run the complete E2E test suite against staging.",
+
+      "dependencies": {
+        "stories": ["OI-036", "OI-006", "OI-012", "OI-018", "OI-024", "OI-029", "OI-035"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "npm run build completes with zero errors",
+        "All Playwright E2E tests in tests/e2e/ops-intelligence/ pass",
+        "No TypeScript strict mode violations",
+        "Bundle size delta is reasonable (<500KB increase)"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [],
+
+      "technicalNotes": "Run npm run build first. If build fails, fix TypeScript errors before running E2E. Check bundle analyzer output for any unexpectedly large chunks."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 37,
+    "completedStories": 0,
+    "estimatedHours": 12,
+    "layers": [
+      { "id": 1, "name": "Chained Workflows", "stories": 6, "ids": ["OI-001", "OI-002", "OI-003", "OI-004", "OI-005", "OI-006"] },
+      { "id": 2, "name": "Proactive Intelligence", "stories": 7, "ids": ["OI-007", "OI-008", "OI-009", "OI-010", "OI-011", "OI-012", "OI-013"] },
+      { "id": 3, "name": "Cross-Table Intelligence", "stories": 6, "ids": ["OI-019", "OI-020", "OI-021", "OI-022", "OI-023", "OI-024"] },
+      { "id": 4, "name": "Recipes", "stories": 5, "ids": ["OI-014", "OI-015", "OI-016", "OI-017", "OI-018"] },
+      { "id": 5, "name": "Conversational Context", "stories": 6, "ids": ["OI-025", "OI-026", "OI-027", "OI-028", "OI-029", "OI-030"] },
+      { "id": 6, "name": "Predictive Actions", "stories": 5, "ids": ["OI-031", "OI-032", "OI-033", "OI-034", "OI-035"] },
+      { "id": 0, "name": "Deployment", "stories": 2, "ids": ["OI-036", "OI-037"] }
+    ],
+    "parallelGroups": [
+      {
+        "name": "Schema foundations (all layers in parallel)",
+        "stories": ["OI-001", "OI-007", "OI-014", "OI-020", "OI-025", "OI-031"],
+        "description": "All schema migrations can run simultaneously since they're independent tables"
+      },
+      {
+        "name": "Service layer + Backend (parallel per layer)",
+        "stories": ["OI-013", "OI-002", "OI-008", "OI-009"],
+        "description": "Service methods and edge functions can be built in parallel within each layer"
+      },
+      {
+        "name": "Frontend components (parallel across layers)",
+        "stories": ["OI-004", "OI-010", "OI-016", "OI-027", "OI-033"],
+        "description": "UI components across different layers are independent"
+      },
+      {
+        "name": "E2E tests (parallel per layer)",
+        "stories": ["OI-006", "OI-012", "OI-018", "OI-024", "OI-029", "OI-035"],
+        "description": "Test suites are independent per layer"
+      }
+    ],
+    "lastUpdated": "2026-02-05T12:00:00Z"
+  }
+}

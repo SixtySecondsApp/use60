@@ -1,0 +1,216 @@
+{
+  "project": {
+    "name": "Simplified HubSpot Import",
+    "description": "Streamline HubSpot import to 2 steps: (1) Select source (list or filter), (2) Import with email as key identifier. Users add HubSpot property columns later in the table itself.",
+    "createdAt": "2026-02-05T12:00:00Z",
+    "branch": "feat/dynamic-tables",
+    "consultedAt": "2026-02-05T12:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "hubspot-simplified",
+      "name": "Simplified HubSpot Import",
+      "status": "pending",
+      "priority": 0,
+      "description": "Replace 4-step wizard with 2-step flow. Email as key identifier. Add HubSpot property columns in-table."
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "HS-001",
+      "feature": "hubspot-simplified",
+      "title": "Add HubSpot list fetching to useHubSpotIntegration hook",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["src/lib/hooks/useHubSpotIntegration.ts"], "schema": [] },
+      "blocks": ["HS-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "Add getLists() method to useHubSpotIntegration hook",
+        "Fetch all lists via GET /crm/v3/lists with pagination",
+        "Return list with: id, name, listType (STATIC/DYNAMIC), membershipCount",
+        "Cache lists for 5 minutes to avoid repeated fetches",
+        "Handle pagination correctly (HubSpot returns max 250 per page)"
+      ],
+      "files": [
+        "src/lib/hooks/useHubSpotIntegration.ts"
+      ]
+    },
+    {
+      "id": "HS-002",
+      "feature": "hubspot-simplified",
+      "title": "Rebuild HubSpotImportWizard as 2-step flow with list selector",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["HS-001"], "files": ["src/components/ops/HubSpotImportWizard.tsx"], "schema": [] },
+      "blocks": ["HS-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Step 1: Select Source — toggle between 'From a List' or 'Filter by Property'",
+        "List mode: searchable list browser showing all HubSpot lists (name, type badge, member count)",
+        "Filter mode: existing property filter builder (keep current implementation)",
+        "Table name auto-fills based on list name or 'HubSpot Contacts'",
+        "Max records limit selector (100/500/1k/5k/10k)",
+        "Step 2: Preview & Import — show preview of first 5 contacts before importing",
+        "Preview table shows: Email, First Name, Last Name, Company (fetched via search API)",
+        "Show total count badge: 'Importing 247 contacts' with sample below",
+        "User confirms by clicking 'Import' button after reviewing preview",
+        "Import creates table with ONLY email column initially"
+      ],
+      "files": [
+        "src/components/ops/HubSpotImportWizard.tsx"
+      ]
+    },
+    {
+      "id": "HS-003",
+      "feature": "hubspot-simplified",
+      "title": "Update import-from-hubspot edge function for email-only import",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["HS-002"], "files": ["supabase/functions/import-from-hubspot/index.ts"], "schema": [] },
+      "blocks": ["HS-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Accept simplified payload: { org_id, user_id, table_name, list_id?, filters?, limit }",
+        "Always fetch 'email' property (required)",
+        "Create table with single 'email' column (type: email, key: email)",
+        "Store full HubSpot contact object in source_data JSONB for later property pulls",
+        "Store HubSpot contact ID in source_id for sync/lookup",
+        "Support list_id parameter for list-based import",
+        "Return { table_id, rows_imported, columns_created: 1 }"
+      ],
+      "files": [
+        "supabase/functions/import-from-hubspot/index.ts"
+      ]
+    },
+    {
+      "id": "HS-004",
+      "feature": "hubspot-simplified",
+      "title": "Add 'HubSpot Property' column type with property picker",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["HS-003"], "files": ["src/components/ops/AddColumnModal.tsx", "supabase/migrations/"], "schema": ["dynamic_table_columns"] },
+      "blocks": ["HS-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration: add 'hubspot_property' to column_type CHECK constraint",
+        "Migration: add hubspot_property_name TEXT to dynamic_table_columns",
+        "AddColumnModal: 'HubSpot Property' type (only shown for hubspot-sourced tables)",
+        "HubSpotPropertyPicker: searchable list of HubSpot contact properties",
+        "Group properties by category (Contact info, Company info, Deal info, Custom)",
+        "Show property label, internal name, and type",
+        "Auto-set column label to property label, column type based on HubSpot type"
+      ],
+      "files": [
+        "supabase/migrations/20260205800000_hubspot_property_column.sql",
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/HubSpotPropertyPicker.tsx",
+        "src/lib/services/opsTableService.ts"
+      ]
+    },
+    {
+      "id": "HS-005",
+      "feature": "hubspot-simplified",
+      "title": "Create edge function to populate HubSpot property column values",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["HS-004"], "files": [], "schema": [] },
+      "blocks": ["HS-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function: populate-hubspot-column/index.ts",
+        "Input: { table_id, column_id, hubspot_property_name }",
+        "For each row: extract value from source_data JSONB if available",
+        "If not in source_data: batch fetch from HubSpot API using source_id (contact ID)",
+        "Batch HubSpot requests: 100 contacts per request via batch read API",
+        "Update cells with fetched values, set status='complete'",
+        "Handle missing values gracefully (null → empty cell)",
+        "Return { rows_populated, rows_skipped, rows_failed }"
+      ],
+      "files": [
+        "supabase/functions/populate-hubspot-column/index.ts"
+      ]
+    },
+    {
+      "id": "HS-006",
+      "feature": "hubspot-simplified",
+      "title": "Wire up column creation to auto-populate values",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["HS-005"], "files": ["src/components/ops/AddColumnModal.tsx", "src/pages/OpsDetailPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "After creating HubSpot property column, auto-call populate-hubspot-column edge function",
+        "Show progress indicator while populating ('Fetching First Name for 247 contacts...')",
+        "Toast on completion: 'Populated 247 values for First Name'",
+        "Handle partial failures gracefully (some rows may fail)",
+        "Column header shows HubSpot icon to indicate it's a linked property",
+        "ColumnHeaderMenu: 'Refresh from HubSpot' action to re-populate values"
+      ],
+      "files": [
+        "src/components/ops/AddColumnModal.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/components/ops/ColumnHeaderMenu.tsx",
+        "src/lib/hooks/useHubSpotColumnPopulate.ts"
+      ]
+    }
+  ],
+
+  "phases": {
+    "phase1": {
+      "name": "List Fetching & Simplified Wizard",
+      "stories": ["HS-001", "HS-002", "HS-003"],
+      "description": "Add list fetching, rebuild wizard to 2 steps, update edge function for email-only import.",
+      "status": "pending"
+    },
+    "phase2": {
+      "name": "HubSpot Property Columns",
+      "stories": ["HS-004", "HS-005", "HS-006"],
+      "description": "New column type for HubSpot properties, edge function to populate values, auto-populate on creation.",
+      "status": "pending"
+    }
+  },
+
+  "architectureDecisions": [
+    {
+      "decision": "Email as the key identifier for HubSpot contacts",
+      "rationale": "Email is the natural unique identifier for contacts. HubSpot also uses email for deduplication. This enables future two-way sync."
+    },
+    {
+      "decision": "Store full HubSpot object in source_data JSONB",
+      "rationale": "Allows extracting additional properties without re-fetching from HubSpot. Enables offline property access for common fields."
+    },
+    {
+      "decision": "HubSpot property columns pull once at creation",
+      "rationale": "User explicitly chose this behavior. Manual re-sync available via column header menu. Avoids API rate limit issues from auto-sync."
+    },
+    {
+      "decision": "Separate 'hubspot_property' column type (not reusing 'integration')",
+      "rationale": "HubSpot properties are read operations (pull from source_data or API), not third-party integrations that run per-row. Simpler mental model."
+    }
+  ],
+
+  "risks": [
+    {
+      "severity": "low",
+      "area": "api-limits",
+      "issue": "HubSpot batch read API has 100 contacts/request limit",
+      "mitigation": "HS-005 batches requests, respects rate limits via shared HubSpotClient"
+    },
+    {
+      "severity": "low",
+      "area": "data-freshness",
+      "issue": "Property values may become stale after import",
+      "mitigation": "Manual 'Refresh from HubSpot' action in column header menu"
+    }
+  ]
+}

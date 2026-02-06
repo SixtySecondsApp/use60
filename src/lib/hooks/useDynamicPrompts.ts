@@ -1,6 +1,7 @@
 /**
  * Dynamic Prompts Hook
  * Generates contextually relevant CoPilot prompts based on user's actual data
+ * US-009: Updated to match capability-matched prompts from brief
  */
 
 import { useState, useEffect } from 'react';
@@ -9,20 +10,33 @@ import { useAuthUser } from '@/lib/hooks/useAuthUser';
 
 interface DynamicPrompt {
   text: string;
-  category: 'priority' | 'deal' | 'contact' | 'task' | 'meeting';
+  category: 'priority' | 'deal' | 'contact' | 'task' | 'meeting' | 'fathom';
 }
 
+// US-009: Capability-matched default prompts from brief
 const DEFAULT_PROMPTS: DynamicPrompt[] = [
-  { text: 'What should I prioritize today?', category: 'priority' },
-  { text: 'Show me deals that need attention', category: 'deal' },
-  { text: 'What tasks are overdue?', category: 'task' }
+  { text: 'What action items am I behind on?', category: 'task' },
+  { text: 'Which deals haven\'t moved in 2 weeks?', category: 'deal' },
+  { text: 'Draft follow-ups for today\'s meetings', category: 'meeting' },
+  { text: 'What should I prioritize today?', category: 'priority' }
 ];
 
-export function useDynamicPrompts(maxPrompts: number = 3): {
+// Format time for meeting prep prompt
+function formatMeetingTime(startTime: string): string {
+  const date = new Date(startTime);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  const hour12 = hours % 12 || 12;
+  const minuteStr = minutes > 0 ? `:${minutes.toString().padStart(2, '0')}` : '';
+  return `${hour12}${minuteStr}${ampm}`;
+}
+
+export function useDynamicPrompts(maxPrompts: number = 4): {
   prompts: string[];
   isLoading: boolean;
 } {
-  const [prompts, setPrompts] = useState<string[]>(DEFAULT_PROMPTS.map(p => p.text));
+  const [prompts, setPrompts] = useState<string[]>(DEFAULT_PROMPTS.slice(0, maxPrompts).map(p => p.text));
   const [isLoading, setIsLoading] = useState(true);
   const { data: user } = useAuthUser();
 
@@ -37,112 +51,113 @@ export function useDynamicPrompts(maxPrompts: number = 3): {
         const dynamicPrompts: DynamicPrompt[] = [];
 
         // Fetch data in parallel for performance
-        const [contactsResult, dealsResult, tasksResult, meetingsResult] = await Promise.all([
+        const [contactsResult, dealsResult, tasksResult, meetingsResult, companiesResult] = await Promise.all([
           // Get recent contacts with activity
           supabase
             .from('contacts')
             .select('id, full_name, first_name, last_name, updated_at')
-            .eq('owner_id', user.id)  // contacts table uses owner_id, not user_id
+            .eq('owner_id', user.id)
             .order('updated_at', { ascending: false })
             .limit(5),
 
-          // Get deals needing attention (low health score or stale)
+          // Get stale deals (not updated in 2 weeks)
           supabase
             .from('deals')
             .select('id, name, health_score, updated_at, expected_close_date')
-            .eq('user_id', user.id)
-            .or('health_score.lt.50,health_score.is.null')
+            .eq('owner_id', user.id)
+            .lt('updated_at', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
             .order('value', { ascending: false })
             .limit(5),
 
-          // Get overdue or high-priority tasks
+          // Get overdue or incomplete tasks
           supabase
             .from('tasks')
             .select('id, title, due_date, priority, status')
             .eq('assigned_to', user.id)
             .neq('status', 'completed')
             .order('due_date', { ascending: true })
-            .limit(5),
+            .limit(10),
 
-          // Get upcoming meetings (next 7 days)
+          // Get upcoming meetings (today or next)
           supabase
             .from('calendar_events')
             .select('id, title, start_time, attendees')
             .eq('user_id', user.id)
             .gte('start_time', new Date().toISOString())
-            .lte('start_time', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
+            .lte('start_time', new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString())
             .order('start_time', { ascending: true })
+            .limit(3),
+
+          // Get recent companies for Fathom-style prompts
+          supabase
+            .from('companies')
+            .select('id, name')
+            .eq('owner_id', user.id)
+            .order('updated_at', { ascending: false })
             .limit(3)
         ]);
 
-        // Generate contact-based prompts
-        if (contactsResult.data && contactsResult.data.length > 0) {
-          const recentContact = contactsResult.data[0];
-          const contactName = recentContact.full_name ||
-            `${recentContact.first_name || ''} ${recentContact.last_name || ''}`.trim() ||
-            'this contact';
-
+        // 1. Meeting prep prompt with actual time (e.g., "Prep me for my 3pm call")
+        if (meetingsResult.data && meetingsResult.data.length > 0) {
+          const nextMeeting = meetingsResult.data[0];
+          const meetingTime = formatMeetingTime(nextMeeting.start_time);
           dynamicPrompts.push({
-            text: `Draft a follow-up email for ${contactName}`,
-            category: 'contact'
+            text: `Prep me for my ${meetingTime} call`,
+            category: 'meeting'
           });
         }
 
-        // Generate deal-based prompts
-        if (dealsResult.data && dealsResult.data.length > 0) {
-          const atRiskDeal = dealsResult.data.find(d => d.health_score && d.health_score < 50);
-          if (atRiskDeal) {
-            dynamicPrompts.push({
-              text: `What's blocking the ${atRiskDeal.name} deal?`,
-              category: 'deal'
-            });
-          } else {
-            dynamicPrompts.push({
-              text: 'Show me deals that need attention',
-              category: 'deal'
-            });
-          }
+        // 2. Contact-based prompt with name (e.g., "What did Sarah say about budget?")
+        if (contactsResult.data && contactsResult.data.length > 0) {
+          const recentContact = contactsResult.data[0];
+          const firstName = recentContact.first_name ||
+            recentContact.full_name?.split(' ')[0] ||
+            'them';
+
+          dynamicPrompts.push({
+            text: `What did ${firstName} say about next steps?`,
+            category: 'fathom'
+          });
         }
 
-        // Generate task-based prompts
-        if (tasksResult.data && tasksResult.data.length > 0) {
+        // 3. Company-based Fathom prompt (e.g., "Summarise my calls with Acme")
+        if (companiesResult.data && companiesResult.data.length > 0) {
+          const recentCompany = companiesResult.data[0];
+          dynamicPrompts.push({
+            text: `Summarise my calls with ${recentCompany.name}`,
+            category: 'fathom'
+          });
+        }
+
+        // 4. Stale deals prompt
+        if (dealsResult.data && dealsResult.data.length > 0) {
+          dynamicPrompts.push({
+            text: `Which deals haven't moved in 2 weeks?`,
+            category: 'deal'
+          });
+        }
+
+        // 5. Task/action items prompt
+        if (tasksResult.data) {
           const overdueTasks = tasksResult.data.filter(t =>
             t.due_date && new Date(t.due_date) < new Date()
           );
 
           if (overdueTasks.length > 0) {
             dynamicPrompts.push({
-              text: `I have ${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''} - what should I tackle first?`,
+              text: 'What action items am I behind on?',
               category: 'task'
             });
-          } else {
-            const highPriorityTask = tasksResult.data.find(t => t.priority === 'high');
-            if (highPriorityTask) {
-              dynamicPrompts.push({
-                text: 'Show me my high priority tasks',
-                category: 'task'
-              });
-            }
           }
         }
 
-        // Generate meeting-based prompts
-        if (meetingsResult.data && meetingsResult.data.length > 0) {
-          const nextMeeting = meetingsResult.data[0];
-          const meetingTitle = nextMeeting.title || 'my next meeting';
-          dynamicPrompts.push({
-            text: `Prep me for ${meetingTitle}`,
-            category: 'meeting'
-          });
-        }
-
-        // Always include the general priority question
-        dynamicPrompts.unshift({
-          text: 'What should I prioritize today?',
-          category: 'priority'
+        // 6. Follow-up prompt
+        dynamicPrompts.push({
+          text: 'Draft follow-ups for today\'s meetings',
+          category: 'contact'
         });
 
-        // Deduplicate and limit
+        // Deduplicate by category and limit
         const uniquePrompts = dynamicPrompts
           .filter((prompt, index, self) =>
             index === self.findIndex(p => p.category === prompt.category)

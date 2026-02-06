@@ -219,12 +219,12 @@ export function SkillInfo({ skillKey, className }: SkillInfoProps) {
             </p>
           )}
           <div className="flex flex-wrap gap-1 mt-2">
-            {skill.frontmatter?.requires_context?.map((ctx: string) => (
+            {Array.isArray(skill.frontmatter?.requires_context) && skill.frontmatter.requires_context.map((ctx: string) => (
               <Badge key={ctx} variant="outline" className="text-[10px]">
                 Needs: {ctx}
               </Badge>
             ))}
-            {skill.frontmatter?.outputs?.map((out: string) => (
+            {Array.isArray(skill.frontmatter?.outputs) && skill.frontmatter.outputs.map((out: string) => (
               <Badge key={out} variant="secondary" className="text-[10px]">
                 → {out}
               </Badge>

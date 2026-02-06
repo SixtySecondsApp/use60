@@ -4,9 +4,13 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { v4 as uuidv4 } from 'uuid';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { CopilotLayout } from './copilot/CopilotLayout';
+import { CopilotRightPanel } from './copilot/CopilotRightPanel';
 import { CopilotService } from '@/lib/services/copilotService';
+import { useCopilotContextData } from '@/lib/hooks/useCopilotContextData';
 import { EmailActionModal, EmailActionData, EmailActionType } from './copilot/EmailActionModal';
 import { useDynamicPrompts } from '@/lib/hooks/useDynamicPrompts';
 import logger from '@/lib/utils/logger';
@@ -46,10 +50,45 @@ export const Copilot: React.FC<CopilotProps> = ({
   onDraftEmail,
   initialQuery
 }) => {
-  const { messages, isLoading, sendMessage, cancelRequest, context } = useCopilot();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { messages, isLoading, sendMessage, cancelRequest, context, conversationId, loadConversation, startNewChat, progressSteps } = useCopilot();
   const [inputValue, setInputValue] = useState(initialQuery || '');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { prompts: suggestedPrompts } = useDynamicPrompts(3);
+
+  // URL-based navigation for conversation selection
+  const handleSelectConversation = useCallback((id: string) => {
+    navigate(`/copilot/${id}`);
+  }, [navigate]);
+
+  // URL-based navigation for new chat
+  const handleNewConversation = useCallback(() => {
+    const newId = uuidv4();
+    startNewChat();
+    navigate(`/copilot/${newId}`);
+  }, [navigate, startNewChat]);
+
+  // Track last synced conversation ID to avoid redundant navigation
+  const lastSyncedConversationId = useRef<string | undefined>(undefined);
+
+  // Sync URL when API returns a different conversation ID
+  useEffect(() => {
+    // Only sync if we have a conversation ID and it's different from last synced
+    if (conversationId && conversationId !== lastSyncedConversationId.current) {
+      // Check if URL already matches
+      const currentUrlId = location.pathname.split('/copilot/')[1];
+      if (currentUrlId !== conversationId) {
+        lastSyncedConversationId.current = conversationId;
+        navigate(`/copilot/${conversationId}`, { replace: true });
+      } else {
+        lastSyncedConversationId.current = conversationId;
+      }
+    }
+  }, [conversationId, location.pathname, navigate]);
+
+  // US-012: Fetch context data for right panel (US-006: includes summary counts)
+  const { contextItems, contextSummary, isLoading: isContextLoading } = useCopilotContextData();
 
   // Email action modal state
   const [emailModal, setEmailModal] = useState<EmailModalState>({
@@ -361,6 +400,20 @@ export const Copilot: React.FC<CopilotProps> = ({
         // Handle schedule call action
         logger.log('Schedule call action');
         break;
+      // US-010: Handle email tone change - regenerate email with new tone
+      case 'change_email_tone':
+        if (action.tone && action.context) {
+          const toneLabels: Record<string, string> = {
+            professional: 'professional',
+            friendly: 'friendly and warm',
+            concise: 'concise and brief'
+          };
+          const toneDescription = toneLabels[action.tone] || action.tone;
+          const contactName = action.context.contactName || 'the contact';
+          // Send a message to regenerate the email with the new tone
+          sendMessage(`Regenerate the email draft for ${contactName} with a ${toneDescription} tone`);
+        }
+        break;
       default:
         // Handle callback function if provided
         if (typeof action.callback === 'function') {
@@ -413,7 +466,18 @@ export const Copilot: React.FC<CopilotProps> = ({
   }, []);
 
   return (
-    <CopilotLayout>
+    <CopilotLayout rightPanel={
+      <CopilotRightPanel
+        contextItems={contextItems}
+        contextSummary={contextSummary}
+        isContextLoading={isContextLoading}
+        progressSteps={progressSteps}
+        isProcessing={isLoading}
+        currentConversationId={conversationId}
+        onSelectConversation={handleSelectConversation}
+        onNewConversation={handleNewConversation}
+      />
+    }>
       <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 flex flex-col min-h-0 overflow-hidden h-[calc(100dvh-var(--app-top-offset))]">
         <AssistantShell mode="page" />
 

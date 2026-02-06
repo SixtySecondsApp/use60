@@ -316,7 +316,7 @@ async function createSale(sale: {
             company: sale.client_name,
             value: sale.amount,
             stage_id: closedStageId,
-            owner_id: user.id,
+            owner_id: userId,
             probability: 100,
             status: 'active',
             expected_close_date: sale.date || new Date().toISOString(),
@@ -403,7 +403,7 @@ async function createSale(sale: {
   }
 
   const activityData = {
-    user_id: user.id,
+    user_id: userId,
     type: 'sale',
     client_name: sale.client_name,
     details: sale.details || `${sale.saleType} Sale`,

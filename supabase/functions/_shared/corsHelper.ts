@@ -177,3 +177,29 @@ export const legacyCorsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
+/**
+ * Standard CORS headers - alias for legacyCorsHeaders for backwards compatibility
+ * Many functions import this directly
+ */
+export const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-cron-secret, x-internal-call',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+};
+
+/**
+ * Handle CORS preflight request and return a Response directly
+ * Used by functions that handle OPTIONS separately without the request object
+ */
+export function handleCorsPreflightWithResponse(): Response {
+  return new Response('ok', {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-cron-secret, x-internal-call',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
+

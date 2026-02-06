@@ -37,10 +37,21 @@ import { ActivityCreationResponse } from './responses/ActivityCreationResponse';
 import { TaskCreationResponse } from './responses/TaskCreationResponse';
 import { ProposalSelectionResponse } from './responses/ProposalSelectionResponse';
 import { ActionSummaryResponse } from './responses/ActionSummaryResponse';
+import { PipelineFocusTasksResponse } from './responses/PipelineFocusTasksResponse';
+import { DealRescuePackResponse } from './responses/DealRescuePackResponse';
+import { NextMeetingCommandCenterResponse } from './responses/NextMeetingCommandCenterResponse';
+import { PostMeetingFollowUpPackResponse } from './responses/PostMeetingFollowUpPackResponse';
+import { DealMapBuilderResponse } from './responses/DealMapBuilderResponse';
+import { DailyFocusPlanResponse } from './responses/DailyFocusPlanResponse';
+import { FollowupZeroInboxResponse } from './responses/FollowupZeroInboxResponse';
+import { DealSlippageGuardrailsResponse } from './responses/DealSlippageGuardrailsResponse';
+import { DailyBriefResponse } from './responses/DailyBriefResponse';
 import { MeetingCountResponse } from './responses/MeetingCountResponse';
 import { MeetingBriefingResponse } from './responses/MeetingBriefingResponse';
 import { MeetingListResponse } from './responses/MeetingListResponse';
 import { TimeBreakdownResponse } from './responses/TimeBreakdownResponse';
+import { OpsTableResponse } from './responses/OpsTableResponse';
+import type { OpsTableResponseData } from './responses/OpsTableResponse';
 import type {
   CopilotResponse as CopilotResponseType,
   PipelineResponse as PipelineResponseType,
@@ -75,6 +86,15 @@ import type {
   TaskCreationResponse as TaskCreationResponseType,
   ProposalSelectionResponse as ProposalSelectionResponseType,
   ActionSummaryResponse as ActionSummaryResponseType,
+  PipelineFocusTasksResponse as PipelineFocusTasksResponseType,
+  DealRescuePackResponse as DealRescuePackResponseType,
+  NextMeetingCommandCenterResponse as NextMeetingCommandCenterResponseType,
+  PostMeetingFollowUpPackResponse as PostMeetingFollowUpPackResponseType,
+  DealMapBuilderResponse as DealMapBuilderResponseType,
+  DailyFocusPlanResponse as DailyFocusPlanResponseType,
+  FollowupZeroInboxResponse as FollowupZeroInboxResponseType,
+  DealSlippageGuardrailsResponse as DealSlippageGuardrailsResponseType,
+  DailyBriefResponse as DailyBriefResponseType,
   MeetingCountResponseData,
   MeetingBriefingResponseData,
   MeetingListResponseData,
@@ -189,6 +209,33 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
     case 'action_summary':
       return <ActionSummaryResponse data={response as ActionSummaryResponseType} onActionClick={onActionClick} />;
 
+    case 'pipeline_focus_tasks':
+      return <PipelineFocusTasksResponse data={response as PipelineFocusTasksResponseType} onActionClick={onActionClick} />;
+
+    case 'deal_rescue_pack':
+      return <DealRescuePackResponse data={response as DealRescuePackResponseType} onActionClick={onActionClick} />;
+
+    case 'next_meeting_command_center':
+      return <NextMeetingCommandCenterResponse data={response as NextMeetingCommandCenterResponseType} onActionClick={onActionClick} />;
+
+    case 'post_meeting_followup_pack':
+      return <PostMeetingFollowUpPackResponse data={response as PostMeetingFollowUpPackResponseType} onActionClick={onActionClick} />;
+
+    case 'deal_map_builder':
+      return <DealMapBuilderResponse data={response as DealMapBuilderResponseType} onActionClick={onActionClick} />;
+
+    case 'daily_focus_plan':
+      return <DailyFocusPlanResponse data={response as DailyFocusPlanResponseType} onActionClick={onActionClick} />;
+
+    case 'followup_zero_inbox':
+      return <FollowupZeroInboxResponse data={response as FollowupZeroInboxResponseType} onActionClick={onActionClick} />;
+
+    case 'deal_slippage_guardrails':
+      return <DealSlippageGuardrailsResponse data={response as DealSlippageGuardrailsResponseType} onActionClick={onActionClick} />;
+
+    case 'daily_brief':
+      return <DailyBriefResponse data={response as DailyBriefResponseType} onActionClick={onActionClick} />;
+
     case 'meeting_count':
       return <MeetingCountResponse data={(response as any).data as MeetingCountResponseData} onActionClick={onActionClick} />;
 
@@ -200,6 +247,9 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'time_breakdown':
       return <TimeBreakdownResponse data={(response as any).data as TimeBreakdownResponseData} onActionClick={onActionClick} />;
+
+    case 'dynamic_table':
+      return <OpsTableResponse data={(response as any).data as OpsTableResponseData} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown

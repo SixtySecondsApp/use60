@@ -79,11 +79,11 @@ export default async function handler(req: any, res: any) {
       );
     }
 
-    const data = await response.json();
+    const data = await response.json() as Record<string, unknown>;
 
     return res.status(200).json({
       success: true,
-      ...data,
+      ...(typeof data === 'object' && data !== null ? data : {}),
       triggeredBy: 'vercel-cron',
       timestamp: new Date().toISOString(),
     });

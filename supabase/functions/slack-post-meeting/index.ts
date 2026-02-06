@@ -173,6 +173,15 @@ async function generateFollowUpDraft(input: {
   }
 
   try {
+    // Get current date for accurate date references in email
+    const today = new Date();
+    const currentDateStr = today.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -190,6 +199,9 @@ async function generateFollowUpDraft(input: {
           {
             role: 'user',
             content: `Draft a follow-up email.
+
+TODAY'S DATE: ${currentDateStr}
+Use this date when making any date references like "tomorrow", "next week", "this Friday", etc.
 
 MEETING: ${input.meetingTitle}
 RECIPIENT: ${input.attendeeNameOrEmail}

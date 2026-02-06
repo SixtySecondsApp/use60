@@ -323,8 +323,8 @@ serve(async (req) => {
         email_type: request.email_type,
         to_email: request.to_email,
         user_id: request.user_id,
-        status: transactionalResult?.success || eventResult.success ? 'sent' : 'failed',
-        error: transactionalResult?.error || eventResult.error,
+        status: eventResult.success ? 'sent' : 'failed',
+        error: eventResult.error,
         metadata: {
           ...request.data,
           sent_via: 'encharge_event', // Events trigger automation flows

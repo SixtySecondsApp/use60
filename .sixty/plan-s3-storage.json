@@ -1,0 +1,613 @@
+{
+  "project": {
+    "name": "60 Notetaker S3 Storage & Cost Tracking",
+    "description": "Phase 1: Background S3 upload for permanent video storage + Admin cost tracking dashboard",
+    "createdAt": "2026-01-26T14:30:00Z",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "storage": "aws-s3",
+      "functions": "edge-functions"
+    }
+  },
+
+  "features": [
+    {
+      "id": "s3-upload",
+      "name": "Background S3 Upload",
+      "status": "pending",
+      "priority": 1,
+      "description": "Async S3 upload job that runs after webhook completes, streaming video from MeetingBaaS to S3 without memory buffering",
+      "estimatedHours": 4
+    },
+    {
+      "id": "cost-tracking",
+      "name": "S3 Cost Tracking Dashboard",
+      "status": "pending",
+      "priority": 2,
+      "description": "Admin interface to monitor S3 storage costs, upload metrics, and usage trends",
+      "estimatedHours": 3
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "S3-001",
+      "feature": "s3-upload",
+      "title": "Add S3 metadata columns to recordings table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["S3-002"],
+      "parallelWith": [],
+
+      "description": "Add columns to track S3 upload status, file sizes, and timestamps",
+
+      "acceptance": [
+        "Add s3_upload_status enum: pending, uploading, complete, failed",
+        "Add s3_file_size_bytes bigint for total video+audio size",
+        "Add s3_upload_started_at, s3_upload_completed_at timestamps",
+        "Add s3_upload_error_message text for failures",
+        "Create index on s3_upload_status for job queue queries"
+      ],
+
+      "files": [
+        "supabase/migrations/20260126160000_add_s3_upload_tracking.sql"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "Status flow: pending → uploading → complete/failed",
+        "s3_file_size_bytes used for cost tracking (GB * $0.023/month)"
+      ]
+    },
+
+    {
+      "id": "S3-002",
+      "feature": "s3-upload",
+      "title": "Create upload-recording-to-s3 edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": ["S3-001"],
+        "files": [
+          "supabase/functions/_shared/s3Client.ts"
+        ],
+        "schema": ["recordings"]
+      },
+      "blocks": ["S3-003"],
+      "parallelWith": [],
+
+      "description": "Streaming S3 upload function that fetches from MeetingBaaS URL and uploads in chunks",
+
+      "acceptance": [
+        "Streams video from MeetingBaaS URL (no memory buffering)",
+        "Uses AWS S3 SDK multipart upload for large files",
+        "Updates s3_upload_status throughout process",
+        "Handles timeout/retry with exponential backoff",
+        "Records file size and upload duration"
+      ],
+
+      "files": [
+        "supabase/functions/upload-recording-to-s3/index.ts",
+        "supabase/functions/_shared/s3StreamUpload.ts"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "Use fetch() with stream reader for MeetingBaaS URL",
+        "AWS multipart upload: 5MB chunks minimum",
+        "Max execution time: 9 minutes (edge function limit)",
+        "For 30-min recording (~480MB): ~3-4 minutes upload time"
+      ],
+
+      "codeTemplate": {
+        "imports": [
+          "import { S3Client, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand } from 'npm:@aws-sdk/client-s3@3';",
+          "import { Readable } from 'node:stream';"
+        ],
+        "pattern": "streaming-upload"
+      }
+    },
+
+    {
+      "id": "S3-003",
+      "feature": "s3-upload",
+      "title": "Update meetingbaas-webhook to queue S3 upload",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": ["S3-001"],
+        "files": [
+          "supabase/functions/meetingbaas-webhook/index.ts"
+        ],
+        "schema": ["recordings"]
+      },
+      "blocks": ["S3-004"],
+      "parallelWith": [],
+
+      "description": "Modify webhook to store MeetingBaaS URLs and set s3_upload_status=pending",
+
+      "acceptance": [
+        "Store video_url and audio_url in bot_deployments table",
+        "Set recordings.s3_upload_status = 'pending'",
+        "Don't block webhook on S3 upload (async queue)",
+        "Webhook completes in < 5 seconds",
+        "Log MeetingBaaS URL expiry time (created_at + 4 hours)"
+      ],
+
+      "files": [
+        "supabase/functions/meetingbaas-webhook/index.ts"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "MeetingBaaS URLs valid for 4 hours after webhook receipt",
+        "S3 upload job must run within this window",
+        "Current implementation already stores URLs in bot_deployments"
+      ]
+    },
+
+    {
+      "id": "S3-004",
+      "feature": "s3-upload",
+      "title": "Create poll-s3-upload-queue cron job",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": ["S3-002", "S3-003"],
+        "files": [],
+        "schema": ["recordings"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "description": "Scheduled job that finds pending uploads and triggers upload-recording-to-s3",
+
+      "acceptance": [
+        "Runs every 5 minutes via pg_cron",
+        "Query recordings where s3_upload_status='pending'",
+        "Check MeetingBaaS URL not expired (< 4 hours old)",
+        "Trigger upload-recording-to-s3 for each recording",
+        "Skip if URL expired, mark as failed"
+      ],
+
+      "files": [
+        "supabase/functions/poll-s3-upload-queue/index.ts",
+        "supabase/migrations/20260126161000_poll_s3_upload_cron.sql"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "Similar pattern to poll-gladia-jobs",
+        "Fast HEAD request to check count before fetching",
+        "Priority: older recordings first (FIFO queue)"
+      ]
+    },
+
+    {
+      "id": "S3-005",
+      "feature": "s3-upload",
+      "title": "Update process-gladia-webhook to sync S3 URLs to meetings",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+
+      "dependencies": {
+        "stories": ["S3-002"],
+        "files": [
+          "supabase/functions/process-gladia-webhook/index.ts"
+        ],
+        "schema": ["recordings", "meetings"]
+      },
+      "blocks": [],
+      "parallelWith": ["S3-006"],
+
+      "description": "After transcript completes, sync S3 video/audio URLs to meetings table",
+
+      "acceptance": [
+        "Check if s3_video_url exists in recordings",
+        "Update meetings.video_url = recordings.s3_video_url",
+        "Update meetings.audio_url = recordings.s3_audio_url",
+        "Only sync if S3 upload is complete",
+        "Graceful handling if S3 upload still pending"
+      ],
+
+      "files": [
+        "supabase/functions/process-gladia-webhook/index.ts"
+      ],
+
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "S3 upload may complete before or after transcription",
+        "Need conditional sync based on s3_upload_status"
+      ]
+    },
+
+    {
+      "id": "S3-006",
+      "feature": "s3-upload",
+      "title": "Add S3 upload retry logic for failures",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+
+      "dependencies": {
+        "stories": ["S3-002", "S3-004"],
+        "files": [],
+        "schema": ["recordings"]
+      },
+      "blocks": [],
+      "parallelWith": ["S3-005"],
+
+      "description": "Retry failed uploads with exponential backoff before URL expiry",
+
+      "acceptance": [
+        "Add s3_upload_retry_count column (default 0)",
+        "Retry up to 3 times with exponential backoff",
+        "First retry: 2 min, second: 5 min, third: 10 min",
+        "Only retry if MeetingBaaS URL still valid",
+        "Mark as permanently failed after 3 retries or URL expiry"
+      ],
+
+      "files": [
+        "supabase/migrations/20260126162000_add_s3_retry_tracking.sql",
+        "supabase/functions/upload-recording-to-s3/index.ts"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "Exponential backoff: 2^retry_count * base_delay",
+        "Must complete within 4-hour MeetingBaaS URL window"
+      ]
+    },
+
+    {
+      "id": "COST-001",
+      "feature": "cost-tracking",
+      "title": "Create s3_usage_metrics table for cost tracking",
+      "type": "schema",
+      "status": "pending",
+      "priority": 7,
+
+      "dependencies": {
+        "stories": ["S3-001"],
+        "files": [],
+        "schema": ["recordings"]
+      },
+      "blocks": ["COST-002"],
+      "parallelWith": [],
+
+      "description": "Aggregated daily metrics for S3 storage and bandwidth costs",
+
+      "acceptance": [
+        "Table: s3_usage_metrics (org_id, date, metric_type, value, cost_usd)",
+        "Metric types: storage_gb, upload_gb, download_gb, api_requests",
+        "Index on (org_id, date) for fast queries",
+        "RLS policy: only admins can read",
+        "Trigger to update on recordings.s3_file_size_bytes change"
+      ],
+
+      "files": [
+        "supabase/migrations/20260126163000_create_s3_usage_metrics.sql"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "Daily aggregation reduces query load",
+        "Cost calculation: storage_gb * 0.023 (monthly) / 30 (daily)",
+        "Bandwidth: upload free, download $0.09/GB"
+      ]
+    },
+
+    {
+      "id": "COST-002",
+      "feature": "cost-tracking",
+      "title": "Create update-s3-metrics edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+
+      "dependencies": {
+        "stories": ["COST-001"],
+        "files": [],
+        "schema": ["recordings", "s3_usage_metrics"]
+      },
+      "blocks": ["COST-003"],
+      "parallelWith": [],
+
+      "description": "Daily cron job to calculate and store S3 usage metrics",
+
+      "acceptance": [
+        "Runs daily at midnight UTC via pg_cron",
+        "Sum s3_file_size_bytes by org_id for storage",
+        "Track new uploads (s3_upload_completed_at in last 24h)",
+        "Calculate costs: storage, upload (free), download (estimated 50%)",
+        "Insert into s3_usage_metrics table"
+      ],
+
+      "files": [
+        "supabase/functions/update-s3-metrics/index.ts",
+        "supabase/migrations/20260126164000_s3_metrics_cron.sql"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "Storage cost: (total_bytes / 1e9) * 0.023 / 30 per day",
+        "Download estimation: 50% of storage watched monthly",
+        "Actual download tracking requires S3 CloudWatch integration (future)"
+      ]
+    },
+
+    {
+      "id": "COST-003",
+      "feature": "cost-tracking",
+      "title": "Create S3 cost tracking API endpoint",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+
+      "dependencies": {
+        "stories": ["COST-002"],
+        "files": [],
+        "schema": ["s3_usage_metrics"]
+      },
+      "blocks": ["COST-004"],
+      "parallelWith": [],
+
+      "description": "API to fetch S3 usage metrics with date range and aggregation",
+
+      "acceptance": [
+        "GET /api/admin/s3-metrics?start_date=&end_date=&org_id=",
+        "Returns: total_storage_gb, total_cost_usd, daily_breakdown",
+        "Aggregation: day, week, month options",
+        "Admin-only access (check isUserAdmin)",
+        "Cost projections: current_month, next_month estimates"
+      ],
+
+      "files": [
+        "supabase/functions/admin-s3-metrics/index.ts"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "Use existing admin auth patterns from adminUtils.ts",
+        "Project next month: current_storage * 1.1 (10% growth assumption)"
+      ]
+    },
+
+    {
+      "id": "COST-004",
+      "feature": "cost-tracking",
+      "title": "Build S3 cost tracking UI component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+
+      "dependencies": {
+        "stories": ["COST-003"],
+        "files": [
+          "src/components/admin/"
+        ],
+        "schema": []
+      },
+      "blocks": ["COST-005"],
+      "parallelWith": [],
+
+      "description": "Reusable S3 metrics component with charts and cost breakdown",
+
+      "acceptance": [
+        "Component: S3CostMetrics with date range picker",
+        "Chart: Storage growth over time (Recharts line chart)",
+        "Metrics cards: Total storage (GB), Monthly cost ($), Recordings count",
+        "Breakdown: Cost by org (for multi-tenant)",
+        "Export CSV button for detailed metrics"
+      ],
+
+      "files": [
+        "src/components/admin/S3CostMetrics.tsx",
+        "src/hooks/queries/useS3Metrics.ts"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "Use existing Recharts setup from analytics pages",
+        "React Query hook for API calls with 5-min cache",
+        "Format: formatBytes(bytes) helper for GB display"
+      ]
+    },
+
+    {
+      "id": "COST-005",
+      "feature": "cost-tracking",
+      "title": "Add S3 metrics to 60 Notetaker admin page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+
+      "dependencies": {
+        "stories": ["COST-004"],
+        "files": [
+          "src/pages/admin/MeetingBaaSAdmin.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "description": "Integrate S3 cost tracking into existing MeetingBaaS admin dashboard",
+
+      "acceptance": [
+        "New tab: \"Storage & Costs\" in MeetingBaaSAdmin",
+        "Shows S3CostMetrics component",
+        "Context: \"S3 storage for permanent video hosting\"",
+        "Alert if monthly cost > $50 (configurable threshold)",
+        "Link to AWS S3 console for detailed breakdown"
+      ],
+
+      "files": [
+        "src/pages/admin/MeetingBaaSAdmin.tsx"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "technicalNotes": [
+        "MeetingBaaSAdmin already has tabs UI pattern",
+        "Add next to existing API tracking, bot status tabs",
+        "Cost alert: useEffect with toast notification"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 11,
+    "completedStories": 0,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["S3-001"],
+        "description": "Schema foundation"
+      },
+      {
+        "group": 2,
+        "stories": ["S3-002", "S3-003"],
+        "description": "Upload implementation and webhook integration"
+      },
+      {
+        "group": 3,
+        "stories": ["S3-004"],
+        "description": "Polling cron job"
+      },
+      {
+        "group": 4,
+        "stories": ["S3-005", "S3-006"],
+        "description": "Sync and retry logic (parallel)"
+      },
+      {
+        "group": 5,
+        "stories": ["COST-001"],
+        "description": "Cost tracking schema"
+      },
+      {
+        "group": 6,
+        "stories": ["COST-002"],
+        "description": "Metrics calculation"
+      },
+      {
+        "group": 7,
+        "stories": ["COST-003"],
+        "description": "API endpoint"
+      },
+      {
+        "group": 8,
+        "stories": ["COST-004"],
+        "description": "UI component"
+      },
+      {
+        "group": 9,
+        "stories": ["COST-005"],
+        "description": "Admin page integration"
+      }
+    ],
+    "estimatedTotalHours": 7,
+    "criticalPath": ["S3-001", "S3-002", "S3-004", "COST-001", "COST-002", "COST-003", "COST-004", "COST-005"]
+  },
+
+  "technicalContext": {
+    "existingPatterns": [
+      "Async processing: poll-gladia-jobs cron pattern",
+      "Edge functions: meetingbaas-webhook, process-gladia-webhook",
+      "Admin UI: MeetingBaaSAdmin with tabs",
+      "S3 client: Already in _shared/s3Client.ts"
+    ],
+    "newPatterns": [
+      "Streaming uploads with multipart S3",
+      "Usage metrics aggregation for cost tracking",
+      "Admin cost monitoring dashboard"
+    ],
+    "integrationPoints": [
+      "meetingbaas-webhook: Add S3 queue trigger",
+      "process-gladia-webhook: Sync S3 URLs to meetings",
+      "MeetingBaaSAdmin: New Storage & Costs tab"
+    ]
+  },
+
+  "costEstimates": {
+    "development": "7 hours ($700-1400 at $100-200/hr)",
+    "infrastructure": {
+      "s3Storage": "$2-10/month initially",
+      "edgeFunctions": "$0 (within free tier)",
+      "total": "$2-10/month"
+    },
+    "roi": "Enables permanent video storage vs 4-hour expiry. Critical for customer value."
+  },
+
+  "risks": [
+    {
+      "risk": "S3 multipart upload complexity",
+      "mitigation": "Use AWS SDK with stream reader, test with large files",
+      "severity": "medium"
+    },
+    {
+      "risk": "MeetingBaaS URL expiry before upload",
+      "mitigation": "Priority queue (FIFO), retry logic, 5-min polling",
+      "severity": "low"
+    },
+    {
+      "risk": "Cost tracking accuracy",
+      "mitigation": "Start with estimates, integrate CloudWatch later for actuals",
+      "severity": "low"
+    }
+  ],
+
+  "testingStrategy": {
+    "unit": [
+      "S3 streaming upload logic",
+      "Cost calculation formulas",
+      "Retry backoff algorithm"
+    ],
+    "integration": [
+      "End-to-end: webhook → S3 upload → URL sync",
+      "Cron job execution and queue processing",
+      "Metrics aggregation accuracy"
+    ],
+    "manual": [
+      "Upload 5-min, 15-min, 30-min recordings",
+      "Verify S3 URLs in meetings table",
+      "Check cost dashboard shows correct metrics"
+    ]
+  }
+}

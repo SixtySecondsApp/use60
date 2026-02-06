@@ -2,8 +2,8 @@
 
 /**
  * Copilot API Edge Function
- * 
- * Provides AI Copilot functionality with Claude Sonnet 4:
+ *
+ * Provides AI Copilot functionality with Google Gemini Flash:
  * - POST /api-copilot/chat - Main chat endpoint
  * - POST /api-copilot/actions/draft-email - Email draft endpoint
  * - GET /api-copilot/conversations/:id - Fetch conversation history
@@ -25,9 +25,18 @@ import {
 import { logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts'
 import { executeAction } from '../_shared/copilot_adapters/executeAction.ts'
 import type { ExecuteActionName } from '../_shared/copilot_adapters/types.ts'
+import { getOrCompilePersona, type CompiledPersona } from '../_shared/salesCopilotPersona.ts'
 
+// Gemini API configuration (replacing Claude for copilot chat)
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? Deno.env.get('GOOGLE_GEMINI_API_KEY') ?? ''
+const GEMINI_MODEL = Deno.env.get('GEMINI_FLASH_MODEL') ?? Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash'
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+
+// Legacy Anthropic config (kept for reference/fallback)
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
-const ANTHROPIC_VERSION = '2023-06-01' // API version for tool calling
+const ANTHROPIC_VERSION = '2023-06-01'
+const ANTHROPIC_VERSION_TOOLS = '2024-04-04'
+
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
 
@@ -81,6 +90,8 @@ interface ToolExecutionDetail {
   latencyMs: number
   success: boolean
   error?: string
+  capability?: string
+  provider?: string
 }
 
 interface StructuredResponse {
@@ -143,6 +154,44 @@ interface GmailMessageSummary {
   link?: string
 }
 
+/**
+ * Strip AI preamble/narration from skill test output.
+ * Removes transitional phrases and meta-commentary that end users shouldn't see.
+ * Uses aggressive strategy: skip all lines until first markdown header (# or ##).
+ */
+function stripSkillTestPreamble(content: string): string {
+  if (!content) return content
+
+  const lines = content.split('\n')
+
+  // Find the first line that starts actual content (markdown header)
+  let contentStartIndex = 0
+  for (let i = 0; i < lines.length; i++) {
+    const trimmedLine = lines[i].trim()
+
+    // Content starts at first markdown header (# or ##)
+    if (trimmedLine.startsWith('#')) {
+      contentStartIndex = i
+      break
+    }
+
+    // Also detect content if we see a markdown table header (| Column |)
+    if (trimmedLine.startsWith('|') && trimmedLine.includes('|', 1)) {
+      contentStartIndex = i
+      break
+    }
+
+    // Also detect "**Bold Title**" format that indicates structured content
+    if (trimmedLine.startsWith('**') && trimmedLine.endsWith('**')) {
+      contentStartIndex = i
+      break
+    }
+  }
+
+  // Return content from the detected start point
+  return lines.slice(contentStartIndex).join('\n').trim()
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -181,7 +230,13 @@ serve(async (req) => {
     // Create service role client for database operations (bypasses RLS)
     const client = createClient(
       supabaseUrl,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+      {
+        // Include the user JWT so DB access remains correct even if service role is misconfigured in secrets.
+        // This also ensures membership-gated queries in shared executors work reliably.
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false },
+      }
     )
 
     const user_id = user.id
@@ -246,6 +301,8 @@ serve(async (req) => {
       return await handleChat(client, req, user_id)
     } else if (req.method === 'POST' && endpoint === 'actions' && resourceId === 'draft-email') {
       return await handleDraftEmail(client, req, user_id)
+    } else if (req.method === 'POST' && endpoint === 'actions' && resourceId === 'regenerate-email-tone') {
+      return await handleRegenerateEmailTone(client, req, user_id)
     } else if (req.method === 'POST' && endpoint === 'actions' && resourceId === 'test-skill') {
       return await handleTestSkill(client, req, user_id)
     } else if (req.method === 'POST' && endpoint === 'actions' && resourceId === 'generate-deal-email') {
@@ -478,6 +535,87 @@ async function handleChat(
     // This allows us to skip AI and go straight to structured response
     const messageLower = body.message.toLowerCase()
     const originalMessage = body.message
+
+    // -------------------------------------------------------------------------
+    // Deterministic confirmation handling (avoids UI "Select Contact" modal)
+    // If the previous assistant message set a pending_action (e.g., run_sequence preview),
+    // then a user reply like "yes" should execute the pending action directly.
+    // -------------------------------------------------------------------------
+    const isAffirmative = /^(yes|yep|yeah|y|ok|okay|sure|do it|go ahead|confirm|create it|create the task|yes create a task)/i.test(
+      body.message.trim()
+    )
+
+    if (isAffirmative) {
+      try {
+        const { data: lastAssistant } = await client
+          .from('copilot_messages')
+          .select('content, metadata')
+          .eq('conversation_id', conversationId)
+          .eq('role', 'assistant')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        const pending = (lastAssistant?.metadata as any)?.pending_action
+        const content = String(lastAssistant?.content || '')
+        const inferredPipelineFocus =
+          content.includes('Pipeline Focus Tasks') || content.includes('seq-pipeline-focus-tasks')
+
+        const pendingSequenceKey =
+          pending?.type === 'run_sequence' && typeof pending.sequence_key === 'string'
+            ? String(pending.sequence_key)
+            : (inferredPipelineFocus ? 'seq-pipeline-focus-tasks' : null)
+
+        // Safety: only allow confirmation execution for known demo sequences.
+        const CONFIRMABLE_SEQUENCES = new Set([
+          'seq-pipeline-focus-tasks',
+          'seq-next-meeting-command-center',
+          'seq-deal-rescue-pack',
+          'seq-post-meeting-followup-pack',
+          'seq-deal-map-builder',
+          'seq-daily-focus-plan',
+          'seq-followup-zero-inbox',
+          'seq-deal-slippage-guardrails',
+        ])
+
+        if (pendingSequenceKey && CONFIRMABLE_SEQUENCES.has(pendingSequenceKey)) {
+          const resolvedOrgId = body.context?.orgId ? String(body.context.orgId) : null
+          const sequenceContext =
+            pending?.sequence_context && typeof pending.sequence_context === 'object'
+              ? pending.sequence_context
+              : {}
+
+          const result = await executeAction(
+            client,
+            userId,
+            resolvedOrgId,
+            'run_sequence',
+            { sequence_key: pendingSequenceKey, is_simulation: false, sequence_context: sequenceContext }
+          )
+
+          const text = `Done — I ran ${pendingSequenceKey}.`
+
+          return new Response(
+            JSON.stringify({
+              response: { type: 'text', content: text, recommendations: [] },
+              conversationId,
+              timestamp: new Date().toISOString(),
+              tool_executions: [
+                {
+                  toolName: 'execute_action',
+                  args: { action: 'run_sequence', params: { sequence_key: pendingSequenceKey, is_simulation: false, sequence_context: sequenceContext } },
+                  result,
+                  success: (result as any)?.success === true,
+                },
+              ],
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+          )
+        }
+      } catch (err) {
+        // Fail open - fall back to normal handling
+      }
+    }
     
     // ULTRA SIMPLE detection: If message contains "performance" anywhere, it's a performance query
     // This catches ALL variations: "Phil's performance", "show performance", "performance this week", etc.
@@ -487,31 +625,65 @@ async function handleChat(
     const hasHowIsMyPerformance = messageLower.includes('how is my performance')
     
     const isPerformanceQuery = hasPerformance || hasSalesCoach || hasHowAmIDoing || hasHowIsMyPerformance
-    const isMeetingPrepQuery = isNextMeetingPrepQuestion(messageLower)
     
-    console.log('[PERF-DETECT] Performance query detection:', {
+    // ---------------------------------------------------------------------------
+    // V1 Deterministic Workflow Router
+    // Maps user intent to one of the 5 V1 workflows + meetings_for_period.
+    // These bypass Gemini reasoning for consistent, reliable results.
+    // ---------------------------------------------------------------------------
+    const v1Route = routeToV1Workflow(messageLower, body.context?.temporalContext)
+    
+    // Legacy flags for backwards compatibility with existing code paths
+    const isMeetingPrepQuery = v1Route?.workflow === 'next_meeting_prep'
+    const isMeetingsForPeriodQuery = v1Route?.workflow === 'meetings_for_period'
+    const isPostMeetingFollowUpPackQuery = v1Route?.workflow === 'post_meeting_followup'
+    const isEmailZeroInboxQuery = v1Route?.workflow === 'email_zero_inbox'
+    const isPipelineFocusQuery = v1Route?.workflow === 'pipeline_focus'
+    const isCatchMeUpQuery = v1Route?.workflow === 'catch_me_up'
+    
+    // ---------------------------------------------------------------------------
+    // Hybrid Escalation Rules (US-015)
+    // Determine if request should escalate to agent-first (plan→execute) mode
+    // Simple queries stay chat-first; complex queries trigger planning
+    // ---------------------------------------------------------------------------
+    const escalationDecision = analyzeEscalationCriteria(body.message, messageLower, body.context)
+    analyticsData.escalation_decision = escalationDecision.decision
+    analyticsData.escalation_reasons = escalationDecision.reasons.join(',')
+    
+    console.log('[ESCALATION] Hybrid escalation analysis:', {
       message: body.message.substring(0, 100),
-      messageLower: messageLower.substring(0, 100),
-      hasPerformance,
-      hasSalesCoach,
-      hasHowAmIDoing,
-      hasHowIsMyPerformance,
-      isPerformanceQuery,
-      isMeetingPrepQuery,
-      userId,
-      isAdmin: currentUser?.is_admin
+      decision: escalationDecision.decision,
+      reasons: escalationDecision.reasons,
+      isAgent: escalationDecision.decision === 'agent',
+      v1Route: v1Route?.workflow || null
     })
     
-    // If it's a deterministic workflow (performance report or next-meeting prep),
-    // skip Claude and go straight to structured response.
+    console.log('[WORKFLOW-ROUTER] V1 workflow routing:', {
+      message: body.message.substring(0, 100),
+      v1Route: v1Route ? { workflow: v1Route.workflow, sequenceKey: v1Route.sequenceKey } : null,
+      isPerformanceQuery,
+      userId,
+      isAdmin: currentUser?.is_admin,
+      escalationDecision: escalationDecision.decision
+    })
+    
+    // If it's a deterministic workflow (performance report or V1 workflow),
+    // skip Gemini and go straight to structured response.
     let aiResponse: any = null
     let shouldSkipClaude = false
     
-    if (isPerformanceQuery || isMeetingPrepQuery) {
+    if (isPerformanceQuery || v1Route) {
       shouldSkipClaude = true
-      console.log('[STRUCTURED] ✅ Deterministic request detected - skipping Claude API call', {
+      
+      // Track workflow telemetry
+      analyticsData.workflow_type = v1Route?.workflow || (isPerformanceQuery ? 'performance_query' : 'unknown')
+      analyticsData.workflow_sequence_key = v1Route?.sequenceKey || null
+      analyticsData.is_deterministic_workflow = true
+      
+      console.log('[WORKFLOW-ROUTER] ✅ Deterministic request detected - skipping Gemini API call', {
         isPerformanceQuery,
-        isMeetingPrepQuery
+        v1Workflow: v1Route?.workflow || null,
+        sequenceKey: v1Route?.sequenceKey || null
       })
       // Create a mock AI response for structured response processing
       aiResponse = {
@@ -521,7 +693,7 @@ async function handleChat(
         usage: { input_tokens: 0, output_tokens: 0 }
       }
     } else {
-      console.log('[PERF-DETECT] ❌ Not a performance query - will call Claude')
+      console.log('[WORKFLOW-ROUTER] ❌ No V1 workflow matched - will call Gemini')
     }
 
     // Build context from user's CRM data
@@ -532,12 +704,12 @@ async function handleChat(
       // Continue with empty context if buildContext fails
     }
 
-    // Call Claude API with tool support (skip if performance query)
-    const claudeStartTime = Date.now()
+    // Call Gemini API with function calling support (skip if performance query)
+    const geminiStartTime = Date.now()
     if (!shouldSkipClaude) {
-      console.log('[CLAUDE] Calling Claude API (not a performance query)')
+      console.log('[GEMINI] Calling Gemini API (not a performance query)')
       try {
-        aiResponse = await callClaudeAPI(
+        aiResponse = await callGeminiAPI(
           body.message,
           formattedMessages,
           context,
@@ -546,8 +718,8 @@ async function handleChat(
           body.context?.orgId ? String(body.context.orgId) : null,
           analyticsData // Pass analytics data to track tool usage
         )
-        analyticsData.claude_api_time_ms = Date.now() - claudeStartTime
-        console.log('[CLAUDE] Claude API response received:', {
+        analyticsData.claude_api_time_ms = Date.now() - geminiStartTime // Keep field name for analytics compatibility
+        console.log('[GEMINI] Gemini API response received:', {
           contentLength: aiResponse.content?.length || 0,
           hasRecommendations: !!aiResponse.recommendations?.length,
           toolsUsed: aiResponse.tools_used || []
@@ -557,12 +729,12 @@ async function handleChat(
       if (aiResponse.usage) {
         analyticsData.input_tokens = aiResponse.usage.input_tokens || 0
         analyticsData.output_tokens = aiResponse.usage.output_tokens || 0
-        // Estimate cost: Haiku 4.5 pricing (approximate)
-        // Input: $0.25 per 1M tokens, Output: $1.25 per 1M tokens
-        const inputCost = (analyticsData.input_tokens / 1_000_000) * 0.25
-        const outputCost = (analyticsData.output_tokens / 1_000_000) * 1.25
+        // Estimate cost: Gemini Flash pricing (approximate)
+        // Input: $0.075 per 1M tokens, Output: $0.30 per 1M tokens
+        const inputCost = (analyticsData.input_tokens / 1_000_000) * 0.075
+        const outputCost = (analyticsData.output_tokens / 1_000_000) * 0.30
         analyticsData.estimated_cost_cents = (inputCost + outputCost) * 100
-        
+
         // Log cost event for tracking
         try {
           // Get user's org_id
@@ -573,15 +745,15 @@ async function handleChat(
             .order('created_at', { ascending: true })
             .limit(1)
             .single()
-          
+
           if (membership?.org_id && aiResponse.usage.input_tokens && aiResponse.usage.output_tokens) {
             // Use the cost tracking helper function
             await logAICostEvent(
               client,
               userId,
               membership.org_id,
-              'anthropic',
-              'claude-haiku-4-5', // Copilot uses Haiku 4.5
+              'gemini',
+              GEMINI_MODEL, // Copilot uses Gemini Flash
               aiResponse.usage.input_tokens,
               aiResponse.usage.output_tokens,
               'copilot',
@@ -610,7 +782,7 @@ async function handleChat(
       analyticsData.status = 'error'
       analyticsData.error_type = 'claude_api_error'
       analyticsData.error_message = claudeError.message || String(claudeError)
-      analyticsData.claude_api_time_ms = Date.now() - claudeStartTime
+      analyticsData.claude_api_time_ms = Date.now() - geminiStartTime
       throw new Error(`Claude API call failed: ${claudeError.message || String(claudeError)}`)
     }
     } else {
@@ -621,6 +793,29 @@ async function handleChat(
 
     // Save assistant message (skip if we're using structured response)
     if (!shouldSkipClaude) {
+      // Store lightweight execution metadata for follow-up confirmations (e.g., "Yes, create it")
+      let pendingAction: any = null
+      try {
+        // IMPORTANT: tool executions are tracked in `aiResponse.tool_executions` (computed server-side),
+        // not on the Claude response object.
+        const execs = Array.isArray(aiResponse.tool_executions) ? aiResponse.tool_executions : []
+        const lastRunSequence = execs
+          .filter((t: any) => t?.toolName === 'execute_action' && t?.args?.action === 'run_sequence')
+          .slice(-1)[0]
+
+        if (lastRunSequence?.args?.params?.sequence_key && lastRunSequence?.args?.params?.is_simulation === true) {
+          pendingAction = {
+            type: 'run_sequence',
+            sequence_key: String(lastRunSequence.args.params.sequence_key),
+            sequence_context: lastRunSequence.args.params.sequence_context || {},
+            is_simulation: false,
+            created_at: new Date().toISOString(),
+          }
+        }
+      } catch {
+        pendingAction = null
+      }
+
       const { error: assistantMsgError } = await client
         .from('copilot_messages')
         .insert({
@@ -628,7 +823,8 @@ async function handleChat(
           role: 'assistant',
           content: aiResponse.content,
           metadata: {
-            recommendations: aiResponse.recommendations || []
+            recommendations: aiResponse.recommendations || [],
+            pending_action: pendingAction || undefined
           }
         })
 
@@ -671,15 +867,272 @@ async function handleChat(
             userId // Pass requesting user ID for permission checks
           )
         } else if (isMeetingPrepQuery) {
-          console.log('[STRUCTURED] Generating structured response for next-meeting prep...', {
+          // Standardize on the sequence-based workflow (consistent with "deals to focus on"):
+          // Run the Next Meeting Command Center sequence in simulation mode, then render the rich panel.
+          const resolvedOrgId = body.context?.orgId ? String(body.context.orgId) : null
+          console.log('[STRUCTURED] Generating structured response for next-meeting command center (sequence)...', {
             targetUserId,
-            orgId: body.context?.orgId || null
+            orgId: resolvedOrgId
           })
-          structuredResponse = await structureNextMeetingPrepResponse(
+
+          const t0 = Date.now()
+          const result = await executeAction(
+            client,
+            targetUserId,
+            resolvedOrgId,
+            'run_sequence',
+            { sequence_key: 'seq-next-meeting-command-center', is_simulation: true, sequence_context: {} }
+          )
+          const latencyMs = Date.now() - t0
+          const capability = (result as any)?.capability
+          const provider = (result as any)?.provider
+          aiResponse.tool_executions = [
+            {
+              toolName: 'execute_action',
+              args: { action: 'run_sequence', params: { sequence_key: 'seq-next-meeting-command-center', is_simulation: true, sequence_context: {} } },
+              result,
+              latencyMs,
+              success: (result as any)?.success === true,
+              capability,
+              provider,
+            },
+          ]
+
+          structuredResponse = await detectAndStructureResponse(
+            body.message,
+            '',
+            client,
+            targetUserId,
+            [],
+            userId,
+            body.context,
+            aiResponse.tool_executions
+          )
+        } else if (isPostMeetingFollowUpPackQuery) {
+          const resolvedOrgId = body.context?.orgId ? String(body.context.orgId) : null
+          console.log('[STRUCTURED] Generating structured response for post-meeting follow-up pack (sequence)...', {
+            targetUserId,
+            orgId: resolvedOrgId
+          })
+
+          const t0 = Date.now()
+          const result = await executeAction(
+            client,
+            targetUserId,
+            resolvedOrgId,
+            'run_sequence',
+            { sequence_key: 'seq-post-meeting-followup-pack', is_simulation: true, sequence_context: {} }
+          )
+          const latencyMs = Date.now() - t0
+          const capability = (result as any)?.capability
+          const provider = (result as any)?.provider
+          aiResponse.tool_executions = [
+            {
+              toolName: 'execute_action',
+              args: { action: 'run_sequence', params: { sequence_key: 'seq-post-meeting-followup-pack', is_simulation: true, sequence_context: {} } },
+              result,
+              latencyMs,
+              success: (result as any)?.success === true,
+              capability,
+              provider,
+            },
+          ]
+
+          structuredResponse = await detectAndStructureResponse(
+            body.message,
+            '',
+            client,
+            targetUserId,
+            [],
+            userId,
+            body.context,
+            aiResponse.tool_executions
+          )
+        } else if (isMeetingsForPeriodQuery) {
+          const period = getMeetingsForPeriodPeriod(messageLower)
+          const timezone = body.context?.temporalContext?.timezone
+            ? String(body.context.temporalContext.timezone)
+            : 'UTC'
+
+          console.log('[STRUCTURED] Generating structured response for meetings list...', {
+            targetUserId,
+            period,
+            timezone,
+          })
+
+          const t0 = Date.now()
+          const result = await executeAction(
             client,
             targetUserId,
             body.context?.orgId ? String(body.context.orgId) : null,
-            body.context?.temporalContext
+            'get_meetings_for_period',
+            { period, timezone, include_context: true, limit: 20 }
+          )
+          const latencyMs = Date.now() - t0
+
+          // Attach deterministic tool telemetry so the UI can show a real tool trail
+          const capability = (result as any)?.capability
+          const provider = (result as any)?.provider
+          aiResponse.tool_executions = [
+            {
+              toolName: 'execute_action',
+              args: { action: 'get_meetings_for_period', params: { period, timezone, include_context: true, limit: 20 } },
+              result,
+              latencyMs,
+              success: (result as any)?.success === true,
+              capability,
+              provider,
+            },
+          ]
+
+          structuredResponse = await detectAndStructureResponse(
+            body.message,
+            '',
+            client,
+            targetUserId,
+            [], // toolsUsed
+            userId,
+            body.context,
+            aiResponse.tool_executions
+          )
+        } else if (isEmailZeroInboxQuery) {
+          // ---------------------------------------------------------------------------
+          // Email Zero Inbox - seq-followup-zero-inbox
+          // ---------------------------------------------------------------------------
+          const resolvedOrgId = body.context?.orgId ? String(body.context.orgId) : null
+          console.log('[WORKFLOW-ROUTER] Generating structured response for email zero inbox (sequence)...', {
+            targetUserId,
+            orgId: resolvedOrgId
+          })
+
+          const t0 = Date.now()
+          const result = await executeAction(
+            client,
+            targetUserId,
+            resolvedOrgId,
+            'run_sequence',
+            { sequence_key: 'seq-followup-zero-inbox', is_simulation: true, sequence_context: {} }
+          )
+          const latencyMs = Date.now() - t0
+          const capability = (result as any)?.capability
+          const provider = (result as any)?.provider
+          aiResponse.tool_executions = [
+            {
+              toolName: 'execute_action',
+              args: { action: 'run_sequence', params: { sequence_key: 'seq-followup-zero-inbox', is_simulation: true, sequence_context: {} } },
+              result,
+              latencyMs,
+              success: (result as any)?.success === true,
+              capability,
+              provider,
+            },
+          ]
+
+          structuredResponse = await detectAndStructureResponse(
+            body.message,
+            '',
+            client,
+            targetUserId,
+            [],
+            userId,
+            body.context,
+            aiResponse.tool_executions
+          )
+        } else if (isPipelineFocusQuery) {
+          // ---------------------------------------------------------------------------
+          // Pipeline Focus - seq-pipeline-focus-tasks
+          // ---------------------------------------------------------------------------
+          const resolvedOrgId = body.context?.orgId ? String(body.context.orgId) : null
+          console.log('[WORKFLOW-ROUTER] Generating structured response for pipeline focus (sequence)...', {
+            targetUserId,
+            orgId: resolvedOrgId
+          })
+
+          const t0 = Date.now()
+          const result = await executeAction(
+            client,
+            targetUserId,
+            resolvedOrgId,
+            'run_sequence',
+            { sequence_key: 'seq-pipeline-focus-tasks', is_simulation: true, sequence_context: { period: 'this_week' } }
+          )
+          const latencyMs = Date.now() - t0
+          const capability = (result as any)?.capability
+          const provider = (result as any)?.provider
+          aiResponse.tool_executions = [
+            {
+              toolName: 'execute_action',
+              args: { action: 'run_sequence', params: { sequence_key: 'seq-pipeline-focus-tasks', is_simulation: true, sequence_context: { period: 'this_week' } } },
+              result,
+              latencyMs,
+              success: (result as any)?.success === true,
+              capability,
+              provider,
+            },
+          ]
+
+          structuredResponse = await detectAndStructureResponse(
+            body.message,
+            '',
+            client,
+            targetUserId,
+            [],
+            userId,
+            body.context,
+            aiResponse.tool_executions
+          )
+        } else if (isCatchMeUpQuery) {
+          // ---------------------------------------------------------------------------
+          // Catch Me Up - seq-catch-me-up (daily brief)
+          // ---------------------------------------------------------------------------
+          const resolvedOrgId = body.context?.orgId ? String(body.context.orgId) : null
+          console.log('[WORKFLOW-ROUTER] Generating structured response for catch me up (sequence)...', {
+            targetUserId,
+            orgId: resolvedOrgId
+          })
+
+          const t0 = Date.now()
+          const result = await executeAction(
+            client,
+            targetUserId,
+            resolvedOrgId,
+            'run_sequence',
+            { sequence_key: 'seq-catch-me-up', is_simulation: true, sequence_context: {} }
+          )
+          const latencyMs = Date.now() - t0
+          
+          // Log detailed result for debugging
+          console.log('[WORKFLOW-ROUTER] seq-catch-me-up result:', {
+            success: (result as any)?.success,
+            hasData: !!(result as any)?.data,
+            error: (result as any)?.error,
+            dataKeys: (result as any)?.data ? Object.keys((result as any).data) : [],
+            finalOutputKeys: (result as any)?.data?.final_output?.outputs ? Object.keys((result as any).data.final_output.outputs) : [],
+          })
+          
+          const capability = (result as any)?.capability
+          const provider = (result as any)?.provider
+          aiResponse.tool_executions = [
+            {
+              toolName: 'execute_action',
+              args: { action: 'run_sequence', params: { sequence_key: 'seq-catch-me-up', is_simulation: true, sequence_context: {} } },
+              result,
+              latencyMs,
+              success: (result as any)?.success === true,
+              capability,
+              provider,
+            },
+          ]
+
+          structuredResponse = await detectAndStructureResponse(
+            body.message,
+            '',
+            client,
+            targetUserId,
+            [],
+            userId,
+            body.context,
+            aiResponse.tool_executions
           )
         } else {
           structuredResponse = null
@@ -690,8 +1143,59 @@ async function handleChat(
           summary: structuredResponse?.summary?.substring(0, 100)
         })
       } catch (error) {
-        console.error('[STRUCTURED] ❌ Error generating structured response:', error)
-        structuredResponse = null
+        // REL-002: Fall back to Gemini when V1 workflow fails
+        console.error('[STRUCTURED] ❌ V1 workflow error, falling back to Gemini:', error)
+
+        // Log fallback event for monitoring
+        console.log('[FALLBACK] ⚠️ V1 → Gemini fallback triggered', {
+          v1Workflow: v1Route?.workflow || (isPerformanceQuery ? 'performance_query' : 'unknown'),
+          sequenceKey: v1Route?.sequenceKey || null,
+          error: error instanceof Error ? error.message : String(error),
+        })
+
+        // Track fallback in analytics
+        analyticsData.v1_fallback_triggered = true
+        analyticsData.v1_fallback_reason = error instanceof Error ? error.message : String(error)
+
+        // Reset to call Gemini
+        shouldSkipClaude = false
+
+        try {
+          console.log('[FALLBACK] Calling Gemini API after V1 failure...')
+          const geminiStartTime = Date.now()
+          aiResponse = await callGeminiAPI(
+            body.message,
+            formattedMessages,
+            context,
+            client,
+            userId,
+            body.context?.orgId ? String(body.context.orgId) : null,
+            analyticsData
+          )
+          analyticsData.claude_api_time_ms = Date.now() - geminiStartTime
+          console.log('[FALLBACK] ✅ Gemini API response received after fallback:', {
+            contentLength: aiResponse.content?.length || 0,
+            hasRecommendations: !!aiResponse.recommendations?.length,
+          })
+
+          // Generate structured response from Gemini output
+          structuredResponse = await detectAndStructureResponse(
+            body.message,
+            aiResponse.content,
+            client,
+            targetUserId,
+            aiResponse.tools_used || [],
+            userId,
+            body.context,
+            aiResponse.tool_executions || []
+          )
+        } catch (fallbackError) {
+          // Both V1 and Gemini failed - return graceful error
+          console.error('[FALLBACK] ❌ Both V1 and Gemini failed:', fallbackError)
+          analyticsData.gemini_fallback_failed = true
+          analyticsData.gemini_fallback_error = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+          structuredResponse = null
+        }
       }
     } else {
       console.log('[STRUCTURED] Using normal detection (not a performance query)')
@@ -715,18 +1219,55 @@ async function handleChat(
 
     // Return response in the format expected by the frontend
     // If we have a structured response, prioritize it over text content
-    // IMPORTANT: If we skipped Claude and have no structured response, something went wrong
+    // REL-002: If deterministic flow couldn't produce a structured response, fail gracefully
     if (shouldSkipClaude && !structuredResponse) {
-      console.error('[RESPONSE] ❌ ERROR: Skipped Claude but no structured response generated!', {
+      const fallbackTriggered = (analyticsData as any).v1_fallback_triggered === true
+      const geminiAlsoFailed = (analyticsData as any).gemini_fallback_failed === true
+
+      console.error('[RESPONSE] ❌ ERROR: Failed to generate response', {
         targetUserId,
         userId,
-        message: body.message
+        message: body.message,
+        fallbackTriggered,
+        geminiAlsoFailed,
       })
-      // Fallback: return error message
+
+      // Surface the underlying tool error when available (helps debugging without breaking UI)
+      let toolError: string | null = null
+      try {
+        const execs = Array.isArray(aiResponse?.tool_executions) ? aiResponse.tool_executions : []
+        const lastExec = execs.slice(-1)[0] as any
+        const err = lastExec?.result?.error
+        if (!err) {
+          toolError = null
+        } else if (typeof err === 'string') {
+          toolError = err
+        } else if (err && typeof err === 'object') {
+          const anyErr = err as any
+          toolError =
+            (typeof anyErr.message === 'string' && anyErr.message) ||
+            (typeof anyErr.error === 'string' && anyErr.error) ||
+            (typeof anyErr.details === 'string' && anyErr.details) ||
+            (typeof anyErr.hint === 'string' && anyErr.hint) ||
+            (() => { try { return JSON.stringify(anyErr) } catch { return '[error object]' } })()
+        } else {
+          toolError = String(err)
+        }
+      } catch {
+        toolError = null
+      }
+
+      // Graceful error message based on what failed (return 200 so the UI doesn't hard-fail)
+      const errorMessage = geminiAlsoFailed
+        ? 'I’m having trouble processing that request right now. Please try again in a moment.'
+        : toolError
+          ? `I couldn’t pull that data right now (${toolError}).`
+          : 'I couldn’t generate that response right now. Please try again.'
+
       return new Response(JSON.stringify({
         response: {
           type: 'text',
-          content: 'I encountered an error generating that response. Please try again.',
+          content: errorMessage,
           recommendations: [],
           structuredResponse: undefined
         },
@@ -734,7 +1275,7 @@ async function handleChat(
         timestamp: new Date().toISOString()
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500
+        status: 200
       })
     }
     
@@ -745,6 +1286,45 @@ async function handleChat(
     const responseContent = structuredResponse 
       ? (structuredResponse.summary || `I've analyzed ${targetUserId !== userId ? 'their' : 'your'} performance data.`)
       : (aiResponse?.content || '')
+
+    // For deterministic (skip-model) flows, persist the assistant message so:
+    // - The user can see it in History
+    // - Confirmation replies like "Confirm" can execute pending sequences (pending_action)
+    if (shouldSkipClaude) {
+      try {
+        const execs = Array.isArray(aiResponse?.tool_executions) ? aiResponse.tool_executions : []
+        let pendingAction: any = null
+
+        const lastRunSequence = execs
+          .filter((t: any) => t?.toolName === 'execute_action' && t?.args?.action === 'run_sequence')
+          .slice(-1)[0]
+
+        if (lastRunSequence?.args?.params?.sequence_key && lastRunSequence?.args?.params?.is_simulation === true) {
+          pendingAction = {
+            type: 'run_sequence',
+            sequence_key: String(lastRunSequence.args.params.sequence_key),
+            sequence_context: lastRunSequence.args.params.sequence_context || {},
+            is_simulation: false,
+            created_at: new Date().toISOString(),
+          }
+        }
+
+        await client
+          .from('copilot_messages')
+          .insert({
+            conversation_id: conversationId,
+            role: 'assistant',
+            content: responseContent,
+            metadata: {
+              recommendations: [],
+              pending_action: pendingAction || undefined,
+              structuredResponse: structuredResponse || undefined,
+            },
+          })
+      } catch {
+        // Fail open - history persistence is non-critical
+      }
+    }
     
     const responsePayload = {
       response: {
@@ -754,7 +1334,26 @@ async function handleChat(
         structuredResponse: structuredResponse || undefined
       },
       conversationId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      tool_executions: aiResponse?.tool_executions || []
+    }
+    
+    // Track workflow completion telemetry
+    if (structuredResponse) {
+      analyticsData.structured_response_type = structuredResponse.type
+      analyticsData.has_structured_response = true
+      analyticsData.workflow_step_count = aiResponse?.tool_executions?.length || 0
+      analyticsData.workflow_completed = true
+      analyticsData.workflow_duration_ms = Date.now() - requestStartTime
+      
+      // Track confirmation potential for preview flows
+      const isPreviewFlow = (structuredResponse.data as any)?.isSimulation === true
+      analyticsData.is_preview_flow = isPreviewFlow
+      analyticsData.pending_action_created = !!(
+        aiResponse?.tool_executions?.some((t: any) => 
+          t?.args?.params?.is_simulation === true
+        )
+      )
     }
     
     // Debug logging
@@ -767,21 +1366,59 @@ async function handleChat(
       summary: structuredResponse?.summary?.substring(0, 100)
     })
 
+    // Log updated analytics with workflow data (non-blocking)
+    logCopilotAnalytics(client, analyticsData).catch(() => {})
+
+    // Log to copilot_executions for execution history replay (non-blocking)
+    logExecutionHistory(client, {
+      organization_id: body.context?.orgId ? String(body.context.orgId) : null,
+      user_id: userId,
+      user_message: body.message,
+      response_text: responseContent,
+      success: true,
+      tools_used: aiResponse?.tool_executions?.map((t: any) => t.toolName) || [],
+      tool_call_count: aiResponse?.tool_executions?.length || 0,
+      duration_ms: Date.now() - requestStartTime,
+      input_tokens: analyticsData.input_tokens || 0,
+      output_tokens: analyticsData.output_tokens || 0,
+      structured_response: structuredResponse || null,
+      skill_key: extractSkillKeyFromExecutions(aiResponse?.tool_executions) || null,
+      sequence_key: extractSequenceKeyFromExecutions(aiResponse?.tool_executions) || null,
+    }).catch(() => {})
+
     // Log final response payload
     return new Response(JSON.stringify(responsePayload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch (error) {
-    // Update analytics with error info
+    // Update analytics with error info and categorization
     analyticsData.status = 'error'
     analyticsData.error_type = error.name || 'UnknownError'
     analyticsData.error_message = error.message || 'Unknown error'
     analyticsData.response_time_ms = Date.now() - requestStartTime
+    analyticsData.workflow_completed = false
+    
+    // Categorize errors for dashboard filtering
+    const errorMsg = (error.message || '').toLowerCase()
+    if (errorMsg.includes('timeout') || errorMsg.includes('timed out')) {
+      analyticsData.error_category = 'timeout'
+    } else if (errorMsg.includes('rate limit') || errorMsg.includes('quota')) {
+      analyticsData.error_category = 'rate_limit'
+    } else if (errorMsg.includes('auth') || errorMsg.includes('unauthorized') || errorMsg.includes('forbidden')) {
+      analyticsData.error_category = 'auth'
+    } else if (errorMsg.includes('not found') || errorMsg.includes('pgrst116')) {
+      analyticsData.error_category = 'not_found'
+    } else if (errorMsg.includes('validation') || errorMsg.includes('invalid')) {
+      analyticsData.error_category = 'validation'
+    } else if (errorMsg.includes('network') || errorMsg.includes('connection')) {
+      analyticsData.error_category = 'network'
+    } else {
+      analyticsData.error_category = 'internal'
+    }
 
     // Log error analytics (non-blocking)
-    logCopilotAnalytics(client, analyticsData).catch(err => {
-    })
+    logCopilotAnalytics(client, analyticsData).catch(() => {})
 
     const errorMessage = error.message || 'Unknown error'
     return createErrorResponse(
@@ -820,10 +1457,115 @@ async function logCopilotAnalytics(client: any, analytics: any): Promise<void> {
         error_type: analytics.error_type || null,
         error_message: analytics.error_message || null,
         has_context: analytics.has_context,
-        context_type: analytics.context_type || null
+        context_type: analytics.context_type || null,
+        // Workflow telemetry fields (US-014)
+        workflow_type: analytics.workflow_type || null,
+        workflow_sequence_key: analytics.workflow_sequence_key || null,
+        is_deterministic_workflow: analytics.is_deterministic_workflow || false,
+        structured_response_type: analytics.structured_response_type || null,
+        has_structured_response: analytics.has_structured_response || false,
+        workflow_step_count: analytics.workflow_step_count || 0,
+        workflow_duration_ms: analytics.workflow_duration_ms || 0,
+        workflow_completed: analytics.workflow_completed || false,
+        is_preview_flow: analytics.is_preview_flow || false,
+        pending_action_created: analytics.pending_action_created || false,
+        error_category: analytics.error_category || null
       })
   } catch (error) {
     // Don't throw - analytics logging should never break the request
+  }
+}
+
+/**
+ * Extract the primary skill_key from tool executions
+ */
+function extractSkillKeyFromExecutions(toolExecutions?: any[]): string | null {
+  if (!toolExecutions?.length) return null
+  for (const exec of toolExecutions) {
+    if (exec?.args?.action === 'run_skill' && exec?.args?.params?.skill_key) {
+      return String(exec.args.params.skill_key)
+    }
+    // For individual skill tool calls
+    if (exec?.skillKey) return String(exec.skillKey)
+  }
+  return null
+}
+
+/**
+ * Extract the sequence_key from tool executions
+ */
+function extractSequenceKeyFromExecutions(toolExecutions?: any[]): string | null {
+  if (!toolExecutions?.length) return null
+  for (const exec of toolExecutions) {
+    if (exec?.args?.action === 'run_sequence' && exec?.args?.params?.sequence_key) {
+      return String(exec.args.params.sequence_key)
+    }
+  }
+  return null
+}
+
+/**
+ * Log execution to copilot_executions table for execution history replay.
+ * Non-blocking — errors are swallowed so the main response is never affected.
+ */
+async function logExecutionHistory(client: any, data: {
+  organization_id: string | null,
+  user_id: string,
+  user_message: string,
+  response_text: string,
+  success: boolean,
+  tools_used: string[],
+  tool_call_count: number,
+  duration_ms: number,
+  input_tokens: number,
+  output_tokens: number,
+  structured_response: any,
+  skill_key: string | null,
+  sequence_key: string | null,
+}): Promise<void> {
+  try {
+    if (!data.organization_id || !data.user_id) return
+
+    const { error } = await client
+      .from('copilot_executions')
+      .insert({
+        organization_id: data.organization_id,
+        user_id: data.user_id,
+        user_message: data.user_message,
+        execution_mode: 'agent',
+        model: 'gemini-2.0-flash',
+        response_text: data.response_text?.slice(0, 5000),
+        success: data.success,
+        tools_used: data.tools_used,
+        tool_call_count: data.tool_call_count,
+        started_at: new Date(Date.now() - data.duration_ms).toISOString(),
+        completed_at: new Date().toISOString(),
+        duration_ms: data.duration_ms,
+        input_tokens: data.input_tokens,
+        output_tokens: data.output_tokens,
+        total_tokens: (data.input_tokens || 0) + (data.output_tokens || 0),
+        structured_response: data.structured_response,
+        skill_key: data.skill_key,
+        sequence_key: data.sequence_key,
+      })
+
+    if (error) {
+      console.error('[logExecutionHistory] Insert error:', error)
+      return
+    }
+
+    // Prune old structured responses to keep only last 5 per skill/sequence
+    if (data.structured_response && (data.skill_key || data.sequence_key)) {
+      await client.rpc('prune_old_structured_responses', {
+        p_skill_key: data.skill_key || null,
+        p_sequence_key: data.sequence_key || null,
+      }).catch((err: any) => {
+        console.error('[logExecutionHistory] Prune error (non-fatal):', err)
+      })
+    }
+  } catch (error) {
+    // Don't throw - execution history logging should never break the request
+    console.error('[logExecutionHistory] Exception:', error)
   }
 }
 
@@ -870,6 +1612,14 @@ async function handleDraftEmail(
       .order('created_at', { ascending: false })
       .limit(3)
 
+    // Fetch user's writing style from AI personalization settings
+    const { data: writingStyle } = await client
+      .from('user_writing_styles')
+      .select('name, tone_description, examples, style_metadata')
+      .eq('user_id', userId)
+      .eq('is_default', true)
+      .maybeSingle()
+
     // Build email context
     const emailContext = {
       contact: {
@@ -882,8 +1632,8 @@ async function handleDraftEmail(
       context: body.context || 'Follow-up email'
     }
 
-    // Generate email with Claude
-    const emailDraft = await generateEmailDraft(emailContext, body.tone)
+    // Generate email with Claude using user's writing style
+    const emailDraft = await generateEmailDraft(emailContext, body.tone, writingStyle)
 
     return new Response(JSON.stringify({
       subject: emailDraft.subject,
@@ -899,14 +1649,224 @@ async function handleDraftEmail(
 }
 
 /**
+ * Handle email tone regeneration
+ * POST /api-copilot/actions/regenerate-email-tone
+ * 
+ * Takes an existing email and regenerates it with a different tone,
+ * using the user's writing style as the base and adjusting from there.
+ */
+async function handleRegenerateEmailTone(
+  client: any,
+  req: Request,
+  userId: string
+): Promise<Response> {
+  try {
+    const body = await req.json()
+    const { currentEmail, newTone, context } = body
+    
+    if (!currentEmail?.body || !newTone) {
+      return createErrorResponse('currentEmail and newTone are required', 400, 'INVALID_REQUEST')
+    }
+    
+    console.log('[REGENERATE-TONE] Starting tone adjustment:', { newTone, hasContext: !!context })
+    
+    // Fetch user's writing style and profile
+    const [{ data: writingStyle }, { data: userProfile }] = await Promise.all([
+      client
+        .from('user_writing_styles')
+        .select('name, tone_description, examples, style_metadata')
+        .eq('user_id', userId)
+        .eq('is_default', true)
+        .maybeSingle(),
+      client
+        .from('profiles')
+        .select('first_name, last_name, email')
+        .eq('id', userId)
+        .maybeSingle()
+    ])
+    
+    const userName = userProfile 
+      ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || userProfile.email?.split('@')[0] || 'Your Name'
+      : 'Your Name'
+    
+    // Build style instruction from user's writing style
+    let baseStyleInstruction = 'The user writes in a balanced, professional style.'
+    if (writingStyle) {
+      const styleParts: string[] = []
+      styleParts.push(`USER'S BASE WRITING STYLE:`)
+      styleParts.push(`- Style: ${writingStyle.name}`)
+      styleParts.push(`- Natural tone: ${writingStyle.tone_description}`)
+      
+      const meta = writingStyle.style_metadata as any
+      if (meta?.tone_characteristics) {
+        styleParts.push(`- Characteristics: ${meta.tone_characteristics}`)
+      }
+      if (meta?.vocabulary_profile) {
+        styleParts.push(`- Vocabulary: ${meta.vocabulary_profile}`)
+      }
+      if (meta?.greeting_style) {
+        styleParts.push(`- Greeting style: ${meta.greeting_style}`)
+      }
+      if (meta?.signoff_style) {
+        styleParts.push(`- Sign-off style: ${meta.signoff_style}`)
+      }
+      
+      baseStyleInstruction = styleParts.join('\n')
+    }
+    
+    // Tone adjustment instructions
+    const toneAdjustments: Record<string, string> = {
+      professional: `Make this email MORE FORMAL than the user's natural style:
+- Use more business-appropriate language
+- Be more structured and polished
+- Keep greetings and sign-offs professional
+- Maintain the same key points but with elevated formality`,
+      
+      friendly: `Make this email MORE CASUAL AND WARM than the user's natural style:
+- Add more warmth and personality
+- Use slightly more relaxed language
+- Keep it personable and approachable
+- Maintain the same key points but with a friendlier touch`,
+      
+      concise: `Make this email SHORTER AND MORE DIRECT than the user's natural style:
+- Cut any unnecessary words or pleasantries
+- Get straight to the point
+- Keep only essential information
+- Make it scannable and action-oriented`
+    }
+    
+    const toneInstruction = toneAdjustments[newTone] || toneAdjustments.professional
+
+    // Build context section if available
+    let contextSection = ''
+    if (context) {
+      const contextParts: string[] = []
+      if (context.contactName) {
+        contextParts.push(`Recipient: ${context.contactName}`)
+      }
+      if (context.lastInteraction) {
+        contextParts.push(`Last interaction: ${context.lastInteraction}`)
+      }
+      if (context.dealValue) {
+        contextParts.push(`Deal value: $${context.dealValue}`)
+      }
+      if (context.keyPoints && context.keyPoints.length > 0) {
+        contextParts.push(`Key points to maintain:\n${context.keyPoints.map((p: string) => `- ${p}`).join('\n')}`)
+      }
+      if (contextParts.length > 0) {
+        contextSection = `\nORIGINAL CONTEXT (preserve this information):\n${contextParts.join('\n')}\n`
+      }
+    }
+
+    const prompt = `Adjust the tone of this email while keeping the same meaning, context, and key points.
+
+${baseStyleInstruction}
+
+TONE ADJUSTMENT REQUIRED:
+${toneInstruction}
+${contextSection}
+CURRENT EMAIL TO ADJUST:
+Subject: ${currentEmail.subject}
+---
+${currentEmail.body}
+---
+
+SENDER NAME: ${userName}
+RECIPIENT: ${context?.contactName || 'the recipient'}
+
+CRITICAL REQUIREMENTS:
+1. Keep ALL the same information, meeting references, action items, and key points
+2. Only adjust the tone/style as requested - DO NOT remove content
+3. Keep the greeting style appropriate for the new tone
+4. Sign off with "${userName}" (never use placeholders like "[Your Name]")
+5. If the email mentions specific dates, names, or action items - KEEP THEM ALL
+6. The adjusted email should be roughly the same length (unless "concise" is requested)
+
+Return ONLY a JSON object:
+{"subject": "adjusted subject", "body": "adjusted email body with proper greeting and sign-off"}`
+
+    // Call Gemini
+    if (!GEMINI_API_KEY) {
+      return createErrorResponse('AI service not configured', 500, 'AI_NOT_CONFIGURED')
+    }
+    
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 1000,
+            responseMimeType: 'application/json'
+          }
+        })
+      }
+    )
+
+    if (!geminiResponse.ok) {
+      console.error('[REGENERATE-TONE] Gemini API error:', geminiResponse.status)
+      return createErrorResponse('Failed to regenerate email', 500, 'AI_ERROR')
+    }
+
+    const geminiData = await geminiResponse.json()
+    const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    
+    try {
+      const emailJson = JSON.parse(responseText)
+      if (emailJson.subject && emailJson.body) {
+        console.log('[REGENERATE-TONE] ✅ Successfully regenerated email with', newTone, 'tone')
+        return new Response(JSON.stringify({
+          subject: emailJson.subject,
+          body: emailJson.body,
+          tone: newTone
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+    } catch (parseError) {
+      // Try to extract JSON
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        try {
+          const emailJson = JSON.parse(jsonMatch[0])
+          if (emailJson.subject && emailJson.body) {
+            return new Response(JSON.stringify({
+              subject: emailJson.subject,
+              body: emailJson.body,
+              tone: newTone
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            })
+          }
+        } catch (e) {
+          // Fall through to error
+        }
+      }
+    }
+    
+    return createErrorResponse('Failed to parse regenerated email', 500, 'PARSE_ERROR')
+    
+  } catch (error) {
+    console.error('[REGENERATE-TONE] Error:', error)
+    return createErrorResponse('Failed to regenerate email tone', 500, 'REGENERATE_ERROR')
+  }
+}
+
+/**
  * Handle skill testing requests (admin/dev console)
  *
  * POST /api-copilot/actions/test-skill
  *
- * Supports optional contact context for testing skills with real contact data:
- * - contact_id: UUID of the contact to use
- * - contact_test_mode: 'good' | 'average' | 'bad' | 'custom'
- * - contact_context: { id, email, name, title, company_id, company_name, total_meetings_count, quality_tier, quality_score }
+ * Supports optional entity context for testing skills with real data:
+ * - entity_type: 'contact' | 'deal' | 'email' | 'activity' | 'meeting'
+ * - entity_test_mode: 'good' | 'average' | 'bad' | 'custom'
+ * - {entity_type}_id: UUID of the entity
+ * - {entity_type}_context: Entity-specific context object
+ *
+ * Legacy contact-specific fields are also supported for backwards compatibility.
  */
 async function handleTestSkill(
   client: any,
@@ -919,7 +1879,20 @@ async function handleTestSkill(
     const testInput = body?.test_input ? String(body.test_input) : ''
     const mode = body?.mode ? String(body.mode) : 'readonly'
 
-    // Optional contact testing context
+    // Entity type detection (new generic approach)
+    const entityType = body?.entity_type ? String(body.entity_type) : null
+    const entityTestMode = body?.entity_test_mode ? String(body.entity_test_mode) : null
+
+    // Get entity ID and context based on entity type
+    let entityId: string | null = null
+    let entityContext: any = null
+
+    if (entityType) {
+      entityId = body?.[`${entityType}_id`] ? String(body[`${entityType}_id`]) : null
+      entityContext = body?.[`${entityType}_context`] || null
+    }
+
+    // Legacy contact support (backwards compatibility)
     const contactId = body?.contact_id ? String(body.contact_id) : null
     const contactTestMode = body?.contact_test_mode ? String(body.contact_test_mode) : null
     const contactContext = body?.contact_context || null
@@ -929,27 +1902,137 @@ async function handleTestSkill(
     }
 
     // Build message parts
+    // Get today's date for context
+    const today = new Date()
+    const todayFormatted = today.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+    const todayISO = today.toISOString().split('T')[0]
+
     const messageParts = [
-      `Skill test mode: ${mode}.`,
-      `First call get_skill({ "skill_key": "${skillKey}" }) and follow that skill's instructions.`,
+      `SKILL TEST MODE: ${mode}`,
+      ``,
+      `TODAY'S DATE: ${todayISO} (${todayFormatted})`,
+      `IMPORTANT: When generating dates for tasks, milestones, deadlines, or any future events, ensure ALL dates are in the future relative to today (${todayISO}). Do not use past dates.`,
+      ``,
+      `CRITICAL OUTPUT RULES - READ CAREFULLY:`,
+      `- Your output goes DIRECTLY to end users - they should NEVER see AI narration`,
+      `- Start your response with the actual content (headers, data, analysis)`,
+      `- FORBIDDEN phrases (never write these): "I'll", "Let me", "Now executing", "I'm going to", "First I'll", "Retrieving", "I will"`,
+      `- NO transitional text, NO explanations of your process, NO meta-commentary`,
+      ``,
+      `EXECUTION STEPS (do silently, don't mention):`,
+      `1. Call get_skill({ "skill_key": "${skillKey}" }) to retrieve the skill`,
+      `2. Execute the skill's instructions completely`,
+      `3. Return ONLY the final deliverable - formatted markdown ready for display`,
+      ``,
     ]
 
-    // Add contact context if provided
-    if (contactId && contactContext) {
+    // Add entity context based on type
+    if (entityType === 'deal' && entityId && entityContext) {
+      const dealInfo = [
+        `\n--- DEAL TESTING CONTEXT ---`,
+        `Test Mode: ${entityTestMode || 'custom'}`,
+        `Quality Tier: ${entityContext.quality_tier || 'unknown'} (Score: ${entityContext.quality_score || 0}/100)`,
+        ``,
+        `Deal Details:`,
+        `- deal_id: ${entityContext.id}`,
+        `- Name: ${entityContext.name || 'Unknown'}`,
+        entityContext.company ? `- Company: ${entityContext.company}` : null,
+        entityContext.contact_name ? `- Contact: ${entityContext.contact_name}` : null,
+        entityContext.value ? `- Value: $${entityContext.value.toLocaleString()}` : null,
+        entityContext.stage_name ? `- Stage: ${entityContext.stage_name}` : null,
+        entityContext.health_status ? `- Health Status: ${entityContext.health_status}` : null,
+        entityContext.overall_health_score != null ? `- Health Score: ${entityContext.overall_health_score}/100` : null,
+        entityContext.days_in_current_stage != null ? `- Days in Stage: ${entityContext.days_in_current_stage}` : null,
+        ``,
+        `IMPORTANT: Use this deal for testing. The deal_id is: ${entityId}`,
+        `When the skill requires a deal_id, use: ${entityId}`,
+        `--- END DEAL CONTEXT ---\n`,
+      ].filter(Boolean).join('\n')
+
+      messageParts.push(dealInfo)
+    } else if (entityType === 'email' && entityId && entityContext) {
+      const emailInfo = [
+        `\n--- EMAIL TESTING CONTEXT ---`,
+        `Test Mode: ${entityTestMode || 'custom'}`,
+        `Quality Tier: ${entityContext.quality_tier || 'unknown'} (Score: ${entityContext.quality_score || 0}/100)`,
+        ``,
+        `Email Details:`,
+        `- email_id: ${entityContext.id}`,
+        `- Subject: ${entityContext.subject || 'No subject'}`,
+        `- From: ${entityContext.from_email || 'Unknown'}`,
+        entityContext.direction ? `- Direction: ${entityContext.direction}` : null,
+        entityContext.category ? `- Category: ${entityContext.category}` : null,
+        entityContext.received_at ? `- Received: ${entityContext.received_at}` : null,
+        ``,
+        `IMPORTANT: Use this email for testing. The email_id is: ${entityId}`,
+        `--- END EMAIL CONTEXT ---\n`,
+      ].filter(Boolean).join('\n')
+
+      messageParts.push(emailInfo)
+    } else if (entityType === 'activity' && entityId && entityContext) {
+      const activityInfo = [
+        `\n--- ACTIVITY TESTING CONTEXT ---`,
+        `Test Mode: ${entityTestMode || 'custom'}`,
+        `Quality Tier: ${entityContext.quality_tier || 'unknown'} (Score: ${entityContext.quality_score || 0}/100)`,
+        ``,
+        `Activity Details:`,
+        `- activity_id: ${entityContext.id}`,
+        `- Type: ${entityContext.type || 'Unknown'}`,
+        `- Client: ${entityContext.client_name || 'Unknown'}`,
+        entityContext.status ? `- Status: ${entityContext.status}` : null,
+        entityContext.priority ? `- Priority: ${entityContext.priority}` : null,
+        entityContext.amount ? `- Amount: $${entityContext.amount.toLocaleString()}` : null,
+        ``,
+        `IMPORTANT: Use this activity for testing. The activity_id is: ${entityId}`,
+        `--- END ACTIVITY CONTEXT ---\n`,
+      ].filter(Boolean).join('\n')
+
+      messageParts.push(activityInfo)
+    } else if (entityType === 'meeting' && entityId && entityContext) {
+      const meetingInfo = [
+        `\n--- MEETING TESTING CONTEXT ---`,
+        `Test Mode: ${entityTestMode || 'custom'}`,
+        `Quality Tier: ${entityContext.quality_tier || 'unknown'} (Score: ${entityContext.quality_score || 0}/100)`,
+        ``,
+        `Meeting Details:`,
+        `- meeting_id: ${entityContext.id}`,
+        `- Title: ${entityContext.title || 'Untitled'}`,
+        entityContext.company_name ? `- Company: ${entityContext.company_name}` : null,
+        entityContext.contact_name ? `- Contact: ${entityContext.contact_name}` : null,
+        entityContext.meeting_start ? `- Start: ${entityContext.meeting_start}` : null,
+        entityContext.duration_minutes ? `- Duration: ${entityContext.duration_minutes} min` : null,
+        entityContext.summary ? `- Summary: ${entityContext.summary.slice(0, 200)}${entityContext.summary.length > 200 ? '...' : ''}` : null,
+        ``,
+        `IMPORTANT: Use this meeting for testing. The meeting_id is: ${entityId}`,
+        `--- END MEETING CONTEXT ---\n`,
+      ].filter(Boolean).join('\n')
+
+      messageParts.push(meetingInfo)
+    } else if ((entityType === 'contact' && entityId && entityContext) || (contactId && contactContext)) {
+      // Contact context (supports both new and legacy format)
+      const ctxId = entityId || contactId
+      const ctx = entityContext || contactContext
+      const testMode = entityTestMode || contactTestMode
+
       const contactInfo = [
         `\n--- CONTACT TESTING CONTEXT ---`,
-        `Test Mode: ${contactTestMode || 'custom'}`,
-        `Quality Tier: ${contactContext.quality_tier || 'unknown'} (Score: ${contactContext.quality_score || 0}/100)`,
+        `Test Mode: ${testMode || 'custom'}`,
+        `Quality Tier: ${ctx.quality_tier || 'unknown'} (Score: ${ctx.quality_score || 0}/100)`,
         ``,
         `Contact Details:`,
-        `- ID: ${contactContext.id}`,
-        `- Name: ${contactContext.name || 'Unknown'}`,
-        `- Email: ${contactContext.email || 'Unknown'}`,
-        contactContext.title ? `- Title: ${contactContext.title}` : null,
-        contactContext.company_name ? `- Company: ${contactContext.company_name}` : null,
-        contactContext.total_meetings_count != null ? `- Meeting Count: ${contactContext.total_meetings_count}` : null,
+        `- contact_id: ${ctx.id}`,
+        `- Name: ${ctx.name || 'Unknown'}`,
+        `- Email: ${ctx.email || 'Unknown'}`,
+        ctx.title ? `- Title: ${ctx.title}` : null,
+        ctx.company_name ? `- Company: ${ctx.company_name}` : null,
+        ctx.total_meetings_count != null ? `- Meeting Count: ${ctx.total_meetings_count}` : null,
         ``,
-        `Use this contact's information when testing the skill. The contact_id is: ${contactId}`,
+        `IMPORTANT: Use this contact for testing. The contact_id is: ${ctxId}`,
         `--- END CONTACT CONTEXT ---\n`,
       ].filter(Boolean).join('\n')
 
@@ -965,20 +2048,30 @@ async function handleTestSkill(
 
     const message = messageParts.join('\n')
 
-    const aiResponse = await callClaudeAPI(message, [], '', client, userId, null)
+    const aiResponse = await callGeminiAPI(message, [], '', client, userId, null)
+
+    // Post-process output to strip AI preamble/narration
+    const cleanedOutput = stripSkillTestPreamble(aiResponse.content)
 
     return new Response(
       JSON.stringify({
         success: true,
         skill_key: skillKey,
-        output: aiResponse.content,
+        output: cleanedOutput,
         tools_used: aiResponse.tools_used || [],
         tool_iterations: aiResponse.tool_iterations || 0,
         tool_executions: aiResponse.tool_executions || [],
         usage: aiResponse.usage || undefined,
-        // Include contact testing info in response for debugging
-        contact_test_info: contactId ? {
-          contact_id: contactId,
+        // Include entity testing info in response for debugging
+        entity_test_info: entityId ? {
+          entity_type: entityType,
+          entity_id: entityId,
+          test_mode: entityTestMode,
+          quality_tier: entityContext?.quality_tier,
+          quality_score: entityContext?.quality_score,
+        } : contactId ? {
+          entity_type: 'contact',
+          entity_id: contactId,
           test_mode: contactTestMode,
           quality_tier: contactContext?.quality_tier,
           quality_score: contactContext?.quality_score,
@@ -1231,6 +2324,14 @@ async function handleGenerateDealEmail(
       console.log('[GENERATE-DEAL-EMAIL] Activities found', { count: activities?.length || 0 })
     }
 
+    // Fetch user's writing style from AI personalization settings
+    const { data: writingStyle } = await client
+      .from('user_writing_styles')
+      .select('name, tone_description, examples, style_metadata')
+      .eq('user_id', userId)
+      .eq('is_default', true)
+      .maybeSingle()
+
     // Build context for email generation
     const emailContext = {
       deal: {
@@ -1250,11 +2351,12 @@ async function handleGenerateDealEmail(
         transcript: lastMeeting.transcript_text || lastMeeting.summary, // Use summary as fallback
         actionItems: lastMeeting.meeting_action_items?.filter((ai: any) => !ai.completed) || []
       } : null,
-      recentActivities: activities || []
+      recentActivities: activities || [],
+      writingStyle: writingStyle || null
     }
 
-    // Generate email using Claude with meeting context
-    console.log('[GENERATE-DEAL-EMAIL] Generating email with Claude...')
+    // Generate email using Claude with meeting context and user's writing style
+    console.log('[GENERATE-DEAL-EMAIL] Generating email with Claude...', { hasWritingStyle: !!writingStyle })
     const emailDraft = await generateDealEmailFromContext(emailContext)
     console.log('[GENERATE-DEAL-EMAIL] ✅ Email generated successfully', { 
       hasSubject: !!emailDraft.subject, 
@@ -1305,7 +2407,54 @@ ${context.lastMeeting.actionItems?.length > 0 ? `- Pending Action Items:\n${cont
     ? `Recent Activity:\n${context.recentActivities.map((a: any) => `- ${a.type}: ${a.notes || 'N/A'} on ${new Date(a.date).toLocaleDateString()}`).join('\n')}\n`
     : ''
 
-  const prompt = `You are drafting a professional follow-up email to progress a sales deal.
+  // Build personalized style instruction if user has a writing style configured
+  let styleInstruction = 'Be professional but warm and personable.'
+  const writingStyle = context.writingStyle
+  if (writingStyle) {
+    const styleParts: string[] = []
+    styleParts.push(`\n## USER'S PERSONAL WRITING STYLE - MATCH THIS EXACTLY`)
+    styleParts.push(`Style: ${writingStyle.name}`)
+    styleParts.push(`Tone: ${writingStyle.tone_description}`)
+    
+    const meta = writingStyle.style_metadata
+    if (meta?.tone_characteristics) {
+      styleParts.push(`Characteristics: ${meta.tone_characteristics}`)
+    }
+    if (meta?.vocabulary_profile) {
+      styleParts.push(`Vocabulary: ${meta.vocabulary_profile}`)
+    }
+    if (meta?.greeting_style) {
+      styleParts.push(`Greetings: ${meta.greeting_style}`)
+    }
+    if (meta?.signoff_style) {
+      styleParts.push(`Sign-offs: ${meta.signoff_style}`)
+    }
+    
+    if (writingStyle.examples && writingStyle.examples.length > 0) {
+      const snippets = writingStyle.examples.slice(0, 2).map((ex: string) => 
+        ex.length > 150 ? ex.substring(0, 150) + '...' : ex
+      )
+      styleParts.push(`\nExample snippets of their writing:\n${snippets.map((s: string) => `"${s}"`).join('\n')}`)
+    }
+    
+    styleParts.push(`\n**CRITICAL: The email must sound like this user wrote it. Match their vocabulary, tone, greeting style, and sign-off patterns exactly.**`)
+    styleInstruction = styleParts.join('\n')
+  }
+
+  // Get current date for accurate date references in email
+  const today = new Date()
+  const dateOptions: Intl.DateTimeFormatOptions = {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }
+  const currentDateStr = today.toLocaleDateString('en-US', dateOptions)
+
+  const prompt = `You are drafting a follow-up email to progress a sales deal.
+
+TODAY'S DATE: ${currentDateStr}
+Use this date when making any date references like "tomorrow", "next week", "this Friday", etc.
 
 Deal: ${context.deal.name} (${context.deal.value ? `$${context.deal.value}` : 'Value TBD'})
 Contact: ${context.contact.name} at ${context.contact.company}
@@ -1315,16 +2464,17 @@ ${meetingContext}
 
 ${recentActivityContext}
 
+${styleInstruction}
+
 IMPORTANT INSTRUCTIONS:
 1. Use the meeting transcript and action items to understand what was discussed
 2. Reference specific points from the conversation to show you were listening
 3. Address any pending action items from the meeting
 4. Propose next steps to move the deal forward
-5. Be professional but warm and personable
-6. Keep it concise (2-3 paragraphs max)
-7. Focus on value and next steps, not just checking in
+5. Keep it concise (2-3 paragraphs max)
+6. Focus on value and next steps, not just checking in
 
-Generate a professional email with:
+Generate an email with:
 1. A clear, compelling subject line that references the meeting or next steps
 2. A well-structured email body that references the conversation and proposes concrete next steps
 3. A suggested send time
@@ -1344,7 +2494,7 @@ Return your response as JSON in this exact format:
       'anthropic-version': ANTHROPIC_VERSION
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5',
       max_tokens: 1500, // More tokens for transcript analysis
       messages: [{
         role: 'user',
@@ -1487,16 +2637,135 @@ async function buildContext(client: any, userId: string, context?: ChatRequest['
       if (org?.company_bio) {
         contextParts.push(`Company bio: ${org.company_bio}`)
       }
+      
+      // -------------------------------------------------------------------------
+      // PERS-001: Add organization enrichment data to context
+      // -------------------------------------------------------------------------
+      const { data: enrichment } = await client
+        .from('organization_enrichment')
+        .select('products, competitors, pain_points, target_market, buying_signals, value_propositions')
+        .eq('organization_id', orgId)
+        .eq('status', 'completed')
+        .maybeSingle()
+      
+      if (enrichment) {
+        contextParts.push(`\n## Company Intelligence (from enrichment)`)
+        
+        // Products (top 3)
+        if (enrichment.products && Array.isArray(enrichment.products) && enrichment.products.length > 0) {
+          const productNames = enrichment.products.slice(0, 3).map((p: any) => p.name || p).join(', ')
+          contextParts.push(`Products: ${productNames}`)
+        }
+        
+        // Competitors (top 3)
+        if (enrichment.competitors && Array.isArray(enrichment.competitors) && enrichment.competitors.length > 0) {
+          const competitorNames = enrichment.competitors.slice(0, 3).map((c: any) => c.name || c).join(', ')
+          contextParts.push(`Competitors: ${competitorNames}`)
+        }
+        
+        // Pain points
+        if (enrichment.pain_points && Array.isArray(enrichment.pain_points) && enrichment.pain_points.length > 0) {
+          contextParts.push(`Customer pain points: ${enrichment.pain_points.slice(0, 3).join(', ')}`)
+        }
+        
+        // Target market
+        if (enrichment.target_market) {
+          contextParts.push(`Target market: ${enrichment.target_market}`)
+        }
+        
+        // Buying signals (for proactive suggestions)
+        if (enrichment.buying_signals && Array.isArray(enrichment.buying_signals) && enrichment.buying_signals.length > 0) {
+          contextParts.push(`Buying signals to watch for: ${enrichment.buying_signals.slice(0, 3).join(', ')}`)
+        }
+        
+        // Value propositions
+        if (enrichment.value_propositions && Array.isArray(enrichment.value_propositions) && enrichment.value_propositions.length > 0) {
+          contextParts.push(`Key differentiators: ${enrichment.value_propositions.slice(0, 2).join(', ')}`)
+        }
+      }
+      
+      // -------------------------------------------------------------------------
+      // PERS-002: Add AI preferences to context
+      // -------------------------------------------------------------------------
+      const { data: orgAiPrefs } = await client
+        .from('org_ai_preferences')
+        .select('brand_voice, blocked_phrases, preferred_tone')
+        .eq('organization_id', orgId)
+        .maybeSingle()
+      
+      if (orgAiPrefs) {
+        contextParts.push(`\n## Organization AI Preferences`)
+        if (orgAiPrefs.brand_voice) {
+          contextParts.push(`Brand voice: ${orgAiPrefs.brand_voice}`)
+        }
+        if (orgAiPrefs.preferred_tone) {
+          contextParts.push(`Preferred tone: ${orgAiPrefs.preferred_tone}`)
+        }
+        if (orgAiPrefs.blocked_phrases && Array.isArray(orgAiPrefs.blocked_phrases) && orgAiPrefs.blocked_phrases.length > 0) {
+          contextParts.push(`NEVER use these phrases: ${orgAiPrefs.blocked_phrases.join(', ')}`)
+        }
+      }
     }
 
+    // PERS-003: Load user profile with working hours
     const { data: profile } = await client
       .from('profiles')
-      .select('bio')
+      .select('bio, working_hours_start, working_hours_end, timezone')
       .eq('id', userId)
       .maybeSingle()
 
     if (profile?.bio) {
       contextParts.push(`User bio: ${profile.bio}`)
+    }
+    
+    // -------------------------------------------------------------------------
+    // PERS-003: Add working hours awareness
+    // -------------------------------------------------------------------------
+    if (profile?.working_hours_start && profile?.working_hours_end) {
+      contextParts.push(`\n## User Working Hours`)
+      contextParts.push(`Working hours: ${profile.working_hours_start} - ${profile.working_hours_end}${profile.timezone ? ` (${profile.timezone})` : ''}`)
+      contextParts.push(`If current time is outside working hours, suggest scheduling actions for the next work day.`)
+    }
+    
+    // ---------------------------------------------------------------------------
+    // User writing style (from AI Personalization settings)
+    // ---------------------------------------------------------------------------
+    const { data: writingStyle } = await client
+      .from('user_writing_styles')
+      .select('name, tone_description, examples, style_metadata')
+      .eq('user_id', userId)
+      .eq('is_default', true)
+      .maybeSingle()
+    
+    if (writingStyle) {
+      contextParts.push(`\n## User's Preferred Writing Style`)
+      contextParts.push(`Style name: ${writingStyle.name}`)
+      contextParts.push(`Tone: ${writingStyle.tone_description}`)
+      
+      // Include style metadata if available (from email training)
+      const meta = writingStyle.style_metadata as any
+      if (meta?.tone_characteristics) {
+        contextParts.push(`Tone characteristics: ${meta.tone_characteristics}`)
+      }
+      if (meta?.vocabulary_profile) {
+        contextParts.push(`Vocabulary: ${meta.vocabulary_profile}`)
+      }
+      if (meta?.greeting_style) {
+        contextParts.push(`Greeting style: ${meta.greeting_style}`)
+      }
+      if (meta?.signoff_style) {
+        contextParts.push(`Sign-off style: ${meta.signoff_style}`)
+      }
+      
+      // Include examples if available (limit to 2 for context size)
+      if (writingStyle.examples && Array.isArray(writingStyle.examples) && writingStyle.examples.length > 0) {
+        const exampleSnippets = writingStyle.examples.slice(0, 2).map((ex: string) => 
+          ex.length > 200 ? ex.substring(0, 200) + '...' : ex
+        )
+        contextParts.push(`Example snippets:\n${exampleSnippets.map((e: string) => `- "${e}"`).join('\n')}`)
+      }
+      
+      contextParts.push(`\n**IMPORTANT: When drafting emails, follow this user's writing style closely. Match their tone, vocabulary, greeting style, and sign-off patterns.**`)
     }
   } catch (e) {
     // fail open: copilot should still work without org context
@@ -2119,6 +3388,43 @@ const AVAILABLE_TOOLS = [
         limit: { type: 'number', default: 10, description: 'Maximum number of messages to return (max 20)' }
       }
     }
+  },
+  // Entity Resolution Tool - Smart contact/person lookup by first name
+  {
+    name: 'resolve_entity',
+    description: `Intelligently resolve a person mentioned by first name (or partial name) to a specific contact by searching across ALL data sources in parallel. Use this FIRST when the user mentions someone by name without full context.
+
+WHEN TO USE:
+- User asks about "Stan" or "John" without providing email or ID
+- User references someone from a recent conversation/meeting
+- Any ambiguous person reference that needs resolution
+
+SEARCHES (in parallel):
+1. CRM contacts - first_name, last_name matches
+2. Recent meetings - attendee names and emails
+3. Calendar events - attendee names and emails
+4. Recent emails - from/to addresses matching the name
+
+RETURNS:
+- If ONE clear match (most recent interaction): Returns resolved contact with full context
+- If MULTIPLE matches: Returns candidates ranked by recency with disambiguation options
+- If NO matches: Returns helpful message suggesting more context
+
+Always use this before asking the user "which person do you mean?" - let the data answer first.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'First name or partial name to search for (e.g., "Stan", "John Smith")'
+        },
+        context_hint: {
+          type: 'string',
+          description: 'Optional context from user message to help disambiguate (e.g., "meeting yesterday", "deal", "email")'
+        }
+      },
+      required: ['name']
+    }
   }
 ]
 
@@ -2126,20 +3432,61 @@ const AVAILABLE_TOOLS = [
  * Skills Router Tools (3-tool surface)
  *
  * Copilot is intentionally limited to:
- * - list_skills: discover skills
- * - get_skill: load a skill document (compiled per org)
+ * - list_skills: discover skills and sequences
+ * - get_skill: load a skill/sequence document (compiled per org)
  * - execute_action: fetch data / perform actions through adapters
  */
 const SKILLS_ROUTER_TOOLS = [
+  // ⚠️ RESOLVE_ENTITY MUST BE FIRST - For first-name-only person references
+  {
+    name: 'resolve_entity',
+    description: `🔴 USE THIS TOOL FIRST when user mentions a person by first name only (e.g., "Stan", "John", "Sarah").
+
+DO NOT ask for clarification first. Call this tool IMMEDIATELY with the name.
+
+TRIGGERS (call this tool when user says):
+- "What did Stan say about..." → resolve_entity(name="Stan")
+- "Tell me about John's deal" → resolve_entity(name="John")
+- "Catch me up on Sarah" → resolve_entity(name="Sarah")
+- Any first-name-only reference
+
+SEARCHES (in parallel, fast):
+- CRM contacts by first_name
+- Recent meetings (attendees from last 30 days)
+- Calendar events (attendees)
+- Recent emails (from/to names)
+
+RETURNS ranked candidates by recency. If ONE clear match → proceed. If MULTIPLE close matches → ask user to confirm.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'First name or partial name to search for'
+        },
+        context_hint: {
+          type: 'string',
+          description: 'Optional context to help disambiguate'
+        }
+      },
+      required: ['name']
+    }
+  },
   {
     name: 'list_skills',
     description: 'List available compiled skills for the user’s organization (optionally filtered by category).',
     input_schema: {
       type: 'object',
       properties: {
+        kind: {
+          type: 'string',
+          enum: ['skill', 'sequence', 'all'],
+          default: 'all',
+          description: 'Filter to skills (single-step) vs sequences (category=agent-sequence).',
+        },
         category: {
           type: 'string',
-          enum: ['sales-ai', 'writing', 'enrichment', 'workflows', 'data-access', 'output-format'],
+          enum: ['sales-ai', 'writing', 'enrichment', 'workflows', 'data-access', 'output-format', 'agent-sequence'],
           description: 'Optional skill category filter.',
         },
         enabled_only: {
@@ -2152,7 +3499,7 @@ const SKILLS_ROUTER_TOOLS = [
   },
   {
     name: 'get_skill',
-    description: 'Retrieve a compiled skill document by skill_key for the user’s organization.',
+    description: 'Retrieve a compiled skill or sequence document by skill_key for the user’s organization.',
     input_schema: {
       type: 'object',
       properties: {
@@ -2165,11 +3512,13 @@ const SKILLS_ROUTER_TOOLS = [
     name: 'execute_action',
     description: `Execute an action to fetch CRM data, meetings, emails, pipeline intelligence, or send notifications.
 
+⚠️ IMPORTANT: If you only have a FIRST NAME (e.g., "Stan", "John"), use the resolve_entity tool instead!
+
 ACTION PARAMETERS:
 
 ## Contact & Lead Lookup
-• get_contact: { email?, name?, id? } - Search contacts by email (preferred), name, or id
-• get_lead: { email?, name?, contact_id?, date_from?, date_to?, date_field? } - Get lead/prospect data including SavvyCal bookings, enrichment data, prep_summary, custom form fields, AND AI-generated insights. date_field: "created_at"|"meeting_start" (default: "created_at"). Use date_from/date_to for queries like "leads from today".
+• get_contact: { email?, full_name?, id? } - Search contacts by email (REQUIRED if available), full name (first AND last), or id. ⚠️ For FIRST-NAME-ONLY queries, use the resolve_entity tool instead!
+• get_lead: { email?, full_name?, contact_id?, date_from?, date_to?, date_field? } - Get lead/prospect data including SavvyCal bookings, enrichment data, prep_summary, custom form fields, AND AI-generated insights. date_field: "created_at"|"meeting_start" (default: "created_at"). Use date_from/date_to for queries like "leads from today". ⚠️ For FIRST-NAME-ONLY queries, use resolve_entity first!
 
 ## Deal & Pipeline
 • get_deal: { name?, id?, close_date_from?, close_date_to?, status?, stage_id?, include_health?, limit? } - Search deals with optional date range and health data. include_health=true adds health_status, risk_level, days_since_last_activity.
@@ -2186,7 +3535,7 @@ ACTION PARAMETERS:
 • get_booking_stats: { period?, filter_by?, source?, org_wide? } - Get meeting/booking statistics. period: "this_week"|"last_week"|"this_month"|"last_month"|"last_7_days"|"last_30_days" (default: "this_week").
 • get_meeting_count: { period?, timezone?, week_starts_on? } - Count meetings for a period. period: "today"|"tomorrow"|"this_week"|"next_week"|"this_month" (default: "this_week"). Uses user's timezone for accurate date boundaries.
 • get_next_meeting: { include_context?, timezone? } - Get next upcoming meeting with CRM context. include_context (default: true) adds company, deal, previous meetings, and recent activities. HERO FEATURE for meeting prep.
-• get_meetings_for_period: { period?, timezone?, week_starts_on?, include_context?, limit? } - Get meeting list for today or tomorrow. period: "today"|"tomorrow" (default: "today"). Great for daily briefings.
+• get_meetings_for_period: { period?, timezone?, week_starts_on?, include_context?, limit? } - Get meeting list for a period. period: "today"|"tomorrow"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday"|"sunday"|"this_week"|"next_week" (default: "today"). Day names find the next occurrence.
 • get_time_breakdown: { period?, timezone?, week_starts_on? } - Analyze time spent in meetings. Returns total hours, internal vs external split, 1:1 vs group breakdown, and daily distribution.
 
 ## Email & Notifications
@@ -2206,6 +3555,10 @@ ACTION PARAMETERS:
   - Research a company: run_skill { skill_key: "lead-research", skill_context: { domain: "stripe.com", company_name: "Stripe" } }
   - Analyze competitors: run_skill { skill_key: "competitor-intel", skill_context: { competitor_name: "Salesforce", our_company: "HubSpot" } }
   - Market research: run_skill { skill_key: "market-research", skill_context: { industry: "fintech", focus_areas: "payment processing" } }
+
+## Ops
+• search_leads_create_table: { query, title?, person_titles?, person_locations?, organization_num_employees_ranges?, person_seniorities? } - Search Apollo for leads matching criteria and create an Ops with results. Returns table_id, table_name, row_count.
+• enrich_table_column: { table_id, column_id, row_ids? } - Enrich a column in an Ops using AI. If row_ids not provided, enriches all rows.
 
 Write actions require params.confirm=true.`,
     input_schema: {
@@ -2232,7 +3585,16 @@ Write actions require params.confirm=true.`,
             'draft_email',
             'update_crm',
             'send_notification',
+            'enrich_contact',
+            'enrich_company',
+            'invoke_skill',
             'run_skill',
+            'run_sequence',
+            'create_task',
+            'list_tasks',
+            'create_activity',
+            'search_leads_create_table',
+            'enrich_table_column',
           ],
           description: 'The action to execute',
         },
@@ -2267,7 +3629,7 @@ Write actions require params.confirm=true.`,
             contactId: { type: 'string', description: 'Contact ID (for get_meetings)' },
             period: { type: 'string', enum: ['today', 'tomorrow', 'this_week', 'next_week', 'last_week', 'this_month', 'last_month', 'this_quarter', 'next_quarter', 'last_7_days', 'last_30_days'], description: 'Time period (for meeting queries, get_booking_stats, get_pipeline_deals, get_pipeline_forecast)' },
             timezone: { type: 'string', description: 'IANA timezone (e.g., Europe/London, America/New_York) for timezone-aware date calculations (for get_meeting_count, get_next_meeting, get_meetings_for_period, get_time_breakdown). Auto-detected from user profile if not provided.' },
-            week_starts_on: { type: 'number', enum: [0, 1], description: 'Week start day: 0=Sunday, 1=Monday (default). Used for this_week/next_week/last_week calculations.' },
+            week_starts_on: { type: 'string', enum: ['0', '1'], description: 'Week start day: 0=Sunday, 1=Monday (default). Used for this_week/next_week/last_week calculations.' },
             include_context: { type: 'boolean', description: 'Include CRM context (company, deal, activities) with meeting data (for get_next_meeting, get_meetings_for_period). Default: true for get_next_meeting.' },
             filter_by: { type: 'string', enum: ['meeting_date', 'booking_date'], description: 'Filter by when meeting is scheduled or when booking was created (for get_booking_stats)' },
             source: { type: 'string', enum: ['all', 'savvycal', 'calendar', 'meetings'], description: 'Data source to query (for get_booking_stats)' },
@@ -2291,16 +3653,532 @@ Write actions require params.confirm=true.`,
             // Skill execution params
             skill_key: { type: 'string', description: 'Skill to execute (for run_skill): lead-research, company-analysis, competitor-intel, market-research, industry-trends, meeting-prep, etc.' },
             skill_context: { type: 'object', description: 'Context variables for the skill (for run_skill): domain, company_name, competitor_name, industry, etc.' },
+            // Sequence execution params
+            sequence_key: { type: 'string', description: 'Sequence to execute (for run_sequence): must be an enabled agent-sequence skill_key' },
+            sequence_context: { type: 'object', description: 'Input context for the sequence trigger (for run_sequence)' },
+            is_simulation: { type: 'boolean', description: 'If true, run in simulation/dry-run mode (for run_sequence)' },
           },
         },
       },
       required: ['action', 'params'],
     },
-  },
+  }
 ]
 
 /**
- * Call Claude API for chat response with tool support
+ * Convert Anthropic tool format to Gemini function declaration format
+ */
+function convertToGeminiFunctionDeclarations(anthropicTools: any[]): any[] {
+  return anthropicTools.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.input_schema
+  }))
+}
+
+// Gemini function declarations (converted from SKILLS_ROUTER_TOOLS)
+const GEMINI_FUNCTION_DECLARATIONS = convertToGeminiFunctionDeclarations(SKILLS_ROUTER_TOOLS)
+
+/**
+ * Parse Gemini JSON response robustly (handles markdown fences, malformed JSON)
+ */
+function parseGeminiJSONResponse(text: string): any {
+  const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
+  let jsonString = jsonMatch ? jsonMatch[1] : text
+
+  if (!jsonString.trim().startsWith('{')) {
+    const objectMatch = jsonString.match(/\{[\s\S]*\}/)
+    if (objectMatch) jsonString = objectMatch[0]
+  }
+
+  jsonString = jsonString.trim()
+  const firstBrace = jsonString.indexOf('{')
+  const lastBrace = jsonString.lastIndexOf('}')
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    jsonString = jsonString.substring(firstBrace, lastBrace + 1)
+  }
+
+  try {
+    return JSON.parse(jsonString)
+  } catch (_err) {
+    // Repair pass for malformed JSON
+    let repaired = jsonString
+    let inString = false
+    let escapeNext = false
+    const out: string[] = []
+
+    for (let i = 0; i < repaired.length; i++) {
+      const ch = repaired[i]
+      if (escapeNext) { out.push(ch); escapeNext = false; continue }
+      if (ch === '\\') { out.push(ch); escapeNext = true; continue }
+      if (ch === '"') { inString = !inString; out.push(ch); continue }
+      if (inString) {
+        if (ch === '\n' || ch === '\r') out.push('\\n')
+        else if (ch === '\t') out.push('\\t')
+        else out.push(ch)
+      } else {
+        out.push(ch)
+      }
+    }
+    if (inString) out.push('"')
+    repaired = out.join('')
+    repaired = repaired.replace(/,(\s*[}\]])/g, '$1') // remove trailing commas
+    return JSON.parse(repaired)
+  }
+}
+
+/**
+ * Call Gemini API for chat response with function calling support
+ * Replaces callClaudeAPI for the copilot chat
+ */
+async function callGeminiAPI(
+  message: string,
+  history: CopilotMessage[],
+  context: string,
+  client: any,
+  userId: string,
+  orgId: string | null,
+  analyticsData?: any
+): Promise<{
+  content: string;
+  recommendations?: any[];
+  usage?: { input_tokens: number; output_tokens: number };
+  tools_used?: string[];
+  tool_iterations?: number;
+  tools_success_count?: number;
+  tools_error_count?: number;
+  tool_execution_time_ms?: number;
+  tool_executions?: ToolExecutionDetail[];
+}> {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY not configured')
+  }
+
+  // Build system instruction and messages for Gemini
+  let companyName = 'your company'
+  let availableSkills: { skill_key: string; name: string; category: string }[] = []
+
+  try {
+    let resolvedOrgId = orgId
+    if (!resolvedOrgId) {
+      const { data: membership } = await client
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      resolvedOrgId = membership?.org_id ? String(membership.org_id) : null
+    }
+
+    if (resolvedOrgId) {
+      const { data: orgCompanyName } = await client
+        .from('organization_context')
+        .select('value')
+        .eq('organization_id', resolvedOrgId)
+        .eq('context_key', 'company_name')
+        .maybeSingle()
+
+      const ctxName = orgCompanyName?.value
+      if (typeof ctxName === 'string' && ctxName.trim()) {
+        companyName = ctxName.trim()
+      } else if (ctxName && typeof ctxName === 'object' && typeof (ctxName as any).name === 'string') {
+        const nestedName = String((ctxName as any).name).trim()
+        if (nestedName) companyName = nestedName
+      } else {
+        const { data: org } = await client
+          .from('organizations')
+          .select('name')
+          .eq('id', resolvedOrgId)
+          .maybeSingle()
+        if (org?.name) companyName = String(org.name)
+      }
+
+      const { data: orgSkills } = await client.rpc('get_organization_skills_for_agent', {
+        p_org_id: resolvedOrgId,
+        p_category: null
+      })
+      if (orgSkills && Array.isArray(orgSkills)) {
+        availableSkills = orgSkills
+          .map((s: any) => {
+            const skillKey = String(s.skill_key || s.skill_id || '').trim()
+            const fm = (s.frontmatter || {}) as Record<string, unknown>
+            const nameCandidate = (typeof fm.name === 'string' && fm.name.trim())
+              ? fm.name
+              : (typeof (fm as any).title === 'string' && String((fm as any).title).trim())
+                ? String((fm as any).title)
+                : skillKey
+            return { skill_key: skillKey, name: String(nameCandidate), category: String(s.category || 'other') }
+          })
+          .filter((s: any) => Boolean(s.skill_key))
+      }
+    }
+  } catch {
+    // fail open: keep default companyName
+  }
+
+  // Format available skills/sequences for system prompt
+  const sequences = availableSkills.filter((s) => s.category === 'agent-sequence')
+  const skillsOnly = availableSkills.filter((s) => s.category !== 'agent-sequence')
+  const skillsByCategory: Record<string, string[]> = {}
+  for (const skill of skillsOnly) {
+    const cat = skill.category || 'other'
+    if (!skillsByCategory[cat]) skillsByCategory[cat] = []
+    skillsByCategory[cat].push(`${skill.skill_key} (${skill.name})`)
+  }
+  const skillsListText = Object.entries(skillsByCategory)
+    .map(([cat, skills]) => `  ${cat}: ${skills.join(', ')}`)
+    .join('\n')
+  const sequencesListText = sequences
+    .map((s) => `  - ${s.skill_key} (${s.name})`)
+    .join('\n')
+
+  // AGENT-002 + CM-003: Load specialized team member persona with memory context
+  let personaSection = ''
+  if (orgId) {
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+      const compiledPersona = await getOrCompilePersona(client, orgId, userId, supabaseUrl, serviceRoleKey)
+      if (compiledPersona?.persona) {
+        personaSection = `## YOUR PERSONA (Team Member Identity)\n\n${compiledPersona.persona}\n\n---\n\n`
+        console.log('[GEMINI_PERSONA] ✅ Loaded specialized persona', {
+          hasEnrichment: compiledPersona.hasEnrichment,
+          hasSkillContext: compiledPersona.hasSkillContext,
+          hasMemoryContext: compiledPersona.hasMemoryContext,
+          version: compiledPersona.version,
+        })
+      }
+    } catch (personaError) {
+      console.error('[GEMINI_PERSONA] ⚠️ Failed to load persona:', personaError)
+    }
+  }
+
+  const systemInstruction = `${personaSection}You are a sales assistant for ${companyName}. You help sales reps prepare for calls, follow up after meetings, and manage their pipeline.
+
+## ⚠️ CRITICAL RULE: First Name Resolution
+
+**BEFORE ANYTHING ELSE**: When the user mentions a person by first name only (e.g., "What did Stan say?", "Tell me about John", "catch me up on Sarah"):
+
+1. **IMMEDIATELY call the resolve_entity function** with that name - DO NOT ask for clarification first
+2. The function searches your CRM, meetings, calendar, and emails in parallel to find the right person
+3. ONLY if the function returns multiple close matches, ask the user which one they meant
+4. ONLY if the function returns zero matches, ask for more context
+
+❌ WRONG: "I'd be happy to help! Can you tell me Stan's last name or email?"
+✅ RIGHT: *calls resolve_entity with name="Stan"* then uses the result to answer
+
+## How You Work
+You have access to **skills** (single-step) and **sequences** (multi-step processes) specific to ${companyName}.
+
+### Available Sequences (multi-step)
+${sequencesListText || '  No sequences configured yet'}
+
+### Available Skills (single-step)
+${skillsListText || '  No skills configured yet'}
+
+### Your Functions
+1. list_skills - See available skills and sequences by category
+2. get_skill - Retrieve a skill/sequence document for guidance
+3. execute_action - Perform actions (query CRM, fetch meetings, search emails, etc.)
+4. resolve_entity - **CRITICAL: Use FIRST when user mentions a person by first name only**
+
+### Workflow Pattern
+1. Understand what the user needs
+2. **If user mentions a person by first name only → Use resolve_entity FIRST**
+3. Retrieve the relevant skill(s) with get_skill
+4. Follow the skill's instructions
+5. Use execute_action to gather data or perform tasks
+6. Deliver results clearly
+
+## Core Rules
+- Confirm before any CRM updates, notifications, or sends
+- Do not make up information; prefer function results
+- If data is missing, state what you couldn't find and proceed with what you have`
+
+  // Build contents array for Gemini
+  const contents: any[] = []
+
+  // Add conversation history (last 10 messages)
+  const recentHistory = history.slice(-10)
+  recentHistory.forEach(msg => {
+    contents.push({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    })
+  })
+
+  // Add runtime context if provided
+  if (context && context.trim()) {
+    contents.push({
+      role: 'user',
+      parts: [{ text: `Context:\n${context}`.trim() }]
+    })
+  }
+
+  // Add current message
+  contents.push({
+    role: 'user',
+    parts: [{ text: message }]
+  })
+
+  // Entity detection for forcing resolve_entity
+  const questionKeywords = ['who', 'what', 'tell', 'find', 'show', 'get', 'catch', 'prep', 'brief', 'update', 'about', 'with', 'from']
+  const hasQuestionKeyword = questionKeywords.some(k => message.toLowerCase().includes(k))
+  const words = message.split(/\s+/)
+  const commonWords = new Set(['The', 'This', 'That', 'These', 'Those', 'What', 'When', 'Where', 'Who', 'Why', 'How', 'Can', 'Could', 'Would', 'Should', 'Will', 'Do', 'Does', 'Did', 'Is', 'Are', 'Was', 'Were', 'Have', 'Has', 'Had', 'Been', 'Being', 'To', 'In', 'On', 'At', 'For', 'With', 'About', 'From', 'Into', 'Through', 'During', 'Before', 'After', 'Above', 'Below', 'Between', 'Under', 'Again', 'Further', 'Then', 'Once', 'Here', 'There', 'All', 'Each', 'Few', 'More', 'Most', 'Other', 'Some', 'Such', 'No', 'Nor', 'Not', 'Only', 'Own', 'Same', 'So', 'Than', 'Too', 'Very', 'Just', 'Now', 'CRM', 'API', 'URL', 'PDF', 'OK'])
+  const potentialNames = words.map((word, idx) => {
+    if (idx === 0) return null
+    // Strip trailing punctuation for name detection
+    const cleanWord = word.replace(/[?!.,;:'"]+$/, '')
+    if (!/^[A-Z][a-z]+$/.test(cleanWord)) return null
+    if (commonWords.has(cleanWord)) return null
+    const nextWord = words[idx + 1]?.replace(/[?!.,;:'"]+$/, '')
+    if (nextWord && /^[A-Z][a-z]+$/.test(nextWord)) return null
+    return cleanWord
+  }).filter(Boolean)
+  const detectedFirstName = potentialNames[0] as string | undefined
+  const shouldForceEntityResolution = hasQuestionKeyword && detectedFirstName && !message.includes('@')
+
+  console.log(`[GEMINI_ENTITY_DETECTION] Message: "${message}"`)
+  console.log(`[GEMINI_ENTITY_DETECTION] shouldForceEntityResolution: ${shouldForceEntityResolution}, name: ${detectedFirstName}`)
+
+  // Build Gemini request
+  const toolConfig = shouldForceEntityResolution
+    ? {
+        function_calling_config: {
+          mode: 'ANY',
+          allowed_function_names: ['resolve_entity']
+        }
+      }
+    : {
+        function_calling_config: {
+          mode: 'AUTO'
+        }
+      }
+
+  const endpoint = `${GEMINI_API_BASE}/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${GEMINI_API_KEY}`
+
+  const requestBody = {
+    contents,
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
+    toolConfig,
+    generationConfig: {
+      temperature: 0.7,
+      topP: 0.95,
+      maxOutputTokens: 4096
+    }
+  }
+
+  console.log(`[GEMINI_REQUEST] Model: ${GEMINI_MODEL}, toolConfig: ${JSON.stringify(toolConfig)}`)
+
+  let response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`[GEMINI_ERROR] ${response.status}: ${errorText}`)
+    throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
+  }
+
+  let data = await response.json()
+  let finalContent = ''
+  const recommendations: any[] = []
+  let accumulatedTextContent = ''
+
+  // Tool usage tracking
+  const toolsUsed: string[] = []
+  let toolIterations = 0
+  let toolsSuccessCount = 0
+  let toolsErrorCount = 0
+  const toolExecutionStartTime = Date.now()
+  const toolExecutions: ToolExecutionDetail[] = []
+
+  // Handle function calling - Gemini may request to use functions
+  let maxToolIterations = 5
+  let iteration = 0
+  const startTime = Date.now()
+  const MAX_EXECUTION_TIME = 120000
+
+  // Check if Gemini wants to call functions
+  let candidate = data.candidates?.[0]
+  let parts = candidate?.content?.parts || []
+
+  // Debug: Log Gemini's initial response structure
+  console.log(`[GEMINI_DEBUG] Initial response parts count: ${parts.length}`)
+  console.log(`[GEMINI_DEBUG] Parts types: ${parts.map((p: any) => p.functionCall ? 'functionCall:' + p.functionCall.name : p.text ? 'text(' + (p.text?.substring(0, 50) || '') + ')' : 'unknown').join(', ')}`)
+  console.log(`[GEMINI_DEBUG] Full first part: ${JSON.stringify(parts[0])?.substring(0, 500)}`)
+
+  while (iteration < maxToolIterations) {
+    if (Date.now() - startTime > MAX_EXECUTION_TIME) break
+
+    // Check for function calls in the response
+    const functionCalls = parts.filter((p: any) => p.functionCall)
+    const textParts = parts.filter((p: any) => p.text)
+
+    // Accumulate text content
+    for (const tp of textParts) {
+      if (tp.text) accumulatedTextContent += tp.text + '\n\n'
+    }
+
+    if (functionCalls.length === 0) break
+
+    iteration++
+    toolIterations++
+
+    // Execute all function calls
+    const functionResponses: any[] = []
+    for (const fc of functionCalls) {
+      const functionName = fc.functionCall.name
+      const functionArgs = fc.functionCall.args || {}
+      const toolStartTime = Date.now()
+
+      console.log(`[GEMINI_FUNCTION_CALL] ${functionName}(${JSON.stringify(functionArgs)})`)
+
+      if (!toolsUsed.includes(functionName)) {
+        toolsUsed.push(functionName)
+      }
+
+      try {
+        const toolPromise = executeToolCall(functionName, functionArgs, client, userId, orgId)
+        let timeoutMs = 15000
+        if (functionName === 'execute_action') {
+          if (functionArgs?.action === 'run_sequence') {
+            timeoutMs = 60000
+          } else {
+            timeoutMs = 30000
+          }
+        }
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Function execution timeout')), timeoutMs)
+        )
+
+        const toolResult = await Promise.race([toolPromise, timeoutPromise])
+        const toolLatencyMs = Date.now() - toolStartTime
+        toolsSuccessCount++
+
+        const capability = (toolResult as any)?.capability
+        const provider = (toolResult as any)?.provider
+
+        toolExecutions.push({
+          toolName: functionName,
+          args: functionArgs,
+          result: toolResult,
+          latencyMs: toolLatencyMs,
+          success: true,
+          capability,
+          provider
+        })
+
+        functionResponses.push({
+          functionResponse: {
+            name: functionName,
+            response: toolResult
+          }
+        })
+
+        console.log(`[GEMINI_FUNCTION_RESULT] ${functionName} succeeded in ${toolLatencyMs}ms`)
+      } catch (error: any) {
+        const toolLatencyMs = Date.now() - toolStartTime
+        toolsErrorCount++
+
+        toolExecutions.push({
+          toolName: functionName,
+          args: functionArgs,
+          result: null,
+          latencyMs: toolLatencyMs,
+          success: false,
+          error: error.message || String(error)
+        })
+
+        functionResponses.push({
+          functionResponse: {
+            name: functionName,
+            response: { error: error.message || String(error) }
+          }
+        })
+
+        console.log(`[GEMINI_FUNCTION_ERROR] ${functionName} failed: ${error.message}`)
+      }
+    }
+
+    // Add model's function call and our responses to contents
+    contents.push({
+      role: 'model',
+      parts: parts
+    })
+    contents.push({
+      role: 'user',
+      parts: functionResponses
+    })
+
+    // Call Gemini again with function results
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        tools: [{ functionDeclarations: GEMINI_FUNCTION_DECLARATIONS }],
+        toolConfig: { function_calling_config: { mode: 'AUTO' } },
+        generationConfig: { temperature: 0.7, topP: 0.95, maxOutputTokens: 4096 }
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`[GEMINI_ERROR] Follow-up call failed: ${response.status}`)
+      break
+    }
+
+    data = await response.json()
+    candidate = data.candidates?.[0]
+    parts = candidate?.content?.parts || []
+  }
+
+  // Use accumulated text if we had iterations, otherwise extract from final parts
+  // This prevents duplication when text appears in both accumulated and final parts
+  if (accumulatedTextContent) {
+    finalContent = accumulatedTextContent.trim()
+  } else {
+    // Only extract from parts if we didn't accumulate (no iterations happened)
+    for (const part of parts) {
+      if (part.text) {
+        finalContent += part.text
+      }
+    }
+  }
+
+  const toolExecutionTimeMs = Date.now() - toolExecutionStartTime
+
+  // Extract usage metadata from Gemini response
+  const usageMetadata = data.usageMetadata || {}
+  const usage = {
+    input_tokens: usageMetadata.promptTokenCount || 0,
+    output_tokens: usageMetadata.candidatesTokenCount || 0
+  }
+
+  console.log(`[GEMINI_COMPLETE] tokens: ${usage.input_tokens}/${usage.output_tokens}, tools: ${toolsUsed.join(',')}, toolExecutions: ${toolExecutions.length}`)
+
+  return {
+    content: finalContent.trim() || 'I processed your request but have no additional response.',
+    recommendations,
+    usage,
+    tools_used: toolsUsed,
+    tool_iterations: toolIterations,
+    tools_success_count: toolsSuccessCount,
+    tools_error_count: toolsErrorCount,
+    tool_execution_time_ms: toolExecutionTimeMs,
+    tool_executions: toolExecutions
+  }
+}
+
+/**
+ * Call Claude API for chat response with tool support (LEGACY - kept for fallback)
  */
 async function callClaudeAPI(
   message: string,
@@ -2328,7 +4206,8 @@ async function callClaudeAPI(
   // Build messages array for Claude
   // Resolve company name and available skills for system prompt
   let companyName = 'your company'
-  let availableSkills: { skill_id: string; name: string; category: string }[] = []
+  // NOTE: get_organization_skills_for_agent returns { skill_key, category, frontmatter, content, is_enabled }
+  let availableSkills: { skill_key: string; name: string; category: string }[] = []
   try {
     // Use the orgId parameter if provided, otherwise look it up
     let resolvedOrgId = orgId
@@ -2371,47 +4250,129 @@ async function callClaudeAPI(
         p_category: null
       })
       if (orgSkills && Array.isArray(orgSkills)) {
-        availableSkills = orgSkills.map((s: any) => ({
-          skill_id: s.skill_id,
-          name: s.skill_name,
-          category: s.category
-        }))
+        availableSkills = orgSkills
+          .map((s: any) => {
+            const skillKey = String(s.skill_key || s.skill_id || '').trim()
+            const fm = (s.frontmatter || {}) as Record<string, unknown>
+            const nameCandidate =
+              (typeof fm.name === 'string' && fm.name.trim())
+                ? fm.name
+                : (typeof (fm as any).title === 'string' && String((fm as any).title).trim())
+                  ? String((fm as any).title)
+                  : skillKey
+            return {
+              skill_key: skillKey,
+              name: String(nameCandidate),
+              category: String(s.category || 'other')
+            }
+          })
+          .filter((s: any) => Boolean(s.skill_key))
       }
     }
   } catch {
     // fail open: keep default companyName
   }
 
-  // Format available skills for the system prompt
+  // Format available skills/sequences for the system prompt
+  const sequences = availableSkills.filter((s) => s.category === 'agent-sequence')
+  const skillsOnly = availableSkills.filter((s) => s.category !== 'agent-sequence')
+
   const skillsByCategory: Record<string, string[]> = {}
-  for (const skill of availableSkills) {
+  for (const skill of skillsOnly) {
     const cat = skill.category || 'other'
     if (!skillsByCategory[cat]) skillsByCategory[cat] = []
-    skillsByCategory[cat].push(`${skill.skill_id} (${skill.name})`)
+    skillsByCategory[cat].push(`${skill.skill_key} (${skill.name})`)
   }
   const skillsListText = Object.entries(skillsByCategory)
     .map(([cat, skills]) => `  ${cat}: ${skills.join(', ')}`)
     .join('\n')
 
-  const systemPrompt = `You are a sales assistant for ${companyName}. You help sales reps prepare for calls, follow up after meetings, and manage their pipeline.
+  const sequencesListText = sequences
+    .map((s) => `  - ${s.skill_key} (${s.name})`)
+    .join('\n')
+
+  // AGENT-002: Load specialized team member persona
+  // CM-003: Also inject 7-day conversation memory context
+  let compiledPersona: CompiledPersona | null = null
+  let personaSection = ''
+
+  // Only try to load persona if we have an org
+  if (orgId) {
+    try {
+      // Pass supabaseUrl and serviceRoleKey for memory context loading (CM-003)
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+      compiledPersona = await getOrCompilePersona(client, orgId, userId, supabaseUrl, serviceRoleKey)
+      if (compiledPersona?.persona) {
+        personaSection = `\n## YOUR PERSONA (Team Member Identity)\n\n${compiledPersona.persona}\n\n---\n`
+        console.log('[PERSONA] ✅ Loaded specialized persona', {
+          hasEnrichment: compiledPersona.hasEnrichment,
+          hasSkillContext: compiledPersona.hasSkillContext,
+          hasMemoryContext: compiledPersona.hasMemoryContext,
+          version: compiledPersona.version,
+        })
+      }
+    } catch (personaError) {
+      // Fail open - continue with generic prompt
+      console.error('[PERSONA] ⚠️ Failed to load persona, using generic:', personaError)
+    }
+  }
+
+  // Build system prompt - inject persona at the top if available
+  const systemPrompt = `${personaSection}You are a sales assistant for ${companyName}. You help sales reps prepare for calls, follow up after meetings, and manage their pipeline.
+
+## ⚠️ CRITICAL RULE: First Name Resolution
+
+**BEFORE ANYTHING ELSE**: When the user mentions a person by first name only (e.g., "What did Stan say?", "Tell me about John", "catch me up on Sarah"):
+
+1. **IMMEDIATELY call the resolve_entity tool** with that name - DO NOT ask for clarification first
+2. The tool searches your CRM, meetings, calendar, and emails in parallel to find the right person
+3. ONLY if the tool returns multiple close matches, ask the user which one they meant
+4. ONLY if the tool returns zero matches, ask for more context
+
+❌ WRONG: "I'd be happy to help! Can you tell me Stan's last name or email?"
+✅ RIGHT: *calls resolve_entity with name="Stan"* then uses the result to answer
 
 ## How You Work
-You have access to skills - documents that contain instructions, context, and best practices specific to ${companyName}. Always retrieve the relevant skill before taking action.
+You have access to **skills** (single-step) and **sequences** (multi-step processes that use many skills) specific to ${companyName}.
 
-### Available Skills
+Always retrieve the relevant skill/sequence before taking action.
+
+### Available Sequences (multi-step)
+${sequencesListText || '  No sequences configured yet'}
+
+### Available Skills (single-step)
 ${skillsListText || '  No skills configured yet'}
 
 ### Your Tools
-1. list_skills - See available skills by category
-2. get_skill - Retrieve a skill document for guidance (use exact skill_id from list above)
+1. list_skills - See available skills and sequences by category
+2. get_skill - Retrieve a skill/sequence document for guidance (use exact skill_key from lists above)
 3. execute_action - Perform actions (query CRM, fetch meetings, search emails, etc.)
+4. resolve_entity - **CRITICAL: Use FIRST when user mentions a person by first name only** (e.g., "Stan", "John"). Searches ALL data sources in parallel to find the right person - don't ask for clarification first!
 
 ### Workflow Pattern
 1. Understand what the user needs
-2. Retrieve the relevant skill(s) with get_skill using the exact skill_id
-3. Follow the skill's instructions
-4. Use execute_action to gather data or perform tasks
-5. Deliver results in the user's preferred channel
+2. **If user mentions a person by first name only → Use resolve_entity FIRST**
+3. Retrieve the relevant skill(s) or sequence(s) with get_skill using the exact skill_key
+4. Follow the skill's instructions
+5. Use execute_action to gather data or perform tasks
+6. Deliver results in the user's preferred channel
+
+## Smart Entity Resolution (CRITICAL)
+
+**When the user mentions someone by first name (e.g., "What did Stan say about next steps?", "Tell me about John")**:
+
+1. **DO NOT ask for clarification first.** Instead, immediately use the resolve_entity tool with the name
+2. The tool searches ALL your data sources in parallel:
+   - CRM contacts (name matches)
+   - Recent meetings (attendee names from last 30 days)
+   - Calendar events (attendee names)
+   - Recent emails (from/to names)
+3. **If resolved to one person**: Proceed with the query using their contact_id or email
+4. **If multiple matches with similar recency**: Present the top candidates and ask user to confirm
+5. **If no matches**: Then ask user for more context (email, company, when you last spoke)
+
+This makes you much more helpful - the user doesn't need to remember full names or emails!
 
 ## Common Workflows
 
@@ -2481,10 +4442,158 @@ These skills use real-time web search and return structured JSON with sources.
 **"What's the status with [company]?"**
 - Use execute_action with get_company_status { company_name: "X" } for holistic view
 
+### Pipeline Focus Task Scheduling (when user says "Help me schedule tasks to engage deals I should focus on" or similar)
+Prefer running the **seq-pipeline-focus-tasks** sequence:
+1. Run execute_action with run_sequence { sequence_key: "seq-pipeline-focus-tasks", is_simulation: true, sequence_context: { period: "this_week" } }
+2. Show the user the task preview (title, checklist, due_date) and the selected top deals
+3. Ask for confirmation before creating tasks
+4. If user confirms, re-run execute_action with run_sequence { sequence_key: "seq-pipeline-focus-tasks", is_simulation: false, sequence_context: { period: "this_week" } }
+
+### Post-Meeting Follow-Up Pack (when user says "generate my follow-up pack" / "send recap" / "Slack update + tasks")
+Prefer running the **seq-post-meeting-followup-pack** sequence:
+1. Run execute_action with run_sequence { sequence_key: "seq-post-meeting-followup-pack", is_simulation: true, sequence_context: {} }
+2. Show the user the email + Slack + task previews
+3. Ask for confirmation before sending/posting/creating
+4. If user confirms, re-run execute_action with run_sequence { sequence_key: "seq-post-meeting-followup-pack", is_simulation: false, sequence_context: {} }
+
+### Deal Mutual Action Plan (MAP) Builder (when user says "build a mutual action plan / MAP for deal X")
+Prefer running the **seq-deal-map-builder** sequence:
+1. Run execute_action with run_sequence { sequence_key: "seq-deal-map-builder", is_simulation: true, sequence_context: { deal_id: "..." } }
+2. Show the milestones + task preview
+3. Ask for confirmation before creating the task
+4. If user confirms, re-run execute_action with run_sequence { sequence_key: "seq-deal-map-builder", is_simulation: false, sequence_context: { deal_id: "..." } }
+
+### Daily Focus Plan (when user says "what should I do today?" / "show me my priorities" / "daily plan")
+Prefer running the **seq-daily-focus-plan** sequence:
+1. Run execute_action with run_sequence { sequence_key: "seq-daily-focus-plan", is_simulation: true, sequence_context: {} }
+2. Show priorities, next best actions, and top task preview
+3. Ask for confirmation before creating the task
+4. If user confirms, re-run execute_action with run_sequence { sequence_key: "seq-daily-focus-plan", is_simulation: false, sequence_context: {} }
+
+### Follow-Up Zero Inbox (when user says "what follow-ups am I missing?" / "check my emails" / "unanswered emails")
+Prefer running the **seq-followup-zero-inbox** sequence:
+1. Run execute_action with run_sequence { sequence_key: "seq-followup-zero-inbox", is_simulation: true, sequence_context: {} }
+2. Show threads needing response, reply drafts, and follow-up task preview
+3. Ask for confirmation before creating the task
+4. If user confirms, re-run execute_action with run_sequence { sequence_key: "seq-followup-zero-inbox", is_simulation: false, sequence_context: {} }
+
+### Deal Slippage Guardrails (when user says "what deals are at risk?" / "show me at-risk deals" / "deal slippage")
+Prefer running the **seq-deal-slippage-guardrails** sequence:
+1. Run execute_action with run_sequence { sequence_key: "seq-deal-slippage-guardrails", is_simulation: true, sequence_context: {} }
+2. Show risk radar, rescue actions, rescue task preview, and Slack update preview
+3. Ask for confirmation before creating the task and posting Slack update
+4. If user confirms, re-run execute_action with run_sequence { sequence_key: "seq-deal-slippage-guardrails", is_simulation: false, sequence_context: {} }
+
+### Catch Me Up / Status Summary (when user says "catch me up" / "what did I miss?" / "status update" / "what's happening?")
+Gather data from multiple sources and present a **well-formatted markdown summary**:
+
+1. **Gather Today's Context:**
+   - Use execute_action with get_meetings_for_period { period: "today" } for today's schedule
+   - Use execute_action with get_pipeline_deals { filter: "stale" } for deals needing attention
+   - Use execute_action with get_contacts_needing_attention { days_since_contact: 7 } for follow-ups due
+   - Use execute_action with get_pipeline_summary {} for current pipeline snapshot
+
+2. **Format your response with these EXACT markdown sections:**
+
+## 📊 This Week's Snapshot
+- **Pipeline Value:** $X total, $Y weighted
+- **Deals Closing Soon:** X deals worth $Y
+- **Stale Opportunities:** X deals with no recent activity
+- **Follow-ups Overdue:** X contacts need attention
+
+## 📅 Today's Schedule
+| Time | Meeting | Company | Prep Status |
+|------|---------|---------|-------------|
+| 9:00 AM | Call with **John Smith** | Acme Corp | ✅ Ready |
+| 2:30 PM | Demo for **Jane Doe** | TechStart | ⚠️ Needs prep |
+
+## ✅ Priority Actions
+1. **Follow up with Stan** at Acme Corp - last contact 10 days ago
+2. **Prepare for 2:30 PM demo** with TechStart - review their requirements
+3. **Update Globex deal** - close date is tomorrow, confirm status
+
+## 💡 Key Insights
+- Your **weighted pipeline is up 12%** from last week
+- **3 deals** moved to negotiation stage
+- Consider reaching out to dormant contacts at **BigCorp** and **MegaInc**
+
+**IMPORTANT Formatting Rules:**
+- Use **bold** for names, numbers, and key metrics
+- Use bullet points (•) for lists within sections
+- Use numbered lists (1. 2. 3.) for priority actions
+- Use tables for schedules with clear columns
+- Use emoji sparingly: 📊 📅 ✅ 💡 ⚠️ for section headers only
+- Keep each section concise - max 5-7 items per section
+
 ## Core Rules
 - Confirm before any CRM updates, notifications, or sends (execute_action write actions require params.confirm=true)
 - Do not make up information; prefer tool results
-- If data is missing, state what you couldn't find and proceed with what you have`
+- If data is missing, state what you couldn't find and proceed with what you have
+
+## Response Voice & Personality (CRITICAL)
+
+You are a TEAM MEMBER, not a generic AI assistant. Your responses should feel like Slack messages from a smart, helpful colleague.
+
+### Tone Guidelines
+- **Casual & Direct**: Like texting a work friend who's really good at their job
+- **First Name**: Always address the user by first name when you have it
+- **Time-Aware Greetings**:
+  - Morning (5am-12pm): "Morning!" "Hey!" "Good morning!"
+  - Afternoon (12pm-5pm): "Hey!" "Quick update:" "Here's the rundown:"
+  - Evening (5pm-10pm): "Working late?" "End of day check:" "Wrapping up?"
+  - Late night (10pm-5am): "Burning the midnight oil?" "Late night hustle!"
+- **Sparse Emojis**: Use sparingly for visual clarity:
+  - 📊 for pipeline/data summaries
+  - ⚠️ for warnings/overdue items
+  - ✅ for completed/healthy items
+  - 🎯 for goals/targets
+  - 📅 for calendar/schedule
+  - 💰 for revenue/deals
+- **Short Paragraphs**: Max 2-3 sentences per thought
+- **Scannable Structure**: Use bold, bullets, and whitespace
+
+### Response Format Rules
+
+**NEVER return wall-of-text responses.** Always structure your output.
+
+For data-heavy responses (tasks, deals, meetings, contacts):
+\`\`\`
+Hey {name}! {time_aware_greeting}
+
+{emoji} **{Section Title}** — {one-line summary}
+• {Item 1 with key details}
+• {Item 2 with key details}
+
+{emoji} **{Section Title}** — {one-line summary}
+• {Item 1}
+• {Item 2}
+
+[Action Button] [Action Button]
+
+{Optional follow-up question or offer}
+\`\`\`
+
+**Example - Tasks needing attention:**
+\`\`\`
+Hey Andrew! 👋 Working late? Here's the quick rundown:
+
+📊 **Deals** — All clear, nothing urgent!
+
+⚠️ **Tasks** — 11 need attention
+• 3 overdue (oldest: Oct 30)
+• 8 due this week
+
+[View All Tasks] [Show Overdue Only]
+
+Want me to help prioritize these?
+\`\`\`
+
+### What NOT to do
+❌ "I'd be happy to help! Here's a summary of what needs your attention..."
+❌ Long paragraphs with inline lists
+❌ Starting every response with "I"
+❌ Generic greetings like "Hello! How can I assist you today?"
+❌ Repeating the user's question back to them`
 
   const messages: any[] = []
 
@@ -2511,6 +4620,66 @@ These skills use real-time web search and return structured JSON with sources.
     content: message
   })
 
+  // ============================================================================
+  // SMART ENTITY DETECTION: Force resolve_entity for first-name-only queries
+  // ============================================================================
+  // Detects standalone first names in questions about people
+  // E.g., "What did Stan say...", "Tell me about John...", "Catch me up on Sarah"
+
+  // Check if message has question/action keywords suggesting a person query
+  const questionKeywords = ['what', 'tell', 'find', 'show', 'get', 'catch', 'prep', 'brief', 'update', 'about', 'with', 'from'];
+  const hasQuestionKeyword = questionKeywords.some(k => message.toLowerCase().includes(k));
+
+  // Find capitalized words that could be first names (not at sentence start, not common words)
+  const words = message.split(/\s+/);
+  const commonWords = new Set(['The', 'This', 'That', 'These', 'Those', 'What', 'When', 'Where', 'Who', 'Why', 'How', 'Can', 'Could', 'Would', 'Should', 'Will', 'Do', 'Does', 'Did', 'Is', 'Are', 'Was', 'Were', 'Have', 'Has', 'Had', 'Been', 'Being', 'To', 'In', 'On', 'At', 'For', 'With', 'About', 'From', 'Into', 'Through', 'During', 'Before', 'After', 'Above', 'Below', 'Between', 'Under', 'Again', 'Further', 'Then', 'Once', 'Here', 'There', 'All', 'Each', 'Few', 'More', 'Most', 'Other', 'Some', 'Such', 'No', 'Nor', 'Not', 'Only', 'Own', 'Same', 'So', 'Than', 'Too', 'Very', 'Just', 'Now', 'CRM', 'API', 'URL', 'PDF', 'OK']);
+
+  // Find potential first names: capitalized words not at position 0, not common words
+  const potentialNames = words.filter((word, idx) => {
+    if (idx === 0) return false; // Skip first word (sentence start)
+    if (!/^[A-Z][a-z]+$/.test(word)) return false; // Must be capitalized word
+    if (commonWords.has(word)) return false; // Skip common words
+    // Check if followed by another capitalized word (would be last name)
+    const nextWord = words[idx + 1];
+    if (nextWord && /^[A-Z][a-z]+$/.test(nextWord)) return false; // Has last name, not first-name-only
+    return true;
+  });
+
+  const detectedFirstName = potentialNames[0];
+
+  // Determine if we should force resolve_entity tool
+  const shouldForceEntityResolution = hasQuestionKeyword &&
+    detectedFirstName &&
+    !message.includes('@'); // Not an email address
+
+  // Debug: Log entity detection details
+  console.log(`[ENTITY_DETECTION] Message: "${message}"`)
+  console.log(`[ENTITY_DETECTION] hasQuestionKeyword: ${hasQuestionKeyword}`)
+  console.log(`[ENTITY_DETECTION] potentialNames: ${JSON.stringify(potentialNames)}`)
+  console.log(`[ENTITY_DETECTION] detectedFirstName: ${detectedFirstName}`)
+  console.log(`[ENTITY_DETECTION] shouldForceEntityResolution: ${shouldForceEntityResolution}`)
+
+  // Build request body
+  const requestBody: Record<string, any> = {
+    model: 'claude-haiku-4-5', // Claude Haiku 4.5 for fast, cost-effective MCP tool execution
+    max_tokens: 4096,
+    system: systemPrompt,
+    tools: SKILLS_ROUTER_TOOLS,
+    messages
+  }
+
+  // Force resolve_entity tool when first-name-only detected
+  if (shouldForceEntityResolution) {
+    requestBody.tool_choice = { type: 'tool', name: 'resolve_entity' }
+    console.log(`[ENTITY_RESOLUTION] 🔴 FORCING resolve_entity tool for "${detectedFirstName}"`)
+  }
+
+  console.log(`[API_REQUEST] tool_choice: ${JSON.stringify(requestBody.tool_choice || 'auto')}`)
+
+  // Use newer API version when tool_choice is set (required for tool_choice support)
+  const apiVersion = requestBody.tool_choice ? ANTHROPIC_VERSION_TOOLS : ANTHROPIC_VERSION
+  console.log(`[API_REQUEST] Using API version: ${apiVersion}`)
+
   // Log request for debugging (without sensitive data)
   // Call Claude Haiku 4.5 with tools (faster and cheaper for MCP requests)
   // Full API ID: claude-haiku-4-5@20251001
@@ -2520,15 +4689,9 @@ These skills use real-time web search and return structured JSON with sources.
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': ANTHROPIC_VERSION
+      'anthropic-version': apiVersion
     },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5', // Claude Haiku 4.5 for fast, cost-effective MCP tool execution
-      max_tokens: 4096,
-      system: systemPrompt,
-      tools: SKILLS_ROUTER_TOOLS,
-      messages
-    })
+    body: JSON.stringify(requestBody)
   })
 
   if (!response.ok) {
@@ -2560,7 +4723,9 @@ These skills use real-time web search and return structured JSON with sources.
   let maxToolIterations = 5 // Prevent infinite loops
   let iteration = 0
   const startTime = Date.now()
-  const MAX_EXECUTION_TIME = 30000 // 30 seconds max execution time
+  // NOTE: Sequences can legitimately take longer than single-step tools.
+  // Keep a hard cap to avoid runaway loops, but allow demo-grade sequences to complete.
+  const MAX_EXECUTION_TIME = 120000 // 120 seconds max execution time
 
   while (data.stop_reason === 'tool_use' && data.content && iteration < maxToolIterations) {
     // Check timeout
@@ -2604,15 +4769,29 @@ These skills use real-time web search and return structured JSON with sources.
             toolsUsed.push(toolCall.name)
           }
           
-          // Add timeout wrapper for tool execution
+          // Add timeout wrapper for tool execution.
+          // execute_action calls may hit external services/APIs and need more time.
+          // run_sequence needs the most time as it runs multi-step workflows.
           const toolPromise = executeToolCall(toolCall.name, toolCall.input, client, userId, orgId)
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Tool execution timeout')), 10000)
+          let timeoutMs = 15000 // default 15s for simple tools
+          if (toolCall?.name === 'execute_action') {
+            if (toolCall?.input?.action === 'run_sequence') {
+              timeoutMs = 60000 // 60s for sequences
+            } else {
+              timeoutMs = 30000 // 30s for other execute_action calls (may hit external APIs)
+            }
+          }
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Tool execution timeout')), timeoutMs)
           )
           
           const toolResult = await Promise.race([toolPromise, timeoutPromise])
           const toolLatencyMs = Date.now() - toolStartTime
           toolsSuccessCount++
+          
+          // Extract capability/provider from result if available
+          const capability = (toolResult as any)?.capability;
+          const provider = (toolResult as any)?.provider;
           
           // Track detailed execution metadata
           toolExecutions.push({
@@ -2620,7 +4799,9 @@ These skills use real-time web search and return structured JSON with sources.
             args: toolCall.input,
             result: toolResult,
             latencyMs: toolLatencyMs,
-            success: true
+            success: true,
+            capability,
+            provider
           })
           
           toolResults.push({
@@ -2765,6 +4946,7 @@ async function executeToolCall(
     if (toolName === 'list_skills') {
       const category = args?.category ? String(args.category) : null
       const enabledOnly = args?.enabled_only !== false
+      const kind = args?.kind ? String(args.kind) : 'all' // 'skill' | 'sequence' | 'all'
 
       if (enabledOnly) {
         const { data: skills, error } = await client.rpc('get_organization_skills_for_agent', {
@@ -2772,16 +4954,24 @@ async function executeToolCall(
         })
         if (error) throw new Error(`Failed to list skills: ${error.message}`)
 
-        const filtered = (skills || []).filter((s: any) => (!category ? true : s.category === category))
+        const filtered = (skills || [])
+          .filter((s: any) => (!category ? true : s.category === category))
+          .filter((s: any) => {
+            if (kind === 'sequence') return s.category === 'agent-sequence'
+            if (kind === 'skill') return s.category !== 'agent-sequence'
+            return true
+          })
         return {
           success: true,
           count: filtered.length,
           skills: filtered.map((s: any) => ({
             skill_key: s.skill_key,
+            kind: s.category === 'agent-sequence' ? 'sequence' : 'skill',
             category: s.category,
             name: s.frontmatter?.name,
             description: s.frontmatter?.description,
             triggers: s.frontmatter?.triggers || [],
+            step_count: Array.isArray(s.frontmatter?.sequence_steps) ? s.frontmatter.sequence_steps.length : undefined,
             is_enabled: s.is_enabled ?? true,
           })),
         }
@@ -2816,16 +5006,23 @@ async function executeToolCall(
           version: r.platform_skill_version ?? 1,
         }))
         .filter((s: any) => (!category ? true : s.category === category))
+        .filter((s: any) => {
+          if (kind === 'sequence') return s.category === 'agent-sequence'
+          if (kind === 'skill') return s.category !== 'agent-sequence'
+          return true
+        })
 
       return {
         success: true,
         count: all.length,
         skills: all.map((s: any) => ({
           skill_key: s.skill_key,
+          kind: s.category === 'agent-sequence' ? 'sequence' : 'skill',
           category: s.category,
           name: s.frontmatter?.name,
           description: s.frontmatter?.description,
           triggers: s.frontmatter?.triggers || [],
+          step_count: Array.isArray(s.frontmatter?.sequence_steps) ? s.frontmatter.sequence_steps.length : undefined,
           is_enabled: s.is_enabled ?? true,
         })),
       }
@@ -2847,9 +5044,13 @@ async function executeToolCall(
           success: true,
           skill: {
             skill_key: found.skill_key,
+            kind: found.category === 'agent-sequence' ? 'sequence' : 'skill',
             category: found.category,
             frontmatter: found.frontmatter || {},
             content: found.content || '',
+            step_count: Array.isArray(found.frontmatter?.sequence_steps)
+              ? found.frontmatter.sequence_steps.length
+              : undefined,
             is_enabled: found.is_enabled ?? true,
           },
         }
@@ -2882,9 +5083,13 @@ async function executeToolCall(
         success: true,
         skill: {
           skill_key: row.skill_id,
+          kind: row.platform_skills?.category === 'agent-sequence' ? 'sequence' : 'skill',
           category: row.platform_skills?.category || 'uncategorized',
           frontmatter: row.compiled_frontmatter || row.platform_skills?.frontmatter || {},
           content: row.compiled_content || row.platform_skills?.content_template || '',
+          step_count: Array.isArray((row.compiled_frontmatter || row.platform_skills?.frontmatter)?.sequence_steps)
+            ? (row.compiled_frontmatter || row.platform_skills?.frontmatter).sequence_steps.length
+            : undefined,
           is_enabled: row.is_enabled ?? true,
         },
       }
@@ -2895,6 +5100,13 @@ async function executeToolCall(
       const params = (args?.params || {}) as Record<string, unknown>
       return await executeAction(client, userId, resolvedOrgId, action, params)
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Entity Resolution Tool - Smart contact lookup by first name
+  // ---------------------------------------------------------------------------
+  if (toolName === 'resolve_entity') {
+    return await handleResolveEntity(args, client, userId, orgId)
   }
 
   // Parse entity and operation from tool name (e.g., "meetings_create" -> entity: "meetings", operation: "create")
@@ -2937,6 +5149,757 @@ async function executeToolCall(
     
     default:
       throw new Error(`Unknown entity: ${entity}`)
+  }
+}
+
+/**
+ * Entity Resolution Handler
+ *
+ * Searches multiple data sources in parallel to resolve a person by first name.
+ * Returns either a resolved contact (if one clear match) or disambiguation candidates.
+ */
+interface RecentInteraction {
+  type: 'meeting' | 'email' | 'calendar'
+  date: string // ISO date
+  title: string
+  description?: string
+  snippet?: string // Transcript snippet or email preview
+  url?: string // Link to view more
+}
+
+interface EntityCandidate {
+  id: string
+  type: 'contact' | 'meeting_attendee' | 'calendar_attendee' | 'email_participant'
+  first_name: string
+  last_name?: string
+  full_name: string
+  email?: string
+  company_name?: string
+  title?: string
+  phone?: string
+  source: string
+  last_interaction: string // ISO date
+  last_interaction_type: string // 'meeting' | 'email' | 'calendar' | 'crm'
+  last_interaction_description?: string
+  recency_score: number // Higher = more recent (0-100)
+  contact_id?: string // If resolved to a CRM contact
+  crm_url?: string // Link to contact in CRM
+  recent_interactions?: RecentInteraction[] // Rich context from various sources
+}
+
+interface ResolveEntityResult {
+  success: boolean
+  resolved: boolean
+  message: string
+  search_summary: {
+    name_searched: string
+    sources_searched: string[]
+    total_candidates: number
+    search_steps: Array<{ source: string; status: 'complete' | 'no_results'; count: number }>
+  }
+  contact?: EntityCandidate // The resolved contact if clear winner
+  candidates?: EntityCandidate[] // Multiple candidates for disambiguation
+  disambiguation_needed?: boolean
+  disambiguation_reason?: string
+}
+
+/**
+ * Fetch rich context for a resolved contact
+ * Includes recent meetings with transcript snippets, emails, and calendar events
+ */
+async function fetchRichContactContext(
+  contact: EntityCandidate,
+  client: any,
+  userId: string,
+  appUrl: string = 'https://app.use60.com'
+): Promise<{ crm_url?: string; recent_interactions: RecentInteraction[] }> {
+  const recentInteractions: RecentInteraction[] = []
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+  // Generate CRM URL if we have a contact_id
+  const crm_url = contact.contact_id
+    ? `${appUrl}/crm/contacts/${contact.contact_id}`
+    : undefined
+
+  // Fetch in parallel for performance
+  const promises: Promise<void>[] = []
+
+  // 1. Fetch recent meetings with this contact (by email or contact_id)
+  promises.push((async () => {
+    try {
+      // Search by contact_id in meeting_attendees
+      let meetingIds: string[] = []
+
+      if (contact.contact_id) {
+        const { data: attendees } = await client
+          .from('meeting_attendees')
+          .select('meeting_id')
+          .eq('contact_id', contact.contact_id)
+          .limit(10)
+
+        if (attendees) {
+          meetingIds = attendees.map((a: any) => a.meeting_id)
+        }
+      }
+
+      // Also search by email
+      if (contact.email && meetingIds.length < 5) {
+        const { data: emailAttendees } = await client
+          .from('meeting_attendees')
+          .select('meeting_id')
+          .eq('email', contact.email)
+          .limit(10)
+
+        if (emailAttendees) {
+          const newIds = emailAttendees.map((a: any) => a.meeting_id)
+          meetingIds = [...new Set([...meetingIds, ...newIds])]
+        }
+      }
+
+      if (meetingIds.length === 0) return
+
+      // Fetch meeting details with transcript snippets
+      const { data: meetings } = await client
+        .from('meetings')
+        .select('id, title, start_time, summary, transcript_text')
+        .eq('owner_user_id', userId)
+        .in('id', meetingIds.slice(0, 5))
+        .gte('start_time', thirtyDaysAgo)
+        .order('start_time', { ascending: false })
+        .limit(5)
+
+      if (meetings) {
+        for (const meeting of meetings) {
+          // Extract a relevant snippet from transcript (first 200 chars or summary)
+          let snippet = meeting.summary || ''
+          if (!snippet && meeting.transcript_text) {
+            snippet = meeting.transcript_text.substring(0, 200) + '...'
+          }
+
+          recentInteractions.push({
+            type: 'meeting',
+            date: meeting.start_time,
+            title: meeting.title || 'Meeting',
+            description: `Meeting with ${contact.full_name}`,
+            snippet: snippet || undefined,
+            url: `${appUrl}/meetings/${meeting.id}`
+          })
+        }
+      }
+    } catch (e) {
+      console.error('[RICH_CONTEXT] Error fetching meetings:', e)
+    }
+  })())
+
+  // 2. Fetch recent calendar events with this contact
+  promises.push((async () => {
+    try {
+      if (!contact.email) return
+
+      const { data: events } = await client
+        .from('calendar_events')
+        .select('id, title, start_time, attendees')
+        .eq('user_id', userId)
+        .gte('start_time', thirtyDaysAgo)
+        .order('start_time', { ascending: false })
+        .limit(20)
+
+      if (!events) return
+
+      // Filter events that include this contact
+      for (const event of events) {
+        const attendees = event.attendees as Array<{ email?: string; displayName?: string }> | null
+        if (!attendees) continue
+
+        const hasContact = attendees.some(a =>
+          a.email?.toLowerCase() === contact.email?.toLowerCase()
+        )
+
+        if (hasContact) {
+          recentInteractions.push({
+            type: 'calendar',
+            date: event.start_time,
+            title: event.title || 'Calendar Event',
+            description: `Scheduled event with ${contact.full_name}`,
+            url: `${appUrl}/meetings?date=${event.start_time.split('T')[0]}`
+          })
+
+          if (recentInteractions.filter(i => i.type === 'calendar').length >= 3) break
+        }
+      }
+    } catch (e) {
+      console.error('[RICH_CONTEXT] Error fetching calendar events:', e)
+    }
+  })())
+
+  // 3. Fetch recent emails with this contact (from synced emails table if exists)
+  promises.push((async () => {
+    try {
+      if (!contact.email) return
+
+      // Check for synced emails in email_messages table
+      const { data: emails } = await client
+        .from('email_messages')
+        .select('id, subject, date, snippet, thread_id')
+        .eq('user_id', userId)
+        .or(`from_email.eq.${contact.email},to_email.cs.{${contact.email}}`)
+        .gte('date', thirtyDaysAgo)
+        .order('date', { ascending: false })
+        .limit(5)
+
+      if (emails) {
+        for (const email of emails) {
+          recentInteractions.push({
+            type: 'email',
+            date: email.date,
+            title: email.subject || 'Email',
+            description: `Email with ${contact.full_name}`,
+            snippet: email.snippet || undefined
+          })
+        }
+      }
+    } catch (e) {
+      // email_messages table may not exist, that's ok
+      console.log('[RICH_CONTEXT] Skipping emails (table may not exist)')
+    }
+  })())
+
+  await Promise.all(promises)
+
+  // Sort all interactions by date (most recent first)
+  recentInteractions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  return {
+    crm_url,
+    recent_interactions: recentInteractions.slice(0, 10) // Top 10 most recent
+  }
+}
+
+async function handleResolveEntity(
+  args: any,
+  client: any,
+  userId: string,
+  orgId: string | null
+): Promise<ResolveEntityResult> {
+  const name = args?.name ? String(args.name).trim() : ''
+  const contextHint = args?.context_hint ? String(args.context_hint).trim() : ''
+
+  if (!name) {
+    return {
+      success: false,
+      resolved: false,
+      message: 'Name is required for entity resolution',
+      search_summary: {
+        name_searched: '',
+        sources_searched: [],
+        total_candidates: 0,
+        search_steps: []
+      }
+    }
+  }
+
+  // Parse name into first/last
+  const nameParts = name.split(/\s+/)
+  const firstName = nameParts[0]
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null
+
+  console.log('[ENTITY_RESOLUTION] Starting entity resolution:', {
+    name,
+    firstName,
+    lastName,
+    userId,
+    orgId,
+    contextHint
+  })
+
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  // Calculate recency score (0-100, higher = more recent)
+  const calcRecencyScore = (dateStr: string | null | undefined): number => {
+    if (!dateStr) return 0
+    const date = new Date(dateStr)
+    const daysSince = Math.max(0, (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    // Score: 100 for today, decays to 0 over 30 days
+    return Math.max(0, Math.round(100 - (daysSince / 30) * 100))
+  }
+
+  const candidates: EntityCandidate[] = []
+  const searchSteps: Array<{ source: string; status: 'complete' | 'no_results'; count: number }> = []
+
+  // ---------------------------------------------------------------------------
+  // 1. Search CRM Contacts (parallel)
+  // ---------------------------------------------------------------------------
+  const contactsPromise = (async () => {
+    try {
+      console.log('[ENTITY_RESOLUTION] Searching contacts with:', { firstName, lastName, userId })
+
+      let query = client
+        .from('contacts')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          title,
+          company_id,
+          companies:company_id (name),
+          updated_at,
+          created_at
+        `)
+        .eq('owner_id', userId) // CRITICAL: contacts uses owner_id, NOT user_id
+        .ilike('first_name', `${firstName}%`)
+        .order('updated_at', { ascending: false })
+        .limit(10)
+
+      if (lastName) {
+        query = query.ilike('last_name', `${lastName}%`)
+      }
+
+      const { data: contacts, error } = await query
+
+      console.log('[ENTITY_RESOLUTION] Contacts query result:', {
+        contactsFound: contacts?.length || 0,
+        error: error?.message || null,
+        firstContact: contacts?.[0] ? { id: contacts[0].id, first_name: contacts[0].first_name } : null
+      })
+
+      if (error || !contacts || contacts.length === 0) {
+        searchSteps.push({ source: 'CRM Contacts', status: 'no_results', count: 0 })
+        return
+      }
+
+      searchSteps.push({ source: 'CRM Contacts', status: 'complete', count: contacts.length })
+
+      for (const contact of contacts) {
+        const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(' ')
+        const companyName = (contact.companies as { name?: string } | null)?.name || undefined
+
+        candidates.push({
+          id: contact.id,
+          type: 'contact',
+          first_name: contact.first_name || '',
+          last_name: contact.last_name || undefined,
+          full_name: fullName || contact.email || 'Unknown',
+          email: contact.email || undefined,
+          phone: contact.phone || undefined,
+          company_name: companyName,
+          title: contact.title || undefined,
+          source: 'CRM',
+          last_interaction: contact.updated_at || contact.created_at,
+          last_interaction_type: 'crm',
+          last_interaction_description: 'CRM record updated',
+          recency_score: calcRecencyScore(contact.updated_at || contact.created_at),
+          contact_id: contact.id
+        })
+      }
+    } catch (e) {
+      searchSteps.push({ source: 'CRM Contacts', status: 'no_results', count: 0 })
+    }
+  })()
+
+  // ---------------------------------------------------------------------------
+  // 2. Search Recent Meetings (parallel) - attendee names
+  // ---------------------------------------------------------------------------
+  const meetingsPromise = (async () => {
+    try {
+      // Search meetings by attendee name - join through meeting_attendees
+      const { data: meetings, error } = await client
+        .from('meetings')
+        .select(`
+          id,
+          title,
+          start_time,
+          meeting_attendees!inner (
+            id,
+            name,
+            email,
+            contact_id
+          )
+        `)
+        .eq('owner_user_id', userId)
+        .gte('start_time', thirtyDaysAgo.toISOString())
+        .order('start_time', { ascending: false })
+        .limit(50)
+
+      if (error || !meetings || meetings.length === 0) {
+        searchSteps.push({ source: 'Recent Meetings', status: 'no_results', count: 0 })
+        return
+      }
+
+      // Filter attendees by name match
+      let matchCount = 0
+      for (const meeting of meetings) {
+        const attendees = meeting.meeting_attendees as Array<{
+          id: string
+          name?: string
+          email?: string
+          contact_id?: string
+        }>
+
+        for (const attendee of attendees) {
+          if (!attendee.name) continue
+
+          const attendeeNameLower = attendee.name.toLowerCase()
+          const searchNameLower = firstName.toLowerCase()
+
+          // Match if first name matches or full name contains the search
+          if (attendeeNameLower.startsWith(searchNameLower) ||
+              attendeeNameLower.includes(searchNameLower)) {
+
+            const nameParts = attendee.name.split(/\s+/)
+            matchCount++
+
+            candidates.push({
+              id: attendee.id,
+              type: 'meeting_attendee',
+              first_name: nameParts[0] || '',
+              last_name: nameParts.slice(1).join(' ') || undefined,
+              full_name: attendee.name,
+              email: attendee.email || undefined,
+              source: 'Meeting',
+              last_interaction: meeting.start_time,
+              last_interaction_type: 'meeting',
+              last_interaction_description: `Meeting: ${meeting.title}`,
+              recency_score: calcRecencyScore(meeting.start_time),
+              contact_id: attendee.contact_id || undefined
+            })
+          }
+        }
+      }
+
+      searchSteps.push({
+        source: 'Recent Meetings',
+        status: matchCount > 0 ? 'complete' : 'no_results',
+        count: matchCount
+      })
+    } catch (e) {
+      searchSteps.push({ source: 'Recent Meetings', status: 'no_results', count: 0 })
+    }
+  })()
+
+  // ---------------------------------------------------------------------------
+  // 3. Search Calendar Events (parallel) - attendee names
+  // ---------------------------------------------------------------------------
+  const calendarPromise = (async () => {
+    try {
+      // Search calendar events in the past 30 days or next 7 days
+      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+      const { data: events, error } = await client
+        .from('calendar_events')
+        .select(`
+          id,
+          title,
+          start_time,
+          attendees
+        `)
+        .eq('user_id', userId)
+        .gte('start_time', thirtyDaysAgo.toISOString())
+        .lte('start_time', sevenDaysFromNow.toISOString())
+        .order('start_time', { ascending: false })
+        .limit(50)
+
+      if (error || !events || events.length === 0) {
+        searchSteps.push({ source: 'Calendar Events', status: 'no_results', count: 0 })
+        return
+      }
+
+      // Search attendees for name match
+      let matchCount = 0
+      for (const event of events) {
+        const attendees = event.attendees as Array<{
+          email?: string
+          displayName?: string
+          responseStatus?: string
+        }> | null
+
+        if (!attendees) continue
+
+        for (const attendee of attendees) {
+          const displayName = attendee.displayName || ''
+          const email = attendee.email || ''
+
+          // Extract name from email if no display name
+          const nameFromEmail = email.split('@')[0]?.replace(/[._-]/g, ' ') || ''
+          const searchIn = (displayName || nameFromEmail).toLowerCase()
+          const searchNameLower = firstName.toLowerCase()
+
+          if (searchIn.includes(searchNameLower)) {
+            const nameParts = (displayName || nameFromEmail).split(/\s+/)
+            matchCount++
+
+            candidates.push({
+              id: `${event.id}-${email}`,
+              type: 'calendar_attendee',
+              first_name: nameParts[0] || '',
+              last_name: nameParts.slice(1).join(' ') || undefined,
+              full_name: displayName || nameFromEmail || email,
+              email: email || undefined,
+              source: 'Calendar',
+              last_interaction: event.start_time,
+              last_interaction_type: 'calendar',
+              last_interaction_description: `Calendar: ${event.title}`,
+              recency_score: calcRecencyScore(event.start_time)
+            })
+          }
+        }
+      }
+
+      searchSteps.push({
+        source: 'Calendar Events',
+        status: matchCount > 0 ? 'complete' : 'no_results',
+        count: matchCount
+      })
+    } catch (e) {
+      searchSteps.push({ source: 'Calendar Events', status: 'no_results', count: 0 })
+    }
+  })()
+
+  // ---------------------------------------------------------------------------
+  // 4. Search Recent Emails (parallel) - from/to matching name
+  // ---------------------------------------------------------------------------
+  const emailsPromise = (async () => {
+    try {
+      // Check if user has Gmail connected
+      const { data: integration } = await client
+        .from('user_integrations')
+        .select('id, access_token')
+        .eq('user_id', userId)
+        .eq('provider', 'gmail')
+        .maybeSingle()
+
+      if (!integration?.access_token) {
+        searchSteps.push({ source: 'Recent Emails', status: 'no_results', count: 0 })
+        return
+      }
+
+      // Search emails using Gmail API - simplified search by name
+      // Note: Gmail API search is limited, we search by name keyword
+      const searchQuery = encodeURIComponent(`${firstName} newer_than:30d`)
+      const gmailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${searchQuery}&maxResults=20`
+
+      const gmailResponse = await fetch(gmailUrl, {
+        headers: {
+          'Authorization': `Bearer ${integration.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!gmailResponse.ok) {
+        searchSteps.push({ source: 'Recent Emails', status: 'no_results', count: 0 })
+        return
+      }
+
+      const gmailData = await gmailResponse.json()
+      const messageIds = (gmailData.messages || []).slice(0, 10).map((m: any) => m.id)
+
+      if (messageIds.length === 0) {
+        searchSteps.push({ source: 'Recent Emails', status: 'no_results', count: 0 })
+        return
+      }
+
+      // Fetch message details for from/to extraction
+      let matchCount = 0
+      for (const msgId of messageIds) {
+        const msgUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`
+        const msgResponse = await fetch(msgUrl, {
+          headers: { 'Authorization': `Bearer ${integration.access_token}` }
+        })
+
+        if (!msgResponse.ok) continue
+
+        const msgData = await msgResponse.json()
+        const headers = msgData.payload?.headers || []
+        const fromHeader = headers.find((h: any) => h.name === 'From')?.value || ''
+        const toHeader = headers.find((h: any) => h.name === 'To')?.value || ''
+        const subjectHeader = headers.find((h: any) => h.name === 'Subject')?.value || ''
+        const dateHeader = headers.find((h: any) => h.name === 'Date')?.value || ''
+
+        // Parse from header: "John Doe <john@example.com>" or "john@example.com"
+        const parseEmailHeader = (header: string): { name: string; email: string } | null => {
+          const match = header.match(/^(?:"?([^"<]+)"?\s*)?<?([^>]+@[^>]+)>?$/)
+          if (match) {
+            return { name: match[1]?.trim() || '', email: match[2]?.trim() || '' }
+          }
+          return null
+        }
+
+        const fromParsed = parseEmailHeader(fromHeader)
+        const toParsed = parseEmailHeader(toHeader)
+
+        // Check if name matches in from or to
+        const searchNameLower = firstName.toLowerCase()
+        const participants = [fromParsed, toParsed].filter(Boolean) as Array<{ name: string; email: string }>
+
+        for (const participant of participants) {
+          const nameLower = participant.name.toLowerCase()
+          const emailNamePart = participant.email.split('@')[0]?.toLowerCase() || ''
+
+          if (nameLower.includes(searchNameLower) || emailNamePart.includes(searchNameLower)) {
+            const nameParts = participant.name.split(/\s+/)
+            matchCount++
+
+            candidates.push({
+              id: `email-${msgId}-${participant.email}`,
+              type: 'email_participant',
+              first_name: nameParts[0] || emailNamePart,
+              last_name: nameParts.slice(1).join(' ') || undefined,
+              full_name: participant.name || participant.email,
+              email: participant.email,
+              source: 'Email',
+              last_interaction: dateHeader ? new Date(dateHeader).toISOString() : now.toISOString(),
+              last_interaction_type: 'email',
+              last_interaction_description: `Email: ${subjectHeader}`,
+              recency_score: calcRecencyScore(dateHeader ? new Date(dateHeader).toISOString() : null)
+            })
+          }
+        }
+      }
+
+      searchSteps.push({
+        source: 'Recent Emails',
+        status: matchCount > 0 ? 'complete' : 'no_results',
+        count: matchCount
+      })
+    } catch (e) {
+      searchSteps.push({ source: 'Recent Emails', status: 'no_results', count: 0 })
+    }
+  })()
+
+  // ---------------------------------------------------------------------------
+  // Wait for all searches to complete in parallel
+  // ---------------------------------------------------------------------------
+  await Promise.all([contactsPromise, meetingsPromise, calendarPromise, emailsPromise])
+
+  // ---------------------------------------------------------------------------
+  // Deduplicate and score candidates
+  // ---------------------------------------------------------------------------
+  // Group by email (if available) or by full_name to deduplicate
+  const deduped = new Map<string, EntityCandidate>()
+
+  for (const candidate of candidates) {
+    const key = candidate.email?.toLowerCase() || candidate.full_name.toLowerCase()
+    const existing = deduped.get(key)
+
+    if (!existing) {
+      deduped.set(key, candidate)
+    } else {
+      // Keep the one with higher recency score, but merge contact_id if available
+      if (candidate.recency_score > existing.recency_score) {
+        deduped.set(key, {
+          ...candidate,
+          contact_id: candidate.contact_id || existing.contact_id
+        })
+      } else if (candidate.contact_id && !existing.contact_id) {
+        existing.contact_id = candidate.contact_id
+      }
+    }
+  }
+
+  const sortedCandidates = Array.from(deduped.values())
+    .sort((a, b) => b.recency_score - a.recency_score)
+
+  const totalCandidates = sortedCandidates.length
+
+  // ---------------------------------------------------------------------------
+  // Determine resolution outcome
+  // ---------------------------------------------------------------------------
+  if (totalCandidates === 0) {
+    return {
+      success: true,
+      resolved: false,
+      message: `No matches found for "${name}". Try providing more context like their email, company, or when you last interacted.`,
+      search_summary: {
+        name_searched: name,
+        sources_searched: ['CRM Contacts', 'Recent Meetings', 'Calendar Events', 'Recent Emails'],
+        total_candidates: 0,
+        search_steps: searchSteps
+      }
+    }
+  }
+
+  if (totalCandidates === 1) {
+    // Clear single match - fetch rich context
+    const resolvedContact = sortedCandidates[0]
+    const richContext = await fetchRichContactContext(resolvedContact, client, userId)
+
+    // Enhance contact with rich context
+    resolvedContact.crm_url = richContext.crm_url
+    resolvedContact.recent_interactions = richContext.recent_interactions
+
+    return {
+      success: true,
+      resolved: true,
+      message: `Found ${resolvedContact.full_name}${resolvedContact.company_name ? ` at ${resolvedContact.company_name}` : ''}${resolvedContact.title ? ` (${resolvedContact.title})` : ''} (${resolvedContact.source})`,
+      search_summary: {
+        name_searched: name,
+        sources_searched: ['CRM Contacts', 'Recent Meetings', 'Calendar Events', 'Recent Emails'],
+        total_candidates: 1,
+        search_steps: searchSteps
+      },
+      contact: resolvedContact
+    }
+  }
+
+  // Multiple candidates - check if there's a clear winner by recency
+  const topCandidate = sortedCandidates[0]
+  const secondCandidate = sortedCandidates[1]
+  const recencyGap = topCandidate.recency_score - secondCandidate.recency_score
+
+  // If the top candidate has significantly higher recency (>20 point gap), auto-resolve
+  if (recencyGap > 20) {
+    // Fetch rich context for the top candidate
+    const richContext = await fetchRichContactContext(topCandidate, client, userId)
+
+    // Enhance contact with rich context
+    topCandidate.crm_url = richContext.crm_url
+    topCandidate.recent_interactions = richContext.recent_interactions
+
+    return {
+      success: true,
+      resolved: true,
+      message: `Found ${topCandidate.full_name}${topCandidate.company_name ? ` at ${topCandidate.company_name}` : ''}${topCandidate.title ? ` (${topCandidate.title})` : ''} - your most recent interaction (${topCandidate.last_interaction_description})`,
+      search_summary: {
+        name_searched: name,
+        sources_searched: ['CRM Contacts', 'Recent Meetings', 'Calendar Events', 'Recent Emails'],
+        total_candidates: totalCandidates,
+        search_steps: searchSteps
+      },
+      contact: topCandidate,
+      candidates: sortedCandidates.slice(0, 5) // Include top 5 for reference
+    }
+  }
+
+  // Multiple candidates with similar recency - need disambiguation
+  // Fetch rich context for top 3 candidates in parallel to provide useful info
+  const topCandidates = sortedCandidates.slice(0, 5)
+  const richContextPromises = topCandidates.slice(0, 3).map(async (candidate) => {
+    try {
+      const richContext = await fetchRichContactContext(candidate, client, userId)
+      candidate.crm_url = richContext.crm_url
+      candidate.recent_interactions = richContext.recent_interactions
+    } catch (e) {
+      console.error('[ENTITY_RESOLUTION] Error fetching rich context for candidate:', e)
+    }
+  })
+
+  await Promise.all(richContextPromises)
+
+  return {
+    success: true,
+    resolved: false,
+    message: `Found ${totalCandidates} people named "${firstName}". Which one did you mean?`,
+    search_summary: {
+      name_searched: name,
+      sources_searched: ['CRM Contacts', 'Recent Meetings', 'Calendar Events', 'Recent Emails'],
+      total_candidates: totalCandidates,
+      search_steps: searchSteps
+    },
+    disambiguation_needed: true,
+    disambiguation_reason: `Multiple contacts with similar recent activity (${topCandidate.full_name} and ${secondCandidate.full_name} both have recent interactions)`,
+    candidates: topCandidates // Top 5 candidates with rich context for top 3
   }
 }
 
@@ -4525,22 +7488,80 @@ function optimizeTranscriptText(
 
 /**
  * Generate email draft using Claude (utility function for email generation)
+ * Now supports user's personal writing style from AI personalization settings
  */
 async function generateEmailDraft(
   context: any,
-  tone: 'professional' | 'friendly' | 'concise'
+  tone: 'professional' | 'friendly' | 'concise',
+  writingStyle?: {
+    name: string;
+    tone_description: string;
+    examples?: string[];
+    style_metadata?: any;
+  } | null
 ): Promise<{ subject: string; body: string; suggestedSendTime: string }> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured')
   }
 
-  const toneInstructions = {
+  // Default tone instructions as fallback
+  const defaultToneInstructions = {
     professional: 'Use a professional, business-appropriate tone. Be respectful and formal.',
     friendly: 'Use a warm, friendly tone. Be personable and conversational.',
     concise: 'Be brief and to the point. Get straight to the value proposition.'
   }
 
-  const prompt = `You are drafting a ${tone} follow-up email for ${context.contact.name} at ${context.contact.company}.
+  // Build personalized style instruction if user has a writing style configured
+  let styleInstruction = ''
+  if (writingStyle) {
+    const styleParts: string[] = []
+    styleParts.push(`\n## USER'S PERSONAL WRITING STYLE`)
+    styleParts.push(`Style: ${writingStyle.name}`)
+    styleParts.push(`Tone: ${writingStyle.tone_description}`)
+    
+    const meta = writingStyle.style_metadata
+    if (meta?.tone_characteristics) {
+      styleParts.push(`Characteristics: ${meta.tone_characteristics}`)
+    }
+    if (meta?.vocabulary_profile) {
+      styleParts.push(`Vocabulary: ${meta.vocabulary_profile}`)
+    }
+    if (meta?.greeting_style) {
+      styleParts.push(`Greetings: ${meta.greeting_style}`)
+    }
+    if (meta?.signoff_style) {
+      styleParts.push(`Sign-offs: ${meta.signoff_style}`)
+    }
+    
+    if (writingStyle.examples && writingStyle.examples.length > 0) {
+      const snippets = writingStyle.examples.slice(0, 2).map(ex => 
+        ex.length > 150 ? ex.substring(0, 150) + '...' : ex
+      )
+      styleParts.push(`\nExample snippets of their writing:\n${snippets.map(s => `"${s}"`).join('\n')}`)
+    }
+    
+    styleParts.push(`\n**CRITICAL: Match this user's writing style exactly. Use their vocabulary, tone, greeting style, and sign-off patterns. Make it sound like THEY wrote it.**`)
+    styleInstruction = styleParts.join('\n')
+  } else {
+    // Fallback to generic tone
+    styleInstruction = defaultToneInstructions[tone]
+  }
+
+  // Get current date for accurate date references in email
+  const today = new Date()
+  const dateOptions: Intl.DateTimeFormatOptions = {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }
+  const currentDateStr = today.toLocaleDateString('en-US', dateOptions)
+  const dayOfWeek = today.toLocaleDateString('en-US', { weekday: 'long' })
+
+  const prompt = `You are drafting a follow-up email for ${context.contact.name} at ${context.contact.company}.
+
+TODAY'S DATE: ${currentDateStr} (${dayOfWeek})
+Use this date when making any date references like "tomorrow", "next week", "this Friday", etc.
 
 Context: ${context.context}
 
@@ -4548,11 +7569,11 @@ ${context.recentActivities.length > 0 ? `Recent activities:\n${context.recentAct
 
 ${context.deals.length > 0 ? `Related deals:\n${context.deals.map((d: any) => `- ${d.name}: $${d.value} (${d.deal_stages?.name || 'Unknown'})`).join('\n')}\n` : ''}
 
-${toneInstructions[tone]}
+${styleInstruction}
 
-Generate a professional email with:
+Generate an email with:
 1. A clear, compelling subject line
-2. A well-structured email body (3-5 paragraphs)
+2. A well-structured email body (2-4 paragraphs)
 3. A suggested send time (e.g., "Tomorrow 9 AM EST" or "Monday morning")
 
 Return your response as JSON in this exact format:
@@ -4570,7 +7591,7 @@ Return your response as JSON in this exact format:
       'anthropic-version': ANTHROPIC_VERSION
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5',
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -5273,6 +8294,885 @@ function isNextMeetingPrepQuestion(messageLower: string): boolean {
 }
 
 /**
+ * Lightweight detection for "show/search my meetings" questions where the user
+ * primarily wants their calendar meetings list for today/tomorrow.
+ *
+ * This is designed to be deterministic (skip model) because it’s a pure data fetch
+ * + structured UI render.
+ */
+function isMeetingsForPeriodQuestion(messageLower: string): boolean {
+  if (!messageLower) return false
+
+  const mentionsMeetings =
+    messageLower.includes('meeting') ||
+    messageLower.includes('meetings') ||
+    messageLower.includes('calendar') ||
+    messageLower.includes('schedule') ||
+    messageLower.includes('what do i have') ||
+    messageLower.includes("what's on") ||
+    messageLower.includes('what have i got')
+
+  const intentPhrases = [
+    'search meetings',
+    'show meetings',
+    'what meetings',
+    'my meetings',
+    'my calendar',
+    'my schedule',
+    "what's on my calendar",
+    "what's on my schedule",
+    'what do i have today',
+    'what do i have tomorrow',
+    'meetings today',
+    'meetings tomorrow',
+    'schedule today',
+    'schedule tomorrow',
+    'what about monday',
+    'what about tuesday',
+    'what about wednesday',
+    'what about thursday',
+    'what about friday',
+    'what about saturday',
+    'what about sunday',
+  ]
+
+  const hasIntent = intentPhrases.some((p) => messageLower.includes(p))
+  
+  // Time period detection - today, tomorrow, or day of week
+  const timePeriods = ['today', 'tomorrow', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'this week', 'next week']
+  const mentionsTimePeriod = timePeriods.some(period => messageLower.includes(period))
+
+  // If they clearly asked for meetings/schedule and anchored it to a time period, treat as deterministic.
+  if (mentionsMeetings && mentionsTimePeriod) return true
+  return mentionsMeetings && hasIntent
+}
+
+function getMeetingsForPeriodPeriod(messageLower: string): string {
+  // Check for day of week first
+  const dayOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    .find(day => messageLower.includes(day))
+  if (dayOfWeek) return dayOfWeek
+  
+  // Check for week periods
+  if (messageLower.includes('this week')) return 'this_week'
+  if (messageLower.includes('next week')) return 'next_week'
+  
+  // Default to today/tomorrow
+  return messageLower.includes('tomorrow') ? 'tomorrow' : 'today'
+}
+
+/**
+ * Detection for "create follow-ups" / "post-meeting follow-up pack" requests.
+ * These map cleanly onto the demo-grade `seq-post-meeting-followup-pack` sequence.
+ */
+function isPostMeetingFollowUpPackQuestion(messageLower: string): boolean {
+  if (!messageLower) return false
+
+  const phrases = [
+    'follow-up pack',
+    'follow up pack',
+    'post-meeting follow-up',
+    'post meeting follow up',
+    'post-meeting followup',
+    'post meeting followup',
+    'create follow-ups',
+    'create follow ups',
+    'write follow-up',
+    'write follow up',
+    'send follow-up',
+    'send follow up',
+    'send recap',
+    'write recap',
+    'after the meeting',
+  ]
+
+  return phrases.some((p) => messageLower.includes(p))
+}
+
+/**
+ * Detection for "catch me up" / "brief me" / "what's happening" requests.
+ * These trigger the seq-catch-me-up sequence for a time-aware daily briefing.
+ */
+function isCatchMeUpQuestion(messageLower: string): boolean {
+  if (!messageLower) return false
+
+  const phrases = [
+    'catch me up',
+    'catch up',
+    'brief me',
+    'bring me up to speed',
+    "what's happening",
+    "what's going on",
+    'what did i miss',
+    "what's new",
+    'my day',
+    'daily brief',
+    'daily briefing',
+    'morning brief',
+    'morning briefing',
+    'start my day',
+    'end of day',
+    'eod update',
+    'eod summary',
+    'wrap up my day',
+  ]
+
+  return phrases.some((p) => messageLower.includes(p))
+}
+
+/**
+ * Detection for "email follow-ups" / "check my inbox" / "unanswered emails" requests.
+ * These trigger the seq-followup-zero-inbox sequence for email triage and reply drafts.
+ */
+function isEmailZeroInboxQuestion(messageLower: string): boolean {
+  if (!messageLower) return false
+
+  const phrases = [
+    'email follow-ups',
+    'email follow ups',
+    'email followups',
+    'check my inbox',
+    'check my emails',
+    'unanswered emails',
+    'emails i need to respond',
+    'emails needing response',
+    'emails i missed',
+    'missed emails',
+    'pending emails',
+    'email backlog',
+    'zero inbox',
+    'inbox zero',
+    'clear my inbox',
+    'help with emails',
+    'help me with emails',
+    'what emails need',
+    'which emails need',
+    'emails to reply',
+    'reply to emails',
+  ]
+
+  return phrases.some((p) => messageLower.includes(p))
+}
+
+/**
+ * Detection for "what deals should I focus on" / "pipeline priorities" requests.
+ * These trigger the seq-pipeline-focus-tasks sequence for deal prioritization.
+ */
+function isPipelineFocusQuestion(messageLower: string): boolean {
+  if (!messageLower) return false
+
+  // Explicit phrases first
+  const phrases = [
+    'deals should i focus',
+    'deals to focus',
+    'pipeline focus',
+    'pipeline priorities',
+    'which deals',
+    'what deals need',
+    'prioritize deals',
+    'prioritize my deals',
+    'deal priorities',
+    'focus deals',
+    'deals needing attention',
+    'stale deals',
+    'deals at risk',
+    'deals closing soon',
+    'high priority deals',
+    'top deals',
+    'help me with deals',
+    // V1 workflow button text - "What needs attention?" quick action
+    'what needs attention',
+    'needs attention',
+    'what should i focus on',
+    'what do i need to focus on',
+  ]
+
+  if (phrases.some((p) => messageLower.includes(p))) return true
+
+  // Composite detection: (deal/pipeline) + (focus/prioritize/attention)
+  const hasDealOrPipeline = messageLower.includes('deal') || messageLower.includes('pipeline')
+  const hasFocusIntent =
+    messageLower.includes('focus') ||
+    messageLower.includes('priorit') ||
+    messageLower.includes('attention') ||
+    messageLower.includes('should i')
+
+  return hasDealOrPipeline && hasFocusIntent
+}
+
+// =============================================================================
+// Hybrid Escalation Rules (US-015)
+// Determines whether to use chat-first or agent-first (plan→execute) mode
+// =============================================================================
+
+interface EscalationDecision {
+  decision: 'chat' | 'agent'
+  reasons: string[]
+  complexity: 'simple' | 'moderate' | 'complex'
+}
+
+/**
+ * Analyze user message to determine if it should escalate to agent mode.
+ * 
+ * Escalation criteria:
+ * - Multi-entity: Request involves multiple distinct entities (deals AND contacts AND tasks)
+ * - Write operations: Request explicitly asks to create/update/delete data
+ * - Multi-step: Request implies a sequence of dependent operations
+ * - Conditional logic: Request has if/then/else requirements
+ * 
+ * Chat-first (simple) queries:
+ * - Questions about data (read-only)
+ * - V1 deterministic workflows
+ * - Single entity focus
+ * - Status/summary requests
+ */
+function analyzeEscalationCriteria(
+  message: string, 
+  messageLower: string, 
+  context?: { contactId?: string; dealIds?: string[]; currentView?: string }
+): EscalationDecision {
+  const reasons: string[] = []
+  let complexityScore = 0
+  
+  // ---------------------------------------------------------------------------
+  // Multi-entity detection
+  // ---------------------------------------------------------------------------
+  const entityMentions = {
+    contacts: /\b(contact|person|people|stakeholder|attendee|participant)\b/i.test(message),
+    deals: /\b(deal|opportunity|pipeline|contract|proposal)\b/i.test(message),
+    tasks: /\b(task|todo|action item|reminder|follow.?up)\b/i.test(message),
+    emails: /\b(email|mail|message|send|draft)\b/i.test(message),
+    meetings: /\b(meeting|call|event|calendar|schedule)\b/i.test(message),
+    slack: /\b(slack|post|notify|alert|channel)\b/i.test(message)
+  }
+  
+  const entityCount = Object.values(entityMentions).filter(Boolean).length
+  if (entityCount >= 3) {
+    reasons.push('multi-entity (3+ entity types)')
+    complexityScore += 3
+  } else if (entityCount === 2) {
+    complexityScore += 1
+  }
+  
+  // ---------------------------------------------------------------------------
+  // Write operation detection
+  // ---------------------------------------------------------------------------
+  const writePatterns = [
+    /\b(create|add|make|new|generate)\s+(a\s+)?(task|deal|contact|note|activity)/i,
+    /\b(update|change|modify|edit|set)\s+(the\s+)?(status|stage|value|name|priority)/i,
+    /\b(delete|remove|cancel|archive)\s+(the\s+)?(task|deal|meeting)/i,
+    /\bsend\s+(an?\s+)?(email|message|slack|notification)/i,
+    /\b(move|advance|push)\s+(the\s+)?deal/i,
+    /\b(assign|reassign|transfer)\s+to\b/i
+  ]
+  
+  const hasWriteOperation = writePatterns.some(p => p.test(message))
+  if (hasWriteOperation) {
+    reasons.push('write operation detected')
+    complexityScore += 2
+  }
+  
+  // ---------------------------------------------------------------------------
+  // Multi-step operation detection
+  // ---------------------------------------------------------------------------
+  const multiStepPatterns = [
+    /\band\s+then\b/i,
+    /\bafter\s+that\b/i,
+    /\bfirst\s+.+then\b/i,
+    /\bfor\s+each\b/i,
+    /\ball\s+(my\s+)?(contacts|deals|tasks)\b/i,
+    /\bevery\s+(contact|deal|task)\b/i,
+    /\bbulk\b/i,
+    /\bbatch\b/i,
+    /\bmultiple\s+(contacts|deals|tasks)\b/i
+  ]
+  
+  const hasMultiStep = multiStepPatterns.some(p => p.test(message))
+  if (hasMultiStep) {
+    reasons.push('multi-step workflow')
+    complexityScore += 2
+  }
+  
+  // ---------------------------------------------------------------------------
+  // Conditional logic detection
+  // ---------------------------------------------------------------------------
+  const conditionalPatterns = [
+    /\bif\s+.+then\b/i,
+    /\bwhen\s+.+notify\b/i,
+    /\bunless\b/i,
+    /\bdepending\s+on\b/i,
+    /\bbased\s+on\s+(the|their)\b/i,
+    /\bonly\s+if\b/i
+  ]
+  
+  const hasConditional = conditionalPatterns.some(p => p.test(message))
+  if (hasConditional) {
+    reasons.push('conditional logic')
+    complexityScore += 2
+  }
+  
+  // ---------------------------------------------------------------------------
+  // Chat-first (simple) indicators - reduce complexity score
+  // ---------------------------------------------------------------------------
+  const simplePatterns = [
+    /^(what|who|when|where|how many|show me|tell me|list|find)\b/i,
+    /\b(summary|overview|status|update me|catch me up)\b/i,
+    /\?$/,  // Questions
+  ]
+  
+  const isLikelySimple = simplePatterns.some(p => p.test(message.trim()))
+  if (isLikelySimple && !hasWriteOperation) {
+    complexityScore = Math.max(0, complexityScore - 1)
+  }
+  
+  // ---------------------------------------------------------------------------
+  // Decision logic
+  // ---------------------------------------------------------------------------
+  let complexity: 'simple' | 'moderate' | 'complex'
+  let decision: 'chat' | 'agent'
+  
+  if (complexityScore >= 4) {
+    complexity = 'complex'
+    decision = 'agent'
+    reasons.push('complexity threshold exceeded')
+  } else if (complexityScore >= 2) {
+    complexity = 'moderate'
+    // Moderate complexity: use chat with sequence support
+    decision = 'chat'
+  } else {
+    complexity = 'simple'
+    decision = 'chat'
+  }
+  
+  // If no specific reasons and simple, just indicate it's a basic query
+  if (reasons.length === 0) {
+    reasons.push('simple query')
+  }
+  
+  return { decision, reasons, complexity }
+}
+
+/**
+ * Unified V1 Workflow Router
+ * Maps user intent to one of the 5 deterministic V1 workflows.
+ * Returns null if no V1 workflow matches (falls back to Gemini reasoning).
+ *
+ * EXC-001: Enhanced with confidence scoring and synonym support.
+ * Only routes to V1 workflows when confidence >= MEDIUM_THRESHOLD.
+ */
+interface V1WorkflowRoute {
+  workflow: 'next_meeting_prep' | 'post_meeting_followup' | 'email_zero_inbox' | 'pipeline_focus' | 'catch_me_up' | 'meetings_for_period'
+  sequenceKey: string
+  sequenceContext: Record<string, any>
+  confidence?: 'high' | 'medium' | 'low'
+  matchedPatterns?: string[]
+}
+
+// EXC-001: Confidence scoring thresholds
+const V1_CONFIDENCE_THRESHOLDS = {
+  HIGH: 0.9,    // Exact phrase match or multiple strong indicators
+  MEDIUM: 0.6,  // Strong composite match
+  LOW: 0.3,     // Partial match - not sufficient for routing
+} as const
+
+// EXC-001: Synonym mappings for better intent detection
+const V1_SYNONYMS = {
+  meeting: ['meeting', 'call', 'session', 'appointment', 'sync', 'standup', 'catch-up'],
+  prepare: ['prep', 'prepare', 'brief', 'brief me', 'get ready', 'prepare me', 'help me prepare'],
+  next: ['next', 'upcoming', 'scheduled', "today's", "tomorrow's"],
+  focus: ['focus', 'prioritize', 'priority', 'attention', 'important', 'urgent', 'critical'],
+  deal: ['deal', 'deals', 'pipeline', 'opportunity', 'opportunities', 'prospect', 'prospects'],
+  catchup: ['catch me up', 'catch up', 'brief me', 'bring me up to speed', 'what did i miss', "what's new", "what's happening"],
+  email: ['email', 'emails', 'inbox', 'messages', 'mail'],
+  followup: ['follow-up', 'follow up', 'followup', 'recap', 'after the meeting', 'post-meeting', 'debrief'],
+}
+
+/**
+ * Calculate confidence score for V1 workflow match
+ * Returns score 0-1 and list of matched patterns
+ */
+function calculateV1Confidence(
+  messageLower: string,
+  exactPhrases: string[],
+  compositeCheck: () => boolean,
+  synonymGroups: (keyof typeof V1_SYNONYMS)[]
+): { score: number; matchedPatterns: string[]; confidence: 'high' | 'medium' | 'low' } {
+  const matchedPatterns: string[] = []
+  let score = 0
+
+  // Check exact phrase matches (highest confidence boost)
+  for (const phrase of exactPhrases) {
+    if (messageLower.includes(phrase)) {
+      matchedPatterns.push(`exact:"${phrase}"`)
+      score += 0.5
+    }
+  }
+
+  // Check synonym matches
+  for (const group of synonymGroups) {
+    const synonyms = V1_SYNONYMS[group]
+    for (const synonym of synonyms) {
+      if (messageLower.includes(synonym)) {
+        matchedPatterns.push(`synonym:${group}:"${synonym}"`)
+        score += 0.15
+        break // Only count one match per synonym group
+      }
+    }
+  }
+
+  // Composite check bonus
+  if (compositeCheck()) {
+    matchedPatterns.push('composite')
+    score += 0.2
+  }
+
+  // Cap score at 1.0
+  score = Math.min(score, 1.0)
+
+  // Determine confidence level
+  let confidence: 'high' | 'medium' | 'low'
+  if (score >= V1_CONFIDENCE_THRESHOLDS.HIGH) {
+    confidence = 'high'
+  } else if (score >= V1_CONFIDENCE_THRESHOLDS.MEDIUM) {
+    confidence = 'medium'
+  } else {
+    confidence = 'low'
+  }
+
+  return { score, matchedPatterns, confidence }
+}
+
+function routeToV1Workflow(messageLower: string, temporalContext?: TemporalContextPayload): V1WorkflowRoute | null {
+  // EXC-001: Enhanced routing with confidence scoring
+  // Order matters - more specific checks first
+
+  console.log('[V1-ROUTER] Checking message:', messageLower.substring(0, 100))
+
+  // Track all workflow matches with confidence
+  const candidates: Array<V1WorkflowRoute & { score: number }> = []
+
+  // 1. Next Meeting Prep - with confidence scoring
+  const nextMeetingExact = [
+    'prep me for my next meeting',
+    'brief me on my next meeting',
+    'prepare me for my next meeting',
+    'get me ready for my next meeting',
+    'help me prepare for my next call',
+  ]
+  const nextMeetingConf = calculateV1Confidence(
+    messageLower,
+    nextMeetingExact,
+    () => {
+      const hasNext = V1_SYNONYMS.next.some(s => messageLower.includes(s))
+      const hasMeeting = V1_SYNONYMS.meeting.some(s => messageLower.includes(s))
+      const hasPrep = V1_SYNONYMS.prepare.some(s => messageLower.includes(s))
+      return hasNext && hasMeeting && hasPrep
+    },
+    ['meeting', 'prepare', 'next']
+  )
+
+  if (nextMeetingConf.confidence !== 'low') {
+    candidates.push({
+      workflow: 'next_meeting_prep',
+      sequenceKey: 'seq-next-meeting-command-center',
+      sequenceContext: {},
+      confidence: nextMeetingConf.confidence,
+      matchedPatterns: nextMeetingConf.matchedPatterns,
+      score: nextMeetingConf.score,
+    })
+  }
+
+  // 2. Post-Meeting Follow-Up Pack - with confidence scoring
+  const followUpExact = [
+    'follow-up pack', 'follow up pack', 'followup pack',
+    'post-meeting follow-up', 'post meeting follow up',
+    'create follow-ups', 'create follow ups',
+    'write follow-up', 'send follow-up', 'send recap', 'write recap',
+    'after the meeting', 'post-meeting followup', 'debrief',
+  ]
+  const followUpConf = calculateV1Confidence(
+    messageLower,
+    followUpExact,
+    () => {
+      const hasFollowup = V1_SYNONYMS.followup.some(s => messageLower.includes(s))
+      const hasMeeting = V1_SYNONYMS.meeting.some(s => messageLower.includes(s))
+      return hasFollowup && hasMeeting
+    },
+    ['followup', 'meeting']
+  )
+
+  if (followUpConf.confidence !== 'low') {
+    candidates.push({
+      workflow: 'post_meeting_followup',
+      sequenceKey: 'seq-post-meeting-followup-pack',
+      sequenceContext: {},
+      confidence: followUpConf.confidence,
+      matchedPatterns: followUpConf.matchedPatterns,
+      score: followUpConf.score,
+    })
+  }
+
+  // 3. Email Zero Inbox - with confidence scoring
+  const emailExact = [
+    'email follow-ups', 'email follow ups', 'email followups',
+    'check my inbox', 'check my emails', 'unanswered emails',
+    'emails i need to respond', 'emails needing response',
+    'emails i missed', 'missed emails', 'pending emails', 'email backlog',
+    'zero inbox', 'inbox zero', 'clear my inbox',
+    'help with emails', 'help me with emails',
+    'what emails need', 'which emails need', 'emails to reply', 'reply to emails',
+  ]
+  const emailConf = calculateV1Confidence(
+    messageLower,
+    emailExact,
+    () => {
+      const hasEmail = V1_SYNONYMS.email.some(s => messageLower.includes(s))
+      const hasAction = messageLower.includes('respond') || messageLower.includes('reply') ||
+                        messageLower.includes('check') || messageLower.includes('clear') ||
+                        messageLower.includes('help')
+      return hasEmail && hasAction
+    },
+    ['email']
+  )
+
+  if (emailConf.confidence !== 'low') {
+    candidates.push({
+      workflow: 'email_zero_inbox',
+      sequenceKey: 'seq-followup-zero-inbox',
+      sequenceContext: {},
+      confidence: emailConf.confidence,
+      matchedPatterns: emailConf.matchedPatterns,
+      score: emailConf.score,
+    })
+  }
+
+  // 4. Pipeline Focus - with confidence scoring
+  // Note: Combined queries like "deals or tasks" should route to catch_me_up instead
+  const pipelineExact = [
+    'deals should i focus', 'deals to focus', 'pipeline focus',
+    'pipeline priorities', 'which deals', 'what deals need',
+    'prioritize deals', 'prioritize my deals', 'deal priorities',
+    'focus deals', 'deals needing attention', 'stale deals',
+    'deals at risk', 'deals closing soon', 'high priority deals', 'top deals',
+    'help me with deals', 'what needs attention', 'needs attention',
+    'what should i focus on', 'what do i need to focus on',
+    'which opportunities', 'prioritize my pipeline',
+    // Enhanced: More "attention" variations
+    'need my attention', 'needs my attention', 'require attention', 'require my attention',
+    'deals need attention', 'deals requiring attention', 'deals that need',
+  ]
+  const pipelineConf = calculateV1Confidence(
+    messageLower,
+    pipelineExact,
+    () => {
+      const hasDeal = V1_SYNONYMS.deal.some(s => messageLower.includes(s))
+      const hasFocus = V1_SYNONYMS.focus.some(s => messageLower.includes(s))
+      return hasDeal && hasFocus
+    },
+    ['deal', 'focus']
+  )
+
+  if (pipelineConf.confidence !== 'low') {
+    candidates.push({
+      workflow: 'pipeline_focus',
+      sequenceKey: 'seq-pipeline-focus-tasks',
+      sequenceContext: { period: 'this_week' },
+      confidence: pipelineConf.confidence,
+      matchedPatterns: pipelineConf.matchedPatterns,
+      score: pipelineConf.score,
+    })
+  }
+
+  // 5. Catch Me Up (daily brief) - with confidence scoring
+  // This handles combined queries about multiple entity types (deals + tasks + meetings)
+  const catchUpExact = [
+    'catch me up', 'catch up', 'bring me up to speed',
+    "what's happening", "what's going on", 'what did i miss', "what's new",
+    'my day', 'daily brief', 'daily briefing',
+    'morning brief', 'morning briefing', 'start my day',
+    'end of day', 'eod update', 'eod summary', 'wrap up my day',
+    'give me the highlights', 'give me a summary', 'what happened',
+    // Enhanced: Combined attention queries (deals AND tasks)
+    'deals or tasks', 'tasks or deals', 'deals and tasks', 'tasks and deals',
+    'what needs my attention today', 'what requires my attention',
+    'what should i focus on today', 'my priorities today',
+    'what do i need to do today', 'what should i do today',
+    'show me my priorities', 'show me what needs attention',
+    'quick rundown', 'quick update', 'quick summary',
+  ]
+  const catchUpConf = calculateV1Confidence(
+    messageLower,
+    catchUpExact,
+    () => {
+      const hasCatchup = V1_SYNONYMS.catchup.some(s => messageLower.includes(s))
+      // Also trigger for combined queries: "deals or tasks", attention + today
+      const hasBothDealsAndTasks = (messageLower.includes('deal') || messageLower.includes('pipeline')) &&
+                                    messageLower.includes('task')
+      const hasAttentionToday = (messageLower.includes('attention') || messageLower.includes('focus') ||
+                                  messageLower.includes('priorit')) &&
+                                 (messageLower.includes('today') || messageLower.includes('now'))
+      return hasCatchup || hasBothDealsAndTasks || hasAttentionToday
+    },
+    ['catchup']
+  )
+
+  if (catchUpConf.confidence !== 'low') {
+    candidates.push({
+      workflow: 'catch_me_up',
+      sequenceKey: 'seq-catch-me-up',
+      sequenceContext: {},
+      confidence: catchUpConf.confidence,
+      matchedPatterns: catchUpConf.matchedPatterns,
+      score: catchUpConf.score,
+    })
+  }
+
+  // 6. Meetings for period (today/tomorrow) - using existing detection
+  if (isMeetingsForPeriodQuestion(messageLower)) {
+    const period = getMeetingsForPeriodPeriod(messageLower)
+    const timezone = temporalContext?.timezone || 'UTC'
+    candidates.push({
+      workflow: 'meetings_for_period',
+      sequenceKey: '', // Uses direct action, not sequence
+      sequenceContext: { period, timezone },
+      confidence: 'high', // Existing logic is reliable
+      matchedPatterns: ['legacy:isMeetingsForPeriodQuestion'],
+      score: 0.9,
+    })
+  }
+
+  // EXC-001: Select best candidate based on confidence score
+  if (candidates.length === 0) {
+    console.log('[V1-ROUTER] ❌ No V1 workflow matched - will call Gemini')
+    return null
+  }
+
+  // Sort by score descending, pick highest
+  candidates.sort((a, b) => b.score - a.score)
+  const bestMatch = candidates[0]
+
+  // Only route if confidence is at least medium
+  if (bestMatch.confidence === 'low') {
+    console.log('[V1-ROUTER] ⚠️ Best match has low confidence, falling back to Gemini', {
+      workflow: bestMatch.workflow,
+      score: bestMatch.score,
+      matchedPatterns: bestMatch.matchedPatterns,
+    })
+    return null
+  }
+
+  console.log('[V1-ROUTER] ✅ Matched workflow with confidence:', {
+    workflow: bestMatch.workflow,
+    confidence: bestMatch.confidence,
+    score: bestMatch.score.toFixed(2),
+    matchedPatterns: bestMatch.matchedPatterns,
+    alternativeCandidates: candidates.slice(1).map(c => ({
+      workflow: c.workflow,
+      score: c.score.toFixed(2),
+    })),
+  })
+
+  // Return without score property (internal tracking only)
+  const { score: _score, ...result } = bestMatch
+  return result
+}
+
+// ============================================================================
+// PROACTIVE-001: Clarifying Questions Flow
+// ============================================================================
+
+interface ClarifyingOption {
+  id: number
+  action: string
+  description: string
+  sequenceKey?: string
+  skillKey?: string
+}
+
+interface ClarifyingQuestionsResult {
+  needsClarification: boolean
+  entityName?: string
+  entityType?: 'deal' | 'contact' | 'company' | 'meeting'
+  options: ClarifyingOption[]
+  prompt?: string
+}
+
+/**
+ * Detects when a user request is ambiguous and needs clarification.
+ * Returns options for the user to choose from.
+ * 
+ * Triggers:
+ * - "Help me with X" where X is a deal/contact/company name
+ * - Short requests that could mean multiple things
+ * - Entity references without clear action intent
+ */
+function detectAmbiguousRequest(
+  messageLower: string,
+  originalMessage: string,
+  availableSequences: { skill_key: string; name: string }[]
+): ClarifyingQuestionsResult {
+  const result: ClarifyingQuestionsResult = {
+    needsClarification: false,
+    options: [],
+  }
+
+  // Pattern 1: "Help me with [entity]" or "I need help with [entity]"
+  const helpPatterns = [
+    /(?:help|assist|work on|look at|check on|update me on)\s+(?:me\s+)?(?:with\s+)?(?:the\s+)?([a-z0-9\s]+?)(?:\s+deal|\s+contact|\s+company)?$/i,
+    /(?:what about|how about|tell me about)\s+(?:the\s+)?([a-z0-9\s]+)$/i,
+    /^([a-z0-9\s]+)(?:\s+deal|\s+contact)?\s*\??$/i, // Just a name like "Acme?" or "John deal?"
+  ]
+
+  for (const pattern of helpPatterns) {
+    const match = originalMessage.match(pattern)
+    if (match && match[1]) {
+      const entityName = match[1].trim()
+      
+      // Skip if it's clearly a specific request
+      if (entityName.length < 2 || entityName.length > 50) continue
+      
+      // Skip if it already contains action words
+      const actionWords = ['prep', 'prepare', 'brief', 'follow', 'email', 'call', 'schedule', 'create', 'update', 'delete']
+      if (actionWords.some(w => messageLower.includes(w))) continue
+      
+      result.needsClarification = true
+      result.entityName = entityName
+      
+      // Determine entity type from context
+      if (messageLower.includes('deal')) {
+        result.entityType = 'deal'
+      } else if (messageLower.includes('contact') || messageLower.includes('person')) {
+        result.entityType = 'contact'
+      } else if (messageLower.includes('company') || messageLower.includes('account')) {
+        result.entityType = 'company'
+      }
+      
+      // Generate contextual options based on entity type and available sequences
+      result.options = generateClarifyingOptions(entityName, result.entityType, availableSequences)
+      
+      result.prompt = generateClarifyingPrompt(entityName, result.entityType, result.options)
+      
+      break
+    }
+  }
+
+  // Pattern 2: Single word or very short requests (under 15 chars, no clear action)
+  if (!result.needsClarification && messageLower.length < 15 && !messageLower.includes(' ')) {
+    // Could be a name lookup - don't trigger clarification for these, 
+    // let resolve_entity handle it
+  }
+
+  return result
+}
+
+function generateClarifyingOptions(
+  entityName: string,
+  entityType: 'deal' | 'contact' | 'company' | 'meeting' | undefined,
+  availableSequences: { skill_key: string; name: string }[]
+): ClarifyingOption[] {
+  const options: ClarifyingOption[] = []
+  
+  if (entityType === 'deal' || !entityType) {
+    // Deal-focused options
+    options.push({
+      id: 1,
+      action: 'Review deal health',
+      description: `Check the status and health of the ${entityName} deal`,
+      sequenceKey: 'seq-deal-rescue-pack',
+    })
+    options.push({
+      id: 2,
+      action: 'Draft a follow-up email',
+      description: `Write a follow-up email for the ${entityName} opportunity`,
+      sequenceKey: 'seq-post-meeting-followup-pack',
+    })
+  }
+  
+  if (entityType === 'contact' || !entityType) {
+    // Contact-focused options
+    options.push({
+      id: options.length + 1,
+      action: 'Prep for a meeting',
+      description: `Get briefed before meeting with ${entityName}`,
+      sequenceKey: 'seq-next-meeting-command-center',
+    })
+    options.push({
+      id: options.length + 1,
+      action: 'Research this contact',
+      description: `Get background and talking points for ${entityName}`,
+      skillKey: 'lead-research',
+    })
+  }
+  
+  if (entityType === 'company' || !entityType) {
+    // Company-focused options
+    options.push({
+      id: options.length + 1,
+      action: 'Analyze this company',
+      description: `Deep research on ${entityName}`,
+      skillKey: 'company-analysis',
+    })
+    options.push({
+      id: options.length + 1,
+      action: 'Check competitor positioning',
+      description: `How we compare to/position against ${entityName}`,
+      skillKey: 'competitor-intel',
+    })
+  }
+  
+  // Re-number options sequentially
+  return options.slice(0, 4).map((opt, idx) => ({ ...opt, id: idx + 1 }))
+}
+
+function generateClarifyingPrompt(
+  entityName: string,
+  entityType: 'deal' | 'contact' | 'company' | 'meeting' | undefined,
+  options: ClarifyingOption[]
+): string {
+  const typeLabel = entityType || 'entity'
+  
+  let prompt = `I can help with **${entityName}**! What would you like to do?\n\n`
+  
+  for (const opt of options) {
+    prompt += `${opt.id}. **${opt.action}** — ${opt.description}\n`
+  }
+  
+  prompt += `\nJust reply with the number or tell me more about what you need.`
+  
+  return prompt
+}
+
+/**
+ * Check if a message is a clarification response (e.g., "1", "option 2", "the first one")
+ */
+function isClarificationResponse(messageLower: string): { isResponse: boolean; selectedOption?: number } {
+  // Direct number responses
+  const numberMatch = messageLower.match(/^([1-4])$/)
+  if (numberMatch) {
+    return { isResponse: true, selectedOption: parseInt(numberMatch[1], 10) }
+  }
+  
+  // "option X" or "number X"
+  const optionMatch = messageLower.match(/(?:option|number|choice)\s*([1-4])/i)
+  if (optionMatch) {
+    return { isResponse: true, selectedOption: parseInt(optionMatch[1], 10) }
+  }
+  
+  // "the first/second/third/fourth one"
+  const ordinalMap: Record<string, number> = {
+    first: 1, second: 2, third: 3, fourth: 4,
+    '1st': 1, '2nd': 2, '3rd': 3, '4th': 4,
+  }
+  for (const [word, num] of Object.entries(ordinalMap)) {
+    if (messageLower.includes(word)) {
+      return { isResponse: true, selectedOption: num }
+    }
+  }
+  
+  return { isResponse: false }
+}
+
+/**
  * Detect intent from user message and structure response accordingly
  */
 async function detectAndStructureResponse(
@@ -5289,7 +9189,620 @@ async function detectAndStructureResponse(
   
   // Store original message for limit extraction
   const originalMessage = userMessage
-  
+
+  // ---------------------------------------------------------------------------
+  // OUTPUT FORMAT SELECTOR SKILL (platform_skills: output-format-selector)
+  // ---------------------------------------------------------------------------
+  // When keyword-based detection is insufficient, consult the output-format-selector
+  // skill for optimal response type selection. The skill provides:
+  // - Decision matrix mapping intent patterns to response types
+  // - Time-awareness rules (morning/afternoon/evening briefings)
+  // - Preview mode rules for write operations
+  // - Sequence-to-response-type mappings
+  //
+  // To use: await executeSkillByKey('output-format-selector', { 
+  //   userMessage, availableData: [...], timeOfDay 
+  // })
+  // Returns: { recommended_type, confidence, reasoning, required_data, preview_mode }
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // Sequence-aware structured responses (demo-grade panels)
+  // If Copilot ran a sequence, convert it into a rich structured panel with
+  // links + confirm buttons (instead of relying on plain text).
+  // ---------------------------------------------------------------------------
+  if (toolExecutions && toolExecutions.length > 0) {
+    console.log('[STRUCTURED] Processing toolExecutions:', {
+      count: toolExecutions.length,
+      tools: toolExecutions.map((e: any) => ({ 
+        name: e.toolName, 
+        success: e.success, 
+        action: e.args?.action,
+        hasResult: !!e.result 
+      }))
+    })
+    
+    // Find sequence executions - also include failed ones for better error handling
+    const allSeqExecs = toolExecutions
+      .filter((e) => e.toolName === 'execute_action' && (e as any).args?.action === 'run_sequence')
+    
+    const runSeqExec = allSeqExecs.slice(-1)[0] as any
+
+    const seqKey = runSeqExec?.args?.params?.sequence_key
+      ? String(runSeqExec.args.params.sequence_key)
+      : null
+
+    // Try multiple paths for the result data
+    const seqResult = runSeqExec?.result?.data || runSeqExec?.result || null
+    const finalOutputs = seqResult?.final_output?.outputs || seqResult?.outputs || null
+
+    // Handle sequence results - check seqKey first, then try to extract outputs
+    if (seqKey) {
+      // Log for debugging
+      console.log('[STRUCTURED] Processing sequence response:', { 
+        seqKey, 
+        runSeqSuccess: runSeqExec?.success,
+        hasResult: !!seqResult,
+        hasFinalOutputs: !!finalOutputs,
+        outputKeys: finalOutputs ? Object.keys(finalOutputs) : [],
+        resultKeys: seqResult ? Object.keys(seqResult) : [],
+        resultError: runSeqExec?.result?.error || null
+      })
+      
+      // Pipeline Focus Tasks
+      if (seqKey === 'seq-pipeline-focus-tasks') {
+        // Try multiple possible paths for deals data
+        const dealsFromOutputs = finalOutputs?.pipeline_deals?.deals || 
+                                  finalOutputs?.pipeline_deals ||
+                                  seqResult?.pipeline_deals?.deals ||
+                                  seqResult?.pipeline_deals ||
+                                  []
+        const deals = Array.isArray(dealsFromOutputs) ? dealsFromOutputs : []
+        const topDeal = deals[0] || null
+        const taskPreview = finalOutputs?.task_preview || seqResult?.task_preview || null
+
+        console.log('[STRUCTURED] Pipeline Focus - extracted deals:', { 
+          dealCount: deals.length, 
+          hasTopDeal: !!topDeal,
+          hasTaskPreview: !!taskPreview 
+        })
+
+        return {
+          type: 'pipeline_focus_tasks',
+          summary: deals.length > 0 
+            ? `Here are the deals to focus on and the task I can create for you.`
+            : 'Your pipeline looks healthy! No urgent deals need attention right now.',
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            deal: topDeal,
+            taskPreview,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'crm'],
+          },
+        }
+      }
+
+      // Deal Rescue Pack
+      if (seqKey === 'seq-deal-rescue-pack') {
+        const deal = Array.isArray(finalOutputs?.deal?.deals) ? finalOutputs.deal.deals[0] : null
+        const plan = finalOutputs?.plan || null
+        const taskPreview = finalOutputs?.task_previews || null
+
+        return {
+          type: 'deal_rescue_pack',
+          summary: 'Here’s the deal diagnosis + rescue plan, and the task I can create.',
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            deal,
+            plan,
+            taskPreview,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'crm'],
+          },
+        }
+      }
+
+      // Next Meeting Command Center
+      if (seqKey === 'seq-next-meeting-command-center') {
+        const nextMeeting = finalOutputs?.next_meeting?.meeting || null
+        const prepTaskPreview = finalOutputs?.prep_task_preview || null
+
+        return {
+          type: 'next_meeting_command_center',
+          summary: 'Here’s your next meeting brief and a prep checklist task ready to create.',
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            meeting: nextMeeting,
+            brief: finalOutputs?.brief || null,
+            prepTaskPreview,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'calendar', 'crm'],
+          },
+        }
+      }
+
+      // Post-Meeting Follow-Up Pack
+      if (seqKey === 'seq-post-meeting-followup-pack') {
+        const meeting = Array.isArray(finalOutputs?.meeting_data?.meetings)
+          ? finalOutputs.meeting_data.meetings[0]
+          : null
+
+        const contact = Array.isArray(finalOutputs?.contact_data?.contacts)
+          ? finalOutputs.contact_data.contacts[0]
+          : null
+
+        return {
+          type: 'post_meeting_followup_pack',
+          summary: 'Here’s your follow-up pack (email, Slack update, and tasks) ready to send/create.',
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            meeting,
+            contact,
+            digest: finalOutputs?.digest || null,
+            pack: finalOutputs?.pack || null,
+            emailPreview: finalOutputs?.email_preview || null,
+            slackPreview: finalOutputs?.slack_preview || null,
+            taskPreview: finalOutputs?.task_preview || null,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'meetings', 'crm', 'email', 'messaging'],
+          },
+        }
+      }
+
+      // Deal MAP Builder
+      if (seqKey === 'seq-deal-map-builder') {
+        const deal = Array.isArray(finalOutputs?.deal?.deals) ? finalOutputs.deal.deals[0] : null
+        const openTasks = finalOutputs?.open_tasks || null
+        const plan = finalOutputs?.plan || null
+        const taskPreview = finalOutputs?.task_previews || null
+
+        return {
+          type: 'deal_map_builder',
+          summary: 'Here\'s a Mutual Action Plan (MAP) for this deal, with milestones and the top task ready to create.',
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            deal,
+            openTasks,
+            plan,
+            taskPreview,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'crm', 'tasks'],
+          },
+        }
+      }
+
+      // Daily Focus Plan
+      if (seqKey === 'seq-daily-focus-plan') {
+        const pipelineDeals = finalOutputs?.pipeline_deals || null
+        const contactsNeedingAttention = finalOutputs?.contacts_needing_attention || null
+        const openTasks = finalOutputs?.open_tasks || null
+        const plan = finalOutputs?.plan || null
+        const taskPreview = finalOutputs?.task_previews || null
+
+        return {
+          type: 'daily_focus_plan',
+          summary: 'Here\'s your daily focus plan: priorities, next best actions, and the top task ready to create.',
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            pipelineDeals,
+            contactsNeedingAttention,
+            openTasks,
+            plan,
+            taskPreview,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'crm', 'tasks'],
+          },
+        }
+      }
+
+      // Follow-Up Zero Inbox
+      if (seqKey === 'seq-followup-zero-inbox') {
+        const emailThreads = finalOutputs?.email_threads || null
+        const triage = finalOutputs?.triage || null
+        const replyDrafts = finalOutputs?.reply_drafts || null
+        const emailPreview = finalOutputs?.email_preview || null
+        const taskPreview = finalOutputs?.task_preview || null
+
+        return {
+          type: 'followup_zero_inbox',
+          summary: 'Here are the email threads needing response, reply drafts, and a follow-up task ready to create.',
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            emailThreads,
+            triage,
+            replyDrafts,
+            emailPreview,
+            taskPreview,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'email', 'crm', 'tasks'],
+          },
+        }
+      }
+
+      // Deal Slippage Guardrails
+      if (seqKey === 'seq-deal-slippage-guardrails') {
+        const atRiskDeals = finalOutputs?.at_risk_deals || null
+        const diagnosis = finalOutputs?.diagnosis || null
+        const taskPreview = finalOutputs?.task_preview || null
+        const slackPreview = finalOutputs?.slack_preview || null
+
+        return {
+          type: 'deal_slippage_guardrails',
+          summary: 'Here are the at-risk deals, rescue actions, and a rescue task + Slack update ready to create/post.',
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            atRiskDeals,
+            diagnosis,
+            taskPreview,
+            slackPreview,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'crm', 'tasks', 'messaging'],
+          },
+        }
+      }
+
+      // Catch Me Up (Daily Brief) - US-004/US-005
+      if (seqKey === 'seq-catch-me-up') {
+        // Log what we received for debugging
+        console.log('[STRUCTURED] seq-catch-me-up - finalOutputs keys:', finalOutputs ? Object.keys(finalOutputs) : 'null')
+        console.log('[STRUCTURED] seq-catch-me-up - seqResult keys:', seqResult ? Object.keys(seqResult) : 'null')
+        
+        // Determine time of day for adaptive greeting
+        const hour = new Date().getHours()
+        const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+        
+        // Extract data from sequence outputs with multiple fallback paths
+        // The action results may be at different nesting levels
+        const extractArray = (key: string, subKey: string) => {
+          // Try finalOutputs.key.subKey first
+          if (finalOutputs?.[key]?.[subKey] && Array.isArray(finalOutputs[key][subKey])) {
+            return finalOutputs[key][subKey]
+          }
+          // Try finalOutputs.key directly if it's an array
+          if (finalOutputs?.[key] && Array.isArray(finalOutputs[key])) {
+            return finalOutputs[key]
+          }
+          // Try seqResult directly
+          if (seqResult?.[key]?.[subKey] && Array.isArray(seqResult[key][subKey])) {
+            return seqResult[key][subKey]
+          }
+          if (seqResult?.[key] && Array.isArray(seqResult[key])) {
+            return seqResult[key]
+          }
+          return []
+        }
+        
+        const meetingsToday = extractArray('meetings_today', 'meetings')
+        const meetingsTomorrow = extractArray('meetings_tomorrow', 'meetings')
+        const staleDeals = extractArray('stale_deals', 'deals')
+        const closingSoonDeals = extractArray('closing_soon_deals', 'deals')
+        const contactsNeedingAttention = extractArray('contacts_needing_attention', 'contacts')
+        const pendingTasks = extractArray('pending_tasks', 'tasks')
+        const dailyBrief = finalOutputs?.daily_brief || seqResult?.daily_brief || null
+        
+        console.log('[STRUCTURED] seq-catch-me-up - extracted counts:', {
+          meetingsToday: meetingsToday.length,
+          meetingsTomorrow: meetingsTomorrow.length,
+          staleDeals: staleDeals.length,
+          closingSoonDeals: closingSoonDeals.length,
+          contacts: contactsNeedingAttention.length,
+          tasks: pendingTasks.length,
+        })
+        
+        // Merge stale and closing soon deals
+        const priorityDeals = [...staleDeals, ...closingSoonDeals].slice(0, 5)
+        
+        // Generate greeting based on time of day
+        const greeting = timeOfDay === 'morning' 
+          ? "Good morning! Here's your day ahead."
+          : timeOfDay === 'afternoon'
+          ? "Here's your afternoon update."
+          : "Wrapping up the day. Here's your summary."
+        
+        // Map meetings to expected format
+        const schedule = meetingsToday.map((m: any) => ({
+          id: m.id || '',
+          title: m.title || m.summary || 'Meeting',
+          startTime: m.start_time || m.meeting_start || '',
+          endTime: m.end_time || m.meeting_end || '',
+          attendees: m.attendees?.map((a: any) => a.email || a.name) || [],
+          linkedDealId: m.deal_id || null,
+          linkedDealName: m.deal_name || null,
+          meetingUrl: m.meeting_url || m.conference_link || null,
+        }))
+        
+        // Map deals to expected format
+        const formattedDeals = priorityDeals.map((d: any) => ({
+          id: d.id || '',
+          name: d.name || '',
+          value: d.value || d.amount || null,
+          stage: d.stage_name || d.stage || null,
+          daysStale: d.days_stale || d.days_since_activity || null,
+          closeDate: d.expected_close_date || d.close_date || null,
+          healthStatus: d.health_status || (d.days_stale > 7 ? 'stale' : 'healthy'),
+          company: d.company_name || d.company || null,
+          contactName: d.contact_name || null,
+          contactEmail: d.contact_email || null,
+        }))
+        
+        // Map contacts to expected format with rich action context
+        const formattedContacts = contactsNeedingAttention.map((c: any) => ({
+          id: c.id || '',
+          name: c.full_name || c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Unknown',
+          email: c.email || null,
+          company: c.company_name || c.company || null,
+          lastContactDate: c.last_contact_date || c.last_activity_date || c.last_interaction_at || null,
+          daysSinceContact: c.days_since_last_contact || null,
+          healthStatus: c.health_status || 'unknown',
+          riskLevel: c.risk_level || 'unknown',
+          riskFactors: c.risk_factors || [],
+          reason: c.reason || (c.risk_level === 'high' ? 'high risk' : c.health_status === 'ghost' ? 'going dark' : 'needs follow-up'),
+        }))
+        
+        // Map tasks to expected format
+        const formattedTasks = pendingTasks.map((t: any) => ({
+          id: t.id || '',
+          title: t.title || '',
+          dueDate: t.due_date || null,
+          priority: t.priority || 'medium',
+          status: t.status || 'pending',
+          linkedDealId: t.deal_id || null,
+          linkedContactId: t.contact_id || null,
+        }))
+        
+        // Generate summary
+        const meetingCount = schedule.length
+        const dealCount = formattedDeals.length
+        const taskCount = formattedTasks.length
+        const summary = dailyBrief?.summary || 
+          `You have ${meetingCount} meeting${meetingCount !== 1 ? 's' : ''} today` +
+          (dealCount > 0 ? `, ${dealCount} deal${dealCount !== 1 ? 's' : ''} needing attention` : '') +
+          (taskCount > 0 ? `, and ${taskCount} pending task${taskCount !== 1 ? 's' : ''}` : '') +
+          '.'
+
+        return {
+          type: 'daily_brief',
+          summary,
+          data: {
+            sequenceKey: seqKey,
+            isSimulation: seqResult?.is_simulation === true,
+            executionId: seqResult?.execution_id,
+            greeting,
+            timeOfDay,
+            schedule,
+            priorityDeals: formattedDeals,
+            contactsNeedingAttention: formattedContacts,
+            tasks: formattedTasks,
+            tomorrowPreview: timeOfDay === 'evening' ? meetingsTomorrow.map((m: any) => ({
+              id: m.id || '',
+              title: m.title || m.summary || 'Meeting',
+              startTime: m.start_time || m.meeting_start || '',
+            })) : undefined,
+            summary,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['sequence', 'calendar', 'crm', 'tasks'],
+          },
+        }
+      }
+    }
+
+    // Ops creation responses
+    const dynamicTableExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'search_leads_create_table')
+      .slice(-1)[0] as any;
+
+    if (dynamicTableExec?.result?.data) {
+      const dtResult = dynamicTableExec.result.data;
+      return {
+        type: 'dynamic_table',
+        summary: `Created an Ops "${dtResult.table_name || 'Untitled'}" with ${dtResult.row_count || 0} leads.`,
+        data: {
+          table_id: dtResult.table_id,
+          table_name: dtResult.table_name || 'Untitled Table',
+          row_count: dtResult.row_count || 0,
+          column_count: dtResult.column_count || 0,
+          source_type: dtResult.source_type || 'apollo',
+          enriched_count: dtResult.enriched_count || 0,
+          preview_rows: dtResult.preview_rows || [],
+          preview_columns: dtResult.preview_columns || [],
+          query_description: dtResult.query_description || '',
+        },
+        actions: [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'primary',
+            callback: 'open_dynamic_table',
+            params: { table_id: dtResult.table_id },
+          },
+          {
+            id: 'add-enrichment',
+            label: 'Add Enrichment',
+            type: 'secondary',
+            callback: 'add_enrichment',
+            params: { table_id: dtResult.table_id },
+          },
+        ],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['dynamic_tables', 'apollo'],
+        },
+      };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Meetings list (today/tomorrow) from get_meetings_for_period
+  // ---------------------------------------------------------------------------
+  if (toolExecutions && toolExecutions.length > 0) {
+    const meetingsForPeriodExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'get_meetings_for_period')
+      .slice(-1)[0] as any
+
+    const raw = meetingsForPeriodExec?.result?.data || null
+    const rawMeetings = Array.isArray(raw?.meetings) ? raw.meetings : []
+
+    if (raw && rawMeetings.length >= 0) {
+      // Best-effort user domain detection for external/internal labeling
+      let userEmailDomain: string | null = null
+      try {
+        const { data: profile } = await client
+          .from('profiles')
+          .select('email')
+          .eq('id', userId)
+          .maybeSingle()
+        const email = profile?.email ? String(profile.email) : ''
+        const domain = email.includes('@') ? email.split('@')[1] : ''
+        userEmailDomain = domain || null
+      } catch {
+        userEmailDomain = null
+      }
+
+      // Support today, tomorrow, and day-of-week periods
+      const rawPeriod = raw?.period ? String(raw.period).toLowerCase() : 'today'
+      const validPeriods = ['today', 'tomorrow', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'this_week', 'next_week']
+      const period = validPeriods.includes(rawPeriod) ? rawPeriod : 'today'
+      
+      // Generate human-readable label
+      const periodLabels: Record<string, string> = {
+        today: 'today',
+        tomorrow: 'tomorrow',
+        monday: 'Monday',
+        tuesday: 'Tuesday',
+        wednesday: 'Wednesday',
+        thursday: 'Thursday',
+        friday: 'Friday',
+        saturday: 'Saturday',
+        sunday: 'Sunday',
+        this_week: 'this week',
+        next_week: 'next week',
+      }
+      const periodLabel = periodLabels[period] || period
+
+      const meetings = rawMeetings.map((m: any) => {
+        const attendeesRaw = Array.isArray(m.attendees) ? m.attendees : []
+        const organizerEmail = m.organizer_email ? String(m.organizer_email) : null
+
+        const attendees = attendeesRaw
+          .map((a: any) => {
+            const email = a?.email ? String(a.email) : ''
+            const name = a?.name ? String(a.name) : undefined
+
+            const isOrganizer = organizerEmail ? email.toLowerCase() === organizerEmail.toLowerCase() : false
+            const isExternal = userEmailDomain
+              ? !email.toLowerCase().endsWith(`@${userEmailDomain.toLowerCase()}`)
+              : false
+
+            // Optional contact linking if available from include_context enrichment
+            const ctx = Array.isArray(m.attendeeContext) ? m.attendeeContext : []
+            const ctxMatch = ctx.find((x: any) => x?.email && String(x.email).toLowerCase() === email.toLowerCase())
+            const crmContactId = ctxMatch?.contactId ? String(ctxMatch.contactId) : undefined
+
+            return {
+              email,
+              name,
+              isExternal,
+              isOrganizer,
+              crmContactId,
+            }
+          })
+          .filter((a: any) => !!a.email)
+
+        const hasExternal = attendees.some((a: any) => a.isExternal === true)
+        const meetingType = hasExternal ? 'sales' : 'internal'
+
+        const statusRaw = m?.status ? String(m.status) : 'confirmed'
+        const status =
+          statusRaw === 'tentative' ? 'tentative' :
+          statusRaw === 'cancelled' ? 'cancelled' :
+          'confirmed'
+
+        return {
+          id: String(m.id),
+          source: 'google_calendar',
+          title: m?.title ? String(m.title) : 'Meeting',
+          startTime: String(m.startTime || m.start_time || ''),
+          endTime: String(m.endTime || m.end_time || ''),
+          durationMinutes: Number(m.durationMinutes || m.duration_minutes || 0) || 0,
+          attendees,
+          location: m?.location ? String(m.location) : undefined,
+          meetingUrl: m?.meetingUrl ? String(m.meetingUrl) : undefined,
+          meetingType,
+          status,
+        }
+      })
+
+      const totalDurationMinutes = meetings.reduce((sum: number, m: any) => sum + (Number(m.durationMinutes) || 0), 0)
+      const external = meetings.filter((m: any) => m.meetingType === 'sales').length
+      const internal = meetings.length - external
+
+      return {
+        type: 'meeting_list',
+        summary: `Here are your meetings for ${periodLabel}.`,
+        data: {
+          meetings,
+          period,
+          periodLabel,
+          totalCount: meetings.length,
+          totalDurationMinutes,
+          breakdown: {
+            internal,
+            external,
+            withDeals: 0,
+          },
+        },
+        actions: [],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['calendar'],
+        },
+      }
+    }
+  }
+
   if (isAvailabilityQuestion(messageLower)) {
     const availabilityStructured = await structureCalendarAvailabilityResponse(
       client,
@@ -5371,11 +9884,27 @@ async function detectAndStructureResponse(
     'follow up', 'follow-up', 'followup'
   ]
 
+  // Pipeline-focus task requests should NOT go through the contact-based task creation flow.
+  // These should be handled by Copilot tools/sequences (e.g. seq-pipeline-focus-tasks).
+  const isPipelineFocusTaskRequest =
+    (messageLower.includes('deal') || messageLower.includes('deals') || messageLower.includes('pipeline')) &&
+    (messageLower.includes('focus') || messageLower.includes('priorit')) &&
+    (messageLower.includes('schedule') || messageLower.includes('task') || messageLower.includes('tasks')) &&
+    (messageLower.includes('engage') || messageLower.includes('outreach') || messageLower.includes('follow up') || messageLower.includes('follow-up'))
+
+  // If user is responding with an affirmative confirmation ("yes", "ok", "confirm", etc),
+  // do not route into the generic contact-based task creation flow. This avoids the
+  // "Select Contact" modal when the intent is to confirm a previously previewed workflow.
+  const isAffirmativeConfirmation =
+    /^(yes|yep|yeah|y|ok|okay|sure|do it|go ahead|confirm|approved|create it|create the task|yes create|yes create a task)\b/i.test(
+      userMessage.trim()
+    )
+
   // Exclude if the message is about email (e.g., "follow-up email")
   const isAboutEmail = messageLower.includes('email')
 
   const isTaskCreationRequest =
-    !isAboutEmail && (
+    !isAboutEmail && !isPipelineFocusTaskRequest && !isAffirmativeConfirmation && (
       taskCreationKeywords.some(keyword => messageLower.includes(keyword)) ||
       (messageLower.includes('task') && (messageLower.includes('create') || messageLower.includes('add') || messageLower.includes('for') || messageLower.includes('to'))) ||
       (messageLower.includes('remind') && (messageLower.includes('to') || messageLower.includes('me') || messageLower.includes('about'))) ||
@@ -5437,7 +9966,7 @@ async function detectAndStructureResponse(
     messageLower.includes('pipeline health') ||
     (messageLower.includes('show me my') && (messageLower.includes('deal') || messageLower.includes('pipeline')))
   
-  if (isPipelineQuery) {
+  if (isPipelineQuery && !isPipelineFocusTaskRequest) {
     const structured = await structurePipelineResponse(client, userId, aiContent, userMessage)
     return structured
   }
@@ -5669,7 +10198,88 @@ async function detectAndStructureResponse(
     const structured = await structureSalesCoachResponse(client, userId, aiContent, userMessage, requestingUserId)
     return structured
   }
-  
+
+  // ============================================================
+  // FALLBACK CLASSIFIER - Apply output-format-selector logic
+  // When no specific pattern matches, detect broad intent categories
+  // and return basic structured responses instead of plain text
+  // ============================================================
+
+  // Broad intent category detection
+  const intentCategories = {
+    meetings: [
+      'meeting', 'meetings', 'call', 'calls', 'calendar', 'schedule',
+      'appointment', 'sync', 'check-in', 'standup', 'demo', 'presentation'
+    ],
+    deals: [
+      'deal', 'deals', 'pipeline', 'opportunity', 'opportunities',
+      'forecast', 'revenue', 'close', 'closing', 'quota', 'stage', 'stages'
+    ],
+    tasks: [
+      'task', 'tasks', 'todo', 'to-do', 'to do', 'reminder', 'reminders',
+      'action item', 'action items', 'overdue', 'due'
+    ],
+    contacts: [
+      'contact', 'contacts', 'person', 'people', 'relationship', 'relationships',
+      'stakeholder', 'stakeholders', 'decision maker', 'champion'
+    ],
+    emails: [
+      'email', 'emails', 'inbox', 'reply', 'replies', 'follow-up', 'follow up',
+      'draft', 'message', 'outreach', 'communication'
+    ],
+    activities: [
+      'activity', 'activities', 'log', 'logged', 'call log', 'note', 'notes',
+      'proposal', 'proposals', 'outbound'
+    ]
+  }
+
+  // Find the dominant category
+  let detectedCategory: string | null = null
+  let maxMatches = 0
+
+  for (const [category, keywords] of Object.entries(intentCategories)) {
+    const matches = keywords.filter(kw => messageLower.includes(kw)).length
+    if (matches > maxMatches) {
+      maxMatches = matches
+      detectedCategory = category
+    }
+  }
+
+  // If we detected a category, return a basic structured response
+  if (detectedCategory && maxMatches > 0) {
+    // Map categories to basic response types
+    const categoryToResponseType: Record<string, string> = {
+      meetings: 'meeting_list',
+      deals: 'pipeline',
+      tasks: 'task',
+      contacts: 'contact',
+      emails: 'email',
+      activities: 'activity_breakdown'
+    }
+
+    const responseType = categoryToResponseType[detectedCategory]
+
+    // Create a basic structured wrapper for the AI content
+    // This ensures formatting rules are applied even when specific patterns don't match
+    return {
+      type: responseType || 'text_with_links',
+      summary: aiContent.slice(0, 200), // First 200 chars as summary
+      data: {
+        content: aiContent,
+        category: detectedCategory,
+        fallbackApplied: true
+      },
+      actions: [],
+      metadata: {
+        timeGenerated: new Date().toISOString(),
+        dataSource: ['fallback_classifier'],
+        confidence: Math.min(100, maxMatches * 30), // Confidence based on keyword matches
+        warning: 'Structured using fallback classification. Specific patterns may provide richer responses.',
+        detectedIntent: detectedCategory
+      }
+    }
+  }
+
   return null
 }
 
@@ -5946,13 +10556,7 @@ async function structureEmailDraftResponse(
     if (hasLastMeetingReference) {
       console.log('[EMAIL-DRAFT] Fetching last meeting with transcript for user:', userId)
 
-      // Only look at meetings from the last 14 days
-      const fourteenDaysAgo = new Date()
-      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
-      const dateFilter = fourteenDaysAgo.toISOString()
-
-      console.log('[EMAIL-DRAFT] Looking for meetings after:', dateFilter)
-
+      // First try: Look for meetings with transcript/summary (no date filter - get most recent)
       const { data: meetings, error: meetingError } = await client
         .from('meetings')
         .select(`
@@ -5961,16 +10565,39 @@ async function structureEmailDraftResponse(
           meeting_attendees(name, email, is_external)
         `)
         .eq('owner_user_id', userId)
-        .gte('meeting_start', dateFilter)
         .or('transcript_text.not.is.null,summary.not.is.null')
         .order('meeting_start', { ascending: false })
-        .limit(1)
+        .limit(5)
 
       if (meetingError) {
         console.error('[EMAIL-DRAFT] Error fetching last meeting:', meetingError)
       } else if (meetings && meetings.length > 0) {
-        lastMeeting = meetings[0]
-        console.log('[EMAIL-DRAFT] Found last meeting:', lastMeeting.title, '- Has summary:', !!lastMeeting.summary, '- Has transcript:', !!lastMeeting.transcript_text)
+        // Pick the first meeting that actually has content
+        lastMeeting = meetings.find((m: any) => m.transcript_text || m.summary) || meetings[0]
+        console.log('[EMAIL-DRAFT] Found last meeting:', lastMeeting.title, '- Has summary:', !!lastMeeting.summary, '- Has transcript:', !!lastMeeting.transcript_text, '- Date:', lastMeeting.meeting_start)
+      } else {
+        // Fallback: Get ANY recent meeting even without transcript/summary
+        console.log('[EMAIL-DRAFT] No meetings with content, trying any recent meeting...')
+        const { data: anyMeetings } = await client
+          .from('meetings')
+          .select(`
+            id, title, summary, transcript_text, meeting_start,
+            meeting_action_items(id, title, completed),
+            meeting_attendees(name, email, is_external)
+          `)
+          .eq('owner_user_id', userId)
+          .order('meeting_start', { ascending: false })
+          .limit(1)
+        
+        if (anyMeetings && anyMeetings.length > 0) {
+          lastMeeting = anyMeetings[0]
+          console.log('[EMAIL-DRAFT] Using most recent meeting (no content):', lastMeeting.title)
+        }
+      }
+      
+      // Process attendees if we found a meeting
+      if (lastMeeting) {
+        console.log('[EMAIL-DRAFT] Processing meeting:', lastMeeting?.title, '- Has summary:', !!lastMeeting?.summary, '- Has transcript:', !!lastMeeting?.transcript_text)
         console.log('[EMAIL-DRAFT] Meeting attendees:', JSON.stringify(lastMeeting.meeting_attendees))
 
         // For "last meeting" requests, ALWAYS use meeting attendee as recipient (overwrite any previous)
@@ -6162,40 +10789,243 @@ async function structureEmailDraftResponse(
       return points.length > 0 ? points : ['Discuss next steps', 'Review key decisions']
     }
 
+    // Fetch user's writing style for personalized email generation
+    const { data: writingStyle } = await client
+      .from('user_writing_styles')
+      .select('name, tone_description, examples, style_metadata')
+      .eq('user_id', userId)
+      .eq('is_default', true)
+      .maybeSingle()
+    
+    // Fetch user's name for email signature
+    const { data: userProfile } = await client
+      .from('profiles')
+      .select('first_name, last_name, email')
+      .eq('id', userId)
+      .maybeSingle()
+    
+    const userName = userProfile 
+      ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || userProfile.email?.split('@')[0] || 'Your Name'
+      : 'Your Name'
+    
+    console.log('[EMAIL-DRAFT] User writing style found:', !!writingStyle, writingStyle?.name)
+    console.log('[EMAIL-DRAFT] User name for signature:', userName)
+
     // Generate email based on meeting context if available
-    if ((isFollowUp || hasLastMeetingReference) && lastMeeting) {
-      // Use actual meeting content for the email
+    if ((isFollowUp || hasLastMeetingReference) && lastMeeting && (lastMeeting.summary || lastMeeting.transcript_text)) {
+      // USE AI to generate a proper email based on meeting content and user's writing style
+      console.log('[EMAIL-DRAFT] Generating AI email from meeting transcript/summary')
+      
       const meetingTitle = lastMeeting.title || 'our recent conversation'
       const meetingDate = lastMeeting.meeting_start
         ? new Date(lastMeeting.meeting_start).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
         : 'recently'
 
-      subject = `Following up on ${meetingTitle}`
       keyPoints = extractMeetingKeyPoints(lastMeeting)
-
-      // Build contextual body from meeting content
-      let discussionPoints = ''
-      if (keyPoints.length > 0 && (lastMeeting.summary || lastMeeting.meeting_action_items?.length > 0)) {
-        discussionPoints = `\n\nKey points from our discussion:\n${keyPoints.map(p => `• ${p}`).join('\n')}`
-      }
-
-      // Check for action items to mention
-      let actionItemsSection = ''
+      
+      // Get uncompleted action items
       const uncompletedActions = lastMeeting.meeting_action_items?.filter((a: any) => !a.completed) || []
-      if (uncompletedActions.length > 0) {
-        actionItemsSection = `\n\nAs discussed, here are the action items we agreed on:\n${uncompletedActions.slice(0, 4).map((a: any) => `• ${a.title}`).join('\n')}`
+      
+      // Build style instruction from user's writing style
+      let styleInstruction = 'Write in a professional but warm and personable tone.'
+      if (writingStyle) {
+        const styleParts: string[] = []
+        styleParts.push(`\n## USER'S PERSONAL WRITING STYLE - YOU MUST MATCH THIS EXACTLY`)
+        styleParts.push(`Style: ${writingStyle.name}`)
+        styleParts.push(`Tone: ${writingStyle.tone_description}`)
+        
+        const meta = writingStyle.style_metadata as any
+        if (meta?.tone_characteristics) {
+          styleParts.push(`Characteristics: ${meta.tone_characteristics}`)
+        }
+        if (meta?.vocabulary_profile) {
+          styleParts.push(`Vocabulary: ${meta.vocabulary_profile}`)
+        }
+        if (meta?.greeting_style) {
+          styleParts.push(`Greeting style: Use "${meta.greeting_style}" style greetings`)
+        }
+        if (meta?.signoff_style) {
+          styleParts.push(`Sign-off style: Use "${meta.signoff_style}" style sign-offs`)
+        }
+        
+        if (writingStyle.examples && Array.isArray(writingStyle.examples) && writingStyle.examples.length > 0) {
+          const snippets = (writingStyle.examples as string[]).slice(0, 2).map((ex: string) => 
+            ex.length > 200 ? ex.substring(0, 200) + '...' : ex
+          )
+          styleParts.push(`\nEXAMPLES OF HOW THIS USER WRITES:\n${snippets.map((s: string) => `"${s}"`).join('\n')}`)
+        }
+        
+        styleParts.push(`\n**CRITICAL: The email MUST sound like this user wrote it. Copy their vocabulary, greeting style, sign-off patterns, and overall tone exactly.**`)
+        styleInstruction = styleParts.join('\n')
       }
 
-      body = `Hi ${recipientName || '[Name]'},
+      // Get current date for accurate date references
+      const today = new Date()
+      const currentDateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+
+      // Prepare meeting content - prefer transcript but use summary as fallback
+      let meetingContent = ''
+      if (lastMeeting.transcript_text) {
+        // Truncate transcript if too long (keep first 3000 chars for context)
+        const transcript = lastMeeting.transcript_text.length > 3000 
+          ? lastMeeting.transcript_text.substring(0, 3000) + '... [transcript truncated]'
+          : lastMeeting.transcript_text
+        meetingContent = `MEETING TRANSCRIPT:\n${transcript}`
+      } else if (lastMeeting.summary) {
+        let summaryText = lastMeeting.summary
+        if (typeof summaryText === 'object' && summaryText.markdown_formatted) {
+          summaryText = summaryText.markdown_formatted
+        } else if (typeof summaryText === 'string' && summaryText.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(summaryText)
+            summaryText = parsed.markdown_formatted || parsed.summary || summaryText
+          } catch (e) {
+            // Use as-is
+          }
+        }
+        meetingContent = `MEETING SUMMARY:\n${summaryText}`
+      }
+
+      // Adjust tone based on user's base style
+      let toneAdjustment = ''
+      if (tone === 'friendly') {
+        toneAdjustment = `\nTONE ADJUSTMENT: Make this email slightly MORE casual and warm than the user's normal style. Add a friendly touch while keeping their voice.`
+      } else if (tone === 'concise') {
+        toneAdjustment = `\nTONE ADJUSTMENT: Make this email MORE brief and direct than the user's normal style. Cut any fluff, keep only essentials.`
+      } else if (tone === 'professional') {
+        toneAdjustment = `\nTONE ADJUSTMENT: Make this email slightly MORE formal than the user's normal style. Keep it polished and business-appropriate.`
+      }
+
+      const prompt = `You are writing a follow-up email after a meeting. Generate a personalized, context-aware email.
+
+TODAY'S DATE: ${currentDateStr}
+
+SENDER NAME: ${userName}
+RECIPIENT: ${recipientName || 'the attendee'}
+RECIPIENT EMAIL: ${contactEmail || 'unknown'}
+MEETING TITLE: ${meetingTitle}
+MEETING DATE: ${meetingDate}
+
+${meetingContent}
+
+${uncompletedActions.length > 0 ? `AGREED ACTION ITEMS:\n${uncompletedActions.map((a: any) => `- ${a.title}`).join('\n')}` : ''}
+
+${styleInstruction}
+${toneAdjustment}
+
+INSTRUCTIONS:
+1. Write a follow-up email that references SPECIFIC things discussed in the meeting
+2. Mention any action items or next steps that were agreed upon
+3. Be concise (2-3 paragraphs max)
+4. Sound natural and human - NOT like a template
+5. Include specific details from the conversation to show you were paying attention
+6. Propose a clear next step
+7. Sign off with the sender's actual name: "${userName}"
+
+Return ONLY a JSON object in this exact format (no markdown, no code blocks):
+{"subject": "Your subject line here", "body": "Full email body here"}
+
+The body MUST include proper greeting and sign off with "${userName}" (not "[Your Name]" or placeholders).`
+
+      try {
+        // Use Gemini for email generation
+        if (GEMINI_API_KEY) {
+          console.log('[EMAIL-DRAFT] Calling Gemini to generate personalized email...')
+          const geminiResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: 1000,
+                  responseMimeType: 'application/json'
+                }
+              })
+            }
+          )
+
+          if (geminiResponse.ok) {
+            const geminiData = await geminiResponse.json()
+            const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
+            console.log('[EMAIL-DRAFT] Gemini response received, length:', responseText.length)
+            
+            try {
+              const emailJson = JSON.parse(responseText)
+              if (emailJson.subject && emailJson.body) {
+                subject = emailJson.subject
+                body = emailJson.body
+                console.log('[EMAIL-DRAFT] ✅ AI-generated email parsed successfully')
+              }
+            } catch (parseError) {
+              console.error('[EMAIL-DRAFT] Failed to parse Gemini response:', parseError)
+              // Try to extract JSON from response
+              const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+              if (jsonMatch) {
+                try {
+                  const emailJson = JSON.parse(jsonMatch[0])
+                  if (emailJson.subject && emailJson.body) {
+                    subject = emailJson.subject
+                    body = emailJson.body
+                    console.log('[EMAIL-DRAFT] ✅ AI-generated email extracted from response')
+                  }
+                } catch (e) {
+                  console.error('[EMAIL-DRAFT] Could not extract JSON from response')
+                }
+              }
+            }
+          } else {
+            console.error('[EMAIL-DRAFT] Gemini API error:', geminiResponse.status)
+          }
+        }
+      } catch (aiError) {
+        console.error('[EMAIL-DRAFT] AI email generation failed:', aiError)
+      }
+
+      // Fallback if AI generation failed
+      if (!body || body.includes('[Add key')) {
+        console.log('[EMAIL-DRAFT] Using fallback template with meeting context')
+        let discussionPoints = ''
+        if (keyPoints.length > 0) {
+          discussionPoints = `\n\nKey points from our discussion:\n${keyPoints.map(p => `• ${p}`).join('\n')}`
+        }
+
+        let actionItemsSection = ''
+        if (uncompletedActions.length > 0) {
+          actionItemsSection = `\n\nAs discussed, here are the action items we agreed on:\n${uncompletedActions.slice(0, 4).map((a: any) => `• ${a.title}`).join('\n')}`
+        }
+
+        subject = `Following up on ${meetingTitle}`
+        body = `Hi ${recipientName || '[Name]'},
 
 Thank you for taking the time to meet with me on ${meetingDate}. I wanted to follow up on our conversation about ${meetingTitle.replace(/^Meeting with /i, '').replace(/^Call with /i, '')}.${discussionPoints}${actionItemsSection}
 
 Please let me know if you have any questions or if there's anything else I can help with.
 
 Best regards`
+      }
 
-      console.log('[EMAIL-DRAFT] Generated email from meeting context:', { meetingTitle, keyPointsCount: keyPoints.length, hasActionItems: uncompletedActions.length > 0 })
+      console.log('[EMAIL-DRAFT] Generated email from meeting context:', { meetingTitle, keyPointsCount: keyPoints.length, hasActionItems: uncompletedActions.length > 0, usedAI: !body.includes('Best regards') || body.length > 500 })
     } else if (isFollowUp && isMeetingRelated) {
+      // No meeting found - try harder to find ANY recent meeting
+      console.log('[EMAIL-DRAFT] No meeting with content found, trying broader search...')
+      
+      const { data: anyMeetings } = await client
+        .from('meetings')
+        .select('id, title, summary, transcript_text, meeting_start')
+        .eq('owner_user_id', userId)
+        .order('meeting_start', { ascending: false })
+        .limit(5)
+      
+      console.log('[EMAIL-DRAFT] Broader search found meetings:', anyMeetings?.length || 0)
+      if (anyMeetings) {
+        anyMeetings.forEach((m: any) => {
+          console.log('[EMAIL-DRAFT] - Meeting:', m.title, 'has_summary:', !!m.summary, 'has_transcript:', !!m.transcript_text)
+        })
+      }
+
       // Fallback if no meeting found but user mentioned meeting
       subject = `Following up on our recent conversation`
       keyPoints = ['Thank them for their time', 'Recap key discussion points', 'Outline next steps']
@@ -6203,9 +11033,7 @@ Best regards`
 
 Thank you for taking the time to speak with me recently. I wanted to follow up on our conversation and ensure we're aligned on the next steps.
 
-[Add key discussion points from the meeting]
-
-Please let me know if you have any questions or if there's anything else I can help with.
+I'd love to hear your thoughts on what we discussed. Please let me know if you have any questions or if there's anything else I can help with.
 
 Best regards`
     } else if (isFollowUp && isProposalRelated) {
@@ -8002,24 +12830,46 @@ async function structureNextMeetingPrepResponse(
     const now = temporalContext?.isoString ? new Date(temporalContext.isoString) : new Date()
     const windowEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-    // Fetch next upcoming event from our locally-synced calendar_events table (org-scoped when available).
+    // Fetch next upcoming event from our locally-synced calendar_events table.
+    // Include events that match org_id OR have null org_id (personal calendar events)
+    // This ensures personal calendar events aren't filtered out when querying in org context.
+    console.log('[MEETING-PREP] Querying next meeting:', {
+      userId,
+      orgId,
+      now: now.toISOString(),
+      windowEnd: windowEnd.toISOString()
+    })
+
     let eventQuery = client
       .from('calendar_events')
       .select(
-        'id, title, start_time, end_time, location, description, meeting_url, html_link, raw_data, contact_id, deal_id, company_id'
+        'id, title, start_time, end_time, location, description, meeting_url, html_link, raw_data, contact_id, deal_id, company_id, org_id'
       )
       .eq('user_id', userId)
       .gt('start_time', now.toISOString())
       .lt('start_time', windowEnd.toISOString())
+
+    // Include events that match org_id OR have null org_id (personal calendar events)
+    if (orgId) {
+      eventQuery = eventQuery.or(`org_id.eq.${orgId},org_id.is.null`)
+    }
+
+    // Apply ordering and limit after all filters
+    eventQuery = eventQuery
       .order('start_time', { ascending: true })
       .limit(1)
       .maybeSingle()
 
-    if (orgId) {
-      eventQuery = eventQuery.eq('org_id', orgId)
-    }
-
     const { data: event, error: eventError } = await eventQuery
+
+    console.log('[MEETING-PREP] Query result:', {
+      found: !!event,
+      eventId: event?.id,
+      eventTitle: event?.title,
+      eventStart: event?.start_time,
+      eventOrgId: event?.org_id,
+      error: eventError?.message
+    })
     if (eventError) throw new Error(`Failed to load next meeting: ${eventError.message}`)
 
     if (!event) {
@@ -8075,7 +12925,7 @@ async function structureNextMeetingPrepResponse(
         .from('contacts')
         .select('id, full_name, first_name, last_name, email, company_id, title, phone')
         .eq('id', event.contact_id)
-        .eq('user_id', userId)
+        .eq('owner_id', userId)  // CRITICAL: contacts uses owner_id, NOT user_id
         .maybeSingle()
       if (orgId) contactQuery = contactQuery.eq('org_id', orgId)
 
@@ -8088,7 +12938,7 @@ async function structureNextMeetingPrepResponse(
       let inferredQuery = client
         .from('contacts')
         .select('id, full_name, first_name, last_name, email, company_id, title, phone')
-        .eq('user_id', userId)
+        .eq('owner_id', userId)  // CRITICAL: contacts uses owner_id, NOT user_id
         .ilike('email', counterpartyEmail)
         .maybeSingle()
       if (orgId) inferredQuery = inferredQuery.eq('org_id', orgId)
@@ -8401,7 +13251,10 @@ async function structureNextMeetingPrepResponse(
     }> = []
     
     if (contactRow?.id || dealInfo?.id) {
-      let tasksQuery = client
+      // Build base query with type assertion for proper inference
+      type TaskRow = { id: string; title: string; status: string; due_date: string | null; assigned_to: string | null; contact_id: string | null; deal_id: string | null }
+      
+      let baseQuery = client
         .from('tasks')
         .select('id, title, status, due_date, assigned_to, contact_id, deal_id')
         .eq('user_id', userId)
@@ -8410,18 +13263,18 @@ async function structureNextMeetingPrepResponse(
         .limit(5)
       
       if (orgId) {
-        tasksQuery = tasksQuery.eq('org_id', orgId)
+        baseQuery = baseQuery.eq('org_id', orgId)
       }
       // Filter by contact_id or deal_id (can match either)
       if (contactRow?.id && dealInfo?.id) {
-        tasksQuery = tasksQuery.or(`contact_id.eq.${contactRow.id},deal_id.eq.${dealInfo.id}`)
+        baseQuery = baseQuery.or(`contact_id.eq.${contactRow.id},deal_id.eq.${dealInfo.id}`)
       } else if (contactRow?.id) {
-        tasksQuery = tasksQuery.eq('contact_id', contactRow.id)
+        baseQuery = baseQuery.eq('contact_id', contactRow.id)
       } else if (dealInfo?.id) {
-        tasksQuery = tasksQuery.eq('deal_id', dealInfo.id)
+        baseQuery = baseQuery.eq('deal_id', dealInfo.id)
       }
       
-      const { data: tasks } = await tasksQuery
+      const { data: tasks } = await baseQuery as { data: TaskRow[] | null }
       if (tasks) {
         for (const task of tasks) {
           actionItems.push({
@@ -8487,7 +13340,7 @@ async function structureNextMeetingPrepResponse(
     if (ANTHROPIC_API_KEY) {
       try {
         // Build context for AI
-        const contextParts = []
+        const contextParts: string[] = []
         if (meeting.title) contextParts.push(`Meeting: ${meeting.title}`)
         if (companyName) contextParts.push(`Company: ${companyName}`)
         if (dealInfo) {

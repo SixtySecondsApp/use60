@@ -1,0 +1,214 @@
+{
+  "project": {
+    "name": "Dynamic Tables — Saved Views & Filters",
+    "description": "Add saved views with filter/sort/column visibility presets per table, system-generated default views, and column-level filtering UI. Transforms Dynamic Tables from ephemeral state into a persistent, view-driven data workspace.",
+    "createdAt": "2026-02-04T22:00:00Z",
+    "branch": "feat/dynamic-tables",
+    "parent_plan": ".sixty/plan-dynamic-tables.json"
+  },
+
+  "features": [
+    {
+      "id": "dt-views",
+      "name": "Saved Views & Column Filters",
+      "status": "done",
+      "priority": 1,
+      "description": "Per-table saved views storing filter expressions, sort state, and column visibility. System-generated defaults plus user-created custom views. Column-level filter UI in the table header."
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "VIEW-001",
+      "feature": "dt-views",
+      "title": "Database schema for saved views",
+      "type": "schema",
+      "status": "done",
+      "priority": 1,
+
+      "description": "Create dynamic_table_views table with: id, table_id (FK), created_by (FK to auth.users), name, is_default (boolean), is_system (boolean — prevents user deletion of system views), filter_config (JSONB — array of {column_key, operator, value} conditions), sort_config (JSONB — {key, dir}), column_config (JSONB — array of column keys in display order, only included columns), position (integer for view tab ordering), created_at, updated_at. Add RLS policies: users can CRUD their own views, read system views for tables in their org. Add updated_at trigger. Add unique constraint on (table_id, created_by, name) to prevent duplicate view names per user per table.",
+
+      "dependencies": { "stories": [], "files": [], "schema": ["dynamic_tables"] },
+      "blocks": ["VIEW-002", "VIEW-003", "VIEW-004", "VIEW-005", "VIEW-006"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "dynamic_table_views table created with all specified columns",
+        "filter_config JSONB stores array of {column_key, operator, value} objects",
+        "RLS: users can manage own views, read system views in their org's tables",
+        "updated_at auto-trigger on row changes",
+        "Unique constraint (table_id, created_by, name) prevents duplicate names"
+      ],
+
+      "files": [
+        "supabase/migrations/20260204220000_dynamic_table_views.sql"
+      ]
+    },
+    {
+      "id": "VIEW-002",
+      "feature": "dt-views",
+      "title": "View service methods in DynamicTableService",
+      "type": "frontend",
+      "status": "done",
+      "priority": 2,
+
+      "description": "Add view CRUD methods to DynamicTableService: getViews(tableId) — returns all views for a table (user's own + system views), ordered by position. createView(params) — creates a new view with filter/sort/column config. updateView(viewId, updates) — updates name, filters, sort, columns, position. deleteView(viewId) — deletes (non-system views only). Also add the FilterCondition and SavedView TypeScript interfaces to the service file.",
+
+      "dependencies": { "stories": ["VIEW-001"], "files": ["src/lib/services/dynamicTableService.ts"], "schema": ["dynamic_table_views"] },
+      "blocks": ["VIEW-004", "VIEW-005"],
+      "parallelWith": ["VIEW-003"],
+
+      "acceptance": [
+        "getViews(tableId) returns views sorted by position, includes both user and system views",
+        "createView accepts filter_config, sort_config, column_config",
+        "deleteView throws/rejects if view has is_system=true",
+        "FilterCondition type: { column_key: string; operator: FilterOperator; value: string }",
+        "SavedView type exported with all DB fields"
+      ],
+
+      "files": [
+        "src/lib/services/dynamicTableService.ts"
+      ]
+    },
+    {
+      "id": "VIEW-003",
+      "feature": "dt-views",
+      "title": "Client-side filter engine",
+      "type": "frontend",
+      "status": "done",
+      "priority": 3,
+
+      "description": "Create a filter utility module that applies filter conditions to rows client-side. Operators: 'equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 'ends_with', 'greater_than', 'less_than', 'is_empty', 'is_not_empty'. The applyFilters(rows, conditions, columns) function takes DynamicTableRow[], FilterCondition[], and column definitions, then returns filtered rows. Number comparisons should be numeric-aware. Date comparisons should parse dates. Empty checks handle null/undefined/empty string. Export from a new file src/lib/utils/dynamicTableFilters.ts.",
+
+      "dependencies": { "stories": ["VIEW-001"], "files": [], "schema": [] },
+      "blocks": ["VIEW-005"],
+      "parallelWith": ["VIEW-002"],
+
+      "acceptance": [
+        "applyFilters() correctly handles all 10 operators",
+        "Numeric columns compared numerically (not string compare)",
+        "Date columns parsed before comparison",
+        "'is_empty' matches null, undefined, and empty string",
+        "Multiple conditions ANDed together (all must match)"
+      ],
+
+      "files": [
+        "src/lib/utils/dynamicTableFilters.ts"
+      ]
+    },
+    {
+      "id": "VIEW-004",
+      "feature": "dt-views",
+      "title": "View selector tabs in detail page header",
+      "type": "frontend",
+      "status": "done",
+      "priority": 4,
+
+      "description": "Create a ViewSelector component rendered as horizontal tabs above the query bar in DynamicTableDetailPage. Shows tab for each saved view (system views first, then user views). Active view highlighted. A '+' button at the end opens the save view dialog. Each tab shows a dropdown on click with: Rename, Duplicate, Delete (not for system views). Wire into the detail page: add currentViewId state, fetch views via getViews(), apply selected view's filter/sort/column config to the page state. Add ?view=<id> URL param support so views can be deep-linked. The 'All' system view should be auto-created when a table has no views (via VIEW-006).",
+
+      "dependencies": { "stories": ["VIEW-002"], "files": ["src/pages/DynamicTableDetailPage.tsx"], "schema": [] },
+      "blocks": ["VIEW-006"],
+      "parallelWith": ["VIEW-005"],
+
+      "acceptance": [
+        "Horizontal tab bar showing all saved views for the table",
+        "Active view tab visually highlighted (underline or background)",
+        "Clicking a view tab applies its filter/sort/column config to the page",
+        "'+' button opens save view dialog to create new view from current state",
+        "URL updates to ?view=<id> when switching views"
+      ],
+
+      "files": [
+        "src/components/dynamic-tables/ViewSelector.tsx",
+        "src/pages/DynamicTableDetailPage.tsx"
+      ]
+    },
+    {
+      "id": "VIEW-005",
+      "feature": "dt-views",
+      "title": "Column filter UI and active filter bar",
+      "type": "frontend",
+      "status": "done",
+      "priority": 5,
+
+      "description": "Add a 'Filter' option to ColumnHeaderMenu that opens a popover for that column with operator dropdown and value input. The active filters are displayed as removable chips in a filter bar below the view tabs (or below the query bar). Each chip shows 'Column operator value' with an X to remove. A 'Clear all' button when any filters are active. When filters change, rows are filtered client-side using applyFilters() from VIEW-003. The current filter state is saveable as a view. Also add a filter icon button next to the query bar that shows/hides a full filter panel (all columns at once) for power users.",
+
+      "dependencies": { "stories": ["VIEW-003", "VIEW-004"], "files": ["src/components/dynamic-tables/ColumnHeaderMenu.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "ColumnHeaderMenu has 'Filter' option that opens filter popover with operator + value",
+        "Active filters shown as removable chips below view tabs",
+        "'Clear all' button removes all active filters",
+        "Rows filtered client-side in real-time as conditions are added/removed",
+        "Current filter state can be saved as a new view via '+' button"
+      ],
+
+      "files": [
+        "src/components/dynamic-tables/ColumnFilterPopover.tsx",
+        "src/components/dynamic-tables/ActiveFilterBar.tsx",
+        "src/components/dynamic-tables/ColumnHeaderMenu.tsx",
+        "src/pages/DynamicTableDetailPage.tsx"
+      ]
+    },
+    {
+      "id": "VIEW-006",
+      "feature": "dt-views",
+      "title": "System default views with smart detection",
+      "type": "frontend",
+      "status": "done",
+      "priority": 6,
+
+      "description": "When a table is loaded and has zero views, auto-create a system 'All' view (no filters, default sort, all columns visible). Additionally, detect column types to suggest smart views: if a date column exists, create a 'Recent' view (sorted by date descending); if a column named 'score', 'icp_score', or similar exists, create a 'Top Scored' view (sorted by score descending); if an email column exists, create 'Has Email' view (email is_not_empty filter). System views have is_system=true and cannot be deleted by users. This auto-creation runs once on first load — check if views exist before creating. The detection logic lives in a utility function generateSystemViews(columns) that returns view configs based on column analysis.",
+
+      "dependencies": { "stories": ["VIEW-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "'All' view auto-created for tables with no views (no filters, all columns)",
+        "'Recent' view created if table has a date-type column (sort desc by date)",
+        "'Top Scored' view created if table has score/number column with score-like name",
+        "'Has Email' view created if table has email-type column (is_not_empty filter)",
+        "System views have is_system=true, cannot be deleted, shown first in tab bar"
+      ],
+
+      "files": [
+        "src/lib/utils/systemViewGenerator.ts",
+        "src/pages/DynamicTableDetailPage.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 6,
+    "groups": [
+      {
+        "id": 1,
+        "name": "Schema foundation",
+        "stories": ["VIEW-001"],
+        "note": "Database table for saved views — everything else depends on this"
+      },
+      {
+        "id": 2,
+        "name": "Parallel: Service layer + Filter engine",
+        "stories": ["VIEW-002", "VIEW-003"],
+        "note": "VIEW-002 (service CRUD) and VIEW-003 (client-side filter logic) can be built in parallel"
+      },
+      {
+        "id": 3,
+        "name": "Parallel: View selector UI + Column filter UI",
+        "stories": ["VIEW-004", "VIEW-005"],
+        "note": "VIEW-004 (tabs + page wiring) and VIEW-005 (filter popover + chips) can be built in parallel once their dependencies are met. VIEW-005 depends on both VIEW-003 and VIEW-004."
+      },
+      {
+        "id": 4,
+        "name": "System default views",
+        "stories": ["VIEW-006"],
+        "note": "Auto-generates smart views based on column types. Depends on the view selector being in place."
+      }
+    ]
+  }
+}

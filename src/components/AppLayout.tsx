@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { ViewModeBanner } from '@/components/ViewModeBanner';
 import { ExternalViewBanner, ExternalViewBannerSpacer } from '@/components/ExternalViewBanner';
 import { ImpersonationBanner } from '@/components/ImpersonationBanner';
+import { IntegrationReconnectBanner, useHasIntegrationAlerts } from '@/components/IntegrationReconnectBanner';
 import { ExternalViewToggle } from '@/components/ExternalViewToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { HITLIndicator } from '@/components/HITLIndicator';
@@ -66,7 +67,7 @@ import { useTaskNotifications } from '@/lib/hooks/useTaskNotifications';
 import { SmartSearch } from '@/components/SmartSearch';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { useNavigate } from 'react-router-dom';
-import { AssistantOverlay } from '@/components/assistant/AssistantOverlay';
+import { CommandCenter } from '@/components/command-center';
 // MeetingUsageIndicator moved to MeetingsList page
 import {
   DropdownMenu,
@@ -81,13 +82,18 @@ import { useTrialStatus } from '@/lib/hooks/useSubscription';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
+import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
   const { signOut } = useAuth();
   const { activeOrgId, activeOrg } = useOrg();
   const trialStatus = useTrialStatus(activeOrgId);
+  const hasIntegrationAlerts = useHasIntegrationAlerts();
   const location = useLocation();
+
+  // Check if user has integration that needs reconnection (must be before isIntegrationBannerVisible)
+  const { needsReconnect: integrationNeedsReconnect } = useIntegrationReconnectNeeded();
 
   // Check if trial banner should be showing (same logic as TrialBanner component)
   const isTrialBannerVisible = useMemo(() => {
@@ -108,27 +114,34 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return trialStatus.isTrialing && !trialStatus.isLoading;
   }, [trialStatus.isTrialing, trialStatus.isLoading]);
 
+  // Check if integration reconnect banner should be showing
+  const isIntegrationBannerVisible = hasIntegrationAlerts || !!integrationNeedsReconnect;
+
   // AppLayout uses top padding to make room for the fixed top bars/banners.
   // Some pages (e.g. Copilot chat) need a reliable way to compute the remaining viewport height
   // without hard-coding "4rem" and accidentally creating extra scroll space.
   const topOffsetPx = useMemo(() => {
-    // Base top bar is 64px (pt-16). Impersonation adds 44px. Trial banner adds ~17px.
-    if (isTrialBannerVisible) {
-      return isImpersonating ? 132 : 115;
-    }
-    return isImpersonating ? 108 : 64;
-  }, [isTrialBannerVisible, isImpersonating]);
+    // Base top bar is 64px (pt-16). Impersonation adds 44px. Trial banner adds ~50px. Integration banner adds ~50px.
+    let offset = 64; // Base top bar
+    if (isImpersonating) offset += 44;
+    if (isTrialBannerVisible) offset += 50;
+    if (isIntegrationBannerVisible) offset += 50;
+    return offset;
+  }, [isTrialBannerVisible, isImpersonating, isIntegrationBannerVisible]);
 
-  const topPaddingClass = useMemo(() => {
-    return isTrialBannerVisible
-      ? (isImpersonating ? 'pt-[132px] lg:pt-[132px]' : 'pt-[115px] lg:pt-[115px]')
-      : (isImpersonating ? 'pt-[108px] lg:pt-[108px]' : 'pt-16 lg:pt-16');
-  }, [isTrialBannerVisible, isImpersonating]);
+  // Calculate the additional offset for IntegrationReconnectBanner (appears below TrialBanner)
+  const integrationBannerTopOffset = useMemo(() => {
+    // TrialBanner is at top-[65px] and is ~50px tall
+    return isTrialBannerVisible ? 50 : 0;
+  }, [isTrialBannerVisible]);
+
+  // Note: topOffsetPx is used for inline paddingTop style since dynamic Tailwind classes
+  // like pt-[${px}px] don't work at runtime (Tailwind JIT needs to see them at build time)
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, toggleMobileMenu] = useCycle(false, true);
   const [hasMounted, setHasMounted] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
-  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
   const [isMobileUserMenuOpen, setIsMobileUserMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -306,6 +319,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Trial Banner - shown when organization is in trial period */}
       <TrialBanner />
 
+      {/* Integration Reconnect Banner - shown when user has integration alerts or needs reconnection */}
+      <IntegrationReconnectBanner
+        additionalTopOffset={integrationBannerTopOffset}
+        hasTrialBannerAbove={isTrialBannerVisible}
+        hasImpersonationBannerAbove={isImpersonating}
+        isSidebarCollapsed={isCollapsed}
+      />
+
       {/* Main app content */}
       <div className="flex">
       
@@ -360,7 +381,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           type="button"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => setIsAssistantOpen(true)}
+          onClick={() => setIsCommandCenterOpen(true)}
           className="fixed bottom-6 right-6 p-4 rounded-full bg-[#37bd7e] hover:bg-[#2da76c] transition-colors shadow-lg shadow-[#37bd7e]/20 z-50"
         >
           <Plus className="w-6 h-6 text-white" />
@@ -1064,19 +1085,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {
             // Used by full-height pages to avoid double-counting the top padding.
             '--app-top-offset': `${topOffsetPx}px`,
+            // Dynamic padding for banners - inline style because dynamic Tailwind classes don't work at runtime
+            paddingTop: `${topOffsetPx}px`,
           } as React.CSSProperties
         }
         className={cn(
         isFullHeightPage && 'h-[100dvh] overflow-hidden',
-        'flex-1 transition-[margin] duration-300 ease-in-out',
+        'flex-1 transition-[margin] duration-300 ease-in-out min-h-screen',
+        'bg-[#F8FAFC] dark:bg-gray-950',
         isCollapsed ? 'lg:ml-[96px]' : 'lg:ml-[256px]',
-        'ml-0',
-        topPaddingClass
+        'ml-0'
       )}
       >
         {children}
         <QuickAdd isOpen={isQuickAddOpen} onClose={() => setIsQuickAddOpen(false)} />
-        <AssistantOverlay isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
+        <CommandCenter isOpen={isCommandCenterOpen} onClose={() => setIsCommandCenterOpen(false)} />
 
         {/* Password Setup Modal - shown for magic link users who haven't set a password */}
         <PasswordSetupModal

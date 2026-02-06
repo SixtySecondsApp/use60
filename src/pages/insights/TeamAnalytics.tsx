@@ -107,11 +107,9 @@ export default function TeamAnalytics() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             {/* Title Section */}
             <div className="flex items-center gap-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl blur-xl opacity-40 dark:opacity-30" />
-                <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 dark:shadow-blue-500/25">
-                  <Users className="w-7 h-7 text-white" />
-                </div>
+              {/* Glassmorphic icon */}
+              <div className="w-14 h-14 rounded-2xl bg-gray-800 border border-gray-700/50 flex items-center justify-center">
+                <Users className="w-7 h-7 text-blue-400" />
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold">

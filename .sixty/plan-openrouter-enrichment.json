@@ -1,0 +1,191 @@
+{
+  "project": {
+    "name": "OpenRouter AI Model Selection for Ops Enrichment",
+    "description": "Add AI model selection to ops table enrichment columns using OpenRouter, allowing users to browse and select from recommended models with pricing displayed",
+    "createdAt": "2026-02-05T10:00:00Z",
+    "completedAt": "2026-02-05T10:30:00Z",
+    "parentFeature": "ops-tables"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "ai": "openrouter"
+  },
+  "features": [
+    {
+      "id": "openrouter-models",
+      "name": "OpenRouter Model Browser",
+      "status": "complete",
+      "priority": 1,
+      "description": "Edge function to fetch and cache OpenRouter model catalog with recommended models highlighted"
+    },
+    {
+      "id": "model-picker-ui",
+      "name": "Model Picker UI Component",
+      "status": "complete",
+      "priority": 2,
+      "description": "React component for browsing and selecting AI models with pricing display"
+    },
+    {
+      "id": "enrichment-integration",
+      "name": "Enrichment Integration",
+      "status": "complete",
+      "priority": 3,
+      "description": "Update enrich-dynamic-table to route to OpenRouter with selected model"
+    }
+  ],
+  "stories": [
+    {
+      "id": "ORM-001",
+      "feature": "openrouter-models",
+      "title": "Create fetch-openrouter-models edge function",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-05T10:05:00Z",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["ORM-002", "ORM-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function fetches models from OpenRouter /api/v1/models endpoint",
+        "Response cached in memory for 1 hour to reduce API calls",
+        "Returns model id, name, pricing (prompt/completion per 1M tokens), context length",
+        "Includes 'recommended' flag for curated models (Claude 3.5, GPT-4o, Llama 3.1 70B, Mixtral)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 5,
+      "files": [
+        "supabase/functions/fetch-openrouter-models/index.ts"
+      ]
+    },
+    {
+      "id": "ORM-002",
+      "feature": "model-picker-ui",
+      "title": "Create OpenRouterModelPicker component",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-05T10:13:00Z",
+      "priority": 2,
+      "dependencies": { "stories": ["ORM-001"], "files": [], "schema": [] },
+      "blocks": ["ORM-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Component displays recommended models first with 'Recommended' badge",
+        "Each model shows: name, price per 1M tokens (input/output), context length",
+        "Expandable 'Browse all models' section with search/filter",
+        "Selected model highlighted with violet border",
+        "Loading and error states handled gracefully"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 8,
+      "files": [
+        "src/components/ops/OpenRouterModelPicker.tsx"
+      ]
+    },
+    {
+      "id": "ORM-003",
+      "feature": "model-picker-ui",
+      "title": "Integrate model picker into AddColumnModal",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-05T10:18:00Z",
+      "priority": 3,
+      "dependencies": { "stories": ["ORM-002"], "files": ["src/components/ops/AddColumnModal.tsx"], "schema": [] },
+      "blocks": ["ORM-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Model picker appears when enrichment column type selected",
+        "Selected model stored in enrichmentModel state",
+        "Model ID passed to onAdd callback in column config",
+        "Default to Claude 3.5 Sonnet if no selection made"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 5,
+      "files": [
+        "src/components/ops/AddColumnModal.tsx"
+      ]
+    },
+    {
+      "id": "ORM-004",
+      "feature": "enrichment-integration",
+      "title": "Add enrichment_model column to dynamic_table_columns",
+      "type": "schema",
+      "status": "complete",
+      "completedAt": "2026-02-05T10:21:00Z",
+      "priority": 4,
+      "dependencies": { "stories": ["ORM-003"], "files": [], "schema": ["dynamic_table_columns"] },
+      "blocks": ["ORM-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration adds enrichment_model TEXT column (nullable)",
+        "Column stores OpenRouter model ID (e.g., 'anthropic/claude-3.5-sonnet')",
+        "Existing enrichment columns default to NULL (will use fallback in edge function)"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 3,
+      "files": [
+        "supabase/migrations/20260205900000_enrichment_model_column.sql"
+      ]
+    },
+    {
+      "id": "ORM-005",
+      "feature": "enrichment-integration",
+      "title": "Update opsTableService to handle enrichment_model",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-05T10:26:00Z",
+      "priority": 5,
+      "dependencies": { "stories": ["ORM-004"], "files": ["src/lib/services/opsTableService.ts"], "schema": [] },
+      "blocks": ["ORM-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "OpsColumn type includes enrichment_model?: string",
+        "addColumn function accepts and persists enrichment_model",
+        "getColumns returns enrichment_model for enrichment columns"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 5,
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ]
+    },
+    {
+      "id": "ORM-006",
+      "feature": "enrichment-integration",
+      "title": "Update enrich-dynamic-table to use OpenRouter",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-05T10:36:00Z",
+      "priority": 6,
+      "dependencies": { "stories": ["ORM-005"], "files": ["supabase/functions/enrich-dynamic-table/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Reads enrichment_model from column config",
+        "If model specified, calls OpenRouter API instead of Anthropic",
+        "Falls back to Claude Sonnet 4 if no model specified (backwards compatible)",
+        "Handles OpenRouter-specific response format",
+        "Logs model used for each enrichment job"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 10,
+      "files": [
+        "supabase/functions/enrich-dynamic-table/index.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 6,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-05T10:36:00Z"
+  },
+  "environment": {
+    "requiredSecrets": [
+      "OPENROUTER_API_KEY"
+    ],
+    "notes": "Platform manages OpenRouter API key - users don't need to provide their own"
+  }
+}

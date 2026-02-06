@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Calendar,
@@ -36,6 +36,9 @@ import { SlackConfigModal } from '@/components/integrations/SlackConfigModal';
 import { JustCallConfigModal } from '@/components/integrations/JustCallConfigModal';
 import { HubSpotConfigModal } from '@/components/integrations/HubSpotConfigModal';
 import { NotetakerConfigModal } from '@/components/integrations/NotetakerConfigModal';
+import { FirefliesConfigModal } from '@/components/integrations/FirefliesConfigModal';
+import { ApolloConfigModal } from '@/components/integrations/ApolloConfigModal';
+import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 
 // Hooks and stores
 import { useGoogleIntegration } from '@/lib/stores/integrationStore';
@@ -45,6 +48,9 @@ import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
 import { useSavvyCalIntegration } from '@/lib/hooks/useSavvyCalIntegration';
 import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
 import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
+import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
+import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
+import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { getIntegrationDomain, getLogoS3Url, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { useUser } from '@/lib/hooks/useUser';
 import { IntegrationVoteState, useIntegrationUpvotes } from '@/lib/hooks/useIntegrationUpvotes';
@@ -421,6 +427,49 @@ const builtIntegrations: IntegrationConfig[] = [
     fallbackIcon: <img src={DEFAULT_SIXTY_ICON_URL} alt="60" className="w-6 h-6 rounded" />,
     isBuilt: true,
   },
+  {
+    id: 'fireflies',
+    name: 'Fireflies.ai',
+    description: 'AI meeting notes & transcription.',
+    permissions: [
+      { title: 'Access recordings', description: 'View and sync meeting recordings.' },
+      { title: 'Read transcripts', description: 'Access meeting transcripts and notes.' },
+      { title: 'View insights', description: 'Import AI-generated meeting insights.' },
+    ],
+    brandColor: 'yellow',
+    iconBgColor: 'bg-yellow-50 dark:bg-yellow-900/20',
+    iconBorderColor: 'border-yellow-100 dark:border-yellow-800/40',
+    fallbackIcon: <Video className="w-6 h-6 text-yellow-500" />,
+    isBuilt: true,
+  },
+  {
+    id: 'apollo',
+    name: 'Apollo.io',
+    description: 'Sales intelligence & lead search.',
+    permissions: [
+      { title: 'Search leads', description: 'Search Apollo database for prospects.' },
+      { title: 'Enrich contacts', description: 'Enrich contact data with Apollo intelligence.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    iconBorderColor: 'border-blue-100 dark:border-blue-800/40',
+    fallbackIcon: <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'instantly',
+    name: 'Instantly',
+    description: 'Cold email campaigns at scale.',
+    permissions: [
+      { title: 'Push leads', description: 'Add leads to Instantly campaigns.' },
+      { title: 'Create campaigns', description: 'Create new email campaigns.' },
+    ],
+    brandColor: 'gray',
+    iconBgColor: 'bg-gray-50 dark:bg-gray-800',
+    iconBorderColor: 'border-gray-200 dark:border-gray-700',
+    fallbackIcon: <Mail className="w-6 h-6 text-gray-600 dark:text-gray-400" />,
+    isBuilt: true,
+  },
 ];
 
 // =====================================================
@@ -435,7 +484,7 @@ const integrationCategories: IntegrationCategory[] = [
     tooltip: 'Syncs meeting transcripts and AI insights directly to contact records. Automatically links meetings to deals and creates follow-up tasks based on action items discussed.',
     icon: <Video className="w-5 h-5" />,
     integrations: [
-      { id: 'fireflies', name: 'Fireflies.ai', description: 'AI meeting notes & transcription.', fallbackIcon: <Video className="w-6 h-6 text-yellow-500" /> },
+      // Fireflies is now a built integration (moved to builtIntegrations array)
       { id: 'otter', name: 'Otter.ai', description: 'Real-time transcription.', fallbackIcon: <Video className="w-6 h-6 text-blue-500" /> },
       { id: 'granola', name: 'Granola', description: 'AI note-taking assistant.', fallbackIcon: <Video className="w-6 h-6 text-amber-600" /> },
       { id: 'gong', name: 'Gong', description: 'Revenue intelligence platform.', fallbackIcon: <Video className="w-6 h-6 text-purple-500" /> },
@@ -561,10 +610,8 @@ const suggestedIntegrations: IntegrationCategory[] = [
     icon: <Mail className="w-5 h-5" />,
     integrations: [
       { id: 'lemlist', name: 'Lemlist', description: 'Cold email outreach.', fallbackIcon: <Mail className="w-6 h-6 text-purple-500" /> },
-      { id: 'apollo', name: 'Apollo.io', description: 'Sales intelligence & outreach.', fallbackIcon: <Mail className="w-6 h-6 text-blue-600" /> },
       { id: 'outreach', name: 'Outreach', description: 'Sales engagement platform.', fallbackIcon: <Mail className="w-6 h-6 text-purple-600" /> },
       { id: 'salesloft', name: 'Salesloft', description: 'Revenue workflow platform.', fallbackIcon: <Mail className="w-6 h-6 text-blue-500" /> },
-      { id: 'instantly', name: 'Instantly', description: 'Cold email at scale.', fallbackIcon: <Mail className="w-6 h-6 text-gray-700 dark:text-gray-300" /> },
     ],
   },
   {
@@ -625,6 +672,7 @@ const suggestedIntegrations: IntegrationCategory[] = [
 // =====================================================
 
 export default function Integrations() {
+  const navigate = useNavigate();
   const hubspotEnabled = isHubSpotIntegrationEnabled();
   const [searchParams] = useSearchParams();
   useUser(); // ensures auth/user is initialized (needed for upvotes under Clerk)
@@ -671,6 +719,21 @@ export default function Integrations() {
     needsCalendar: notetakerNeedsCalendar,
     status: notetakerStatus,
   } = useNotetakerIntegration();
+
+  const {
+    isConnected: firefliesConnected,
+    loading: firefliesLoading,
+  } = useFirefliesIntegration();
+
+  const {
+    isConnected: apolloConnected,
+    loading: apolloLoading,
+  } = useApolloIntegration();
+
+  const {
+    isConnected: instantlyConnected,
+    loading: instantlyLoading,
+  } = useInstantlyIntegration();
 
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
@@ -745,6 +808,12 @@ export default function Integrations() {
         if (!notetakerOrgEnabled) return 'inactive';
         if (notetakerNeedsCalendar) return 'syncing'; // Shows "needs setup" state
         return notetakerConnected ? 'active' : 'inactive';
+      case 'fireflies':
+        return firefliesConnected ? 'active' : 'inactive';
+      case 'apollo':
+        return apolloConnected ? 'active' : 'inactive';
+      case 'instantly':
+        return instantlyConnected ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
@@ -757,11 +826,38 @@ export default function Integrations() {
     const status = getIntegrationStatus(integrationId);
 
     if (status === 'active' || status === 'syncing') {
+      // Meeting recorders navigate to dedicated settings pages when connected
+      if (integrationId === 'fathom') {
+        navigate('/settings/integrations/fathom');
+        return;
+      }
+      if (integrationId === 'fireflies') {
+        navigate('/settings/integrations/fireflies');
+        return;
+      }
+      if (integrationId === '60-notetaker') {
+        navigate('/meetings/recordings/settings');
+        return;
+      }
+      // Other integrations use config modals
       setActiveConfigModal(integrationId);
     } else {
       // JustCall is API-key based (no OAuth flow) so go straight to config.
       if (integrationId === 'justcall') {
         setActiveConfigModal('justcall');
+        return;
+      }
+      // Fireflies is API-key based - go straight to config modal for initial connection
+      if (integrationId === 'fireflies') {
+        setActiveConfigModal('fireflies');
+        return;
+      }
+      if (integrationId === 'apollo') {
+        setActiveConfigModal('apollo');
+        return;
+      }
+      if (integrationId === 'instantly') {
+        setActiveConfigModal('instantly');
         return;
       }
       // 60 Notetaker goes straight to config modal (handles its own enable flow)
@@ -838,8 +934,11 @@ export default function Integrations() {
       savvycal: savvycalLoading,
       hubspot: hubspotLoading,
       '60-notetaker': notetakerLoading,
+      fireflies: firefliesLoading,
+      apollo: apolloLoading,
+      instantly: instantlyLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, instantlyLoading]
   );
 
   // Preload cached S3 logo URLs on page load to prevent any visible swap/flicker.
@@ -1009,6 +1108,18 @@ export default function Integrations() {
       />
       <NotetakerConfigModal
         open={activeConfigModal === '60-notetaker'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <FirefliesConfigModal
+        open={activeConfigModal === 'fireflies'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <ApolloConfigModal
+        open={activeConfigModal === 'apollo'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <InstantlyConfigModal
+        open={activeConfigModal === 'instantly'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>

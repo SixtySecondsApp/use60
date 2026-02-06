@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,8 @@ import {
   Share2,
   AlertCircle,
   ExternalLink,
-  ClipboardList
+  ClipboardList,
+  RefreshCw
 } from 'lucide-react'
 import type { RecordingStatus, MeetingPlatform } from '@/lib/types/meetingBaaS'
 
@@ -86,12 +87,72 @@ export const RecordingDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [isDownloading, setIsDownloading] = useState(false)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [videoLoading, setVideoLoading] = useState(false)
+  const [videoError, setVideoError] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Fetch recording data
   const { data: recording, isLoading, error } = useRecording(id || '')
 
   // Subscribe to real-time updates
   useRecordingRealtime(id || '')
+
+  // Fetch fresh signed URL for video playback when recording is ready
+  useEffect(() => {
+    const fetchVideoUrl = async () => {
+      if (!id || !recording?.recording_s3_key) return
+      if (recording.status !== 'ready') return
+
+      setVideoLoading(true)
+      setVideoError(null)
+
+      try {
+        const result = await recordingService.getRecordingUrl(id)
+        if (result.success && result.url) {
+          setVideoUrl(result.url)
+        } else {
+          setVideoError(result.error || 'Failed to load video')
+        }
+      } catch (err) {
+        setVideoError('Failed to load video')
+      } finally {
+        setVideoLoading(false)
+      }
+    }
+
+    fetchVideoUrl()
+  }, [id, recording?.recording_s3_key, recording?.status])
+
+  // Function to refresh video URL (in case it expires during viewing)
+  const refreshVideoUrl = async () => {
+    if (!id) return
+    setVideoLoading(true)
+    setVideoError(null)
+
+    try {
+      const result = await recordingService.getRecordingUrl(id)
+      if (result.success && result.url) {
+        setVideoUrl(result.url)
+        // If video element exists, update its src and reload
+        if (videoRef.current) {
+          const currentTime = videoRef.current.currentTime
+          videoRef.current.src = result.url
+          videoRef.current.load()
+          videoRef.current.currentTime = currentTime
+        }
+        toast.success('Video refreshed')
+      } else {
+        setVideoError(result.error || 'Failed to refresh video')
+        toast.error(result.error || 'Failed to refresh video')
+      }
+    } catch (err) {
+      setVideoError('Failed to refresh video')
+      toast.error('Failed to refresh video')
+    } finally {
+      setVideoLoading(false)
+    }
+  }
 
   // Handle download - fetches fresh signed URL and triggers download
   const handleDownload = async () => {
@@ -295,6 +356,78 @@ export const RecordingDetail: React.FC = () => {
           </div>
         </div>
       </motion.div>
+
+      {/* Video Player */}
+      {recording.recording_s3_key && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-gray-700/30 overflow-hidden"
+        >
+          <div className="p-4 border-b border-gray-200/50 dark:border-gray-700/30 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Video className="h-5 w-5 text-emerald-500" />
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Recording</h3>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={refreshVideoUrl}
+              disabled={videoLoading}
+              className="gap-2"
+            >
+              <RefreshCw className={cn("h-4 w-4", videoLoading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
+
+          <div className="aspect-video bg-black relative">
+            {videoLoading ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <Loader2 className="h-12 w-12 text-emerald-500 animate-spin mx-auto mb-3" />
+                  <p className="text-gray-400 text-sm">Loading video...</p>
+                </div>
+              </div>
+            ) : videoError ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-3" />
+                  <p className="text-gray-400 text-sm mb-3">{videoError}</p>
+                  <Button variant="outline" size="sm" onClick={refreshVideoUrl}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            ) : videoUrl ? (
+              <video
+                ref={videoRef}
+                src={videoUrl}
+                controls
+                className="w-full h-full"
+                poster={recording.thumbnail_url || undefined}
+                onError={() => {
+                  setVideoError('Video playback failed. The URL may have expired.')
+                }}
+              >
+                Your browser does not support the video tag.
+              </video>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <Video className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-400 text-sm">
+                    {recording.status === 'processing'
+                      ? 'Video is being processed...'
+                      : 'Video not available'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* Content Tabs */}
       <motion.div

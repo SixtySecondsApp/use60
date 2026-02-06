@@ -374,12 +374,9 @@ export default function MeetingIntelligence() {
           className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8"
         >
           <div className="flex items-center gap-4">
-            {/* Custom icon - not generic AI sparkles */}
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl blur-xl opacity-30" />
-              <div className="relative p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30">
-                <Search className="h-7 w-7 text-white" />
-              </div>
+            {/* Glassmorphic icon */}
+            <div className="w-14 h-14 rounded-2xl bg-gray-800 border border-gray-700/50 flex items-center justify-center">
+              <Search className="h-7 w-7 text-emerald-400" />
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold">

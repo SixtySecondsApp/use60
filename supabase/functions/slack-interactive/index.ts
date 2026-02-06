@@ -6291,6 +6291,50 @@ serve(async (req) => {
           }
         }
 
+        // =====================================================================
+        // PROACTIVE-005: Route proactive/copilot actions to slack-copilot-actions
+        // =====================================================================
+        const proactiveActionPrefixes = [
+          'open_dashboard', 'open_copilot',
+          'run_sequence_', 'confirm_', 'dismiss_',
+          'get_more_info', 'view_brief', 'draft_email_',
+          'proactive_', 'copilot_',
+        ];
+        const isProactiveAction = proactiveActionPrefixes.some(
+          prefix => action.action_id === prefix || action.action_id.startsWith(prefix)
+        );
+
+        if (isProactiveAction) {
+          console.log('[Proactive] Forwarding action to slack-copilot-actions:', action.action_id);
+          try {
+            // Forward to slack-copilot-actions function
+            const response = await supabase.functions.invoke('slack-copilot-actions', {
+              body: {
+                type: 'block_actions',
+                user: payload.user,
+                team: payload.team,
+                channel: payload.channel,
+                message: payload.message,
+                actions: [action],
+                trigger_id: payload.trigger_id,
+                response_url: payload.response_url,
+              },
+            });
+
+            if (response.error) {
+              console.error('[Proactive] Forward error:', response.error);
+            }
+
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } catch (err) {
+            console.error('[Proactive] Forward failed:', err);
+            // Fall through to handle as unknown action if forward fails
+          }
+        }
+
         // Route to appropriate handler based on action_id
         if (action.action_id.startsWith('add_task_')) {
           return handleAddTask(supabase, payload, action);

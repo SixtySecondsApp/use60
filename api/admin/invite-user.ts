@@ -201,7 +201,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       }),
     });
 
-    const createdJson = await createUserResp.json().catch(() => null);
+    const createdJson = await createUserResp.json().catch(() => null) as { id?: string } | null;
     if (!createUserResp.ok) {
       // Track failed attempt
       await fetch(`${supabaseUrl}/rest/v1/invite_attempts`, {
@@ -223,7 +223,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Failed to create user', details: createdJson });
     }
 
-    const newUserId = createdJson?.id as string | undefined;
+    const newUserId = createdJson?.id;
     if (!newUserId) {
       // Track failed attempt
       await fetch(`${supabaseUrl}/rest/v1/invite_attempts`, {
@@ -311,9 +311,9 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       }),
     });
 
-    const linkJson = await linkResp.json().catch(() => null);
+    const linkJson = await linkResp.json().catch(() => null) as { action_link?: string } | null;
     // Supabase returns action_link at the top level, not under properties
-    const actionLink = linkJson?.action_link as string | undefined;
+    const actionLink = linkJson?.action_link;
     if (!linkResp.ok || !actionLink) {
       console.error('[invite-user] Failed to generate link:', {
         status: linkResp.status,

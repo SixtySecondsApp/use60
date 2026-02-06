@@ -61,6 +61,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyPress}
             disabled={disabled}
+            data-testid="copilot-input"
             className={cn(
               'w-full px-5 py-4 bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl',
               'text-base text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500',

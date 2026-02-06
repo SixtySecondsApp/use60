@@ -14,6 +14,7 @@ interface DealDetailsViewProps {
   dealId: string;
   onClose?: () => void;
   onEmailGenerated?: (email: { subject: string; body: string }) => void;
+  onActionClick?: (action: any) => void;
 }
 
 interface DealDetails {
@@ -70,7 +71,8 @@ const formatDate = (dateString: string): string => {
 export const DealDetailsView: React.FC<DealDetailsViewProps> = ({
   dealId,
   onClose,
-  onEmailGenerated
+  onEmailGenerated,
+  onActionClick
 }) => {
   const [deal, setDeal] = useState<DealDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -399,7 +401,11 @@ export const DealDetailsView: React.FC<DealDetailsViewProps> = ({
                   subject: emailDraft.subject || '',
                   body: emailDraft.body || ''
                 });
-                window.location.href = `/crm/email?${params.toString()}`;
+                const emailUrl = `/crm/email?${params.toString()}`;
+                if (onActionClick) {
+                  return onActionClick({ action: 'navigate', data: { path: emailUrl } });
+                }
+                window.location.href = emailUrl;
               }}
               className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
             >

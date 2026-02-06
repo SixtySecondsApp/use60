@@ -1,0 +1,170 @@
+{
+  "project": {
+    "name": "Token Refresh Reliability & User Notifications",
+    "description": "Fix Google OAuth token refresh reliability and notify users when reconnection is needed",
+    "createdAt": "2026-01-25T12:45:00Z",
+    "previousPhase": "copilot-excellence-phase2"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind"
+  },
+  "features": [
+    {
+      "id": "token-refresh",
+      "name": "Token Refresh Reliability",
+      "status": "pending",
+      "priority": 1,
+      "description": "Improve cron frequency, expand refresh window, detect expired tokens"
+    },
+    {
+      "id": "user-notifications",
+      "name": "User Notifications",
+      "status": "pending",
+      "priority": 2,
+      "description": "Slack DM and in-app banner when token needs reconnection"
+    }
+  ],
+  "stories": [
+    {
+      "id": "TOK-001",
+      "feature": "token-refresh",
+      "title": "Increase cron frequency from 4h to 1h",
+      "type": "config",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["TOK-002", "TOK-003"],
+      "acceptance": [
+        "vercel.json cron schedule changed from '30 */4 * * *' to '0 * * * *'",
+        "Cron runs every hour on the hour"
+      ],
+      "estimatedMinutes": 5,
+      "files": ["vercel.json"]
+    },
+    {
+      "id": "TOK-002",
+      "feature": "token-refresh",
+      "title": "Expand refresh window from 15min to 60min",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["TOK-001", "TOK-003"],
+      "acceptance": [
+        "REFRESH_WINDOW_MS changed from 15*60*1000 to 60*60*1000",
+        "Tokens expiring within 60 minutes get refreshed"
+      ],
+      "estimatedMinutes": 5,
+      "files": ["supabase/functions/google-token-refresh/index.ts"]
+    },
+    {
+      "id": "TOK-003",
+      "feature": "token-refresh",
+      "title": "Detect and refresh already-expired tokens",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["NOT-002"],
+      "parallelWith": ["TOK-001", "TOK-002"],
+      "acceptance": [
+        "Check if expiresAtDate < now before checking refresh window",
+        "Expired tokens trigger immediate refresh attempt",
+        "Log message indicates 'Token EXPIRED' for visibility"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["supabase/functions/google-token-refresh/index.ts"]
+    },
+    {
+      "id": "NOT-001",
+      "feature": "user-notifications",
+      "title": "Add user_id column to integration_alerts for per-user alerts",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": ["integration_alerts"] },
+      "blocks": ["NOT-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration adds user_id column to integration_alerts table",
+        "Index created on user_id for efficient queries",
+        "Foreign key references auth.users(id)",
+        "RLS policy allows users to read their own alerts"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["supabase/migrations/20260125000001_add_user_id_to_integration_alerts.sql"]
+    },
+    {
+      "id": "NOT-002",
+      "feature": "user-notifications",
+      "title": "Implement sendReconnectionNotification helper in token refresh",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["NOT-001", "TOK-003"], "files": [], "schema": [] },
+      "blocks": ["NOT-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "sendReconnectionNotification function created",
+        "Creates integration_alert record with user_id",
+        "Sends Slack DM using proactive deliverySlack infrastructure",
+        "Slack message includes reconnect button with deep link",
+        "Function called when token refresh fails permanently"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/google-token-refresh/index.ts"
+      ]
+    },
+    {
+      "id": "NOT-003",
+      "feature": "user-notifications",
+      "title": "Create IntegrationReconnectBanner component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["NOT-001"], "files": [], "schema": [] },
+      "blocks": ["NOT-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Component queries google_integrations for revoked/expired status",
+        "Shows amber warning banner when reconnection needed",
+        "Links to /settings/integrations/google-workspace",
+        "Uses staleTime of 5 minutes to avoid excessive queries",
+        "Dismisses automatically when integration is healthy"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["src/components/integrations/IntegrationReconnectBanner.tsx"]
+    },
+    {
+      "id": "NOT-004",
+      "feature": "user-notifications",
+      "title": "Add IntegrationReconnectBanner to AppLayout",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["NOT-003"], "files": ["src/components/AppLayout.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Banner imported in AppLayout.tsx",
+        "Banner renders after TrialBanner (same position pattern)",
+        "Top offset calculation updated to account for new banner",
+        "Banner only shows for authenticated users with integrations"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["src/components/AppLayout.tsx"]
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "currentFeature": "token-refresh",
+    "lastUpdated": "2026-01-25T12:45:00Z"
+  }
+}

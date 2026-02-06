@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, 
-  Users, 
-  Mail, 
-  Phone, 
-  Building2, 
-  Plus, 
+import {
+  Search,
+  Users,
+  Mail,
+  Phone,
+  Building2,
+  Plus,
   X,
   CheckCircle,
-  UserPlus
+  UserPlus,
+  ArrowLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useContacts } from '@/lib/hooks/useContacts';
@@ -36,25 +37,62 @@ interface NewContactForm {
   job_title: string;
 }
 
-export function ContactSearchModal({ 
-  isOpen, 
-  onClose, 
-  onContactSelect, 
+// Animation variants matching Command Center spring physics
+const overlayVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, transition: { duration: 0.15 } },
+};
+
+const panelVariants = {
+  hidden: { opacity: 0, scale: 0.95, y: 20 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { type: 'spring', stiffness: 300, damping: 30 },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.95,
+    y: 20,
+    transition: { duration: 0.2 },
+  },
+};
+
+const createFormVariants = {
+  hidden: { opacity: 0, x: 20 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { type: 'spring', stiffness: 350, damping: 30 },
+  },
+  exit: {
+    opacity: 0,
+    x: 20,
+    transition: { duration: 0.15 },
+  },
+};
+
+export function ContactSearchModal({
+  isOpen,
+  onClose,
+  onContactSelect,
   prefilledEmail = '',
   prefilledName = ''
 }: ContactSearchModalProps) {
   const { userData } = useUser();
   const { contacts, isLoading, searchContacts, createContact, findContactByEmail, fetchContacts } = useContacts();
   const { createCompany, companies } = useCompanies();
-  
-  
+
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [allContacts, setAllContacts] = useState<any[]>([]);
-  
+
   const [newContactForm, setNewContactForm] = useState<NewContactForm>({
     first_name: '',
     last_name: '',
@@ -74,39 +112,39 @@ export function ContactSearchModal({
   // Extract website from email domain
   const extractWebsiteFromEmail = (email: string): string => {
     if (!email || !email.includes('@')) return '';
-    
+
     const domain = email.split('@')[1]?.toLowerCase();
     if (!domain) return '';
-    
+
     // Don't pre-populate for personal email domains
     if (personalEmailDomains.includes(domain)) return '';
-    
+
     return `www.${domain}`;
   };
 
   // Extract first and last name from email username
   const extractNamesFromEmail = (email: string): { firstName: string; lastName: string } => {
     if (!email || !email.includes('@')) return { firstName: '', lastName: '' };
-    
+
     const username = email.split('@')[0];
     if (!username) return { firstName: '', lastName: '' };
-    
+
     // Helper function to capitalize first letter
     const capitalize = (str: string): string => {
       return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
     };
-    
+
     // Remove common prefixes and suffixes
     const cleanedUsername = username
       .replace(/^(mr|mrs|ms|dr|prof)\.?/i, '') // Remove titles
       .replace(/\d+$/, '') // Remove trailing numbers
       .replace(/[_-]+$/, ''); // Remove trailing separators
-    
+
     // Pattern 1: first.last or first_last
     if (cleanedUsername.includes('.') || cleanedUsername.includes('_')) {
       const separator = cleanedUsername.includes('.') ? '.' : '_';
       const parts = cleanedUsername.split(separator);
-      
+
       if (parts.length >= 2 && parts[0].length > 0 && parts[1].length > 0) {
         return {
           firstName: capitalize(parts[0]),
@@ -114,7 +152,7 @@ export function ContactSearchModal({
         };
       }
     }
-    
+
     // Pattern 2: firstName + LastName (camelCase)
     const camelCaseMatch = cleanedUsername.match(/^([a-z]+)([A-Z][a-z]+)$/);
     if (camelCaseMatch) {
@@ -123,7 +161,7 @@ export function ContactSearchModal({
         lastName: capitalize(camelCaseMatch[2])
       };
     }
-    
+
     // Pattern 3: firstlast (all lowercase, try to split common names)
     // Only do this for longer usernames to avoid false positives
     if (cleanedUsername.length > 6 && /^[a-z]+$/.test(cleanedUsername)) {
@@ -133,7 +171,7 @@ export function ContactSearchModal({
         'james', 'emma', 'robert', 'lisa', 'william', 'jessica', 'thomas', 'ashley', 'daniel',
         'emily', 'matthew', 'amanda', 'mark', 'melissa', 'paul', 'jennifer', 'kevin', 'nicole'
       ];
-      
+
       for (const firstName of commonFirstNames) {
         if (cleanedUsername.startsWith(firstName) && cleanedUsername.length > firstName.length) {
           const remainingPart = cleanedUsername.slice(firstName.length);
@@ -146,7 +184,7 @@ export function ContactSearchModal({
         }
       }
     }
-    
+
     // Pattern 4: Just use the whole username as first name if it's reasonable length
     if (cleanedUsername.length >= 2 && cleanedUsername.length <= 15 && /^[a-zA-Z]+$/.test(cleanedUsername)) {
       return {
@@ -154,7 +192,7 @@ export function ContactSearchModal({
         lastName: ''
       };
     }
-    
+
     return { firstName: '', lastName: '' };
   };
 
@@ -164,7 +202,7 @@ export function ContactSearchModal({
       const nameParts = prefilledName.trim().split(' ');
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ');
-      
+
       setNewContactForm(prev => ({
         ...prev,
         first_name: firstName,
@@ -181,11 +219,11 @@ export function ContactSearchModal({
       setShowCreateForm(false);
       const suggestedWebsite = prefilledEmail ? extractWebsiteFromEmail(prefilledEmail) : '';
       const extractedNames = prefilledEmail ? extractNamesFromEmail(prefilledEmail) : { firstName: '', lastName: '' };
-      
+
       // Use prefilled name if available, otherwise use extracted names from email
       const firstName = prefilledName ? prefilledName.split(' ')[0] || '' : extractedNames.firstName;
       const lastName = prefilledName ? prefilledName.split(' ').slice(1).join(' ') : extractedNames.lastName;
-      
+
       setNewContactForm({
         first_name: firstName,
         last_name: lastName,
@@ -194,10 +232,10 @@ export function ContactSearchModal({
         company_website: suggestedWebsite,
         job_title: ''
       });
-      
+
       // Fetch all contacts when modal opens
       fetchAllContacts();
-      
+
       // Auto-search if we have a prefilled email
       if (prefilledEmail) {
         handleSearch(prefilledEmail);
@@ -205,11 +243,11 @@ export function ContactSearchModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, prefilledEmail, prefilledName]); // Intentionally limited dependencies to prevent re-renders
-  
+
   // Fetch all contacts for initial display
   const fetchAllContacts = async () => {
     if (!isOpen) return;
-    
+
     // If we already have contacts from the hook, use them
     if (contacts && contacts.length > 0) {
       setAllContacts(contacts);
@@ -218,7 +256,7 @@ export function ContactSearchModal({
       }
       return;
     }
-    
+
     setIsSearching(true);
     try {
       // Fetch contacts without search term to get all
@@ -280,13 +318,13 @@ export function ContactSearchModal({
     try {
       // Extract domain from website
       const domain = website.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
-      
+
       // Extract company name from domain (remove .com, .co.uk, etc.)
       const domainParts = domain.split('.');
       const companyName = domainParts[0].charAt(0).toUpperCase() + domainParts[0].slice(1);
 
       // Check if company already exists with this domain
-      const existingCompany = companies?.find(company => 
+      const existingCompany = companies?.find(company =>
         company.domain?.toLowerCase() === domain.toLowerCase() ||
         company.website?.toLowerCase().includes(domain.toLowerCase())
       );
@@ -345,13 +383,13 @@ export function ContactSearchModal({
       };
 
       const newContact = await createContact(contactData);
-      
+
       if (newContact) {
-        const successMessage = company 
+        const successMessage = company
           ? `Contact and company "${company.name}" created successfully!`
           : 'Contact created successfully!';
         toast.success(successMessage);
-        
+
         // Trigger background enrichment
         const fullName = `${contactData.first_name} ${contactData.last_name || ''}`.trim();
         LinkedInEnrichmentService.enrichContactProfile(
@@ -362,7 +400,7 @@ export function ContactSearchModal({
         ).then(success => {
           if (success) toast.success('Contact profile enriched with LinkedIn data');
         });
-        
+
         // Attach the website and company information to the contact object
         const enrichedContact = {
           ...newContact,
@@ -391,212 +429,110 @@ export function ContactSearchModal({
     return allContacts?.length > 0 ? allContacts : searchResults;
   }, [searchQuery, searchResults, allContacts]);
 
+  const inputClass = 'w-full px-3 py-2.5 bg-gray-800/60 border border-gray-700/40 rounded-xl text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500/50 transition-all';
+
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+          variants={overlayVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4"
           onClick={onClose}
         >
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            className="theme-bg-card backdrop-blur-xl theme-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-lg"
+            variants={panelVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl max-h-[80dvh] overflow-hidden shadow-2xl shadow-black/50"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b theme-border">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800/50 bg-gray-900/50 backdrop-blur-sm">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-violet-500/10 rounded-lg">
-                  <Users className="w-5 h-5 text-violet-400" />
-                </div>
+                {showCreateForm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateForm(false)}
+                    className="p-1.5 -ml-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 rounded-lg transition-all"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                ) : (
+                  <div className="w-9 h-9 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-violet-400" />
+                  </div>
+                )}
                 <div>
-                  <h3 className="text-xl font-semibold theme-text-primary">Select Contact</h3>
-                  <p className="text-sm theme-text-tertiary">Search for existing contacts or create a new one</p>
+                  <h2 className="text-base font-semibold text-gray-100">
+                    {showCreateForm ? 'Create Contact' : 'Select Contact'}
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    {showCreateForm ? 'Fill in the details below' : 'Search or create a new contact'}
+                  </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onClose}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
+                className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-colors"
               >
-                <X className="w-5 h-5 theme-text-tertiary" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex h-[600px]">
-              {/* Search Panel */}
-              <div className="flex-1 flex flex-col border-r theme-border">
-                {/* Search Input */}
-                <div className="p-4 border-b theme-border">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 theme-text-tertiary" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by name, email, or company..."
-                      className="w-full pl-10 pr-10 py-3 theme-bg-elevated theme-border rounded-xl theme-text-primary placeholder:theme-text-tertiary focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
-                    />
-                    {isSearching && searchQuery && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <div className="w-4 h-4 border-2 border-gray-600 border-t-violet-500 rounded-full animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Search Results */}
-                <div className="flex-1 overflow-y-auto theme-bg-primary">
-                  {isSearching ? (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="flex items-center gap-3 theme-text-tertiary">
-                        <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-600 border-t-violet-500 rounded-full animate-spin" />
-                        Searching contacts...
-                      </div>
-                    </div>
-                  ) : filteredResults.length > 0 ? (
-                    <div className="p-2 space-y-1">
-                      {filteredResults.map((contact) => (
-                        <motion.button
-                          key={contact.id}
-                          whileHover={{ scale: 1.01 }}
-                          onClick={() => handleContactSelect(contact)}
-                          className="w-full p-4 text-left rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800/50"
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 bg-violet-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                              <Users className="w-4 h-4 text-violet-400" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium theme-text-primary truncate">
-                                {contact.full_name ||
-                                 `${contact.first_name || ''} ${contact.last_name || ''}`.trim() ||
-                                 contact.email ||
-                                 'Unknown Contact'}
-                              </h4>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Mail className="w-3 h-3 theme-text-tertiary" />
-                                <span className="text-sm theme-text-tertiary truncate">{contact.email}</span>
-                              </div>
-                              {(contact.company || contact.company_name || contact.companies?.name || contact.companies) && (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Building2 className="w-3 h-3 theme-text-tertiary" />
-                                  <span className="text-sm theme-text-tertiary truncate">
-                                    {typeof contact.company === 'string'
-                                      ? contact.company
-                                      : contact.company?.name ||
-                                        contact.company_name ||
-                                        contact.companies?.name ||
-                                        (typeof contact.companies === 'object' ? contact.companies?.name : contact.companies)}
-                                  </span>
-                                </div>
-                              )}
-                              {contact.phone && (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Phone className="w-3 h-3 theme-text-tertiary" />
-                                  <span className="text-sm theme-text-tertiary">{contact.phone}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </motion.button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-                      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800/50 rounded-full flex items-center justify-center mb-4">
-                        <Users className="w-6 h-6 theme-text-tertiary" />
-                      </div>
-                      <h4 className="font-medium theme-text-primary mb-2">
-                        {searchQuery ? 'No contacts found' : 'No contacts yet'}
-                      </h4>
-                      <p className="theme-text-tertiary text-sm mb-4">
-                        {searchQuery
-                          ? `No contacts match "${searchQuery}". Try a different search or create a new contact.`
-                          : 'Create your first contact to get started'
-                        }
-                      </p>
-                      <button
-                        onClick={() => setShowCreateForm(true)}
-                        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors flex items-center gap-2"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        Create New Contact
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Create New Button */}
-                {filteredResults.length > 0 && (
-                  <div className="p-4 border-t theme-border">
-                    <button
-                      onClick={() => setShowCreateForm(true)}
-                      className="w-full px-4 py-3 bg-violet-600/10 border border-violet-500/20 text-violet-400 rounded-xl hover:bg-violet-600/20 hover:border-violet-500/30 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Create New Contact
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Create Form Panel */}
-              <AnimatePresence>
-                {showCreateForm && (
-                  <motion.div
-                    initial={{ width: 0, opacity: 0 }}
-                    animate={{ width: '50%', opacity: 1 }}
-                    exit={{ width: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="flex flex-col border-l theme-border overflow-hidden theme-bg-secondary"
-                  >
-                    <div className="flex items-center justify-between p-4 border-b theme-border">
-                      <h4 className="font-semibold theme-text-primary flex items-center gap-2">
-                        <UserPlus className="w-4 h-4 text-violet-400" />
-                        Create New Contact
-                      </h4>
-                      <button
-                        onClick={() => setShowCreateForm(false)}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded transition-colors"
-                      >
-                        <X className="w-4 h-4 theme-text-tertiary" />
-                      </button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-4">
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
+            {/* Content */}
+            <AnimatePresence mode="wait">
+              {showCreateForm ? (
+                /* ─── Create Form ─── */
+                <motion.div
+                  key="create-form"
+                  variants={createFormVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="flex flex-col"
+                >
+                  <div className="overflow-y-auto p-5 max-h-[calc(80dvh-8rem)]">
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-400 mb-1.5">First Name *</label>
                           <input
                             type="text"
-                            placeholder="First Name *"
+                            placeholder="John"
                             value={newContactForm.first_name}
                             onChange={(e) => setNewContactForm(prev => ({
                               ...prev,
                               first_name: e.target.value
                             }))}
-                            className="w-full px-3 py-2.5 theme-bg-elevated theme-border rounded-lg theme-text-primary placeholder:theme-text-tertiary focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 text-sm"
+                            className={inputClass}
                             required
                           />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-400 mb-1.5">Last Name</label>
                           <input
                             type="text"
-                            placeholder="Last Name"
+                            placeholder="Smith"
                             value={newContactForm.last_name}
                             onChange={(e) => setNewContactForm(prev => ({
                               ...prev,
                               last_name: e.target.value
                             }))}
-                            className="w-full px-3 py-2.5 theme-bg-elevated theme-border rounded-lg theme-text-primary placeholder:theme-text-tertiary focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 text-sm"
+                            className={inputClass}
                           />
                         </div>
+                      </div>
 
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Email *</label>
                         <input
                           type="email"
-                          placeholder="Email Address *"
+                          placeholder="john@company.com"
                           value={newContactForm.email}
                           onChange={(e) => {
                             const newEmail = e.target.value;
@@ -606,11 +542,9 @@ export function ContactSearchModal({
                             setNewContactForm(prev => ({
                               ...prev,
                               email: newEmail,
-                              // Only update website if it's currently empty or was auto-populated
                               company_website: (!prev.company_website || prev.company_website.startsWith('www.'))
                                 ? suggestedWebsite
                                 : prev.company_website,
-                              // Only update names if they're currently empty (don't overwrite user input)
                               first_name: (!prev.first_name && extractedNames.firstName)
                                 ? extractedNames.firstName
                                 : prev.first_name,
@@ -619,24 +553,30 @@ export function ContactSearchModal({
                                 : prev.last_name
                             }));
                           }}
-                          className="w-full px-3 py-2.5 theme-bg-elevated theme-border rounded-lg theme-text-primary placeholder:theme-text-tertiary focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 text-sm"
+                          className={inputClass}
                           required
                         />
+                      </div>
 
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Phone</label>
                         <input
                           type="tel"
-                          placeholder="Phone Number"
+                          placeholder="+44 7911 123456"
                           value={newContactForm.phone}
                           onChange={(e) => setNewContactForm(prev => ({
                             ...prev,
                             phone: e.target.value
                           }))}
-                          className="w-full px-3 py-2.5 theme-bg-elevated theme-border rounded-lg theme-text-primary placeholder:theme-text-tertiary focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 text-sm"
+                          className={inputClass}
                         />
+                      </div>
 
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Company Website</label>
                         <input
                           type="text"
-                          placeholder="Company Website (e.g., www.company.com)"
+                          placeholder="www.company.com"
                           value={newContactForm.company_website}
                           onChange={(e) => {
                             let website = e.target.value.trim();
@@ -654,42 +594,178 @@ export function ContactSearchModal({
                               company_website: website
                             }));
                           }}
-                          className="w-full px-3 py-2.5 theme-bg-elevated theme-border rounded-lg theme-text-primary placeholder:theme-text-tertiary focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 text-sm"
+                          className={inputClass}
                         />
+                      </div>
 
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Job Title</label>
                         <input
                           type="text"
-                          placeholder="Job Title"
+                          placeholder="Sales Director"
                           value={newContactForm.job_title}
                           onChange={(e) => setNewContactForm(prev => ({
                             ...prev,
                             job_title: e.target.value
                           }))}
-                          className="w-full px-3 py-2.5 theme-bg-elevated theme-border rounded-lg theme-text-primary placeholder:theme-text-tertiary focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 text-sm"
+                          className={inputClass}
                         />
                       </div>
                     </div>
+                  </div>
 
-                    <div className="p-4 border-t theme-border">
+                  {/* Create button */}
+                  <div className="px-5 py-4 border-t border-gray-800/50">
+                    <button
+                      type="button"
+                      onClick={handleCreateContact}
+                      disabled={!newContactForm.email || !newContactForm.first_name || isCreating}
+                      className={cn(
+                        'w-full px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all',
+                        newContactForm.email && newContactForm.first_name && !isCreating
+                          ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40'
+                          : 'bg-gray-800 text-gray-500 cursor-not-allowed',
+                      )}
+                    >
+                      {isCreating ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          Create &amp; Select Contact
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                /* ─── Search View ─── */
+                <motion.div
+                  key="search-view"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, x: -20, transition: { duration: 0.15 } }}
+                  className="flex flex-col"
+                >
+                  {/* Search Input */}
+                  <div className="px-5 py-4 border-b border-gray-800/50">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search by name, email, or company..."
+                        className="w-full pl-10 pr-10 py-3 bg-gray-800/60 border border-gray-700/40 rounded-xl text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500/50 transition-all"
+                        autoFocus
+                      />
+                      {isSearching && searchQuery && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <div className="w-4 h-4 border-2 border-gray-600 border-t-violet-500 rounded-full animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Search Results */}
+                  <div className="overflow-y-auto max-h-[calc(80dvh-14rem)]">
+                    {isSearching ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="flex items-center gap-3 text-gray-500 text-sm">
+                          <div className="w-5 h-5 border-2 border-gray-700 border-t-violet-500 rounded-full animate-spin" />
+                          Searching contacts...
+                        </div>
+                      </div>
+                    ) : filteredResults.length > 0 ? (
+                      <div className="p-2 space-y-0.5">
+                        {filteredResults.map((contact) => (
+                          <button
+                            key={contact.id}
+                            type="button"
+                            onClick={() => handleContactSelect(contact)}
+                            className="w-full p-3 text-left rounded-xl transition-all hover:bg-gray-800/50 group"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="w-9 h-9 bg-violet-500/15 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-violet-500/25 transition-colors">
+                                <Users className="w-4 h-4 text-violet-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-sm font-medium text-gray-200 truncate group-hover:text-white transition-colors">
+                                  {contact.full_name ||
+                                   `${contact.first_name || ''} ${contact.last_name || ''}`.trim() ||
+                                   contact.email ||
+                                   'Unknown Contact'}
+                                </h4>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <Mail className="w-3 h-3 text-gray-600" />
+                                  <span className="text-xs text-gray-500 truncate">{contact.email}</span>
+                                </div>
+                                {(contact.company || contact.company_name || contact.companies?.name || contact.companies) && (
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <Building2 className="w-3 h-3 text-gray-600" />
+                                    <span className="text-xs text-gray-500 truncate">
+                                      {typeof contact.company === 'string'
+                                        ? contact.company
+                                        : contact.company?.name ||
+                                          contact.company_name ||
+                                          contact.companies?.name ||
+                                          (typeof contact.companies === 'object' ? contact.companies?.name : contact.companies)}
+                                    </span>
+                                  </div>
+                                )}
+                                {contact.phone && (
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <Phone className="w-3 h-3 text-gray-600" />
+                                    <span className="text-xs text-gray-500">{contact.phone}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+                        <div className="w-14 h-14 bg-gray-800/60 rounded-xl flex items-center justify-center mb-4">
+                          <Users className="w-6 h-6 text-gray-600" />
+                        </div>
+                        <h4 className="font-medium text-gray-300 mb-1 text-sm">
+                          {searchQuery ? 'No contacts found' : 'No contacts yet'}
+                        </h4>
+                        <p className="text-gray-500 text-xs mb-4 max-w-xs">
+                          {searchQuery
+                            ? `No contacts match "${searchQuery}". Try a different search or create a new contact.`
+                            : 'Create your first contact to get started'
+                          }
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateForm(true)}
+                          className="px-4 py-2 bg-violet-500/20 border border-violet-500/30 text-violet-400 rounded-xl hover:bg-violet-500/30 hover:border-violet-500/40 transition-all flex items-center gap-2 text-sm font-medium"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          Create New Contact
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Create New Button (when results exist) */}
+                  {filteredResults.length > 0 && (
+                    <div className="px-5 py-4 border-t border-gray-800/50">
                       <button
-                        onClick={handleCreateContact}
-                        disabled={!newContactForm.email || !newContactForm.first_name || isCreating}
-                        className="w-full px-4 py-3 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:from-gray-700 disabled:to-gray-700 transition-all shadow-lg shadow-violet-500/25 flex items-center justify-center gap-2 text-sm font-medium"
+                        type="button"
+                        onClick={() => setShowCreateForm(true)}
+                        className="w-full px-4 py-3 bg-violet-500/10 border border-violet-500/20 text-violet-400 rounded-xl hover:bg-violet-500/20 hover:border-violet-500/30 transition-all flex items-center justify-center gap-2 text-sm font-medium"
                       >
-                        {isCreating ? (
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            <CheckCircle className="w-4 h-4" />
-                            Create & Select Contact
-                          </>
-                        )}
+                        <Plus className="w-4 h-4" />
+                        Create New Contact
                       </button>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </motion.div>
       )}

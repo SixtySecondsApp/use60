@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ChevronRight, Sparkles, CheckSquare, PhoneCall, Users, FileText, PoundSterling, Map } from 'lucide-react';
+import { ArrowUp, CheckSquare, PhoneCall, Users, FileText, PoundSterling, Map, Sparkles, Send } from 'lucide-react';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { ChatMessage } from '@/components/copilot/ChatMessage';
+import { CopilotEmpty } from '@/components/copilot/CopilotEmpty';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useEventEmitter } from '@/lib/communication/EventBus';
@@ -12,12 +13,6 @@ interface AssistantShellProps {
   mode: AssistantShellMode;
   onOpenQuickAdd?: (opts: { preselectAction: string; initialData?: Record<string, unknown> }) => void;
 }
-
-const DEFAULT_SUGGESTIONS = [
-  'Prep me for my next meeting',
-  'Show me deals that need attention',
-  'What should I prioritize today?',
-];
 
 export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   const { messages, isLoading, sendMessage, cancelRequest } = useCopilot();
@@ -43,6 +38,71 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
     const payload = typeof action === 'object' ? (action?.data ?? action) : undefined;
 
     if (!actionName) return;
+
+    // ---------------------------------------------------------------------------
+    // Standard Copilot action contract (Option A)
+    // ---------------------------------------------------------------------------
+    // In-app navigation
+    if (actionName === 'open_contact' && (payload?.contactId || payload?.id)) {
+      navigate(`/crm/contacts/${String(payload.contactId || payload.id)}`);
+      return;
+    }
+
+    if (actionName === 'open_deal' && (payload?.dealId || payload?.id)) {
+      navigate(`/crm/deals/${String(payload.dealId || payload.id)}`);
+      return;
+    }
+
+    if (actionName === 'open_meeting' && (payload?.meetingId || payload?.id)) {
+      navigate(`/meetings?meeting=${encodeURIComponent(String(payload.meetingId || payload.id))}`);
+      return;
+    }
+
+    if (actionName === 'open_task') {
+      // We don't have a task detail route standardized; default to tasks list.
+      navigate('/tasks');
+      return;
+    }
+
+    // Ops navigation
+    if (actionName === 'open_dynamic_table' && (payload?.table_id || payload?.tableId)) {
+      navigate(`/ops/${String(payload.table_id || payload.tableId)}`);
+      return;
+    }
+
+    if (actionName === 'add_enrichment' && (payload?.table_id || payload?.tableId)) {
+      navigate(`/ops/${String(payload.table_id || payload.tableId)}?action=enrich`);
+      return;
+    }
+
+    if (actionName === 'push_to_instantly' && (payload?.table_id || payload?.tableId)) {
+      navigate(`/ops/${String(payload.table_id || payload.tableId)}?action=push`);
+      return;
+    }
+
+    // External navigation
+    if (actionName === 'open_external_url' && payload?.url) {
+      window.open(String(payload.url), '_blank');
+      return;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Backwards-compatible aliases (older response components)
+    // ---------------------------------------------------------------------------
+    if (actionName === 'open_meeting_url' && payload?.url) {
+      window.open(String(payload.url), '_blank');
+      return;
+    }
+
+    if (actionName === 'view_meeting' && (payload?.meetingId || payload?.id)) {
+      navigate(`/meetings?meeting=${encodeURIComponent(String(payload.meetingId || payload.id))}`);
+      return;
+    }
+
+    if (actionName === 'view_task') {
+      navigate('/tasks');
+      return;
+    }
 
     if (actionName === 'open_contact' && payload?.contactId) {
       navigate(`/crm/contacts/${payload.contactId}`);
@@ -103,6 +163,47 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       });
       return;
     }
+    
+    // Send a new message to copilot (for interactive follow-up actions)
+    if (actionName === 'send_message' && payload?.prompt) {
+      sendMessage(String(payload.prompt));
+      return;
+    }
+
+    // Email actions - most are handled in-component (EmailResponse)
+    // Only handle actions that need shell-level access
+    
+    // change_email_tone is handled directly in EmailResponse component via API
+    // Do NOT call sendMessage - just return to prevent bubbling
+    if (actionName === 'change_email_tone') {
+      // Handled in EmailResponse component
+      return;
+    }
+
+    // shorten is handled in EmailResponse component
+    if (actionName === 'shorten') {
+      return;
+    }
+
+    // add_calendar_link is handled in EmailResponse component
+    if (actionName === 'add_calendar_link') {
+      return;
+    }
+
+    // copy_email is handled in EmailResponse component
+    if (actionName === 'copy_email') {
+      return;
+    }
+
+    // send_email is handled in EmailResponse component
+    if (actionName === 'send_email') {
+      return;
+    }
+
+    // edit_in_gmail is handled in EmailResponse component
+    if (actionName === 'edit_in_gmail') {
+      return;
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -127,121 +228,138 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
     ] as const;
   }, []);
 
+  // Suggested prompts for overlay inline welcome
+  const inlinePrompts = useMemo(() => [
+    'Prep me for my next meeting',
+    'Show me deals that need attention',
+    'What should I prioritize today?',
+  ], []);
+
+  // Overlay mode uses inline chat-style welcome; page mode uses full CopilotEmpty
+  const showInlineWelcome = mode === 'overlay' && isEmpty;
+  const showFullWelcome = mode === 'page' && isEmpty;
+  // In overlay mode, always show input (even when empty)
+  const showInput = mode === 'overlay' || !isEmpty;
+
   return (
     <div className={cn('flex flex-col min-h-0', shellClass)}>
-      {/* Messages */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
-        {isEmpty ? (
-          <div className="flex gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500/20 to-purple-600/20 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-violet-400" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-gray-300 leading-relaxed">
-                Hey! I’m your Sales Assistant. Ask me to prep meetings, find deals/contacts/tasks, and create actions.
-              </p>
+      {/* Full-page welcome (page mode only) */}
+      {showFullWelcome && (
+        <CopilotEmpty onPromptClick={(prompt) => sendMessage(prompt)} />
+      )}
 
-              <div className="mt-3 space-y-2">
-                {DEFAULT_SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() => {
-                      // Auto-run the suggestion immediately without requiring second confirmation
-                      sendMessage(s);
-                    }}
-                    className={cn(
-                      'w-full text-left text-sm px-3 py-2 rounded-lg bg-gray-800/50 text-gray-400 hover:bg-gray-800 hover:text-gray-200 transition-all duration-200 flex items-center gap-2 group',
-                      isLoading && 'opacity-60 cursor-not-allowed'
-                    )}
-                  >
-                    <ChevronRight className="w-3 h-3 text-gray-600 group-hover:text-violet-400 transition-colors" />
-                    <span>{s}</span>
-                  </button>
-                ))}
+      {/* Inline chat welcome (overlay mode, no messages) */}
+      {showInlineWelcome && (
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+          {/* Assistant welcome bubble */}
+          <div className="flex gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-medium text-gray-300">Copilot</span>
+              </div>
+              <div className="bg-gray-800/60 rounded-2xl rounded-tl-md px-4 py-3 text-sm text-gray-200 leading-relaxed">
+                Hey! I&apos;m your Sales Assistant. Ask me to prep meetings, find deals, contacts or tasks, and create actions.
               </div>
             </div>
           </div>
-        ) : (
-          <>
-            {messages.map((m) => (
-              <ChatMessage key={m.id} message={m} onActionClick={handleActionClick} />
+
+          {/* Suggested prompts */}
+          <div className="space-y-2 mt-2 pl-11">
+            {inlinePrompts.map((prompt, index) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => sendMessage(prompt)}
+                className="w-full text-left px-4 py-3 rounded-xl bg-gray-800/40 border border-gray-700/30 text-sm text-gray-300 hover:bg-gray-800/60 hover:border-gray-600/50 transition-all"
+                style={{ animationDelay: `${0.3 + index * 0.1}s` }}
+              >
+                <span className="text-gray-500 mr-2">&rsaquo;</span>
+                {prompt}
+              </button>
             ))}
-          </>
-        )}
-        <div ref={endRef} />
-      </div>
-
-      {/* Input */}
-      <div className="p-4 border-t border-gray-800/50">
-        {/* Quick Add chips (V2-style) */}
-        {mode === 'overlay' && (
-          <div className="mb-3">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {quickActions.map((action) => (
-                <button
-                  key={action.id}
-                  type="button"
-                  disabled={isLoading}
-                  onClick={() => {
-                    if (onOpenQuickAdd) {
-                      onOpenQuickAdd({ preselectAction: action.id });
-                      return;
-                    }
-                    emit('modal:opened', { type: 'quick-add', context: { preselectAction: action.id } });
-                  }}
-                  className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 border border-gray-700/50 hover:border-gray-600 transition-all duration-200 group ${
-                    isLoading ? 'opacity-60 cursor-not-allowed' : ''
-                  }`}
-                >
-                  <div className={`w-6 h-6 rounded-lg ${action.bg} flex items-center justify-center`}>
-                    <action.icon className={`w-3.5 h-3.5 ${action.color}`} />
-                  </div>
-                  <span className="text-sm text-gray-200 whitespace-nowrap">{action.label}</span>
-                </button>
-              ))}
-            </div>
           </div>
-        )}
-
-        <div className="flex items-end gap-3">
-          <div className="flex-1 relative">
-            <div className="flex items-end bg-gray-800/50 rounded-xl border border-gray-700/50 focus-within:border-violet-500/50 transition-colors">
-              <textarea
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask me to create, find, or prep anything…"
-                rows={1}
-                className="flex-1 bg-transparent text-white placeholder-gray-500 text-sm py-3 px-4 resize-none outline-none max-h-32"
-                style={{ minHeight: '44px' }}
-              />
-              {/* Cancel button could live here later; for now keep UI simple */}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!inputValue.trim() || isLoading}
-            className={`flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
-              inputValue.trim() && !isLoading
-                ? 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/25'
-                : 'bg-gray-800 text-gray-600 cursor-not-allowed'
-            }`}
-            aria-label="Send"
-          >
-            <ArrowUp className="w-5 h-5" />
-          </button>
         </div>
+      )}
 
-        {isLoading && (
-          <div className="mt-2 text-xs text-gray-500">
-            Working… <button className="underline" onClick={cancelRequest}>Cancel</button>
+      {/* Messages area (has messages) */}
+      {!isEmpty && (
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+          {messages.map((m) => (
+            <ChatMessage key={m.id} message={m} onActionClick={handleActionClick} />
+          ))}
+          <div ref={endRef} />
+        </div>
+      )}
+
+      {/* Quick action chips (separate section, overlay mode only) */}
+      {showInput && mode === 'overlay' && (
+        <div className="flex-shrink-0 px-5 py-3 border-t border-gray-800/50 bg-gray-900/50">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {quickActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                disabled={isLoading}
+                onClick={() => {
+                  if (onOpenQuickAdd) {
+                    onOpenQuickAdd({ preselectAction: action.id });
+                    return;
+                  }
+                  emit('modal:opened', { type: 'quick-add', context: { preselectAction: action.id } });
+                }}
+                className={cn(
+                  'flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-gray-800/60 border border-gray-700/40 rounded-lg text-xs font-medium text-gray-300 hover:bg-gray-700/60 hover:border-gray-600/60 transition-all whitespace-nowrap',
+                  isLoading && 'opacity-60 cursor-not-allowed',
+                )}
+              >
+                <action.icon className={cn('w-3.5 h-3.5', action.color)} />
+                {action.label}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Input area */}
+      {showInput && (
+        <div className="flex-shrink-0 px-5 py-4 border-t border-gray-800/50 bg-gray-900/80 backdrop-blur-sm">
+          <div className="flex items-end gap-3 bg-gray-800/60 border border-gray-700/40 rounded-xl px-4 py-3 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
+            <textarea
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask me to create, find, or prep anything..."
+              rows={1}
+              className="flex-1 bg-transparent resize-none text-sm text-gray-100 placeholder-gray-500 focus:outline-none max-h-32"
+              style={{ minHeight: '24px' }}
+            />
+
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!inputValue.trim() || isLoading}
+              className={cn(
+                'p-2 rounded-lg transition-all',
+                inputValue.trim() && !isLoading
+                  ? 'bg-violet-500 text-white hover:bg-violet-600'
+                  : 'text-gray-600 cursor-not-allowed',
+              )}
+              aria-label="Send"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+
+          {isLoading && (
+            <div className="mt-2 text-xs text-gray-500">
+              Working... <button className="underline" onClick={cancelRequest}>Cancel</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

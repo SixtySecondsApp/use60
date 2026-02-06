@@ -490,6 +490,102 @@ export function getAvailableContextVariables(): { key: string; description: stri
 /**
  * Extract required context variables from a template
  */
+// ============================================================================
+// Post-Save Sync: Embedding Generation + Org Compilation
+// ============================================================================
+
+/**
+ * Generate embedding and compile org skills after a skill is saved.
+ * Runs in the background — failures are logged but don't block the save.
+ */
+export async function syncSkillAfterSave(
+  skill: PlatformSkill,
+  organizationId: string | null
+): Promise<{ embeddingOk: boolean; compileOk: boolean; errors: string[] }> {
+  const errors: string[] = [];
+  let embeddingOk = false;
+  let compileOk = false;
+
+  // 1. Generate embedding from name + description
+  const embeddingText = buildEmbeddingText(skill);
+
+  try {
+    const { data, error } = await supabase.functions.invoke('generate-embedding', {
+      body: { text: embeddingText },
+    });
+
+    if (error || !data?.embedding) {
+      const msg = error?.message || 'No embedding returned';
+      console.warn('[syncSkillAfterSave] Embedding generation failed:', msg);
+      errors.push(`Embedding: ${msg}`);
+    } else {
+      // Store the embedding on the platform_skills row
+      const { error: updateError } = await supabase
+        .from('platform_skills')
+        .update({ description_embedding: JSON.stringify(data.embedding) })
+        .eq('id', skill.id);
+
+      if (updateError) {
+        console.warn('[syncSkillAfterSave] Embedding save failed:', updateError.message);
+        errors.push(`Embedding save: ${updateError.message}`);
+      } else {
+        embeddingOk = true;
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[syncSkillAfterSave] Embedding error:', msg);
+    errors.push(`Embedding: ${msg}`);
+  }
+
+  // 2. Compile for the user's organization
+  if (organizationId) {
+    try {
+      const { data, error } = await supabase.functions.invoke('compile-organization-skills', {
+        body: {
+          action: 'compile_one',
+          organization_id: organizationId,
+          skill_key: skill.skill_key,
+        },
+      });
+
+      if (error) {
+        console.warn('[syncSkillAfterSave] Org compilation failed:', error.message);
+        errors.push(`Compile: ${error.message}`);
+      } else if (data && !data.success) {
+        console.warn('[syncSkillAfterSave] Org compilation error:', data.error);
+        errors.push(`Compile: ${data.error}`);
+      } else {
+        compileOk = true;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[syncSkillAfterSave] Compile error:', msg);
+      errors.push(`Compile: ${msg}`);
+    }
+  }
+
+  return { embeddingOk, compileOk, errors };
+}
+
+/**
+ * Build the text used for embedding generation.
+ * Format: "Name: Description. Triggers: trigger1, trigger2"
+ */
+function buildEmbeddingText(skill: PlatformSkill): string {
+  const name = skill.frontmatter.name || skill.skill_key;
+  const description = skill.frontmatter.description || '';
+  const triggers = skill.frontmatter.triggers;
+
+  let text = `${name}: ${description}`;
+
+  if (Array.isArray(triggers) && triggers.length > 0) {
+    text += ` Triggers: ${triggers.join(', ')}`;
+  }
+
+  return text;
+}
+
 export function extractVariablesFromTemplate(template: string): string[] {
   const regex = /\$\{([^}|]+)/g;
   const variables = new Set<string>();

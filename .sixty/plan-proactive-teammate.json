@@ -1,0 +1,554 @@
+{
+  "name": "Proactive AI Sales Teammate",
+  "version": "1.0",
+  "createdAt": "2026-01-24T15:53:00Z",
+  "description": "Transform copilot from reactive assistant (55% vision) to proactive AI teammate (90%+ vision)",
+  "assessment_baseline": {
+    "specialized_persona": "8/10",
+    "skill_execution": "8/10",
+    "proactive_workflows": "4/10",
+    "hitl_confirmation": "6/10",
+    "engagement_tracking": "3/10",
+    "slack_integration": "5/10",
+    "overall": "55%"
+  },
+  "target_scores": {
+    "specialized_persona": "9/10",
+    "skill_execution": "9/10",
+    "proactive_workflows": "9/10",
+    "hitl_confirmation": "9/10",
+    "engagement_tracking": "8/10",
+    "slack_integration": "9/10",
+    "overall": "90%+"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Proactive Infrastructure",
+      "description": "Enable automatic cron scheduling and core proactive functions",
+      "priority": "critical",
+      "duration": "3-4 days",
+      "stories": ["CRON-001", "CRON-002", "CRON-003", "CRON-004"]
+    },
+    {
+      "id": "phase-2",
+      "name": "HITL for Proactive Flows",
+      "description": "Add preview→confirm pattern to all Slack-initiated actions",
+      "priority": "critical",
+      "duration": "2-3 days",
+      "stories": ["HITL-001", "HITL-002", "HITL-003"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Persona & Enrichment Loop",
+      "description": "Wire enrichment updates to persona cache and add re-enrichment",
+      "priority": "high",
+      "duration": "2 days",
+      "stories": ["PERS-001", "PERS-002", "PERS-003"]
+    },
+    {
+      "id": "phase-4",
+      "name": "Engagement Feedback Loop",
+      "description": "Use engagement data to optimize proactive outreach",
+      "priority": "high",
+      "duration": "3 days",
+      "stories": ["ENG-001", "ENG-002", "ENG-003", "ENG-004"]
+    },
+    {
+      "id": "phase-5",
+      "name": "UX Polish",
+      "description": "Reduce approval friction, improve email refinement, interactive context",
+      "priority": "medium",
+      "duration": "2-3 days",
+      "stories": ["UX-001", "UX-002", "UX-003", "UX-004"]
+    },
+    {
+      "id": "phase-6",
+      "name": "Clarifying Questions",
+      "description": "Detect ambiguity and offer clarifying options",
+      "priority": "medium",
+      "duration": "1-2 days",
+      "stories": ["CLAR-001", "CLAR-002"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "CRON-001",
+      "title": "Setup Supabase Cron Infrastructure",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "infrastructure",
+      "estimate": "2h",
+      "description": "Configure pg_cron extension and create cron job registration functions for proactive workflows",
+      "acceptance_criteria": [
+        "pg_cron extension enabled in Supabase project",
+        "Vault secret 'service_role_key' created and verified",
+        "call_proactive_edge_function() SQL function working",
+        "Test cron job executes successfully"
+      ],
+      "files": [
+        "supabase/migrations/20260124100004_setup_proactive_cron_jobs.sql"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "CRON-002",
+      "title": "Schedule Daily Pipeline Analysis Cron",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "1h",
+      "description": "Register proactive-pipeline-analysis to run daily at 9am for each org",
+      "acceptance_criteria": [
+        "Cron job registered: '0 9 * * *' (daily 9am)",
+        "Function executes and sends Slack DMs to users with pipeline insights",
+        "Handles orgs without Slack gracefully",
+        "Logs execution status to workflow_executions table"
+      ],
+      "files": [
+        "supabase/functions/proactive-pipeline-analysis/index.ts",
+        "supabase/migrations/20260125_schedule_pipeline_cron.sql"
+      ],
+      "dependencies": ["CRON-001"],
+      "blockedBy": ["CRON-001"]
+    },
+    {
+      "id": "CRON-003",
+      "title": "Implement Pre-Meeting Prep Function",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "4h",
+      "description": "Create proactive-meeting-prep edge function that sends Slack briefs 2 hours before meetings",
+      "acceptance_criteria": [
+        "New edge function: proactive-meeting-prep",
+        "Finds meetings starting in next 2 hours (attendees_count > 1)",
+        "Runs seq-next-meeting-command-center in simulation mode",
+        "Sends Slack DM with brief and [View Full Brief] button",
+        "Cron registered: '*/30 * * * *' (every 30 min)"
+      ],
+      "files": [
+        "supabase/functions/proactive-meeting-prep/index.ts",
+        "supabase/migrations/20260125_schedule_meeting_prep_cron.sql"
+      ],
+      "dependencies": ["CRON-001"],
+      "blockedBy": ["CRON-001"]
+    },
+    {
+      "id": "CRON-004",
+      "title": "Populate Slack User Mappings on OAuth",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "1.5h",
+      "description": "Insert into slack_user_mappings during Slack OAuth callback to enable proactive DMs",
+      "acceptance_criteria": [
+        "slack-oauth-callback inserts into slack_user_mappings",
+        "Mapping includes: slack_user_id, sixty_user_id, org_id, slack_team_id",
+        "Proactive functions can resolve user → Slack ID",
+        "Handle re-auth gracefully (upsert)"
+      ],
+      "files": [
+        "supabase/functions/slack-oauth-callback/index.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "HITL-001",
+      "title": "Add HITL Handler to slack-copilot-actions",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "3h",
+      "description": "Implement preview→confirm pattern for proactive Slack button clicks",
+      "acceptance_criteria": [
+        "Button click from proactive message triggers preview flow",
+        "Preview shown in Slack thread (not executed)",
+        "User must reply 'confirm' or click confirm button",
+        "Only then execute with is_simulation: false",
+        "Store pending_action_context for confirmation lookup"
+      ],
+      "files": [
+        "supabase/functions/slack-copilot-actions/index.ts",
+        "supabase/functions/_shared/slackHitlHandler.ts"
+      ],
+      "dependencies": ["CRON-002", "CRON-003"],
+      "blockedBy": []
+    },
+    {
+      "id": "HITL-002",
+      "title": "Preserve Context Through Proactive→Action Flow",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "2h",
+      "description": "Pass dealId, contactId, sequenceKey from proactive message to action handler",
+      "acceptance_criteria": [
+        "Proactive message buttons include full context in callback_id/value",
+        "slack-copilot-actions extracts and uses context",
+        "Skill execution has access to original insight data",
+        "User sees specific deal/contact context, not generic response"
+      ],
+      "files": [
+        "supabase/functions/proactive-pipeline-analysis/index.ts",
+        "supabase/functions/proactive-meeting-prep/index.ts",
+        "supabase/functions/slack-copilot-actions/index.ts"
+      ],
+      "dependencies": ["HITL-001"],
+      "blockedBy": ["HITL-001"]
+    },
+    {
+      "id": "HITL-003",
+      "title": "Add Confirmation UI in Slack Thread",
+      "phase": "phase-2",
+      "priority": "P1",
+      "type": "backend",
+      "estimate": "2h",
+      "description": "Show rich preview in thread with Confirm/Cancel buttons for external actions",
+      "acceptance_criteria": [
+        "Preview shows in thread reply (not main message)",
+        "Email preview: subject, recipient, first 200 chars of body",
+        "Task preview: title, description, due date",
+        "[Confirm] [Edit] [Cancel] buttons",
+        "Confirm executes, Cancel dismisses, Edit links to copilot"
+      ],
+      "files": [
+        "supabase/functions/_shared/slackHitlHandler.ts",
+        "supabase/functions/slack-copilot-actions/index.ts"
+      ],
+      "dependencies": ["HITL-001"],
+      "blockedBy": ["HITL-001"]
+    },
+    {
+      "id": "PERS-001",
+      "title": "Wire Persona Invalidation to Enrichment Updates",
+      "phase": "phase-3",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "1h",
+      "description": "Call invalidatePersonaCache() when deep-enrich-organization completes",
+      "acceptance_criteria": [
+        "deep-enrich-organization calls invalidatePersonaCache on success",
+        "Persona cache cleared for affected org",
+        "Next copilot request compiles fresh persona",
+        "Test: update enrichment → persona reflects new data immediately"
+      ],
+      "files": [
+        "supabase/functions/deep-enrich-organization/index.ts",
+        "supabase/functions/_shared/salesCopilotPersona.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "PERS-002",
+      "title": "Inject Enrichment Context into Skill Execution",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "estimate": "2h",
+      "description": "Pass company products, competitors, pain points to skill template context",
+      "acceptance_criteria": [
+        "executeAction loads enrichment data for org",
+        "Template context includes: company_enrichment, competitors, pain_points, value_props",
+        "Skills can reference ${company_enrichment.products} etc.",
+        "Meeting prep includes competitor positioning from enrichment"
+      ],
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/api-copilot/index.ts"
+      ],
+      "dependencies": ["PERS-001"],
+      "blockedBy": []
+    },
+    {
+      "id": "PERS-003",
+      "title": "Schedule Weekly Re-Enrichment Cron",
+      "phase": "phase-3",
+      "priority": "P2",
+      "type": "backend",
+      "estimate": "2h",
+      "description": "Automatically re-scrape company websites weekly to keep knowledge fresh",
+      "acceptance_criteria": [
+        "Cron job: '0 3 * * 0' (Sunday 3am)",
+        "Calls deep-enrich-organization for each active org",
+        "Compares old vs new enrichment, logs changes",
+        "Invalidates persona cache if significant changes detected",
+        "Admin notification if enrichment fails"
+      ],
+      "files": [
+        "supabase/functions/auto-re-enrich/index.ts",
+        "supabase/migrations/20260125_schedule_reenrich_cron.sql"
+      ],
+      "dependencies": ["PERS-001"],
+      "blockedBy": []
+    },
+    {
+      "id": "ENG-001",
+      "title": "Create Engagement Aggregation Views",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "database",
+      "estimate": "2h",
+      "description": "Build SQL views that aggregate engagement metrics per user/org",
+      "acceptance_criteria": [
+        "View: user_engagement_summary (avg_response_time, action_rate, preferred_channel)",
+        "View: org_engagement_summary (proactive_vs_reactive, top_sequences)",
+        "View: sequence_effectiveness (completion_rate, time_saved)",
+        "RLS policies applied"
+      ],
+      "files": [
+        "supabase/migrations/20260125_engagement_aggregation_views.sql"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "ENG-002",
+      "title": "Load Engagement Metrics in Persona Compiler",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "backend",
+      "estimate": "2h",
+      "description": "Use engagement history to personalize proactive message timing and content",
+      "acceptance_criteria": [
+        "getOrCompilePersona loads engagement metrics",
+        "Persona includes user response patterns (best time, preferred length)",
+        "Low-engagement users get less frequent proactive messages",
+        "High-engagement users get more detailed insights"
+      ],
+      "files": [
+        "supabase/functions/_shared/salesCopilotPersona.ts"
+      ],
+      "dependencies": ["ENG-001"],
+      "blockedBy": ["ENG-001"]
+    },
+    {
+      "id": "ENG-003",
+      "title": "Build Engagement Dashboard Component",
+      "phase": "phase-4",
+      "priority": "P2",
+      "type": "frontend",
+      "estimate": "4h",
+      "description": "Create admin dashboard showing copilot ROI and engagement trends",
+      "acceptance_criteria": [
+        "New component: AgentPerformanceDashboard",
+        "Shows: proactive vs reactive breakdown, time saved, action rates",
+        "Per-user engagement scores",
+        "Sequence effectiveness rankings",
+        "Accessible from /admin/agent-performance"
+      ],
+      "files": [
+        "src/components/admin/AgentPerformanceDashboard.tsx",
+        "src/pages/admin/AgentPerformance.tsx",
+        "src/lib/hooks/useEngagementMetrics.ts"
+      ],
+      "dependencies": ["ENG-001"],
+      "blockedBy": ["ENG-001"]
+    },
+    {
+      "id": "ENG-004",
+      "title": "Wire Telemetry to Proactive Functions",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "backend",
+      "estimate": "1.5h",
+      "description": "Record execution telemetry for proactive workflows",
+      "acceptance_criteria": [
+        "proactive-pipeline-analysis logs to workflow_executions",
+        "proactive-meeting-prep logs to workflow_executions",
+        "Telemetry includes: trigger_type='proactive', outcome, duration",
+        "Can track proactive vs reactive in analytics"
+      ],
+      "files": [
+        "supabase/functions/proactive-pipeline-analysis/index.ts",
+        "supabase/functions/proactive-meeting-prep/index.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "UX-001",
+      "title": "Add Inline Quick-Approve for Simple Actions",
+      "phase": "phase-5",
+      "priority": "P1",
+      "type": "frontend",
+      "estimate": "2h",
+      "description": "Single-click approval for simple action items without modal",
+      "acceptance_criteria": [
+        "ActionItemCard has inline [✓ Approve] button for simple items",
+        "Simple = single-line task or reminder",
+        "Complex items still open modal preview",
+        "Reduces approval clicks from 3-4 to 1"
+      ],
+      "files": [
+        "src/components/copilot/ActionItemCard.tsx",
+        "src/lib/stores/actionItemsStore.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "UX-002",
+      "title": "Email Refinement Inline Controls",
+      "phase": "phase-5",
+      "priority": "P1",
+      "type": "frontend",
+      "estimate": "3h",
+      "description": "Add tone/length selectors without opening modal",
+      "acceptance_criteria": [
+        "EmailResponse shows tone selector: Professional | Casual | Urgent",
+        "Length control: Shorter | Current | Longer",
+        "Regenerate button re-runs email generation with new params",
+        "Changes don't require full page reload"
+      ],
+      "files": [
+        "src/components/copilot/responses/EmailResponse.tsx",
+        "src/lib/hooks/useEmailRefinement.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "UX-003",
+      "title": "Interactive Context Cards",
+      "phase": "phase-5",
+      "priority": "P2",
+      "type": "frontend",
+      "estimate": "3h",
+      "description": "Allow drill-down into HubSpot activities and Fathom calls from context panel",
+      "acceptance_criteria": [
+        "HubSpotContextCard: click '5 activities' → shows activity list modal",
+        "FathomContextCard: click call → shows transcript preview",
+        "Filter by activity type",
+        "Links to open full record in HubSpot/Fathom"
+      ],
+      "files": [
+        "src/components/copilot/context/HubSpotContextCard.tsx",
+        "src/components/copilot/context/FathomContextCard.tsx",
+        "src/components/copilot/context/ContextDrilldownModal.tsx"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "UX-004",
+      "title": "Smoother Loading State Transitions",
+      "phase": "phase-5",
+      "priority": "P2",
+      "type": "frontend",
+      "estimate": "1h",
+      "description": "Fix abrupt transitions when response arrives",
+      "acceptance_criteria": [
+        "ToolCallIndicator exit animation is 500ms (not 200ms)",
+        "No scale transform on exit (just opacity)",
+        "Add subtle 'Response received' micro-animation",
+        "Users perceive smooth transition"
+      ],
+      "files": [
+        "src/components/copilot/ToolCallIndicator.tsx",
+        "src/components/copilot/ChatMessage.tsx"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "CLAR-001",
+      "title": "Implement Ambiguity Detection",
+      "phase": "phase-6",
+      "priority": "P1",
+      "type": "backend",
+      "estimate": "3h",
+      "description": "Detect when user request has multiple valid interpretations",
+      "acceptance_criteria": [
+        "detectAmbiguity() function in api-copilot",
+        "Triggers when: multiple entity matches, vague verbs ('help with'), no specific action",
+        "Returns ambiguity score and suggested clarifications",
+        "Threshold configurable (default: 0.6)"
+      ],
+      "files": [
+        "supabase/functions/api-copilot/index.ts",
+        "supabase/functions/_shared/ambiguityDetector.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "CLAR-002",
+      "title": "Clarifying Questions UI Flow",
+      "phase": "phase-6",
+      "priority": "P1",
+      "type": "fullstack",
+      "estimate": "2h",
+      "description": "Present 2-4 options when ambiguity detected",
+      "acceptance_criteria": [
+        "Copilot responds with numbered options",
+        "Options based on available skills/sequences for context",
+        "User can reply with number or description",
+        "Selected option executes with full context"
+      ],
+      "files": [
+        "supabase/functions/api-copilot/index.ts",
+        "src/components/copilot/responses/ClarificationResponse.tsx"
+      ],
+      "dependencies": ["CLAR-001"],
+      "blockedBy": ["CLAR-001"]
+    }
+  ],
+  "parallelGroups": [
+    {
+      "group": "cron-setup",
+      "stories": ["CRON-001", "CRON-004"],
+      "reason": "Independent infrastructure setup"
+    },
+    {
+      "group": "engagement-foundation",
+      "stories": ["ENG-001", "ENG-004"],
+      "reason": "No dependencies between aggregation and telemetry"
+    },
+    {
+      "group": "ux-polish",
+      "stories": ["UX-001", "UX-002", "UX-003", "UX-004"],
+      "reason": "Independent UI improvements"
+    }
+  ],
+  "criticalPath": [
+    "CRON-001",
+    "CRON-002",
+    "CRON-003",
+    "HITL-001",
+    "HITL-002"
+  ],
+  "riskRegister": [
+    {
+      "risk": "Supabase cron not available in project plan",
+      "mitigation": "Use external cron service (cron-job.org) as fallback",
+      "owner": "DevOps"
+    },
+    {
+      "risk": "Slack rate limits on proactive DMs",
+      "mitigation": "Batch messages per org, add retry with backoff",
+      "owner": "Backend"
+    },
+    {
+      "risk": "Engagement data insufficient for optimization",
+      "mitigation": "Start with rule-based timing, ML optimization in Phase 2",
+      "owner": "Product"
+    }
+  ],
+  "successMetrics": {
+    "proactive_message_delivery": ">95% of scheduled proactive messages delivered",
+    "hitl_confirmation_rate": ">98% of external actions go through preview",
+    "user_engagement_rate": ">40% action rate on proactive messages",
+    "time_to_action": "<5 min from proactive notification to user action",
+    "persona_freshness": "100% of personas updated within 24h of enrichment change"
+  },
+  "totalEstimate": {
+    "stories": 22,
+    "hours": "45-55h",
+    "sprints": "2-3 sprints",
+    "parallelExecution": "Phases 4+5+6 can run in parallel after Phase 2"
+  }
+}

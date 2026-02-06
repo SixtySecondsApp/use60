@@ -57,9 +57,8 @@ export const ActionSummaryResponse: React.FC<ActionSummaryResponseProps> = ({ da
   };
 
   const handleActionClick = (action: any) => {
-    if (action.callback && action.callback.startsWith('/')) {
-      window.location.href = action.callback;
-    } else if (onActionClick) {
+    // Always use onActionClick contract - never direct window.location
+    if (onActionClick) {
       onActionClick(action);
     }
   };

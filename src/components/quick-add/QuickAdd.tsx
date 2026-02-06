@@ -122,9 +122,14 @@ function QuickAddComponent({
   }, []);
 
   // Component registration with mediator
+  // IMPORTANT: notify must NOT re-emit events to the EventBus.
+  // The ComponentMediator subscribes to events and calls notify() on this component.
+  // If notify() re-emits, it creates an infinite loop: emit → mediator → notify → emit → ...
+  // QuickAdd already handles events via its own useEventListener subscriptions.
   const componentRef = useRef<IFormComponent>({
-    async notify(event, data) {
-      await emit(event, data);
+    async notify(_event, _data) {
+      // No-op: events are handled by useEventListener subscriptions above.
+      // Do NOT call emit() here — it causes an infinite event loop.
     },
     subscribe(event, handler) {
       return eventBus.on(event, handler);
@@ -412,15 +417,27 @@ function QuickAddComponent({
   };
 
   const handleActionSelect = (actionId: string) => {
-    if (actionId === 'meeting' || actionId === 'proposal' || actionId === 'sale') {
+    if (actionId === 'meeting' || actionId === 'proposal') {
       setSelectedAction(actionId);
+      // Contact is required — show contact search first
       setShowContactSearch(true);
       if (variant === 'v2') {
         setShowQuickActionsV2(false);
         setChatMessages(prev => [
           ...prev,
           { type: 'user', content: `Add ${actionId}` },
-          { type: 'ai', content: 'Great — first pick a contact.' }
+          { type: 'ai', content: `Let's find a contact for your ${actionId}.` }
+        ]);
+      }
+    } else if (actionId === 'sale') {
+      setSelectedAction(actionId);
+      // Contact is optional for sales
+      if (variant === 'v2') {
+        setShowQuickActionsV2(false);
+        setChatMessages(prev => [
+          ...prev,
+          { type: 'user', content: `Add ${actionId}` },
+          { type: 'ai', content: `Got it — fill in the details for your ${actionId}.` }
         ]);
       }
     } else if (actionId === 'outbound') {
@@ -588,12 +605,13 @@ function QuickAddComponent({
       }
     }
     
-    // Validation for meeting/proposal/sale - require contact
-    if ((selectedAction === 'meeting' || selectedAction === 'proposal' || selectedAction === 'sale') && !selectedContact) {
-      toast.error('Please select a contact first');
+    // Contact is required for meeting and proposal
+    if ((selectedAction === 'meeting' || selectedAction === 'proposal') && !selectedContact) {
+      toast.error('Please select a contact for this activity');
+      setShowContactSearch(true);
       return;
     }
-    
+
     // Validation for meeting/proposal/sale - require company name OR website
     if ((selectedAction === 'meeting' || selectedAction === 'proposal' || selectedAction === 'sale')) {
       if ((!formData.client_name || formData.client_name.trim() === '') && 
@@ -1231,8 +1249,7 @@ function QuickAddComponent({
                           />
                         )}
                         {!showContactSearch &&
-                          (selectedAction === 'meeting' || selectedAction === 'proposal' || selectedAction === 'sale') &&
-                          selectedContact && (
+                          (selectedAction === 'meeting' || selectedAction === 'proposal' || selectedAction === 'sale') && (
                             <ActivityForms
                               selectedAction={selectedAction}
                               selectedContact={selectedContact}
@@ -1411,8 +1428,7 @@ function QuickAddComponent({
                 )}
 
                 {!showContactSearch &&
-                  (selectedAction === 'meeting' || selectedAction === 'proposal' || selectedAction === 'sale') &&
-                  selectedContact && (
+                  (selectedAction === 'meeting' || selectedAction === 'proposal' || selectedAction === 'sale') && (
                     <ActivityForms
                       selectedAction={selectedAction}
                       selectedContact={selectedContact}

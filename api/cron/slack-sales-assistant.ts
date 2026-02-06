@@ -54,11 +54,11 @@ export default async function handler(req: any, res: any) {
       throw new Error(`Edge function error: ${response.status} - ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as Record<string, unknown>;
 
     return res.status(200).json({
       success: true,
-      ...data,
+      ...(typeof data === 'object' && data !== null ? data : {}),
       triggeredBy: 'vercel-cron',
       timestamp: new Date().toISOString(),
     });

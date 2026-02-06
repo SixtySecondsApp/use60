@@ -11,7 +11,8 @@ export type SkillCategory =
   | 'enrichment'
   | 'workflows'
   | 'data-access'
-  | 'output-format';
+  | 'output-format'
+  | 'agent-sequence';
 
 export interface SkillDoc {
   skill_key: string;
@@ -43,9 +44,21 @@ export type ExecuteActionName =
   | 'enrich_company'
   | 'invoke_skill'
   | 'run_skill'
+  | 'run_sequence'
   | 'create_task'
   | 'list_tasks'
-  | 'create_activity';
+  | 'create_activity'
+  | 'search_leads_create_table'
+  | 'enrich_table_column';
+
+/**
+ * Parameters for run_sequence action - executes a multi-step agent sequence
+ */
+export interface RunSequenceParams {
+  sequence_key: string;
+  sequence_context?: Record<string, unknown>;
+  is_simulation?: boolean;
+}
 
 /**
  * Parameters for invoke_skill action - enables skill composition
@@ -135,6 +148,7 @@ export interface AdapterContext {
 export interface MeetingAdapter {
   source: string;
   listMeetings(params: {
+    meeting_id?: string;
     contactEmail?: string;
     contactId?: string;
     limit?: number;
@@ -163,10 +177,10 @@ export interface MeetingAdapter {
     timezone?: string;
   }): Promise<ActionResult>;
   /**
-   * Get list of meetings for a specific period (today/tomorrow)
+   * Get list of meetings for a specific period
    */
   getMeetingsForPeriod(params: {
-    period: 'today' | 'tomorrow';
+    period: string; // today, tomorrow, monday-sunday, this_week, next_week
     timezone?: string;
     weekStartsOn?: 0 | 1;
     includeContext?: boolean;

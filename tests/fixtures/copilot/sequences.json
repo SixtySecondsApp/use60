@@ -1,0 +1,271 @@
+{
+  "description": "Sequence execution fixtures for Copilot E2E tests",
+  "version": "1.0.0",
+
+  "nextMeetingCommandCenter": {
+    "sequenceKey": "seq-next-meeting-command-center",
+    "description": "Next meeting prep workflow",
+    "simulationResult": {
+      "success": true,
+      "execution_id": "exec-001",
+      "sequence_key": "seq-next-meeting-command-center",
+      "status": "completed",
+      "is_simulation": true,
+      "step_results": [
+        {
+          "step_index": 0,
+          "step_type": "action",
+          "action": "get_next_meeting",
+          "status": "success",
+          "output": {
+            "meeting": {
+              "id": "meeting-001",
+              "title": "Q1 Planning Review with Acme Corp",
+              "start_time": "2026-01-24T15:00:00Z"
+            }
+          },
+          "duration_ms": 150
+        },
+        {
+          "step_index": 1,
+          "step_type": "skill",
+          "skill_key": "meeting-context-builder",
+          "status": "success",
+          "output": {
+            "attendee_insights": [
+              {
+                "name": "John Doe",
+                "company": "Acme Corporation",
+                "role": "VP Sales",
+                "relationship_score": 85,
+                "last_interaction": "2026-01-22"
+              }
+            ],
+            "deal_context": {
+              "deal_name": "Acme Corp Enterprise License",
+              "value": 75000,
+              "stage": "Proposal"
+            }
+          },
+          "duration_ms": 320
+        }
+      ],
+      "final_output": {
+        "meeting": {
+          "id": "meeting-001",
+          "title": "Q1 Planning Review with Acme Corp"
+        },
+        "attendee_insights": [],
+        "deal_context": {},
+        "talking_points": [
+          "Review Q1 implementation timeline",
+          "Address security compliance questions",
+          "Discuss pricing options"
+        ]
+      }
+    },
+    "executionResult": {
+      "success": true,
+      "execution_id": "exec-002",
+      "is_simulation": false,
+      "status": "completed"
+    }
+  },
+
+  "pipelineFocusTasks": {
+    "sequenceKey": "seq-pipeline-focus-tasks",
+    "description": "Pipeline focus and prioritization workflow",
+    "simulationResult": {
+      "success": true,
+      "execution_id": "exec-003",
+      "sequence_key": "seq-pipeline-focus-tasks",
+      "status": "completed",
+      "is_simulation": true,
+      "step_results": [
+        {
+          "step_index": 0,
+          "step_type": "action",
+          "action": "get_pipeline_deals",
+          "status": "success",
+          "output": {
+            "deals": [
+              {
+                "id": "deal-001",
+                "name": "Acme Corp Enterprise License",
+                "value": 75000,
+                "stage": "Proposal",
+                "days_in_stage": 7
+              },
+              {
+                "id": "deal-002",
+                "name": "TechStart Annual Contract",
+                "value": 45000,
+                "stage": "Negotiation",
+                "days_in_stage": 21
+              }
+            ]
+          },
+          "duration_ms": 200
+        },
+        {
+          "step_index": 1,
+          "step_type": "skill",
+          "skill_key": "deal-prioritizer",
+          "status": "success",
+          "output": {
+            "priority_deals": [
+              {
+                "deal_id": "deal-002",
+                "reason": "At risk - stalled for 21 days",
+                "suggested_action": "Schedule urgent follow-up call"
+              },
+              {
+                "deal_id": "deal-001",
+                "reason": "High value deal in final stages",
+                "suggested_action": "Send contract for review"
+              }
+            ]
+          },
+          "duration_ms": 280
+        }
+      ],
+      "final_output": {
+        "focus_tasks": [
+          {
+            "priority": 1,
+            "deal": "TechStart Annual Contract",
+            "action": "Schedule urgent follow-up call",
+            "reason": "Deal stalled for 21 days"
+          },
+          {
+            "priority": 2,
+            "deal": "Acme Corp Enterprise License",
+            "action": "Send contract for review",
+            "reason": "High value deal ready to close"
+          }
+        ]
+      }
+    }
+  },
+
+  "catchMeUp": {
+    "sequenceKey": "seq-catch-me-up",
+    "description": "Daily briefing workflow",
+    "simulationResult": {
+      "success": true,
+      "execution_id": "exec-004",
+      "sequence_key": "seq-catch-me-up",
+      "status": "completed",
+      "is_simulation": true,
+      "step_results": [
+        {
+          "step_index": 0,
+          "step_type": "action",
+          "action": "get_recent_activities",
+          "status": "success",
+          "output": {
+            "activities": [
+              {
+                "type": "email_received",
+                "from": "john.doe@acmecorp.com",
+                "subject": "RE: Proposal Questions",
+                "timestamp": "2026-01-24T08:30:00Z"
+              },
+              {
+                "type": "deal_updated",
+                "deal_name": "DataFlow Implementation",
+                "update": "Moved to Closed Won",
+                "timestamp": "2026-01-24T09:15:00Z"
+              }
+            ]
+          },
+          "duration_ms": 180
+        }
+      ],
+      "final_output": {
+        "summary": "You have 3 meetings today. 1 deal closed yesterday. 2 emails need responses.",
+        "highlights": [
+          "🎉 DataFlow Implementation closed for $120,000",
+          "📧 John Doe replied to your proposal email",
+          "📅 Q1 Planning Review with Acme Corp at 3 PM"
+        ],
+        "urgent_items": [
+          "Respond to John Doe's proposal questions"
+        ]
+      }
+    }
+  },
+
+  "failedSequence": {
+    "sequenceKey": "seq-test-failure",
+    "description": "Simulates a sequence failure for error handling tests",
+    "simulationResult": {
+      "success": false,
+      "execution_id": "exec-fail-001",
+      "sequence_key": "seq-test-failure",
+      "status": "failed",
+      "is_simulation": true,
+      "step_results": [
+        {
+          "step_index": 0,
+          "step_type": "action",
+          "action": "get_nonexistent_data",
+          "status": "failed",
+          "error": "Data source not available",
+          "duration_ms": 50
+        }
+      ],
+      "error": "Sequence failed at step 1: Data source not available"
+    }
+  },
+
+  "retryScenario": {
+    "description": "Tests retry mechanism",
+    "sequenceKey": "seq-with-retry",
+    "result": {
+      "success": true,
+      "execution_id": "exec-retry-001",
+      "step_results": [
+        {
+          "step_index": 0,
+          "status": "success",
+          "retry_count": 2,
+          "max_retries": 3,
+          "retry_attempts": [
+            {
+              "attempt": 1,
+              "error": "Network timeout",
+              "delay_ms": 100
+            },
+            {
+              "attempt": 2,
+              "error": "Network timeout",
+              "delay_ms": 200
+            }
+          ],
+          "duration_ms": 850
+        }
+      ]
+    }
+  },
+
+  "timeoutScenario": {
+    "description": "Tests timeout handling",
+    "sequenceKey": "seq-with-timeout",
+    "result": {
+      "success": false,
+      "execution_id": "exec-timeout-001",
+      "step_results": [
+        {
+          "step_index": 0,
+          "status": "failed",
+          "error": "Step 1 timed out after 30000ms",
+          "timeout_ms": 30000,
+          "timed_out": true,
+          "duration_ms": 30050
+        }
+      ],
+      "error": "Sequence failed: step timed out"
+    }
+  }
+}

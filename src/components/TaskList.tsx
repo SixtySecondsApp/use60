@@ -45,6 +45,7 @@ import {
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { TaskQuickView } from '@/components/TaskQuickView';
+import { cleanUnresolvedVariables } from '@/lib/utils/templateUtils';
 
 interface TaskListProps {
   showCompleted?: boolean;
@@ -480,7 +481,7 @@ const TaskList: React.FC<TaskListProps> = ({
                                         <h3 className={`font-medium ${
                                           task.completed ? 'line-through text-gray-500' : 'text-gray-900 dark:text-white'
                                         }`}>
-                                          {task.title}
+                                          {cleanUnresolvedVariables(task.title)}
                                         </h3>
                                         <Badge className={`px-2 py-0.5 text-xs ${getPriorityColor(task.priority)}`}>
                                           {task.priority}
@@ -505,7 +506,7 @@ const TaskList: React.FC<TaskListProps> = ({
                                         <p className={`text-sm mb-2 ${
                                           task.completed ? 'text-gray-500 dark:text-gray-600' : 'text-gray-600 dark:text-gray-400'
                                         }`}>
-                                          {task.description}
+                                          {cleanUnresolvedVariables(task.description)}
                                         </p>
                                       )}
 

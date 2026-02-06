@@ -45,7 +45,6 @@ function processTemplate(template: string, variables: Record<string, any>): stri
   return processed;
 }
 
-
 /**
  * Create HMAC-SHA256 signature
  */
@@ -398,46 +397,118 @@ async function testSESConnection(): Promise<{ success: boolean; message: string;
   }
 }
 
+/**
+ * Decode JWT payload without verification (for role checking only)
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = parts[1];
+    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if request is authenticated with service role key
+ */
+function isServiceRoleAuth(authHeader: string | null, serviceRoleKey: string): boolean {
+  if (!authHeader) return false;
+
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+
+  // First try: exact string match with env var
+  if (serviceRoleKey && token === serviceRoleKey) {
+    console.log('[encharge-send-email] Service role auth via exact match');
+    return true;
+  }
+
+  // Second try: decode JWT and check role claim
+  const payload = decodeJwtPayload(token);
+  if (payload && payload.role === 'service_role') {
+    console.log('[encharge-send-email] Service role auth via JWT role claim');
+    return true;
+  }
+
+  console.log('[encharge-send-email] Service role auth failed:', {
+    tokenLength: token.length,
+    keyLength: serviceRoleKey?.length,
+    jwtRole: payload?.role,
+  });
+  return false;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Check authentication - EDGE_FUNCTION_SECRET for inter-function calls, or user JWT
+  // Check authentication - allow service role key or user JWT
   const authHeader = req.headers.get('Authorization');
-  const EDGE_FUNCTION_SECRET = Deno.env.get('EDGE_FUNCTION_SECRET');
+  const apikeyHeader = req.headers.get('apikey');
 
-  // Check for EDGE_FUNCTION_SECRET (inter-function calls from other edge functions)
-  const isEdgeFunctionAuth = (() => {
-    if (!authHeader || !EDGE_FUNCTION_SECRET) return false;
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    return token === EDGE_FUNCTION_SECRET;
-  })();
+  console.log('[encharge-send-email] Auth check:', {
+    hasAuthHeader: !!authHeader,
+    hasApiKeyHeader: !!apikeyHeader,
+    authHeaderPreview: authHeader ? authHeader.substring(0, 20) + '...' : null,
+    serviceRoleKeySet: !!SUPABASE_SERVICE_ROLE_KEY,
+    serviceRoleKeyLength: SUPABASE_SERVICE_ROLE_KEY?.length,
+  });
 
-  if (isEdgeFunctionAuth) {
-    // Authenticated via EDGE_FUNCTION_SECRET - proceed
+  // Allow service role authentication (for service-to-service calls)
+  const isServiceRole = isServiceRoleAuth(authHeader, SUPABASE_SERVICE_ROLE_KEY) ||
+                        (apikeyHeader === SUPABASE_SERVICE_ROLE_KEY);
+
+  console.log('[encharge-send-email] Service role check result:', { isServiceRole });
+
+  // If we have a service role key match, skip further auth checks
+  if (isServiceRole) {
+    console.log('[encharge-send-email] Authenticated as service role - proceeding');
   } else if (authHeader) {
-    // Try to validate as user JWT (for client-side calls via supabase.functions.invoke)
+    // If not service role, try to validate as user JWT (optional - for direct calls)
     try {
-      const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const token = authHeader.replace(/^Bearer\s+/i, '');
-      const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      console.log('[encharge-send-email] JWT validation result:', {
+        error: error?.message,
+        hasUser: !!user,
+      });
       if (error || !user) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Unauthorized: invalid authentication' }),
+          JSON.stringify({
+            success: false,
+            error: 'Unauthorized: invalid authentication',
+            details: {
+              message: error?.message || 'User not found',
+            }
+          }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     } catch (authError) {
+      console.log('[encharge-send-email] Auth exception:', authError);
       return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized: authentication failed' }),
+        JSON.stringify({
+          success: false,
+          error: 'Unauthorized: authentication failed',
+          details: {
+            message: authError instanceof Error ? authError.message : 'Unknown error'
+          }
+        }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
   } else {
+    // No auth headers provided
     return new Response(
-      JSON.stringify({ success: false, error: 'Unauthorized: no authentication provided' }),
+      JSON.stringify({
+        success: false,
+        error: 'Unauthorized: no authentication provided'
+      }),
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -473,37 +544,14 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // 1. Get template from database
-    // Try by template_type first, then fall back to template_name
-    // (some templates like organization_invitation have template_type='transactional'
-    //  but template_name='organization_invitation')
-    let template = null;
-    let templateError = null;
-
-    const { data: t1, error: e1 } = await supabase
+    const { data: template, error: templateError } = await supabase
       .from('encharge_email_templates')
       .select('*')
       .eq('template_type', request.template_type)
       .eq('is_active', true)
-      .maybeSingle();
+      .single();
 
-    if (t1) {
-      template = t1;
-    } else {
-      // Fallback: try by template_name
-      console.log(`[encharge-send-email] No template with type '${request.template_type}', trying by name...`);
-      const { data: t2, error: e2 } = await supabase
-        .from('encharge_email_templates')
-        .select('*')
-        .eq('template_name', request.template_type)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      template = t2;
-      templateError = !t2 ? (e1 || e2) : null;
-    }
-
-    if (!template) {
-      console.error(`[encharge-send-email] Template not found for type or name: ${request.template_type}`);
+    if (templateError || !template) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -514,12 +562,8 @@ serve(async (req) => {
     }
 
     // 2. Process template variables
-    // Set common aliases so templates can use any naming convention
-    const derivedName = request.to_name || request.to_email.split('@')[0];
     const variables = {
-      user_name: derivedName,
-      recipient_name: derivedName,
-      first_name: derivedName,
+      user_name: request.to_name || request.to_email.split('@')[0],
       user_email: request.to_email,
       ...request.variables,
     };
@@ -531,7 +575,7 @@ serve(async (req) => {
     // 3. Send email via AWS SES (using REST API directly, not SDK)
     const sesResult = await sendEmailViaSES(
       request.to_email,
-      '60 <app@use60.com>',
+      'Sixty Seconds <app@use60.com>',
       subject,
       htmlBody,
       textBody
@@ -549,37 +593,13 @@ serve(async (req) => {
 
     // 4. Track event in Encharge
     const eventNameMap: Record<string, string> = {
-      // Organization & Membership (4)
-      organization_invitation: 'Organization Invitation Sent',
-      member_removed: 'Member Removed',
-      org_approval: 'Organization Approval',
-      join_request_approved: 'Join Request Approved',
-
-      // Waitlist & Access (2)
-      waitlist_invite: 'Waitlist Invite Sent',
-      waitlist_welcome: 'Waitlist Welcome Sent',
-
-      // Onboarding (1)
       welcome: 'Account Created',
-
-      // Integrations (2)
-      fathom_connected: 'Fathom Connected',
-      first_meeting_synced: 'First Meeting Synced',
-
-      // Subscription & Trial (5)
+      waitlist_invite: 'Waitlist Invite Sent',
       trial_ending: 'Trial Ending Soon',
       trial_expired: 'Trial Expired',
-      subscription_confirmed: 'Subscription Confirmed',
-      meeting_limit_warning: 'Meeting Limit Warning',
-      upgrade_prompt: 'Upgrade Prompt Sent',
-
-      // Account Management (3)
-      email_change_verification: 'Email Change Verification',
-      password_reset: 'Password Reset Requested',
-      join_request_rejected: 'Join Request Rejected',
-
-      // Admin/Moderation (1)
-      permission_to_close: 'Permission to Close Requested',
+      first_summary_viewed: 'First Summary Viewed',
+      fathom_connected: 'Fathom Connected',
+      first_meeting_synced: 'First Meeting Synced',
     };
 
     const eventName = eventNameMap[request.template_type] || 'Email Sent';

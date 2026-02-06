@@ -266,8 +266,24 @@ export class GoogleIntegrationAPI {
       body: {}
     });
 
+    // Log full response for debugging
+    console.log('[googleIntegration.testConnection] Response:', { data, error });
+
+    // Handle invoke-level errors (network, etc.)
     if (error) {
+      console.error('[googleIntegration.testConnection] Invoke error:', error);
       throw new Error(error.message || 'Failed to test connection');
+    }
+
+    // The function now always returns 200 with data
+    // Check data.success to determine if the operation succeeded
+    if (data && !data.success) {
+      console.error('[googleIntegration.testConnection] Function returned error:', data);
+      const errorInfo = data.error || data.message || 'Test connection failed';
+      const debugInfo = data.debugInfo || '';
+      const currentStep = data.currentStep || '';
+      console.error(`[googleIntegration.testConnection] Debug: ${debugInfo}, Step: ${currentStep}`);
+      // Still return the data so the UI can show the error details
     }
 
     return data;

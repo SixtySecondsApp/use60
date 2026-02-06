@@ -17,6 +17,12 @@ export interface UseIntegrationLogoOptions {
   enableFetch?: boolean;
 }
 
+// Hardcoded logo URLs for integrations where logo.dev doesn't have good coverage
+const HARDCODED_LOGOS: Record<string, string> = {
+  teams: 'https://erg-application-logos.s3.eu-west-2.amazonaws.com/logos/microsoft-teams.png',
+  'microsoft-teams': 'https://erg-application-logos.s3.eu-west-2.amazonaws.com/logos/microsoft-teams.png',
+};
+
 // Map integration names to their official domains for logo.dev lookup
 const INTEGRATION_DOMAINS: Record<string, string> = {
   // Google services
@@ -40,8 +46,8 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
 
   // Video Conferencing
   zoom: 'zoom.us',
-  teams: 'microsoft.com',
-  'microsoft-teams': 'teams.microsoft.com',
+  teams: 'teams.live.com',
+  'microsoft-teams': 'teams.live.com',
   webex: 'webex.com',
 
   // Calendar & Booking
@@ -260,6 +266,15 @@ export function useIntegrationLogo(
 
     // Get domain from mapping, or use integrationId as domain if not found
     const normalizedId = integrationId.toLowerCase().trim();
+
+    // Check for hardcoded logos first (e.g., Microsoft Teams)
+    const hardcodedUrl = HARDCODED_LOGOS[normalizedId];
+    if (hardcodedUrl) {
+      setLogoUrl(hardcodedUrl);
+      setIsLoading(false);
+      return;
+    }
+
     const domain = INTEGRATION_DOMAINS[normalizedId] || `${normalizedId}.com`;
 
     if (!domain) {

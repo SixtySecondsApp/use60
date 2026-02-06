@@ -302,6 +302,63 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     }>;
   }, [activeOrgId, enabled]);
 
+  const getSegments = useCallback(async () => {
+    if (!enabled) throw new Error('HubSpot integration is disabled');
+    if (!activeOrgId) throw new Error('No active organization selected');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('No active session');
+
+    const resp = await supabase.functions.invoke('hubspot-admin', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'get_lists', org_id: activeOrgId }),
+    });
+    if (resp.error) throw new Error(resp.error.message || 'Failed to fetch segments');
+    if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch segments');
+    return resp.data.lists as Array<{
+      id: string;
+      name: string;
+      listType: 'STATIC' | 'DYNAMIC';
+      membershipCount: number;
+      createdAt?: string;
+      updatedAt?: string;
+    }>;
+  }, [activeOrgId, enabled]);
+
+  const previewContacts = useCallback(
+    async (args: { list_id?: string; filters?: { propertyName: string; operator: string; value: string }[]; filter_logic?: 'AND' | 'OR'; limit?: number }) => {
+      if (!enabled) throw new Error('HubSpot integration is disabled');
+      if (!activeOrgId) throw new Error('No active organization selected');
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('No active session');
+
+      const resp = await supabase.functions.invoke('hubspot-admin', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'preview_contacts', org_id: activeOrgId, ...args }),
+      });
+      if (resp.error) throw new Error(resp.error.message || 'Failed to preview contacts');
+      if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to preview contacts');
+      return {
+        totalCount: resp.data.totalCount as number,
+        contacts: resp.data.contacts as Array<{
+          id: string;
+          email: string;
+          firstName: string;
+          lastName: string;
+          company: string;
+        }>,
+      };
+    },
+    [activeOrgId, enabled]
+  );
+
   const triggerSync = useCallback(
     async (args: {
       sync_type: 'deals' | 'contacts' | 'tasks';
@@ -356,6 +413,8 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     getProperties,
     getPipelines,
     getForms,
+    getSegments,
+    previewContacts,
     triggerSync,
   };
 }

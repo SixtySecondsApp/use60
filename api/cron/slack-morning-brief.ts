@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({}),
     });
 
-    const data = await response.json();
+    const data = await response.json() as Record<string, unknown>;
 
     if (!response.ok) {
       return res.status(response.status).json(data);
@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       success: true,
-      ...data,
+      ...(typeof data === 'object' && data !== null ? data : {}),
     });
   } catch (error) {
     console.error('[cron/slack-morning-brief] Error:', error);

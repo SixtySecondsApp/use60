@@ -19,11 +19,77 @@ function fail(error: string, source: string, extra?: Partial<ActionResult>): Act
   return { success: false, data: null, error, source, ...extra };
 }
 
+function formatAdapterError(e: unknown): string {
+  // Deno/Supabase errors are often plain objects (PostgREST) not Error instances.
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object') {
+    const anyErr = e as Record<string, unknown>;
+    const message =
+      (typeof anyErr.message === 'string' && anyErr.message) ||
+      (typeof anyErr.error === 'string' && anyErr.error) ||
+      (typeof anyErr.details === 'string' && anyErr.details) ||
+      (typeof anyErr.hint === 'string' && anyErr.hint);
+    if (message) return message;
+    try {
+      return JSON.stringify(anyErr);
+    } catch {
+      return '[unknown error object]';
+    }
+  }
+  return String(e);
+}
+
 export function createDbMeetingAdapter(client: SupabaseClient, userId: string): MeetingAdapter {
   return {
     source: 'db_meetings',
     async listMeetings(params) {
       try {
+        const meetingId =
+          (params as any)?.meeting_id ? String((params as any).meeting_id).trim() : null;
+
+        // Fast path: fetch a specific meeting by id (used by sequences/skills)
+        if (meetingId) {
+          const { data: meeting, error: meetingError } = await client
+            .from('meetings')
+            .select(
+              'id,title,meeting_start,meeting_end,duration_minutes,summary,transcript_text,share_url,company_id,primary_contact_id'
+            )
+            .eq('owner_user_id', userId)
+            .eq('id', meetingId)
+            .maybeSingle();
+
+          if (meetingError) throw meetingError;
+
+          if (!meeting) {
+            return ok(
+              {
+                meetings: [],
+                matchedOn: 'meeting_id',
+                note: `No meeting found for meeting_id: ${meetingId}`,
+              },
+              this.source
+            );
+          }
+
+          const { data: attendees, error: attendeesError } = await client
+            .from('meeting_attendees')
+            .select('name,email')
+            .eq('meeting_id', meetingId)
+            .order('created_at', { ascending: true })
+            .limit(50);
+
+          if (attendeesError) throw attendeesError;
+
+          return ok(
+            {
+              meetings: [{ ...meeting, attendees: attendees || [] }],
+              matchedOn: 'meeting_id',
+            },
+            this.source
+          );
+        }
+
         const limit = Math.min(Math.max(Number(params.limit ?? 5) || 5, 1), 20);
 
         let contactEmail: string | null = params.contactEmail ? String(params.contactEmail).trim().toLowerCase() : null;
@@ -122,7 +188,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
         if (meetingsError) throw meetingsError;
         return ok({ meetings: meetings || [], matchedOn: 'recent' }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -240,7 +306,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           this.source
         );
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -287,7 +353,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           note: 'Total is from calendar events. Recorded meetings may overlap with calendar events.',
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -297,25 +363,27 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
         const includeContext = params.includeContext ?? true;
         const now = new Date();
 
-        // Get next upcoming calendar event
+        // Get next upcoming calendar event with attendees (exclude solo calendar blocks)
+        // Filter for meetings with attendees_count > 1 (user + at least one other person)
         const { data: events, error: eventsError } = await client
           .from('calendar_events')
           .select(`
             id, external_id, title, description, start_time, end_time, location, meeting_url,
-            attendees, attendees_count, status, is_recurring, organizer_email
+            attendees, attendees_count, status, organizer_email
           `)
           .eq('user_id', userId)
           .neq('status', 'cancelled')
           .gte('start_time', now.toISOString())
+          .gt('attendees_count', 1) // More than 1 = has external attendees
           .order('start_time', { ascending: true })
-          .limit(1);
+          .limit(5); // Fetch more to ensure we find a valid meeting
 
         if (eventsError) throw eventsError;
 
         if (!events || events.length === 0) {
           return ok({
             found: false,
-            message: 'No upcoming meetings found',
+            message: 'No upcoming meetings with attendees found',
           }, this.source);
         }
 
@@ -358,7 +426,6 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           attendees,
           attendeesCount: event.attendees_count || attendees.length,
           status: event.status,
-          isRecurring: event.is_recurring,
         };
 
         // If context not requested, return basic meeting info
@@ -500,7 +567,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           context,
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -520,7 +587,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           .from('calendar_events')
           .select(`
             id, external_id, title, description, start_time, end_time, location, meeting_url,
-            attendees, attendees_count, status, is_recurring, organizer_email
+            attendees, attendees_count, status, organizer_email
           `)
           .eq('user_id', userId)
           .neq('status', 'cancelled')
@@ -622,7 +689,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           meetings,
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -738,7 +805,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           })),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -955,6 +1022,39 @@ function calculateDateRangeWithTimezone(
       };
     }
 
+    // Day of week support - finds the NEXT occurrence of that day
+    case 'monday':
+    case 'tuesday':
+    case 'wednesday':
+    case 'thursday':
+    case 'friday':
+    case 'saturday':
+    case 'sunday': {
+      const dayMap: Record<string, number> = {
+        sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+        thursday: 4, friday: 5, saturday: 6,
+      };
+      const targetDay = dayMap[period];
+      const currentDayOfWeek = new Date(Date.UTC(localYear, localMonth, localDay)).getUTCDay();
+      
+      // Calculate days until target day (0 = today if it's that day, otherwise next occurrence)
+      let daysUntil = targetDay - currentDayOfWeek;
+      if (daysUntil < 0) {
+        daysUntil += 7; // Next week
+      }
+      
+      const targetStart = new Date(localMidnight);
+      targetStart.setUTCDate(targetStart.getUTCDate() + daysUntil);
+      
+      const targetEnd = new Date(targetStart);
+      targetEnd.setUTCHours(23, 59, 59, 999);
+      
+      return {
+        startDate: localToUtc(targetStart),
+        endDate: localToUtc(targetEnd),
+      };
+    }
+
     default:
       // Default to today
       return {
@@ -983,7 +1083,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
 
         return ok({ contacts: data || [] }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1041,7 +1141,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
 
         return ok({ deals }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1111,7 +1211,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
             return fail(`Unsupported entity: ${String(params.entity)}`, source);
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, source);
       }
     },
@@ -1199,7 +1299,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           by_stage: Object.values(byStage),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1238,10 +1338,10 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
         }
 
         const selectFields = includeHealth
-          ? `id,name,company,value,stage_id,status,expected_close_date,probability,created_at,updated_at,
+          ? `id,name,company,contact_name,contact_email,value,stage_id,status,expected_close_date,probability,created_at,updated_at,
              deal_stages(name),
              deal_health_scores(health_status,risk_level,days_since_last_activity,days_in_current_stage,overall_health_score)`
-          : `id,name,company,value,stage_id,status,expected_close_date,probability,created_at,updated_at,
+          : `id,name,company,contact_name,contact_email,value,stage_id,status,expected_close_date,probability,created_at,updated_at,
              deal_stages(name)`;
 
         let q = client
@@ -1279,6 +1379,8 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
             id: deal.id,
             name: deal.name,
             company: deal.company,
+            contact_name: deal.contact_name || null,
+            contact_email: deal.contact_email || null,
             value: deal.value,
             stage_name: stageData?.name || 'Unknown',
             status: deal.status,
@@ -1320,7 +1422,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           deals: deals.slice(0, limit),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1433,7 +1535,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           by_month: Object.values(byMonth),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1517,7 +1619,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           contacts: contactList.slice(0, limit),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1659,7 +1761,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           overall_health: overallHealth,
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1699,7 +1801,7 @@ export function createDbEmailAdapter(client: SupabaseClient, userId: string): Em
 
         return ok({ emails: data || [] }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1906,7 +2008,7 @@ Return ONLY valid JSON with these fields (use null for unknown, never omit requi
           this.source
         );
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -2074,7 +2176,7 @@ Return ONLY valid JSON with these fields (use null for unknown, never omit requi
           this.source
         );
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },

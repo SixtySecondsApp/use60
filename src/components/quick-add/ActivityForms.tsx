@@ -88,21 +88,44 @@ export function ActivityForms({
         </button>
         {getActionIcon()}
         <span className="text-sm font-medium text-gray-300">{getActionTitle()}</span>
-        <span className="text-gray-600">•</span>
-        <span className="text-xs text-emerald-400 truncate max-w-[150px]">
-          {selectedContact.full_name || selectedContact.first_name || selectedContact.email}
-        </span>
-        <button type="button" onClick={onChangeContact} className="text-[10px] text-gray-500 hover:text-gray-300 ml-auto">
-          Change
-        </button>
+        {selectedContact ? (
+          <>
+            <span className="text-gray-600">•</span>
+            <span className="text-xs text-emerald-400 truncate max-w-[150px]">
+              {selectedContact.full_name || selectedContact.first_name || selectedContact.email}
+            </span>
+            <button type="button" onClick={onChangeContact} className="text-[10px] text-gray-500 hover:text-gray-300 ml-auto">
+              Change
+            </button>
+          </>
+        ) : (
+          <span className="text-[10px] text-red-400/70 ml-auto">Contact required</span>
+        )}
       </div>
 
-      {/* Compact form */}
+      {/* Form */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {/* Contact selection - required for meeting/proposal */}
+        {!selectedContact && (selectedAction === 'meeting' || selectedAction === 'proposal') && (
+          <button
+            type="button"
+            onClick={onChangeContact}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed rounded-lg transition-colors text-sm",
+              validationErrors.contact
+                ? "border-red-500/50 text-red-400 hover:border-red-400/70"
+                : `border-${color}-500/30 text-${color}-400 hover:border-${color}-500/60 hover:text-${color}-300`
+            )}
+          >
+            <Users className="w-4 h-4" />
+            Select Contact
+          </button>
+        )}
+
         {/* Date Selection */}
         <div>
-          <label className="text-xs text-gray-500 mb-1.5 block">Date</label>
-          <div className="flex gap-1.5 mb-1.5">
+          <label className="text-xs text-gray-500 mb-1 block">Date</label>
+          <div className="flex gap-1.5 mb-2">
             {[
               { label: 'Today', date: new Date() },
               { label: 'Yesterday', date: addDays(new Date(), -1) },
@@ -113,7 +136,7 @@ export function ActivityForms({
                 type="button"
                 onClick={() => { setSelectedDate(opt.date); setShowCalendar(false); }}
                 className={cn(
-                  "flex-1 py-1.5 rounded-md border text-xs transition-all",
+                  "flex-1 py-2 rounded-md border text-sm transition-all",
                   format(selectedDate, 'yyyy-MM-dd') === format(opt.date, 'yyyy-MM-dd')
                     ? `bg-${color}-500/20 border-${color}-500/50 text-${color}-300`
                     : "bg-gray-800/30 border-gray-700/30 text-gray-500 hover:bg-gray-800/50"
@@ -126,7 +149,7 @@ export function ActivityForms({
           <button
             type="button"
             onClick={() => setShowCalendar(!showCalendar)}
-            className="w-full flex items-center justify-between bg-gray-800/30 border border-gray-700/30 rounded-md px-2.5 py-1.5 text-xs text-gray-400 hover:bg-gray-800/50"
+            className="w-full flex items-center justify-between bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-gray-400 hover:bg-gray-800/50"
           >
             <span className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5" />
@@ -153,7 +176,7 @@ export function ActivityForms({
               <label className="text-xs text-gray-500 mb-1 block">Type</label>
               <select
                 required
-                className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2 py-1.5 text-xs text-white"
+                className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white"
                 value={formData.details}
                 onChange={(e) => setFormData({ ...formData, details: e.target.value })}
               >
@@ -168,7 +191,7 @@ export function ActivityForms({
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Status</label>
               <select
-                className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2 py-1.5 text-xs text-white"
+                className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white"
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
               >
@@ -189,7 +212,7 @@ export function ActivityForms({
               min="0"
               step="0.01"
               placeholder="0.00"
-              className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2.5 py-1.5 text-xs text-white placeholder:text-gray-600"
+              className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white placeholder:text-gray-600"
               value={formData.amount || ''}
               onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
             />
@@ -207,7 +230,7 @@ export function ActivityForms({
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2.5 py-1.5 text-xs text-white placeholder:text-gray-600"
+                  className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white placeholder:text-gray-600"
                   value={formData.monthlyMrr || ''}
                   onChange={(e) => setFormData({ ...formData, monthlyMrr: e.target.value })}
                 />
@@ -219,7 +242,7 @@ export function ActivityForms({
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2.5 py-1.5 text-xs text-white placeholder:text-gray-600"
+                  className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white placeholder:text-gray-600"
                   value={formData.oneOffRevenue || ''}
                   onChange={(e) => setFormData({ ...formData, oneOffRevenue: e.target.value })}
                 />
@@ -241,7 +264,7 @@ export function ActivityForms({
               type="text"
               placeholder="Acme Inc."
               className={cn(
-                "w-full bg-gray-800/30 border rounded-md px-2.5 py-1.5 text-xs text-white placeholder:text-gray-600",
+                "w-full bg-gray-800/30 border rounded-md px-3 py-2 text-sm text-white placeholder:text-gray-600",
                 validationErrors.client_name ? "border-red-500/50" : "border-gray-700/30"
               )}
               value={formData.client_name || ''}
@@ -259,7 +282,7 @@ export function ActivityForms({
             <input
               type="text"
               placeholder="acme.com"
-              className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2.5 py-1.5 text-xs text-white placeholder:text-gray-600"
+              className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white placeholder:text-gray-600"
               value={formData.company_website || ''}
               onChange={(e) => {
                 let val = e.target.value.trim();
@@ -276,7 +299,7 @@ export function ActivityForms({
         <textarea
           rows={2}
           placeholder="Notes (optional)..."
-          className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2.5 py-1.5 text-xs text-white placeholder:text-gray-600 resize-none"
+          className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white placeholder:text-gray-600 resize-none"
           value={formData.description || ''}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
         />
@@ -386,7 +409,7 @@ export function OutboundForm({
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Type</label>
             <select
-              className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2 py-1.5 text-xs text-white"
+              className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white"
               value={formData.outboundType || 'Call'}
               onChange={(e) => setFormData({ ...formData, outboundType: e.target.value })}
             >
@@ -403,7 +426,7 @@ export function OutboundForm({
               min="1"
               max="50"
               placeholder="1"
-              className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2.5 py-1.5 text-xs text-white"
+              className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white"
               value={formData.outboundCount || '1'}
               onChange={(e) => setFormData({ ...formData, outboundCount: e.target.value })}
             />
@@ -413,7 +436,7 @@ export function OutboundForm({
         <textarea
           rows={2}
           placeholder="Details (optional)..."
-          className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-2.5 py-1.5 text-xs text-white placeholder:text-gray-600 resize-none"
+          className="w-full bg-gray-800/30 border border-gray-700/30 rounded-md px-3 py-2 text-sm text-white placeholder:text-gray-600 resize-none"
           value={formData.details || ''}
           onChange={(e) => setFormData({ ...formData, details: e.target.value })}
         />
@@ -430,12 +453,12 @@ export function OutboundForm({
         </button>
         <button
           type="submit"
-          disabled={isSubmitting || !selectedContact}
+          disabled={isSubmitting}
           className={cn(
             "flex-1 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all",
             submitStatus === 'success'
               ? "bg-emerald-600 text-white"
-              : isSubmitting || !selectedContact
+              : isSubmitting
                 ? "bg-gray-700 text-gray-400 cursor-not-allowed"
                 : "bg-sky-600 text-white hover:bg-sky-500"
           )}

@@ -15,6 +15,8 @@ export const ProactiveSimulator = lazyWithRetry(() => import('@/pages/platform/P
 export const DealTruthSimulator = lazyWithRetry(() => import('@/pages/platform/DealTruthSimulator'));
 export const PricingControl = lazyWithRetry(() => import('@/pages/platform/PricingControl'));
 export const CostAnalysis = lazyWithRetry(() => import('@/pages/platform/CostAnalysis'));
+export const AIUsageAdmin = lazyWithRetry(() => import('@/pages/platform/AIUsageAdmin'));
+export const ApiUsageDashboard = lazyWithRetry(() => import('@/pages/platform/ApiUsageDashboard'));
 export const LaunchChecklist = lazyWithRetry(() => import('@/pages/platform/LaunchChecklist'));
 export const ActivationDashboard = lazyWithRetry(() => import('@/pages/platform/ActivationDashboard'));
 export const EngagementDashboard = lazyWithRetry(() => import('@/pages/platform/EngagementDashboard'));
@@ -26,13 +28,18 @@ export const MetaAdsAnalytics = lazyWithRetry(() => import('@/pages/platform/Met
 export const ErrorMonitoring = lazyWithRetry(() => import('@/pages/platform/ErrorMonitoring'));
 export const SentryBridge = lazyWithRetry(() => import('@/pages/platform/SentryBridge'));
 export const SkillsAdmin = lazyWithRetry(() => import('@/pages/platform/SkillsAdmin'));
+export const SkillsQAPage = lazyWithRetry(() => import('@/pages/platform/SkillsQAPage'));
 export const PlatformSkillViewPage = lazyWithRetry(() => import('@/pages/platform/PlatformSkillViewPage'));
 export const PlatformSkillEditPage = lazyWithRetry(() => import('@/pages/platform/PlatformSkillEditPage'));
 export const SkillDetailPage = lazyWithRetry(() => import('@/pages/skills/SkillDetailPage'));
 export const AgentSequencesPage = lazyWithRetry(() => import('@/pages/platform/AgentSequencesPage'));
 export const AgentSequenceBuilderPage = lazyWithRetry(() => import('@/pages/platform/AgentSequenceBuilderPage'));
 export const CopilotTestPage = lazyWithRetry(() => import('@/pages/platform/CopilotTestPage'));
+export const CopilotLabPage = lazyWithRetry(() => import('@/pages/platform/CopilotLabPage'));
+export const AgentPerformanceDashboard = lazyWithRetry(() => import('@/pages/platform/AgentPerformanceDashboard'));
 export const NotetakerBranding = lazyWithRetry(() => import('@/pages/platform/NotetakerBranding'));
+export const NotetakerVideoQuality = lazyWithRetry(() => import('@/pages/platform/NotetakerVideoQuality'));
+export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionCentre'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
@@ -128,6 +135,9 @@ export const ActivityProcessingPage = lazyWithRetry(() => import('@/pages/Activi
 export const Workflows = lazyWithRetry(() => import('@/pages/Workflows'));
 export const FreepikFlow = lazyWithRetry(() => import('@/components/workflows/FreepikFlow'));
 export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m => ({ default: m.Copilot })));
+export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
+export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
+export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
 
 // ============================================================
 // SETTINGS PAGES
@@ -146,16 +156,20 @@ export const SalesCoachingPage = lazyWithRetry(() => import('@/pages/settings/Sa
 export const APIKeysPage = lazyWithRetry(() => import('@/pages/settings/APIKeysPage'));
 export const EmailSyncPage = lazyWithRetry(() => import('@/pages/settings/EmailSyncPage'));
 export const TaskSyncPage = lazyWithRetry(() => import('@/pages/settings/TaskSyncPage'));
-export const MeetingSyncPage = lazyWithRetry(() => import('@/pages/settings/MeetingSyncPage'));
-export const OrganizationManagementPage = lazyWithRetry(() => import('@/pages/settings/OrganizationManagementPage'));
+export const TeamMembersPage = lazyWithRetry(() => import('@/pages/settings/TeamMembersPage'));
 export const CallTypeSettings = lazyWithRetry(() => import('@/pages/settings/CallTypeSettings'));
 export const PipelineAutomationSettings = lazyWithRetry(() => import('@/pages/settings/PipelineAutomationSettings'));
 export const FollowUpSettings = lazyWithRetry(() => import('@/pages/settings/FollowUpSettings'));
+export const OrganizationSettingsPage = lazyWithRetry(() => import('@/pages/settings/OrganizationSettingsPage'));
 export const LogoSettings = lazyWithRetry(() => import('@/pages/settings/LogoSettings'));
 export const SlackSettings = lazyWithRetry(() => import('@/pages/settings/SlackSettings'));
 export const JustCallSettings = lazyWithRetry(() => import('@/pages/settings/JustCallSettings'));
 export const HubSpotSettings = lazyWithRetry(() => import('@/pages/settings/HubSpotSettings'));
 export const BullhornSettings = lazyWithRetry(() => import('@/pages/settings/BullhornSettings'));
+// Integration settings pages (dedicated settings for each integration)
+export const GoogleWorkspaceIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/GoogleWorkspaceIntegrationPage'));
+export const FathomIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/FathomIntegrationPage'));
+export const FirefliesIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/FirefliesIntegrationPage'));
 
 // Org Settings (moved from /org routes)
 export const OrgBranding = lazyWithRetry(() => import('@/pages/org/OrgBranding'));

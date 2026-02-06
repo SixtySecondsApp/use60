@@ -17,8 +17,9 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/+esm';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { loadPrompt, interpolateVariables } from '../_shared/promptLoader.ts';
+import { invalidatePersonaCache } from '../_shared/salesCopilotPersona.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -149,7 +150,6 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      console.error('[deep-enrich-organization] No authorization header found');
       throw new Error('No authorization header');
     }
 
@@ -161,20 +161,11 @@ serve(async (req) => {
     });
 
     const token = authHeader.replace('Bearer ', '');
-    console.log('[deep-enrich-organization] Validating JWT token...');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    if (userError) {
-      console.error('[deep-enrich-organization] JWT validation error:', userError.message);
-      throw new Error(`Invalid JWT token: ${userError.message}`);
+    if (userError || !user) {
+      throw new Error('Invalid authentication token');
     }
-
-    if (!user) {
-      console.error('[deep-enrich-organization] No user found in JWT');
-      throw new Error('No user found in authentication token');
-    }
-
-    console.log('[deep-enrich-organization] JWT validated for user:', user.id);
 
     const requestBody = await req.json();
     const { action, organization_id, domain, manual_data, force } = requestBody;
@@ -451,6 +442,10 @@ async function runManualEnrichmentPipeline(
     // Save skill-derived context (brand_tone, words_to_avoid, etc.)
     await saveSkillDerivedContext(supabase, organizationId, skills, 'manual', 0.70);
 
+    // AGENT-003: Invalidate persona cache so it regenerates with new data
+    await invalidatePersonaCache(supabase, organizationId);
+    console.log(`[ManualPipeline] Invalidated persona cache for org ${organizationId}`);
+
     console.log(`[ManualPipeline] Enrichment complete for ${manualData.company_name}`);
 
   } catch (error) {
@@ -569,9 +564,8 @@ async function runEnrichmentPipeline(
 ): Promise<void> {
   try {
     // Step 1: Scrape website content
-    console.log(`[Pipeline] Step 1/3: Scraping ${domain}`);
+    console.log(`[Pipeline] Starting scrape for ${domain}`);
     const scrapedContent = await scrapeWebsite(domain);
-    console.log(`[Pipeline] Step 1/3: ✓ Scraped ${scrapedContent.length} chars`);
 
     // Update status
     await supabase
@@ -580,9 +574,8 @@ async function runEnrichmentPipeline(
       .eq('id', enrichmentId);
 
     // Step 2: Extract structured data (Prompt 1)
-    console.log(`[Pipeline] Step 2/3: Extracting data with AI`);
+    console.log(`[Pipeline] Extracting structured data`);
     const enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
-    console.log(`[Pipeline] Step 2/3: ✓ Extracted company: ${enrichmentData.company_name}`);
 
     // Update with enrichment data
     await supabase
@@ -605,17 +598,47 @@ async function runEnrichmentPipeline(
       .eq('id', enrichmentId);
 
     // Step 3: Generate skill configurations (Prompt 2)
-    console.log(`[Pipeline] Step 3/3: Generating skills`);
+    console.log(`[Pipeline] Generating skill configurations`);
     const skills = await generateSkillConfigs(supabase, enrichmentData, domain);
-    console.log(`[Pipeline] Step 3/3: ✓ Generated ${Object.keys(skills).length} skills`);
 
-    // Save generated skills
+    // =========================================================================
+    // ENRICH-002: Detect and handle enrichment changes
+    // =========================================================================
+    // Fetch previous enrichment to compare
+    const { data: previousEnrichment } = await supabase
+      .from('organization_enrichment')
+      .select('company_name, description, products, competitors, generated_skills, enrichment_version')
+      .eq('id', enrichmentId)
+      .single();
+
+    // Calculate data hash for change detection
+    const currentHash = generateEnrichmentHash(enrichmentData);
+    const previousHash = previousEnrichment?.previous_hash;
+    const hasChanges = previousHash !== currentHash;
+    const newVersion = (previousEnrichment?.enrichment_version || 0) + 1;
+
+    // Build change summary
+    const changeSummary = hasChanges && previousEnrichment ? {
+      version: newVersion,
+      detected_at: new Date().toISOString(),
+      changes: detectEnrichmentChanges(previousEnrichment, enrichmentData, skills),
+    } : null;
+
+    if (changeSummary && changeSummary.changes.length > 0) {
+      console.log(`[Pipeline] Detected ${changeSummary.changes.length} changes in enrichment:`, 
+        changeSummary.changes.map(c => c.field).join(', '));
+    }
+
+    // Save generated skills with change tracking
     await supabase
       .from('organization_enrichment')
       .update({
         generated_skills: skills,
         status: 'completed',
         confidence_score: 0.85,
+        enrichment_version: newVersion,
+        previous_hash: currentHash,
+        change_summary: changeSummary,
       })
       .eq('id', enrichmentId);
 
@@ -628,29 +651,21 @@ async function runEnrichmentPipeline(
     // Save skill-derived context (brand_tone, words_to_avoid, etc.)
     await saveSkillDerivedContext(supabase, organizationId, skills, 'enrichment', 0.85);
 
-    console.log(`[Pipeline] ✓ Enrichment complete for ${domain}`);
+    // AGENT-003: Invalidate persona cache so it regenerates with new data
+    await invalidatePersonaCache(supabase, organizationId);
+    console.log(`[Pipeline] Invalidated persona cache for org ${organizationId}`);
+
+    console.log(`[Pipeline] Enrichment complete for ${domain}`);
 
   } catch (error) {
-    const rawMessage = extractErrorMessage(error);
-    console.error('[runEnrichmentPipeline] Error:', rawMessage);
-
-    // Make error messages more user-friendly
-    let userMessage = rawMessage;
-    if (rawMessage.includes('Could not scrape') || rawMessage.includes('content from')) {
-      userMessage = 'Unable to access website. It may be blocking automated access or temporarily unavailable. Please try entering your company details manually.';
-    } else if (rawMessage.includes('GEMINI_API_KEY') || rawMessage.includes('API key')) {
-      userMessage = 'AI service configuration error. Please contact support or try entering details manually.';
-    } else if (rawMessage.includes('Failed to parse') || rawMessage.includes('Invalid JSON')) {
-      userMessage = 'AI response was invalid. Please try again or enter details manually.';
-    } else if (rawMessage.includes('fetch') || rawMessage.includes('network') || rawMessage.includes('timeout')) {
-      userMessage = 'Network error while accessing website. Please check the URL and try again.';
-    }
+    const errorMessage = extractErrorMessage(error);
+    console.error('[runEnrichmentPipeline] Error:', errorMessage);
 
     await supabase
       .from('organization_enrichment')
       .update({
         status: 'failed',
-        error_message: userMessage,
+        error_message: errorMessage,
       })
       .eq('id', enrichmentId);
   }
@@ -701,19 +716,12 @@ async function scrapeWebsite(domain: string): Promise<string> {
     fetchedUrls.add(url);
 
     try {
-      // Add 10 second timeout per page
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; Use60Bot/1.0; +https://use60.com)',
         },
         redirect: 'follow',
-        signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       if (response.ok) {
         const html = await response.text();
@@ -724,7 +732,7 @@ async function scrapeWebsite(domain: string): Promise<string> {
         }
       }
     } catch (e) {
-      // Silently skip failed fetches (including timeouts)
+      // Silently skip failed fetches
     }
     return false;
   }
@@ -1339,4 +1347,130 @@ function stripHtml(html: string): string {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// ============================================================================
+// ENRICH-002: Change Detection Helpers
+// ============================================================================
+
+/**
+ * Generate a hash of enrichment data for change detection
+ */
+function generateEnrichmentHash(data: any): string {
+  const keyFields = {
+    company_name: data.company_name,
+    description: data.description?.substring(0, 500),
+    industry: data.industry,
+    products: data.products?.slice(0, 5).map((p: any) => p.name || p),
+    competitors: data.competitors?.slice(0, 5).map((c: any) => c.name || c),
+    target_market: data.target_market,
+  };
+  
+  // Simple hash function
+  const str = JSON.stringify(keyFields);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit int
+  }
+  return hash.toString(16);
+}
+
+interface EnrichmentChange {
+  field: string;
+  type: 'added' | 'removed' | 'modified';
+  old_value?: any;
+  new_value?: any;
+}
+
+/**
+ * Detect specific changes between old and new enrichment data
+ */
+function detectEnrichmentChanges(
+  oldData: any,
+  newData: any,
+  newSkills: any
+): EnrichmentChange[] {
+  const changes: EnrichmentChange[] = [];
+
+  // Check company name change
+  if (oldData.company_name !== newData.company_name) {
+    changes.push({
+      field: 'company_name',
+      type: 'modified',
+      old_value: oldData.company_name,
+      new_value: newData.company_name,
+    });
+  }
+
+  // Check description change (significant change only)
+  if (oldData.description && newData.description) {
+    const oldLen = oldData.description.length;
+    const newLen = newData.description.length;
+    if (Math.abs(oldLen - newLen) > 100 || 
+        oldData.description.substring(0, 100) !== newData.description.substring(0, 100)) {
+      changes.push({
+        field: 'description',
+        type: 'modified',
+      });
+    }
+  }
+
+  // Check products changes
+  const oldProducts = (oldData.products || []).map((p: any) => p.name || p);
+  const newProducts = (newData.products || []).map((p: any) => p.name || p);
+  const addedProducts = newProducts.filter((p: string) => !oldProducts.includes(p));
+  const removedProducts = oldProducts.filter((p: string) => !newProducts.includes(p));
+  
+  if (addedProducts.length > 0) {
+    changes.push({
+      field: 'products',
+      type: 'added',
+      new_value: addedProducts,
+    });
+  }
+  if (removedProducts.length > 0) {
+    changes.push({
+      field: 'products',
+      type: 'removed',
+      old_value: removedProducts,
+    });
+  }
+
+  // Check competitors changes
+  const oldCompetitors = (oldData.competitors || []).map((c: any) => c.name || c);
+  const newCompetitors = (newData.competitors || []).map((c: any) => c.name || c);
+  const addedCompetitors = newCompetitors.filter((c: string) => !oldCompetitors.includes(c));
+  const removedCompetitors = oldCompetitors.filter((c: string) => !newCompetitors.includes(c));
+  
+  if (addedCompetitors.length > 0) {
+    changes.push({
+      field: 'competitors',
+      type: 'added',
+      new_value: addedCompetitors,
+    });
+  }
+  if (removedCompetitors.length > 0) {
+    changes.push({
+      field: 'competitors',
+      type: 'removed',
+      old_value: removedCompetitors,
+    });
+  }
+
+  // Check skill changes (new skills generated)
+  const oldSkillKeys = Object.keys(oldData.generated_skills || {});
+  const newSkillKeys = Object.keys(newSkills || {});
+  const addedSkills = newSkillKeys.filter(k => !oldSkillKeys.includes(k));
+  
+  if (addedSkills.length > 0) {
+    changes.push({
+      field: 'generated_skills',
+      type: 'added',
+      new_value: addedSkills,
+    });
+  }
+
+  return changes;
 }
