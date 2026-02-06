@@ -37,8 +37,9 @@ import {
   GripVertical,
 } from 'lucide-react';
 import { OpsTableCell } from './OpsTableCell';
-import { evaluateFormattingRules, formattingStyleToCSS } from '@/lib/utils/conditionalFormatting';
+import { evaluateFormattingRules, evaluateRowFormatting, formattingStyleToCSS } from '@/lib/utils/conditionalFormatting';
 import type { FormattingRule } from '@/lib/utils/conditionalFormatting';
+import { getLogoS3Url, getIntegrationDomain } from '@/lib/hooks/useIntegrationLogo';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,12 +59,14 @@ interface Column {
   integration_config?: Record<string, unknown> | null;
   action_type?: string | null;
   action_config?: Record<string, unknown> | null;
+  hubspot_property_name?: string | null;
 }
 
 interface Row {
   id: string;
-  cells: Record<string, { value: string | null; confidence: number | null; status: string }>;
+  cells: Record<string, { value: string | null; confidence: number | null; status: string; metadata?: Record<string, unknown> | null }>;
   source_data?: Record<string, unknown>;
+  hubspot_removed_at?: string | null;
 }
 
 interface OpsTableProps {
@@ -80,6 +83,7 @@ interface OpsTableProps {
   columnOrder?: string[] | null;
   onColumnReorder?: (columnKeys: string[]) => void;
   onColumnResize?: (columnId: string, width: number) => void;
+  onEnrichRow?: (rowId: string, columnId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +167,7 @@ function SortableColumnHeader({
       className={`
         relative flex items-center gap-1 px-2 border-r border-gray-800 shrink-0 select-none
         ${col.is_enrichment ? 'bg-violet-500/5' : ''}
+        ${col.hubspot_property_name ? 'bg-orange-500/30' : ''}
         group cursor-pointer hover:bg-gray-800/40 transition-colors
       `}
       style={style}
@@ -223,6 +228,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   columnOrder,
   onColumnReorder,
   onColumnResize,
+  onEnrichRow,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
@@ -353,9 +359,35 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   // -----------------------------------------------------------------------
 
   const renderColumnIcon = (col: Column) => {
+    // Integration column: show integration logo (HubSpot, Apollo, Instantly, etc.)
+    const integrationId = col.hubspot_property_name ? 'hubspot' : col.integration_type;
+    if (integrationId) {
+      // Extract base integration name from types like "apollo_enrich" -> "apollo"
+      const baseName = integrationId.split('_')[0];
+      // Use getIntegrationDomain for proper domain mapping (apollo -> apollo.io, instantly -> instantly.ai)
+      const domain = getIntegrationDomain(baseName);
+      const logoUrl = getLogoS3Url(domain);
+
+      return (
+        <img
+          src={logoUrl}
+          alt={baseName}
+          className="w-3.5 h-3.5 shrink-0 rounded-sm object-contain"
+          onError={(e) => {
+            // Fallback to Zap icon if logo fails to load
+            e.currentTarget.style.display = 'none';
+            const fallback = document.createElement('div');
+            fallback.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>';
+            e.currentTarget.parentNode?.appendChild(fallback.firstChild!);
+          }}
+        />
+      );
+    }
+    // Enrichment column: show sparkles
     if (col.is_enrichment) {
       return <Sparkles className="w-3.5 h-3.5 text-violet-400 shrink-0" />;
     }
+    // Default: show column type icon
     const Icon = columnTypeIcons[col.column_type] ?? Hash;
     return <Icon className="w-3.5 h-3.5 text-gray-500 shrink-0" />;
   };
@@ -455,6 +487,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
               if (!row) return null;
               const isSelected = selectedRows.has(row.id);
               const { firstName, lastName } = getPersonNames(row);
+              const rowFmtStyle = formattingRules.length > 0
+                ? evaluateRowFormatting(formattingRules, row.cells)
+                : null;
 
               return (
                 <div
@@ -463,20 +498,26 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                     absolute left-0 w-full flex
                     border-b border-gray-800/50
                     transition-colors duration-75
-                    ${isSelected ? 'bg-blue-500/10' : 'hover:bg-blue-500/5'}
+                    ${isSelected ? 'bg-blue-500/10' : rowFmtStyle ? '' : 'hover:bg-blue-500/5'}
+                    ${row.hubspot_removed_at ? 'opacity-50 line-through' : ''}
                   `}
                   style={{
                     height: ROW_HEIGHT,
                     transform: `translateY(${virtualRow.start}px)`,
+                    ...(rowFmtStyle ? formattingStyleToCSS(rowFmtStyle) : {}),
                   }}
                 >
                   {/* Checkbox cell (sticky left) */}
                   <div
                     className={`
                       sticky left-0 z-20 flex items-center justify-center border-r border-gray-800/50 shrink-0
-                      ${isSelected ? 'bg-blue-500/10' : 'bg-gray-950'}
+                      ${isSelected ? 'bg-blue-500/10' : rowFmtStyle ? '' : 'bg-gray-950'}
                     `}
-                    style={{ width: CHECKBOX_COL_WIDTH, minWidth: CHECKBOX_COL_WIDTH }}
+                    style={{
+                      width: CHECKBOX_COL_WIDTH,
+                      minWidth: CHECKBOX_COL_WIDTH,
+                      ...(rowFmtStyle && !isSelected ? formattingStyleToCSS(rowFmtStyle) : {}),
+                    }}
                   >
                     <input
                       type="checkbox"
@@ -507,6 +548,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                         className={`
                           flex items-center px-2 border-r border-gray-800/50 shrink-0 overflow-hidden
                           ${col.is_enrichment ? 'bg-violet-500/[0.03]' : ''}
+                          ${col.hubspot_property_name ? 'bg-orange-500/10' : ''}
                         `}
                         style={{ width: cellWidth, minWidth: cellWidth, ...fmtStyle }}
                       >
@@ -523,6 +565,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           onEdit={(col.is_enrichment || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
                           dropdownOptions={col.dropdown_options}
                           formulaExpression={col.formula_expression}
+                          columnLabel={col.label}
+                          metadata={cellData.metadata}
+                          onEnrichRow={col.is_enrichment ? () => onEnrichRow?.(row.id, col.id) : undefined}
                         />
                       </div>
                     );
