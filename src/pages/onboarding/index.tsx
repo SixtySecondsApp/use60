@@ -46,7 +46,29 @@ export default function OnboardingPage() {
           return;
         }
 
-        // Check if user is on the waitlist with 'released' or 'converted' status (invitation access only)
+        // Check if user is choosing a different organization (re-onboarding after leaving org)
+        const searchParams = new URLSearchParams(window.location.search);
+        const isChoosingOrg = searchParams.get('step') === 'organization_selection';
+
+        // Check if user already has a profile (existing user re-onboarding)
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        const isExistingUser = !!existingProfile;
+
+        // Allow access if:
+        // 1. User is re-onboarding (choosing different org after leaving), OR
+        // 2. User is existing user (already has profile)
+        if (isChoosingOrg || isExistingUser) {
+          console.log('[Onboarding] Allowing access - existing user or re-onboarding:', { isChoosingOrg, isExistingUser });
+          setIsCheckingEmailVerification(false);
+          return;
+        }
+
+        // For new users, check if they're on the waitlist with 'released' or 'converted' status
         const { data: waitlistEntry, error: waitlistError } = await supabase
           .from('meetings_waitlist')
           .select('id, status')

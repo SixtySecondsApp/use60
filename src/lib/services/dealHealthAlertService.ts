@@ -407,6 +407,52 @@ async function sendAlertNotification(alert: DealHealthAlert): Promise<void> {
       },
     });
 
+    // ORG-NOTIF-006: Also notify org admins for critical alerts
+    if (alert.severity === 'critical') {
+      try {
+        // Get org_id from deal owner's membership
+        const { data: membership } = await supabase
+          .from('organization_memberships')
+          .select('org_id')
+          .eq('user_id', alert.user_id)
+          .eq('member_status', 'active')
+          .maybeSingle();
+
+        if (membership?.org_id) {
+          // Get owner name for context
+          const { data: owner } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', alert.user_id)
+            .single();
+
+          // Notify org admins/owners
+          await supabase.rpc('notify_org_members', {
+            p_org_id: membership.org_id,
+            p_role_filter: ['owner', 'admin'],
+            p_title: `Critical: Deal At Risk - ${dealName}`,
+            p_message: `${alert.message} (Owner: ${owner?.full_name || 'Unknown'})`,
+            p_type: 'error',
+            p_category: 'deal',
+            p_action_url: `/crm?deal=${alert.deal_id}`,
+            p_metadata: {
+              deal_id: alert.deal_id,
+              deal_name: dealName,
+              alert_type: alert.alert_type,
+              severity: alert.severity,
+              owner_id: alert.user_id,
+              owner_name: owner?.full_name,
+              suggested_actions: alert.suggested_actions,
+            },
+            p_is_org_wide: true,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to notify admins of critical deal alert:', error);
+        // Don't fail the main notification if admin notification fails
+      }
+    }
+
     if (notification) {
       // Update alert with notification info
       await supabase

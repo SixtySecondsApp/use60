@@ -7,6 +7,17 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Hide scrollbar on tab navigation
+const scrollbarHideStyle = `
+  .skill-tabs-container::-webkit-scrollbar {
+    display: none;
+  }
+  .skill-tabs-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+`;
 import {
   Check,
   ChevronRight,
@@ -103,6 +114,26 @@ export function SkillsConfigStep() {
     }));
     await moveNext();
   }, [activeSkill.id, moveNext]);
+
+  const handleSkipAll = useCallback(async () => {
+    // Mark all remaining skills as skipped and go to complete
+    const updated = { ...skillStatuses };
+    for (const skill of SKILLS) {
+      if (updated[skill.id] === 'pending') {
+        updated[skill.id] = 'skipped';
+      }
+    }
+    setSkillStatuses(updated);
+
+    if (organizationId) {
+      const success = await saveAllSkills(organizationId);
+      if (success) {
+        setStep('complete');
+      }
+    } else {
+      setStep('complete');
+    }
+  }, [skillStatuses, organizationId, saveAllSkills, setStep]);
 
   const renderSkillConfig = () => {
     if (!activeConfig) return null;
@@ -619,16 +650,18 @@ export function SkillsConfigStep() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-2xl mx-auto px-4"
-    >
-      <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
-        {/* Tab Navigation */}
-        <div className="px-4 pt-4 border-b border-gray-800">
-          <div className="flex gap-1 overflow-x-auto pb-0 scrollbar-hide">
+    <>
+      <style>{scrollbarHideStyle}</style>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="w-full max-w-2xl mx-auto px-4"
+      >
+        <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
+          {/* Tab Navigation */}
+          <div className="px-4 pt-4 border-b border-gray-800">
+            <div className="skill-tabs-container flex gap-1 overflow-x-auto pb-0">
             {SKILLS.map((skill, index) => {
               const Icon = skill.icon;
               const status = getSkillStatus(skill.id);
@@ -717,7 +750,24 @@ export function SkillsConfigStep() {
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Skip All & Start Over */}
+        <div className="px-4 sm:px-6 py-3 border-t border-gray-800/50 flex items-center justify-between">
+          <button
+            onClick={() => useOnboardingV2Store.getState().reset()}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+          >
+            Start Over
+          </button>
+          <button
+            onClick={handleSkipAll}
+            className="text-xs text-gray-400 hover:text-violet-400 transition-colors font-medium"
+          >
+            Skip All & Finish
+          </button>
+        </div>
       </div>
-    </motion.div>
+      </motion.div>
+    </>
   );
 }

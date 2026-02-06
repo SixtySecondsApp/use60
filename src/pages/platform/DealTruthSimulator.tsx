@@ -39,6 +39,7 @@ import {
   Pause,
   RotateCcw,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -1011,6 +1012,9 @@ export default function DealTruthSimulator() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950">
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+        {/* Back Button */}
+        <BackToPlatform />
+
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>

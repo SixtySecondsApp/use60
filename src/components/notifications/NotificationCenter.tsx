@@ -26,7 +26,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { id: 'all', label: 'All' },
+  { id: 'all', label: 'All', icon: Bell },
   { id: 'ai', label: 'AI', icon: Sparkles },
   { id: 'tasks', label: 'Tasks', icon: Target },
   { id: 'content', label: 'Content', icon: FileText },
@@ -220,261 +220,267 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
     const colors: Record<string, { bg: string; text: string }> = {
       purple: {
         bg: isDark ? 'bg-purple-500/20' : 'bg-purple-100',
-        text: 'text-purple-500',
+        text: 'text-purple-600 dark:text-purple-400',
       },
       amber: {
         bg: isDark ? 'bg-amber-500/20' : 'bg-amber-100',
-        text: 'text-amber-500',
+        text: 'text-amber-600 dark:text-amber-400',
       },
       blue: {
         bg: isDark ? 'bg-blue-500/20' : 'bg-blue-100',
-        text: 'text-blue-500',
+        text: 'text-blue-600 dark:text-blue-400',
       },
       emerald: {
         bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-100',
-        text: 'text-emerald-500',
+        text: 'text-emerald-600 dark:text-emerald-400',
       },
       rose: {
         bg: isDark ? 'bg-rose-500/20' : 'bg-rose-100',
-        text: 'text-rose-500',
+        text: 'text-rose-600 dark:text-rose-400',
       },
       gray: {
-        bg: isDark ? 'bg-gray-800' : 'bg-gray-100',
-        text: 'text-gray-500',
+        bg: isDark ? 'bg-gray-500/20' : 'bg-gray-100',
+        text: 'text-gray-600 dark:text-gray-400',
       },
     };
     return colors[color] || colors.gray;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end pt-16 pr-4 sm:pt-4">
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      
-      <div className="relative w-full max-w-md max-h-[80vh] overflow-hidden rounded-2xl border shadow-2xl flex flex-col bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
-        
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-blue-500/20 dark:bg-blue-500/20">
-                <Bell className="w-5 h-5 text-blue-500" />
-              </div>
-              <div>
-                <h2 className="font-bold text-gray-900 dark:text-white">Notifications</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-500">
-                  {unreadCount} unread
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllAsRead}
-                  className="p-2 rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-500"
-                  title="Mark all as read"
-                >
-                  <CheckCheck className="w-4 h-4" />
-                </button>
-              )}
-              <button
-                className="p-2 rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-500"
-                title="Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-500"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {TABS.map((tab) => {
-              const count = tabCounts[tab.id];
-              const unreadInTab = groupedNotifications[tab.id]?.filter(n => !n.read).length || 0;
-              
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    if (tab.id === 'all') {
-                      setExpandedGroup(null);
-                    }
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors",
-                    activeTab === tab.id
-                      ? "bg-blue-500/20 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
-                      : "text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  )}
-                >
-                  {tab.icon && <tab.icon className="w-3.5 h-3.5" />}
-                  {tab.label}
-                  {count > 0 && (
-                    <span
-                      className={cn(
-                        "px-1.5 py-0.5 rounded-full text-xs",
-                        activeTab === tab.id
-                          ? "bg-blue-500/30 dark:bg-blue-500/30"
-                          : "bg-gray-200 dark:bg-gray-800"
-                      )}
-                    >
-                      {unreadInTab > 0 ? unreadInTab : count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Notifications List */}
-        <div className="flex-1 overflow-y-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 text-gray-500 dark:text-gray-400 animate-spin" />
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center py-12 px-4">
-              <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">{error}</p>
-            </div>
-          ) : notifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 px-4">
-              <BellOff className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-3" />
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                No notifications yet
+    <div className="
+      w-full h-full sm:w-[480px] sm:h-auto sm:max-h-[700px]
+      bg-white dark:bg-gray-900/95 backdrop-blur-sm
+      border-0 sm:border border-gray-200 dark:border-gray-700/50
+      rounded-none sm:rounded-lg shadow-2xl
+      overflow-hidden flex flex-col
+    ">
+      {/* Header */}
+      <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Bell className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <h2 className="font-bold text-sm sm:text-base text-gray-900 dark:text-white truncate">Notifications</h2>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-500">
+                {unreadCount} unread
               </p>
             </div>
-          ) : (
-            displayNotifications.map(([groupId, groupNotifications]) => {
-              if (groupNotifications.length === 0) return null;
-
-              const groupIdTyped = groupId as TabId;
-              // Always expanded - no collapsed groups
-              const isExpanded = true;
-
-              return (
-                <div key={groupId}>
-                  {/* Group headers removed - showing flat list */}
-                  
-                  {isExpanded && (
-                    <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                      <AnimatePresence>
-                        {groupNotifications.map((notification) => {
-                          const { Icon, color } = getNotificationIcon(notification);
-                          const colors = getColorClasses(color);
-
-                          return (
-                            <motion.div
-                              key={notification.id}
-                              initial={{ opacity: 0, y: -10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -10 }}
-                              className={cn(
-                                "p-4 transition-colors cursor-pointer group",
-                                !notification.read && "bg-blue-50/50 dark:bg-gray-800/30",
-                                "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                              )}
-                              onClick={() => handleNotificationClick(notification)}
-                            >
-                              <div className="flex gap-3">
-                                <div className={cn("p-2 rounded-lg flex-shrink-0", colors.bg)}>
-                                  <Icon className={cn("w-4 h-4", colors.text)} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                      <p
-                                        className={cn(
-                                          "text-sm font-medium",
-                                          !notification.read
-                                            ? "text-gray-900 dark:text-white"
-                                            : "text-gray-700 dark:text-gray-300"
-                                        )}
-                                      >
-                                        {notification.title}
-                                      </p>
-                                      <p className="text-sm mt-0.5 text-gray-500 dark:text-gray-400 line-clamp-2">
-                                        {notification.message}
-                                      </p>
-                                    </div>
-                                    {!notification.read && (
-                                      <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-2" />
-                                    )}
-                                  </div>
-                                  
-                                  <div className="flex items-center justify-between mt-2">
-                                    <span className="text-xs text-gray-500 dark:text-gray-500">
-                                      {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-                                    </span>
-                                    
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          markAsRead(notification.id);
-                                        }}
-                                        className="p-1 rounded-lg transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-                                      >
-                                        <Check className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          deleteNotification(notification.id);
-                                        }}
-                                        className="p-1 rounded-lg transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                  
-                                  {notification.metadata?.priority && (
-                                    <div
-                                      className={cn(
-                                        "mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
-                                        notification.metadata.priority === 'critical'
-                                          ? "bg-rose-500/20 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400"
-                                          : "bg-amber-500/20 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400"
-                                      )}
-                                    >
-                                      <AlertCircle className="w-3 h-3" />
-                                      {notification.metadata.priority}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Footer */}
-        {notifications.length > 0 && (
-          <div className="p-3 border-t border-gray-200 dark:border-gray-800">
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                className="p-2 rounded-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
+                title="Mark all as read"
+                aria-label="Mark all notifications as read"
+              >
+                <CheckCheck className="w-5 h-5" />
+              </button>
+            )}
             <button
-              onClick={loadMore}
-              className="w-full py-2 rounded-xl text-sm font-medium transition-colors text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="p-2 rounded-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
+              title="Settings"
+              aria-label="Notification settings"
             >
-              Load More
+              <Settings className="w-5 h-5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/50 text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
+              aria-label="Close notifications"
+            >
+              <X className="w-5 h-5" />
             </button>
           </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="grid grid-cols-5 gap-1.5">
+          {TABS.map((tab) => {
+            const count = tabCounts[tab.id];
+            const unreadInTab = groupedNotifications[tab.id]?.filter(n => !n.read).length || 0;
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (tab.id === 'all') {
+                    setExpandedGroup(null);
+                  }
+                }}
+                className={cn(
+                  "flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-all duration-200",
+                  activeTab === tab.id
+                    ? "bg-blue-500/20 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                    : "text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50"
+                )}
+                title={tab.label}
+              >
+                {tab.icon && <tab.icon className="w-4 h-4 flex-shrink-0" />}
+                {count > 0 && (
+                  <span
+                    className={cn(
+                      "rounded-full text-xs font-bold flex-shrink-0 min-w-[20px] h-5 flex items-center justify-center",
+                      activeTab === tab.id
+                        ? "bg-blue-500/30 dark:bg-blue-500/30"
+                        : "bg-gray-200 dark:bg-gray-800"
+                    )}
+                  >
+                    {unreadInTab > 0 ? unreadInTab : count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Notifications List */}
+      <div className="flex-1 overflow-y-auto">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 text-gray-500 dark:text-gray-400 animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center">{error}</p>
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <BellOff className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-3" />
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+              No notifications yet
+            </p>
+          </div>
+        ) : (
+          displayNotifications.map(([groupId, groupNotifications]) => {
+            if (groupNotifications.length === 0) return null;
+
+            const groupIdTyped = groupId as TabId;
+            // Always expanded - no collapsed groups
+            const isExpanded = true;
+
+            return (
+              <div key={groupId}>
+                {/* Group headers removed - showing flat list */}
+
+                {isExpanded && (
+                  <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                    <AnimatePresence>
+                      {groupNotifications.map((notification) => {
+                        const { Icon, color } = getNotificationIcon(notification);
+                        const colors = getColorClasses(color);
+
+                        return (
+                          <motion.div
+                            key={notification.id}
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className={cn(
+                              "px-4 sm:px-5 py-4 sm:py-5 transition-colors cursor-pointer group",
+                              !notification.read && "bg-blue-50/50 dark:bg-gray-800/30",
+                              "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                            )}
+                            onClick={() => handleNotificationClick(notification)}
+                          >
+                            <div className="flex gap-3 sm:gap-4">
+                              <div className={cn("p-2.5 rounded-lg flex-shrink-0 flex items-center justify-center", colors.bg)}>
+                                <Icon className={cn("w-5 h-5", colors.text)} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <p
+                                      className={cn(
+                                        "text-sm sm:text-base font-medium leading-snug",
+                                        !notification.read
+                                          ? "text-gray-900 dark:text-white"
+                                          : "text-gray-700 dark:text-gray-300"
+                                      )}
+                                    >
+                                      {notification.title}
+                                    </p>
+                                    <p className="text-xs sm:text-sm mt-1 text-gray-500 dark:text-gray-400 line-clamp-2 leading-normal">
+                                      {notification.message}
+                                    </p>
+                                  </div>
+                                  {!notification.read && (
+                                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
+                                  )}
+                                </div>
+
+                                <div className="flex items-center justify-between gap-2 mt-3">
+                                  <span className="text-xs text-gray-500 dark:text-gray-500 flex-shrink-0">
+                                    {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                                  </span>
+
+                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        markAsRead(notification.id);
+                                      }}
+                                      className="p-1.5 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                                      title="Mark as read"
+                                      aria-label="Mark as read"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteNotification(notification.id);
+                                      }}
+                                      className="p-1.5 rounded-lg transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+                                      title="Delete notification"
+                                      aria-label="Delete notification"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {notification.metadata?.priority && (
+                                  <div
+                                    className={cn(
+                                      "mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
+                                      notification.metadata.priority === 'critical'
+                                        ? "bg-rose-500/20 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400"
+                                        : "bg-amber-500/20 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                                    )}
+                                  >
+                                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    <span>{notification.metadata.priority}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
+
+      {/* Footer */}
+      {notifications.length > 0 && (
+        <div className="p-4 sm:p-5 border-t border-gray-200 dark:border-gray-800">
+          <button
+            onClick={loadMore}
+            className="w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-200 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50"
+          >
+            Load More
+          </button>
+        </div>
+      )}
     </div>
   );
 }

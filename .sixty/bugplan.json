@@ -1,0 +1,280 @@
+{
+  "feature": "onboarding",
+  "issue": "manual-enrichment-race-condition",
+  "createdAt": "2026-02-05T14:30:00Z",
+  "reportedSymptom": "When selecting 'I don't have a website' and completing manual enrichment, user is redirected back to website_input, then automatically advances to enrichment_result without user action.",
+  "consoleErrors": [
+    "[EnrichmentLoadingStep] No organizationId - cannot proceed with enrichment. Redirecting to website_input",
+    "EnrichmentLoadingStep: Manual enrichment already started, skipping startEnrichment",
+    "[pollEnrichmentStatus] Updated org name to: Testing Software"
+  ],
+  "rootCause": {
+    "id": "BUG-001",
+    "summary": "State transition race condition - currentStep set before organizationId is available",
+    "file": "src/lib/stores/onboardingV2Store.ts",
+    "line": 1082,
+    "confidence": 0.98,
+    "explanation": "submitManualEnrichment sets currentStep='enrichment_loading' synchronously before organizationId is created asynchronously. This causes EnrichmentLoadingStep to mount with empty organizationId, triggering guard redirect."
+  },
+  "bugs": [
+    {
+      "id": "BUG-001",
+      "title": "Fix state transition race condition in submitManualEnrichment",
+      "severity": "critical",
+      "priority": "P0",
+      "status": "fixed",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1073-1132",
+      "description": "submitManualEnrichment sets currentStep='enrichment_loading' synchronously (line 1082) before organizationId is created asynchronously (line 1098). This causes EnrichmentLoadingStep to mount with empty organizationId, triggering guard redirect to website_input.",
+      "approach": "Move currentStep transition to AFTER organizationId is confirmed. Set organizationId and currentStep atomically in single set() call.",
+      "estimatedMinutes": 15,
+      "dependencies": [],
+      "blocks": [
+        "BUG-002",
+        "BUG-004",
+        "BUG-005"
+      ],
+      "codeChanges": {
+        "location": "src/lib/stores/onboardingV2Store.ts:1073-1132",
+        "changes": [
+          {
+            "type": "remove",
+            "line": 1082,
+            "code": "currentStep: 'enrichment_loading',"
+          },
+          {
+            "type": "modify",
+            "lineRange": "1089-1098",
+            "before": "if (!finalOrgId || finalOrgId === '') {\n  finalOrgId = await get().createOrganizationFromManualData(session.user.id, manualData);\n  if (!finalOrgId) {\n    set({ isEnrichmentLoading: false });\n    return;\n  }\n  set({ organizationId: finalOrgId });\n}",
+            "after": "if (!finalOrgId || finalOrgId === '') {\n  finalOrgId = await get().createOrganizationFromManualData(session.user.id, manualData);\n  if (!finalOrgId) {\n    set({ isEnrichmentLoading: false });\n    return;\n  }\n} else if (manualData.company_name) {\n  await supabase\n    .from('organizations')\n    .update({ name: manualData.company_name })\n    .eq('id', finalOrgId);\n}\n\n// NOW set organizationId and step atomically\nset({ \n  organizationId: finalOrgId,\n  currentStep: 'enrichment_loading',\n});"
+          }
+        ]
+      },
+      "testCases": [
+        "Personal email user completes manual enrichment without redirect",
+        "Step transitions directly from manual_enrichment to enrichment_loading",
+        "No console error about missing organizationId",
+        "EnrichmentLoadingStep mounts with valid organizationId",
+        "No redirect to website_input occurs"
+      ],
+      "fixedAt": "2026-02-05T14:28:23.676Z",
+      "commit": "484c54d1",
+      "actualMinutes": 15
+    },
+    {
+      "id": "BUG-002",
+      "title": "Use atomic state update for organizationId and currentStep",
+      "severity": "high",
+      "priority": "P0",
+      "status": "fixed",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1098",
+      "description": "Multiple separate set() calls (line 1078-1083 and line 1098) cause intermediate renders where state is incomplete. EnrichmentLoadingStep can mount between these updates with stale state.",
+      "approach": "Combine organizationId and currentStep into single atomic set() call to prevent intermediate renders with incomplete state. This is part of BUG-001 fix.",
+      "estimatedMinutes": 5,
+      "dependencies": [
+        "BUG-001"
+      ],
+      "blocks": [],
+      "testCases": [
+        "State updates are atomic - no intermediate renders",
+        "organizationId and currentStep visible in same render cycle",
+        "No race condition between state updates"
+      ],
+      "fixedAt": "2026-02-05T14:28:23.676Z",
+      "commit": "484c54d1",
+      "actualMinutes": 5
+    },
+    {
+      "id": "BUG-003",
+      "title": "Add polling guard to stop if organizationId cleared",
+      "severity": "high",
+      "priority": "P1",
+      "status": "fixed",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1176-1286",
+      "description": "pollEnrichmentStatus continues running recursively even after guard redirect to website_input. When enrichment completes, it auto-advances to enrichment_result, causing unexpected navigation.",
+      "approach": "Add guard at start of pollEnrichmentStatus to check if organizationId still exists and step is still enrichment_loading. Stop polling if conditions not met.",
+      "estimatedMinutes": 10,
+      "dependencies": [],
+      "blocks": [],
+      "codeChanges": {
+        "location": "src/lib/stores/onboardingV2Store.ts:1176-1286",
+        "changes": [
+          {
+            "type": "add",
+            "after": 1186,
+            "code": "\n  // Guard: Stop polling if organizationId cleared or step changed away from enrichment flow\n  if (!state.organizationId && state.currentStep !== 'enrichment_loading') {\n    console.log('[pollEnrichmentStatus] Stopping - organizationId cleared or step changed');\n    set({\n      isEnrichmentLoading: false,\n      pollingStartTime: null,\n      pollingAttempts: 0,\n    });\n    return;\n  }"
+          }
+        ]
+      },
+      "testCases": [
+        "Polling stops if organizationId is cleared",
+        "Polling stops if user navigates away from enrichment_loading",
+        "No auto-advance after error redirect",
+        "Polling continues normally during valid enrichment"
+      ],
+      "fixedAt": "2026-02-05T14:28:23.676Z",
+      "commit": "484c54d1",
+      "actualMinutes": 10
+    },
+    {
+      "id": "BUG-004",
+      "title": "Add enrichment source check to guard in EnrichmentLoadingStep",
+      "severity": "high",
+      "priority": "P1",
+      "status": "fixed",
+      "file": "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx",
+      "lines": "49-55",
+      "description": "Guard useEffect runs immediately on component mount, before async organizationId creation completes. For manual enrichment, this timing is expected and shouldn't trigger redirect.",
+      "approach": "Add check for enrichmentSource='manual' and isEnrichmentLoading=true to skip guard during manual enrichment initialization phase.",
+      "estimatedMinutes": 10,
+      "dependencies": [
+        "BUG-001"
+      ],
+      "blocks": [],
+      "codeChanges": {
+        "location": "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx:49-55",
+        "changes": [
+          {
+            "type": "modify",
+            "lineRange": "49-55",
+            "before": "// Guard: Redirect to website_input if no organizationId (cannot proceed without it)\nuseEffect(() => {\n  if (!organizationId || organizationId === '') {\n    console.error('[EnrichmentLoadingStep] No organizationId - cannot proceed with enrichment. Redirecting to website_input');\n    setStep('website_input');\n    return;\n  }\n}, [organizationId, setStep]);",
+            "after": "// Guard: Redirect to website_input if no organizationId (cannot proceed without it)\nuseEffect(() => {\n  // Skip guard during manual enrichment initialization (organizationId set asynchronously)\n  if (enrichmentSource === 'manual' && isEnrichmentLoading && !enrichment) {\n    // Manual enrichment just started, organizationId may be pending async resolution\n    return;\n  }\n\n  if (!organizationId || organizationId === '') {\n    console.error(\n      `[EnrichmentLoadingStep] No organizationId for ${enrichmentSource || 'unknown'} enrichment. ` +\n      `Redirecting to website_input. Loading: ${isEnrichmentLoading}, Has enrichment: ${!!enrichment}`\n    );\n    setStep('website_input');\n    return;\n  }\n}, [organizationId, setStep, enrichmentSource, isEnrichmentLoading, enrichment]);"
+          }
+        ]
+      },
+      "testCases": [
+        "Guard skips check during manual enrichment initialization",
+        "Guard still works for website-based enrichment",
+        "Guard triggers for invalid states (no org after loading completes)",
+        "Better error messages logged for debugging"
+      ],
+      "fixedAt": "2026-02-05T14:28:23.676Z",
+      "commit": "484c54d1",
+      "actualMinutes": 10
+    },
+    {
+      "id": "BUG-005",
+      "title": "Add validation before calling pollEnrichmentStatus",
+      "severity": "medium",
+      "priority": "P2",
+      "status": "fixed",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1126",
+      "description": "pollEnrichmentStatus called without validating that organizationId parameter exists. If finalOrgId is null/empty, polling continues with invalid organizationId.",
+      "approach": "Add validation before calling pollEnrichmentStatus to ensure organizationId is valid.",
+      "estimatedMinutes": 5,
+      "dependencies": [
+        "BUG-001"
+      ],
+      "blocks": [],
+      "codeChanges": {
+        "location": "src/lib/stores/onboardingV2Store.ts:1114-1126",
+        "changes": [
+          {
+            "type": "add",
+            "before": 1126,
+            "code": "\n    // Validate organizationId before polling\n    if (!finalOrgId || finalOrgId === '') {\n      throw new Error('Cannot start polling without valid organizationId');\n    }"
+          }
+        ]
+      },
+      "testCases": [
+        "Error thrown if pollEnrichmentStatus called with empty organizationId",
+        "Polling only starts with valid organizationId",
+        "User sees error message instead of hanging state"
+      ],
+      "fixedAt": "2026-02-05T14:28:23.676Z",
+      "commit": "484c54d1",
+      "actualMinutes": 5
+    },
+    {
+      "id": "BUG-006",
+      "title": "Improve error handling for silent org selection path failure",
+      "severity": "medium",
+      "priority": "P2",
+      "status": "fixed",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1093-1096",
+      "description": "When createOrganizationFromManualData returns null (organization selection step shown), submitManualEnrichment returns silently without setting enrichmentError. User may be confused about what to do next.",
+      "approach": "Add better state handling when organization selection path is taken. Ensure enrichmentError is null and step is correctly set.",
+      "estimatedMinutes": 5,
+      "dependencies": [
+        "BUG-001"
+      ],
+      "blocks": [],
+      "codeChanges": {
+        "location": "src/lib/stores/onboardingV2Store.ts:1093-1096",
+        "changes": [
+          {
+            "type": "modify",
+            "lineRange": "1093-1096",
+            "before": "if (!finalOrgId) {\n  set({ isEnrichmentLoading: false });\n  return;\n}",
+            "after": "if (!finalOrgId) {\n  // Organization selection step shown, ensure clean state\n  set({ \n    isEnrichmentLoading: false,\n    enrichmentError: null, // Clear any previous errors\n    // currentStep already set by createOrganizationFromManualData\n  });\n  console.log('[submitManualEnrichment] Organization selection required, waiting for user choice');\n  return;\n}"
+          }
+        ]
+      },
+      "testCases": [
+        "Similar org found shows organization_selection step",
+        "No error message shown during org selection",
+        "State is clean when waiting for user to select org",
+        "User can complete org selection and continue"
+      ],
+      "fixedAt": "2026-02-05T14:28:23.676Z",
+      "commit": "484c54d1",
+      "actualMinutes": 5
+    }
+  ],
+  "testPlan": {
+    "manual": [
+      "Sign up with personal email (gmail.com)",
+      "Select 'I don't have a website yet'",
+      "Complete all 6 manual enrichment questions",
+      "Click 'Complete' on final question",
+      "Verify: User stays on enrichment_loading (no redirect)",
+      "Verify: No console error about missing organizationId",
+      "Verify: Progress advances to enrichment_result when complete",
+      "Test with existing similar organization",
+      "Verify: Organization selection shown correctly",
+      "Test with corporate email domain",
+      "Verify: Website-based enrichment still works",
+      "Test error scenarios (network failure, etc.)",
+      "Verify: Proper error messages shown to user"
+    ],
+    "automated": [
+      "Unit test: submitManualEnrichment sets organizationId before step transition",
+      "Unit test: State updates are atomic",
+      "Unit test: pollEnrichmentStatus stops when organizationId cleared",
+      "Unit test: Guard skips during manual enrichment initialization",
+      "Integration test: Manual enrichment flow end-to-end",
+      "Integration test: Organization selection flow",
+      "Integration test: Error handling in manual enrichment"
+    ]
+  },
+  "technicalNotes": {
+    "raceConditionExplanation": "The race condition occurs because React renders happen synchronously when Zustand state changes. When submitManualEnrichment sets currentStep='enrichment_loading', React immediately re-renders OnboardingV2, which mounts EnrichmentLoadingStep. The component's useEffect guard runs and reads organizationId from the store, but at this point the async createOrganizationFromManualData hasn't completed yet, so organizationId is empty. The guard triggers a redirect, which overwrites the enrichment_loading step. Meanwhile, the async operation completes and polling starts, eventually auto-advancing to enrichment_result.",
+    "keyFiles": [
+      "src/lib/stores/onboardingV2Store.ts - Main state management",
+      "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx - Component with guard",
+      "src/pages/onboarding/v2/ManualEnrichmentStep.tsx - Triggers submission",
+      "src/pages/onboarding/v2/OnboardingV2.tsx - Parent coordinator"
+    ],
+    "zustandBatchingNote": "Zustand doesn't batch multiple set() calls. Each set() triggers subscribers immediately. To ensure atomic state updates visible to all components in same render cycle, use single set() call with all state changes.",
+    "reactRenderTimingNote": "When Zustand store updates, React components subscribed to that store re-render synchronously. If a store update happens during an async operation, components will render with intermediate state. This is why organizationId must be set BEFORE currentStep changes.",
+    "agentAnalysis": {
+      "codeTracer": "Mapped execution flow showing state mutations happen in wrong order",
+      "logicAnalyzer": "Identified timing issue between sync and async operations",
+      "errorTracker": "Found missing validation and error handling gaps",
+      "edgeCaseHunter": "Confirmed race condition with polling continuation"
+    }
+  },
+  "totalEstimatedMinutes": 50,
+  "fixOrder": [
+    "BUG-001 (Critical) - Fix state transition order",
+    "BUG-002 (High) - Ensure atomic updates (part of BUG-001)",
+    "BUG-003 (High) - Add polling guard",
+    "BUG-004 (High) - Improve EnrichmentLoadingStep guard",
+    "BUG-005 (Medium) - Add validation before polling",
+    "BUG-006 (Medium) - Better org selection error handling"
+  ]
+}

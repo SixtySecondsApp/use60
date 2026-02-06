@@ -83,55 +83,59 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
 
   return (
     <div className="
-      w-full h-full sm:w-96 sm:h-auto sm:max-h-[600px]
+      w-full h-full sm:w-[480px] sm:h-auto sm:max-h-[700px]
       bg-white dark:bg-gray-900/95 backdrop-blur-sm
       border-0 sm:border border-gray-200 dark:border-gray-700/50
       rounded-none sm:rounded-lg shadow-2xl
       overflow-hidden flex flex-col
     ">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Bell className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
-            {unreadCount > 0 && (
-              <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-full">
-                {unreadCount} new
-              </span>
-            )}
+      <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <Bell className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100 truncate">Notifications</h3>
+              {unreadCount > 0 && (
+                <span className="inline-block mt-0.5 px-2 py-0.5 bg-red-500/20 text-red-500 dark:text-red-400 text-xs font-medium rounded-full">
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllAsRead}
-                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800/30 rounded transition-colors"
+                className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg transition-all duration-200"
                 title="Mark all as read"
+                aria-label="Mark all notifications as read"
               >
-                <CheckCheck className="w-4 h-4" />
+                <CheckCheck className="w-5 h-5" />
               </button>
             )}
             {notifications.length > 0 && (
               <button
                 onClick={handleClearAll}
-                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800/30 rounded transition-colors"
+                className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-all duration-200"
                 title="Clear all"
+                aria-label="Clear all notifications"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-5 h-5" />
               </button>
             )}
           </div>
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800/50 p-1 rounded">
+        <div className="flex gap-1.5 bg-gray-100 dark:bg-gray-800/50 p-1.5 rounded-lg">
           <button
             onClick={() => setFilter('all')}
             className={cn(
-              "flex-1 px-3 py-1.5 text-sm font-medium rounded transition-colors",
+              "flex-1 px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all duration-200",
               filter === 'all'
-                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-white/50 dark:hover:bg-gray-700/30"
             )}
           >
             All
@@ -139,13 +143,17 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
           <button
             onClick={() => setFilter('unread')}
             className={cn(
-              "flex-1 px-3 py-1.5 text-sm font-medium rounded transition-colors",
+              "flex-1 px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 whitespace-nowrap",
               filter === 'unread'
-                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-white/50 dark:hover:bg-gray-700/30"
             )}
           >
-            Unread ({unreadCount})
+            <span className="hidden sm:inline">Unread</span>
+            <span className="sm:hidden">Unread</span>
+            {unreadCount > 0 && (
+              <span className="ml-1 text-xs">({unreadCount})</span>
+            )}
           </button>
         </div>
       </div>
@@ -178,7 +186,7 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
                   className={cn(
-                    "p-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer group relative",
+                    "px-4 sm:px-5 py-4 sm:py-5 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer group relative",
                     !notification.read && "bg-gray-50 dark:bg-gray-800/20"
                   )}
                   onClick={() => handleNotificationClick(notification)}
@@ -188,36 +196,38 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />
                   )}
 
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 sm:gap-4">
                     {/* Icon */}
-                    <div className="flex-shrink-0 mt-0.5">
-                      {getNotificationIcon(notification.type)}
+                    <div className="flex-shrink-0 mt-1">
+                      <div className="p-2 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center">
+                        {getNotificationIcon(notification.type)}
+                      </div>
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
                           <p className={cn(
-                            "text-sm font-medium",
+                            "text-sm sm:text-base font-medium leading-snug",
                             notification.read ? "text-gray-700 dark:text-gray-300" : "text-gray-900 dark:text-gray-100"
                           )}>
                             {notification.title}
                           </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+                          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 leading-normal">
                             {notification.message}
                           </p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
                               {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                             </span>
                             {notification.category && (
-                              <span className="text-xs text-gray-400 dark:text-gray-500 px-1.5 py-0.5 bg-gray-200 dark:bg-gray-800 rounded">
+                              <span className="text-xs text-gray-400 dark:text-gray-500 px-2 py-0.5 bg-gray-200 dark:bg-gray-800 rounded-md">
                                 {notification.category}
                               </span>
                             )}
                             {notification.action_url && (
-                              <ExternalLink className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                              <ExternalLink className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
                             )}
                           </div>
                         </div>
@@ -228,9 +238,11 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
                             e.stopPropagation();
                             deleteNotification(notification.id);
                           }}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 dark:text-gray-500 hover:text-red-400 transition-all"
+                          className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-all duration-200 flex-shrink-0"
+                          title="Delete notification"
+                          aria-label="Delete notification"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -244,10 +256,10 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
 
       {/* Load More */}
       {notifications.length >= 20 && (
-        <div className="p-3 border-t border-gray-200 dark:border-gray-800">
+        <div className="p-4 sm:p-5 border-t border-gray-200 dark:border-gray-800">
           <button
             onClick={loadMore}
-            className="w-full px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800/30 rounded transition-colors"
+            className="w-full px-4 py-2.5 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg transition-all duration-200"
           >
             Load more notifications
           </button>

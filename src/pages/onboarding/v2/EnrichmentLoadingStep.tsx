@@ -27,8 +27,19 @@ const tasks = [
 export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: EnrichmentLoadingStepProps) {
   const [progress, setProgress] = useState(0);
   const [startTime] = useState(Date.now());
+  const [elapsedTime, setElapsedTime] = useState(0);
   const [showStillWorkingMessage, setShowStillWorkingMessage] = useState(false);
-  const { organizationId: storeOrgId, startEnrichment, enrichment, isEnrichmentLoading, enrichmentError, setStep, enrichmentSource } = useOnboardingV2Store();
+  const {
+    organizationId: storeOrgId,
+    startEnrichment,
+    enrichment,
+    isEnrichmentLoading,
+    enrichmentError,
+    setStep,
+    enrichmentSource,
+    enrichmentRetryCount,
+    pollingStartTime,
+  } = useOnboardingV2Store();
 
   // Use organizationId from store (which gets updated when new org is created)
   // Fall back to prop if store is empty
@@ -36,12 +47,21 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
 
   // Guard: Redirect to website_input if no organizationId (cannot proceed without it)
   useEffect(() => {
+    // Skip guard during manual enrichment initialization (organizationId set asynchronously)
+    if (enrichmentSource === 'manual' && isEnrichmentLoading && !enrichment) {
+      // Manual enrichment just started, organizationId may be pending async resolution
+      return;
+    }
+
     if (!organizationId || organizationId === '') {
-      console.error('[EnrichmentLoadingStep] No organizationId - cannot proceed with enrichment. Redirecting to website_input');
+      console.error(
+        `[EnrichmentLoadingStep] No organizationId for ${enrichmentSource || 'unknown'} enrichment. ` +
+        `Redirecting to website_input. Loading: ${isEnrichmentLoading}, Has enrichment: ${!!enrichment}`
+      );
       setStep('website_input');
       return;
     }
-  }, [organizationId, setStep]);
+  }, [organizationId, setStep, enrichmentSource, isEnrichmentLoading, enrichment]);
 
   // Start enrichment on mount (only for website-based enrichment, not manual)
   // Manual enrichment is already started in submitManualEnrichment
@@ -87,6 +107,18 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
     return () => clearInterval(interval);
   }, [isEnrichmentLoading, enrichment?.status]);
 
+  // Track elapsed time while loading
+  useEffect(() => {
+    if (!isEnrichmentLoading) return;
+
+    const timer = setInterval(() => {
+      const start = pollingStartTime || startTime;
+      setElapsedTime(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isEnrichmentLoading, pollingStartTime, startTime]);
+
   // Show "still working" message after 30 seconds
   useEffect(() => {
     if (isEnrichmentLoading || enrichment?.status === 'scraping' || enrichment?.status === 'analyzing') {
@@ -111,6 +143,8 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
   }, [progress, enrichment?.status, setStep]);
 
   if (enrichmentError) {
+    const hasRetriedMultipleTimes = enrichmentRetryCount >= 2;
+
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -121,25 +155,69 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
           <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6">
             <span className="text-3xl">⚠️</span>
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Something went wrong</h2>
-          <p className="text-gray-400 mb-6">{enrichmentError}</p>
-          <button
-            onClick={() => {
-              if (!organizationId) return;
-              // For manual enrichment, just reload the page
-              // For website enrichment, retry with the domain
-              if (enrichmentSource === 'manual' || !domain) {
-                // Just reload the page - the enrichment process is running in the background
-                location.reload();
-              } else {
-                startEnrichment(organizationId, domain, true); // force = true to retry
-              }
-            }}
-            disabled={!organizationId}
-            className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Try Again
-          </button>
+          <h2 className="text-xl font-bold text-white mb-2">
+            {hasRetriedMultipleTimes ? 'Unable to analyze website' : 'Enrichment failed'}
+          </h2>
+          <p className="text-gray-400 mb-2">{enrichmentError}</p>
+          <p className="text-sm text-gray-500 mb-6">
+            {hasRetriedMultipleTimes
+              ? 'We recommend entering your company details manually to continue.'
+              : 'Some websites block automated access. You can retry or enter your company details manually.'}
+          </p>
+          <div className="flex flex-col gap-3">
+            {hasRetriedMultipleTimes ? (
+              <>
+                <button
+                  onClick={() => setStep('manual_enrichment')}
+                  className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors"
+                >
+                  Enter Details Manually
+                </button>
+                <button
+                  onClick={() => {
+                    if (!organizationId) return;
+                    if (enrichmentSource === 'manual' || !domain) {
+                      location.reload();
+                    } else {
+                      startEnrichment(organizationId, domain, true);
+                    }
+                  }}
+                  disabled={!organizationId}
+                  className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Try Again Anyway
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    if (!organizationId) return;
+                    if (enrichmentSource === 'manual' || !domain) {
+                      location.reload();
+                    } else {
+                      startEnrichment(organizationId, domain, true);
+                    }
+                  }}
+                  disabled={!organizationId}
+                  className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={() => setStep('manual_enrichment')}
+                  className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors"
+                >
+                  Enter Details Manually
+                </button>
+              </>
+            )}
+          </div>
+          {enrichmentRetryCount > 0 && (
+            <p className="text-xs text-gray-500 mt-4">
+              Attempt {enrichmentRetryCount + 1} of enrichment
+            </p>
+          )}
         </div>
       </motion.div>
     );
@@ -187,12 +265,14 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
           </div>
         </div>
 
-        {/* Time Estimate */}
-        {progress < 90 && (
-          <p className="text-xs text-gray-500 mb-6">
-            Estimated: {Math.max(0, Math.round((90 - progress) / 2))}s remaining
-          </p>
-        )}
+        {/* Time Display */}
+        <p className="text-xs text-gray-500 mb-6">
+          {progress < 90 ? (
+            <>Analyzing... ({Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')} elapsed)</>
+          ) : (
+            <>Finalizing... ({Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')} elapsed)</>
+          )}
+        </p>
 
         {/* Title */}
         <h2 className="text-xl font-bold text-white mb-2">
@@ -307,6 +387,16 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
             )}
           </motion.div>
         )}
+
+        {/* Start Over Link */}
+        <div className="mt-8 pt-6 border-t border-gray-800/50">
+          <button
+            onClick={() => useOnboardingV2Store.getState().reset()}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+          >
+            Start Over
+          </button>
+        </div>
       </div>
     </motion.div>
   );

@@ -1,6 +1,28 @@
+---
+requires-profile: true
+---
+
 # /build-feature — Generate a PRD, create prd.json, and sync to AI Dev Hub
 
 I want to build: $ARGUMENTS
+
+---
+
+## STEP 0: Select Model Profile
+
+Before proceeding, ask the user to select which model profile to use:
+- **Economy** — Fastest, lowest cost
+- **Balanced** — Good balance of speed & accuracy
+- **Thorough** — Most accurate, highest cost
+
+Use the `AskUserQuestion` tool with these options.
+
+**Note**: Based on selection, appropriate models will be assigned:
+- Economy: Fast iteration, familiar patterns
+- Balanced: Regular PRD development
+- Thorough: Complex features, strategic decisions
+
+---
 
 Act as an expert product consultant helping define a feature. Ask me meaningful questions, one by one, until you have enough information to create a complete PRD. Then execute the full workflow.
 

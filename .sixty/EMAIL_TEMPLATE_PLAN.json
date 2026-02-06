@@ -1,0 +1,277 @@
+{
+  "project": {
+    "name": "Email Template Standardization & Multi-Use System",
+    "feature": "email-templates",
+    "status": "planning",
+    "createdAt": "2026-02-03T00:00:00Z",
+    "branch": "fix/go-live-bug-fixes"
+  },
+
+  "objectives": [
+    "Create database templates for ALL email types using consistent 'welcome' design",
+    "Standardize ALL template variables across email types",
+    "Update all email functions to use database templates",
+    "Ensure design consistency with context-appropriate messaging",
+    "Create both automated and manual test suites"
+  ],
+
+  "standardizedVariables": {
+    "universal": [
+      "recipient_name - Primary greeting (first name)",
+      "action_url - Primary CTA button link",
+      "support_email - Help/support contact email",
+      "expiry_time - Validity period (e.g., '7 days')"
+    ],
+    "contextual": [
+      "organization_name - For org-related emails",
+      "inviter_name - For invitation emails",
+      "admin_name - For admin action emails",
+      "company_name - For waitlist/signup emails"
+    ]
+  },
+
+  "stories": [
+    {
+      "id": "EMAIL-001",
+      "title": "Create standardized email template schema migration",
+      "type": "schema",
+      "priority": 1,
+      "status": "pending",
+      "blockedBy": [],
+      "blocks": ["EMAIL-002", "EMAIL-003", "EMAIL-004", "EMAIL-005"],
+      "estimatedMinutes": 20,
+      "description": "Create/update encharge_email_templates with all email types using consistent design",
+      "acceptance": [
+        "Migration creates/updates 4+ email template records",
+        "All templates have standardized variable placeholders",
+        "All templates include 'welcome' design styling",
+        "Templates include HTML and text versions",
+        "Migration is idempotent and safe to rerun"
+      ],
+      "files": [
+        "supabase/migrations/20260203_standardize_email_templates.sql"
+      ]
+    },
+    {
+      "id": "EMAIL-002",
+      "title": "Update send-organization-invitation to use database templates",
+      "type": "backend",
+      "priority": 2,
+      "status": "pending",
+      "blockedBy": ["EMAIL-001"],
+      "blocks": ["EMAIL-006"],
+      "estimatedMinutes": 25,
+      "description": "Replace hardcoded HTML template with database template lookup",
+      "acceptance": [
+        "Function fetches 'organization_invitation' template from database",
+        "Replaces hardcoded fallback with database template",
+        "Uses standardized variable names",
+        "Maintains backward compatibility with fallback",
+        "Logs email send to email_logs table"
+      ],
+      "files": [
+        "supabase/functions/send-organization-invitation/index.ts"
+      ]
+    },
+    {
+      "id": "EMAIL-003",
+      "title": "Update send-removal-email to use standardized variables",
+      "type": "backend",
+      "priority": 2,
+      "status": "pending",
+      "blockedBy": ["EMAIL-001"],
+      "blocks": ["EMAIL-006"],
+      "estimatedMinutes": 20,
+      "description": "Standardize member removal email with consistent variables",
+      "acceptance": [
+        "Uses standardized variable names (recipient_name, action_url, etc)",
+        "Fetches 'member_removed' template from database",
+        "Uses Bearer token for authentication",
+        "Email logs include all metadata"
+      ],
+      "files": [
+        "supabase/functions/send-removal-email/index.ts"
+      ]
+    },
+    {
+      "id": "EMAIL-004",
+      "title": "Standardize waitlist invitation email variables",
+      "type": "backend",
+      "priority": 2,
+      "status": "pending",
+      "blockedBy": ["EMAIL-001"],
+      "blocks": ["EMAIL-006"],
+      "estimatedMinutes": 15,
+      "description": "Update waitlist invitation service to use standardized variables",
+      "acceptance": [
+        "Uses standardized variable names",
+        "Template variables match database template definitions",
+        "Works with existing encharge-send-email function"
+      ],
+      "files": [
+        "src/lib/services/waitlistAdminService.ts"
+      ]
+    },
+    {
+      "id": "EMAIL-005",
+      "title": "Verify waitlist-welcome-email compliance",
+      "type": "backend",
+      "priority": 2,
+      "status": "pending",
+      "blockedBy": ["EMAIL-001"],
+      "blocks": ["EMAIL-006"],
+      "estimatedMinutes": 10,
+      "description": "Ensure waitlist welcome email follows all standardization patterns",
+      "acceptance": [
+        "Uses standardized variable names",
+        "Fetches correct template type from database",
+        "Email logging is consistent"
+      ],
+      "files": [
+        "supabase/functions/waitlist-welcome-email/index.ts"
+      ]
+    },
+    {
+      "id": "EMAIL-006",
+      "title": "Create template variables configuration document",
+      "type": "documentation",
+      "priority": 3,
+      "status": "pending",
+      "blockedBy": ["EMAIL-001", "EMAIL-002", "EMAIL-003", "EMAIL-004", "EMAIL-005"],
+      "blocks": ["EMAIL-007"],
+      "estimatedMinutes": 15,
+      "description": "Document all standardized variables and their usage",
+      "acceptance": [
+        "Document lists all standardized variables",
+        "Shows which variables apply to each email type",
+        "Includes examples for each email type",
+        "Documents variable format and constraints"
+      ],
+      "files": [
+        ".sixty/EMAIL_TEMPLATE_VARIABLES.md"
+      ]
+    },
+    {
+      "id": "EMAIL-007",
+      "title": "Create automated test suite for all email flows",
+      "type": "test",
+      "priority": 3,
+      "status": "pending",
+      "blockedBy": ["EMAIL-006"],
+      "blocks": ["EMAIL-008"],
+      "estimatedMinutes": 30,
+      "description": "Write tests for all email sending methods",
+      "acceptance": [
+        "Tests cover all 4 email types",
+        "Tests verify template loading",
+        "Tests verify variable substitution",
+        "Tests verify Bearer token authentication",
+        "Tests verify email logging"
+      ],
+      "files": [
+        "test/email-template-integration.test.ts"
+      ]
+    },
+    {
+      "id": "EMAIL-008",
+      "title": "Create manual testing checklist and scenarios",
+      "type": "test",
+      "priority": 3,
+      "status": "pending",
+      "blockedBy": ["EMAIL-007"],
+      "blocks": ["EMAIL-009"],
+      "estimatedMinutes": 20,
+      "description": "Create comprehensive manual testing guide",
+      "acceptance": [
+        "Checklist covers all email types",
+        "Includes step-by-step testing scenarios",
+        "Documents expected email appearance",
+        "Includes troubleshooting guide",
+        "Covers both staging and production"
+      ],
+      "files": [
+        ".sixty/EMAIL_TESTING_CHECKLIST.md"
+      ]
+    },
+    {
+      "id": "EMAIL-009",
+      "title": "Redeploy all email edge functions with updates",
+      "type": "deployment",
+      "priority": 4,
+      "status": "pending",
+      "blockedBy": ["EMAIL-008"],
+      "blocks": ["EMAIL-010"],
+      "estimatedMinutes": 15,
+      "description": "Deploy all updated email functions to staging",
+      "acceptance": [
+        "All 4 email functions deployed successfully",
+        "Environment secrets properly set",
+        "Functions respond with 200 status",
+        "Email logs show successful sends"
+      ],
+      "files": []
+    },
+    {
+      "id": "EMAIL-010",
+      "title": "Execute comprehensive testing across all email flows",
+      "type": "test",
+      "priority": 4,
+      "status": "pending",
+      "blockedBy": ["EMAIL-009"],
+      "blocks": [],
+      "estimatedMinutes": 45,
+      "description": "Run both automated and manual tests",
+      "acceptance": [
+        "All automated tests pass",
+        "All manual test scenarios complete",
+        "Emails are styled correctly",
+        "Variables are substituted properly",
+        "Emails arrive in correct inboxes"
+      ],
+      "files": []
+    }
+  ],
+
+  "executionSummary": {
+    "totalStories": 10,
+    "phases": [
+      {
+        "phase": "1 - Schema & Foundation",
+        "stories": ["EMAIL-001"],
+        "estimatedTime": "20 min"
+      },
+      {
+        "phase": "2 - Backend Updates (Parallelizable)",
+        "stories": ["EMAIL-002", "EMAIL-003", "EMAIL-004", "EMAIL-005"],
+        "estimatedTime": "70 min"
+      },
+      {
+        "phase": "3 - Documentation",
+        "stories": ["EMAIL-006"],
+        "estimatedTime": "15 min"
+      },
+      {
+        "phase": "4 - Testing Setup",
+        "stories": ["EMAIL-007", "EMAIL-008"],
+        "estimatedTime": "50 min"
+      },
+      {
+        "phase": "5 - Deployment & Testing",
+        "stories": ["EMAIL-009", "EMAIL-010"],
+        "estimatedTime": "60 min"
+      }
+    ],
+    "totalEstimatedTime": "215 minutes (3.5+ hours with parallelization)"
+  },
+
+  "successCriteria": [
+    "All 4 email types use database templates",
+    "All variables standardized across email types",
+    "All email functions deploy without errors",
+    "Automated test suite passes 100%",
+    "Manual testing checklist completed",
+    "Email logs show all sends successful",
+    "Design is consistent across all emails",
+    "No customer-facing email issues reported"
+  ]
+}

@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
 
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -233,6 +234,7 @@ export default function ProactiveSimulator() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950">
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+        <BackToPlatform />
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">

@@ -17,6 +17,7 @@ import {
   AlertCircle,
   History,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -330,14 +331,9 @@ export default function AgentSequenceBuilderPage() {
       {/* Header */}
       <div className="border-b shrink-0">
         <div className="px-6 py-3">
-          <div className="flex items-center justify-between">
+          <BackToPlatform />
+          <div className="flex items-center justify-between mt-2">
             <div className="flex items-center gap-4">
-              <Link
-                to="/platform/agent-sequences"
-                className="p-2 rounded-lg hover:bg-muted transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5 text-muted-foreground" />
-              </Link>
               <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg">
                 <GitBranch className="w-5 h-5" />
               </div>

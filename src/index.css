@@ -202,9 +202,91 @@
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE and Edge */
   }
-  
+
   .scrollbar-none::-webkit-scrollbar {
     display: none; /* Chrome, Safari, and Opera */
+  }
+
+  /* Custom styled scrollbar for light mode */
+  .scrollbar-custom {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(200, 213, 219, 0.6) transparent; /* Firefox: thumb and track */
+  }
+
+  .scrollbar-custom::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb {
+    background-color: rgba(200, 213, 219, 0.6);
+    border-radius: 3px;
+    border: none;
+    transition: background-color 0.2s ease;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(148, 163, 184, 0.8);
+  }
+
+  /* Custom styled scrollbar for dark mode */
+  .dark .scrollbar-custom,
+  [data-theme="dark"] .scrollbar-custom {
+    scrollbar-color: rgba(71, 85, 105, 0.7) transparent; /* Firefox: thumb and track */
+  }
+
+  .dark .scrollbar-custom::-webkit-scrollbar-thumb,
+  [data-theme="dark"] .scrollbar-custom::-webkit-scrollbar-thumb {
+    background-color: rgba(71, 85, 105, 0.7);
+  }
+
+  .dark .scrollbar-custom::-webkit-scrollbar-thumb:hover,
+  [data-theme="dark"] .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(100, 116, 139, 0.9);
+  }
+
+  /* Accent scrollbar variant for navigation areas */
+  .scrollbar-accent {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 102, 241, 0.4) transparent; /* Firefox: indigo for light mode */
+  }
+
+  .scrollbar-accent::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-accent::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-accent::-webkit-scrollbar-thumb {
+    background-color: rgba(99, 102, 241, 0.4);
+    border-radius: 3px;
+    border: none;
+    transition: background-color 0.2s ease;
+  }
+
+  .scrollbar-accent::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(99, 102, 241, 0.6);
+  }
+
+  /* Accent scrollbar for dark mode - uses slate gray for blended appearance */
+  .dark .scrollbar-accent,
+  [data-theme="dark"] .scrollbar-accent {
+    scrollbar-color: rgba(100, 116, 139, 0.35) transparent; /* Firefox: slate gray for dark mode */
+  }
+
+  .dark .scrollbar-accent::-webkit-scrollbar-thumb,
+  [data-theme="dark"] .scrollbar-accent::-webkit-scrollbar-thumb {
+    background-color: rgba(100, 116, 139, 0.35);
+  }
+
+  .dark .scrollbar-accent::-webkit-scrollbar-thumb:hover,
+  [data-theme="dark"] .scrollbar-accent::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(120, 140, 160, 0.5);
   }
 }
 

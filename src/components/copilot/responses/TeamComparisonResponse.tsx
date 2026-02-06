@@ -75,13 +75,13 @@ export const TeamComparisonResponse: React.FC<TeamComparisonResponseProps> = ({ 
   return (
     <div className="space-y-6">
       {/* Ranking Header */}
-      <div className="bg-gradient-to-r from-gray-900/80 to-gray-800/80 backdrop-blur-sm border border-gray-800/50 rounded-lg p-6">
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900/80 dark:to-gray-800/80 backdrop-blur-sm border border-gray-200 dark:border-gray-800/50 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Users className="w-6 h-6 text-blue-400" />
+            <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h3 className="text-lg font-semibold text-gray-100">{userMetrics.userName}'s Performance</h3>
-              <p className="text-sm text-gray-400">{period.startDate} to {period.endDate}</p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{userMetrics.userName}'s Performance</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{period.startDate} to {period.endDate}</p>
             </div>
           </div>
           <div className="text-right">

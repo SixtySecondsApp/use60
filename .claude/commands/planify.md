@@ -1,4 +1,26 @@
+---
+requires-profile: true
+---
+
 # Planify: Transform Markdown to Structured Plan
+
+---
+
+## STEP 0: Select Model Profile
+
+Before proceeding, ask the user to select which model profile to use:
+- **Economy** — Fastest, lowest cost
+- **Balanced** — Good balance of speed & accuracy
+- **Thorough** — Most accurate, highest cost
+
+Use the `AskUserQuestion` tool with these options.
+
+**Note**: Based on selection, appropriate models will be assigned:
+- Economy: Simple plans, straightforward documentation
+- Balanced: Complex projects, multi-phase transformations
+- Thorough: Large-scale strategic planning, deep analysis
+
+---
 
 Transform any markdown document into a structured implementation plan with phases, tasks, and status tracking.
 

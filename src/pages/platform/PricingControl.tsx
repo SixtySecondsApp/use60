@@ -30,6 +30,7 @@ import {
   ShoppingCart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -274,6 +275,7 @@ export default function PricingControl() {
 
   return (
     <div className="container mx-auto px-6 py-6 space-y-6 max-w-7xl">
+      <BackToPlatform />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

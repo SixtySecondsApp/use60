@@ -1,0 +1,117 @@
+================================================================================
+  EMAIL TEMPLATE STANDARDIZATION & MULTI-USE SYSTEM - EXECUTION PLAN
+================================================================================
+
+STATUS: AWAITING APPROVAL & NEXT INSTRUCTIONS
+
+CREATED: 2026-02-03
+BRANCH: fix/go-live-bug-fixes
+TOTAL STORIES: 10
+ESTIMATED TIME: 3.5+ hours (with parallelization)
+
+================================================================================
+  QUICK OVERVIEW
+================================================================================
+
+OBJECTIVE:
+  Standardize ALL email sending across the application using a centralized
+  database template system with consistent variables and "welcome" design.
+
+CURRENT STATE:
+  X send-organization-invitation - Uses hardcoded HTML template
+  ~ send-removal-email - Uses inconsistent variables
+  ~ waitlist-invite - Uses non-standard variables
+  OK waitlist-welcome - Uses database template (reference)
+
+TARGET STATE:
+  OK All 4 email types use encharge_email_templates database
+  OK All variables standardized (recipient_name, action_url, etc.)
+  OK Consistent "welcome" design styling across all emails
+  OK Context-appropriate messaging based on email type
+  OK Full test coverage (automated + manual)
+
+================================================================================
+  STANDARDIZED VARIABLES (Multi-Use Format)
+================================================================================
+
+UNIVERSAL (All Emails):
+  - recipient_name       First name for greeting
+  - action_url           Primary CTA button link
+  - support_email        Help/support contact email
+  - expiry_time          Validity period (when applicable)
+
+CONTEXTUAL (Email-Type Specific):
+  - organization_name    For org-related emails
+  - inviter_name         For invitation emails
+  - admin_name           For admin action emails
+  - company_name         For waitlist/signup emails
+
+================================================================================
+  EXECUTION PHASES
+================================================================================
+
+PHASE 1: Schema & Foundation (20 min)
+  EMAIL-001: Create standardized email template migration
+
+PHASE 2: Backend Updates (70 min - Parallelizable)
+  EMAIL-002: Update send-organization-invitation
+  EMAIL-003: Update send-removal-email
+  EMAIL-004: Standardize waitlist invitations
+  EMAIL-005: Verify waitlist-welcome compliance
+
+PHASE 3: Documentation (15 min)
+  EMAIL-006: Create template variables configuration document
+
+PHASE 4: Testing Setup (50 min)
+  EMAIL-007: Create automated test suite
+  EMAIL-008: Create manual testing checklist
+
+PHASE 5: Deployment & Testing (60 min)
+  EMAIL-009: Redeploy all email edge functions
+  EMAIL-010: Execute comprehensive testing
+
+================================================================================
+  SUCCESS CRITERIA
+================================================================================
+
+Must Complete All:
+  [ ] All 4 email types use database templates
+  [ ] All variables standardized
+  [ ] All email functions deploy without errors
+  [ ] Automated test suite passes 100%
+  [ ] Manual testing checklist completed
+  [ ] email_logs table shows all sends successful
+  [ ] Design is consistent across all emails
+  [ ] No customer-facing email issues
+
+================================================================================
+  NEXT STEPS
+================================================================================
+
+AWAITING USER APPROVAL:
+
+Please confirm:
+  1. Design approval - Is "welcome" styling acceptable?
+  2. Variable names - Appropriate standardization?
+  3. Scope - Any additional email types?
+  4. Testing approach - Automated + manual sufficient?
+  5. Timeline - Proceed now or schedule?
+
+Once approved, execution begins with Phase 1.
+
+================================================================================
+  FILES CREATED
+================================================================================
+
+.sixty/EMAIL_TEMPLATE_PLAN.json
+  Structured execution plan with all 10 stories
+
+.sixty/EMAIL_TEMPLATE_STANDARDIZATION_PLAN.md
+  Detailed markdown plan with complete information
+
+.sixty/PLAN_SUMMARY.txt
+  This file - quick reference
+
+================================================================================
+  STATUS: AWAITING APPROVAL & NEXT INSTRUCTIONS
+================================================================================

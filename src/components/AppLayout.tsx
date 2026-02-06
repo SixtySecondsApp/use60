@@ -87,7 +87,7 @@ import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconne
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
   const { signOut } = useAuth();
-  const { activeOrgId } = useOrg();
+  const { activeOrgId, activeOrg } = useOrg();
   const trialStatus = useTrialStatus(activeOrgId);
   const hasIntegrationAlerts = useHasIntegrationAlerts();
   const location = useLocation();
@@ -143,6 +143,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
+  const [isMobileUserMenuOpen, setIsMobileUserMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { openCopilot } = useCopilot();
   // Allow decoupled components (assistant/chat panels/etc) to open Quick Add.
@@ -334,26 +335,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       isImpersonating ? "top-[44px]" : "top-0"
     )}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg overflow-hidden">
-            {userData?.avatar_url ? (
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+            {activeOrg?.logo_url ? (
               <img
-                src={userData.avatar_url}
-                alt="Profile"
+                src={activeOrg.logo_url}
+                alt="Organization Logo"
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-[#37bd7e]/20 flex items-center justify-center">
-                <span className="text-sm font-medium text-[#37bd7e]">
-                  {userData?.first_name?.[0] || ''}{userData?.last_name?.[0] || ''}
+              <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
+                <span className="text-white font-semibold text-xs">
+                  {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'O'}
                 </span>
               </div>
             )}
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {userData?.first_name} {userData?.last_name}
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+              {activeOrg?.name || 'Organization'}
             </span>
-            <span className="text-xs text-gray-700 dark:text-gray-300">{userData?.stage}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -388,7 +388,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </motion.button>
       )}
 
-      {/* Mobile Menu - Full Page with Scrolling */}
+      {/* Mobile Menu - Partial Pop-out Drawer */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <>
@@ -396,7 +396,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[99] lg:hidden"
+              className="fixed inset-0 bg-black/60 backdrop-blur-md z-[99] lg:hidden"
               onClick={() => toggleMobileMenu()}
             />
             <motion.div
@@ -404,45 +404,150 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-              className="fixed inset-0 w-full bg-white dark:bg-gray-900/95 backdrop-blur-xl z-[100] lg:hidden transition-colors duration-200 flex flex-col"
+              className="fixed top-0 right-0 bottom-0 w-80 bg-white dark:bg-gray-900/95 backdrop-blur-xl z-[100] lg:hidden transition-colors duration-200 flex flex-col shadow-2xl"
             >
               {/* Fixed Header */}
-              <div className="flex-shrink-0 p-4 sm:p-6 border-b border-[#E2E8F0] dark:border-gray-800">
+              <div className="flex-shrink-0 space-y-4 p-4 sm:p-6 border-b border-[#E2E8F0] dark:border-gray-800">
+                {/* Organization Branding Section */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg overflow-hidden">
-                      {userData?.avatar_url ? (
+                    <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+                      {activeOrg?.logo_url ? (
                         <img
-                          src={userData.avatar_url}
-                          alt="Profile"
+                          src={activeOrg.logo_url}
+                          alt="Organization Logo"
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full bg-[#37bd7e]/20 flex items-center justify-center">
-                          <span className="text-base sm:text-lg font-medium text-[#37bd7e]">
-                            {userData?.first_name?.[0]}{userData?.last_name?.[0]}
+                        <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
+                          <span className="text-white font-semibold text-xs">
+                            {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'O'}
                           </span>
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-base sm:text-lg font-semibold text-[#1E293B] dark:text-gray-100">
-                        {userData?.first_name} {userData?.last_name}
-                      </span>
-                      <span className="text-xs sm:text-sm text-[#64748B] dark:text-gray-300">{userData?.stage}</span>
-                    </div>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                      {activeOrg?.name || 'Organization'}
+                    </span>
                   </div>
                   <button
                     onClick={() => toggleMobileMenu()}
-                    className="p-2 sm:p-3 min-h-[44px] min-w-[44px] hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors flex items-center justify-center"
+                    className="p-2 sm:p-3 min-h-[44px] min-w-[44px] hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
                   >
                     <X className="w-6 h-6 text-gray-400" />
                   </button>
                 </div>
+
+                {/* User Details Section - Clickable */}
+                <button
+                  onClick={() => setIsMobileUserMenuOpen(!isMobileUserMenuOpen)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors text-left group"
+                >
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg overflow-hidden flex-shrink-0">
+                    {userData?.avatar_url ? (
+                      <img
+                        src={userData.avatar_url}
+                        alt="Profile"
+                        className="w-full h-full object-cover aspect-square"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-100 dark:bg-gray-700/30 flex items-center justify-center">
+                        <span className="text-base sm:text-lg font-medium text-[#37bd7e]">
+                          {userData?.first_name?.[0]}{userData?.last_name?.[0]}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="text-sm sm:text-base font-semibold text-[#1E293B] dark:text-gray-100 truncate">
+                      {userData?.first_name} {userData?.last_name}
+                    </span>
+                    <span className="text-xs text-[#64748B] dark:text-gray-400 truncate">{userData?.email}</span>
+                  </div>
+                  <ChevronDown className={cn(
+                    "w-4 h-4 text-gray-400 transition-transform flex-shrink-0",
+                    isMobileUserMenuOpen && "rotate-180"
+                  )} />
+                </button>
+
+                {/* User Menu Dropdown */}
+                <AnimatePresence>
+                  {isMobileUserMenuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="space-y-2 pt-2 border-t border-[#E2E8F0] dark:border-gray-800"
+                    >
+                      <button
+                        onClick={() => {
+                          navigate('/profile');
+                          setIsMobileUserMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#64748B] dark:text-gray-400 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors"
+                      >
+                        <UserCog className="w-4 h-4" />
+                        Profile
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigate('/settings');
+                          setIsMobileUserMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#64748B] dark:text-gray-400 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                      </button>
+                      {isPlatformAdmin && (
+                        <button
+                          onClick={() => {
+                            navigate('/platform');
+                            setIsMobileUserMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                        >
+                          <Shield className="w-4 h-4" />
+                          Platform Admin
+                        </button>
+                      )}
+                      {isInternal && (
+                        <>
+                          <div className="h-px bg-gray-200 dark:bg-gray-700 my-2" />
+                          <div className="px-1 py-1">
+                            <ExternalViewToggle showLabel={true} variant="ghost" className="w-full justify-start text-sm h-auto py-2" />
+                          </div>
+                        </>
+                      )}
+                      <div className="h-px bg-gray-200 dark:bg-gray-700 my-2" />
+                      <button
+                        onClick={handleLogout}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                          isImpersonating
+                            ? "text-amber-400 hover:bg-amber-500/10"
+                            : "text-red-400 hover:bg-red-500/10"
+                        )}
+                      >
+                        {isImpersonating ? (
+                          <>
+                            <UserX className="w-4 h-4" />
+                            Stop Impersonation
+                          </>
+                        ) : (
+                          <>
+                            <LogOut className="w-4 h-4" />
+                            Logout
+                          </>
+                        )}
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Scrollable Navigation */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto scrollbar-accent pb-4">
                 <nav className="p-4 sm:p-6 space-y-1 sm:space-y-2">
                   {menuItems.map((item) => {
                     // Handle dividers
@@ -460,7 +565,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           className={cn(
                             'w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] sm:min-h-[64px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]',
                             location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
-                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
+                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                               : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                           )}
                         >
@@ -482,7 +587,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                                 className={cn(
                                   'w-full flex items-center gap-3 px-4 py-3 min-h-[48px] rounded-xl text-sm font-medium transition-colors',
                                   location.pathname === subItem.href
-                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
+                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                                     : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                                 )}
                               >
@@ -506,7 +611,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   className={cn(
                     "flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]",
                     location.pathname.startsWith('/settings')
-                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
+                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                       : 'text-[#64748B] dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-gray-800/50'
                   )}
                 >
@@ -603,10 +708,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     <img
                       src={userData.avatar_url}
                       alt="Profile"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover aspect-square"
                     />
                   ) : (
-                    <div className="w-full h-full bg-[#37bd7e]/20 flex items-center justify-center">
+                    <div className="w-full h-full bg-gray-100 dark:bg-gray-700/30 flex items-center justify-center">
                       <span className="text-sm font-medium text-[#37bd7e]">
                         {userData?.first_name?.[0] || ''}{userData?.last_name?.[0] || ''}
                       </span>
@@ -617,7 +722,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <span className="text-sm font-semibold text-[#1E293B] dark:text-gray-100">
                     {userData?.first_name} {userData?.last_name}
                   </span>
-                  <span className="text-xs text-[#64748B] dark:text-gray-400">{userData?.stage}</span>
+                  <span className="text-xs text-[#64748B] dark:text-gray-400">
+                    {activeOrg?.name || userData?.stage}
+                  </span>
                 </div>
                 <ChevronDown className="w-4 h-4 text-gray-400 hidden xl:block" />
               </button>
@@ -688,78 +795,68 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           'fixed left-0 bottom-0 bg-white dark:bg-gray-900/50 backdrop-blur-xl p-6',
           'border-r border-[#E2E8F0] dark:border-gray-800/50 shadow-[2px_0_8px_-2px_rgba(0,0,0,0.04)] dark:shadow-none',
           'transition-all duration-300 ease-in-out flex-shrink-0',
-          'overflow-visible',
+          'overflow-y-auto overflow-x-hidden',
           isCollapsed ? 'w-[96px]' : 'w-[256px]',
           'hidden lg:block z-[100]',
           isImpersonating ? 'top-[44px] h-[calc(100vh-44px)]' : 'top-0 h-screen'
         )}
+        style={{ overscrollBehavior: 'contain' }}
       >
-        {/* Small Circular Toggle Button - Positioned on Edge, Inline with Logo */}
-        <div
-          className={cn(
-            'absolute z-50',
-            // Align with logo: p-6 (24px) + half logo height
-            // Collapsed: 24px + 24px = 48px (logo is now w-12 h-12), Expanded: 24px + 24px = 48px
-            'top-[48px]',
-            // Position on edge with transform to center button on edge
-            'right-0 translate-x-1/2',
-            'w-6 h-6'
-          )}
-        >
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className={cn(
-              'w-full h-full rounded-full',
-              'bg-white dark:bg-gray-800',
-              'border border-gray-200 dark:border-gray-700/50',
-              'text-gray-500 dark:text-gray-400',
-              'hover:text-gray-700 dark:hover:text-gray-200',
-              'hover:bg-gray-50 dark:hover:bg-gray-700',
-              'shadow-md dark:shadow-lg dark:shadow-black/20',
-              'flex items-center justify-center',
-              'transition-colors duration-200'
-            )}
-            style={{ transformOrigin: 'center center' }}
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {isCollapsed ? (
-              <ChevronRight className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronLeft className="w-3.5 h-3.5" />
-            )}
-          </motion.button>
-        </div>
-
         <div className="flex h-full flex-col">
           {/* Logo Header */}
           <div className={cn(
-            'mb-8 flex items-center justify-center'
+            'mb-8 flex items-center',
+            isCollapsed ? 'justify-center' : 'justify-start gap-3'
           )}>
-            <Link to="/" className={cn(
-              'transition-opacity hover:opacity-80',
-              isCollapsed ? 'w-12 h-12' : 'w-full'
-            )}>
-              {isCollapsed ? (
-                <img
-                  key={`icon-collapsed-${resolvedTheme}`}
-                  src={icon}
-                  alt="Logo"
-                  className="w-12 h-12 object-contain rounded-xl"
-                />
-              ) : (
-                <img
-                  key={`logo-expanded-${resolvedTheme}`}
-                  src={currentLogo}
-                  alt="Logo"
-                  className="h-12 w-full object-contain"
-                />
-              )}
-            </Link>
+            {isCollapsed ? (
+              <Link to="/" className="transition-opacity hover:opacity-80">
+                <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                  {activeOrg?.logo_url ? (
+                    <img
+                      src={activeOrg.logo_url}
+                      alt="Organization Logo"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
+                      <span className="text-white font-semibold text-sm">
+                        {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'O'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Link>
+            ) : (
+              <Link to="/" className="flex items-center gap-3 transition-opacity hover:opacity-80 flex-1 min-w-0">
+                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                  {activeOrg?.logo_url ? (
+                    <img
+                      src={activeOrg.logo_url}
+                      alt="Organization Logo"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#37bd7e] to-[#2da76c] flex items-center justify-center">
+                      <span className="text-white font-semibold text-xs">
+                        {activeOrg?.name?.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'O'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                  {activeOrg?.name || 'Organization'}
+                </span>
+              </Link>
+            )}
           </div>
-          
-          <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+
+          {/* Separator Line */}
+          <div className="border-t border-[#E2E8F0] dark:border-gray-800 mb-6" />
+
+          <div className={cn(
+            'flex-1 overflow-y-auto scrollbar-accent',
+            !isCollapsed ? 'pr-2 -mr-2' : 'pr-0'
+          )}>
             <nav className={cn(
               'pb-6',
               isCollapsed ? 'space-y-3' : 'space-y-2'
@@ -785,7 +882,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           ? 'w-12 h-12 mx-auto rounded-xl justify-center'
                           : 'w-full gap-3 px-2 py-2.5 rounded-xl',
                         location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
-                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
+                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                           : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                       )}
                     >
@@ -826,7 +923,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                             className={cn(
                               'w-full flex items-center gap-3 px-2 py-2 rounded-xl text-xs font-medium transition-colors',
                               location.pathname === subItem.href
-                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                                 : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                             )}
                           >
@@ -855,7 +952,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   ? 'w-12 h-12 mx-auto rounded-xl justify-center mb-0' 
                   : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
                 location.pathname.startsWith('/settings')
-                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                   : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
               )}
             >
@@ -953,6 +1050,36 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </motion.div>
+
+      {/* Sidebar Toggle Button - Positioned on Edge Outside Sidebar */}
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className={cn(
+          'fixed z-[200] hidden lg:flex',
+          'top-[48px]',
+          isCollapsed ? 'left-[84px]' : 'left-[244px]',
+          'w-6 h-6 rounded-full',
+          'bg-white dark:bg-gray-800',
+          'border border-gray-200 dark:border-gray-700/50',
+          'text-gray-500 dark:text-gray-400',
+          'hover:text-gray-700 dark:hover:text-gray-200',
+          'hover:bg-gray-50 dark:hover:bg-gray-700',
+          'shadow-md dark:shadow-lg dark:shadow-black/20',
+          'items-center justify-center',
+          'transition-all duration-300 ease-in-out'
+        )}
+        style={{ transformOrigin: 'center center' }}
+        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {isCollapsed ? (
+          <ChevronRight className="w-3.5 h-3.5" />
+        ) : (
+          <ChevronLeft className="w-3.5 h-3.5" />
+        )}
+      </motion.button>
+
       <main
         style={
           {

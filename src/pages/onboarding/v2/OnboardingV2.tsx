@@ -16,9 +16,10 @@
 import { useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { useOnboardingV2Store, type OnboardingV2Step } from '@/lib/stores/onboardingV2Store';
+import { useOnboardingV2Store, type OnboardingV2Step, isPersonalEmailDomain } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { toast } from 'sonner';
 import { WebsiteInputStep } from './WebsiteInputStep';
 import { ManualEnrichmentStep } from './ManualEnrichmentStep';
 import { OrganizationSelectionStep } from './OrganizationSelectionStep';
@@ -76,6 +77,85 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
   // 1. New users signing up won't have membership until after onboarding
   // 2. localStorage is already cleared in SetPassword to prevent cached org bypass
   // 3. This validation was breaking the onboarding flow by clearing valid organizationIds
+
+  // Restore state from localStorage on mount (session recovery)
+  useEffect(() => {
+    const restoreState = async () => {
+      if (!user) return;
+
+      // Check for saved state in localStorage
+      const savedState = localStorage.getItem(`sixty_onboarding_${user.id}`);
+
+      if (savedState) {
+        // Validate session is still active before restoring
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session) {
+          // Session is active - restore state
+          try {
+            const parsed = JSON.parse(savedState);
+            console.log('[OnboardingV2] Restored state from localStorage:', parsed);
+
+            // Validate that the saved organizationId still exists before restoring
+            // (org may have been deleted by an admin)
+            let orgStillExists = false;
+            if (parsed.organizationId) {
+              const { data: orgCheck } = await supabase
+                .from('organizations')
+                .select('id')
+                .eq('id', parsed.organizationId)
+                .maybeSingle();
+              orgStillExists = !!orgCheck;
+            }
+
+            if (parsed.organizationId && !orgStillExists) {
+              // Organization was deleted — clear stale state and start fresh
+              console.log('[OnboardingV2] Saved organization no longer exists, starting fresh');
+              localStorage.removeItem(`sixty_onboarding_${user.id}`);
+              setStep('website_input');
+              return;
+            }
+
+            // Restore state to Zustand store
+            if (parsed.domain) setDomain(parsed.domain);
+            if (parsed.organizationId) setOrganizationId(parsed.organizationId);
+            if (parsed.websiteUrl) useOnboardingV2Store.setState({ websiteUrl: parsed.websiteUrl });
+            if (parsed.manualData) useOnboardingV2Store.setState({ manualData: parsed.manualData });
+            if (parsed.enrichment) useOnboardingV2Store.setState({ enrichment: parsed.enrichment });
+            if (parsed.skillConfigs) useOnboardingV2Store.setState({ skillConfigs: parsed.skillConfigs });
+
+            // Restore enrichment loading state for session recovery
+            if (parsed.pollingStartTime) {
+              useOnboardingV2Store.setState({
+                pollingStartTime: parsed.pollingStartTime,
+                pollingAttempts: parsed.pollingAttempts || 0,
+              });
+            }
+
+            // If enrichment was in progress when interrupted, resume from enrichment_loading
+            // but don't restore isEnrichmentLoading directly (let the step trigger re-poll)
+            if (parsed.currentStep === 'enrichment_loading' && parsed.isEnrichmentLoading) {
+              setStep('enrichment_loading');
+              toast.info('Resuming enrichment from where you left off...');
+            } else if (parsed.currentStep) {
+              setStep(parsed.currentStep);
+              toast.info('Restored your progress');
+            }
+          } catch (error) {
+            console.error('[OnboardingV2] Failed to parse saved state:', error);
+            // Clear invalid state
+            localStorage.removeItem(`sixty_onboarding_${user.id}`);
+          }
+        } else {
+          // Session expired - clear stale state
+          console.log('[OnboardingV2] Session expired, clearing stale state');
+          localStorage.removeItem(`sixty_onboarding_${user.id}`);
+        }
+      }
+    };
+
+    restoreState();
+  }, [user]);
 
   // Read step from database on mount for resumption after logout
   useEffect(() => {
@@ -178,46 +258,20 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
     }
   }, [organizationId, domain, userEmail, setOrganizationId, setDomain, setUserEmail]);
 
-  // Check for existing organization when business email signs up
+  // Alternative initialization path for business emails with domain check
   useEffect(() => {
-    const checkBusinessEmailOrg = async () => {
-      // Only run this check once when component mounts with business email
-      if (!userEmail || !domain) return;
-
-      const { setStep } = useOnboardingV2Store.getState();
-
-      try {
-        // Call RPC to check if org exists for this email domain
-        const { data: existingOrg } = await supabase
-          .rpc('check_existing_org_by_email_domain', {
-            p_email: userEmail,
-          })
-          .maybeSingle();
-
-        if (existingOrg && existingOrg.should_request_join) {
-          console.log('[OnboardingV2] Found existing org for business email:', existingOrg.org_name);
-          // Set step to organization selection to allow join request
-          setStep('organization_selection');
-          // Update store with similar orgs data
-          useOnboardingV2Store.setState({
-            similarOrganizations: [{
-              id: existingOrg.org_id,
-              name: existingOrg.org_name,
-              company_domain: existingOrg.org_domain,
-              member_count: existingOrg.member_count,
-              similarity_score: 1.0, // Exact match
-            }],
-            matchSearchTerm: existingOrg.org_domain,
-          });
-        }
-      } catch (error) {
-        console.error('[OnboardingV2] Error checking for existing org:', error);
-        // Continue to enrichment on error
+    const initBusinessEmail = async () => {
+      if (userEmail && !isPersonalEmailDomain(userEmail)) {
+        // setUserEmail is now async and handles domain checking internally
+        await setUserEmail(userEmail);
       }
     };
+    initBusinessEmail();
+  }, [userEmail, setUserEmail]);
 
-    checkBusinessEmailOrg();
-  }, [userEmail, domain]);
+  // Note: Organization existence checking is now handled exclusively in the store methods
+  // (setUserEmail and submitWebsite) to prevent race conditions and duplicate checks.
+  // This useEffect was removed to consolidate logic and eliminate conflicting behavior.
 
   // Auto-start enrichment for corporate email path (if no existing org found)
   useEffect(() => {

@@ -1,9 +1,28 @@
 ---
 name: sixty-design-system
 description: Sixty's production design system for enterprise SaaS applications. Use when building UI components, creating React/Next.js interfaces, styling dashboards, implementing light/dark themes, or applying Sixty's glassmorphic dark mode aesthetic. Triggers on frontend development, UI styling, component creation, theme implementation, and any Sixty product interface work.
+requires-profile: true
 ---
 
 # Sixty Design System
+
+---
+
+## STEP 0: Select Model Profile
+
+Before proceeding, ask the user to select which model profile to use:
+- **Economy** — Fastest, lowest cost
+- **Balanced** — Good balance of speed & accuracy
+- **Thorough** — Most accurate, highest cost
+
+Use the `AskUserQuestion` tool with these options.
+
+**Note**: Based on selection, appropriate models will be assigned:
+- Economy: Simple styling, minor UI updates
+- Balanced: Standard component building, design system implementation
+- Thorough: Complex patterns, multi-component systems
+
+---
 
 Production-ready design system with clean minimal light mode and premium glassmorphic dark mode. Built for Next.js/React with Tailwind CSS.
 

@@ -371,7 +371,7 @@ export default function EmailTemplates() {
 
       {/* Preview/Test Dialog */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent>
+        <DialogContent className="w-[calc(100%-2rem)] sm:w-[calc(100%-4rem)] max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Send Test Email</DialogTitle>
             <DialogDescription>
@@ -390,14 +390,21 @@ export default function EmailTemplates() {
               />
             </div>
             {selectedTemplate && (
-              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900 max-h-96 overflow-y-auto">
-                <div className="text-sm font-semibold mb-2">Subject:</div>
-                <div className="mb-4">{selectedTemplate.subject_line}</div>
-                <div className="text-sm font-semibold mb-2">Preview:</div>
-                <div
-                  className="text-xs"
-                  dangerouslySetInnerHTML={{ __html: selectedTemplate.html_body }}
-                />
+              <div className="space-y-4">
+                <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
+                  <div className="text-sm font-semibold mb-2">Subject:</div>
+                  <div className="mb-0">{selectedTemplate.subject_line}</div>
+                </div>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="text-sm font-semibold p-3 bg-gray-50 dark:bg-gray-900 border-b">Preview:</div>
+                  <div className="max-h-96 overflow-y-auto bg-[#030712] p-6">
+                    <div
+                      className="text-xs"
+                      style={{ minHeight: '300px' }}
+                      dangerouslySetInnerHTML={{ __html: selectedTemplate.html_body }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>

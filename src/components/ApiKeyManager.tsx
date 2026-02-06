@@ -442,7 +442,7 @@ export const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ onKeySelected }) =
       </div>
 
       {/* API Keys List */}
-      <div className="bg-gradient-to-br from-gray-900/80 to-gray-800/60 backdrop-blur-xl rounded-2xl border border-gray-700/60 shadow-xl overflow-hidden">
+      <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900/80 dark:to-gray-800/60 backdrop-blur-xl rounded-2xl border border-gray-200 dark:border-gray-700/60 shadow-xl overflow-hidden">
         {apiKeys.length > 0 ? (
           <div className="divide-y divide-gray-700/40">
             {apiKeys.map((apiKey, index) => (

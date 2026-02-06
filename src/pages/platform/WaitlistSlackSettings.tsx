@@ -5,11 +5,13 @@
 
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { SlackNotificationSettings } from '@/components/admin/waitlist/SlackNotificationSettings';
 
 export default function WaitlistSlackSettings() {
   return (
     <div className="p-4 sm:p-6 space-y-6 overflow-x-hidden w-full bg-white dark:bg-gray-950 min-h-screen">
+      <BackToPlatform />
       {/* Header with back link */}
       <div className="space-y-4">
         <Link

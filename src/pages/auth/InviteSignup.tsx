@@ -16,9 +16,12 @@ import { Building2, Lock, User, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getInvitationByToken, completeInviteSignup, type Invitation } from '@/lib/services/invitationService';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
 
-type SignupStatus = 'loading' | 'ready' | 'signing-up' | 'complete' | 'verify-email' | 'error';
+type SignupStatus = 'loading' | 'ready' | 'signing-up' | 'signing-in' | 'complete' | 'verify-email' | 'error';
+type FormMode = 'signup' | 'signin';
 
 export default function InviteSignup() {
   const { token } = useParams<{ token: string }>();
@@ -26,6 +29,7 @@ export default function InviteSignup() {
   const { signUp } = useAuth();
 
   const [status, setStatus] = useState<SignupStatus>('loading');
+  const [formMode, setFormMode] = useState<FormMode>('signup');
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -60,11 +64,69 @@ export default function InviteSignup() {
     loadInvitation();
   }, [token]);
 
-  // Handle signup
+  // Handle sign-in for existing users
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!invitation || !token) return;
+
+    if (formData.password.length < 1) {
+      toast.error('Please enter your password');
+      return;
+    }
+
+    setStatus('signing-in');
+
+    try {
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: invitation.email,
+        password: formData.password,
+      });
+
+      if (signInError) {
+        setStatus('ready');
+        toast.error(signInError.message);
+        return;
+      }
+
+      // Complete the invite signup (create membership, mark onboarding complete)
+      const result = await completeInviteSignup(token);
+
+      if (!result.success) {
+        setStatus('error');
+        setError(result.error_message || 'Failed to set up organization membership');
+        toast.error(result.error_message || 'Failed to set up organization');
+        return;
+      }
+
+      // Set the invited org as the active organization
+      if (result.org_id) {
+        useOrgStore.getState().setActiveOrg(result.org_id);
+      }
+
+      setStatus('complete');
+      toast.success(`Welcome to ${result.org_name}!`);
+
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 1500);
+    } catch (err: any) {
+      console.error('Error during sign-in:', err);
+      setStatus('ready');
+      toast.error(err.message || 'An error occurred during sign-in');
+    }
+  };
+
+  // Handle signup for new users
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!invitation || !token) return;
+
+    // If in signin mode, delegate to sign-in handler
+    if (formMode === 'signin') {
+      return handleSignIn(e);
+    }
 
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
@@ -98,13 +160,48 @@ export default function InviteSignup() {
       );
 
       if (signupError) {
+        // If user already exists, switch to sign-in mode
+        if (signupError.message?.toLowerCase().includes('already') ||
+            signupError.message?.toLowerCase().includes('exists')) {
+          setFormMode('signin');
+          setStatus('ready');
+          setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
+          toast.info('Account already exists. Please sign in to accept the invitation.');
+          return;
+        }
         setStatus('error');
         setError(signupError.message);
         toast.error(signupError.message);
         return;
       }
 
-      // Step 2: Complete the invite signup (create membership, mark onboarding complete)
+      // Step 2: Explicitly save first_name and last_name to profile
+      // The DB trigger may not extract names from auth metadata, and this flow
+      // skips AuthCallback which normally handles the profile upsert
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: user.id,
+              email: invitation.email,
+              first_name: formData.firstName.trim(),
+              last_name: formData.lastName.trim(),
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'id',
+            });
+
+          if (profileError) {
+            console.warn('[InviteSignup] Failed to save profile names:', profileError);
+          }
+        }
+      } catch (profileErr) {
+        console.warn('[InviteSignup] Error saving profile names:', profileErr);
+      }
+
+      // Step 3: Complete the invite signup (create membership, mark onboarding complete)
       // This doesn't require a session since it's a SECURITY DEFINER RPC
       const result = await completeInviteSignup(token);
 
@@ -113,6 +210,12 @@ export default function InviteSignup() {
         setError(result.error_message || 'Failed to set up organization membership');
         toast.error(result.error_message || 'Failed to set up organization');
         return;
+      }
+
+      // Step 4: Set the invited org as the active organization
+      // This ensures the dashboard loads the correct org, not an auto-created one
+      if (result.org_id) {
+        useOrgStore.getState().setActiveOrg(result.org_id);
       }
 
       // Success! Redirect straight to dashboard
@@ -271,16 +374,20 @@ export default function InviteSignup() {
               <Building2 className="w-8 h-8 text-[#37bd7e]" />
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">
-              Join{' '}
+              {formMode === 'signin' ? 'Sign in to join' : 'Join'}{' '}
               <span className="text-[#37bd7e]">
                 {invitation?.organization?.name || 'Organization'}
               </span>
             </h1>
             <p className="text-gray-400">
-              You've been invited to join{' '}
-              <span className="text-white font-medium">
-                {invitation?.organization?.name || 'an organization'}
-              </span>
+              {formMode === 'signin'
+                ? 'You already have an account. Sign in to accept the invitation.'
+                : <>You've been invited to join{' '}
+                    <span className="text-white font-medium">
+                      {invitation?.organization?.name || 'an organization'}
+                    </span>
+                  </>
+              }
             </p>
           </div>
 
@@ -300,40 +407,42 @@ export default function InviteSignup() {
               <p className="text-xs text-gray-500">Email verified from your invitation</p>
             </div>
 
-            {/* First and Last Name */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-400">First Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    required
-                    value={formData.firstName}
-                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
-                    placeholder="Sarah"
-                    disabled={status !== 'ready'}
-                  />
+            {/* First and Last Name - only shown in signup mode */}
+            {formMode === 'signup' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-400">First Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      required
+                      value={formData.firstName}
+                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
+                      placeholder="Sarah"
+                      disabled={status !== 'ready'}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-400">Last Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    required
-                    value={formData.lastName}
-                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
-                    placeholder="Johnson"
-                    disabled={status !== 'ready'}
-                  />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-400">Last Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      required
+                      value={formData.lastName}
+                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
+                      placeholder="Johnson"
+                      disabled={status !== 'ready'}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Password */}
             <div className="space-y-2">
@@ -343,7 +452,7 @@ export default function InviteSignup() {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={formMode === 'signup' ? 6 : 1}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
@@ -351,26 +460,30 @@ export default function InviteSignup() {
                   disabled={status !== 'ready'}
                 />
               </div>
-              <p className="text-xs text-gray-500">Minimum 6 characters</p>
+              {formMode === 'signup' && (
+                <p className="text-xs text-gray-500">Minimum 6 characters</p>
+              )}
             </div>
 
-            {/* Confirm Password */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-400">Confirm Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
-                  placeholder="••••••••"
-                  disabled={status !== 'ready'}
-                />
+            {/* Confirm Password - only shown in signup mode */}
+            {formMode === 'signup' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-400">Confirm Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
+                    placeholder="••••••••"
+                    disabled={status !== 'ready'}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <button
               type="submit"
@@ -383,11 +496,51 @@ export default function InviteSignup() {
                   Creating account...
                 </>
               )}
-              {status === 'ready' && 'Create Account & Join'}
+              {status === 'signing-in' && (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin inline" />
+                  Signing in...
+                </>
+              )}
+              {status === 'ready' && formMode === 'signup' && 'Create Account & Join'}
+              {status === 'ready' && formMode === 'signin' && 'Sign In & Join'}
             </button>
           </form>
 
-          <p className="text-xs text-gray-500 text-center mt-6">
+          {/* Toggle between signup and signin */}
+          <p className="text-sm text-gray-400 text-center mt-4">
+            {formMode === 'signup' ? (
+              <>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormMode('signin');
+                    setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
+                  }}
+                  className="text-[#37bd7e] hover:underline font-medium"
+                >
+                  Sign in instead
+                </button>
+              </>
+            ) : (
+              <>
+                Don't have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormMode('signup');
+                    setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
+                  }}
+                  className="text-[#37bd7e] hover:underline font-medium"
+                >
+                  Create one
+                </button>
+              </>
+            )}
+          </p>
+
+          <p className="text-xs text-gray-500 text-center mt-4">
             Invited as: <span className="font-medium text-gray-300 capitalize">{invitation?.role || 'member'}</span>
           </p>
         </div>

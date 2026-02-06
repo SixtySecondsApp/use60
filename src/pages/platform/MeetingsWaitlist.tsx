@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useWaitlistAdmin } from '@/lib/hooks/useWaitlistAdmin';
 import { useWaitlistBulkActions } from '@/lib/hooks/useWaitlistBulkActions';
@@ -119,6 +120,7 @@ export default function MeetingsWaitlist() {
 
   return (
     <div className="p-4 sm:p-6 space-y-6 overflow-x-hidden w-full bg-white dark:bg-gray-950 min-h-screen">
+      <BackToPlatform />
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Meetings Waitlist</h1>

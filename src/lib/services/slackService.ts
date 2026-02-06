@@ -212,11 +212,122 @@ class SlackService {
   }
 
   /**
+   * Format an organization notification for Slack
+   * Story: ORG-NOTIF-012
+   */
+  formatOrgNotification(
+    notification: {
+      title: string;
+      message: string;
+      type: 'info' | 'success' | 'warning' | 'error';
+      category: string;
+      action_url?: string;
+      metadata?: Record<string, any>;
+    },
+    orgName: string,
+    config: SlackNotificationConfig
+  ): SlackMessage {
+    const mentions = config.mention_users?.map(user => `<@${user}>`).join(' ') || '';
+
+    // Map notification type to Slack color
+    const colorMap = {
+      info: '#439FE0',
+      success: '#36a64f',
+      warning: '#ff9900',
+      error: '#d9534f',
+    };
+
+    // Map category to emoji
+    const emojiMap: Record<string, string> = {
+      team: ':busts_in_silhouette:',
+      deal: ':moneybag:',
+      system: ':gear:',
+      digest: ':newspaper:',
+    };
+
+    const message: SlackMessage = {
+      username: config.username || 'Sixty Sales Bot',
+      icon_emoji: config.icon_emoji || emojiMap[notification.category] || ':bell:',
+      text: `${notification.title} ${mentions}`.trim(),
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: notification.title,
+            emoji: true,
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: notification.message,
+          },
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: `📊 *${orgName}* • ${new Date().toLocaleString()}`,
+            },
+          ],
+        },
+      ],
+    };
+
+    // Add action button if URL provided
+    if (notification.action_url) {
+      message.blocks!.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: 'View Details',
+              emoji: true,
+            },
+            url: `https://app.use60.com${notification.action_url}`,
+            style: notification.type === 'error' ? 'danger' : 'primary',
+          },
+        ],
+      });
+    }
+
+    // Add metadata as context if present
+    if (notification.metadata && Object.keys(notification.metadata).length > 0) {
+      const metadataFields = Object.entries(notification.metadata)
+        .slice(0, 5) // Limit to 5 fields
+        .map(([key, value]) => `*${key}:* ${JSON.stringify(value)}`)
+        .join(' • ');
+
+      message.blocks!.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: metadataFields,
+          },
+        ],
+      });
+    }
+
+    // Override channel if specified
+    if (config.channel) {
+      message.channel = config.channel;
+    }
+
+    return message;
+  }
+
+  /**
    * Format a general notification for Slack
    */
   formatGeneralNotification(title: string, message: string, config: SlackNotificationConfig): SlackMessage {
     const mentions = config.mention_users?.map(user => `<@${user}>`).join(' ') || '';
-    
+
     return {
       username: config.username || 'Sixty Sales Bot',
       icon_emoji: config.icon_emoji || ':bell:',

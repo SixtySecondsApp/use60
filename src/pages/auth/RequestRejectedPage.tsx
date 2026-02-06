@@ -31,7 +31,7 @@ export default function RequestRejectedPage() {
       try {
         const { data } = await supabase
           .from('organization_join_requests')
-          .select('organization_id, rejection_reason, organization_id(name)')
+          .select('org_id, rejection_reason, organizations(name)')
           .eq('user_id', user.id)
           .eq('status', 'rejected')
           .order('actioned_at', { ascending: false })
@@ -39,9 +39,7 @@ export default function RequestRejectedPage() {
 
         if (data) {
           setRejectionDetails({
-            orgName: typeof data.organization_id === 'object' && data.organization_id?.name 
-              ? data.organization_id.name 
-              : 'the organization',
+            orgName: data.organizations?.name || 'the organization',
             reason: data.rejection_reason,
           });
         }

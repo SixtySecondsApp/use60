@@ -61,15 +61,12 @@ export async function approveJoinRequest(
   adminUserId: string
 ): Promise<ApproveRequestResult> {
   try {
-    console.log('[joinRequestService] Approving join request via RPC:', requestId);
-
     // Call RPC function - auth is handled automatically via session
     const { data, error } = await supabase.rpc('approve_join_request', {
       p_request_id: requestId,
     });
 
     if (error) {
-      console.error('[joinRequestService] RPC error:', error);
       return {
         success: false,
         error: error.message || 'Failed to approve join request',
@@ -80,7 +77,6 @@ export async function approveJoinRequest(
     const result = data?.[0];
 
     if (!result) {
-      console.error('[joinRequestService] No result from RPC');
       return {
         success: false,
         error: 'Failed to approve join request',
@@ -88,33 +84,24 @@ export async function approveJoinRequest(
     }
 
     if (!result.success) {
-      console.error('[joinRequestService] RPC returned failure:', result.message);
       return {
         success: false,
         error: result.message || 'Failed to approve join request',
       };
     }
 
-    console.log('[joinRequestService] ✅ Join request approved successfully');
-
     // Update profile status to active
     if (result.user_id) {
-      const { error: profileError } = await supabase
+      await supabase
         .from('profiles')
         .update({ profile_status: 'active' })
         .eq('id', result.user_id);
-
-      if (profileError) {
-        console.error('[joinRequestService] Failed to update profile status:', profileError);
-        // Don't fail - membership was already created
-      }
     }
 
     return {
       success: true,
     };
   } catch (err) {
-    console.error('[joinRequestService] Exception in approveJoinRequest:', err);
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Unknown error',
@@ -279,7 +266,7 @@ export async function acceptJoinRequest(
     // Check if user is already a member (shouldn't happen, but be safe)
     const { data: existingMembership } = await supabase
       .from('organization_memberships')
-      .select('id')
+      .select('org_id, user_id')
       .eq('org_id', orgId)
       .eq('user_id', joinRequest.user_id)
       .maybeSingle();
@@ -352,16 +339,38 @@ export async function acceptJoinRequest(
  */
 export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest[]> {
   try {
-    console.log('[joinRequestService] ===== FETCHING JOIN REQUESTS =====');
-    console.log('[joinRequestService] Org ID:', orgId);
+    // Step 1: Verify user has permission FIRST (fail fast with clear error)
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('Not authenticated');
+    }
 
-    // Check auth state
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('[joinRequestService] Auth session exists:', !!session);
-    console.log('[joinRequestService] User ID:', session?.user?.id);
-    console.log('[joinRequestService] User email:', session?.user?.email);
+    const { data: membership } = await supabase
+      .from('organization_memberships')
+      .select('role, member_status')
+      .eq('org_id', orgId)
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-    // Step 1: Fetch join requests (without embedded profile join)
+    if (!membership || !['owner', 'admin'].includes(membership.role)) {
+      console.warn('[joinRequestService] User lacks permission to view join requests:', {
+        userId: user.id,
+        orgId,
+        role: membership?.role,
+      });
+      throw new Error('You do not have permission to view join requests for this organization');
+    }
+
+    if (membership.member_status !== 'active') {
+      console.warn('[joinRequestService] User has inactive membership:', {
+        userId: user.id,
+        orgId,
+        member_status: membership.member_status,
+      });
+      throw new Error('Your membership is not active');
+    }
+
+    // Step 2: Fetch join requests (permission verified)
     // Note: Only selecting columns that exist in base migration
     // join_request_token and join_request_expires_at columns may not exist yet
     const { data: joinRequests, error } = await supabase
@@ -382,19 +391,18 @@ export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest
       .order('requested_at', { ascending: false });
 
     if (error) {
-      console.error('[joinRequestService] ❌ Query failed with error:', error);
-      console.error('[joinRequestService] Error code:', error.code);
-      console.error('[joinRequestService] Error message:', error.message);
-      console.error('[joinRequestService] Error details:', error.details);
-      console.error('[joinRequestService] Error hint:', error.hint);
-      return [];
+      console.error('[joinRequestService] Supabase error fetching join requests:', {
+        orgId,
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+      throw new Error(`Failed to fetch join requests: ${error.message}`);
     }
 
-    console.log('[joinRequestService] ✅ Join requests query succeeded');
-    console.log('[joinRequestService] Number of results:', joinRequests?.length || 0);
-
     if (!joinRequests || joinRequests.length === 0) {
-      console.warn('[joinRequestService] ⚠️ No pending requests found for org:', orgId);
+      console.log('[joinRequestService] No pending join requests found for org:', orgId);
       return [];
     }
 
@@ -410,12 +418,14 @@ export async function getPendingJoinRequests(orgId: string): Promise<JoinRequest
       });
     });
 
+    console.log('[joinRequestService] Found', joinRequests.length, 'pending join requests');
+
     // Return join requests as-is - they already have user_profile data from the table
     // No need to fetch profiles separately (would be blocked by RLS anyway)
     return joinRequests as JoinRequest[];
   } catch (err) {
-    console.error('[joinRequestService] ❌ Exception in getPendingJoinRequests:', err);
-    return [];
+    console.error('[joinRequestService] Exception in getPendingJoinRequests:', err);
+    throw err; // Re-throw so useQuery can catch and display error
   }
 }
 
@@ -432,7 +442,6 @@ export async function getUserJoinRequests(userId: string): Promise<JoinRequest[]
       .order('requested_at', { ascending: false });
 
     if (error) {
-      console.error('[joinRequestService] Failed to get user join requests:', error);
       return [];
     }
 
@@ -446,38 +455,157 @@ export async function getUserJoinRequests(userId: string): Promise<JoinRequest[]
 /**
  * Cancel a pending join request
  * Allows user to cancel and restart onboarding
+ * Handles both organization_join_requests and rejoin_requests
  */
 export async function cancelJoinRequest(
   requestId: string,
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // First try the RPC (works if deployed)
     const { data, error } = await supabase.rpc('cancel_join_request', {
       p_request_id: requestId,
       p_user_id: userId,
     });
 
     if (error) {
-      console.error('[joinRequestService] Failed to cancel request:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to cancel join request',
-      };
+      // Fall through to direct deletion approach
+    } else if (data?.[0]?.success) {
+      return { success: true };
+    } else if (data?.[0]) {
+      console.warn('[joinRequestService] RPC returned failure, trying direct deletion:', data[0].message);
+      // Fall through to direct deletion approach
     }
 
-    if (!data?.[0]?.success) {
-      return {
-        success: false,
-        error: data?.[0]?.message || 'Failed to cancel join request',
-      };
+    // Fallback: Try to delete from organization_join_requests
+    console.log('[joinRequestService] Attempting direct deletion from organization_join_requests...');
+    let { data: joinReqData, error: joinReqError } = await supabase
+      .from('organization_join_requests')
+      .select('id')
+      .eq('id', requestId)
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (joinReqData) {
+      const { error: deleteError } = await supabase
+        .from('organization_join_requests')
+        .delete()
+        .eq('id', requestId)
+        .eq('user_id', userId);
+
+      if (!deleteError) {
+        console.log('[joinRequestService] ✅ Deleted from organization_join_requests');
+        const resetResult = await resetOnboardingState(userId);
+        if (!resetResult.success) {
+          return {
+            success: false,
+            error: resetResult.error || 'Failed to reset onboarding state after cancellation',
+          };
+        }
+        return { success: true };
+      } else {
+        console.warn('[joinRequestService] Failed to delete from organization_join_requests:', deleteError);
+      }
     }
 
-    return { success: true };
+    // Fallback: Try to delete from rejoin_requests
+    console.log('[joinRequestService] Attempting direct deletion from rejoin_requests...');
+    const { data: rejoinData, error: rejoinError } = await supabase
+      .from('rejoin_requests')
+      .select('id')
+      .eq('id', requestId)
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (rejoinData) {
+      const { error: deleteError } = await supabase
+        .from('rejoin_requests')
+        .delete()
+        .eq('id', requestId)
+        .eq('user_id', userId);
+
+      if (!deleteError) {
+        console.log('[joinRequestService] ✅ Deleted from rejoin_requests');
+        const resetResult = await resetOnboardingState(userId);
+        if (!resetResult.success) {
+          return {
+            success: false,
+            error: resetResult.error || 'Failed to reset onboarding state after cancellation',
+          };
+        }
+        return { success: true };
+      } else {
+        console.error('[joinRequestService] Failed to delete from rejoin_requests:', deleteError);
+        return {
+          success: false,
+          error: deleteError.message || 'Failed to cancel rejoin request',
+        };
+      }
+    }
+
+    // Request not found in either table
+    console.error('[joinRequestService] Request not found in either table');
+    return {
+      success: false,
+      error: 'Join request not found or already processed',
+    };
   } catch (err) {
     console.error('[joinRequestService] Exception in cancelJoinRequest:', err);
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Helper function to reset onboarding state after canceling a request
+ */
+async function resetOnboardingState(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Reset profile status to active
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ profile_status: 'active' })
+      .eq('id', userId);
+
+    if (profileError) {
+      console.error('[joinRequestService] Failed to reset profile status:', profileError);
+      return {
+        success: false,
+        error: `Failed to reset profile status: ${profileError.message}`,
+      };
+    }
+
+    // Reset onboarding progress
+    const { error: progressError } = await supabase
+      .from('user_onboarding_progress')
+      .upsert(
+        {
+          user_id: userId,
+          onboarding_step: 'website_input',
+          onboarding_completed_at: null,
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (progressError) {
+      console.error('[joinRequestService] Failed to reset onboarding progress:', progressError);
+      return {
+        success: false,
+        error: `Failed to reset onboarding progress: ${progressError.message}`,
+      };
+    }
+
+    console.log('[joinRequestService] Reset onboarding state for user:', userId);
+    return { success: true };
+  } catch (err) {
+    console.error('[joinRequestService] Error resetting onboarding state:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error resetting onboarding state',
     };
   }
 }

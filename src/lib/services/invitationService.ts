@@ -88,19 +88,18 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     const { error } = await supabase.functions.invoke('encharge-send-email', {
       body: {
         to_email: invitation.email,
+        to_name: inviteeName,
         template_type: 'organization_invitation',
         variables: {
           first_name: inviteeName,
+          recipient_name: inviteeName,
           organization_name: organizationName,
           inviter_name: name,
           inviter_initials: initials || 'SS',
           invitation_url: invitationUrl,
+          expiry_time: '7 days',
         },
         user_id: null, // No user_id yet since invitee may not have account
-        metadata: {
-          invitation_id: invitation.id,
-          org_id: invitation.org_id,
-        },
       },
     });
 
@@ -126,9 +125,26 @@ export async function createInvitation({
   orgId,
   email,
   role,
-}: CreateInvitationParams): Promise<{ data: Invitation | null; error: string | null }> {
+}: CreateInvitationParams): Promise<{ data: Invitation | null; error: string | null; warning?: string }> {
   try {
     logger.log('[InvitationService] Creating invitation:', { orgId, email, role });
+
+    // Permission check: caller must be admin or owner of the target org
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) {
+      return { data: null, error: 'Not authenticated' };
+    }
+
+    const { data: callerMembership } = await supabase
+      .from('organization_memberships')
+      .select('role')
+      .eq('org_id', orgId)
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    if (!callerMembership || !['admin', 'owner'].includes(callerMembership.role)) {
+      return { data: null, error: 'You do not have permission to invite members to this organization' };
+    }
 
     // Check if user already exists and is a member
     const { data: profileData } = await supabase
@@ -153,9 +169,10 @@ export async function createInvitation({
 
     // Check for existing pending invitation - if exists, regenerate token instead of rejecting
     // This allows admins to easily resend if user accidentally closed the tab or lost the link
+    // Note: selecting specific columns to avoid auth.users permission error (invited_by FK)
     const { data: existingInvite } = await supabase
       .from('organization_invitations')
-      .select('*')
+      .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
       .eq('org_id', orgId)
       .eq('email', email.toLowerCase())
       .is('accepted_at', null)
@@ -204,8 +221,12 @@ export async function createInvitation({
     // Get current user for invited_by
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Create the invitation
+    // Create the invitation with explicit token generation
     // Note: organization_invitations table is created by our migrations but not in generated types
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
     const { data, error } = await supabase
       .from('organization_invitations' as any)
       .insert({
@@ -213,6 +234,7 @@ export async function createInvitation({
         email: email.toLowerCase(),
         role,
         invited_by: user?.id || null,
+        token, // Explicitly set the token
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
       } as any)
       .select()
@@ -226,9 +248,14 @@ export async function createInvitation({
     const invitationData = data as unknown as Invitation;
     logger.log('[InvitationService] Invitation created:', invitationData?.id);
 
-    // Send invitation email
+    // Send invitation email and track result
     const inviterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'A team member';
-    await sendInvitationEmail(invitationData, inviterName);
+    const emailSent = await sendInvitationEmail(invitationData, inviterName);
+
+    if (!emailSent) {
+      logger.warn('[InvitationService] Invitation created but email failed to send:', invitationData?.id);
+      return { data: invitationData, error: null, warning: 'Invitation created but email delivery failed. You can resend from the invitation list.' };
+    }
 
     return { data: invitationData, error: null };
   } catch (err: any) {
@@ -279,40 +306,6 @@ export async function acceptInvitation(
 
     logger.log('[InvitationService] Invitation accepted:', result);
 
-    // After accepting invitation, remove user from old organizations
-    // This prevents users from being in multiple organizations
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) {
-        const userId = session.user.id;
-
-        // Get all user's memberships
-        const { data: allMemberships } = await supabase
-          .from('organization_memberships')
-          .select('org_id, role, organizations(created_by)')
-          .eq('user_id', userId);
-
-        // Find old organizations (anything except the one they just joined)
-        const oldOrgs = allMemberships?.filter(m =>
-          m.org_id !== result.org_id  // Not the organization they just joined
-        ) || [];
-
-        // Remove user from all other organizations
-        for (const oldOrg of oldOrgs) {
-          await supabase
-            .from('organization_memberships')
-            .delete()
-            .eq('org_id', oldOrg.org_id)
-            .eq('user_id', userId);
-
-          logger.log('[InvitationService] Removed from old org:', oldOrg.org_id);
-        }
-        // Trigger will automatically delete empty orgs
-      }
-    } catch (cleanupErr) {
-      logger.error('[InvitationService] Failed to cleanup old orgs:', cleanupErr);
-    }
-
     return {
       success: true,
       org_id: result.org_id,
@@ -340,9 +333,10 @@ export async function getOrgInvitations(
   orgId: string
 ): Promise<{ data: Invitation[] | null; error: string | null }> {
   try {
+    // Note: selecting specific columns to avoid auth.users permission error (invited_by FK)
     const { data, error } = await supabase
       .from('organization_invitations')
-      .select('*')
+      .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
       .eq('org_id', orgId)
       .is('accepted_at', null)
       .gt('expires_at', new Date().toISOString())
@@ -368,51 +362,143 @@ export async function getInvitationByToken(
   token: string
 ): Promise<{ data: Invitation | null; error: string | null }> {
   try {
-    const { data, error } = await supabase
-      .from('organization_invitations')
-      .select(`
-        id,
-        org_id,
-        email,
-        role,
-        invited_by,
-        token,
-        expires_at,
-        accepted_at,
-        created_at
-      `)
-      .eq('token', token)
-      .is('accepted_at', null)
-      .gt('expires_at', new Date().toISOString())
-      .single();
+    logger.log('[InvitationService] Looking up invitation with token:', { tokenLength: token?.length, tokenStart: token?.substring(0, 10) });
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return { data: null, error: 'Invitation not found or has expired' };
+    // Strategy 1: Call edge function (uses service role, bypasses RLS)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && supabaseAnonKey) {
+      try {
+        const edgeRes = await fetch(`${supabaseUrl}/functions/v1/get-invitation-by-token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({ token }),
+        });
+
+        if (edgeRes.ok) {
+          const result = await edgeRes.json();
+          if (result.data) {
+            const row = result.data;
+            logger.log('[InvitationService] Invitation found via edge function:', { id: row.id, email: row.email, org_name: row.org_name });
+            return { data: {
+              id: row.id,
+              org_id: row.org_id,
+              email: row.email,
+              role: row.role,
+              invited_by: null,
+              token: row.token,
+              expires_at: row.expires_at,
+              accepted_at: row.accepted_at,
+              created_at: row.created_at,
+              organization: row.org_name ? { id: row.org_id, name: row.org_name } : undefined,
+            } as Invitation, error: null };
+          }
+          if (result.error) {
+            return { data: null, error: result.error };
+          }
+        } else {
+          logger.warn('[InvitationService] Edge function returned:', edgeRes.status);
+        }
+      } catch (edgeErr) {
+        logger.warn('[InvitationService] Edge function not available, trying RPC fallback:', edgeErr);
       }
-      logger.error('[InvitationService] Error fetching invitation:', error);
-      return { data: null, error: error.message };
     }
 
-    // Fetch organization details separately to avoid ambiguity
-    if (data) {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('id, name')
-        .eq('id', (data as any).org_id)
-        .single();
+    // Strategy 2: Try SECURITY DEFINER RPC (requires migration to be applied)
+    const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_invitation_by_token', {
+      p_token: token,
+    }) as { data: any[] | null; error: any };
 
+    if (!rpcError && rpcData) {
+      const row = rpcData?.[0] || null;
+      if (!row) {
+        return { data: null, error: 'Invitation not found, expired, or already used' };
+      }
+      logger.log('[InvitationService] Invitation found via RPC:', { id: row.id, email: row.email, org_name: row.org_name });
       return { data: {
-        ...data,
-        organization: org || undefined,
+        id: row.id,
+        org_id: row.org_id,
+        email: row.email,
+        role: row.role,
+        invited_by: null,
+        token: row.token,
+        expires_at: row.expires_at,
+        accepted_at: row.accepted_at,
+        created_at: row.created_at,
+        organization: row.org_name ? { id: row.org_id, name: row.org_name } : undefined,
       } as Invitation, error: null };
     }
 
-    return { data: null, error: null };
+    if (rpcError) {
+      logger.warn('[InvitationService] RPC not available, using direct query fallback:', rpcError.message);
+    }
+
+    // Strategy 3: Direct query fallback
+    return await getInvitationByTokenFallback(token);
   } catch (err: any) {
     logger.error('[InvitationService] Exception fetching invitation:', err);
     return { data: null, error: err.message || 'Failed to fetch invitation' };
   }
+}
+
+// Fallback for when the get_invitation_by_token RPC doesn't exist yet
+async function getInvitationByTokenFallback(
+  token: string
+): Promise<{ data: Invitation | null; error: string | null }> {
+  // Use PostgREST embedded resource join to get org name in one query
+  // This works because organization_invitations has a FK to organizations
+  // and organization_invitations has RLS disabled
+  const { data, error } = await supabase
+    .from('organization_invitations')
+    .select('id, org_id, email, role, token, expires_at, accepted_at, created_at, organizations(id, name)')
+    .eq('token', token)
+    .is('accepted_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+
+  if (error) {
+    logger.error('[InvitationService] Fallback query error:', error);
+
+    // If the join fails, try without the org name
+    const { data: basicData, error: basicError } = await supabase
+      .from('organization_invitations')
+      .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
+      .eq('token', token)
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (basicError) return { data: null, error: basicError.message };
+    if (!basicData) return { data: null, error: 'Invitation not found, expired, or already used' };
+
+    return { data: {
+      ...basicData,
+      invited_by: null,
+      organization: undefined,
+    } as Invitation, error: null };
+  }
+
+  if (!data) return { data: null, error: 'Invitation not found, expired, or already used' };
+
+  // Extract org from the joined data
+  const org = (data as any).organizations;
+
+  return { data: {
+    id: data.id,
+    org_id: data.org_id,
+    email: data.email,
+    role: data.role,
+    token: data.token,
+    expires_at: data.expires_at,
+    accepted_at: data.accepted_at,
+    created_at: data.created_at,
+    invited_by: null,
+    organization: org ? { id: org.id, name: org.name } : undefined,
+  } as Invitation, error: null };
 }
 
 // =====================================================

@@ -1,6 +1,28 @@
+---
+requires-profile: true
+---
+
 # /continue-feature — Execute stories from prd.json (Ralph-style loop)
 
 **Iterations requested:** $ARGUMENTS (default: 10)
+
+---
+
+## STEP 0: Select Model Profile
+
+Before proceeding, ask the user to select which model profile to use:
+- **Economy** — Fastest, lowest cost
+- **Balanced** — Good balance of speed & accuracy
+- **Thorough** — Most accurate, highest cost
+
+Use the `AskUserQuestion` tool with these options.
+
+**Note**: Based on selection, appropriate models will be assigned:
+- Economy: Quick implementations, small stories
+- Balanced: Regular feature development, typical stories
+- Thorough: Complex logic, multi-system changes
+
+---
 
 Execute up to N iterations, completing one user story per iteration from `prd.json`.
 

@@ -19,8 +19,8 @@ function BulkActivityImport() {
   logger.warn("BulkActivityImport component rendered - functionality moved to ActivityUploadModal");
 
   return (
-    <div className="space-y-4 p-4 mb-6 bg-gray-900/50 backdrop-blur-xl rounded-lg border border-gray-800/50">
-      <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+    <div className="space-y-4 p-4 mb-6 bg-gray-50 dark:bg-gray-900/50 backdrop-blur-xl rounded-lg border border-gray-200 dark:border-gray-800/50">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
         <UploadCloud className="w-5 h-5" />
         Bulk Import Activities (Deprecated - Use Upload Button)
       </h3>

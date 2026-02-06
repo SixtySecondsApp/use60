@@ -72,10 +72,10 @@ export const InsightsResponse: React.FC<InsightsResponseProps> = ({ data, onActi
     <div className="space-y-6">
       {/* Priority Insights */}
       {priorityInsights && priorityInsights.length > 0 && (
-        <div className="bg-gradient-to-r from-gray-900/80 to-gray-800/80 backdrop-blur-sm border border-gray-800/50 rounded-lg p-6">
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900/80 dark:to-gray-800/80 backdrop-blur-sm border border-gray-200 dark:border-gray-800/50 rounded-lg p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Lightbulb className="w-6 h-6 text-blue-400" />
-            <h3 className="text-lg font-semibold text-gray-100">Priority Insights</h3>
+            <Lightbulb className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Priority Insights</h3>
           </div>
           <div className="space-y-4">
             {priorityInsights.map((insight) => (

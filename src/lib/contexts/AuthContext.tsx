@@ -171,6 +171,29 @@ const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 user_id: session.user.id,
                 email: session.user.email,
               });
+
+              // ORGREM-009: Check if user was removed from organization
+              try {
+                // Check redirect flag - only redirect if explicitly flagged as removed
+                // Don't use membership count as a signal - users in pending_approval won't have active memberships
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('redirect_to_onboarding')
+                  .eq('id', session.user.id)
+                  .single();
+
+                const shouldRedirect = profile?.redirect_to_onboarding === true;
+
+                if (shouldRedirect && !window.location.pathname.includes('/onboarding/removed-user')) {
+                  logger.log('🔄 User was removed from org, redirecting to removed-user page');
+                  // Redirect will be handled by App.tsx route guard
+                  // Store flag in sessionStorage so App.tsx can detect it
+                  sessionStorage.setItem('user_removed_redirect', 'true');
+                }
+              } catch (error) {
+                logger.error('Error checking user removal status:', error);
+                // Don't block login on error
+              }
             }
           }
           setLoading(false);

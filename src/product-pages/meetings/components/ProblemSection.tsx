@@ -117,7 +117,7 @@ export function ProblemSection() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.6, duration: 0.6 }}
-          className="mt-16 p-6 lg:p-8 rounded-2xl bg-gradient-to-r from-gray-900/80 to-gray-900/40 border border-white/10"
+          className="mt-16 p-6 lg:p-8 rounded-2xl bg-gradient-to-r from-white to-gray-50 dark:from-gray-900/80 dark:to-gray-900/40 border border-gray-200 dark:border-white/10"
         >
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="text-center md:text-left">
