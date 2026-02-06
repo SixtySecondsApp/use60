@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { MessageSquare, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import { MessageSquare, ChevronDown, ChevronUp, RotateCcw, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -51,6 +51,16 @@ export function AiChatThread({ tableId, sessionId, messages, onNewSession }: AiC
           <RotateCcw className="h-4 w-4 mr-2" />
           New Session
         </Button>
+
+        <a
+          href="/docs#ops-conversations"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-1 hover:bg-slate-700/50 rounded transition-colors"
+          title="Learn more about Conversations"
+        >
+          <HelpCircle className="w-4 h-4 text-slate-400 hover:text-blue-400" />
+        </a>
       </div>
 
       {/* Chat history */}

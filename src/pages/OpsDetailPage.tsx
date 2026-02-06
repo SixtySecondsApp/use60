@@ -22,6 +22,7 @@ import {
   Zap,
   BookOpen,
   GitBranch,
+  HelpCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -1157,6 +1158,20 @@ function OpsDetailPage() {
 
         {/* Query bar */}
         <div className="mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">AI Query Bar</h3>
+              <a
+                href="/docs#ops-query-bar"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
+                title="Learn more about AI Query Bar"
+              >
+                <HelpCircle className="w-4 h-4 text-slate-400 hover:text-blue-600" />
+              </a>
+            </div>
+          </div>
           <AiQueryBar
             value={queryInput}
             onChange={setQueryInput}
@@ -1290,21 +1305,43 @@ function OpsDetailPage() {
           {/* Right: action buttons */}
           <div className="flex shrink-0 items-center gap-2">
             {/* OI-005: Workflows button */}
-            <button
-              onClick={() => setShowWorkflows(!showWorkflows)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-3 py-1.5 text-sm font-medium text-violet-300 transition-colors hover:bg-violet-900/40 hover:text-violet-200"
-            >
-              <GitBranch className="h-3.5 w-3.5" />
-              Workflows
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowWorkflows(!showWorkflows)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-3 py-1.5 text-sm font-medium text-violet-300 transition-colors hover:bg-violet-900/40 hover:text-violet-200"
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+                Workflows
+              </button>
+              <a
+                href="/docs#ops-workflows"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 hover:bg-slate-700/50 rounded transition-colors"
+                title="Learn more about Workflows"
+              >
+                <HelpCircle className="w-4 h-4 text-slate-400 hover:text-violet-300" />
+              </a>
+            </div>
             {/* OI-016: Recipe Library button */}
-            <button
-              onClick={() => setShowRecipeLibrary(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-1.5 text-sm font-medium text-amber-300 transition-colors hover:bg-amber-900/40 hover:text-amber-200"
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              Recipes
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowRecipeLibrary(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-1.5 text-sm font-medium text-amber-300 transition-colors hover:bg-amber-900/40 hover:text-amber-200"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Recipes
+              </button>
+              <a
+                href="/docs#ops-recipes"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 hover:bg-slate-700/50 rounded transition-colors"
+                title="Learn more about Recipes"
+              >
+                <HelpCircle className="w-4 h-4 text-slate-400 hover:text-amber-300" />
+              </a>
+            </div>
             {/* HubSpot sync button (only for hubspot-sourced tables) */}
             {table.source_type === 'hubspot' && (
               <button
@@ -1615,7 +1652,18 @@ function OpsDetailPage() {
         <div className="fixed inset-y-0 right-0 z-50 w-[480px] bg-gray-900 border-l border-gray-800 shadow-xl overflow-y-auto">
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-white">Workflows</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-white">Workflows</h2>
+                <a
+                  href="/docs#ops-workflows"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 hover:bg-slate-700/50 rounded transition-colors"
+                  title="Learn more about Workflows"
+                >
+                  <HelpCircle className="w-4 h-4 text-slate-400 hover:text-violet-300" />
+                </a>
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowWorkflowBuilder(true)}
