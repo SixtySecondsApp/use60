@@ -220,8 +220,8 @@ async function sendViaEmail(
     to: candidate.email,
     subject: emailContent.subject,
     html: emailContent.bodyHtml,
-    from: "notifications@sixtyseconds.ai",
-    fromName: "60",
+    from: "noreply@use60.com",
+    fromName: "Sixty",
   });
 
   if (!result.success) {
