@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-import { BookOpen, Search, Menu, X } from 'lucide-react';
+import { BookOpen, Search, Menu, X, Copy, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { DocsFeedback } from '@/components/docs/DocsFeedback';
+import { PersonalizedExample } from '@/components/docs/PersonalizedExample';
+import { TryItButton } from '@/components/docs/TryItButton';
+import { toast } from 'sonner';
 
 interface Article {
   id: string;
@@ -19,10 +23,72 @@ interface GroupedArticles {
   [category: string]: Article[];
 }
 
+// Code block with copy button
+function CodeBlock({ children, className }: { children: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(children);
+    setCopied(true);
+    toast.success('Copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="relative group">
+      <pre className={className}>
+        <code>{children}</code>
+      </pre>
+      <button
+        onClick={handleCopy}
+        className="absolute top-2 right-2 p-2 rounded-lg bg-slate-800 hover:bg-slate-700
+          opacity-0 group-hover:opacity-100 transition-opacity"
+        aria-label="Copy code"
+      >
+        {copied ? (
+          <Check className="w-4 h-4 text-green-400" />
+        ) : (
+          <Copy className="w-4 h-4 text-slate-300" />
+        )}
+      </button>
+    </div>
+  );
+}
+
 export default function DocsPage() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Fetch org tables and columns for personalized examples
+  const { data: orgData } = useQuery({
+    queryKey: ['ops-tables-for-docs'],
+    queryFn: async () => {
+      const { data: tables, error } = await supabase
+        .from('dynamic_tables')
+        .select('id, name')
+        .limit(5);
+
+      if (error) {
+        console.error('Failed to load tables for personalization:', error);
+        return null;
+      }
+
+      // Get columns from first table
+      const firstTableId = tables?.[0]?.id;
+      let columns: any[] = [];
+      if (firstTableId) {
+        const { data: cols } = await supabase
+          .from('dynamic_table_columns')
+          .select('name, type')
+          .eq('table_id', firstTableId)
+          .limit(10);
+        columns = cols || [];
+      }
+
+      return { tables, columns };
+    },
+  });
 
   // Fetch all published articles
   const { data: articlesData, isLoading } = useQuery({
@@ -196,7 +262,18 @@ export default function DocsPage() {
               </div>
 
               <ReactMarkdown
+                children={processTemplateVars(article.content, orgData)}
                 components={{
+                  code({ node, inline, className, children, ...props }) {
+                    if (inline) {
+                      return <code className={className} {...props}>{children}</code>;
+                    }
+                    return (
+                      <CodeBlock className={className}>
+                        {String(children).replace(/\n$/, '')}
+                      </CodeBlock>
+                    );
+                  },
                   h1: ({ children, ...props }) => (
                     <h1 id={slugify(String(children))} {...props}>
                       {children}
@@ -216,6 +293,11 @@ export default function DocsPage() {
               >
                 {article.content}
               </ReactMarkdown>
+
+              {/* Feedback Section */}
+              <div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-700">
+                <DocsFeedback articleId={article.id} />
+              </div>
             </article>
           ) : (
             <div className="text-center py-12 text-slate-500">
@@ -236,4 +318,23 @@ function slugify(text: string): string {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .trim();
+}
+
+// Process template variables in content
+function processTemplateVars(content: string, orgData: any): string {
+  if (!orgData) return content;
+
+  let processed = content;
+
+  // Replace {{table_name}}
+  if (orgData.tables?.[0]) {
+    processed = processed.replace(/\{\{table_name\}\}/g, orgData.tables[0].name);
+  }
+
+  // Replace {{column_name}}
+  if (orgData.columns?.[0]) {
+    processed = processed.replace(/\{\{column_name\}\}/g, orgData.columns[0].name);
+  }
+
+  return processed;
 }

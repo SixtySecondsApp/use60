@@ -77,6 +77,7 @@ export const BillingAnalytics = lazyWithRetry(() => import('@/pages/admin/Billin
 export const SaasAdminDashboard = lazyWithRetry(() => import('@/pages/SaasAdminDashboard'));
 export const QuickAddSimulator = lazyWithRetry(() => import('@/pages/platform/QuickAddSimulator'));
 export const EmailActionCenter = lazyWithRetry(() => import('@/pages/EmailActionCenter'));
+export const DocsAdminPage = lazyWithRetry(() => import('@/pages/platform/DocsAdminPage'));
 
 // Integration Testing
 export const IntegrationsDashboard = lazyWithRetry(() => import('@/pages/admin/IntegrationsDashboard'));
