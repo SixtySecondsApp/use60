@@ -606,25 +606,37 @@ export default function Users() {
                               <AlertDialogTrigger asChild>
                                 <button
                                   className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                                  title="Delete user account"
                                 >
                                   <Trash2 className="w-4 h-4 text-red-500" />
                                 </button>
                               </AlertDialogTrigger>
                               <AlertDialogContent className="bg-gray-900/95 backdrop-blur-xl border border-gray-800/50">
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete {user.first_name} {user.last_name}? This action cannot be undone.
-                                    All their activities and targets will also be deleted.
+                                  <AlertDialogTitle className="text-red-400">Permanently Delete User</AlertDialogTitle>
+                                  <AlertDialogDescription className="space-y-3 text-gray-300">
+                                    <p>
+                                      You are about to permanently delete <span className="font-semibold text-white">{user.first_name} {user.last_name}</span> ({user.email}).
+                                    </p>
+                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-2">
+                                      <p className="text-sm font-medium text-red-400">⚠️ This action will:</p>
+                                      <ul className="text-sm space-y-1 ml-2 text-gray-300">
+                                        <li>• Permanently remove the user's authentication access</li>
+                                        <li>• Allow this email to be used for a new account signup</li>
+                                        <li>• Delete all user data from the system</li>
+                                        <li>• Remove associated activities, tasks, and targets</li>
+                                      </ul>
+                                      <p className="text-xs text-red-300 mt-2">This action <span className="font-semibold">cannot be undone</span>.</p>
+                                    </div>
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel className="bg-gray-800/50 text-gray-300 hover:bg-gray-800">Cancel</AlertDialogCancel>
                                   <AlertDialogAction
                                     onClick={() => deleteUser(user.id)}
-                                    className="bg-red-500 hover:bg-red-600"
+                                    className="bg-red-600 hover:bg-red-700"
                                   >
-                                    Delete
+                                    Yes, Delete User
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
