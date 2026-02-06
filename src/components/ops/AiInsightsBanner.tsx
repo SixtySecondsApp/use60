@@ -6,9 +6,10 @@
  */
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tantml/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useServices } from '@/lib/services/ServiceLocator';
 
