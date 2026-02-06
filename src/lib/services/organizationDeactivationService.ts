@@ -47,8 +47,9 @@ export async function validateOwnerCanDeactivate(orgId: string): Promise<string 
       return 'Only organization owners can deactivate';
     }
 
-    // FIXED: Removed check for other active organizations
-    // Users can now deactivate their only organization
+    // NOTE: Backend RPC function no longer enforces "must maintain at least one active organization" (BACKEND-001)
+    // This allows users to deactivate their only active organization
+    // Frontend is responsible for handling redirects when activeOrgId becomes inactive
 
     return null; // Can deactivate
   } catch (error) {
