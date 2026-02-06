@@ -285,7 +285,91 @@ serve(async (req) => {
 
         if (error) throw error;
 
-        // TODO: Send Slack notification for approval (implement in DOC-014)
+        // DOC-014: Send Slack notification for approval
+        try {
+          // Get article title for context
+          const { data: article } = await userClient
+            .from('docs_articles')
+            .select('title, slug')
+            .eq('id', article_id)
+            .single();
+
+          // Send to Slack (requires SLACK_WEBHOOK_URL env var)
+          const slackWebhook = Deno.env.get('SLACK_DOCS_APPROVAL_WEBHOOK');
+          if (slackWebhook && article) {
+            await fetch(slackWebhook, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                blocks: [
+                  {
+                    type: 'header',
+                    text: {
+                      type: 'plain_text',
+                      text: '📝 Doc Update Proposal',
+                    },
+                  },
+                  {
+                    type: 'section',
+                    fields: [
+                      {
+                        type: 'mrkdwn',
+                        text: `*Article:*\n${article.title}`,
+                      },
+                      {
+                        type: 'mrkdwn',
+                        text: `*Reason:*\n${reason}`,
+                      },
+                    ],
+                  },
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: `*Proposed Changes:*\n\`\`\`\n${proposed_content.substring(0, 500)}...\n\`\`\``,
+                    },
+                  },
+                  {
+                    type: 'actions',
+                    elements: [
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: 'Approve',
+                        },
+                        style: 'primary',
+                        value: proposal.id,
+                        action_id: 'approve_doc_proposal',
+                      },
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: 'Reject',
+                        },
+                        style: 'danger',
+                        value: proposal.id,
+                        action_id: 'reject_doc_proposal',
+                      },
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: 'View in Admin',
+                        },
+                        url: `${Deno.env.get('APP_URL') || 'https://app.use60.com'}/platform/docs-admin`,
+                      },
+                    ],
+                  },
+                ],
+              }),
+            });
+          }
+        } catch (slackError) {
+          console.error('Failed to send Slack notification:', slackError);
+          // Don't fail the entire request if Slack fails
+        }
 
         return new Response(JSON.stringify({ data: proposal }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
