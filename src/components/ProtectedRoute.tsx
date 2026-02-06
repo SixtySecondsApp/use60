@@ -368,7 +368,9 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       return;
     }
 
-    // Check if organization is inactive
+    // Check if organization is inactive (including deactivated orgs where activeOrgId points to a deactivated org)
+    // This ensures users with deactivated activeOrgId are redirected to the inactive org page
+    // instead of seeing blank pages or errors in the app
     if (isAuthenticated && isOrgActive === false && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute) {
       if (location.pathname !== '/inactive-organization') {
         logger.log('[ProtectedRoute] Organization is inactive, redirecting to inactive-organization page');
