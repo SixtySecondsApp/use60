@@ -13,7 +13,7 @@
  * Phase 7 update: Added PlatformSkillConfigStep for platform-controlled skills
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useOnboardingV2Store, type OnboardingV2Step, isPersonalEmailDomain } from '@/lib/stores/onboardingV2Store';
@@ -64,6 +64,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
   const [savedStateForChoice, setSavedStateForChoice] = useState<any>(null);
   const [isStartingFresh, setIsStartingFresh] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
+  const hasAttemptedRestore = useRef(false);
   const {
     currentStep,
     domain: storeDomain,
@@ -92,6 +93,10 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
   useEffect(() => {
     const restoreProgress = async () => {
       if (!user) return;
+
+      // Only attempt restoration once — prevents async race with user interaction
+      if (hasAttemptedRestore.current) return;
+      hasAttemptedRestore.current = true;
 
       // --- Priority 1: Restore from localStorage (richest state) ---
       const savedState = localStorage.getItem(`sixty_onboarding_${user.email || user.id}`);
@@ -126,6 +131,13 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
               console.log('[OnboardingV2] Saved organization no longer exists, starting fresh');
               localStorage.removeItem(`sixty_onboarding_${user.email || user.id}`);
               setStep('website_input');
+              return;
+            }
+
+            // Bail out if user already navigated while we were awaiting async checks
+            const storeStepAfterChecks = useOnboardingV2Store.getState().currentStep;
+            if (storeStepAfterChecks !== 'website_input') {
+              console.log('[OnboardingV2] User already navigated to', storeStepAfterChecks, '— skipping restoration');
               return;
             }
 
@@ -208,6 +220,13 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
           .select('onboarding_step')
           .eq('user_id', user.id)
           .maybeSingle();
+
+        // Bail out if user already navigated while we were querying DB
+        const storeStepAfterDb = useOnboardingV2Store.getState().currentStep;
+        if (storeStepAfterDb !== 'website_input') {
+          console.log('[OnboardingV2] User already navigated to', storeStepAfterDb, '— skipping DB restoration');
+          return;
+        }
 
         if (progress && progress.onboarding_step !== 'complete') {
           const dbStep = progress.onboarding_step as OnboardingV2Step;
