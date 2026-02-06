@@ -48,8 +48,19 @@ const sanitizeInput = (input: string): string => {
 };
 
 export function SkillsConfigStep() {
-  const { skillConfigs, updateSkillConfig, setStep, saveAllSkills, organizationId, enrichment } =
+  const { skillConfigs, updateSkillConfig, setStep, saveAllSkills, organizationId, enrichment, resetAndCleanup } =
     useOnboardingV2Store();
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleStartOver = async () => {
+    if (isResetting) return;
+    setIsResetting(true);
+    try {
+      await resetAndCleanup();
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const [currentSkillIndex, setCurrentSkillIndex] = useState(0);
   const [skillStatuses, setSkillStatuses] = useState<Record<SkillId, SkillStatus>>(() =>
@@ -754,10 +765,11 @@ export function SkillsConfigStep() {
         {/* Skip All & Start Over */}
         <div className="px-4 sm:px-6 py-3 border-t border-gray-800/50 flex items-center justify-between">
           <button
-            onClick={() => useOnboardingV2Store.getState().reset()}
-            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+            onClick={handleStartOver}
+            disabled={isResetting}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors disabled:opacity-50"
           >
-            Start Over
+            {isResetting ? 'Resetting...' : 'Start over'}
           </button>
           <button
             onClick={handleSkipAll}

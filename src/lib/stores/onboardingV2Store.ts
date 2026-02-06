@@ -336,6 +336,7 @@ interface OnboardingV2State {
 
   // Reset
   reset: () => void;
+  resetAndCleanup: () => Promise<void>;
 }
 
 // ============================================================================
@@ -1788,5 +1789,70 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     if (state.userEmail) {
       clearOnboardingState(state.userEmail);
     }
+  },
+
+  // Reset with full database cleanup (deletes org + related records)
+  resetAndCleanup: async () => {
+    const { organizationId, userEmail } = get();
+
+    if (organizationId) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('No session');
+
+        // Delete in dependency order to respect foreign key constraints
+
+        // 1. Delete organization_enrichment records
+        await supabase
+          .from('organization_enrichment')
+          .delete()
+          .eq('organization_id', organizationId);
+
+        // 2. Delete organization_skills records
+        await supabase
+          .from('organization_skills')
+          .delete()
+          .eq('organization_id', organizationId);
+
+        // 3. Delete organization_context records
+        await supabase
+          .from('organization_context')
+          .delete()
+          .eq('organization_id', organizationId);
+
+        // 4. Delete membership (only this user's)
+        await supabase
+          .from('organization_memberships')
+          .delete()
+          .eq('org_id', organizationId)
+          .eq('user_id', session.user.id);
+
+        // 5. Delete the organization itself (only if created by this user)
+        await supabase
+          .from('organizations')
+          .delete()
+          .eq('id', organizationId)
+          .eq('created_by', session.user.id);
+
+        // 6. Reset onboarding progress to initial state
+        await supabase
+          .from('user_onboarding_progress')
+          .update({ onboarding_step: 'website_input', onboarding_completed_at: null })
+          .eq('user_id', session.user.id);
+
+        console.log('[onboardingV2] Successfully cleaned up org during reset:', organizationId);
+      } catch (error) {
+        console.error('[onboardingV2] Failed to cleanup org during reset:', error);
+        // Continue with local reset even if DB cleanup fails
+      }
+    }
+
+    // Clear localStorage
+    if (userEmail) {
+      clearOnboardingState(userEmail);
+    }
+
+    // Reset Zustand store state
+    get().reset();
   },
 }));

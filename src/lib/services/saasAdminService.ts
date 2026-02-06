@@ -576,6 +576,33 @@ export async function getBillingHistory(orgId: string): Promise<BillingHistoryIt
 }
 
 // ============================================================================
+// Organization Deletion
+// ============================================================================
+
+export async function deleteOrganization(orgId: string): Promise<{ success: boolean; affectedUsers: number }> {
+  const { data, error } = await supabase.functions.invoke('delete-organization', {
+    body: { orgId },
+  });
+
+  if (error) {
+    logger.error('[SaaS Admin] Error invoking delete-organization:', error);
+    throw error;
+  }
+
+  if (data?.error) {
+    logger.error('[SaaS Admin] delete-organization returned error:', data);
+    const errorMessage = data.code === 'ORG_NOT_FOUND'
+      ? 'Organization not found'
+      : data.code === 'ORG_DELETION_FAILED'
+        ? `Failed to delete organization: ${data.error}`
+        : data.error;
+    throw new Error(errorMessage);
+  }
+
+  return { success: true, affectedUsers: data?.affectedUsers || 0 };
+}
+
+// ============================================================================
 // Admin Dashboard Stats
 // ============================================================================
 

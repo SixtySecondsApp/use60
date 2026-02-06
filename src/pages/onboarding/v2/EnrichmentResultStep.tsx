@@ -13,8 +13,19 @@ import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 
 export function EnrichmentResultStep() {
-  const { enrichment, setStep, organizationId, setEnrichment } = useOnboardingV2Store();
+  const { enrichment, setStep, organizationId, setEnrichment, resetAndCleanup } = useOnboardingV2Store();
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleStartOver = async () => {
+    if (isResetting) return;
+    setIsResetting(true);
+    try {
+      await resetAndCleanup();
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // Load enrichment from database if not in store
   useEffect(() => {
@@ -161,10 +172,11 @@ export function EnrichmentResultStep() {
           {/* Start Over Link */}
           <div className="mt-4 pt-4 border-t border-gray-800/50 text-center">
             <button
-              onClick={() => useOnboardingV2Store.getState().reset()}
-              className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+              onClick={handleStartOver}
+              disabled={isResetting}
+              className="text-xs text-gray-500 hover:text-gray-400 transition-colors disabled:opacity-50"
             >
-              Start Over
+              {isResetting ? 'Resetting...' : 'Start over'}
             </button>
           </div>
         </div>

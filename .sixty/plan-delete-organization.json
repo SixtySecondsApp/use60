@@ -1,0 +1,257 @@
+{
+  "feature": "delete-organization",
+  "name": "Delete Organization from Platform Customers Page",
+  "description": "Add ability for platform admins to permanently delete organizations from the /platform/customers page. Users in the deleted org become unassigned and must re-onboard. User personal data (deals, contacts, activities) is preserved.",
+  "createdAt": "2026-02-06T00:00:00Z",
+  "consultReport": ".sixty/consult/delete-organization.md",
+  "status": "pending",
+
+  "context": {
+    "userRequest": "Delete organizations from platform/customers page. Users inside should become unassigned and go through onboarding again from the start.",
+    "dataHandling": "Keep user data (deals, contacts, activities). Only delete the org record and org-scoped data (integrations, AI data, billing, settings). Users are unassigned via membership deletion.",
+    "architecture": {
+      "userOrgLink": "organization_memberships table (many-to-many, NOT a direct organization_id on profiles)",
+      "cascadeBehavior": "313 ON DELETE CASCADE constraints on org-scoped tables. Core sales data (contacts, deals, activities) uses clerk_org_id (text, no FK) — will be orphaned, not deleted.",
+      "onboardingRedirect": "ProtectedRoute checks hasOrgMembership. When false, redirects to /onboarding. Must also reset user_onboarding_progress so onboarding page shows the flow.",
+      "existingDeletionCron": "org-deletion-cron already handles scheduled deletions after 30-day deactivation. This feature adds immediate admin deletion."
+    },
+    "criticalRisk": "MUST reset user_onboarding_progress.onboarding_completed_at for affected users. Without this, the onboarding page sees 'completed' and redirects back to dashboard, creating an infinite loop."
+  },
+
+  "stories": [
+    {
+      "id": "DELORG-001",
+      "title": "Create delete-organization edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 25,
+
+      "description": "Create a new Supabase edge function that permanently deletes an organization. Must be callable by platform admins only (is_admin check). The function should: (1) verify admin JWT, (2) fetch affected member user_ids, (3) reset user_onboarding_progress for all members (set onboarding_completed_at=null, onboarding_step='website_input'), (4) delete organization_memberships for this org, (5) delete the organization record (CASCADE handles org-scoped data). Return list of affected users.",
+
+      "acceptance": [
+        "Edge function validates admin JWT and checks is_admin on profiles",
+        "Resets user_onboarding_progress for all org members (clears onboarding_completed_at, sets step to 'website_input')",
+        "Deletes the organization record (CASCADE deletes org-scoped data)",
+        "Returns success with affected user count, or specific error codes on failure",
+        "Follows delete-user error handling pattern (specific error codes, no silent catches)"
+      ],
+
+      "files": [
+        "supabase/functions/delete-organization/index.ts"
+      ],
+
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/delete-user/index.ts"],
+        "schema": ["organizations", "organization_memberships", "user_onboarding_progress"]
+      },
+      "blocks": ["DELORG-002", "DELORG-003"],
+      "parallelWith": ["DELORG-004"],
+
+      "implementation_notes": [
+        "Pattern: Copy structure from delete-user/index.ts",
+        "Auth: JWT verification + is_admin check (same as delete-user)",
+        "CRITICAL: Reset onboarding progress BEFORE deleting memberships — membership CASCADE might affect ability to find users",
+        "Order of operations: (1) get members, (2) reset onboarding, (3) delete org (CASCADE handles memberships + org data)",
+        "Use service_role_key for all operations to bypass RLS",
+        "Import corsHeaders from '../_shared/cors.ts' and captureException from '../_shared/sentryEdge.ts'"
+      ]
+    },
+
+    {
+      "id": "DELORG-002",
+      "title": "Add delete-organization to config.toml and service",
+      "type": "config",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 10,
+
+      "description": "Add the delete-organization edge function to supabase/config.toml with verify_jwt = true (admin JWT auth). Also add deleteOrganization() function to saasAdminService.ts that invokes the edge function and handles error codes.",
+
+      "acceptance": [
+        "config.toml has [functions.delete-organization] with verify_jwt = true",
+        "saasAdminService.ts has deleteOrganization(orgId) function",
+        "Function calls supabase.functions.invoke('delete-organization', { body: { orgId } })",
+        "Handles error codes: ORG_NOT_FOUND, ORG_DELETION_FAILED",
+        "Logs errors with logger.error('[SaaS Admin]' pattern)"
+      ],
+
+      "files": [
+        "supabase/config.toml",
+        "src/lib/services/saasAdminService.ts"
+      ],
+
+      "dependencies": {
+        "stories": ["DELORG-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["DELORG-005"],
+      "parallelWith": [],
+
+      "implementation_notes": [
+        "config.toml pattern: [functions.delete-organization] verify_jwt = true",
+        "Service pattern: follow existing deletePlan/cancelSubscription patterns in saasAdminService.ts",
+        "Return type: Promise<{ success: boolean; affectedUsers: number }>"
+      ]
+    },
+
+    {
+      "id": "DELORG-003",
+      "title": "Export deleteOrganization from SaasAdminDashboard",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 5,
+
+      "description": "Import the deleteOrganization function in SaasAdminDashboard.tsx and pass it down as a callback to the CustomerList component (or make it available for the delete dialog).",
+
+      "acceptance": [
+        "SaasAdminDashboard imports deleteOrganization from saasAdminService",
+        "handleDeleteOrganization wraps the call with try/catch, toast notifications, and data refresh",
+        "Pass onDelete callback to CustomerList component"
+      ],
+
+      "files": [
+        "src/pages/SaasAdminDashboard.tsx"
+      ],
+
+      "dependencies": {
+        "stories": ["DELORG-002"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["DELORG-005"],
+      "parallelWith": ["DELORG-004"],
+
+      "implementation_notes": [
+        "Add handleDeleteOrganization async function",
+        "Call loadData() after successful deletion to refresh the customer list",
+        "toast.success('Organization deleted successfully') / toast.error(...)"
+      ]
+    },
+
+    {
+      "id": "DELORG-004",
+      "title": "Build delete organization confirmation dialog",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 20,
+
+      "description": "Create a confirmation dialog component for deleting an organization. Must clearly warn about consequences: users will be unassigned and must re-onboard, org-scoped data will be deleted. Require typing the organization name to confirm. Follow the AlertDialog pattern from Users.tsx delete confirmation.",
+
+      "acceptance": [
+        "AlertDialog shows org name and member count",
+        "Warning box lists consequences: users unassigned, must re-onboard, org data deleted, user personal data preserved",
+        "User must type organization name to enable the delete button",
+        "Delete button is red, disabled until name matches",
+        "Loading state while deletion is in progress",
+        "Follows dark mode styling patterns (dark:bg-gray-900/95 backdrop-blur-xl)"
+      ],
+
+      "files": [
+        "src/components/saas-admin/CustomerList.tsx"
+      ],
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/admin/Users.tsx"],
+        "schema": []
+      },
+      "blocks": ["DELORG-005"],
+      "parallelWith": ["DELORG-001"],
+
+      "implementation_notes": [
+        "Add inline in CustomerList.tsx rather than separate file — keeps it simple",
+        "Use AlertDialog from @/components/ui/alert-dialog",
+        "State: deleteTarget (CustomerWithDetails | null), confirmText (string), isDeleting (boolean)",
+        "Add 'Delete Organization' option to the DropdownMenu in each row",
+        "Confirmation input: <Input> that must match customer.name exactly",
+        "Pattern: follow Users.tsx lines 605-643 for dialog structure"
+      ]
+    },
+
+    {
+      "id": "DELORG-005",
+      "title": "Wire up delete flow end-to-end and test",
+      "type": "integration",
+      "status": "pending",
+      "priority": 3,
+      "estimatedMinutes": 15,
+
+      "description": "Connect the delete confirmation dialog to the actual deletion service call. Wire the onDelete prop from SaasAdminDashboard through to CustomerList. Verify the full flow: click delete -> confirmation dialog -> type name -> confirm -> edge function called -> data refreshed -> toast shown.",
+
+      "acceptance": [
+        "CustomerList accepts onDelete prop and calls it when confirmed",
+        "After successful deletion, customer list refreshes automatically",
+        "Error states show toast with specific error message",
+        "Dialog closes after successful deletion",
+        "Deleted org no longer appears in the customer list"
+      ],
+
+      "files": [
+        "src/components/saas-admin/CustomerList.tsx",
+        "src/pages/SaasAdminDashboard.tsx"
+      ],
+
+      "dependencies": {
+        "stories": ["DELORG-002", "DELORG-003", "DELORG-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "implementation_notes": [
+        "This is the final wiring story — all pieces should be in place",
+        "Test manually: create test org, add users, delete org, verify users sent to onboarding",
+        "Verify cascade: org-scoped data deleted, user personal data preserved",
+        "Check edge case: deleting org with 0 members should still work"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 0,
+    "estimatedTotal": "75 minutes",
+    "parallelGroups": [
+      {
+        "group": ["DELORG-001", "DELORG-004"],
+        "reason": "Edge function and UI dialog have no file overlap",
+        "timeSaved": "20 minutes"
+      }
+    ],
+    "criticalPath": "DELORG-001 → DELORG-002 → DELORG-003 → DELORG-005",
+    "note": "DELORG-004 (dialog UI) can be built in parallel with DELORG-001 (edge function)"
+  },
+
+  "risks": [
+    {
+      "severity": "critical",
+      "area": "onboarding",
+      "issue": "If user_onboarding_progress is not reset, users get stuck in redirect loop (onboarding page sees 'completed', redirects to dashboard, dashboard sees no membership, redirects to onboarding)",
+      "mitigation": "Edge function MUST reset onboarding_completed_at=null and onboarding_step='website_input' for all affected users BEFORE deleting the org"
+    },
+    {
+      "severity": "high",
+      "area": "cascade",
+      "issue": "313 ON DELETE CASCADE constraints — single DELETE triggers massive cascade across 50+ tables",
+      "mitigation": "This is by design. The cascade deletes org-scoped data (integrations, AI, billing) which is correct. Core sales data uses clerk_org_id (no FK) and is preserved."
+    },
+    {
+      "severity": "medium",
+      "area": "active-sessions",
+      "issue": "Users currently logged in won't be force-logged out. They'll see errors until they navigate and ProtectedRoute kicks in.",
+      "mitigation": "Acceptable for admin operation. ProtectedRoute will redirect to onboarding on next navigation."
+    },
+    {
+      "severity": "low",
+      "area": "config",
+      "issue": "Edge function needs to be in config.toml or it will return 401",
+      "mitigation": "Story DELORG-002 explicitly adds to config.toml (learned from waitlist bug fix)"
+    }
+  ]
+}
