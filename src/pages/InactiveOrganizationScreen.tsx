@@ -18,7 +18,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 export default function InactiveOrganizationScreen() {
   const navigate = useNavigate();
   const { activeOrg } = useOrganizationContext();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [isRequesting, setIsRequesting] = useState(false);
   const [existingRequest, setExistingRequest] = useState<OrganizationReactivationRequest | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
@@ -26,6 +26,7 @@ export default function InactiveOrganizationScreen() {
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
   const [isOverdue, setIsOverdue] = useState(false);
   const [isLeavingOrg, setIsLeavingOrg] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     // Check if there's already a pending request
@@ -150,9 +151,19 @@ export default function InactiveOrganizationScreen() {
     }
   };
 
-  const handleSignOut = () => {
-    // Will trigger auth context sign out
-    navigate('/auth/logout');
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      navigate('/auth/login', { replace: true });
+    } catch (error) {
+      logger.error('[InactiveOrganizationScreen] Error signing out:', error);
+      toast.error('Failed to sign out', {
+        description: 'Please try again or contact support.'
+      });
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   return (
@@ -334,13 +345,18 @@ export default function InactiveOrganizationScreen() {
 
             <Button
               onClick={handleSignOut}
+              disabled={isSigningOut}
               variant="outline"
               className="w-full justify-between"
               size="lg"
             >
               <span className="flex items-center gap-2">
-                <LogOut className="w-4 h-4" />
-                Sign Out
+                {isSigningOut ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LogOut className="w-4 h-4" />
+                )}
+                {isSigningOut ? 'Signing out...' : 'Sign Out'}
               </span>
               <span>→</span>
             </Button>

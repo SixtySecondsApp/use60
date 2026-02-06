@@ -214,6 +214,9 @@ export function OrgProvider({ children }: OrgProviderProps) {
   useEffect(() => {
     if (!activeOrg || !activeOrgId) return;
 
+    // Prevent redirect loop when already on inactive organization page
+    if (window.location.pathname.includes('/inactive-organization')) return;
+
     // If org is inactive, redirect immediately
     if (activeOrg.is_active === false) {
       logger.log('[OrgContext] Active org is inactive, redirecting to inactive page');
