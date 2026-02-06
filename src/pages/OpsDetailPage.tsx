@@ -23,6 +23,7 @@ import {
   HelpCircle,
   Save,
   Clock,
+  List,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -34,7 +35,7 @@ import { EditEnrichmentModal } from '@/components/ops/EditEnrichmentModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
 import { BulkActionsBar } from '@/components/ops/BulkActionsBar';
-import { HubSpotPushModal } from '@/components/ops/HubSpotPushModal';
+import { HubSpotPushModal, type HubSpotPushConfig } from '@/components/ops/HubSpotPushModal';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 import { ViewSelector } from '@/components/ops/ViewSelector';
 import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
@@ -47,6 +48,7 @@ import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
 import { useHubSpotWriteBack } from '@/lib/hooks/useHubSpotWriteBack';
 import { HubSpotSyncHistory } from '@/components/ops/HubSpotSyncHistory';
 import { HubSpotSyncSettingsModal } from '@/components/ops/HubSpotSyncSettingsModal';
+import { SaveAsHubSpotListModal } from '@/components/ops/SaveAsHubSpotListModal';
 import { useOpsRules } from '@/lib/hooks/useOpsRules';
 import { RuleBuilder } from '@/components/ops/RuleBuilder';
 import { RuleList } from '@/components/ops/RuleList';
@@ -165,6 +167,9 @@ function OpsDetailPage() {
   const [showRecipeLibrary, setShowRecipeLibrary] = useState(false);
   const [showSyncHistory, setShowSyncHistory] = useState(false);
   const [showSyncSettings, setShowSyncSettings] = useState(false);
+  const [hubspotLists, setHubspotLists] = useState<{ listId: string; name: string }[]>([]);
+  const [isLoadingLists, setIsLoadingLists] = useState(false);
+  const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
 
   // ---- Save as Recipe state ----
@@ -457,11 +462,7 @@ function OpsDetailPage() {
   });
 
   const pushToHubSpotMutation = useMutation({
-    mutationFn: async (config: {
-      fieldMappings: { opsColumnKey: string; hubspotProperty: string }[];
-      duplicateStrategy: 'update' | 'skip' | 'create';
-      listId?: string;
-    }) => {
+    mutationFn: async (config: HubSpotPushConfig) => {
       const { data, error } = await supabase.functions.invoke('push-to-hubspot', {
         body: { table_id: tableId, row_ids: Array.from(selectedRows), config },
       });
@@ -471,9 +472,60 @@ function OpsDetailPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       setShowHubSpotPush(false);
-      toast.success(`HubSpot: ${data?.pushed ?? 0} pushed, ${data?.failed ?? 0} failed`);
+      const listMsg = data?.list_contacts_added
+        ? `, ${data.list_contacts_added} added to list`
+        : '';
+      toast.success(`HubSpot: ${data?.pushed ?? 0} pushed, ${data?.failed ?? 0} failed${listMsg}`);
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to push to HubSpot'),
+  });
+
+  // Fetch HubSpot lists when push modal opens
+  const fetchHubSpotLists = useCallback(async () => {
+    if (!table) return;
+    setIsLoadingLists(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('hubspot-admin', {
+        body: { action: 'get_lists', org_id: table.organization_id },
+      });
+      if (error) throw error;
+      const lists = (data?.lists ?? []).map((l: any) => ({
+        listId: String(l.listId),
+        name: l.name ?? `List ${l.listId}`,
+      }));
+      setHubspotLists(lists);
+    } catch (err) {
+      console.error('[OpsDetailPage] Failed to fetch HubSpot lists:', err);
+      setHubspotLists([]);
+    } finally {
+      setIsLoadingLists(false);
+    }
+  }, [table]);
+
+  // Save as HubSpot List mutation
+  const createHubSpotListMutation = useMutation({
+    mutationFn: async (config: { listName: string; scope: 'all' | 'selected'; linkList: boolean }) => {
+      const rowIds = config.scope === 'selected' ? Array.from(selectedRows) : undefined;
+      const { data, error } = await supabase.functions.invoke('hubspot-list-ops', {
+        body: {
+          action: 'create_list_from_table',
+          table_id: tableId,
+          list_name: config.listName,
+          row_ids: rowIds,
+          link_list: config.linkList,
+        },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      setShowSaveAsHubSpotList(false);
+      if (data?.link_list) {
+        queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      }
+      toast.success(`Created HubSpot list "${data?.list_name}" with ${data?.contacts_added ?? 0} contacts`);
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to create HubSpot list'),
   });
 
   const runIntegrationMutation = useMutation({
@@ -524,12 +576,40 @@ function OpsDetailPage() {
   });
 
   const deleteRowsMutation = useMutation({
-    mutationFn: (rowIds: string[]) => tableService.deleteRows(rowIds),
-    onSuccess: () => {
+    mutationFn: async (rowIds: string[]) => {
+      // Pre-capture source_ids for HubSpot list removal
+      const sourceIds = rows
+        .filter((r) => rowIds.includes(r.id) && r.source_id)
+        .map((r) => r.source_id as string);
+      await tableService.deleteRows(rowIds);
+      return sourceIds;
+    },
+    onSuccess: (sourceIds) => {
       setSelectedRows(new Set());
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       toast.success('Rows deleted');
+
+      // Fire-and-forget: mirror delete to HubSpot list if bidirectional
+      const isBidirectional = table?.source_type === 'hubspot' &&
+        (table?.source_query as any)?.sync_direction === 'bidirectional';
+      const listId = (table?.source_query as any)?.list_id;
+      if (isBidirectional && listId && sourceIds.length > 0) {
+        supabase.functions.invoke('hubspot-list-ops', {
+          body: {
+            action: 'remove_from_list',
+            list_id: listId,
+            contact_ids: sourceIds,
+            org_id: table?.organization_id,
+          },
+        }).then(({ error }) => {
+          if (error) {
+            console.error('[OpsDetailPage] Failed to remove contacts from HubSpot list:', error);
+          } else {
+            toast.success(`Removed ${sourceIds.length} contacts from HubSpot list`, { duration: 3000 });
+          }
+        });
+      }
     },
     onError: () => toast.error('Failed to delete rows'),
   });
@@ -1405,10 +1485,19 @@ function OpsDetailPage() {
                 </button>
                 <button
                   onClick={() => setShowSyncHistory(true)}
-                  className="inline-flex items-center justify-center rounded-lg border border-orange-700/40 bg-orange-900/20 p-1.5 text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-orange-700/40 bg-orange-900/20 text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200"
                   title="Sync history"
                 >
                   <Clock className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setShowSaveAsHubSpotList(true)}
+                  disabled={createHubSpotListMutation.isPending}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-orange-700/40 bg-orange-900/20 px-3 py-1.5 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200 disabled:opacity-50"
+                  title="Save as HubSpot List"
+                >
+                  <List className="h-3.5 w-3.5" />
+                  Save List
                 </button>
               </div>
             )}
@@ -1435,10 +1524,10 @@ function OpsDetailPage() {
               href="/docs#ops-intelligence"
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1.5 hover:bg-gray-800 rounded-lg transition-colors"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-700 bg-gray-800 text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
               title="Ops Intelligence docs"
             >
-              <HelpCircle className="w-4 h-4 text-gray-500 hover:text-gray-300" />
+              <HelpCircle className="h-3.5 w-3.5" />
             </a>
           </div>
         </div>
@@ -1758,7 +1847,7 @@ function OpsDetailPage() {
           startEnrichment({ columnId: enrichCols[0].id, rowIds: Array.from(selectedRows) });
         }}
         onPushToInstantly={() => toast.info('Push to Instantly coming soon.')}
-        onPushToHubSpot={() => setShowHubSpotPush(true)}
+        onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
         onReEnrich={() => {
           const enrichCols = columns.filter((c) => c.is_enrichment);
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
@@ -1776,6 +1865,8 @@ function OpsDetailPage() {
         selectedRows={rows.filter((r) => selectedRows.has(r.id))}
         onPush={(config) => pushToHubSpotMutation.mutate(config)}
         isPushing={pushToHubSpotMutation.isPending}
+        hubspotLists={hubspotLists}
+        isLoadingLists={isLoadingLists}
       />
 
       {/* AI Query Preview Modal */}
@@ -1921,6 +2012,17 @@ function OpsDetailPage() {
           }}
         />
       )}
+
+      {/* Save as HubSpot List Modal */}
+      <SaveAsHubSpotListModal
+        isOpen={showSaveAsHubSpotList}
+        onClose={() => setShowSaveAsHubSpotList(false)}
+        tableName={table?.name ?? 'Untitled'}
+        totalRows={rows.length}
+        selectedCount={selectedRows.size}
+        onSave={(config) => createHubSpotListMutation.mutate(config)}
+        isSaving={createHubSpotListMutation.isPending}
+      />
     </div>
   );
 }
