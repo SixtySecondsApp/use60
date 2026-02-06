@@ -208,8 +208,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Auto-collapse sidebar on specific pages for more space
   useEffect(() => {
-    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow'];
-    const shouldCollapse = collapsedPages.includes(location.pathname);
+    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow', '/docs'];
+    const shouldCollapse = collapsedPages.includes(location.pathname) || location.pathname.startsWith('/ops');
     
     if (shouldCollapse) {
       setIsCollapsed(true);
@@ -219,7 +219,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Pages that should behave like an app-within-the-app (no document scrolling).
   // The page itself manages its own internal scroll regions (e.g. Copilot chat).
   const isFullHeightPage = useMemo(() => {
-    return location.pathname === '/copilot';
+    return location.pathname === '/copilot' || location.pathname.startsWith('/ops/');
   }, [location.pathname]);
 
   // Keyboard shortcut for SmartSearch (⌘K) - Disabled
@@ -698,9 +698,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div
           className={cn(
             'absolute z-50',
-            // Align with logo: p-6 (24px) + half logo height
-            // Collapsed: 24px + 24px = 48px (logo is now w-12 h-12), Expanded: 24px + 24px = 48px
-            'top-[48px]',
+            // Align with logo: p-6 (24px) + half logo height (16px) = 40px
+            'top-[40px]',
             // Position on edge with transform to center button on edge
             'right-0 translate-x-1/2',
             'w-6 h-6'
@@ -739,14 +738,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           )}>
             <Link to="/" className={cn(
               'transition-opacity hover:opacity-80',
-              isCollapsed ? 'w-12 h-12' : 'w-full'
+              isCollapsed ? 'w-8 h-8' : 'w-full'
             )}>
               {isCollapsed ? (
                 <img
                   key={`icon-collapsed-${resolvedTheme}`}
                   src={icon}
                   alt="Logo"
-                  className="w-12 h-12 object-contain rounded-xl"
+                  className="w-8 h-8 object-contain rounded-lg"
                 />
               ) : (
                 <img
@@ -759,7 +758,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           
-          <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+          <div className={cn('flex-1 overflow-y-auto', !isCollapsed && 'pr-2 -mr-2')}>
             <nav className={cn(
               'pb-6',
               isCollapsed ? 'space-y-3' : 'space-y-2'
@@ -780,29 +779,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     <Link
                       to={item.href}
                       className={cn(
-                        'flex items-center transition-colors text-sm font-medium',
+                        'flex items-center transition-colors text-[15px] font-medium',
                         isCollapsed
-                          ? 'w-12 h-12 mx-auto rounded-xl justify-center'
-                          : 'w-full gap-3 px-2 py-2.5 rounded-xl',
+                          ? 'h-12 w-full rounded-xl justify-center'
+                          : 'w-full gap-3 px-3 py-3 rounded-xl',
                         location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
                           ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
                           : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                       )}
                     >
-                      <motion.div
-                        animate={{
-                          x: isCollapsed ? 0 : 0,
-                          scale: isCollapsed ? 1.1 : 1
-                        }}
+                      <div
                         className={cn(
                           'relative z-10 flex items-center justify-center',
-                          isCollapsed ? 'w-full h-full' : 'min-w-[20px]',
+                          isCollapsed ? 'w-full h-full' : 'min-w-[24px]',
                           location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
                             ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
                         )}
                       >
-                        <item.icon className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4')} />
-                      </motion.div>
+                        <item.icon className="w-5 h-5 flex-shrink-0" />
+                      </div>
                       <AnimatePresence>
                         {!isCollapsed && (
                           <motion.span
@@ -824,13 +819,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                             key={subItem.href + subItem.label}
                             to={subItem.href}
                             className={cn(
-                              'w-full flex items-center gap-3 px-2 py-2 rounded-xl text-xs font-medium transition-colors',
+                              'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
                               location.pathname === subItem.href
                                 ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
                                 : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                             )}
                           >
-                            <subItem.icon className="w-3.5 h-3.5" />
+                            <subItem.icon className="w-4 h-4 flex-shrink-0" />
                             <span>{subItem.label}</span>
                           </Link>
                         ))}
@@ -850,16 +845,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Link
               to="/settings"
               className={cn(
-                'flex items-center transition-colors text-sm font-medium',
-                isCollapsed 
-                  ? 'w-12 h-12 mx-auto rounded-xl justify-center mb-0' 
-                  : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
+                'flex items-center transition-colors text-[15px] font-medium',
+                isCollapsed
+                  ? 'h-12 w-full rounded-xl justify-center mb-0'
+                  : 'w-full gap-3 px-3 py-3 rounded-xl mb-2',
                 location.pathname.startsWith('/settings')
                   ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
                   : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
               )}
             >
-              <Settings className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+              <Settings className="w-5 h-5 flex-shrink-0" />
               <AnimatePresence>
                 {!isCollapsed && (
                   <motion.span
@@ -879,16 +874,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Link
                 to="/platform"
                 className={cn(
-                  'flex items-center transition-colors text-sm font-medium',
-                  isCollapsed 
-                    ? 'w-12 h-12 mx-auto rounded-xl justify-center mb-0' 
-                    : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
+                  'flex items-center transition-colors text-[15px] font-medium',
+                  isCollapsed
+                    ? 'h-12 w-full rounded-xl justify-center mb-0'
+                    : 'w-full gap-3 px-3 py-3 rounded-xl mb-2',
                   location.pathname.startsWith('/platform')
                     ? 'bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-900/20 dark:text-white dark:border-purple-800/20'
                     : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                 )}
               >
-                <Shield className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+                <Shield className="w-5 h-5 flex-shrink-0" />
                 <AnimatePresence>
                   {!isCollapsed && (
                     <motion.span
@@ -907,10 +902,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <button
               onClick={handleLogout}
               className={cn(
-                'flex items-center transition-colors text-sm font-medium',
-                isCollapsed 
-                  ? 'w-12 h-12 mx-auto rounded-xl justify-center' 
-                  : 'w-full gap-3 px-2 py-2.5 rounded-xl',
+                'flex items-center transition-colors text-[15px] font-medium',
+                isCollapsed
+                  ? 'h-12 w-full rounded-xl justify-center'
+                  : 'w-full gap-3 px-3 py-3 rounded-xl',
                 isImpersonating
                   ? 'text-amber-400 hover:bg-amber-500/10'
                   : 'text-red-400 hover:bg-red-500/10'
@@ -918,7 +913,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             >
               {isImpersonating ? (
                 <>
-                  <UserX className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+                  <UserX className="w-5 h-5 flex-shrink-0" />
                   <AnimatePresence>
                     {!isCollapsed && (
                       <motion.span
@@ -934,7 +929,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </>
               ) : (
                 <>
-                  <LogOut className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+                  <LogOut className="w-5 h-5 flex-shrink-0" />
                   <AnimatePresence>
                     {!isCollapsed && (
                       <motion.span
