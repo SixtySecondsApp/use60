@@ -313,27 +313,51 @@ export async function getCustomerById(orgId: string): Promise<CustomerWithDetail
 }
 
 export async function getCustomerMembers(orgId: string): Promise<OrganizationMembership[]> {
-  const { data, error } = await supabase
+  // Query memberships first (works with RLS)
+  const { data: memberships, error: membershipError } = await supabase
     .from('organization_memberships')
-    .select(`
-      *,
-      user:profiles (
-        id,
-        email,
-        first_name,
-        last_name,
-        avatar_url
-      )
-    `)
+    .select('user_id, role, created_at')
     .eq('org_id', orgId)
     .order('created_at', { ascending: true });
 
-  if (error) {
-    logger.error('[SaaS Admin] Error fetching customer members:', error);
-    throw error;
+  if (membershipError) {
+    logger.error('[SaaS Admin] Error fetching organization memberships:', membershipError);
+    throw membershipError;
   }
 
-  return data || [];
+  if (!memberships || memberships.length === 0) {
+    return [];
+  }
+
+  // Get user IDs
+  const userIds = memberships.map((m) => m.user_id);
+
+  // Query profiles separately (RLS allows viewing profiles when you have their IDs)
+  const { data: profiles, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, email, first_name, last_name, avatar_url')
+    .in('id', userIds);
+
+  if (profileError) {
+    logger.error('[SaaS Admin] Error fetching member profiles:', profileError);
+    throw profileError;
+  }
+
+  // Create profile map for efficient lookup
+  const profileMap = new Map(
+    profiles?.map((p) => [p.id, p]) || []
+  );
+
+  // Combine memberships with profiles
+  const membersWithProfiles = memberships.map((m) => ({
+    user_id: m.user_id,
+    role: m.role,
+    created_at: m.created_at,
+    org_id: orgId,
+    user: profileMap.get(m.user_id) || null,
+  }));
+
+  return membersWithProfiles;
 }
 
 // ============================================================================

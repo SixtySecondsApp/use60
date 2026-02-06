@@ -123,7 +123,10 @@ export function useUsers() {
       });
 
       // Transform data to match expected User interface
-      const usersData = (profiles || []).map((profile) => {
+      // Filter out deleted users (those with email like deleted_*@deleted.local)
+      const usersData = (profiles || [])
+        .filter(profile => !profile.email?.startsWith('deleted_'))
+        .map((profile) => {
           const email = profile.email || `user_${profile.id.slice(0, 8)}@private.local`;
           return {
             id: profile.id,
@@ -320,51 +323,44 @@ export function useUsers() {
         }
 
         if (data?.error) {
+          // Check if it's an auth deletion failure vs profile deletion failure
+          if (data.code === 'AUTH_DELETION_FAILED') {
+            throw new Error(`Failed to revoke user access: ${data.error}. User cannot be deleted.`);
+          }
           throw new Error(data.error);
         }
 
-        toast.success('User deleted successfully');
+        toast.success('User deleted successfully and access revoked');
         await fetchUsers();
         return;
       } catch (edgeFunctionError: any) {
-        // If edge function fails (not deployed, network error, etc.), fallback to direct deletion
-        logger.warn('Edge function deletion failed, attempting direct deletion:', edgeFunctionError);
+        // If edge function fails (not deployed, network error, etc.), analyze the error
+        logger.warn('Edge function deletion failed:', edgeFunctionError);
 
         // Check if it's a permission/authorization error - don't fallback in that case
         if (edgeFunctionError?.status === 401 || edgeFunctionError?.status === 403) {
           throw new Error('Unauthorized: Admin access required to delete users');
         }
 
-        // Fallback: Anonymize the user from profiles table
-        // Note: This won't delete from auth.users, but will anonymize the profile
-        const targetUser = users.find(u => u.id === targetUserId);
-        if (targetUser?.email) {
-          // Deactivate in internal_users if exists
-          await supabase
-            .from('internal_users')
-            .update({ is_active: false, updated_at: new Date().toISOString() })
-            .eq('email', targetUser.email.toLowerCase());
+        // Check if it's an auth deletion failure - this is critical and should not fallback
+        if (edgeFunctionError?.message?.includes('Failed to revoke user access') ||
+            edgeFunctionError?.message?.includes('AUTH_DELETION_FAILED')) {
+          throw new Error(`${edgeFunctionError.message} Please contact support if this persists.`);
         }
 
-        // Anonymize profile: clear personal data but keep name for audit trail
-        const { error: deleteError } = await supabase
-          .from('profiles')
-          .update({
-            email: `deleted_${targetUserId}@deleted.local`,
-            avatar_url: null,
-            bio: null,
-            clerk_user_id: null,
-            auth_provider: 'deleted',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetUserId);
+        // Only fallback to direct deletion if the edge function itself didn't deploy/respond
+        // (network error, function not found, etc.)
+        const isDeploymentError = edgeFunctionError?.message?.includes('not found') ||
+                                  edgeFunctionError?.status === 502 ||
+                                  edgeFunctionError?.status === 503;
 
-        if (deleteError) {
-          throw deleteError;
+        if (!isDeploymentError) {
+          // Not a deployment error - re-throw the original error
+          throw edgeFunctionError;
         }
 
-        toast.success('User deleted successfully');
-        await fetchUsers();
+        logger.warn('Edge function not available, but this is a critical operation - not falling back');
+        throw new Error('User deletion requires the delete-user edge function to be deployed. Please contact support.');
       }
     } catch (error: any) {
       logger.error('Delete error:', error);

@@ -114,8 +114,23 @@ serve(async (req) => {
     try {
       await supabaseAdmin.auth.admin.deleteUser(userId)
     } catch (authError: any) {
-      // It's okay if auth user doesn't exist - profile might have been created without auth
-      console.log('Note: Could not delete auth user (may not exist):', authError.message)
+      // Only ignore if auth user truly doesn't exist (404)
+      // For other errors (permission issues, database errors), return failure
+      if (authError?.status === 404 || authError?.code === 'user_not_found') {
+        // It's okay if auth user doesn't exist - profile might have been created without auth
+        console.log('Note: Auth user does not exist (already deleted or never created):', authError.message)
+      } else {
+        // Auth deletion failed for a real reason - return error
+        console.error('Error deleting auth user:', authError)
+        return new Response(
+          JSON.stringify({
+            error: `Failed to delete auth user: ${authError.message || 'Unknown error'}`,
+            code: 'AUTH_DELETION_FAILED',
+            details: authError
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     return new Response(
