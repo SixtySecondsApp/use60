@@ -387,13 +387,13 @@ const APPLY_FORMATTING_TOOL: Anthropic.Tool = {
               properties: {
                 bg_color: {
                   type: 'string',
-                  description:
-                    'Background color as a Tailwind color class suffix (e.g., "amber-900/20", "red-900/20", "green-900/20", "blue-900/20")',
+                  enum: ['green', 'red', 'amber', 'yellow', 'blue', 'purple', 'orange', 'gold'],
+                  description: 'Highlight color name',
                 },
                 text_color: {
                   type: 'string',
                   description:
-                    'Text color as a Tailwind color class suffix (e.g., "amber-300", "red-300", "green-300")',
+                    'Optional text color override (Tailwind suffix like "green-300"). Usually omit — the bg_color auto-selects a matching text color.',
                 },
               },
             },
@@ -503,6 +503,25 @@ const CROSS_COLUMN_VALIDATE_TOOL: Anthropic.Tool = {
   },
 };
 
+// Move rows to top/bottom
+const MOVE_ROWS_TOOL: Anthropic.Tool = {
+  name: 'move_rows',
+  description:
+    'Move specific rows to the top or bottom of the table. Use for "put Zak at the bottom", "move completed deals to the top", "send blank rows to the bottom", etc. This repositions matching rows without changing the sort order of other rows.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      conditions: CONDITIONS_ARRAY_SCHEMA,
+      position: {
+        type: 'string',
+        enum: ['top', 'bottom'],
+        description: 'Where to move the matching rows',
+      },
+    },
+    required: ['conditions', 'position'],
+  },
+};
+
 // OI-021: Cross-table query tool
 const CROSS_TABLE_QUERY_TOOL: Anthropic.Tool = {
   name: 'cross_table_query',
@@ -527,6 +546,72 @@ const CROSS_TABLE_QUERY_TOOL: Anthropic.Tool = {
   },
 };
 
+const SUGGEST_VIEWS_TOOL: Anthropic.Tool = {
+  name: 'suggest_views',
+  description:
+    'Analyze the table data and suggest 3-5 useful saved views based on column types, value patterns, and common sales ops workflows. Use when the user says "__suggest_views__" or asks for view recommendations.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      suggestions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'View name' },
+            description: { type: 'string', description: 'Why this view is useful' },
+            filter_conditions: CONDITIONS_ARRAY_SCHEMA,
+            sort_config: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  key: { type: 'string' },
+                  dir: { type: 'string', enum: ['asc', 'desc'] },
+                },
+                required: ['key', 'dir'],
+              },
+            },
+          },
+          required: ['name', 'description', 'filter_conditions'],
+        },
+        description: '3-5 suggested views',
+      },
+    },
+    required: ['suggestions'],
+  },
+};
+
+const CONFIGURE_VIEW_TOOL: Anthropic.Tool = {
+  name: 'configure_view',
+  description:
+    'Parse a natural language view description into a structured view configuration. Use when the user describes what they want to see in a view, like "show me California leads with > $10k deal size, sorted by score, hide the email column".',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      view_name: { type: 'string', description: 'Suggested view name' },
+      filter_conditions: CONDITIONS_ARRAY_SCHEMA,
+      sort_config: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            key: { type: 'string' },
+            dir: { type: 'string', enum: ['asc', 'desc'] },
+          },
+          required: ['key', 'dir'],
+        },
+      },
+      hidden_columns: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Column keys to hide from the view',
+      },
+    },
+    required: ['view_name', 'filter_conditions'],
+  },
+};
+
 // --- All tools combined ---
 
 const ALL_TOOLS: Anthropic.Tool[] = [
@@ -544,7 +629,10 @@ const ALL_TOOLS: Anthropic.Tool[] = [
   CONDITIONAL_UPDATE_TOOL,
   EXPORT_ROWS_TOOL,
   CROSS_COLUMN_VALIDATE_TOOL,
+  MOVE_ROWS_TOOL,
   CROSS_TABLE_QUERY_TOOL, // OI-021
+  SUGGEST_VIEWS_TOOL,     // PV-009
+  CONFIGURE_VIEW_TOOL,    // PV-010
 ];
 
 // =============================================================================
@@ -630,6 +718,7 @@ TABLE STRUCTURE:
 
 VISUAL:
 - sort_rows: Sort by one or more columns
+- move_rows: Move specific rows to top or bottom ("put Zak at the bottom", "move empty rows to bottom")
 - apply_formatting: Conditional color highlighting
 
 ADVANCED:
@@ -643,7 +732,10 @@ Guidelines:
 3. For "not blank"/"has value" → is_not_empty operator
 4. Use "contains" for partial text matches
 5. For enrichment columns, reference other columns with {column_key} syntax in prompts
-6. Always select exactly one tool based on the user's intent`;
+6. Always select exactly one tool based on the user's intent
+7. SORT: For "who has X first" / "non-empty first" / "filled values first" → use sort_rows with dir: "asc". Empty values are automatically pushed to the end. For "empty first" → use filter_rows with is_empty.
+8. FORMAT: When asked to highlight a person's row or a matching row, use apply_formatting with the conditions that identify the row. The entire row gets highlighted, not just one cell.
+9. FORMAT: Use sample values to identify which column a person's name is in. If the query says "Zak", look at sample values to find which column contains "Zak".`;
 }
 
 // =============================================================================
@@ -800,6 +892,8 @@ function generateSummary(
       return `Export to CSV${formatConditions((toolInput.conditions as FilterCondition[]) || [])}`;
     case 'cross_column_validate':
       return `Validate "${getColLabel(toolInput.source_column as string)}" vs "${getColLabel(toolInput.target_column as string)}"`;
+    case 'move_rows':
+      return `Move rows${formatConditions(toolInput.conditions as FilterCondition[])} to ${toolInput.position}`;
     default:
       return toolName;
   }
@@ -1017,6 +1111,74 @@ function buildBatchCreateViewsResponse(
   };
 }
 
+function buildSuggestViewsResponse(
+  toolInput: Record<string, unknown>,
+  columns: ColumnInfo[],
+  summary: string
+) {
+  const suggestions = (toolInput.suggestions as Array<{
+    name: string;
+    description: string;
+    filter_conditions?: Array<{ column_key: string; operator: string; value?: string }>;
+    sort_config?: Array<{ key: string; dir: string }>;
+  }>) || [];
+
+  const resolved = suggestions.map((s) => ({
+    name: s.name,
+    description: s.description,
+    filterConditions: (s.filter_conditions || [])
+      .map((c) => {
+        const key = resolveColumnKey(c.column_key, columns);
+        return key ? { column_key: key, operator: c.operator, value: c.value ?? '' } : null;
+      })
+      .filter(Boolean),
+    sortConfig: (s.sort_config || [])
+      .map((sc) => {
+        const key = resolveColumnKey(sc.key, columns);
+        return key ? { key, dir: sc.dir } : null;
+      })
+      .filter(Boolean),
+  }));
+
+  return {
+    type: 'suggest_views',
+    suggestions: resolved,
+    summary,
+  };
+}
+
+function buildConfigureViewResponse(
+  toolInput: Record<string, unknown>,
+  columns: ColumnInfo[],
+  summary: string
+) {
+  const viewName = (toolInput.view_name as string) || 'Custom View';
+  const filterConditions = ((toolInput.filter_conditions as Array<{ column_key: string; operator: string; value?: string }>) || [])
+    .map((c) => {
+      const key = resolveColumnKey(c.column_key, columns);
+      return key ? { column_key: key, operator: c.operator, value: c.value ?? '' } : null;
+    })
+    .filter(Boolean);
+  const sortConfig = ((toolInput.sort_config as Array<{ key: string; dir: string }>) || [])
+    .map((s) => {
+      const key = resolveColumnKey(s.key, columns);
+      return key ? { key, dir: s.dir } : null;
+    })
+    .filter(Boolean);
+  const hiddenColumns = ((toolInput.hidden_columns as string[]) || [])
+    .map((k) => resolveColumnKey(k, columns))
+    .filter(Boolean) as string[];
+
+  return {
+    type: 'configure_view',
+    viewName,
+    filterConditions,
+    sortConfig,
+    hiddenColumns,
+    summary,
+  };
+}
+
 function buildSortResponse(
   toolInput: Record<string, unknown>,
   columns: ColumnInfo[],
@@ -1128,6 +1290,25 @@ function buildExportResponse(
     conditions: resolvedConditions,
     columns: exportColumns,
     filename: (toolInput.filename as string) || 'export',
+    summary,
+  };
+}
+
+function buildMoveRowsResponse(
+  toolInput: Record<string, unknown>,
+  columns: ColumnInfo[],
+  summary: string
+) {
+  const { resolved, errors } = resolveConditions(
+    (toolInput.conditions as FilterCondition[]) || [],
+    columns
+  );
+  if (errors.length > 0) return { error: errors[0] };
+
+  return {
+    type: 'move_rows',
+    conditions: resolved,
+    position: toolInput.position as string,
     summary,
   };
 }
@@ -1254,7 +1435,7 @@ serve(async (req: Request) => {
       const { data: recipe, error: saveError } = await supabase
         .from('ops_table_recipes')
         .insert({
-          org_id: (await supabase.from('dynamic_tables').select('org_id').eq('id', tableId).single()).data?.org_id,
+          org_id: (await supabase.from('dynamic_tables').select('organization_id').eq('id', tableId).single()).data?.organization_id,
           table_id: tableId,
           created_by: user.id,
           name: saveAsRecipe.name,
@@ -1418,9 +1599,22 @@ serve(async (req: Request) => {
       case 'export_rows':
         result = buildExportResponse(toolInput, columns, summary);
         break;
+      case 'move_rows':
+        result = buildMoveRowsResponse(toolInput, columns, summary);
+        break;
       case 'cross_column_validate':
         result = buildCrossColumnValidateResponse(toolInput, columns, summary);
         break;
+      // PV-009: Suggest views
+      case 'suggest_views':
+        result = buildSuggestViewsResponse(toolInput, columns, summary);
+        break;
+
+      // PV-010: Configure view from natural language
+      case 'configure_view':
+        result = buildConfigureViewResponse(toolInput, columns, summary);
+        break;
+
       // OI-021: Cross-table query handler
       case 'cross_table_query': {
         const { query: crossQuery, target_sources } = toolInput;

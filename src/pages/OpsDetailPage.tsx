@@ -39,7 +39,8 @@ import { HubSpotPushModal, type HubSpotPushConfig } from '@/components/ops/HubSp
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 import { ViewSelector } from '@/components/ops/ViewSelector';
 import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
-import type { SavedView, FilterCondition, OpsTableColumn } from '@/lib/services/opsTableService';
+import { ViewConfigPanel, normalizeSortConfig, type ViewConfigState } from '@/components/ops/ViewConfigPanel';
+import type { SavedView, FilterCondition, OpsTableColumn, SortConfig, GroupConfig, AggregateType } from '@/lib/services/opsTableService';
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
 import { useAuthUser } from '@/lib/hooks/useAuthUser';
@@ -64,6 +65,8 @@ import { WorkflowBuilder } from '@/components/ops/WorkflowBuilder';
 import { AiRecipeLibrary } from '@/components/ops/AiRecipeLibrary';
 import { AutomationsDropdown } from '@/components/ops/AutomationsDropdown';
 import { CrossQueryResultPanel } from '@/components/ops/CrossQueryResultPanel';
+import { QuickFilterBar } from '@/components/ops/QuickFilterBar';
+import { SmartViewSuggestions } from '@/components/ops/SmartViewSuggestions';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
 
@@ -135,7 +138,7 @@ function OpsDetailPage() {
     columnId: string;
     anchorRect: DOMRect;
   } | null>(null);
-  const [sortState, setSortState] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const [sortState, setSortState] = useState<SortConfig | SortConfig[] | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [queryInput, setQueryInput] = useState('');
@@ -160,6 +163,25 @@ function OpsDetailPage() {
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+  const [showViewConfigPanel, setShowViewConfigPanel] = useState(false);
+  const [editingView, setEditingView] = useState<SavedView | null>(null);
+  const [groupConfig, setGroupConfig] = useState<GroupConfig | null>(null);
+  const [summaryConfig, setSummaryConfig] = useState<Record<string, AggregateType> | null>(null);
+  const [viewSuggestions, setViewSuggestions] = useState<Array<{
+    name: string;
+    description: string;
+    filterConditions: FilterCondition[];
+    sortConfig: SortConfig[];
+  }>>([]);
+  const [nlViewConfig, setNlViewConfig] = useState<ViewConfigState | null>(null);
+  const [nlQueryLoading, setNlQueryLoading] = useState(false);
+
+  // Snapshot state before panel opens so we can revert on cancel
+  const preConfigSnapshot = useRef<{
+    filters: FilterCondition[];
+    sort: SortConfig[];
+    columnOrder: string[] | null;
+  } | null>(null);
 
   // ---- OI: New feature state ----
   const [showWorkflows, setShowWorkflows] = useState(false);
@@ -209,6 +231,10 @@ function OpsDetailPage() {
     enabled: !!tableId,
   });
 
+  // Normalize sort for query — primary sort goes to server, multi-sort client-side
+  const normalizedSorts = useMemo(() => normalizeSortConfig(sortState), [sortState]);
+  const primarySort = normalizedSorts[0] ?? null;
+
   const {
     data: tableData,
     isLoading: isDataLoading,
@@ -217,8 +243,8 @@ function OpsDetailPage() {
     queryFn: () =>
       tableService.getTableData(tableId!, {
         perPage: 500,
-        sortBy: sortState?.key ?? 'row_index',
-        sortDir: sortState?.dir,
+        sortBy: primarySort?.key ?? 'row_index',
+        sortDir: primarySort?.dir,
         filters: filterConditions.length > 0 ? filterConditions : undefined,
       }),
     enabled: !!tableId,
@@ -287,8 +313,28 @@ function OpsDetailPage() {
     });
   }, [tableId, table, currentUserId, views.length, columns, isViewsLoading, queryClient]);
 
-  // Rows are now filtered and sorted server-side via getTableData()
-  const rows = useMemo(() => tableData?.rows ?? [], [tableData?.rows]);
+  // Rows: server-side filter + primary sort, then client-side multi-sort if needed
+  const rows = useMemo(() => {
+    const base = tableData?.rows ?? [];
+    if (normalizedSorts.length <= 1) return base;
+    // Multi-sort: apply all sort keys client-side
+    return [...base].sort((a, b) => {
+      for (const s of normalizedSorts) {
+        const aVal = a.cells[s.key]?.value ?? '';
+        const bVal = b.cells[s.key]?.value ?? '';
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
+        let cmp: number;
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          cmp = aNum - bNum;
+        } else {
+          cmp = aVal.localeCompare(bVal, undefined, { sensitivity: 'base' });
+        }
+        if (cmp !== 0) return s.dir === 'desc' ? -cmp : cmp;
+      }
+      return 0;
+    });
+  }, [tableData?.rows, normalizedSorts]);
 
   // ---- Integration polling ----
   useIntegrationPolling(tableId, columns, rows);
@@ -680,12 +726,143 @@ function OpsDetailPage() {
       setFilterConditions(view.filter_config ?? []);
       setSortState(view.sort_config ?? null);
       setColumnOrder(view.column_config ?? null);
+      setGroupConfig(view.group_config ?? null);
+      setSummaryConfig(view.summary_config ?? null);
     }
   }, [views, setSearchParams]);
 
   const handleDuplicateView = useCallback((view: SavedView) => {
     createViewMutation.mutate({ name: `${view.name} (copy)` });
   }, [createViewMutation]);
+
+  const handleOpenViewConfig = useCallback((viewToEdit?: SavedView) => {
+    // Snapshot current state for cancel/revert
+    preConfigSnapshot.current = {
+      filters: [...filterConditions],
+      sort: normalizeSortConfig(sortState),
+      columnOrder: columnOrder ? [...columnOrder] : null,
+    };
+    if (viewToEdit) {
+      setEditingView(viewToEdit);
+    } else {
+      setEditingView(null);
+    }
+    setShowViewConfigPanel(true);
+  }, [filterConditions, sortState, columnOrder]);
+
+  const handleViewConfigClose = useCallback(() => {
+    // Revert to snapshot
+    if (preConfigSnapshot.current) {
+      setFilterConditions(preConfigSnapshot.current.filters);
+      setSortState(
+        preConfigSnapshot.current.sort.length === 1
+          ? preConfigSnapshot.current.sort[0]
+          : preConfigSnapshot.current.sort.length > 1
+            ? preConfigSnapshot.current.sort
+            : null
+      );
+      setColumnOrder(preConfigSnapshot.current.columnOrder);
+    }
+    setShowViewConfigPanel(false);
+    setEditingView(null);
+    setNlViewConfig(null);
+    preConfigSnapshot.current = null;
+  }, []);
+
+  const handleViewConfigSave = useCallback((config: ViewConfigState) => {
+    const sortCfg = config.sorts.length === 1
+      ? config.sorts[0]
+      : config.sorts.length > 1
+        ? config.sorts
+        : null;
+
+    if (editingView) {
+      // Update existing view
+      tableService.updateView(editingView.id, {
+        name: config.name,
+        filterConfig: config.filters,
+        sortConfig: sortCfg,
+        columnConfig: config.columnOrder,
+        formattingRules: config.formattingRules.length > 0 ? config.formattingRules : null,
+        groupConfig: config.groupConfig,
+        summaryConfig: config.summaryConfig,
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
+        toast.success('View updated');
+      }).catch(() => toast.error('Failed to update view'));
+    } else {
+      // Create new view
+      tableService.createView({
+        tableId: tableId!,
+        createdBy: currentUserId!,
+        name: config.name,
+        filterConfig: config.filters,
+        sortConfig: sortCfg,
+        columnConfig: config.columnOrder,
+        formattingRules: config.formattingRules.length > 0 ? config.formattingRules : null,
+        groupConfig: config.groupConfig,
+        summaryConfig: config.summaryConfig,
+      }).then((newView) => {
+        queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
+        setActiveViewId(newView.id);
+        setSearchParams({ view: newView.id });
+        toast.success('View created');
+      }).catch(() => toast.error('Failed to create view'));
+    }
+
+    // Apply config to current state
+    setFilterConditions(config.filters);
+    setSortState(sortCfg);
+    setColumnOrder(config.columnOrder);
+    setGroupConfig(config.groupConfig);
+    setSummaryConfig(config.summaryConfig);
+    setShowViewConfigPanel(false);
+    setEditingView(null);
+    setNlViewConfig(null);
+    preConfigSnapshot.current = null;
+  }, [editingView, tableId, currentUserId, queryClient, setSearchParams]);
+
+  // PV-010: Handle NL view description from ViewConfigPanel
+  const handleNlViewQuery = useCallback(async (query: string) => {
+    if (!tableId) return;
+    setNlQueryLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+        body: { tableId, query },
+      });
+      if (error) throw error;
+      const result = data as Record<string, unknown>;
+      if (result.type === 'configure_view') {
+        const viewFilters = (result.filterConditions as FilterCondition[]) || [];
+        const viewSorts = (result.sortConfig as SortConfig[]) || [];
+        const viewHidden = (result.hiddenColumns as string[]) || [];
+        const viewName = result.viewName as string;
+        const allColumnKeys = columns.map((c) => c.key);
+        const visibleCols = allColumnKeys.filter((k) => !viewHidden.includes(k));
+        // Update the panel's config (triggers useEffect re-init)
+        setNlViewConfig({
+          name: viewName,
+          filters: viewFilters,
+          sorts: viewSorts,
+          columnOrder: visibleCols.length < allColumnKeys.length ? visibleCols : null,
+          formattingRules: [],
+          groupConfig: null,
+          summaryConfig: null,
+        });
+        // Apply live preview
+        setFilterConditions(viewFilters);
+        setSortState(viewSorts.length === 1 ? viewSorts[0] : viewSorts.length > 1 ? viewSorts : null);
+        toast.success(result.summary as string);
+      } else {
+        toast.info('Try describing filters and sorts, like "show California leads sorted by score"');
+      }
+    } catch (err) {
+      console.error('[NL View] Error:', err);
+      toast.error('Failed to parse view description');
+    } finally {
+      setNlQueryLoading(false);
+    }
+  }, [tableId, columns]);
 
   const handleSelectRow = useCallback((rowId: string) => {
     setSelectedRows((prev) => {
@@ -1163,6 +1340,46 @@ function OpsDetailPage() {
             break;
           }
 
+          // === PV-009: Suggest Views ===
+          case 'suggest_views': {
+            const suggestions = (result.suggestions as Array<{
+              name: string;
+              description: string;
+              filterConditions: FilterCondition[];
+              sortConfig: SortConfig[];
+            }>) || [];
+            setViewSuggestions(suggestions);
+            setQueryInput('');
+            toast.success(`Found ${suggestions.length} view suggestions`);
+            break;
+          }
+
+          // === PV-010: Configure View from NL ===
+          case 'configure_view': {
+            const viewFilters = (result.filterConditions as FilterCondition[]) || [];
+            const viewSorts = (result.sortConfig as SortConfig[]) || [];
+            const viewHidden = (result.hiddenColumns as string[]) || [];
+            const viewName = result.viewName as string;
+            // Open the ViewConfigPanel pre-populated with the AI config
+            const allColumnKeys = columns.map((c) => c.key);
+            const visibleCols = allColumnKeys.filter((k) => !viewHidden.includes(k));
+            setEditingView(null);
+            setShowViewConfigPanel(true);
+            // Defer so that ViewConfigPanel picks up existingConfig
+            setNlViewConfig({
+              name: viewName,
+              filters: viewFilters,
+              sorts: viewSorts,
+              columnOrder: visibleCols.length < allColumnKeys.length ? visibleCols : null,
+              formattingRules: [],
+              groupConfig: null,
+              summaryConfig: null,
+            });
+            setQueryInput('');
+            toast.success(result.summary as string);
+            break;
+          }
+
           default: {
             toast.error(`Unknown action type: ${resultType}`);
           }
@@ -1375,12 +1592,16 @@ function OpsDetailPage() {
               views={views}
               activeViewId={activeViewId}
               onSelectView={handleSelectView}
-              onCreateView={() => setShowSaveViewDialog(true)}
+              onCreateView={() => handleOpenViewConfig()}
               onRenameView={(viewId, name) =>
                 updateViewMutation.mutate({ viewId, updates: { name } })
               }
               onDuplicateView={handleDuplicateView}
               onDeleteView={(viewId) => deleteViewMutation.mutate(viewId)}
+              onEditView={(viewId) => {
+                const v = views.find((vw) => vw.id === viewId);
+                if (v) handleOpenViewConfig(v);
+              }}
             />
           </div>
         )}
@@ -1396,6 +1617,50 @@ function OpsDetailPage() {
               onEditFilter={handleEditFilter}
             />
           </div>
+        )}
+
+        {/* Quick filter bar */}
+        {rows.length > 0 && (
+          <div className="mb-3">
+            <QuickFilterBar
+              columns={columns}
+              rows={rows}
+              activeFilters={filterConditions}
+              onAddFilter={(condition) => setFilterConditions((prev) => [...prev, condition])}
+              onRemoveFilter={(index) => setFilterConditions((prev) => prev.filter((_, i) => i !== index))}
+            />
+          </div>
+        )}
+
+        {/* Smart view suggestions */}
+        {viewSuggestions.length > 0 && (
+          <SmartViewSuggestions
+            suggestions={viewSuggestions}
+            onApply={(suggestion) => {
+              setFilterConditions(suggestion.filterConditions);
+              if (suggestion.sortConfig.length > 0) {
+                setSortState(
+                  suggestion.sortConfig.length === 1
+                    ? suggestion.sortConfig[0]
+                    : suggestion.sortConfig
+                );
+              }
+              // Open view config panel pre-filled
+              setEditingView(null);
+              setNlViewConfig({
+                name: suggestion.name,
+                filters: suggestion.filterConditions,
+                sorts: suggestion.sortConfig,
+                columnOrder: null,
+                formattingRules: [],
+                groupConfig: null,
+                summaryConfig: null,
+              });
+              setShowViewConfigPanel(true);
+              setViewSuggestions([]);
+            }}
+            onDismiss={() => setViewSuggestions([])}
+          />
         )}
 
         {/* Consolidated toolbar */}
@@ -1697,6 +1962,8 @@ function OpsDetailPage() {
             onColumnReorder={setColumnOrder}
             onColumnResize={(columnId, width) => resizeColumnMutation.mutate({ columnId, width })}
             onEnrichRow={handleEnrichRow}
+            groupConfig={groupConfig}
+            summaryConfig={summaryConfig}
           />
         </div>
       )}
@@ -1882,7 +2149,46 @@ function OpsDetailPage() {
         isExecuting={isAiQueryExecuting}
       />
 
-      {/* Save View Dialog */}
+      {/* View Config Panel (replaces SaveViewDialog for new/edit views) */}
+      <ViewConfigPanel
+        isOpen={showViewConfigPanel}
+        onClose={handleViewConfigClose}
+        onSave={handleViewConfigSave}
+        columns={columns}
+        rows={rows}
+        totalRows={tableData?.total ?? rows.length}
+        filteredRows={rows.length}
+        mode={editingView ? 'edit' : 'create'}
+        existingConfig={
+          editingView
+            ? {
+                viewId: editingView.id,
+                name: editingView.name,
+                filters: editingView.filter_config ?? [],
+                sorts: normalizeSortConfig(editingView.sort_config),
+                columnOrder: editingView.column_config,
+                formattingRules: editingView.formatting_rules ?? [],
+                groupConfig: editingView.group_config ?? null,
+                summaryConfig: editingView.summary_config ?? null,
+              }
+            : nlViewConfig
+              ? nlViewConfig
+              : {
+                  filters: filterConditions,
+                  sorts: normalizeSortConfig(sortState),
+                  columnOrder,
+                }
+        }
+        onFiltersChange={setFilterConditions}
+        onSortsChange={(sorts) => {
+          setSortState(sorts.length === 1 ? sorts[0] : sorts.length > 1 ? sorts : null);
+        }}
+        onColumnOrderChange={setColumnOrder}
+        onNlQuery={handleNlViewQuery}
+        nlQueryLoading={nlQueryLoading}
+      />
+
+      {/* Save View Dialog (legacy — kept for AI query inline create) */}
       <SaveViewDialog
         isOpen={showSaveViewDialog}
         onClose={() => setShowSaveViewDialog(false)}

@@ -399,13 +399,16 @@ serve(async (req: Request) => {
     // Get table
     const { data: table } = await supabase
       .from('dynamic_tables')
-      .select('id, org_id')
+      .select('id, organization_id')
       .eq('id', tableId)
       .maybeSingle();
 
     if (!table) {
       return errorResponse('Table not found', req, 404);
     }
+
+    // Alias for consistency with ops tables
+    const tableWithOrg = { ...table, org_id: table.organization_id };
 
     if (action === 'get_active') {
       const { data: insights } = await supabase
@@ -424,20 +427,20 @@ serve(async (req: Request) => {
       const allInsights: Insight[] = [];
 
       // Run all detectors
-      const clusterInsights = await detectCompanyClusters(supabase, tableId, table.org_id);
+      const clusterInsights = await detectCompanyClusters(supabase, tableId, tableWithOrg.org_id);
       allInsights.push(...clusterInsights);
 
-      const staleInsights = await detectStaleLeads(supabase, tableId, table.org_id);
+      const staleInsights = await detectStaleLeads(supabase, tableId, tableWithOrg.org_id);
       allInsights.push(...staleInsights);
 
-      const qualityInsights = await detectDataQuality(supabase, tableId, table.org_id);
+      const qualityInsights = await detectDataQuality(supabase, tableId, tableWithOrg.org_id);
       allInsights.push(...qualityInsights);
 
       // Conversion patterns (uses AI)
       if (ANTHROPIC_API_KEY) {
         const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
         const { insights: conversionInsights, inputTokens, outputTokens } =
-          await detectConversionPatterns(anthropic, supabase, tableId, table.org_id);
+          await detectConversionPatterns(anthropic, supabase, tableId, tableWithOrg.org_id);
 
         allInsights.push(...conversionInsights);
         totalInputTokens += inputTokens;
@@ -446,7 +449,7 @@ serve(async (req: Request) => {
 
       // Upsert insights to database
       const insightsToSave = allInsights.map((insight) => ({
-        org_id: table.org_id,
+        org_id: tableWithOrg.org_id,
         table_id: tableId,
         insight_type: insight.insight_type,
         severity: insight.severity,
@@ -464,7 +467,7 @@ serve(async (req: Request) => {
           console.error(`${LOG_PREFIX} Insert error:`, insertError);
         } else {
           // OI-009: Send Slack notifications for new insights
-          await sendInsightSlackNotifications(supabase, table.org_id, tableId, allInsights);
+          await sendInsightSlackNotifications(supabase, tableWithOrg.org_id, tableId, allInsights);
         }
       }
 

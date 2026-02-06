@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   DndContext,
@@ -35,6 +35,7 @@ import {
   Zap,
   Play,
   GripVertical,
+  ChevronRight,
 } from 'lucide-react';
 import { OpsTableCell } from './OpsTableCell';
 import { evaluateFormattingRules, evaluateRowFormatting, formattingStyleToCSS } from '@/lib/utils/conditionalFormatting';
@@ -69,6 +70,14 @@ interface Row {
   hubspot_removed_at?: string | null;
 }
 
+interface GroupConfig {
+  column_key: string;
+  collapsed_by_default?: boolean;
+  sort_groups_by?: 'alpha' | 'count';
+}
+
+type AggregateType = 'count' | 'sum' | 'average' | 'min' | 'max' | 'filled_percent' | 'unique_count' | 'none';
+
 interface OpsTableProps {
   columns: Column[];
   rows: Row[];
@@ -84,6 +93,8 @@ interface OpsTableProps {
   onColumnReorder?: (columnKeys: string[]) => void;
   onColumnResize?: (columnId: string, width: number) => void;
   onEnrichRow?: (rowId: string, columnId: string) => void;
+  groupConfig?: GroupConfig | null;
+  summaryConfig?: Record<string, AggregateType> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +240,8 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   onColumnReorder,
   onColumnResize,
   onEnrichRow,
+  groupConfig,
+  summaryConfig,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
@@ -325,9 +338,114 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   const allSelected = rows.length > 0 && selectedRows.size === rows.length;
   const someSelected = selectedRows.size > 0 && !allSelected;
 
-  // Virtual row scroller
+  // ---- GROUPING ----
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Reset collapsed state when group config changes
+  useEffect(() => {
+    if (groupConfig?.collapsed_by_default) {
+      // Collapse all groups initially
+      const allGroupKeys = new Set(
+        rows.map((r) => r.cells[groupConfig.column_key]?.value ?? '__empty__')
+      );
+      setCollapsedGroups(allGroupKeys);
+    } else {
+      setCollapsedGroups(new Set());
+    }
+  }, [groupConfig?.column_key, groupConfig?.collapsed_by_default]);
+
+  type FlatItem = { type: 'group-header'; groupKey: string; count: number } | { type: 'row'; row: Row };
+
+  const flatItems: FlatItem[] = useMemo(() => {
+    if (!groupConfig) return rows.map((row) => ({ type: 'row' as const, row }));
+
+    // Build groups
+    const groups = new Map<string, Row[]>();
+    for (const row of rows) {
+      const val = row.cells[groupConfig.column_key]?.value ?? '__empty__';
+      if (!groups.has(val)) groups.set(val, []);
+      groups.get(val)!.push(row);
+    }
+
+    // Sort groups
+    let sortedKeys = [...groups.keys()];
+    if (groupConfig.sort_groups_by === 'count') {
+      sortedKeys.sort((a, b) => (groups.get(b)?.length ?? 0) - (groups.get(a)?.length ?? 0));
+    } else {
+      sortedKeys.sort((a, b) => {
+        if (a === '__empty__') return 1;
+        if (b === '__empty__') return -1;
+        return a.localeCompare(b);
+      });
+    }
+
+    const items: FlatItem[] = [];
+    for (const key of sortedKeys) {
+      const groupRows = groups.get(key) ?? [];
+      items.push({ type: 'group-header', groupKey: key, count: groupRows.length });
+      if (!collapsedGroups.has(key)) {
+        for (const row of groupRows) {
+          items.push({ type: 'row', row });
+        }
+      }
+    }
+    return items;
+  }, [rows, groupConfig, collapsedGroups]);
+
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // ---- SUMMARY ROW ----
+  const summaryValues = useMemo(() => {
+    if (!summaryConfig) return null;
+    const result: Record<string, string> = {};
+    for (const [colKey, aggType] of Object.entries(summaryConfig)) {
+      if (aggType === 'none') continue;
+      const values = rows.map((r) => r.cells[colKey]?.value).filter((v): v is string => v != null && v !== '');
+      switch (aggType) {
+        case 'count':
+          result[colKey] = `${values.length}`;
+          break;
+        case 'sum': {
+          const nums = values.map(Number).filter((n) => !isNaN(n));
+          result[colKey] = nums.reduce((a, b) => a + b, 0).toLocaleString();
+          break;
+        }
+        case 'average': {
+          const nums = values.map(Number).filter((n) => !isNaN(n));
+          result[colKey] = nums.length > 0 ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1) : '—';
+          break;
+        }
+        case 'min': {
+          const nums = values.map(Number).filter((n) => !isNaN(n));
+          result[colKey] = nums.length > 0 ? Math.min(...nums).toLocaleString() : '—';
+          break;
+        }
+        case 'max': {
+          const nums = values.map(Number).filter((n) => !isNaN(n));
+          result[colKey] = nums.length > 0 ? Math.max(...nums).toLocaleString() : '—';
+          break;
+        }
+        case 'filled_percent':
+          result[colKey] = rows.length > 0 ? `${Math.round((values.length / rows.length) * 100)}%` : '0%';
+          break;
+        case 'unique_count':
+          result[colKey] = `${new Set(values).size}`;
+          break;
+      }
+    }
+    return Object.keys(result).length > 0 ? result : null;
+  }, [summaryConfig, rows]);
+
+  // Virtual row scroller — uses flatItems for grouped view
   const rowVirtualizer = useVirtualizer({
-    count: rows.length,
+    count: flatItems.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
@@ -483,8 +601,35 @@ export const OpsTable: React.FC<OpsTableProps> = ({
             }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const row = rows[virtualRow.index];
-              if (!row) return null;
+              const item = flatItems[virtualRow.index];
+              if (!item) return null;
+
+              // ---- GROUP HEADER ----
+              if (item.type === 'group-header') {
+                const isCollapsed = collapsedGroups.has(item.groupKey);
+                const displayLabel = item.groupKey === '__empty__' ? '(No value)' : item.groupKey;
+                return (
+                  <div
+                    key={`gh-${item.groupKey}`}
+                    className="absolute left-0 w-full flex items-center border-b border-gray-700 bg-gray-800/80 cursor-pointer hover:bg-gray-800"
+                    style={{ height: ROW_HEIGHT, transform: `translateY(${virtualRow.start}px)` }}
+                    onClick={() => toggleGroup(item.groupKey)}
+                  >
+                    <div className="flex items-center gap-2 px-4">
+                      <ChevronRight
+                        className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
+                      />
+                      <span className="text-sm font-medium text-gray-200">{displayLabel}</span>
+                      <span className="rounded-full bg-gray-700 px-2 py-0.5 text-[10px] font-medium text-gray-400">
+                        {item.count}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ---- DATA ROW ----
+              const row = item.row;
               const isSelected = selectedRows.has(row.id);
               const { firstName, lastName } = getPersonNames(row);
               const rowFmtStyle = formattingRules.length > 0
@@ -591,6 +736,46 @@ export const OpsTable: React.FC<OpsTableProps> = ({
               <p className="text-xs text-gray-600 mt-1">
                 Import data or add rows to get started.
               </p>
+            </div>
+          )}
+
+          {/* ---- SUMMARY ROW ---- */}
+          {summaryValues && rows.length > 0 && (
+            <div
+              className="sticky bottom-0 z-10 flex border-t border-gray-700 bg-gray-800/90 backdrop-blur-sm"
+              style={{ minWidth: totalWidth }}
+            >
+              {/* Checkbox placeholder */}
+              <div
+                className="flex items-center justify-center border-r border-gray-700 shrink-0 bg-gray-800/90"
+                style={{ width: CHECKBOX_COL_WIDTH, minWidth: CHECKBOX_COL_WIDTH, height: ROW_HEIGHT }}
+              />
+              {visibleColumns.map((col) => {
+                const val = summaryValues[col.key];
+                const aggType = summaryConfig?.[col.key];
+                const aggLabel = aggType && aggType !== 'none'
+                  ? { count: '#', sum: '\u03A3', average: 'Avg', min: 'Min', max: 'Max', filled_percent: '%', unique_count: '\u2261' }[aggType] ?? ''
+                  : '';
+                const cellWidth = resizingColumnId === col.id ? (resizingWidth ?? col.width) : col.width;
+                return (
+                  <div
+                    key={col.id}
+                    className="flex items-center px-2 border-r border-gray-700 shrink-0 overflow-hidden"
+                    style={{ width: cellWidth, minWidth: cellWidth, height: ROW_HEIGHT }}
+                  >
+                    {val ? (
+                      <span className="text-xs font-medium text-gray-300 truncate">
+                        <span className="text-gray-500 mr-1">{aggLabel}</span>
+                        {val}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <div
+                className="shrink-0 border-r border-gray-700"
+                style={{ width: ADD_COL_WIDTH, minWidth: ADD_COL_WIDTH, height: ROW_HEIGHT }}
+              />
             </div>
           )}
         </div>

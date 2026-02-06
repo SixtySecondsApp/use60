@@ -277,13 +277,15 @@ serve(async (req: Request) => {
     // Get table
     const { data: table } = await supabase
       .from('dynamic_tables')
-      .select('id, org_id')
+      .select('id, organization_id')
       .eq('id', tableId)
       .maybeSingle();
 
     if (!table) {
       return errorResponse('Table not found', req, 404);
     }
+
+    const tableWithOrg = { ...table, org_id: table.organization_id };
 
     if (action === 'get_active') {
       const { data: predictions } = await supabase
@@ -298,7 +300,7 @@ serve(async (req: Request) => {
     }
 
     if (action === 'compute_patterns') {
-      const patterns = await computeBehavioralPatterns(supabase, table.org_id);
+      const patterns = await computeBehavioralPatterns(supabase, tableWithOrg.org_id);
 
       return jsonResponse({
         computed: patterns.length,
@@ -311,11 +313,11 @@ serve(async (req: Request) => {
       let { data: patterns } = await supabase
         .from('ops_behavioral_patterns')
         .select('*')
-        .eq('org_id', table.org_id)
+        .eq('org_id', tableWithOrg.org_id)
         .gt('expires_at', new Date().toISOString());
 
       if (!patterns || patterns.length === 0) {
-        patterns = await computeBehavioralPatterns(supabase, table.org_id);
+        patterns = await computeBehavioralPatterns(supabase, tableWithOrg.org_id);
       }
 
       // Generate predictions
@@ -324,7 +326,7 @@ serve(async (req: Request) => {
       const goingDark = await generateGoingDarkPredictions(
         supabase,
         tableId,
-        table.org_id,
+        tableWithOrg.org_id,
         patterns
       );
       allPredictions.push(...goingDark);
@@ -332,7 +334,7 @@ serve(async (req: Request) => {
       const likelyToConvert = await generateLikelyToConvertPredictions(
         supabase,
         tableId,
-        table.org_id,
+        tableWithOrg.org_id,
         patterns
       );
       allPredictions.push(...likelyToConvert);
@@ -340,14 +342,14 @@ serve(async (req: Request) => {
       const optimalTiming = await generateOptimalTimingPredictions(
         supabase,
         tableId,
-        table.org_id,
+        tableWithOrg.org_id,
         patterns
       );
       allPredictions.push(...optimalTiming);
 
       // Save predictions to database
       const predictionsToSave = allPredictions.map((pred) => ({
-        org_id: table.org_id,
+        org_id: tableWithOrg.org_id,
         table_id: tableId,
         row_id: pred.row_id || null,
         prediction_type: pred.prediction_type,

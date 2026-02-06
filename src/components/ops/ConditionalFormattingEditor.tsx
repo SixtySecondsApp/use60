@@ -133,6 +133,33 @@ export function ConditionalFormattingEditor({ columns, rules, onChange }: Condit
               );
             })}
           </div>
+
+          {/* Scope toggle */}
+          <div className="flex items-center gap-1 mt-1">
+            <span className="text-[10px] font-medium text-gray-500 uppercase mr-1">Apply to</span>
+            <div className="inline-flex rounded-md bg-gray-800 p-0.5">
+              <button
+                onClick={() => updateRule(i, { scope: 'cell' as const })}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  (!rule.scope || rule.scope === 'cell')
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                Cell
+              </button>
+              <button
+                onClick={() => updateRule(i, { scope: 'row' as const })}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  rule.scope === 'row'
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                Entire row
+              </button>
+            </div>
+          </div>
         </div>
       ))}
     </div>

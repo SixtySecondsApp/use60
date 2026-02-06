@@ -638,6 +638,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     navSection: 'platform',
     order: 54,
   },
+  // Content Management
+  {
+    path: '/platform/docs-admin',
+    access: 'platformAdmin',
+    label: 'Documentation CMS',
+    icon: BookOpen,
+    showInNav: false,
+    navSection: 'platform',
+    order: 55,
+  },
   // Slack Settings (Org Admin)
   {
     path: '/settings/integrations/slack',

@@ -11,6 +11,8 @@ import {
   RefreshCw,
   Play,
   RotateCcw,
+  Sparkles,
+  Settings,
 } from 'lucide-react';
 
 interface ColumnHeaderMenuProps {
@@ -26,6 +28,8 @@ interface ColumnHeaderMenuProps {
   onRecalcFormula?: () => void;
   onRunIntegration?: () => void;
   onRetryFailed?: () => void;
+  onEditEnrichment?: () => void;
+  onReEnrich?: () => void;
   anchorRect?: DOMRect;
 }
 
@@ -42,6 +46,8 @@ export function ColumnHeaderMenu({
   onRecalcFormula,
   onRunIntegration,
   onRetryFailed,
+  onEditEnrichment,
+  onReEnrich,
   anchorRect,
 }: ColumnHeaderMenuProps) {
   const [isRenaming, setIsRenaming] = useState(false);
@@ -170,6 +176,28 @@ export function ColumnHeaderMenu({
           onClose();
         }}
       />
+
+      {/* Enrichment actions */}
+      {column.is_enrichment && onEditEnrichment && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit prompt"
+          onClick={() => {
+            onEditEnrichment();
+            onClose();
+          }}
+        />
+      )}
+      {column.is_enrichment && onReEnrich && (
+        <MenuItem
+          icon={<Sparkles className="h-4 w-4" />}
+          label="Re-enrich all rows"
+          onClick={() => {
+            onReEnrich();
+            onClose();
+          }}
+        />
+      )}
 
       {/* Recalculate (formula columns only) */}
       {column.column_type === 'formula' && onRecalcFormula && (

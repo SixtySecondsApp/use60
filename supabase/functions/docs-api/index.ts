@@ -109,14 +109,14 @@ serve(async (req) => {
 
       // Check if user is platform admin for write operations (except feedback)
       if (postAction !== 'feedback' && postAction !== 'propose_update') {
-        const { data: roles } = await userClient
-          .from('user_roles')
+        const { data: membership } = await userClient
+          .from('organization_memberships')
           .select('role')
           .eq('user_id', user.id)
-          .eq('role', 'platformAdmin')
+          .in('role', ['admin', 'owner'])
           .maybeSingle();
 
-        if (!roles) {
+        if (!membership) {
           return new Response(JSON.stringify({ error: 'Forbidden: Platform admin required' }), {
             status: 403,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

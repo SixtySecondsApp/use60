@@ -34,11 +34,46 @@ serve(async (req: Request) => {
   }
 
   try {
+    console.log('[import-from-hubspot] Received request:', {
+      method: req.method,
+      url: req.url,
+      contentType: req.headers.get('content-type'),
+      contentLength: req.headers.get('content-length'),
+      hasBody: req.body !== null,
+    })
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-    const body = await req.json()
+    let body: any
+    try {
+      const rawText = await req.text()
+      console.log('[import-from-hubspot] Raw request body length:', rawText.length)
+      console.log('[import-from-hubspot] Raw request body (first 500 chars):', rawText.substring(0, 500))
+
+      if (!rawText || rawText.trim().length === 0) {
+        throw new Error('Request body is empty')
+      }
+
+      body = JSON.parse(rawText)
+    } catch (jsonError: any) {
+      console.error('[import-from-hubspot] Failed to parse request body:', jsonError.message)
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body: ' + jsonError.message }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    console.log('[import-from-hubspot] Request body parsed:', {
+      org_id: body.org_id,
+      user_id: body.user_id,
+      table_name: body.table_name,
+      list_id: body.list_id,
+      has_filters: !!body.filters,
+      limit: body.limit,
+    })
+
     const { org_id, user_id, table_name, list_id, filters, filter_logic, limit, import_all_columns, sync_direction } = body
 
     if (!org_id || !user_id || !table_name) {
@@ -65,24 +100,44 @@ serve(async (req: Request) => {
     const hubspot = new HubSpotClient({ accessToken: creds.access_token })
 
     // 2. Create table with source_type = 'hubspot'
-    const { data: table, error: tableError } = await supabase
-      .from('dynamic_tables')
-      .insert({
-        organization_id: org_id,
-        created_by: user_id,
-        name: table_name,
-        source_type: 'hubspot',
-        source_query: {
-          list_id,
-          filters,
-          sync_direction: sync_direction || 'pull_only',
-          imported_at: new Date().toISOString(),
-        },
-      })
-      .select('id')
-      .single()
+    //    Handle duplicate names by appending a number
+    let finalTableName = table_name
+    let table: any = null
 
-    if (tableError) throw tableError
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const tryName = attempt === 0 ? table_name : `${table_name} (${attempt})`
+      const { data, error: tableError } = await supabase
+        .from('dynamic_tables')
+        .insert({
+          organization_id: org_id,
+          created_by: user_id,
+          name: tryName,
+          source_type: 'hubspot',
+          source_query: {
+            list_id,
+            filters,
+            sync_direction: sync_direction || 'pull_only',
+            imported_at: new Date().toISOString(),
+          },
+        })
+        .select('id')
+        .single()
+
+      if (!tableError) {
+        table = data
+        finalTableName = tryName
+        break
+      }
+
+      // If not a duplicate name error, throw it
+      if (!tableError.message?.includes('unique_table_name_per_org')) {
+        throw tableError
+      }
+
+      console.log(`[import-from-hubspot] Table name "${tryName}" already exists, trying next`)
+    }
+
+    if (!table) throw new Error(`Table name "${table_name}" already exists. Please choose a different name.`)
 
     // 3. Create columns - email is always created, others depend on import_all_columns
     const columnsToCreate = [
@@ -169,8 +224,13 @@ serve(async (req: Request) => {
           count: membershipResponse?.results?.length ?? 0,
         })
 
-        const memberIds = membershipResponse?.results?.map((m: any) => m.recordId) ?? []
-        if (memberIds.length === 0) break
+        const memberIds = membershipResponse?.results?.map((m: any) => m.recordId).filter(Boolean) ?? []
+        console.log(`[import-from-hubspot] Extracted ${memberIds.length} member IDs from list`)
+
+        if (memberIds.length === 0) {
+          console.log('[import-from-hubspot] No member IDs found, stopping pagination')
+          break
+        }
 
         // Batch-read contacts with properties
         console.log(`[import-from-hubspot] Batch reading ${memberIds.length} contacts`)
@@ -187,9 +247,18 @@ serve(async (req: Request) => {
         console.log(`[import-from-hubspot] Batch response:`, {
           hasResults: !!batchResponse?.results,
           count: batchResponse?.results?.length ?? 0,
+          responseType: typeof batchResponse,
+          isNull: batchResponse === null,
+          isUndefined: batchResponse === undefined,
         })
 
-        results = batchResponse?.results ?? []
+        // Handle null/undefined response from batch read
+        if (!batchResponse || typeof batchResponse !== 'object') {
+          console.error('[import-from-hubspot] Batch response is null or not an object:', batchResponse)
+          throw new Error('HubSpot API returned invalid response for batch read')
+        }
+
+        results = batchResponse.results ?? []
         after = membershipResponse?.paging?.next?.after
       } else {
         // Use search API

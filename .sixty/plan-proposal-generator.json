@@ -1,0 +1,1244 @@
+{
+  "project": {
+    "name": "Professional Proposal Generator",
+    "description": "Upgrade proposal system to produce professionally branded, multi-format documents (DOCX, PDF, HTML) with Logo.dev integration, template reuse, and reliable edge function performance",
+    "prd": "docs/pdf_proposal_brief.md",
+    "createdAt": "2026-02-06T12:00:00Z"
+  },
+  "features": [
+    {
+      "id": "reliability",
+      "name": "Edge Function Reliability & Chunked Processing",
+      "status": "complete",
+      "phase": 1
+    },
+    {
+      "id": "docgen",
+      "name": "DOCX & PDF Document Generation",
+      "status": "complete",
+      "phase": 1
+    },
+    {
+      "id": "branding",
+      "name": "Logo.dev Integration & Client Branding",
+      "status": "complete",
+      "phase": 1
+    },
+    {
+      "id": "preview",
+      "name": "Enhanced Preview & Inline Editing",
+      "status": "complete",
+      "phase": 1
+    },
+    {
+      "id": "wizard",
+      "name": "Wizard Steps 4-6 Enhancement",
+      "status": "complete",
+      "phase": 1
+    },
+    {
+      "id": "schema",
+      "name": "Templates & Assets Schema",
+      "status": "complete",
+      "phase": 2
+    },
+    {
+      "id": "templates",
+      "name": "Template Save & Reuse System",
+      "status": "complete",
+      "phase": 2
+    },
+    {
+      "id": "pricing",
+      "name": "Pricing Table Extraction",
+      "status": "complete",
+      "phase": 2
+    },
+    {
+      "id": "starters",
+      "name": "Starter Templates & Polish",
+      "status": "complete",
+      "phase": 3
+    },
+    {
+      "id": "upload-to-template",
+      "name": "Upload Example \u2192 Auto-Create Template",
+      "status": "complete",
+      "phase": 4
+    }
+  ],
+  "stories": [
+    {
+      "id": "REL-001",
+      "feature": "reliability",
+      "title": "Add chunked transcript processing to generate-proposal edge function",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-06T13:00:00Z",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/generate-proposal/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "REL-002",
+        "REL-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Transcripts over 15,000 tokens are split into chunks before AI calls",
+        "Each chunk is processed independently then results are stitched together",
+        "Parallel chunk processing completes within 150s edge function timeout",
+        "Long transcripts (60+ min meetings) no longer cause timeouts"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/generate-proposal/index.ts"
+      ],
+      "requirements": [
+        "RP-01",
+        "RP-04"
+      ]
+    },
+    {
+      "id": "REL-002",
+      "feature": "reliability",
+      "title": "Add retry logic with exponential backoff to AI calls",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "REL-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "REL-003"
+      ],
+      "acceptance": [
+        "Failed AI calls retry up to 3 times with 1s, 3s, 9s backoff intervals",
+        "Retry wrapper is reusable across all generate-proposal action types",
+        "Failed retries return structured error with attempt count",
+        "Non-retryable errors (400, 401) fail immediately without retry"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/generate-proposal/index.ts"
+      ],
+      "requirements": [
+        "RP-02",
+        "RP-04"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "REL-003",
+      "feature": "reliability",
+      "title": "Add structured JSON output validation for AI-generated content",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "REL-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "DOC-001",
+        "DOC-002"
+      ],
+      "parallelWith": [
+        "REL-002"
+      ],
+      "acceptance": [
+        "AI output is validated against a ProposalSections JSON schema before document assembly",
+        "Schema defines section types: executive_summary, problem, solution, approach, timeline, pricing, terms",
+        "Invalid AI output triggers one retry with a stricter prompt before failing",
+        "Validated output is stored in proposals.sections JSONB column"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/generate-proposal/index.ts",
+        "src/lib/prompts/proposalGeneration.ts"
+      ],
+      "requirements": [
+        "PG-04"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "REL-004",
+      "feature": "reliability",
+      "title": "Stream generation progress to client via Supabase Realtime",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": [
+          "REL-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "WIZ-003"
+      ],
+      "parallelWith": [
+        "REL-002",
+        "REL-003"
+      ],
+      "acceptance": [
+        "Edge function publishes progress events (analyzing, generating_section_N, assembling, complete) via Supabase Realtime",
+        "Client subscribes to proposal generation channel and receives status updates",
+        "Progress is displayed as a stepper in the wizard preview step"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/generate-proposal/index.ts",
+        "src/lib/services/proposalService.ts"
+      ],
+      "requirements": [
+        "RP-03"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "SCH-001",
+      "feature": "schema",
+      "title": "Add proposals table columns for structured generation",
+      "type": "schema",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "proposals"
+        ]
+      },
+      "blocks": [
+        "DOC-001",
+        "DOC-002",
+        "BRD-003",
+        "TPL-001"
+      ],
+      "parallelWith": [
+        "REL-001"
+      ],
+      "acceptance": [
+        "Migration adds template_id (FK nullable), output_format (text), brand_config (JSONB), sections (JSONB), generation_status (text) columns to proposals table",
+        "Default values set for existing rows (generation_status='complete', output_format='html')",
+        "Migration is idempotent (uses IF NOT EXISTS)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260207_proposal_structured_columns.sql"
+      ],
+      "requirements": [
+        "PG-01",
+        "PG-02"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "SCH-002",
+      "feature": "schema",
+      "title": "Create proposal_templates table with RLS",
+      "type": "schema",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": [
+          "SCH-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "TPL-001",
+        "TPL-002"
+      ],
+      "parallelWith": [
+        "SCH-003"
+      ],
+      "acceptance": [
+        "proposal_templates table created with id, org_id, name, description, sections (JSONB), brand_config (JSONB), created_at, updated_at, created_by",
+        "RLS policies enforce org_id isolation: users can only CRUD templates in their org",
+        "Index on org_id for query performance"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260207_proposal_templates_assets.sql"
+      ],
+      "requirements": [
+        "BT-03",
+        "BT-04"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "SCH-003",
+      "feature": "schema",
+      "title": "Create proposal_assets table and Supabase Storage bucket",
+      "type": "schema",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": [
+          "SCH-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "BRD-002"
+      ],
+      "parallelWith": [
+        "SCH-002"
+      ],
+      "acceptance": [
+        "proposal_assets table created with id, proposal_id, org_id, asset_type (logo/image/attachment), storage_path, source (upload/logo_dev/template), created_at",
+        "RLS policies enforce org_id isolation",
+        "Supabase Storage bucket 'proposal-assets' created with org-scoped access policies"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260207_proposal_templates_assets.sql"
+      ],
+      "requirements": [
+        "BT-01",
+        "BT-02"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "DOC-001",
+      "feature": "docgen",
+      "title": "Create proposal-generate-docx edge function for DOCX assembly",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": {
+        "stories": [
+          "REL-003",
+          "SCH-001"
+        ],
+        "files": [],
+        "schema": [
+          "proposals"
+        ]
+      },
+      "blocks": [
+        "DOC-003",
+        "WIZ-003"
+      ],
+      "parallelWith": [
+        "DOC-002"
+      ],
+      "acceptance": [
+        "New edge function accepts proposal ID and generates DOCX from proposals.sections JSON",
+        "DOCX includes professional formatting: headers, tables, page breaks, table of contents",
+        "Brand config (colors, logo) applied from proposals.brand_config",
+        "Generated DOCX returned as base64-encoded response or uploaded to Supabase Storage",
+        "Uses docx npm package via esm.sh (pinned version)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/proposal-generate-docx/index.ts"
+      ],
+      "requirements": [
+        "PG-01"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "DOC-002",
+      "feature": "docgen",
+      "title": "Create proposal-generate-pdf edge function for PDF generation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": {
+        "stories": [
+          "REL-003",
+          "SCH-001"
+        ],
+        "files": [],
+        "schema": [
+          "proposals"
+        ]
+      },
+      "blocks": [
+        "DOC-003",
+        "WIZ-003"
+      ],
+      "parallelWith": [
+        "DOC-001"
+      ],
+      "acceptance": [
+        "New edge function accepts proposal ID and generates PDF from proposals.sections JSON",
+        "PDF includes professional formatting matching the HTML preview layout",
+        "Brand config (colors, logo) applied from proposals.brand_config",
+        "Generated PDF returned as base64-encoded response or uploaded to Supabase Storage",
+        "Uses jsPDF or pdf-lib via esm.sh (Deno-compatible)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/proposal-generate-pdf/index.ts"
+      ],
+      "requirements": [
+        "PG-02"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "DOC-003",
+      "feature": "docgen",
+      "title": "Add DOCX and PDF download functions to proposalService.ts",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": {
+        "stories": [
+          "DOC-001",
+          "DOC-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "WIZ-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "proposalService exports downloadProposalDocx(proposalId) and downloadProposalPdf(proposalId)",
+        "Functions invoke respective edge functions via supabase.functions.invoke()",
+        "Downloaded file triggers browser download with appropriate filename",
+        "Loading/error states handled with toast feedback"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/proposalService.ts"
+      ],
+      "requirements": [
+        "PG-01",
+        "PG-02"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "BRD-001",
+      "feature": "branding",
+      "title": "Create fetch-logo edge function with Logo.dev integration",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "BRD-003"
+      ],
+      "parallelWith": [
+        "REL-001",
+        "SCH-001"
+      ],
+      "acceptance": [
+        "New edge function accepts a domain (e.g. 'acme.com') and returns logo URL from Logo.dev API",
+        "Falls back to text-based company name rendering if Logo.dev returns no result",
+        "Logo.dev API key stored as edge function secret",
+        "Response includes logo URL, format, and dimensions"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/fetch-logo/index.ts"
+      ],
+      "requirements": [
+        "BT-01"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "BRD-002",
+      "feature": "branding",
+      "title": "Add logo upload to proposal_assets via Supabase Storage",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 12,
+      "dependencies": {
+        "stories": [
+          "SCH-003"
+        ],
+        "files": [],
+        "schema": [
+          "proposal_assets"
+        ]
+      },
+      "blocks": [
+        "BRD-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "UI component allows drag-and-drop logo upload (PNG, SVG, JPG, max 2MB)",
+        "Uploaded logos stored in Supabase Storage under proposals/{org_id}/logos/",
+        "proposal_assets record created with asset_type='logo', source='upload'",
+        "Preview thumbnail shown after upload"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/LogoUploader.tsx",
+        "src/lib/services/proposalService.ts"
+      ],
+      "requirements": [
+        "BT-02"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "BRD-003",
+      "feature": "branding",
+      "title": "Build logo resolution chain with priority fallback",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 13,
+      "dependencies": {
+        "stories": [
+          "BRD-001",
+          "BRD-002",
+          "SCH-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "WIZ-002"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Logo resolver checks in order: 1) manual upload in proposal_assets, 2) template-stored logo, 3) Logo.dev domain lookup, 4) text fallback",
+        "Resolver exported as resolveClientLogo(orgId, contactEmail, proposalId) from proposalService",
+        "Resolved logo cached in proposal's brand_config.logo for subsequent renders",
+        "Text fallback renders company name in styled typography"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/proposalService.ts"
+      ],
+      "requirements": [
+        "BT-01"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "PRV-001",
+      "feature": "preview",
+      "title": "Build ProposalPreview component with section-based HTML rendering",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 14,
+      "dependencies": {
+        "stories": [
+          "REL-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "PRV-002",
+        "WIZ-003"
+      ],
+      "parallelWith": [
+        "BRD-001",
+        "DOC-001"
+      ],
+      "acceptance": [
+        "ProposalPreview component renders structured sections JSON as professional HTML",
+        "Sections rendered: cover page, executive summary, problem, solution, approach, timeline, pricing, terms",
+        "Brand config (colors, logo) applied to rendered output",
+        "Component is reusable across wizard preview and public share page"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/proposals/ProposalPreview.tsx"
+      ],
+      "requirements": [
+        "PG-03"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "PRV-002",
+      "feature": "preview",
+      "title": "Add inline editing to ProposalPreview sections",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 15,
+      "dependencies": {
+        "stories": [
+          "PRV-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "WIZ-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Each section in ProposalPreview has an edit toggle that switches to contentEditable mode",
+        "Edited content syncs back to the sections JSON state",
+        "Section reordering via drag handles",
+        "Changes are saved to proposals.sections on explicit save or before export"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/ProposalPreview.tsx"
+      ],
+      "requirements": [
+        "PG-05"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "WIZ-001",
+      "feature": "wizard",
+      "title": "Enhance wizard Step 4 (Format) with output format selection and template picker",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 16,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/proposals/ProposalWizard.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "WIZ-002"
+      ],
+      "parallelWith": [
+        "REL-001",
+        "SCH-001"
+      ],
+      "acceptance": [
+        "Step 4 shows output format selector: DOCX, PDF, or HTML (radio group)",
+        "Template picker shows saved templates (if any exist) or 'Start Fresh' option",
+        "Client branding toggle enables/disables Logo.dev integration",
+        "Selected format stored in wizard state and passed to generation"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/ProposalWizard.tsx"
+      ],
+      "requirements": [
+        "PG-01",
+        "PG-02",
+        "BT-04"
+      ],
+      "completedAt": "2026-02-06T13:00:00Z"
+    },
+    {
+      "id": "WIZ-002",
+      "feature": "wizard",
+      "title": "Enhance wizard Step 5 (Config) with brand configuration",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 17,
+      "dependencies": {
+        "stories": [
+          "WIZ-001",
+          "BRD-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "WIZ-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Step 5 shows auto-populated client logo (from logo resolution chain) with override option",
+        "Color picker for primary, secondary, and accent brand colors",
+        "Section ordering: drag-and-drop to reorder proposal sections",
+        "Pricing table toggle for inclusion"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/ProposalWizard.tsx",
+        "src/components/proposals/BrandConfigPanel.tsx"
+      ],
+      "requirements": [
+        "BT-01",
+        "BT-05"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "WIZ-003",
+      "feature": "wizard",
+      "title": "Rebuild wizard Step 6 (Preview & Export) with live preview and download",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 18,
+      "dependencies": {
+        "stories": [
+          "WIZ-002",
+          "PRV-002",
+          "DOC-003",
+          "REL-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Step 6 shows live ProposalPreview with inline editing",
+        "Generation progress stepper shown during AI processing (from Realtime subscription)",
+        "Download buttons for DOCX and PDF formats (invoke respective edge functions)",
+        "Save as Template button stores current proposal structure as a reusable template",
+        "Existing share functionality preserved"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/proposals/ProposalWizard.tsx"
+      ],
+      "requirements": [
+        "PG-01",
+        "PG-02",
+        "PG-03",
+        "PG-05",
+        "BT-03"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "TPL-001",
+      "feature": "templates",
+      "title": "Build save-as-template service and UI",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 19,
+      "dependencies": {
+        "stories": [
+          "SCH-001",
+          "SCH-002"
+        ],
+        "files": [],
+        "schema": [
+          "proposal_templates"
+        ]
+      },
+      "blocks": [
+        "TPL-002"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "saveAsTemplate(proposalId, name, description) extracts sections structure and brand_config from a completed proposal",
+        "Template saved to proposal_templates with org_id scoping",
+        "UI: modal triggered from Step 6 preview allows naming and saving the template",
+        "Toast confirmation on successful save"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/proposalService.ts",
+        "src/components/proposals/SaveTemplateModal.tsx"
+      ],
+      "requirements": [
+        "BT-03"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "TPL-002",
+      "feature": "templates",
+      "title": "Build template selection and application in wizard Step 4",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 20,
+      "dependencies": {
+        "stories": [
+          "TPL-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PRC-001"
+      ],
+      "acceptance": [
+        "Step 4 fetches org templates from proposal_templates and displays as selectable cards",
+        "Selecting a template pre-populates sections structure, brand_config, and logo in wizard state",
+        "User can still override any template-populated values in Step 5",
+        "Template name shown as badge during remaining wizard steps"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/proposals/ProposalWizard.tsx"
+      ],
+      "requirements": [
+        "BT-04"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "PRC-001",
+      "feature": "pricing",
+      "title": "Add pricing table extraction from transcripts and section rendering",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 21,
+      "dependencies": {
+        "stories": [
+          "REL-003",
+          "PRV-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TPL-002"
+      ],
+      "acceptance": [
+        "AI prompt includes pricing extraction instructions: line items, quantities, rates, totals",
+        "ProposalPreview renders pricing section as a formatted table",
+        "Pricing table is inline-editable (add/remove rows, edit amounts)",
+        "Pricing section includes subtotal, tax, and total rows"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/prompts/proposalGeneration.ts",
+        "src/components/proposals/ProposalPreview.tsx",
+        "supabase/functions/generate-proposal/index.ts"
+      ],
+      "requirements": [
+        "PG-06"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "STR-001",
+      "feature": "starters",
+      "title": "Create 5 built-in starter templates (Training, Consulting, SaaS, Retainer, Custom)",
+      "type": "data",
+      "status": "complete",
+      "priority": 22,
+      "dependencies": {
+        "stories": [
+          "SCH-002",
+          "TPL-001"
+        ],
+        "files": [],
+        "schema": [
+          "proposal_templates"
+        ]
+      },
+      "blocks": [
+        "STR-002"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration seeds 5 starter templates with org_id=NULL (global templates)",
+        "Each template has sensible default sections, placeholder content, and neutral brand_config",
+        "Templates cover: Training Programme, Consulting Engagement, SaaS Onboarding, Monthly Retainer, Custom Proposal",
+        "Starter templates appear in Step 4 alongside org-specific templates"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260207_proposal_starter_templates.sql"
+      ],
+      "requirements": [
+        "BT-06"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "STR-002",
+      "feature": "starters",
+      "title": "Build template management UI (view, edit, delete, duplicate)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 23,
+      "dependencies": {
+        "stories": [
+          "STR-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Settings page lists all org templates and global starter templates",
+        "Edit action opens template in a form with sections and brand_config editing",
+        "Delete action with confirmation modal (org templates only, not global starters)",
+        "Duplicate action creates a copy owned by the current org"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/settings/ProposalSettings.tsx",
+        "src/components/proposals/TemplateManager.tsx"
+      ],
+      "requirements": [
+        "BT-06"
+      ],
+      "completedAt": "2026-02-06T15:11:42.000Z"
+    },
+    {
+      "id": "UPL-001",
+      "feature": "upload-to-template",
+      "title": "Expand proposal-assets storage bucket for document uploads",
+      "type": "schema",
+      "status": "complete",
+      "priority": 24,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "proposal_assets"
+        ]
+      },
+      "blocks": [
+        "UPL-002",
+        "UPL-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration expands proposal-assets bucket max file size from 5MB to 15MB",
+        "Bucket allows DOCX MIME type (application/vnd.openxmlformats-officedocument.wordprocessingml.document)",
+        "proposal_assets.asset_type CHECK constraint expanded to include 'document'",
+        "proposal_templates gains nullable source_document_id (FK to proposal_assets) column"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260207_upload_to_template_schema.sql"
+      ],
+      "requirements": [],
+      "completedAt": "2026-02-06T19:00:00Z"
+    },
+    {
+      "id": "UPL-002",
+      "feature": "upload-to-template",
+      "title": "Create proposal-parse-document edge function for DOCX/PDF analysis",
+      "type": "backend",
+      "status": "complete",
+      "priority": 25,
+      "dependencies": {
+        "stories": [
+          "UPL-001"
+        ],
+        "files": [],
+        "schema": [
+          "proposal_assets"
+        ]
+      },
+      "blocks": [
+        "UPL-004"
+      ],
+      "parallelWith": [
+        "UPL-003"
+      ],
+      "acceptance": [
+        "Edge function downloads file from Supabase Storage given a proposal_assets.id",
+        "DOCX files parsed via mammoth.js (esm.sh pinned) for HTML + JSZip for theme/style XML extraction",
+        "PDF files parsed via pdfjs-dist (esm.sh pinned) for text extraction with heading detection",
+        "Extracted content sent to Claude Haiku via OpenRouter for section identification and typing",
+        "Returns TemplateExtraction JSON: sections array, brand_config (colors, font), metadata"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/proposal-parse-document/index.ts"
+      ],
+      "requirements": [],
+      "completedAt": "2026-02-06T19:00:00Z"
+    },
+    {
+      "id": "UPL-003",
+      "feature": "upload-to-template",
+      "title": "Add document upload and parse service functions to proposalService",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 26,
+      "dependencies": {
+        "stories": [
+          "UPL-001"
+        ],
+        "files": [
+          "src/lib/services/proposalService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "UPL-004"
+      ],
+      "parallelWith": [
+        "UPL-002"
+      ],
+      "acceptance": [
+        "uploadAndParseDocument(file, orgId) uploads file to proposal-assets bucket, creates asset record",
+        "createTemplateFromExtraction(name, extraction, orgId, sourceAssetId) saves extraction as structured template",
+        "File type validation (only .docx and .pdf, max 15MB) with clear error messages",
+        "Both functions use supabase.functions.invoke() for edge function calls (not raw fetch)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/proposalService.ts"
+      ],
+      "requirements": [],
+      "completedAt": "2026-02-06T19:00:00Z"
+    },
+    {
+      "id": "UPL-004",
+      "feature": "upload-to-template",
+      "title": "Build TemplateUploader and TemplateExtractReview components",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 27,
+      "dependencies": {
+        "stories": [
+          "UPL-002",
+          "UPL-003"
+        ],
+        "files": [
+          "src/components/proposals/TemplateManager.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "UPL-005"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "TemplateUploader: drag-and-drop zone (native HTML5, matching LogoUploader pattern) for .docx/.pdf",
+        "Shows upload progress and 'Analyzing document structure...' loading state during parsing",
+        "TemplateExtractReview: editable section list with type dropdown, title input, content preview",
+        "Brand config preview with color swatches and editable color pickers",
+        "Save as Template button with name input creates new org template"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/proposals/TemplateUploader.tsx",
+        "src/components/proposals/TemplateExtractReview.tsx"
+      ],
+      "requirements": [],
+      "completedAt": "2026-02-06T19:00:00Z"
+    },
+    {
+      "id": "UPL-005",
+      "feature": "upload-to-template",
+      "title": "Integrate upload flow into TemplateManager and wizard template picker",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 28,
+      "dependencies": {
+        "stories": [
+          "UPL-004"
+        ],
+        "files": [
+          "src/components/proposals/TemplateManager.tsx",
+          "src/components/proposals/ProposalWizard.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "TemplateManager has 'Upload Example' button that opens modal with upload \u2192 review \u2192 save flow",
+        "After save, new template appears in template list immediately",
+        "Wizard template picker (Step 1) has optional 'Upload Example' card alongside existing templates",
+        "Clicking it opens the same upload flow; after save, the new template is auto-selected"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/proposals/TemplateManager.tsx",
+        "src/components/proposals/ProposalWizard.tsx"
+      ],
+      "requirements": [],
+      "completedAt": "2026-02-06T19:00:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 28,
+    "completedStories": 28,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-06T18:00:00Z",
+    "phases": {
+      "phase1": {
+        "name": "Core Generation Engine",
+        "stories": [
+          "REL-001",
+          "REL-002",
+          "REL-003",
+          "REL-004",
+          "SCH-001",
+          "DOC-001",
+          "DOC-002",
+          "DOC-003",
+          "BRD-001",
+          "BRD-002",
+          "BRD-003",
+          "PRV-001",
+          "PRV-002",
+          "WIZ-001",
+          "WIZ-002",
+          "WIZ-003"
+        ],
+        "estimatedHours": "6.5",
+        "parallelGroups": [
+          [
+            "REL-001",
+            "SCH-001",
+            "BRD-001",
+            "WIZ-001"
+          ],
+          [
+            "REL-002",
+            "REL-003",
+            "REL-004",
+            "SCH-002",
+            "SCH-003"
+          ],
+          [
+            "DOC-001",
+            "DOC-002",
+            "PRV-001",
+            "BRD-002"
+          ],
+          [
+            "DOC-003",
+            "BRD-003",
+            "PRV-002"
+          ],
+          [
+            "WIZ-002"
+          ],
+          [
+            "WIZ-003"
+          ]
+        ]
+      },
+      "phase2": {
+        "name": "Templates & Branding",
+        "stories": [
+          "TPL-001",
+          "TPL-002",
+          "PRC-001"
+        ],
+        "estimatedHours": "1.5",
+        "parallelGroups": [
+          [
+            "TPL-001"
+          ],
+          [
+            "TPL-002",
+            "PRC-001"
+          ]
+        ]
+      },
+      "phase3": {
+        "name": "Starter Templates & Polish",
+        "stories": [
+          "STR-001",
+          "STR-002"
+        ],
+        "estimatedHours": "1",
+        "parallelGroups": [
+          [
+            "STR-001"
+          ],
+          [
+            "STR-002"
+          ]
+        ]
+      },
+      "phase4": {
+        "name": "Upload Example \u2192 Auto-Create Template",
+        "stories": [
+          "UPL-001",
+          "UPL-002",
+          "UPL-003",
+          "UPL-004",
+          "UPL-005"
+        ],
+        "estimatedHours": "2",
+        "parallelGroups": [
+          [
+            "UPL-001"
+          ],
+          [
+            "UPL-002",
+            "UPL-003"
+          ],
+          [
+            "UPL-004"
+          ],
+          [
+            "UPL-005"
+          ]
+        ]
+      }
+    }
+  },
+  "risks": [
+    {
+      "id": "RISK-001",
+      "severity": "high",
+      "description": "docx npm package may not work in Deno (Supabase Edge Functions). The brief calls for server-side DOCX generation but Deno compatibility is unverified.",
+      "mitigation": "Spike test docx package via esm.sh in Deno first. Fallback: use client-side docx generation (runs in browser, skips edge function). Alternative: use docx-templates or officegen."
+    },
+    {
+      "id": "RISK-002",
+      "severity": "high",
+      "description": "PDF generation in Deno edge functions has limited library support. Most PDF libraries (puppeteer, wkhtmltopdf) require system binaries unavailable in Deno.",
+      "mitigation": "Use pdf-lib (pure JS, Deno-compatible) for direct PDF assembly from structured data. Avoid HTML-to-PDF conversion which needs a browser engine."
+    },
+    {
+      "id": "RISK-003",
+      "severity": "medium",
+      "description": "Logo.dev API key is not yet obtained (P0 action item for Andrew). Development will be blocked until key is available.",
+      "mitigation": "Build with a mock/stub Logo.dev response first. Use environment variable for API key so it can be swapped in later."
+    },
+    {
+      "id": "RISK-004",
+      "severity": "medium",
+      "description": "150s edge function timeout may be insufficient for chunked processing of very long transcripts even with parallel execution.",
+      "mitigation": "If chunked parallel approach still hits limits, fall back to async job queue (already exists in proposal_jobs). Client polls for completion."
+    },
+    {
+      "id": "RISK-005",
+      "severity": "low",
+      "description": "esm.sh CDN issue with @supabase/supabase-js@2 (resolves to broken @2.95.1)",
+      "mitigation": "Pin all imports to @2.43.4 as per established pattern in this project."
+    },
+    {
+      "id": "RISK-006",
+      "severity": "medium",
+      "description": "PDF structure detection is less reliable than DOCX \u2014 PDFs lose semantic heading/section structure. AI section identification may produce lower-quality results for PDF uploads.",
+      "mitigation": "AI prompt handles gracefully by analyzing content patterns rather than relying on formatting. DOCX will always produce better results; warn users accordingly."
+    },
+    {
+      "id": "RISK-007",
+      "severity": "low",
+      "description": "mammoth.js and pdfjs-dist Deno compatibility on esm.sh untested in this codebase.",
+      "mitigation": "Pin to known-good versions (mammoth@1.6.0, pdfjs-dist@3.11.174). If either fails, fall back to basic text extraction via regex on raw XML (DOCX) or a simpler PDF parser."
+    }
+  ],
+  "notes": {
+    "existingCode": "Extensive proposal system already exists: 6-step wizard (ProposalWizard.tsx, 898 lines), generate-proposal edge function (2525 lines), proposalService.ts (1515 lines), proposal_templates and proposal_jobs tables, org_proposal_workflows, public sharing with password protection.",
+    "keyInsight": "The brief references 'proposal-analyze' edge function but the actual function is named 'generate-proposal'. No separate proposal-analyze function exists.",
+    "edgeFunctionPattern": "All edge functions use OpenRouter for Claude models. Pin esm.sh imports to @2.43.4. Deploy with --no-verify-jwt to staging.",
+    "denoDocxRisk": "The docx npm package is designed for Node.js. It uses Buffer and fs which may not be available in Deno. This is the P0 spike identified in the brief's action items."
+  }
+}

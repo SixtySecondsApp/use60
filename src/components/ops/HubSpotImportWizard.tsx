@@ -311,14 +311,29 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete }: HubSpotI
       };
       console.log('[HubSpotImportWizard] Calling import-from-hubspot with:', requestBody);
 
-      const { data, error } = await supabase.functions.invoke('import-from-hubspot', {
-        body: requestBody,
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('No auth token available');
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
+      const fnUrl = `${supabaseUrl}/functions/v1/import-from-hubspot`;
+      const jsonBody = JSON.stringify(requestBody);
+      console.log('[HubSpotImportWizard] Direct fetch to:', fnUrl, 'body length:', jsonBody.length);
+
+      const resp = await fetch(fnUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY,
+        },
+        body: jsonBody,
       });
 
-      console.log('[HubSpotImportWizard] Response:', { data, error });
+      const data = await resp.json();
+      console.log('[HubSpotImportWizard] Response:', { status: resp.status, data });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (!resp.ok || data?.error) throw new Error(data?.error || `HTTP ${resp.status}`);
 
       queryClient.invalidateQueries({ queryKey: ['ops-tables'] });
       toast.success(`Imported ${data.rows_imported} contacts from HubSpot`);

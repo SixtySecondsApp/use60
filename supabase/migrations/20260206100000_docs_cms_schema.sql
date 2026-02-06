@@ -28,7 +28,7 @@ CREATE TABLE docs_versions (
   article_id UUID REFERENCES docs_articles(id) ON DELETE CASCADE,
   version_number INTEGER NOT NULL,
   content TEXT NOT NULL, -- snapshot of content at this version
-  changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  changed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   diff_summary TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(article_id, version_number)
@@ -41,7 +41,7 @@ CREATE INDEX idx_docs_versions_created_at ON docs_versions(created_at DESC);
 CREATE TABLE docs_feedback (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   article_id UUID REFERENCES docs_articles(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   helpful BOOLEAN NOT NULL,
   comment TEXT,
   section_slug TEXT,
@@ -82,47 +82,47 @@ CREATE POLICY "Users can read published articles"
     auth.role() = 'authenticated' AND published = true
   );
 
--- Platform admins can read all articles (including drafts)
-CREATE POLICY "Platform admins can read all articles"
+-- Org admins/owners can read all articles (including drafts)
+CREATE POLICY "Admins can read all articles"
   ON docs_articles FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'platformAdmin'
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.user_id = auth.uid()
+      AND organization_memberships.role IN ('admin', 'owner')
     )
   );
 
--- Platform admins can insert articles
-CREATE POLICY "Platform admins can insert articles"
+-- Org admins/owners can insert articles
+CREATE POLICY "Admins can insert articles"
   ON docs_articles FOR INSERT
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'platformAdmin'
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.user_id = auth.uid()
+      AND organization_memberships.role IN ('admin', 'owner')
     )
   );
 
--- Platform admins can update articles
-CREATE POLICY "Platform admins can update articles"
+-- Org admins/owners can update articles
+CREATE POLICY "Admins can update articles"
   ON docs_articles FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'platformAdmin'
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.user_id = auth.uid()
+      AND organization_memberships.role IN ('admin', 'owner')
     )
   );
 
--- Platform admins can delete articles
-CREATE POLICY "Platform admins can delete articles"
+-- Org admins/owners can delete articles
+CREATE POLICY "Admins can delete articles"
   ON docs_articles FOR DELETE
   USING (
     EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'platformAdmin'
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.user_id = auth.uid()
+      AND organization_memberships.role IN ('admin', 'owner')
     )
   );
 
@@ -139,25 +139,25 @@ CREATE POLICY "Users can read versions for published articles"
     )
   );
 
--- Platform admins can read all versions
-CREATE POLICY "Platform admins can read all versions"
+-- Admins can read all versions
+CREATE POLICY "Admins can read all versions"
   ON docs_versions FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'platformAdmin'
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.user_id = auth.uid()
+      AND organization_memberships.role IN ('admin', 'owner')
     )
   );
 
--- Platform admins can insert versions
-CREATE POLICY "Platform admins can insert versions"
+-- Admins can insert versions
+CREATE POLICY "Admins can insert versions"
   ON docs_versions FOR INSERT
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'platformAdmin'
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.user_id = auth.uid()
+      AND organization_memberships.role IN ('admin', 'owner')
     )
   );
 
@@ -185,14 +185,14 @@ CREATE POLICY "Users can delete their own feedback"
 
 -- RLS Policies for docs_ai_proposals
 
--- Platform admins can read all proposals
-CREATE POLICY "Platform admins can read proposals"
+-- Admins can read all proposals
+CREATE POLICY "Admins can read proposals"
   ON docs_ai_proposals FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'platformAdmin'
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.user_id = auth.uid()
+      AND organization_memberships.role IN ('admin', 'owner')
     )
   );
 
@@ -201,14 +201,14 @@ CREATE POLICY "Service can insert proposals"
   ON docs_ai_proposals FOR INSERT
   WITH CHECK (true); -- Service role bypasses RLS anyway
 
--- Platform admins can update proposals (approve/reject)
-CREATE POLICY "Platform admins can update proposals"
+-- Admins can update proposals (approve/reject)
+CREATE POLICY "Admins can update proposals"
   ON docs_ai_proposals FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'platformAdmin'
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.user_id = auth.uid()
+      AND organization_memberships.role IN ('admin', 'owner')
     )
   );
 

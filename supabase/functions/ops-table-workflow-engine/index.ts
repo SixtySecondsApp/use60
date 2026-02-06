@@ -386,13 +386,15 @@ serve(async (req: Request) => {
     // Get table metadata
     const { data: table } = await supabase
       .from('dynamic_tables')
-      .select('id, name, org_id')
+      .select('id, name, organization_id')
       .eq('id', tableId)
       .maybeSingle();
 
     if (!table) {
       return errorResponse('Table not found', req, 404);
     }
+
+    const tableWithOrg = { ...table, org_id: table.organization_id };
 
     const { data: columns } = await supabase
       .from('dynamic_table_columns')
@@ -492,7 +494,7 @@ serve(async (req: Request) => {
       const { data: savedWorkflow, error: saveError } = await supabase
         .from('ops_table_workflows')
         .insert({
-          org_id: table.org_id,
+          org_id: tableWithOrg.org_id,
           table_id: tableId,
           name: body.workflow.name,
           description: body.workflow.description,

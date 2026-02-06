@@ -40,7 +40,7 @@ export function DocsFeedback({ articleId, sectionSlug }: DocsFeedbackProps) {
 
   if (voted) {
     return (
-      <div className="flex items-center space-x-2 text-sm text-slate-500 dark:text-slate-400">
+      <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
         <span>Thanks for your feedback!</span>
       </div>
     );
@@ -48,29 +48,29 @@ export function DocsFeedback({ articleId, sectionSlug }: DocsFeedbackProps) {
 
   return (
     <div className="flex items-center space-x-4">
-      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
         Was this helpful?
       </span>
       <div className="flex space-x-2">
         <button
           onClick={() => handleFeedback(true)}
           disabled={feedbackMutation.isPending}
-          className="p-2 rounded-lg border border-slate-300 dark:border-slate-600
-            hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-500
+          className="p-2 rounded-lg border border-gray-300 dark:border-gray-700
+            hover:bg-green-50 dark:hover:bg-green-500/10 hover:border-green-500 dark:hover:border-green-500/30
             disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           aria-label="This was helpful"
         >
-          <ThumbsUp className="w-4 h-4" />
+          <ThumbsUp className="w-4 h-4 text-gray-500 dark:text-gray-400" />
         </button>
         <button
           onClick={() => handleFeedback(false)}
           disabled={feedbackMutation.isPending}
-          className="p-2 rounded-lg border border-slate-300 dark:border-slate-600
-            hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-500
+          className="p-2 rounded-lg border border-gray-300 dark:border-gray-700
+            hover:bg-red-50 dark:hover:bg-red-500/10 hover:border-red-500 dark:hover:border-red-500/30
             disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           aria-label="This was not helpful"
         >
-          <ThumbsDown className="w-4 h-4" />
+          <ThumbsDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
         </button>
       </div>
     </div>

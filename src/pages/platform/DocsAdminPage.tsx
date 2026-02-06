@@ -183,13 +183,13 @@ export default function DocsAdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center space-x-3">
             <BookOpen className="w-8 h-8 text-blue-600" />
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
               Documentation CMS
             </h1>
           </div>
@@ -205,42 +205,42 @@ export default function DocsAdminPage() {
 
         {/* Articles List */}
         {isLoading ? (
-          <div className="text-center py-12 text-slate-500">Loading articles...</div>
+          <div className="text-center py-12 text-gray-500">Loading articles...</div>
         ) : (
           <div className="space-y-8">
             {Object.entries(articles || {}).map(([category, categoryArticles]) => (
               <div key={category}>
-                <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-4">
+                <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">
                   {category}
                 </h2>
-                <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700/50 overflow-hidden">
                   <table className="w-full">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                    <thead className="bg-gray-50 dark:bg-gray-950/50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Title
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Slug
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Last Updated
                         </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700/50">
                       {categoryArticles.map((article) => (
-                        <tr key={article.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                          <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">
+                        <tr key={article.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                             {article.title}
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                          <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                             {article.slug}
                           </td>
                           <td className="px-6 py-4 text-sm">
@@ -249,12 +249,12 @@ export default function DocsAdminPage() {
                                 Published
                               </span>
                             ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-400">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400">
                                 Draft
                               </span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                          <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                             {new Date(article.updated_at).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 text-sm text-right">
@@ -268,7 +268,7 @@ export default function DocsAdminPage() {
                               </button>
                               <button
                                 onClick={() => handleTogglePublished(article.id, article.published)}
-                                className="p-2 text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                className="p-2 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                 title={article.published ? 'Unpublish' : 'Publish'}
                               >
                                 {article.published ? (
@@ -296,8 +296,8 @@ export default function DocsAdminPage() {
 
             {Object.keys(articles || {}).length === 0 && (
               <div className="text-center py-12">
-                <BookOpen className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-slate-500">No articles yet. Create your first article!</p>
+                <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500">No articles yet. Create your first article!</p>
               </div>
             )}
           </div>
@@ -306,9 +306,9 @@ export default function DocsAdminPage() {
         {/* Article Editor Modal */}
         {editingId && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg w-full max-w-7xl h-[90vh] flex flex-col">
+            <div className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-7xl h-[90vh] flex flex-col">
               {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700/50">
                 <h3 className="text-xl font-bold">
                   {editingId === 'new' ? 'Create New Article' : 'Edit Article'}
                 </h3>
@@ -324,7 +324,7 @@ export default function DocsAdminPage() {
                   </button>
                   <button
                     onClick={() => setEditingId(null)}
-                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -332,44 +332,44 @@ export default function DocsAdminPage() {
               </div>
 
               {/* Metadata Panel */}
-              <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-950/50">
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Title *
                     </label>
                     <input
                       type="text"
                       value={editorData.title}
                       onChange={(e) => setEditorData({ ...editorData, title: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg
-                        bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg
+                        bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                       placeholder="Article title"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Slug *
                     </label>
                     <input
                       type="text"
                       value={editorData.slug}
                       onChange={(e) => setEditorData({ ...editorData, slug: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg
-                        bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg
+                        bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                       placeholder="url-friendly-slug"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Category *
                     </label>
                     <input
                       type="text"
                       value={editorData.category}
                       onChange={(e) => setEditorData({ ...editorData, category: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg
-                        bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg
+                        bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                       placeholder="Getting Started"
                     />
                   </div>
@@ -379,7 +379,7 @@ export default function DocsAdminPage() {
               {/* Split-Pane Editor */}
               <div className="flex-1 flex overflow-hidden">
                 {/* Editor */}
-                <div className="flex-1 border-r border-slate-200 dark:border-slate-700">
+                <div className="flex-1 border-r border-gray-200 dark:border-gray-700/50">
                   <MarkdownEditor
                     value={editorData.content}
                     onChange={(content) => setEditorData({ ...editorData, content })}
@@ -389,18 +389,18 @@ export default function DocsAdminPage() {
                 {/* Preview / Version History */}
                 <div className="flex-1">
                   <div className="h-full flex flex-col">
-                    <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+                    <div className="p-3 border-b border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-950/50 flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <button
                           onClick={() => setShowVersionHistory(false)}
-                          className={`text-sm font-medium ${!showVersionHistory ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                          className={`text-sm font-medium ${!showVersionHistory ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                         >
                           Preview
                         </button>
                         {editingId !== 'new' && (
                           <button
                             onClick={() => setShowVersionHistory(true)}
-                            className={`flex items-center space-x-1 text-sm font-medium ${showVersionHistory ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex items-center space-x-1 text-sm font-medium ${showVersionHistory ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                           >
                             <History className="w-4 h-4" />
                             <span>Version History</span>

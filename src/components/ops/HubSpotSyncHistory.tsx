@@ -70,7 +70,7 @@ export function HubSpotSyncHistory({ open, onOpenChange, tableId }: HubSpotSyncH
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[400px] sm:w-[440px]">
+      <SheetContent className="!top-16 !h-[calc(100vh-4rem)] w-[400px] sm:w-[440px]">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-orange-400" />
@@ -78,7 +78,7 @@ export function HubSpotSyncHistory({ open, onOpenChange, tableId }: HubSpotSyncH
           </SheetTitle>
         </SheetHeader>
 
-        <div className="mt-4 space-y-2 overflow-y-auto max-h-[calc(100vh-120px)]">
+        <div className="mt-4 space-y-2 overflow-y-auto max-h-[calc(100vh-4rem-120px)]">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-orange-500" />

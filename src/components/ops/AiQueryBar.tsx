@@ -275,7 +275,7 @@ export function AiQueryBar({
             onFocus={handleFocus}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            placeholder="Ask anything... e.g. 'Delete rows with blank emails' or 'How many leads per stage?'"
+            placeholder="Ask anything about this table..."
             className="min-w-0 flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-500 outline-none disabled:opacity-50"
           />
           <kbd className="hidden shrink-0 items-center gap-0.5 rounded border border-gray-700 bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-500 sm:flex">

@@ -46,6 +46,7 @@ import {
   Bot,
   FlaskConical,
   Video,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -483,6 +484,16 @@ const platformSections: Record<string, PlatformSection[]> = {
       href: '/platform/sentry-bridge',
       color: 'text-red-600 bg-red-100 dark:bg-red-900/30',
       badge: 'New',
+    },
+  ],
+  'Content Management': [
+    {
+      id: 'docs-admin',
+      title: 'Documentation CMS',
+      description: 'Create, edit, and publish help documentation articles',
+      icon: BookOpen,
+      href: '/platform/docs-admin',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
     },
   ],
 };

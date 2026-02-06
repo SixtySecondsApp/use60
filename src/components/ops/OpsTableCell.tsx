@@ -1,11 +1,17 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink } from 'lucide-react';
 import type { DropdownOption } from '@/lib/services/opsTableService';
 
 interface CellData {
   value: string | null;
   confidence: number | null;
   status: 'none' | 'pending' | 'complete' | 'failed';
+}
+
+interface SourceEntry {
+  title?: string;
+  url?: string;
 }
 
 interface OpsTableCellProps {
@@ -17,6 +23,9 @@ interface OpsTableCellProps {
   onEdit?: (value: string) => void;
   dropdownOptions?: DropdownOption[] | null;
   formulaExpression?: string | null;
+  columnLabel?: string;
+  metadata?: Record<string, unknown> | null;
+  onEnrichRow?: () => void;
 }
 
 /**
@@ -34,10 +43,15 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   onEdit,
   dropdownOptions,
   formulaExpression,
+  columnLabel,
+  metadata,
+  onEnrichRow,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(cell.value ?? '');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +68,16 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
       setEditValue(cell.value ?? '');
     }
   }, [cell.value, isEditing]);
+
+  // Close enrichment overlay on Escape
+  useEffect(() => {
+    if (!expanded) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setExpanded(false); setCopied(false); }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [expanded]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -103,19 +127,33 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   if (isEnrichment) {
     if (cell.status === 'pending') {
       return (
-        <span className="text-xs text-gray-500 italic flex items-center gap-1.5">
-          <Loader2 className="w-3 h-3 animate-spin text-violet-400" />
-          Enriching...
-        </span>
+        <div className="w-full h-full flex items-center">
+          <span className="text-xs text-violet-300 italic flex items-center gap-1.5">
+            <Loader2 className="w-3 h-3 animate-spin text-violet-400" />
+            Processing...
+          </span>
+        </div>
       );
     }
 
     if (cell.status === 'failed') {
       return (
-        <span className="text-xs text-red-400 flex items-center gap-1.5">
-          <AlertCircle className="w-3 h-3" />
-          Failed
-        </span>
+        <div className="w-full h-full flex items-center group/enrich-fail">
+          <span className="text-xs text-red-400 flex items-center gap-1.5">
+            <AlertCircle className="w-3 h-3" />
+            Failed
+          </span>
+          {onEnrichRow && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+              className="ml-auto opacity-0 group-hover/enrich-fail:opacity-100 transition-opacity p-0.5 rounded hover:bg-violet-500/20"
+              title="Retry enrichment"
+            >
+              <Zap className="w-3.5 h-3.5 text-violet-400" />
+            </button>
+          )}
+        </div>
       );
     }
   }
@@ -525,7 +563,7 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     );
   }
 
-  // Enrichment value with confidence tint (read-only — no click-to-edit)
+  // Enrichment value with confidence tint — click to expand full text
   if (isEnrichment && cell.value != null) {
     const confidence = cell.confidence ?? 1;
     const opacityClass =
@@ -534,20 +572,128 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         : confidence >= 0.5
           ? 'text-gray-300'
           : 'text-gray-400 italic';
+    const hasSources = Array.isArray(metadata?.sources) && (metadata.sources as SourceEntry[]).length > 0;
     return (
-      <div className="w-full h-full flex items-center cursor-default">
-        <span className={`truncate text-sm ${opacityClass}`} title={cell.value}>
-          {cell.value}
-        </span>
-      </div>
+      <>
+        <div
+          className="w-full h-full flex items-center cursor-pointer group/enrich"
+          onClick={() => setExpanded(true)}
+        >
+          <span className={`truncate text-sm ${opacityClass} group-hover/enrich:text-violet-300 transition-colors`}>
+            {cell.value}
+          </span>
+          {hasSources && (
+            <ExternalLink className="w-3 h-3 ml-1 shrink-0 text-gray-600 group-hover/enrich:text-violet-400 transition-colors" />
+          )}
+          {onEnrichRow && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+              className="ml-auto opacity-0 group-hover/enrich:opacity-100 transition-opacity p-0.5 rounded hover:bg-violet-500/20 shrink-0"
+              title="Re-enrich this row"
+            >
+              <Zap className="w-3.5 h-3.5 text-violet-400" />
+            </button>
+          )}
+        </div>
+        {expanded && createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center"
+            onClick={() => { setExpanded(false); setCopied(false); }}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div
+              className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-violet-400" />
+                  <span className="text-sm font-medium text-gray-200">{columnLabel || 'Enrichment'}</span>
+                  {confidence < 1 && (
+                    <span className="text-xs text-gray-500 ml-1">
+                      {Math.round(confidence * 100)}% confidence
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(cell.value ?? '');
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    {copied ? <CheckCheck className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setExpanded(false); setCopied(false); }}
+                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="px-4 py-4 max-h-[60vh] overflow-y-auto">
+                <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
+                  {cell.value}
+                </p>
+                {(() => {
+                  const sources = (metadata?.sources ?? []) as SourceEntry[];
+                  if (sources.length === 0) return null;
+                  return (
+                    <div className="mt-4 pt-3 border-t border-gray-800">
+                      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Sources</p>
+                      <ul className="space-y-1.5">
+                        {sources.map((src, i) => (
+                          <li key={i} className="flex items-start gap-1.5 text-xs text-gray-400">
+                            <ExternalLink className="w-3 h-3 mt-0.5 shrink-0 text-gray-500" />
+                            {src.url ? (
+                              <a
+                                href={src.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:text-violet-300 transition-colors underline underline-offset-2 break-all"
+                              >
+                                {src.title || src.url}
+                              </a>
+                            ) : (
+                              <span>{src.title || 'Unknown source'}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      </>
     );
   }
 
   // Enrichment column with no value yet (empty / not yet run)
   if (isEnrichment && cell.status === 'none') {
     return (
-      <div className="w-full h-full flex items-center cursor-default">
+      <div className="w-full h-full flex items-center cursor-default group/enrich-await">
         <span className="text-gray-600 text-xs italic">Awaiting enrichment</span>
+        {onEnrichRow && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+            className="ml-auto opacity-0 group-hover/enrich-await:opacity-100 transition-opacity p-0.5 rounded hover:bg-violet-500/20"
+            title="Enrich this row"
+          >
+            <Zap className="w-3.5 h-3.5 text-violet-400" />
+          </button>
+        )}
       </div>
     );
   }

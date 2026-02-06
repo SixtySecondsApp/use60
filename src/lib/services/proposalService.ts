@@ -1513,3 +1513,680 @@ export async function disableProposalSharing(proposalId: string): Promise<boolea
     return false;
   }
 }
+
+// ==========================================
+// Proposal Generation Progress (REL-004)
+// ==========================================
+
+export interface ProposalGenerationProgress {
+  step: string;
+  percent: number;
+  message: string;
+  status: string;
+}
+
+/**
+ * Subscribe to proposal generation progress via Supabase Realtime.
+ *
+ * The edge function updates `generation_status` and
+ * `brand_config._generation_progress` on the proposals row as it works.
+ * This function subscribes to postgres_changes on that specific row so the
+ * client receives real-time updates without polling.
+ *
+ * @param proposalId  The UUID of the proposal whose generation progress to watch
+ * @param onProgress  Callback invoked on every Realtime UPDATE with progress info
+ * @returns           An unsubscribe function that removes the channel
+ */
+export function subscribeToProposalProgress(
+  proposalId: string,
+  onProgress: (progress: ProposalGenerationProgress) => void
+): () => void {
+  const channel = supabase
+    .channel(`proposal-progress-${proposalId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'proposals',
+        filter: `id=eq.${proposalId}`,
+      },
+      (payload: any) => {
+        const { generation_status, brand_config } = payload.new;
+        const progress = brand_config?._generation_progress;
+
+        onProgress({
+          step: progress?.step || generation_status,
+          percent: progress?.percent ?? (generation_status === 'complete' ? 100 : 0),
+          message: progress?.message || generation_status,
+          status: generation_status,
+        });
+      }
+    )
+    .subscribe();
+
+  // Return cleanup function
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ==========================================
+// Proposal Asset Uploads (BRD-002)
+// ==========================================
+
+/**
+ * Upload a logo file to proposal-assets storage bucket
+ */
+export async function uploadProposalLogo(
+  file: File,
+  orgId: string,
+  proposalId?: string
+): Promise<{ storage_path: string; public_url: string }> {
+  const userId = (await supabase.auth.getUser()).data.user?.id;
+  if (!userId) throw new Error('Not authenticated');
+
+  // Validate file
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Invalid file type. Allowed: PNG, JPG, SVG, WebP');
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    throw new Error('File too large. Maximum size: 2MB');
+  }
+
+  // Generate storage path
+  const ext = file.name.split('.').pop() || 'png';
+  const assetId = crypto.randomUUID();
+  const storagePath = `${orgId}/${userId}/${assetId}/logo.${ext}`;
+
+  // Upload to Supabase Storage
+  const { error: uploadError } = await supabase.storage
+    .from('proposal-assets')
+    .upload(storagePath, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (uploadError) throw uploadError;
+
+  // Get a signed URL since the bucket is private
+  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+    .from('proposal-assets')
+    .createSignedUrl(storagePath, 60 * 60); // 1 hour expiry
+
+  const publicUrl = signedUrlError ? '' : (signedUrlData?.signedUrl || '');
+
+  // Create proposal_assets record
+  const { error: assetError } = await supabase
+    .from('proposal_assets')
+    .insert({
+      proposal_id: proposalId || null,
+      org_id: orgId,
+      asset_type: 'logo',
+      storage_path: storagePath,
+      source: 'upload',
+      file_name: file.name,
+      file_size_bytes: file.size,
+      mime_type: file.type,
+      created_by: userId,
+    });
+
+  if (assetError) {
+    logger.warn('Failed to create proposal_assets record:', assetError);
+    // Don't throw - file is uploaded, record is secondary
+  }
+
+  return { storage_path: storagePath, public_url: publicUrl };
+}
+
+/**
+ * Get a signed URL for a private proposal asset
+ */
+export async function getProposalAssetUrl(
+  storagePath: string,
+  expiresInSeconds = 3600
+): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('proposal-assets')
+    .createSignedUrl(storagePath, expiresInSeconds);
+
+  if (error) {
+    logger.warn('Failed to get signed URL for proposal asset:', error);
+    return '';
+  }
+
+  return data?.signedUrl || '';
+}
+
+// ==========================================
+// DOCX & PDF Download Functions (DOC-003)
+// ==========================================
+
+/**
+ * Helper: decode a base64 string to a Uint8Array
+ */
+function base64ToBytes(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Helper: trigger a browser download from a Uint8Array
+ */
+function triggerBrowserDownload(bytes: Uint8Array, filename: string, mimeType: string) {
+  const blob = new Blob([bytes], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Download a DOCX version of a proposal.
+ * Invokes the proposal-generate-docx edge function, decodes the base64 response,
+ * and triggers a browser download.
+ */
+export async function downloadProposalDocx(proposalId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('proposal-generate-docx', {
+    body: { proposal_id: proposalId },
+  });
+
+  if (error) {
+    logger.error('Failed to generate DOCX:', error);
+    throw new Error(error.message || 'Failed to generate DOCX');
+  }
+
+  if (!data?.docx_base64) {
+    throw new Error('No DOCX data returned from server');
+  }
+
+  const bytes = base64ToBytes(data.docx_base64);
+  const filename = data.filename || `proposal-${proposalId.slice(0, 8)}.docx`;
+  triggerBrowserDownload(bytes, filename, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+}
+
+/**
+ * Download a PDF version of a proposal.
+ * Invokes the proposal-generate-pdf edge function, decodes the base64 response,
+ * and triggers a browser download.
+ */
+export async function downloadProposalPdf(proposalId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('proposal-generate-pdf', {
+    body: { proposal_id: proposalId },
+  });
+
+  if (error) {
+    logger.error('Failed to generate PDF:', error);
+    throw new Error(error.message || 'Failed to generate PDF');
+  }
+
+  if (!data?.pdf_base64) {
+    throw new Error('No PDF data returned from server');
+  }
+
+  const bytes = base64ToBytes(data.pdf_base64);
+  const filename = data.filename || `proposal-${proposalId.slice(0, 8)}.pdf`;
+  triggerBrowserDownload(bytes, filename, 'application/pdf');
+}
+
+// ==========================================
+// Logo Resolution Chain (BRD-003)
+// ==========================================
+
+/**
+ * Resolve the best logo for a proposal using a priority fallback chain:
+ * 1. Manual upload in proposal_assets (highest priority)
+ * 2. Template-stored logo (from brand_config.logo_url if template is set)
+ * 3. Logo.dev domain lookup using the contact's email domain
+ * 4. Text fallback (returns null logo_url with fallback_text)
+ */
+export async function resolveClientLogo(
+  orgId: string,
+  contactEmail?: string | null,
+  proposalId?: string | null,
+  templateBrandConfig?: { logo_url?: string } | null
+): Promise<{ logo_url: string | null; source: string; fallback_text?: string }> {
+  // 1) Check for manually uploaded logo in proposal_assets
+  if (proposalId) {
+    const { data: assetLogo } = await supabase
+      .from('proposal_assets')
+      .select('storage_path')
+      .eq('proposal_id', proposalId)
+      .eq('asset_type', 'logo')
+      .eq('source', 'upload')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (assetLogo?.storage_path) {
+      const url = await getProposalAssetUrl(assetLogo.storage_path);
+      if (url) return { logo_url: url, source: 'upload' };
+    }
+  }
+
+  // Also check org-level uploaded logos (not tied to a specific proposal)
+  const { data: orgLogo } = await supabase
+    .from('proposal_assets')
+    .select('storage_path')
+    .eq('org_id', orgId)
+    .eq('asset_type', 'logo')
+    .eq('source', 'upload')
+    .is('proposal_id', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (orgLogo?.storage_path) {
+    const url = await getProposalAssetUrl(orgLogo.storage_path);
+    if (url) return { logo_url: url, source: 'upload' };
+  }
+
+  // 2) Template-stored logo
+  if (templateBrandConfig?.logo_url) {
+    return { logo_url: templateBrandConfig.logo_url, source: 'template' };
+  }
+
+  // 3) Logo.dev domain lookup
+  if (contactEmail) {
+    const emailDomain = contactEmail.split('@')[1];
+    if (emailDomain && !emailDomain.match(/^(gmail|yahoo|hotmail|outlook|icloud|aol)\./i)) {
+      try {
+        const { data: logoData, error: logoError } = await supabase.functions.invoke('fetch-logo', {
+          body: { domain: emailDomain },
+        });
+
+        if (!logoError && logoData?.logo_url) {
+          return { logo_url: logoData.logo_url, source: 'logo_dev' };
+        }
+
+        if (!logoError && logoData?.fallback_text) {
+          return { logo_url: null, source: 'fallback', fallback_text: logoData.fallback_text };
+        }
+      } catch (e) {
+        logger.warn('Logo.dev lookup failed, using fallback:', e);
+      }
+    }
+  }
+
+  // 4) Text fallback
+  return { logo_url: null, source: 'fallback' };
+}
+
+// ==========================================
+// Template Save (TPL-001 placeholder export)
+// ==========================================
+
+/**
+ * Save a completed proposal as a reusable template.
+ */
+export async function saveAsTemplate(
+  proposalId: string,
+  name: string,
+  description: string,
+  orgId: string
+): Promise<{ id: string }> {
+  const userId = (await supabase.auth.getUser()).data.user?.id;
+  if (!userId) throw new Error('Not authenticated');
+
+  // Fetch proposal sections and brand_config
+  const { data: proposal, error: fetchError } = await supabase
+    .from('proposals')
+    .select('sections, brand_config')
+    .eq('id', proposalId)
+    .single();
+
+  if (fetchError || !proposal) {
+    throw new Error('Failed to fetch proposal for template creation');
+  }
+
+  const { data: template, error: insertError } = await supabase
+    .from('proposal_templates')
+    .insert({
+      name,
+      description,
+      org_id: orgId,
+      sections: proposal.sections,
+      brand_config: proposal.brand_config,
+      category: 'org',
+      created_by: userId,
+      user_id: userId,
+    })
+    .select('id')
+    .single();
+
+  if (insertError) throw insertError;
+  return { id: template.id };
+}
+
+// ==========================================
+// Structured Template CRUD (STR-002)
+// ==========================================
+
+export interface StructuredTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  org_id: string | null;
+  sections: Array<{
+    id: string;
+    type: string;
+    title: string;
+    content: string;
+    order: number;
+  }>;
+  brand_config: Record<string, unknown> | null;
+  category: 'starter' | 'org' | 'personal';
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Fetch all structured templates (with sections JSONB) visible to the user.
+ * Returns global starters + org templates + personal templates.
+ */
+export async function getStructuredTemplates(): Promise<StructuredTemplate[]> {
+  try {
+    const { data, error } = await supabase
+      .from('proposal_templates')
+      .select('id, name, description, org_id, sections, brand_config, category, created_by, created_at, updated_at')
+      .not('sections', 'is', null)
+      .order('category', { ascending: true })
+      .order('name', { ascending: true });
+
+    if (error) {
+      logger.error('Error fetching structured templates:', error);
+      return [];
+    }
+
+    return (data || []) as StructuredTemplate[];
+  } catch (error) {
+    logger.error('Exception fetching structured templates:', error);
+    return [];
+  }
+}
+
+/**
+ * Update a structured template's name, description, sections, or brand_config.
+ */
+export async function updateStructuredTemplate(
+  id: string,
+  updates: Partial<Pick<StructuredTemplate, 'name' | 'description' | 'sections' | 'brand_config'>>
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('proposal_templates')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) {
+      logger.error('Error updating structured template:', error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error('Exception updating structured template:', error);
+    return false;
+  }
+}
+
+/**
+ * Delete a structured template. Only org/personal templates can be deleted (not global starters).
+ */
+export async function deleteStructuredTemplate(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('proposal_templates')
+      .delete()
+      .eq('id', id)
+      .not('org_id', 'is', null); // Safety: never delete global starters
+
+    if (error) {
+      logger.error('Error deleting structured template:', error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error('Exception deleting structured template:', error);
+    return false;
+  }
+}
+
+/**
+ * Duplicate a template, creating a copy owned by the given org.
+ */
+export async function duplicateStructuredTemplate(
+  templateId: string,
+  orgId: string
+): Promise<StructuredTemplate | null> {
+  try {
+    const userId = (await supabase.auth.getUser()).data.user?.id;
+    if (!userId) throw new Error('Not authenticated');
+
+    // Fetch original
+    const { data: original, error: fetchError } = await supabase
+      .from('proposal_templates')
+      .select('name, description, sections, brand_config')
+      .eq('id', templateId)
+      .single();
+
+    if (fetchError || !original) {
+      logger.error('Error fetching template to duplicate:', fetchError);
+      return null;
+    }
+
+    // Insert copy
+    const { data: copy, error: insertError } = await supabase
+      .from('proposal_templates')
+      .insert({
+        name: `${original.name} (Copy)`,
+        description: original.description,
+        org_id: orgId,
+        sections: original.sections,
+        brand_config: original.brand_config,
+        category: 'org',
+        created_by: userId,
+      })
+      .select('id, name, description, org_id, sections, brand_config, category, created_by, created_at, updated_at')
+      .single();
+
+    if (insertError) {
+      logger.error('Error duplicating template:', insertError);
+      return null;
+    }
+
+    return copy as StructuredTemplate;
+  } catch (error) {
+    logger.error('Exception duplicating template:', error);
+    return null;
+  }
+}
+
+/**
+ * Get org logos from proposal_assets
+ */
+export async function getOrgLogos(orgId: string): Promise<Array<{
+  id: string;
+  storage_path: string;
+  file_name: string;
+  created_at: string;
+}>> {
+  const { data, error } = await supabase
+    .from('proposal_assets')
+    .select('id, storage_path, file_name, created_at')
+    .eq('org_id', orgId)
+    .eq('asset_type', 'logo')
+    .eq('source', 'upload')
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error) {
+    logger.warn('Failed to fetch org logos:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+// ==========================================
+// Upload Example → Auto-Create Template (UPL-003)
+// ==========================================
+
+export interface TemplateExtraction {
+  sections: Array<{
+    id: string;
+    type: string;
+    title: string;
+    content_hint: string;
+    order: number;
+  }>;
+  brand_config: {
+    primary_color: string | null;
+    secondary_color: string | null;
+    font_family: string | null;
+  };
+  metadata: {
+    page_count: number | null;
+    word_count: number;
+    detected_type: string;
+    file_type: 'docx' | 'pdf';
+  };
+}
+
+/**
+ * Upload a .docx or .pdf example proposal, parse it, and return the extracted template structure.
+ * Flow: upload to storage → create asset record → invoke proposal-parse-document edge function.
+ */
+export async function uploadAndParseDocument(
+  file: File,
+  orgId: string
+): Promise<{ extraction: TemplateExtraction; assetId: string }> {
+  const userId = (await supabase.auth.getUser()).data.user?.id;
+  if (!userId) throw new Error('Not authenticated');
+
+  // Validate file type
+  const allowedTypes = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Invalid file type. Only .docx and .pdf files are supported.');
+  }
+  if (file.size > 15 * 1024 * 1024) {
+    throw new Error('File too large. Maximum size: 15MB.');
+  }
+
+  // Generate storage path
+  const ext = file.name.split('.').pop() || 'pdf';
+  const assetId = crypto.randomUUID();
+  const storagePath = `${orgId}/${userId}/${assetId}/document.${ext}`;
+
+  // Upload to Supabase Storage
+  const { error: uploadError } = await supabase.storage
+    .from('proposal-assets')
+    .upload(storagePath, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+  // Create proposal_assets record
+  const { data: asset, error: assetError } = await supabase
+    .from('proposal_assets')
+    .insert({
+      id: assetId,
+      org_id: orgId,
+      asset_type: 'document',
+      storage_path: storagePath,
+      source: 'upload',
+      file_name: file.name,
+      file_size_bytes: file.size,
+      mime_type: file.type,
+      created_by: userId,
+    })
+    .select('id')
+    .single();
+
+  if (assetError) {
+    logger.error('Failed to create asset record:', assetError);
+    throw new Error('Failed to register uploaded document.');
+  }
+
+  // Invoke parse edge function
+  const { data, error: invokeError } = await supabase.functions.invoke('proposal-parse-document', {
+    body: { asset_id: asset.id },
+  });
+
+  if (invokeError) {
+    throw new Error(`Document analysis failed: ${invokeError.message}`);
+  }
+
+  return { extraction: data as TemplateExtraction, assetId: asset.id };
+}
+
+/**
+ * Create a structured template from an AI-extracted document analysis.
+ * Converts extraction sections (with content_hint) into template sections (with content placeholder).
+ */
+export async function createTemplateFromExtraction(
+  name: string,
+  description: string,
+  extraction: TemplateExtraction,
+  orgId: string,
+  sourceAssetId: string
+): Promise<StructuredTemplate | null> {
+  const userId = (await supabase.auth.getUser()).data.user?.id;
+  if (!userId) throw new Error('Not authenticated');
+
+  // Convert extraction sections to template sections
+  const sections = extraction.sections.map((s) => ({
+    id: s.id,
+    type: s.type,
+    title: s.title,
+    content: s.content_hint, // Use the hint as placeholder content for AI generation
+    order: s.order,
+  }));
+
+  const brandConfig: Record<string, unknown> = {};
+  if (extraction.brand_config.primary_color) brandConfig.primary_color = extraction.brand_config.primary_color;
+  if (extraction.brand_config.secondary_color) brandConfig.secondary_color = extraction.brand_config.secondary_color;
+  if (extraction.brand_config.font_family) brandConfig.font_family = extraction.brand_config.font_family;
+
+  const { data, error } = await supabase
+    .from('proposal_templates')
+    .insert({
+      name,
+      description,
+      org_id: orgId,
+      sections,
+      brand_config: Object.keys(brandConfig).length > 0 ? brandConfig : null,
+      category: 'org',
+      created_by: userId,
+      source_document_id: sourceAssetId,
+      type: 'proposal',
+      is_default: false,
+      content: '',
+    })
+    .select('id, name, description, org_id, sections, brand_config, category, created_by, created_at, updated_at')
+    .single();
+
+  if (error) {
+    logger.error('Failed to create template from extraction:', error);
+    return null;
+  }
+
+  return data as StructuredTemplate;
+}

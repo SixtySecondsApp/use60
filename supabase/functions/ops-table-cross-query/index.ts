@@ -276,7 +276,7 @@ serve(async (req: Request) => {
     // Get table
     const { data: table } = await supabase
       .from('dynamic_tables')
-      .select('id, org_id')
+      .select('id, organization_id')
       .eq('id', tableId)
       .maybeSingle();
 
@@ -284,8 +284,10 @@ serve(async (req: Request) => {
       return errorResponse('Table not found', req, 404);
     }
 
+    const tableWithOrg = { ...table, org_id: table.organization_id };
+
     // Get available data sources
-    const availableSources = await getAvailableDataSources(supabase, table.org_id);
+    const availableSources = await getAvailableDataSources(supabase, tableWithOrg.org_id);
 
     // Parse query
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });

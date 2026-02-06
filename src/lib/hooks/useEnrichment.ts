@@ -52,7 +52,7 @@ export function useEnrichment(tableId: string) {
   const queryClient = useQueryClient();
 
   // --------------------------------------------------------------------------
-  // Enrichment Jobs Query (polls every 3s when active jobs exist)
+  // Enrichment Jobs Query (polls every 1.5s when active jobs exist)
   // --------------------------------------------------------------------------
 
   const {
@@ -74,8 +74,8 @@ export function useEnrichment(tableId: string) {
     enabled: !!tableId,
     refetchInterval: (query) => {
       const jobs = query.state.data;
-      // Poll every 3s when there are active jobs
-      return jobs && jobs.length > 0 ? 3000 : false;
+      // Poll every 1.5s when there are active jobs for live row-by-row updates
+      return jobs && jobs.length > 0 ? 1500 : false;
     },
   });
 
@@ -94,7 +94,7 @@ export function useEnrichment(tableId: string) {
   const isEnriching = activeJob !== null;
 
   // --------------------------------------------------------------------------
-  // Start Enrichment Mutation
+  // Invoke Enrichment (shared helper)
   // --------------------------------------------------------------------------
 
   /**
@@ -124,8 +124,8 @@ export function useEnrichment(tableId: string) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.jobs(tableId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
 
-      // Continue with next batch (small delay to avoid hammering)
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Continue with next batch (short delay for faster visual feedback)
+      await new Promise((resolve) => setTimeout(resolve, 200));
       return invokeEnrichment({
         columnId: params.columnId,
         resumeJobId: result.job_id,
@@ -134,6 +134,65 @@ export function useEnrichment(tableId: string) {
 
     return result;
   };
+
+  // --------------------------------------------------------------------------
+  // Optimistic Cache Update Helper
+  // --------------------------------------------------------------------------
+
+  /**
+   * Optimistically set target cells to 'pending' in the React Query cache.
+   * Provides instant visual feedback before the edge function round-trip.
+   *
+   * Note: The actual table data query key includes sort/filter state
+   * (e.g. ['ops-table-data', tableId, sortState, filterConditions]), so we
+   * resolve the real key from the cache via findAll (prefix match) rather
+   * than using the short key which only works for cancel/invalidate.
+   */
+  const optimisticPendingUpdate = async (columnId: string, rowIds?: string[]) => {
+    const filter = { queryKey: QUERY_KEYS.tableData(tableId) };
+    await queryClient.cancelQueries(filter);
+
+    // Resolve the actual query key (includes sort/filter state)
+    const cached = queryClient.getQueryCache().findAll(filter);
+    if (cached.length === 0) return undefined;
+
+    const actualKey = cached[0].queryKey;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const previousData = queryClient.getQueryData<any>(actualKey);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    queryClient.setQueryData(actualKey, (old: any) => {
+      if (!old?.rows) return old;
+      return {
+        ...old,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rows: old.rows.map((row: any) => {
+          if (rowIds && !rowIds.includes(row.id)) return row;
+
+          const updatedCells = { ...row.cells };
+          for (const [key, cell] of Object.entries(updatedCells)) {
+            if ((cell as { column_id?: string }).column_id === columnId) {
+              updatedCells[key] = {
+                ...(cell as object),
+                value: null,
+                confidence: null,
+                status: 'pending',
+                error_message: null,
+                metadata: null,
+              };
+            }
+          }
+          return { ...row, cells: updatedCells };
+        }),
+      };
+    });
+
+    return { previousData, queryKey: actualKey };
+  };
+
+  // --------------------------------------------------------------------------
+  // Start Enrichment Mutation (bulk — with optimistic update)
+  // --------------------------------------------------------------------------
 
   const startEnrichmentMutation = useMutation({
     mutationFn: async ({
@@ -145,15 +204,49 @@ export function useEnrichment(tableId: string) {
     }) => {
       return invokeEnrichment({ columnId, rowIds });
     },
+    onMutate: async ({ columnId, rowIds }) => {
+      return await optimisticPendingUpdate(columnId, rowIds);
+    },
+    onError: (error: Error, _vars, context) => {
+      // Rollback optimistic update on failure
+      if (context?.previousData && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previousData);
+      }
+      toast.error(`Enrichment failed: ${error.message}`);
+    },
     onSuccess: () => {
-      // Refresh jobs list to pick up the completed job
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.jobs(tableId) });
-      // Refresh table data to show enriched cells
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
       toast.success('Enrichment complete');
     },
-    onError: (error: Error) => {
+  });
+
+  // --------------------------------------------------------------------------
+  // Single-Row Enrichment Mutation (no toast — cell update IS the feedback)
+  // --------------------------------------------------------------------------
+
+  const singleRowEnrichmentMutation = useMutation({
+    mutationFn: async ({
+      columnId,
+      rowId,
+    }: {
+      columnId: string;
+      rowId: string;
+    }) => {
+      return invokeEnrichment({ columnId, rowIds: [rowId] });
+    },
+    onMutate: async ({ columnId, rowId }) => {
+      return await optimisticPendingUpdate(columnId, [rowId]);
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.previousData && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previousData);
+      }
       toast.error(`Enrichment failed: ${error.message}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.jobs(tableId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
     },
   });
 
@@ -215,6 +308,7 @@ export function useEnrichment(tableId: string) {
 
   return {
     startEnrichment: startEnrichmentMutation.mutate,
+    startSingleRowEnrichment: singleRowEnrichmentMutation.mutate,
     enrichmentJobs,
     activeJob,
     progress,
