@@ -13,9 +13,9 @@
  * Phase 7 update: Added PlatformSkillConfigStep for platform-controlled skills
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useOnboardingV2Store, type OnboardingV2Step, isPersonalEmailDomain } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -52,10 +52,16 @@ interface OnboardingV2Props {
   userEmail?: string;
 }
 
+// Steps where resume/start-fresh choice should be shown
+const RESUMABLE_STEPS: OnboardingV2Step[] = ['enrichment_loading', 'enrichment_result', 'skills_config'];
+
 export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2Props) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [showResumeChoice, setShowResumeChoice] = useState(false);
+  const [savedStateForChoice, setSavedStateForChoice] = useState<any>(null);
+  const [isStartingFresh, setIsStartingFresh] = useState(false);
   const {
     currentStep,
     domain: storeDomain,
@@ -64,6 +70,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
     setUserEmail,
     setStep,
     startEnrichment,
+    resetAndCleanup,
   } = useOnboardingV2Store();
 
   // NOTE: Removed org membership redirect check because:
@@ -84,7 +91,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
       if (!user) return;
 
       // Check for saved state in localStorage
-      const savedState = localStorage.getItem(`sixty_onboarding_${user.id}`);
+      const savedState = localStorage.getItem(`sixty_onboarding_${user.email || user.id}`);
 
       if (savedState) {
         // Validate session is still active before restoring
@@ -111,8 +118,20 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
             if (parsed.organizationId && !orgStillExists) {
               // Organization was deleted — clear stale state and start fresh
               console.log('[OnboardingV2] Saved organization no longer exists, starting fresh');
-              localStorage.removeItem(`sixty_onboarding_${user.id}`);
+              localStorage.removeItem(`sixty_onboarding_${user.email || user.id}`);
               setStep('website_input');
+              return;
+            }
+
+            // If returning to a resumable step with an existing org, show choice dialog
+            if (
+              parsed.organizationId &&
+              orgStillExists &&
+              RESUMABLE_STEPS.includes(parsed.currentStep)
+            ) {
+              console.log('[OnboardingV2] Showing resume/start-fresh choice for step:', parsed.currentStep);
+              setSavedStateForChoice(parsed);
+              setShowResumeChoice(true);
               return;
             }
 
@@ -144,12 +163,12 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
           } catch (error) {
             console.error('[OnboardingV2] Failed to parse saved state:', error);
             // Clear invalid state
-            localStorage.removeItem(`sixty_onboarding_${user.id}`);
+            localStorage.removeItem(`sixty_onboarding_${user.email || user.id}`);
           }
         } else {
           // Session expired - clear stale state
           console.log('[OnboardingV2] Session expired, clearing stale state');
-          localStorage.removeItem(`sixty_onboarding_${user.id}`);
+          localStorage.removeItem(`sixty_onboarding_${user.email || user.id}`);
         }
       }
     };
@@ -281,6 +300,55 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
     }
   }, [currentStep, storeDomain, domain, organizationId, userEmail, startEnrichment]);
 
+  // Handle "Resume" choice — apply saved state and continue
+  const handleResume = () => {
+    if (!savedStateForChoice) return;
+    const parsed = savedStateForChoice;
+
+    if (parsed.domain) setDomain(parsed.domain);
+    if (parsed.organizationId) setOrganizationId(parsed.organizationId);
+    if (parsed.websiteUrl) useOnboardingV2Store.setState({ websiteUrl: parsed.websiteUrl });
+    if (parsed.manualData) useOnboardingV2Store.setState({ manualData: parsed.manualData });
+    if (parsed.enrichment) useOnboardingV2Store.setState({ enrichment: parsed.enrichment });
+    if (parsed.skillConfigs) useOnboardingV2Store.setState({ skillConfigs: parsed.skillConfigs });
+
+    if (parsed.pollingStartTime) {
+      useOnboardingV2Store.setState({
+        pollingStartTime: parsed.pollingStartTime,
+        pollingAttempts: parsed.pollingAttempts || 0,
+      });
+    }
+
+    if (parsed.currentStep === 'enrichment_loading' && parsed.isEnrichmentLoading) {
+      setStep('enrichment_loading');
+      toast.info('Resuming enrichment from where you left off...');
+    } else if (parsed.currentStep) {
+      setStep(parsed.currentStep);
+      toast.info('Restored your progress');
+    }
+
+    setShowResumeChoice(false);
+    setSavedStateForChoice(null);
+  };
+
+  // Handle "Start Fresh" choice — cleanup org and restart
+  const handleStartFresh = async () => {
+    if (isStartingFresh) return;
+    setIsStartingFresh(true);
+
+    try {
+      // Temporarily set the org ID so resetAndCleanup knows what to delete
+      if (savedStateForChoice?.organizationId) {
+        setOrganizationId(savedStateForChoice.organizationId);
+      }
+      await resetAndCleanup();
+    } finally {
+      setIsStartingFresh(false);
+      setShowResumeChoice(false);
+      setSavedStateForChoice(null);
+    }
+  };
+
   const renderStep = () => {
     const effectiveDomain = storeDomain || domain || '';
 
@@ -322,6 +390,44 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
         );
     }
   };
+
+  // Show resume vs start fresh choice dialog
+  if (showResumeChoice) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 bg-gray-950">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-md mx-auto px-4"
+        >
+          <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-violet-500/20 flex items-center justify-center mx-auto mb-6">
+              <span className="text-3xl">👋</span>
+            </div>
+            <h2 className="text-xl font-bold text-white mb-3">Welcome back</h2>
+            <p className="text-gray-400 mb-6">
+              You have an onboarding session in progress. Would you like to continue where you left off or start fresh?
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleResume}
+                className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors"
+              >
+                Resume where I left off
+              </button>
+              <button
+                onClick={handleStartFresh}
+                disabled={isStartingFresh}
+                className="w-full py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-medium transition-colors border border-gray-700 disabled:opacity-50"
+              >
+                {isStartingFresh ? 'Cleaning up...' : 'Start fresh'}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 bg-gray-950">

@@ -18,15 +18,27 @@ import {
   Clock,
   XCircle,
   Pause,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import type { CustomerWithDetails, SubscriptionPlan, SubscriptionStatus } from '@/lib/types/saasAdmin';
 import { CustomerDetailModal } from './CustomerDetailModal';
 
@@ -35,6 +47,7 @@ interface CustomerListProps {
   plans: SubscriptionPlan[];
   isLoading: boolean;
   onRefresh: () => void;
+  onDelete?: (orgId: string) => Promise<void>;
 }
 
 const statusConfig: Record<
@@ -73,8 +86,26 @@ const statusConfig: Record<
   },
 };
 
-export function CustomerList({ customers, plans, isLoading, onRefresh }: CustomerListProps) {
+export function CustomerList({ customers, plans, isLoading, onRefresh, onDelete }: CustomerListProps) {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithDetails | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CustomerWithDetails | null>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteTarget || !onDelete) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(deleteTarget.id);
+      setDeleteTarget(null);
+      setConfirmText('');
+    } catch {
+      // Reset dialog state so user isn't stuck with stale confirmation
+      setConfirmText('');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -105,7 +136,7 @@ export function CustomerList({ customers, plans, isLoading, onRefresh }: Custome
           No customers yet
         </h3>
         <p className="text-gray-500 dark:text-gray-400">
-          When organizations sign up, they'll appear here.
+          When organizations sign up, they&apos;ll appear here.
         </p>
       </div>
     );
@@ -198,6 +229,21 @@ export function CustomerList({ customers, plans, isLoading, onRefresh }: Custome
                         <Edit className="w-4 h-4 mr-2" />
                         Edit Subscription
                       </DropdownMenuItem>
+                      {onDelete && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setDeleteTarget(customer);
+                              setConfirmText('');
+                            }}
+                            className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete Organization
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -216,6 +262,77 @@ export function CustomerList({ customers, plans, isLoading, onRefresh }: Custome
           onRefresh={onRefresh}
         />
       )}
+
+      {/* Delete Organization Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => {
+        if (!open) {
+          setDeleteTarget(null);
+          setConfirmText('');
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600 dark:text-red-400">
+              Permanently Delete Organization
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p className="text-gray-600 dark:text-gray-300">
+                  You are about to permanently delete <span className="font-semibold text-gray-900 dark:text-white">{deleteTarget?.name}</span>{' '}
+                  ({deleteTarget?.member_count || 0} member{deleteTarget?.member_count !== 1 ? 's' : ''}).
+                </p>
+
+                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg p-3 space-y-2">
+                  <p className="text-sm font-medium text-red-700 dark:text-red-400">This action will:</p>
+                  <ul className="text-sm space-y-1 ml-2 text-red-600 dark:text-red-300/80">
+                    <li>- Remove the organization and all its settings</li>
+                    <li>- Delete org integrations, AI data, and billing records</li>
+                    <li>- Unassign all members from this organization</li>
+                    <li>- Force all members to complete onboarding again</li>
+                  </ul>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-400 mt-2">
+                    User personal data (deals, contacts, activities) will be preserved.
+                  </p>
+                  <p className="text-xs text-red-500 dark:text-red-300 mt-2 font-semibold">
+                    This action cannot be undone.
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <label className="text-sm text-gray-600 dark:text-gray-400">
+                    Type <span className="font-mono font-semibold text-gray-900 dark:text-white">{deleteTarget?.name}</span> to confirm:
+                  </label>
+                  <Input
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder="Organization name"
+                    className="bg-white dark:bg-gray-800/50 border-gray-300 dark:border-gray-700"
+                    disabled={isDeleting}
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={confirmText !== deleteTarget?.name || isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Yes, Delete Organization'
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

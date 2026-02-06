@@ -289,3 +289,13 @@ verify_jwt = false
 # We handle validation by checking token existence and expiry in the database
 [functions.validate-waitlist-token]
 verify_jwt = false
+
+# Delete organization - called from admin panel with user JWT
+# We handle auth verification manually inside the function (admin check)
+[functions.delete-organization]
+verify_jwt = false
+
+# Cleanup incomplete onboarding - scheduled/manual cleanup of abandoned org records
+# Called by pg_cron or admin trigger with CRON_SECRET or service role key
+[functions.cleanup-incomplete-onboarding]
+verify_jwt = false

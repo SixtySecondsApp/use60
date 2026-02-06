@@ -5,7 +5,7 @@
  * Displays tasks completing as the AI scrapes and analyzes the website.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Loader } from 'lucide-react';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
@@ -29,6 +29,7 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
   const [startTime] = useState(Date.now());
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showStillWorkingMessage, setShowStillWorkingMessage] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const {
     organizationId: storeOrgId,
     startEnrichment,
@@ -39,7 +40,18 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
     enrichmentSource,
     enrichmentRetryCount,
     pollingStartTime,
+    resetAndCleanup,
   } = useOnboardingV2Store();
+
+  const handleStartOver = useCallback(async () => {
+    if (isResetting) return;
+    setIsResetting(true);
+    try {
+      await resetAndCleanup();
+    } finally {
+      setIsResetting(false);
+    }
+  }, [isResetting, resetAndCleanup]);
 
   // Use organizationId from store (which gets updated when new org is created)
   // Fall back to prop if store is empty
@@ -391,10 +403,11 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
         {/* Start Over Link */}
         <div className="mt-8 pt-6 border-t border-gray-800/50">
           <button
-            onClick={() => useOnboardingV2Store.getState().reset()}
-            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+            onClick={handleStartOver}
+            disabled={isResetting}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors disabled:opacity-50"
           >
-            Start Over
+            {isResetting ? 'Resetting...' : 'Start over'}
           </button>
         </div>
       </div>
