@@ -1,14 +1,12 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { formatDistanceToNow } from 'date-fns';
 import {
   ArrowLeft,
   Loader2,
   Pencil,
   Check,
   X,
-  Clock,
   Rows3,
   Sparkles,
   FileSpreadsheet,
@@ -20,6 +18,12 @@ import {
   Download,
   Copy,
   Zap,
+  BookOpen,
+  GitBranch,
+  HelpCircle,
+  Save,
+  Clock,
+  List,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -27,18 +31,25 @@ import { OpsTableService } from '@/lib/services/opsTableService';
 import { OpsTable } from '@/components/ops/OpsTable';
 import { AddColumnModal } from '@/components/ops/AddColumnModal';
 import { ColumnHeaderMenu } from '@/components/ops/ColumnHeaderMenu';
+import { EditEnrichmentModal } from '@/components/ops/EditEnrichmentModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
 import { BulkActionsBar } from '@/components/ops/BulkActionsBar';
-import { HubSpotPushModal } from '@/components/ops/HubSpotPushModal';
+import { HubSpotPushModal, type HubSpotPushConfig } from '@/components/ops/HubSpotPushModal';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 import { ViewSelector } from '@/components/ops/ViewSelector';
 import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
-import type { SavedView, FilterCondition, OpsTableColumn } from '@/lib/services/opsTableService';
+import { ViewConfigPanel, normalizeSortConfig, type ViewConfigState } from '@/components/ops/ViewConfigPanel';
+import type { SavedView, FilterCondition, OpsTableColumn, SortConfig, GroupConfig, AggregateType } from '@/lib/services/opsTableService';
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
+import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { useIntegrationPolling } from '@/lib/hooks/useIntegrationStatus';
 import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
+import { useHubSpotWriteBack } from '@/lib/hooks/useHubSpotWriteBack';
+import { HubSpotSyncHistory } from '@/components/ops/HubSpotSyncHistory';
+import { HubSpotSyncSettingsModal } from '@/components/ops/HubSpotSyncSettingsModal';
+import { SaveAsHubSpotListModal } from '@/components/ops/SaveAsHubSpotListModal';
 import { useOpsRules } from '@/lib/hooks/useOpsRules';
 import { RuleBuilder } from '@/components/ops/RuleBuilder';
 import { RuleList } from '@/components/ops/RuleList';
@@ -47,12 +58,53 @@ import { AiQuerySummaryCard, type SummaryData } from '@/components/ops/AiQuerySu
 import { AiTransformPreviewModal, type TransformPreviewData } from '@/components/ops/AiTransformPreviewModal';
 import { AiDeduplicatePreviewModal, type DeduplicatePreviewData } from '@/components/ops/AiDeduplicatePreviewModal';
 import { AiQueryBar } from '@/components/ops/AiQueryBar';
+import { AiChatThread } from '@/components/ops/AiChatThread';
+import { AiInsightsBanner } from '@/components/ops/AiInsightsBanner';
+import { WorkflowList } from '@/components/ops/WorkflowList';
+import { WorkflowBuilder } from '@/components/ops/WorkflowBuilder';
+import { AiRecipeLibrary } from '@/components/ops/AiRecipeLibrary';
+import { AutomationsDropdown } from '@/components/ops/AutomationsDropdown';
+import { CrossQueryResultPanel } from '@/components/ops/CrossQueryResultPanel';
+import { QuickFilterBar } from '@/components/ops/QuickFilterBar';
+import { SmartViewSuggestions } from '@/components/ops/SmartViewSuggestions';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
 
 // ---------------------------------------------------------------------------
 // Service singleton
 // ---------------------------------------------------------------------------
 
 const tableService = new OpsTableService(supabase);
+
+// ---------------------------------------------------------------------------
+// Normalize formatting rules from DB (handles old + new formats)
+// ---------------------------------------------------------------------------
+
+function normalizeFormattingRules(raw: any[]): FormattingRule[] {
+  if (!raw || !Array.isArray(raw)) return [];
+
+  return raw.flatMap((rule: any) => {
+    // New format: flat {column_key, operator, value, style, scope}
+    if (rule.column_key && rule.operator) return [rule as FormattingRule];
+
+    // Old format: {conditions: [...], style: {bg_color, text_color}, label}
+    if (rule.conditions && Array.isArray(rule.conditions)) {
+      return rule.conditions.map((cond: any) => ({
+        id: cond.id || crypto.randomUUID(),
+        column_key: cond.column_key,
+        operator: cond.operator,
+        value: cond.value || '',
+        scope: 'row' as const,
+        style: rule.style?.backgroundColor
+          ? rule.style // Already CSS format
+          : convertAIStyleToCSS(rule.style || {}), // Convert from Tailwind
+        label: rule.label,
+      }));
+    }
+
+    return []; // Skip unrecognized format
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Source badge config
@@ -76,6 +128,8 @@ function OpsDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: authUser } = useAuthUser();
+  const currentUserId = authUser?.id;
 
   // ---- Local state ----
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -84,7 +138,7 @@ function OpsDetailPage() {
     columnId: string;
     anchorRect: DOMRect;
   } | null>(null);
-  const [sortState, setSortState] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const [sortState, setSortState] = useState<SortConfig | SortConfig[] | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [queryInput, setQueryInput] = useState('');
@@ -99,11 +153,52 @@ function OpsDetailPage() {
     anchorRect: DOMRect;
     editIndex?: number;
   } | null>(null);
+
+  // OI-028: Chat session state
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessionMessages, setSessionMessages] = useState<any[]>([]);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotPush, setShowHubSpotPush] = useState(false);
+  const [editEnrichmentColumn, setEditEnrichmentColumn] = useState<OpsTableColumn | null>(null);
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+  const [showViewConfigPanel, setShowViewConfigPanel] = useState(false);
+  const [editingView, setEditingView] = useState<SavedView | null>(null);
+  const [groupConfig, setGroupConfig] = useState<GroupConfig | null>(null);
+  const [summaryConfig, setSummaryConfig] = useState<Record<string, AggregateType> | null>(null);
+  const [viewSuggestions, setViewSuggestions] = useState<Array<{
+    name: string;
+    description: string;
+    filterConditions: FilterCondition[];
+    sortConfig: SortConfig[];
+  }>>([]);
+  const [nlViewConfig, setNlViewConfig] = useState<ViewConfigState | null>(null);
+  const [nlQueryLoading, setNlQueryLoading] = useState(false);
+
+  // Snapshot state before panel opens so we can revert on cancel
+  const preConfigSnapshot = useRef<{
+    filters: FilterCondition[];
+    sort: SortConfig[];
+    columnOrder: string[] | null;
+  } | null>(null);
+
+  // ---- OI: New feature state ----
+  const [showWorkflows, setShowWorkflows] = useState(false);
+  const [showWorkflowBuilder, setShowWorkflowBuilder] = useState(false);
+  const [showRecipeLibrary, setShowRecipeLibrary] = useState(false);
+  const [showSyncHistory, setShowSyncHistory] = useState(false);
+  const [showSyncSettings, setShowSyncSettings] = useState(false);
+  const [hubspotLists, setHubspotLists] = useState<{ listId: string; name: string }[]>([]);
+  const [isLoadingLists, setIsLoadingLists] = useState(false);
+  const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
+  const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- Save as Recipe state ----
+  const [lastSuccessfulQuery, setLastSuccessfulQuery] = useState<{ query: string; resultType: string; parsedResult: any } | null>(null);
+  const [showSaveRecipeDialog, setShowSaveRecipeDialog] = useState(false);
+  const [recipeNameInput, setRecipeNameInput] = useState('');
+  const [isSavingRecipe, setIsSavingRecipe] = useState(false);
 
   // ---- AI Query state ----
   const [aiQueryOperation, setAiQueryOperation] = useState<AiQueryOperation | null>(null);
@@ -136,6 +231,10 @@ function OpsDetailPage() {
     enabled: !!tableId,
   });
 
+  // Normalize sort for query — primary sort goes to server, multi-sort client-side
+  const normalizedSorts = useMemo(() => normalizeSortConfig(sortState), [sortState]);
+  const primarySort = normalizedSorts[0] ?? null;
+
   const {
     data: tableData,
     isLoading: isDataLoading,
@@ -144,8 +243,8 @@ function OpsDetailPage() {
     queryFn: () =>
       tableService.getTableData(tableId!, {
         perPage: 500,
-        sortBy: sortState?.key ?? 'row_index',
-        sortDir: sortState?.dir,
+        sortBy: primarySort?.key ?? 'row_index',
+        sortDir: primarySort?.dir,
         filters: filterConditions.length > 0 ? filterConditions : undefined,
       }),
     enabled: !!tableId,
@@ -158,10 +257,11 @@ function OpsDetailPage() {
   });
 
   // ---- Enrichment hook ----
-  const { startEnrichment } = useEnrichment(tableId ?? '');
+  const { startEnrichment, startSingleRowEnrichment } = useEnrichment(tableId ?? '');
 
   // ---- HubSpot sync hook ----
   const { sync: syncHubSpot, isSyncing: isHubSpotSyncing } = useHubSpotSync(tableId);
+  const { writeBack: pushCellToHubSpot } = useHubSpotWriteBack();
 
   // ---- Rules hook ----
   const { rules, createRule, toggleRule, deleteRule, isCreating: isRuleCreating } = useOpsRules(tableId);
@@ -178,7 +278,7 @@ function OpsDetailPage() {
   useEffect(() => {
     // Wait for views query to finish loading before deciding to create
     if (isViewsLoading) return;
-    if (!tableId || !table || views.length > 0 || systemViewsCreatedRef.current) return;
+    if (!tableId || !table || !currentUserId || views.length > 0 || systemViewsCreatedRef.current) return;
     if (columns.length === 0) return;
 
     // Mark as created immediately (sync) to prevent double-creation
@@ -190,7 +290,7 @@ function OpsDetailPage() {
       systemViewConfigs.map((config) =>
         tableService.createView({
           tableId: tableId,
-          createdBy: table.created_by,
+          createdBy: currentUserId,
           name: config.name,
           isSystem: true,
           isDefault: config.name === 'All',
@@ -211,10 +311,30 @@ function OpsDetailPage() {
       // Silently fail — views will just not be auto-created
       // User can still manually create views
     });
-  }, [tableId, table, views.length, columns, isViewsLoading, queryClient]);
+  }, [tableId, table, currentUserId, views.length, columns, isViewsLoading, queryClient]);
 
-  // Rows are now filtered and sorted server-side via getTableData()
-  const rows = useMemo(() => tableData?.rows ?? [], [tableData?.rows]);
+  // Rows: server-side filter + primary sort, then client-side multi-sort if needed
+  const rows = useMemo(() => {
+    const base = tableData?.rows ?? [];
+    if (normalizedSorts.length <= 1) return base;
+    // Multi-sort: apply all sort keys client-side
+    return [...base].sort((a, b) => {
+      for (const s of normalizedSorts) {
+        const aVal = a.cells[s.key]?.value ?? '';
+        const bVal = b.cells[s.key]?.value ?? '';
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
+        let cmp: number;
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          cmp = aNum - bNum;
+        } else {
+          cmp = aVal.localeCompare(bVal, undefined, { sensitivity: 'base' });
+        }
+        if (cmp !== 0) return s.dir === 'desc' ? -cmp : cmp;
+      }
+      return 0;
+    });
+  }, [tableData?.rows, normalizedSorts]);
 
   // ---- Integration polling ----
   useIntegrationPolling(tableId, columns, rows);
@@ -330,6 +450,16 @@ function OpsDetailPage() {
     onError: () => toast.error('Failed to rename column'),
   });
 
+  const updateEnrichmentMutation = useMutation({
+    mutationFn: ({ columnId, enrichmentPrompt, enrichmentModel }: { columnId: string; enrichmentPrompt: string; enrichmentModel: string }) =>
+      tableService.updateColumn(columnId, { enrichmentPrompt, enrichmentModel }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Enrichment settings updated');
+    },
+    onError: () => toast.error('Failed to update enrichment settings'),
+  });
+
   const resizeColumnMutation = useMutation({
     mutationFn: ({ columnId, width }: { columnId: string; width: number }) =>
       tableService.updateColumn(columnId, { width }),
@@ -378,11 +508,7 @@ function OpsDetailPage() {
   });
 
   const pushToHubSpotMutation = useMutation({
-    mutationFn: async (config: {
-      fieldMappings: { opsColumnKey: string; hubspotProperty: string }[];
-      duplicateStrategy: 'update' | 'skip' | 'create';
-      listId?: string;
-    }) => {
+    mutationFn: async (config: HubSpotPushConfig) => {
       const { data, error } = await supabase.functions.invoke('push-to-hubspot', {
         body: { table_id: tableId, row_ids: Array.from(selectedRows), config },
       });
@@ -392,9 +518,60 @@ function OpsDetailPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       setShowHubSpotPush(false);
-      toast.success(`HubSpot: ${data?.pushed ?? 0} pushed, ${data?.failed ?? 0} failed`);
+      const listMsg = data?.list_contacts_added
+        ? `, ${data.list_contacts_added} added to list`
+        : '';
+      toast.success(`HubSpot: ${data?.pushed ?? 0} pushed, ${data?.failed ?? 0} failed${listMsg}`);
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to push to HubSpot'),
+  });
+
+  // Fetch HubSpot lists when push modal opens
+  const fetchHubSpotLists = useCallback(async () => {
+    if (!table) return;
+    setIsLoadingLists(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('hubspot-admin', {
+        body: { action: 'get_lists', org_id: table.organization_id },
+      });
+      if (error) throw error;
+      const lists = (data?.lists ?? []).map((l: any) => ({
+        listId: String(l.listId),
+        name: l.name ?? `List ${l.listId}`,
+      }));
+      setHubspotLists(lists);
+    } catch (err) {
+      console.error('[OpsDetailPage] Failed to fetch HubSpot lists:', err);
+      setHubspotLists([]);
+    } finally {
+      setIsLoadingLists(false);
+    }
+  }, [table]);
+
+  // Save as HubSpot List mutation
+  const createHubSpotListMutation = useMutation({
+    mutationFn: async (config: { listName: string; scope: 'all' | 'selected'; linkList: boolean }) => {
+      const rowIds = config.scope === 'selected' ? Array.from(selectedRows) : undefined;
+      const { data, error } = await supabase.functions.invoke('hubspot-list-ops', {
+        body: {
+          action: 'create_list_from_table',
+          table_id: tableId,
+          list_name: config.listName,
+          row_ids: rowIds,
+          link_list: config.linkList,
+        },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      setShowSaveAsHubSpotList(false);
+      if (data?.link_list) {
+        queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      }
+      toast.success(`Created HubSpot list "${data?.list_name}" with ${data?.contacts_added ?? 0} contacts`);
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to create HubSpot list'),
   });
 
   const runIntegrationMutation = useMutation({
@@ -445,12 +622,40 @@ function OpsDetailPage() {
   });
 
   const deleteRowsMutation = useMutation({
-    mutationFn: (rowIds: string[]) => tableService.deleteRows(rowIds),
-    onSuccess: () => {
+    mutationFn: async (rowIds: string[]) => {
+      // Pre-capture source_ids for HubSpot list removal
+      const sourceIds = rows
+        .filter((r) => rowIds.includes(r.id) && r.source_id)
+        .map((r) => r.source_id as string);
+      await tableService.deleteRows(rowIds);
+      return sourceIds;
+    },
+    onSuccess: (sourceIds) => {
       setSelectedRows(new Set());
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       toast.success('Rows deleted');
+
+      // Fire-and-forget: mirror delete to HubSpot list if bidirectional
+      const isBidirectional = table?.source_type === 'hubspot' &&
+        (table?.source_query as any)?.sync_direction === 'bidirectional';
+      const listId = (table?.source_query as any)?.list_id;
+      if (isBidirectional && listId && sourceIds.length > 0) {
+        supabase.functions.invoke('hubspot-list-ops', {
+          body: {
+            action: 'remove_from_list',
+            list_id: listId,
+            contact_ids: sourceIds,
+            org_id: table?.organization_id,
+          },
+        }).then(({ error }) => {
+          if (error) {
+            console.error('[OpsDetailPage] Failed to remove contacts from HubSpot list:', error);
+          } else {
+            toast.success(`Removed ${sourceIds.length} contacts from HubSpot list`, { duration: 3000 });
+          }
+        });
+      }
     },
     onError: () => toast.error('Failed to delete rows'),
   });
@@ -472,7 +677,7 @@ function OpsDetailPage() {
     mutationFn: (params: { name: string; formattingRules?: any[] }) =>
       tableService.createView({
         tableId: tableId!,
-        createdBy: table!.created_by,
+        createdBy: currentUserId!,
         name: params.name,
         filterConfig: filterConditions,
         sortConfig: sortState,
@@ -506,7 +711,7 @@ function OpsDetailPage() {
       setSearchParams({});
       toast.success('View deleted');
     },
-    onError: () => toast.error('Failed to delete view'),
+    onError: (error: Error) => toast.error(`Failed to delete view: ${error.message}`),
   });
 
   // ---- Handlers ----
@@ -521,12 +726,143 @@ function OpsDetailPage() {
       setFilterConditions(view.filter_config ?? []);
       setSortState(view.sort_config ?? null);
       setColumnOrder(view.column_config ?? null);
+      setGroupConfig(view.group_config ?? null);
+      setSummaryConfig(view.summary_config ?? null);
     }
   }, [views, setSearchParams]);
 
   const handleDuplicateView = useCallback((view: SavedView) => {
     createViewMutation.mutate({ name: `${view.name} (copy)` });
   }, [createViewMutation]);
+
+  const handleOpenViewConfig = useCallback((viewToEdit?: SavedView) => {
+    // Snapshot current state for cancel/revert
+    preConfigSnapshot.current = {
+      filters: [...filterConditions],
+      sort: normalizeSortConfig(sortState),
+      columnOrder: columnOrder ? [...columnOrder] : null,
+    };
+    if (viewToEdit) {
+      setEditingView(viewToEdit);
+    } else {
+      setEditingView(null);
+    }
+    setShowViewConfigPanel(true);
+  }, [filterConditions, sortState, columnOrder]);
+
+  const handleViewConfigClose = useCallback(() => {
+    // Revert to snapshot
+    if (preConfigSnapshot.current) {
+      setFilterConditions(preConfigSnapshot.current.filters);
+      setSortState(
+        preConfigSnapshot.current.sort.length === 1
+          ? preConfigSnapshot.current.sort[0]
+          : preConfigSnapshot.current.sort.length > 1
+            ? preConfigSnapshot.current.sort
+            : null
+      );
+      setColumnOrder(preConfigSnapshot.current.columnOrder);
+    }
+    setShowViewConfigPanel(false);
+    setEditingView(null);
+    setNlViewConfig(null);
+    preConfigSnapshot.current = null;
+  }, []);
+
+  const handleViewConfigSave = useCallback((config: ViewConfigState) => {
+    const sortCfg = config.sorts.length === 1
+      ? config.sorts[0]
+      : config.sorts.length > 1
+        ? config.sorts
+        : null;
+
+    if (editingView) {
+      // Update existing view
+      tableService.updateView(editingView.id, {
+        name: config.name,
+        filterConfig: config.filters,
+        sortConfig: sortCfg,
+        columnConfig: config.columnOrder,
+        formattingRules: config.formattingRules.length > 0 ? config.formattingRules : null,
+        groupConfig: config.groupConfig,
+        summaryConfig: config.summaryConfig,
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
+        toast.success('View updated');
+      }).catch(() => toast.error('Failed to update view'));
+    } else {
+      // Create new view
+      tableService.createView({
+        tableId: tableId!,
+        createdBy: currentUserId!,
+        name: config.name,
+        filterConfig: config.filters,
+        sortConfig: sortCfg,
+        columnConfig: config.columnOrder,
+        formattingRules: config.formattingRules.length > 0 ? config.formattingRules : null,
+        groupConfig: config.groupConfig,
+        summaryConfig: config.summaryConfig,
+      }).then((newView) => {
+        queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
+        setActiveViewId(newView.id);
+        setSearchParams({ view: newView.id });
+        toast.success('View created');
+      }).catch(() => toast.error('Failed to create view'));
+    }
+
+    // Apply config to current state
+    setFilterConditions(config.filters);
+    setSortState(sortCfg);
+    setColumnOrder(config.columnOrder);
+    setGroupConfig(config.groupConfig);
+    setSummaryConfig(config.summaryConfig);
+    setShowViewConfigPanel(false);
+    setEditingView(null);
+    setNlViewConfig(null);
+    preConfigSnapshot.current = null;
+  }, [editingView, tableId, currentUserId, queryClient, setSearchParams]);
+
+  // PV-010: Handle NL view description from ViewConfigPanel
+  const handleNlViewQuery = useCallback(async (query: string) => {
+    if (!tableId) return;
+    setNlQueryLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+        body: { tableId, query },
+      });
+      if (error) throw error;
+      const result = data as Record<string, unknown>;
+      if (result.type === 'configure_view') {
+        const viewFilters = (result.filterConditions as FilterCondition[]) || [];
+        const viewSorts = (result.sortConfig as SortConfig[]) || [];
+        const viewHidden = (result.hiddenColumns as string[]) || [];
+        const viewName = result.viewName as string;
+        const allColumnKeys = columns.map((c) => c.key);
+        const visibleCols = allColumnKeys.filter((k) => !viewHidden.includes(k));
+        // Update the panel's config (triggers useEffect re-init)
+        setNlViewConfig({
+          name: viewName,
+          filters: viewFilters,
+          sorts: viewSorts,
+          columnOrder: visibleCols.length < allColumnKeys.length ? visibleCols : null,
+          formattingRules: [],
+          groupConfig: null,
+          summaryConfig: null,
+        });
+        // Apply live preview
+        setFilterConditions(viewFilters);
+        setSortState(viewSorts.length === 1 ? viewSorts[0] : viewSorts.length > 1 ? viewSorts : null);
+        toast.success(result.summary as string);
+      } else {
+        toast.info('Try describing filters and sorts, like "show California leads sorted by score"');
+      }
+    } catch (err) {
+      console.error('[NL View] Error:', err);
+      toast.error('Failed to parse view description');
+    } finally {
+      setNlQueryLoading(false);
+    }
+  }, [tableId, columns]);
 
   const handleSelectRow = useCallback((rowId: string) => {
     setSelectedRows((prev) => {
@@ -555,14 +891,37 @@ function OpsDetailPage() {
       const cell = fullRow?.cells[columnKey];
       const col = columns.find((c) => c.key === columnKey);
 
+      const onSuccess = () => {
+        // Fire-and-forget: push to HubSpot if bi-directional
+        if (
+          table?.source_type === 'hubspot' &&
+          (table?.source_query as any)?.sync_direction === 'bidirectional' &&
+          col?.hubspot_property_name &&
+          tableId
+        ) {
+          pushCellToHubSpot({
+            tableId,
+            rowId,
+            columnId: col.id,
+            newValue: value,
+          });
+        }
+      };
+
       if (cell?.id) {
-        cellEditMutation.mutate({ cellId: cell.id, rowId, columnId: col?.id ?? '', value });
+        cellEditMutation.mutate(
+          { cellId: cell.id, rowId, columnId: col?.id ?? '', value },
+          { onSuccess },
+        );
       } else if (col) {
         // Cell doesn't exist yet — upsert
-        cellEditMutation.mutate({ rowId, columnId: col.id, value });
+        cellEditMutation.mutate(
+          { rowId, columnId: col.id, value },
+          { onSuccess },
+        );
       }
     },
-    [tableData?.rows, columns, cellEditMutation],
+    [tableData?.rows, columns, cellEditMutation, table, tableId, pushCellToHubSpot],
   );
 
   const handleColumnHeaderClick = useCallback(
@@ -580,6 +939,13 @@ function OpsDetailPage() {
       }
     },
     [],
+  );
+
+  const handleEnrichRow = useCallback(
+    (rowId: string, columnId: string) => {
+      startSingleRowEnrichment({ columnId, rowId });
+    },
+    [startSingleRowEnrichment],
   );
 
   const handleStartEditName = useCallback(() => {
@@ -645,6 +1011,18 @@ function OpsDetailPage() {
       setIsAiQueryParsing(true);
 
       try {
+        const submittedQuery = queryInput.trim();
+
+        // Build sample values from first 5 rows to help AI match column references
+        const sampleValues: Record<string, string[]> = {};
+        const sampleRows = rows.slice(0, 5);
+        for (const col of columns) {
+          const vals = sampleRows
+            .map((r) => r.cells[col.key]?.value)
+            .filter((v): v is string => !!v && v.trim() !== '');
+          if (vals.length > 0) sampleValues[col.key] = vals;
+        }
+
         // Call the AI query edge function to parse the natural language
         const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
           body: {
@@ -656,12 +1034,23 @@ function OpsDetailPage() {
               column_type: c.column_type,
             })),
             rowCount: table?.row_count,
+            sampleValues,
+            sessionId: currentSessionId, // OI-028: Include session ID for conversational context
           },
         });
 
         if (error) throw error;
 
         const result = data as Record<string, unknown>;
+
+        // OI-028: Update session state from response
+        if (result.sessionId) {
+          setCurrentSessionId(result.sessionId as string);
+        }
+        if (result.sessionMessages) {
+          setSessionMessages(result.sessionMessages as any[]);
+        }
+
         const resultType = (result.type as string) || result.action;
 
         switch (resultType) {
@@ -684,6 +1073,23 @@ function OpsDetailPage() {
             setAiQueryPreviewRows(preview.matchingRows);
             setAiQueryTotalCount(preview.totalCount);
             setIsAiQueryLoading(false);
+            break;
+          }
+
+          // === NEW: Move Rows (reorder to top/bottom) ===
+          case 'move_rows': {
+            const moveConditions = result.conditions as FilterCondition[];
+            const movePosition = result.position as 'top' | 'bottom';
+            const moveResult = await tableService.moveRows(tableId, moveConditions, movePosition);
+            if (moveResult.movedCount > 0) {
+              // Reset sort to default (row_index) so the move is visible
+              setSortState(null);
+              queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+              toast.success(result.summary as string);
+            } else {
+              toast.error('No matching rows found to move');
+            }
+            setQueryInput('');
             break;
           }
 
@@ -737,7 +1143,7 @@ function OpsDetailPage() {
             for (const val of uniqueValues) {
               await tableService.createView({
                 tableId,
-                createdBy: table!.created_by,
+                createdBy: currentUserId!,
                 name: `${colLabel}: ${val}`,
                 filterConfig: [{ column_key: splitCol, operator: 'equals', value: val }],
                 sortConfig: null,
@@ -859,25 +1265,31 @@ function OpsDetailPage() {
               style: { bg_color?: string; text_color?: string };
               label?: string;
             }[]) || [];
-            // Convert to formatting rules and save to current view
-            const formattingRules = fmtRules.map((rule) => ({
-              conditions: rule.conditions,
-              style: rule.style,
-              label: rule.label,
-            }));
+            // Convert AI conditions format → flat FormattingRule format with CSS colors
+            const formattingRules = fmtRules.flatMap((rule) =>
+              rule.conditions.map((cond) => ({
+                id: crypto.randomUUID(),
+                column_key: cond.column_key,
+                operator: cond.operator,
+                value: cond.value || '',
+                scope: 'row' as const,
+                style: convertAIStyleToCSS(rule.style),
+                label: rule.label,
+              }))
+            );
             if (activeViewId) {
               // Save to existing view
               await tableService.updateView(activeViewId, {
-                filterConfig: filterConditions,
-                sortConfig: sortState,
+                formattingRules,
               });
               queryClient.invalidateQueries({ queryKey: ['ops-table-views', tableId] });
+            } else {
+              // Create a new view with the formatting
+              createViewMutation.mutate({
+                name: `Formatted: ${result.summary}`,
+                formattingRules,
+              });
             }
-            // Also create a new view with the formatting
-            createViewMutation.mutate({
-              name: `Formatted: ${result.summary}`,
-              formattingRules,
-            });
             setQueryInput('');
             toast.success(result.summary as string);
             break;
@@ -928,9 +1340,58 @@ function OpsDetailPage() {
             break;
           }
 
+          // === PV-009: Suggest Views ===
+          case 'suggest_views': {
+            const suggestions = (result.suggestions as Array<{
+              name: string;
+              description: string;
+              filterConditions: FilterCondition[];
+              sortConfig: SortConfig[];
+            }>) || [];
+            setViewSuggestions(suggestions);
+            setQueryInput('');
+            toast.success(`Found ${suggestions.length} view suggestions`);
+            break;
+          }
+
+          // === PV-010: Configure View from NL ===
+          case 'configure_view': {
+            const viewFilters = (result.filterConditions as FilterCondition[]) || [];
+            const viewSorts = (result.sortConfig as SortConfig[]) || [];
+            const viewHidden = (result.hiddenColumns as string[]) || [];
+            const viewName = result.viewName as string;
+            // Open the ViewConfigPanel pre-populated with the AI config
+            const allColumnKeys = columns.map((c) => c.key);
+            const visibleCols = allColumnKeys.filter((k) => !viewHidden.includes(k));
+            setEditingView(null);
+            setShowViewConfigPanel(true);
+            // Defer so that ViewConfigPanel picks up existingConfig
+            setNlViewConfig({
+              name: viewName,
+              filters: viewFilters,
+              sorts: viewSorts,
+              columnOrder: visibleCols.length < allColumnKeys.length ? visibleCols : null,
+              formattingRules: [],
+              groupConfig: null,
+              summaryConfig: null,
+            });
+            setQueryInput('');
+            toast.success(result.summary as string);
+            break;
+          }
+
           default: {
             toast.error(`Unknown action type: ${resultType}`);
           }
+        }
+
+        // Track successful query for "Save as Recipe"
+        if (resultType && resultType !== 'unknown') {
+          setLastSuccessfulQuery({
+            query: submittedQuery,
+            resultType: resultType,
+            parsedResult: result,
+          });
         }
       } catch (err) {
         console.error('[AI Query] Error:', err);
@@ -981,6 +1442,16 @@ function OpsDetailPage() {
     setAiQueryTotalCount(0);
   }, []);
 
+  // OI-028: New Session handler - clears conversational context
+  const handleNewSession = useCallback(() => {
+    setCurrentSessionId(null);
+    setSessionMessages([]);
+    // Clear filters and reset table state
+    setFilterConditions([]);
+    setSortState(null);
+    toast.success('Started new chat session');
+  }, []);
+
   const handleTransformConfirm = useCallback(async () => {
     if (!transformPreviewData || !tableId) return;
     setIsTransformExecuting(true);
@@ -1027,6 +1498,33 @@ function OpsDetailPage() {
       setIsDeduplicateExecuting(false);
     }
   }, [deduplicatePreviewData, tableId, queryClient]);
+
+  // ---- Save as Recipe handler ----
+
+  const handleSaveRecipe = useCallback(async () => {
+    if (!lastSuccessfulQuery || !tableId || !currentUserId) return;
+    setIsSavingRecipe(true);
+    try {
+      await tableService.saveRecipe({
+        table_id: tableId,
+        created_by: currentUserId,
+        name: recipeNameInput.trim() || lastSuccessfulQuery.query.slice(0, 60),
+        query_text: lastSuccessfulQuery.query,
+        parsed_config: lastSuccessfulQuery.parsedResult,
+        trigger_type: 'one_shot',
+        is_shared: false,
+      });
+      queryClient.invalidateQueries({ queryKey: ['recipes', tableId] });
+      toast.success('Recipe saved');
+      setShowSaveRecipeDialog(false);
+      setLastSuccessfulQuery(null);
+      setRecipeNameInput('');
+    } catch (err) {
+      toast.error('Failed to save recipe');
+    } finally {
+      setIsSavingRecipe(false);
+    }
+  }, [lastSuccessfulQuery, tableId, currentUserId, recipeNameInput, queryClient]);
 
   // ---- Active column for menu ----
 
@@ -1094,12 +1592,16 @@ function OpsDetailPage() {
               views={views}
               activeViewId={activeViewId}
               onSelectView={handleSelectView}
-              onCreateView={() => setShowSaveViewDialog(true)}
+              onCreateView={() => handleOpenViewConfig()}
               onRenameView={(viewId, name) =>
                 updateViewMutation.mutate({ viewId, updates: { name } })
               }
               onDuplicateView={handleDuplicateView}
               onDeleteView={(viewId) => deleteViewMutation.mutate(viewId)}
+              onEditView={(viewId) => {
+                const v = views.find((vw) => vw.id === viewId);
+                if (v) handleOpenViewConfig(v);
+              }}
             />
           </div>
         )}
@@ -1117,131 +1619,152 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* Query bar */}
-        <div className="mb-5">
-          <AiQueryBar
-            value={queryInput}
-            onChange={setQueryInput}
-            onSubmit={handleQuerySubmit}
-            isLoading={isAiQueryParsing}
-            columns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
-            tableId={tableId!}
-          />
-        </div>
-
-        {/* AI Summary Card */}
-        {summaryData && (
-          <div className="mb-5">
-            <AiQuerySummaryCard
-              data={summaryData}
-              onDismiss={() => setSummaryData(null)}
+        {/* Quick filter bar */}
+        {rows.length > 0 && (
+          <div className="mb-3">
+            <QuickFilterBar
+              columns={columns}
+              rows={rows}
+              activeFilters={filterConditions}
+              onAddFilter={(condition) => setFilterConditions((prev) => [...prev, condition])}
+              onRemoveFilter={(index) => setFilterConditions((prev) => prev.filter((_, i) => i !== index))}
             />
           </div>
         )}
 
-        {/* Metadata header */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          {/* Left: name + description */}
-          <div className="min-w-0 flex-1">
-            {/* Editable table name */}
-            <div className="flex items-center gap-2">
-              {isEditingName ? (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    ref={nameInputRef}
-                    type="text"
-                    value={editNameValue}
-                    onChange={(e) => setEditNameValue(e.target.value)}
-                    onKeyDown={handleNameKeyDown}
-                    onBlur={handleSaveName}
-                    className="rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1 text-lg font-semibold text-white outline-none focus:border-violet-500"
-                  />
-                  <button
-                    onClick={handleSaveName}
-                    className="rounded p-1 text-green-400 transition-colors hover:bg-gray-800"
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => setIsEditingName(false)}
-                    className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-800"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <div className="group flex items-center gap-2">
-                  <h1 className="text-lg font-semibold text-white">{table.name}</h1>
-                  <button
-                    onClick={handleStartEditName}
-                    className="rounded p-1 text-gray-500 opacity-0 transition-all hover:bg-gray-800 hover:text-gray-300 group-hover:opacity-100"
-                    title="Rename table"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
+        {/* Smart view suggestions */}
+        {viewSuggestions.length > 0 && (
+          <SmartViewSuggestions
+            suggestions={viewSuggestions}
+            onApply={(suggestion) => {
+              setFilterConditions(suggestion.filterConditions);
+              if (suggestion.sortConfig.length > 0) {
+                setSortState(
+                  suggestion.sortConfig.length === 1
+                    ? suggestion.sortConfig[0]
+                    : suggestion.sortConfig
+                );
+              }
+              // Open view config panel pre-filled
+              setEditingView(null);
+              setNlViewConfig({
+                name: suggestion.name,
+                filters: suggestion.filterConditions,
+                sorts: suggestion.sortConfig,
+                columnOrder: null,
+                formattingRules: [],
+                groupConfig: null,
+                summaryConfig: null,
+              });
+              setShowViewConfigPanel(true);
+              setViewSuggestions([]);
+            }}
+            onDismiss={() => setViewSuggestions([])}
+          />
+        )}
 
-            {/* Description */}
-            {table.description && (
-              <p className="mt-1 text-sm text-gray-400">{table.description}</p>
+        {/* Consolidated toolbar */}
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+          {/* Left: table name + meta badges */}
+          <div className="flex items-center gap-3 min-w-0 shrink-0">
+            {isEditingName ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  onKeyDown={handleNameKeyDown}
+                  onBlur={handleSaveName}
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1 text-base font-semibold text-white outline-none focus:border-violet-500"
+                />
+                <button
+                  onClick={handleSaveName}
+                  className="rounded p-1 text-green-400 transition-colors hover:bg-gray-800"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setIsEditingName(false)}
+                  className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-800"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="group flex items-center gap-1.5">
+                <h1 className="text-base font-semibold text-white truncate">{table.name}</h1>
+                <button
+                  onClick={handleStartEditName}
+                  className="rounded p-1 text-gray-500 opacity-0 transition-all hover:bg-gray-800 hover:text-gray-300 group-hover:opacity-100"
+                  title="Rename table"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${sourceBadge.className}`}
+            >
+              <SourceIcon className="h-3 w-3" />
+              {sourceBadge.label}
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+              <Rows3 className="h-3 w-3" />
+              {table.row_count.toLocaleString()} {table.row_count === 1 ? 'row' : 'rows'}
+            </span>
+          </div>
 
-            {/* Badges & meta row */}
-            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-gray-500">
-              {/* Source badge */}
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium ${sourceBadge.className}`}
-              >
-                <SourceIcon className="h-3 w-3" />
-                {sourceBadge.label}
-              </span>
-
-              {/* Last synced (HubSpot tables) */}
-              {table.source_type === 'hubspot' && (table.source_query as any)?.last_synced_at && (
-                <span className="inline-flex items-center gap-1 text-orange-400/70">
-                  <RefreshCw className="h-3 w-3" />
-                  Synced {formatDistanceToNow(new Date((table.source_query as any).last_synced_at), { addSuffix: true })}
-                </span>
-              )}
-
-              {/* Row count */}
-              <span className="inline-flex items-center gap-1">
-                <Rows3 className="h-3 w-3" />
-                {table.row_count.toLocaleString()} {table.row_count === 1 ? 'row' : 'rows'}
-              </span>
-
-              {/* Created */}
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Created {formatDistanceToNow(new Date(table.created_at), { addSuffix: true })}
-              </span>
-
-              {/* Updated */}
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Updated {formatDistanceToNow(new Date(table.updated_at), { addSuffix: true })}
-              </span>
-            </div>
+          {/* Center: AI Query Bar */}
+          <div className="flex-1 max-w-xl">
+            <AiQueryBar
+              value={queryInput}
+              onChange={setQueryInput}
+              onSubmit={handleQuerySubmit}
+              isLoading={isAiQueryParsing}
+              columns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              tableId={tableId!}
+            />
           </div>
 
           {/* Right: action buttons */}
           <div className="flex shrink-0 items-center gap-2">
-            {/* HubSpot sync button (only for hubspot-sourced tables) */}
+            <AutomationsDropdown
+              onOpenWorkflows={() => setShowWorkflows(true)}
+              onOpenRecipes={() => setShowRecipeLibrary(true)}
+            />
+            {/* HubSpot sync buttons (only for hubspot-sourced tables) */}
             {table.source_type === 'hubspot' && (
-              <button
-                onClick={syncHubSpot}
-                disabled={isHubSpotSyncing}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-orange-700/40 bg-orange-900/20 px-3 py-1.5 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200 disabled:opacity-50"
-              >
-                {isHubSpotSyncing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Sync from HubSpot
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={syncHubSpot}
+                  disabled={isHubSpotSyncing}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-orange-700/40 bg-orange-900/20 px-3 py-1.5 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200 disabled:opacity-50"
+                >
+                  {isHubSpotSyncing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Sync
+                </button>
+                <button
+                  onClick={() => setShowSyncHistory(true)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-orange-700/40 bg-orange-900/20 text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200"
+                  title="Sync history"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setShowSaveAsHubSpotList(true)}
+                  disabled={createHubSpotListMutation.isPending}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-orange-700/40 bg-orange-900/20 px-3 py-1.5 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200 disabled:opacity-50"
+                  title="Save as HubSpot List"
+                >
+                  <List className="h-3.5 w-3.5" />
+                  Save List
+                </button>
+              </div>
             )}
             <button
               onClick={() => addRowMutation.mutate()}
@@ -1260,10 +1783,129 @@ function OpsDetailPage() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
             >
               <Upload className="h-3.5 w-3.5" />
-              Upload CSV
+              CSV
             </button>
+            <a
+              href="/docs#ops-intelligence"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-700 bg-gray-800 text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+              title="Ops Intelligence docs"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </a>
           </div>
         </div>
+
+        {/* Save as Recipe bar — shown after successful query */}
+        {lastSuccessfulQuery && !showSaveRecipeDialog && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-700/30 bg-amber-900/10 px-3 py-1.5">
+            <BookOpen className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+            <span className="text-xs text-amber-300/80 truncate flex-1">
+              {lastSuccessfulQuery.query}
+            </span>
+            <button
+              onClick={() => {
+                setRecipeNameInput(lastSuccessfulQuery.query.slice(0, 60));
+                setShowSaveRecipeDialog(true);
+              }}
+              className="inline-flex items-center gap-1 rounded-md bg-amber-600/20 border border-amber-600/30 px-2 py-0.5 text-xs font-medium text-amber-300 hover:bg-amber-600/30 transition-colors shrink-0"
+            >
+              <Save className="h-3 w-3" />
+              Save as Recipe
+            </button>
+            <button
+              onClick={() => setLastSuccessfulQuery(null)}
+              className="p-0.5 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Save Recipe mini dialog */}
+        {showSaveRecipeDialog && lastSuccessfulQuery && (
+          <div className="mb-3 rounded-xl border border-amber-700/30 bg-gray-900 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-amber-400" />
+              <span className="text-sm font-medium text-gray-200">Save as Recipe</span>
+            </div>
+            <input
+              type="text"
+              value={recipeNameInput}
+              onChange={(e) => setRecipeNameInput(e.target.value)}
+              placeholder="Recipe name"
+              className="w-full h-8 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-gray-200 placeholder:text-gray-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 outline-none"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveRecipe();
+                if (e.key === 'Escape') {
+                  setShowSaveRecipeDialog(false);
+                  setRecipeNameInput('');
+                }
+              }}
+            />
+            <div className="rounded-lg bg-white/[0.02] border border-white/[0.06] px-3 py-2">
+              <p className="text-xs text-gray-500 font-mono truncate">{lastSuccessfulQuery.query}</p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowSaveRecipeDialog(false);
+                  setRecipeNameInput('');
+                }}
+                className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveRecipe}
+                disabled={isSavingRecipe}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-3.5 py-1.5 text-xs font-medium text-white shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-orange-500 transition-all disabled:opacity-50"
+              >
+                {isSavingRecipe ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Save className="h-3 w-3" />
+                )}
+                Save Recipe
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* OI-010: AI Insights Banner + OI-033: Predictions */}
+        <AiInsightsBanner
+          tableId={tableId!}
+          onActionClick={(action: any) => {
+            if (action.action_type === 'filter') {
+              // Apply filter from insight action
+              toast.info('Applying insight filter...');
+            }
+          }}
+        />
+
+        {/* OI-022: Cross-Query Results */}
+        {crossQueryResult && (
+          <CrossQueryResultPanel
+            result={crossQueryResult}
+            onKeepColumn={(col: any) => {
+              toast.success(`Column "${col.name}" added to table`);
+              setCrossQueryResult(null);
+            }}
+            onDismiss={() => setCrossQueryResult(null)}
+          />
+        )}
+
+        {/* AI Summary Card */}
+        {summaryData && (
+          <div className="mb-4">
+            <AiQuerySummaryCard
+              data={summaryData}
+              onDismiss={() => setSummaryData(null)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Tab bar */}
@@ -1313,12 +1955,15 @@ function OpsDetailPage() {
             isLoading={isDataLoading}
             formattingRules={
               activeViewId
-                ? (views.find((v) => v.id === activeViewId)?.formatting_rules ?? [])
+                ? normalizeFormattingRules(views.find((v) => v.id === activeViewId)?.formatting_rules ?? [])
                 : []
             }
             columnOrder={columnOrder}
             onColumnReorder={setColumnOrder}
             onColumnResize={(columnId, width) => resizeColumnMutation.mutate({ columnId, width })}
+            onEnrichRow={handleEnrichRow}
+            groupConfig={groupConfig}
+            summaryConfig={summaryConfig}
           />
         </div>
       )}
@@ -1415,7 +2060,32 @@ function OpsDetailPage() {
               toast.info('No failed rows to retry');
             }
           } : undefined}
+          onEditEnrichment={activeColumn.is_enrichment ? () => {
+            setEditEnrichmentColumn(activeColumn);
+          } : undefined}
+          onReEnrich={activeColumn.is_enrichment ? () => {
+            startEnrichment({ columnId: activeColumn.id });
+          } : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
+        />
+      )}
+
+      {/* Edit Enrichment Modal */}
+      {editEnrichmentColumn && (
+        <EditEnrichmentModal
+          isOpen={!!editEnrichmentColumn}
+          onClose={() => setEditEnrichmentColumn(null)}
+          onSave={(prompt, model) => {
+            updateEnrichmentMutation.mutate({
+              columnId: editEnrichmentColumn.id,
+              enrichmentPrompt: prompt,
+              enrichmentModel: model,
+            });
+          }}
+          currentPrompt={editEnrichmentColumn.enrichment_prompt ?? ''}
+          currentModel={editEnrichmentColumn.enrichment_model ?? 'anthropic/claude-3.5-sonnet'}
+          columnLabel={editEnrichmentColumn.label}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
         />
       )}
 
@@ -1444,7 +2114,7 @@ function OpsDetailPage() {
           startEnrichment({ columnId: enrichCols[0].id, rowIds: Array.from(selectedRows) });
         }}
         onPushToInstantly={() => toast.info('Push to Instantly coming soon.')}
-        onPushToHubSpot={() => setShowHubSpotPush(true)}
+        onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
         onReEnrich={() => {
           const enrichCols = columns.filter((c) => c.is_enrichment);
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
@@ -1462,6 +2132,8 @@ function OpsDetailPage() {
         selectedRows={rows.filter((r) => selectedRows.has(r.id))}
         onPush={(config) => pushToHubSpotMutation.mutate(config)}
         isPushing={pushToHubSpotMutation.isPending}
+        hubspotLists={hubspotLists}
+        isLoadingLists={isLoadingLists}
       />
 
       {/* AI Query Preview Modal */}
@@ -1477,7 +2149,46 @@ function OpsDetailPage() {
         isExecuting={isAiQueryExecuting}
       />
 
-      {/* Save View Dialog */}
+      {/* View Config Panel (replaces SaveViewDialog for new/edit views) */}
+      <ViewConfigPanel
+        isOpen={showViewConfigPanel}
+        onClose={handleViewConfigClose}
+        onSave={handleViewConfigSave}
+        columns={columns}
+        rows={rows}
+        totalRows={tableData?.total ?? rows.length}
+        filteredRows={rows.length}
+        mode={editingView ? 'edit' : 'create'}
+        existingConfig={
+          editingView
+            ? {
+                viewId: editingView.id,
+                name: editingView.name,
+                filters: editingView.filter_config ?? [],
+                sorts: normalizeSortConfig(editingView.sort_config),
+                columnOrder: editingView.column_config,
+                formattingRules: editingView.formatting_rules ?? [],
+                groupConfig: editingView.group_config ?? null,
+                summaryConfig: editingView.summary_config ?? null,
+              }
+            : nlViewConfig
+              ? nlViewConfig
+              : {
+                  filters: filterConditions,
+                  sorts: normalizeSortConfig(sortState),
+                  columnOrder,
+                }
+        }
+        onFiltersChange={setFilterConditions}
+        onSortsChange={(sorts) => {
+          setSortState(sorts.length === 1 ? sorts[0] : sorts.length > 1 ? sorts : null);
+        }}
+        onColumnOrderChange={setColumnOrder}
+        onNlQuery={handleNlViewQuery}
+        nlQueryLoading={nlQueryLoading}
+      />
+
+      {/* Save View Dialog (legacy — kept for AI query inline create) */}
       <SaveViewDialog
         isOpen={showSaveViewDialog}
         onClose={() => setShowSaveViewDialog(false)}
@@ -1523,6 +2234,100 @@ function OpsDetailPage() {
           queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
           queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
         }}
+      />
+
+      {/* OI-028: Conversational Chat Thread */}
+      <AiChatThread
+        tableId={tableId!}
+        sessionId={currentSessionId}
+        messages={sessionMessages}
+        onNewSession={handleNewSession}
+      />
+
+      {/* OI-005: Workflows Panel */}
+      <Sheet open={showWorkflows} onOpenChange={setShowWorkflows}>
+        <SheetContent className="w-[480px] sm:w-[520px] overflow-y-auto !top-16 !h-auto !p-0 border-l border-white/[0.06] bg-gray-950">
+          {/* Header */}
+          <div className="border-b border-white/[0.06] px-6 pt-6 pb-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                  <GitBranch className="w-4.5 h-4.5 text-white" />
+                </div>
+                <div>
+                  <SheetTitle className="text-base font-semibold text-gray-100">Workflows</SheetTitle>
+                  <p className="text-xs text-gray-500 mt-0.5">Automate actions on your table</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5" />
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-5">
+            {!showWorkflowBuilder && (
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => setShowWorkflowBuilder(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 px-3.5 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-500/20 transition-all hover:from-violet-400 hover:to-purple-500"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New Workflow
+                </button>
+              </div>
+            )}
+            {showWorkflowBuilder ? (
+              <WorkflowBuilder tableId={tableId!} onClose={() => setShowWorkflowBuilder(false)} />
+            ) : (
+              <WorkflowList tableId={tableId!} onEdit={() => setShowWorkflowBuilder(true)} />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* OI-016: Recipe Library */}
+      <AiRecipeLibrary
+        tableId={tableId!}
+        open={showRecipeLibrary}
+        onOpenChange={setShowRecipeLibrary}
+        onRun={(recipe: any) => {
+          setQueryInput(recipe.query_text);
+          setShowRecipeLibrary(false);
+          toast.info('Recipe loaded into query bar');
+        }}
+      />
+
+      {/* HubSpot Sync History */}
+      {tableId && (
+        <HubSpotSyncHistory
+          open={showSyncHistory}
+          onOpenChange={setShowSyncHistory}
+          tableId={tableId}
+        />
+      )}
+
+      {/* HubSpot Sync Settings */}
+      {tableId && table?.source_type === 'hubspot' && (
+        <HubSpotSyncSettingsModal
+          open={showSyncSettings}
+          onOpenChange={setShowSyncSettings}
+          tableId={tableId}
+          currentSourceQuery={table?.source_query ?? null}
+          onUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+          }}
+        />
+      )}
+
+      {/* Save as HubSpot List Modal */}
+      <SaveAsHubSpotListModal
+        isOpen={showSaveAsHubSpotList}
+        onClose={() => setShowSaveAsHubSpotList(false)}
+        tableName={table?.name ?? 'Untitled'}
+        totalRows={rows.length}
+        selectedCount={selectedRows.size}
+        onSave={(config) => createHubSpotListMutation.mutate(config)}
+        isSaving={createHubSpotListMutation.isPending}
       />
     </div>
   );

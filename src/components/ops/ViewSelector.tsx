@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, MoreHorizontal, Pencil, Copy, Trash2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Plus, MoreHorizontal, Pencil, Copy, Trash2, Settings2 } from 'lucide-react';
 import type { SavedView } from '@/lib/services/opsTableService';
 
 // ---------------------------------------------------------------------------
@@ -14,6 +15,7 @@ interface ViewSelectorProps {
   onRenameView: (viewId: string, name: string) => void;
   onDuplicateView: (view: SavedView) => void;
   onDeleteView: (viewId: string) => void;
+  onEditView?: (viewId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -28,12 +30,15 @@ export function ViewSelector({
   onRenameView,
   onDuplicateView,
   onDeleteView,
+  onEditView,
 }: ViewSelectorProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   // Sort: system views first, then by position
   const sortedViews = [...views].sort((a, b) => {
@@ -48,19 +53,40 @@ export function ViewSelector({
     }
   }, [renamingId]);
 
-  // Close menu on outside click
+  // Close menu on outside click or scroll
   useEffect(() => {
     if (!menuOpenId) return;
 
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const triggerEl = triggerRefs.current.get(menuOpenId!);
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        (!triggerEl || !triggerEl.contains(e.target as Node))
+      ) {
         setMenuOpenId(null);
       }
     }
 
+    function handleScroll() {
+      setMenuOpenId(null);
+    }
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, [menuOpenId]);
+
+  const openMenu = useCallback((viewId: string) => {
+    const triggerEl = triggerRefs.current.get(viewId);
+    if (triggerEl) {
+      const rect = triggerEl.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setMenuOpenId(viewId);
+  }, []);
 
   const handleStartRename = useCallback((view: SavedView) => {
     setRenamingId(view.id);
@@ -90,119 +116,146 @@ export function ViewSelector({
     [handleCommitRename],
   );
 
+  // Find the view for the open menu
+  const menuView = menuOpenId ? sortedViews.find((v) => v.id === menuOpenId) : null;
+
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-      {sortedViews.map((view) => {
-        const isActive = view.id === activeViewId;
-        const isRenaming = view.id === renamingId;
+    <>
+      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        {sortedViews.map((view) => {
+          const isActive = view.id === activeViewId;
+          const isRenaming = view.id === renamingId;
 
-        return (
-          <div key={view.id} className="relative flex shrink-0 items-center">
-            {/* Tab */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (!isRenaming) onSelectView(view.id);
-              }}
-              onKeyDown={(e) => {
-                if (!isRenaming && (e.key === 'Enter' || e.key === ' ')) {
-                  e.preventDefault();
-                  onSelectView(view.id);
-                }
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setMenuOpenId(view.id);
-              }}
-              className={`
-                inline-flex cursor-pointer select-none items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium
-                transition-colors
-                ${
-                  isActive
-                    ? 'border-violet-500/30 bg-violet-600/20 text-violet-300'
-                    : 'border-gray-700/50 bg-gray-800/60 text-gray-400 hover:bg-gray-800 hover:text-gray-200'
-                }
-              `}
-            >
-              {isRenaming ? (
-                <input
-                  ref={renameInputRef}
-                  type="text"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={handleRenameKeyDown}
-                  onBlur={handleCommitRename}
-                  className="w-24 bg-transparent text-sm outline-none"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span>{view.name}</span>
-              )}
-
-              {/* Menu trigger (not shown while renaming) */}
-              {!isRenaming && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpenId(menuOpenId === view.id ? null : view.id);
-                  }}
-                  className="ml-0.5 rounded p-0.5 text-gray-500 transition-colors hover:bg-gray-700/50 hover:text-gray-300"
-                >
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Context menu */}
-            {menuOpenId === view.id && (
+          return (
+            <div key={view.id} className="relative flex shrink-0 items-center">
+              {/* Tab */}
               <div
-                ref={menuRef}
-                className="absolute left-0 top-full z-50 mt-1 w-40 rounded-lg border border-gray-700 bg-gray-800 py-1 shadow-xl"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  if (!isRenaming) onSelectView(view.id);
+                }}
+                onKeyDown={(e) => {
+                  if (!isRenaming && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onSelectView(view.id);
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  openMenu(view.id);
+                }}
+                className={`
+                  inline-flex cursor-pointer select-none items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium
+                  transition-colors
+                  ${
+                    isActive
+                      ? 'border-violet-500/30 bg-violet-600/20 text-violet-300'
+                      : 'border-gray-700/50 bg-gray-800/60 text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                  }
+                `}
               >
-                <button
-                  onClick={() => handleStartRename(view)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700/60 hover:text-white"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Rename
-                </button>
-                <button
-                  onClick={() => {
-                    onDuplicateView(view);
-                    setMenuOpenId(null);
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700/60 hover:text-white"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                  Duplicate
-                </button>
-                {!view.is_system && (
+                {isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    type="text"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={handleRenameKeyDown}
+                    onBlur={handleCommitRename}
+                    className="w-24 bg-transparent text-sm outline-none"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span>{view.name}</span>
+                )}
+
+                {/* Menu trigger (not shown while renaming) */}
+                {!isRenaming && (
                   <button
-                    onClick={() => {
-                      onDeleteView(view.id);
-                      setMenuOpenId(null);
+                    ref={(el) => {
+                      if (el) triggerRefs.current.set(view.id, el);
+                      else triggerRefs.current.delete(view.id);
                     }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (menuOpenId === view.id) {
+                        setMenuOpenId(null);
+                      } else {
+                        openMenu(view.id);
+                      }
+                    }}
+                    className="ml-0.5 rounded p-0.5 text-gray-500 transition-colors hover:bg-gray-700/50 hover:text-gray-300"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete
+                    <MoreHorizontal className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
-            )}
-          </div>
-        );
-      })}
+            </div>
+          );
+        })}
 
-      {/* Create new view button */}
-      <button
-        onClick={onCreateView}
-        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-dashed border-gray-700/50 px-2.5 py-1.5 text-sm text-gray-500 transition-colors hover:border-gray-600 hover:bg-gray-800/40 hover:text-gray-300"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        <span>New view</span>
-      </button>
-    </div>
+        {/* Create new view button */}
+        <button
+          onClick={onCreateView}
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-dashed border-gray-700/50 px-2.5 py-1.5 text-sm text-gray-500 transition-colors hover:border-gray-600 hover:bg-gray-800/40 hover:text-gray-300"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>New view</span>
+        </button>
+      </div>
+
+      {/* Context menu rendered via portal to avoid overflow clipping */}
+      {menuOpenId && menuView && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+          className="z-[9999] w-40 rounded-lg border border-gray-700 bg-gray-800 py-1 shadow-xl"
+        >
+          {!menuView.is_system && onEditView && (
+            <button
+              onClick={() => {
+                onEditView(menuView.id);
+                setMenuOpenId(null);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700/60 hover:text-white"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Edit view
+            </button>
+          )}
+          <button
+            onClick={() => handleStartRename(menuView)}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700/60 hover:text-white"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Rename
+          </button>
+          <button
+            onClick={() => {
+              onDuplicateView(menuView);
+              setMenuOpenId(null);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700/60 hover:text-white"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            Duplicate
+          </button>
+          {!menuView.is_system && (
+            <button
+              onClick={() => {
+                onDeleteView(menuView.id);
+                setMenuOpenId(null);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          )}
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

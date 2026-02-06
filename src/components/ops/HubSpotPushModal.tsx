@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, ArrowRight, AlertCircle, Loader2, Check } from 'lucide-react';
+import { X, ArrowRight, AlertCircle, Loader2, Check, List, Plus } from 'lucide-react';
 import type { OpsTableColumn, OpsTableRow } from '@/lib/services/opsTableService';
 
 // Common auto-mapping: Ops column key → HubSpot property
@@ -25,17 +25,28 @@ interface FieldMapping {
   hubspotProperty: string;
 }
 
+export interface HubSpotPushConfig {
+  fieldMappings: FieldMapping[];
+  duplicateStrategy: 'update' | 'skip' | 'create';
+  listId?: string;
+  createNewList?: boolean;
+  newListName?: string;
+}
+
+interface HubSpotListOption {
+  listId: string;
+  name: string;
+}
+
 interface HubSpotPushModalProps {
   isOpen: boolean;
   onClose: () => void;
   columns: OpsTableColumn[];
   selectedRows: OpsTableRow[];
-  onPush: (config: {
-    fieldMappings: FieldMapping[];
-    duplicateStrategy: 'update' | 'skip' | 'create';
-    listId?: string;
-  }) => void;
+  onPush: (config: HubSpotPushConfig) => void;
   isPushing?: boolean;
+  hubspotLists?: HubSpotListOption[];
+  isLoadingLists?: boolean;
 }
 
 export function HubSpotPushModal({
@@ -45,9 +56,14 @@ export function HubSpotPushModal({
   selectedRows,
   onPush,
   isPushing,
+  hubspotLists = [],
+  isLoadingLists = false,
 }: HubSpotPushModalProps) {
   const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>([]);
   const [duplicateStrategy, setDuplicateStrategy] = useState<'update' | 'skip' | 'create'>('update');
+  const [listAction, setListAction] = useState<'none' | 'existing' | 'new'>('none');
+  const [selectedListId, setSelectedListId] = useState('');
+  const [newListName, setNewListName] = useState('');
 
   // Auto-map fields on open
   useEffect(() => {
@@ -63,6 +79,9 @@ export function HubSpotPushModal({
     }
     setFieldMappings(mappings);
     setDuplicateStrategy('update');
+    setListAction('none');
+    setSelectedListId('');
+    setNewListName('');
   }, [isOpen, columns]);
 
   const unmappedColumns = useMemo(() => {
@@ -92,6 +111,20 @@ export function HubSpotPushModal({
 
   const validMappings = fieldMappings.filter((m) => m.hubspotProperty.trim().length > 0);
   const hasEmailMapping = validMappings.some((m) => m.hubspotProperty === 'email');
+
+  const handlePush = () => {
+    const config: HubSpotPushConfig = {
+      fieldMappings: validMappings,
+      duplicateStrategy,
+    };
+    if (listAction === 'existing' && selectedListId) {
+      config.listId = selectedListId;
+    } else if (listAction === 'new' && newListName.trim()) {
+      config.createNewList = true;
+      config.newListName = newListName.trim();
+    }
+    onPush(config);
+  };
 
   if (!isOpen) return null;
 
@@ -199,6 +232,76 @@ export function HubSpotPushModal({
             </div>
           </div>
 
+          {/* Add to HubSpot List */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-300">Add to HubSpot List</label>
+            <div className="space-y-2">
+              {/* List action radios */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'none' as const, label: 'No list', desc: 'Push contacts only', icon: X },
+                  { value: 'existing' as const, label: 'Existing list', desc: 'Add to a list', icon: List },
+                  { value: 'new' as const, label: 'New list', desc: 'Create a new list', icon: Plus },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setListAction(opt.value)}
+                    className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                      listAction === opt.value
+                        ? 'border-orange-500 bg-orange-500/15 text-orange-300'
+                        : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
+                    }`}
+                  >
+                    <p className="text-sm font-medium flex items-center gap-1.5">
+                      <opt.icon className="h-3.5 w-3.5" />
+                      {opt.label}
+                    </p>
+                    <p className="mt-0.5 text-xs opacity-70">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Existing list dropdown */}
+              {listAction === 'existing' && (
+                <div className="mt-2">
+                  {isLoadingLists ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading lists...
+                    </div>
+                  ) : hubspotLists.length === 0 ? (
+                    <p className="text-sm text-gray-500 py-2">No lists found. Create a new one instead.</p>
+                  ) : (
+                    <select
+                      value={selectedListId}
+                      onChange={(e) => setSelectedListId(e.target.value)}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-orange-500"
+                    >
+                      <option value="">Select a list...</option>
+                      {hubspotLists.map((list) => (
+                        <option key={list.listId} value={list.listId}>{list.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
+              {/* New list name input */}
+              {listAction === 'new' && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={newListName}
+                    onChange={(e) => setNewListName(e.target.value)}
+                    placeholder="Enter list name..."
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-orange-500"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Preview */}
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-500">Preview (first 3 rows)</p>
@@ -239,7 +342,7 @@ export function HubSpotPushModal({
             Cancel
           </button>
           <button
-            onClick={() => onPush({ fieldMappings: validMappings, duplicateStrategy })}
+            onClick={handlePush}
             disabled={isPushing || validMappings.length === 0}
             className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-40 flex items-center gap-2"
           >

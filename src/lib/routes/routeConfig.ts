@@ -32,6 +32,7 @@ import {
   Bot,
   Inbox,
   Table2,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -296,6 +297,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false, // Accessible via notifications, not in nav
     navSection: 'tools',
     order: 7,
+  },
+  {
+    path: '/docs',
+    access: 'any',
+    label: 'Docs',
+    icon: BookOpen,
+    showInNav: true,
+    navSection: 'tools',
+    order: 6,
+    displayGroup: 2,
   },
 
   // ========== Settings Section (Tier 1: All Users) ==========
@@ -626,6 +637,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false,
     navSection: 'platform',
     order: 54,
+  },
+  // Content Management
+  {
+    path: '/platform/docs-admin',
+    access: 'platformAdmin',
+    label: 'Documentation CMS',
+    icon: BookOpen,
+    showInNav: false,
+    navSection: 'platform',
+    order: 55,
   },
   // Slack Settings (Org Admin)
   {

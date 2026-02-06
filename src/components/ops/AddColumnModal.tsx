@@ -103,7 +103,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
   const [apifyActorId, setApifyActorId] = useState('');
   const [hubspotPropertyName, setHubspotPropertyName] = useState('');
   const [hubspotPropertyColumnType, setHubspotPropertyColumnType] = useState('text');
-  const [enrichmentModel, setEnrichmentModel] = useState('anthropic/claude-3.5-sonnet');
+  const [enrichmentModel, setEnrichmentModel] = useState('google/gemini-3-flash-preview');
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -153,7 +153,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     setApifyActorId('');
     setHubspotPropertyName('');
     setHubspotPropertyColumnType('text');
-    setEnrichmentModel('anthropic/claude-3.5-sonnet');
+    setEnrichmentModel('google/gemini-3-flash-preview');
     setMentionOpen(false);
     setMentionQuery('');
     setMentionIndex(0);
@@ -336,7 +336,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
         </div>
 
         {/* Body */}
-        <div className="space-y-5 px-6 py-5">
+        <div className="max-h-[calc(100vh-200px)] space-y-5 overflow-y-auto px-6 py-5">
           {/* Column Name */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-300">

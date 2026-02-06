@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   DndContext,
@@ -35,10 +35,12 @@ import {
   Zap,
   Play,
   GripVertical,
+  ChevronRight,
 } from 'lucide-react';
 import { OpsTableCell } from './OpsTableCell';
-import { evaluateFormattingRules, formattingStyleToCSS } from '@/lib/utils/conditionalFormatting';
+import { evaluateFormattingRules, evaluateRowFormatting, formattingStyleToCSS } from '@/lib/utils/conditionalFormatting';
 import type { FormattingRule } from '@/lib/utils/conditionalFormatting';
+import { getLogoS3Url, getIntegrationDomain } from '@/lib/hooks/useIntegrationLogo';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,13 +60,23 @@ interface Column {
   integration_config?: Record<string, unknown> | null;
   action_type?: string | null;
   action_config?: Record<string, unknown> | null;
+  hubspot_property_name?: string | null;
 }
 
 interface Row {
   id: string;
-  cells: Record<string, { value: string | null; confidence: number | null; status: string }>;
+  cells: Record<string, { value: string | null; confidence: number | null; status: string; metadata?: Record<string, unknown> | null }>;
   source_data?: Record<string, unknown>;
+  hubspot_removed_at?: string | null;
 }
+
+interface GroupConfig {
+  column_key: string;
+  collapsed_by_default?: boolean;
+  sort_groups_by?: 'alpha' | 'count';
+}
+
+type AggregateType = 'count' | 'sum' | 'average' | 'min' | 'max' | 'filled_percent' | 'unique_count' | 'none';
 
 interface OpsTableProps {
   columns: Column[];
@@ -80,6 +92,9 @@ interface OpsTableProps {
   columnOrder?: string[] | null;
   onColumnReorder?: (columnKeys: string[]) => void;
   onColumnResize?: (columnId: string, width: number) => void;
+  onEnrichRow?: (rowId: string, columnId: string) => void;
+  groupConfig?: GroupConfig | null;
+  summaryConfig?: Record<string, AggregateType> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +178,7 @@ function SortableColumnHeader({
       className={`
         relative flex items-center gap-1 px-2 border-r border-gray-800 shrink-0 select-none
         ${col.is_enrichment ? 'bg-violet-500/5' : ''}
+        ${col.hubspot_property_name ? 'bg-orange-500/30' : ''}
         group cursor-pointer hover:bg-gray-800/40 transition-colors
       `}
       style={style}
@@ -223,6 +239,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   columnOrder,
   onColumnReorder,
   onColumnResize,
+  onEnrichRow,
+  groupConfig,
+  summaryConfig,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
@@ -319,9 +338,114 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   const allSelected = rows.length > 0 && selectedRows.size === rows.length;
   const someSelected = selectedRows.size > 0 && !allSelected;
 
-  // Virtual row scroller
+  // ---- GROUPING ----
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Reset collapsed state when group config changes
+  useEffect(() => {
+    if (groupConfig?.collapsed_by_default) {
+      // Collapse all groups initially
+      const allGroupKeys = new Set(
+        rows.map((r) => r.cells[groupConfig.column_key]?.value ?? '__empty__')
+      );
+      setCollapsedGroups(allGroupKeys);
+    } else {
+      setCollapsedGroups(new Set());
+    }
+  }, [groupConfig?.column_key, groupConfig?.collapsed_by_default]);
+
+  type FlatItem = { type: 'group-header'; groupKey: string; count: number } | { type: 'row'; row: Row };
+
+  const flatItems: FlatItem[] = useMemo(() => {
+    if (!groupConfig) return rows.map((row) => ({ type: 'row' as const, row }));
+
+    // Build groups
+    const groups = new Map<string, Row[]>();
+    for (const row of rows) {
+      const val = row.cells[groupConfig.column_key]?.value ?? '__empty__';
+      if (!groups.has(val)) groups.set(val, []);
+      groups.get(val)!.push(row);
+    }
+
+    // Sort groups
+    let sortedKeys = [...groups.keys()];
+    if (groupConfig.sort_groups_by === 'count') {
+      sortedKeys.sort((a, b) => (groups.get(b)?.length ?? 0) - (groups.get(a)?.length ?? 0));
+    } else {
+      sortedKeys.sort((a, b) => {
+        if (a === '__empty__') return 1;
+        if (b === '__empty__') return -1;
+        return a.localeCompare(b);
+      });
+    }
+
+    const items: FlatItem[] = [];
+    for (const key of sortedKeys) {
+      const groupRows = groups.get(key) ?? [];
+      items.push({ type: 'group-header', groupKey: key, count: groupRows.length });
+      if (!collapsedGroups.has(key)) {
+        for (const row of groupRows) {
+          items.push({ type: 'row', row });
+        }
+      }
+    }
+    return items;
+  }, [rows, groupConfig, collapsedGroups]);
+
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // ---- SUMMARY ROW ----
+  const summaryValues = useMemo(() => {
+    if (!summaryConfig) return null;
+    const result: Record<string, string> = {};
+    for (const [colKey, aggType] of Object.entries(summaryConfig)) {
+      if (aggType === 'none') continue;
+      const values = rows.map((r) => r.cells[colKey]?.value).filter((v): v is string => v != null && v !== '');
+      switch (aggType) {
+        case 'count':
+          result[colKey] = `${values.length}`;
+          break;
+        case 'sum': {
+          const nums = values.map(Number).filter((n) => !isNaN(n));
+          result[colKey] = nums.reduce((a, b) => a + b, 0).toLocaleString();
+          break;
+        }
+        case 'average': {
+          const nums = values.map(Number).filter((n) => !isNaN(n));
+          result[colKey] = nums.length > 0 ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1) : '—';
+          break;
+        }
+        case 'min': {
+          const nums = values.map(Number).filter((n) => !isNaN(n));
+          result[colKey] = nums.length > 0 ? Math.min(...nums).toLocaleString() : '—';
+          break;
+        }
+        case 'max': {
+          const nums = values.map(Number).filter((n) => !isNaN(n));
+          result[colKey] = nums.length > 0 ? Math.max(...nums).toLocaleString() : '—';
+          break;
+        }
+        case 'filled_percent':
+          result[colKey] = rows.length > 0 ? `${Math.round((values.length / rows.length) * 100)}%` : '0%';
+          break;
+        case 'unique_count':
+          result[colKey] = `${new Set(values).size}`;
+          break;
+      }
+    }
+    return Object.keys(result).length > 0 ? result : null;
+  }, [summaryConfig, rows]);
+
+  // Virtual row scroller — uses flatItems for grouped view
   const rowVirtualizer = useVirtualizer({
-    count: rows.length,
+    count: flatItems.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
@@ -353,9 +477,35 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   // -----------------------------------------------------------------------
 
   const renderColumnIcon = (col: Column) => {
+    // Integration column: show integration logo (HubSpot, Apollo, Instantly, etc.)
+    const integrationId = col.hubspot_property_name ? 'hubspot' : col.integration_type;
+    if (integrationId) {
+      // Extract base integration name from types like "apollo_enrich" -> "apollo"
+      const baseName = integrationId.split('_')[0];
+      // Use getIntegrationDomain for proper domain mapping (apollo -> apollo.io, instantly -> instantly.ai)
+      const domain = getIntegrationDomain(baseName);
+      const logoUrl = getLogoS3Url(domain);
+
+      return (
+        <img
+          src={logoUrl}
+          alt={baseName}
+          className="w-3.5 h-3.5 shrink-0 rounded-sm object-contain"
+          onError={(e) => {
+            // Fallback to Zap icon if logo fails to load
+            e.currentTarget.style.display = 'none';
+            const fallback = document.createElement('div');
+            fallback.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>';
+            e.currentTarget.parentNode?.appendChild(fallback.firstChild!);
+          }}
+        />
+      );
+    }
+    // Enrichment column: show sparkles
     if (col.is_enrichment) {
       return <Sparkles className="w-3.5 h-3.5 text-violet-400 shrink-0" />;
     }
+    // Default: show column type icon
     const Icon = columnTypeIcons[col.column_type] ?? Hash;
     return <Icon className="w-3.5 h-3.5 text-gray-500 shrink-0" />;
   };
@@ -451,10 +601,40 @@ export const OpsTable: React.FC<OpsTableProps> = ({
             }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const row = rows[virtualRow.index];
-              if (!row) return null;
+              const item = flatItems[virtualRow.index];
+              if (!item) return null;
+
+              // ---- GROUP HEADER ----
+              if (item.type === 'group-header') {
+                const isCollapsed = collapsedGroups.has(item.groupKey);
+                const displayLabel = item.groupKey === '__empty__' ? '(No value)' : item.groupKey;
+                return (
+                  <div
+                    key={`gh-${item.groupKey}`}
+                    className="absolute left-0 w-full flex items-center border-b border-gray-700 bg-gray-800/80 cursor-pointer hover:bg-gray-800"
+                    style={{ height: ROW_HEIGHT, transform: `translateY(${virtualRow.start}px)` }}
+                    onClick={() => toggleGroup(item.groupKey)}
+                  >
+                    <div className="flex items-center gap-2 px-4">
+                      <ChevronRight
+                        className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
+                      />
+                      <span className="text-sm font-medium text-gray-200">{displayLabel}</span>
+                      <span className="rounded-full bg-gray-700 px-2 py-0.5 text-[10px] font-medium text-gray-400">
+                        {item.count}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ---- DATA ROW ----
+              const row = item.row;
               const isSelected = selectedRows.has(row.id);
               const { firstName, lastName } = getPersonNames(row);
+              const rowFmtStyle = formattingRules.length > 0
+                ? evaluateRowFormatting(formattingRules, row.cells)
+                : null;
 
               return (
                 <div
@@ -463,20 +643,26 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                     absolute left-0 w-full flex
                     border-b border-gray-800/50
                     transition-colors duration-75
-                    ${isSelected ? 'bg-blue-500/10' : 'hover:bg-blue-500/5'}
+                    ${isSelected ? 'bg-blue-500/10' : rowFmtStyle ? '' : 'hover:bg-blue-500/5'}
+                    ${row.hubspot_removed_at ? 'opacity-50 line-through' : ''}
                   `}
                   style={{
                     height: ROW_HEIGHT,
                     transform: `translateY(${virtualRow.start}px)`,
+                    ...(rowFmtStyle ? formattingStyleToCSS(rowFmtStyle) : {}),
                   }}
                 >
                   {/* Checkbox cell (sticky left) */}
                   <div
                     className={`
                       sticky left-0 z-20 flex items-center justify-center border-r border-gray-800/50 shrink-0
-                      ${isSelected ? 'bg-blue-500/10' : 'bg-gray-950'}
+                      ${isSelected ? 'bg-blue-500/10' : rowFmtStyle ? '' : 'bg-gray-950'}
                     `}
-                    style={{ width: CHECKBOX_COL_WIDTH, minWidth: CHECKBOX_COL_WIDTH }}
+                    style={{
+                      width: CHECKBOX_COL_WIDTH,
+                      minWidth: CHECKBOX_COL_WIDTH,
+                      ...(rowFmtStyle && !isSelected ? formattingStyleToCSS(rowFmtStyle) : {}),
+                    }}
                   >
                     <input
                       type="checkbox"
@@ -507,6 +693,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                         className={`
                           flex items-center px-2 border-r border-gray-800/50 shrink-0 overflow-hidden
                           ${col.is_enrichment ? 'bg-violet-500/[0.03]' : ''}
+                          ${col.hubspot_property_name ? 'bg-orange-500/10' : ''}
                         `}
                         style={{ width: cellWidth, minWidth: cellWidth, ...fmtStyle }}
                       >
@@ -523,6 +710,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           onEdit={(col.is_enrichment || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
                           dropdownOptions={col.dropdown_options}
                           formulaExpression={col.formula_expression}
+                          columnLabel={col.label}
+                          metadata={cellData.metadata}
+                          onEnrichRow={col.is_enrichment ? () => onEnrichRow?.(row.id, col.id) : undefined}
                         />
                       </div>
                     );
@@ -546,6 +736,46 @@ export const OpsTable: React.FC<OpsTableProps> = ({
               <p className="text-xs text-gray-600 mt-1">
                 Import data or add rows to get started.
               </p>
+            </div>
+          )}
+
+          {/* ---- SUMMARY ROW ---- */}
+          {summaryValues && rows.length > 0 && (
+            <div
+              className="sticky bottom-0 z-10 flex border-t border-gray-700 bg-gray-800/90 backdrop-blur-sm"
+              style={{ minWidth: totalWidth }}
+            >
+              {/* Checkbox placeholder */}
+              <div
+                className="flex items-center justify-center border-r border-gray-700 shrink-0 bg-gray-800/90"
+                style={{ width: CHECKBOX_COL_WIDTH, minWidth: CHECKBOX_COL_WIDTH, height: ROW_HEIGHT }}
+              />
+              {visibleColumns.map((col) => {
+                const val = summaryValues[col.key];
+                const aggType = summaryConfig?.[col.key];
+                const aggLabel = aggType && aggType !== 'none'
+                  ? { count: '#', sum: '\u03A3', average: 'Avg', min: 'Min', max: 'Max', filled_percent: '%', unique_count: '\u2261' }[aggType] ?? ''
+                  : '';
+                const cellWidth = resizingColumnId === col.id ? (resizingWidth ?? col.width) : col.width;
+                return (
+                  <div
+                    key={col.id}
+                    className="flex items-center px-2 border-r border-gray-700 shrink-0 overflow-hidden"
+                    style={{ width: cellWidth, minWidth: cellWidth, height: ROW_HEIGHT }}
+                  >
+                    {val ? (
+                      <span className="text-xs font-medium text-gray-300 truncate">
+                        <span className="text-gray-500 mr-1">{aggLabel}</span>
+                        {val}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <div
+                className="shrink-0 border-r border-gray-700"
+                style={{ width: ADD_COL_WIDTH, minWidth: ADD_COL_WIDTH, height: ROW_HEIGHT }}
+              />
             </div>
           )}
         </div>

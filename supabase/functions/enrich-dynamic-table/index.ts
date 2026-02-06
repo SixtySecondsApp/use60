@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { fetchWithRetry } from '../_shared/rateLimiter.ts'
 
 const corsHeaders = {
@@ -543,6 +543,32 @@ serve(async (req) => {
     }
 
     // -----------------------------------------------------------------
+    // 6b. Mark all batch cells as 'pending' for instant UI feedback
+    // -----------------------------------------------------------------
+    const pendingUpserts = rows.map((row) => ({
+      row_id: row.id,
+      column_id,
+      value: null,
+      confidence: null,
+      status: 'pending',
+      source: 'ai_enrichment',
+      error_message: null,
+      metadata: null,
+    }))
+
+    for (let i = 0; i < pendingUpserts.length; i += 500) {
+      const chunk = pendingUpserts.slice(i, i + 500)
+      const { error: pendingError } = await serviceClient
+        .from('dynamic_table_cells')
+        .upsert(chunk, { onConflict: 'row_id,column_id' })
+      if (pendingError) {
+        console.error(`${LOG_PREFIX} Failed to mark cells as pending:`, pendingError.message)
+      }
+    }
+
+    console.log(`${LOG_PREFIX} Marked ${pendingUpserts.length} cells as pending`)
+
+    // -----------------------------------------------------------------
     // 7. Process rows sequentially (this batch only)
     // -----------------------------------------------------------------
     let processedRows = existingJobProcessed
@@ -565,26 +591,51 @@ ${JSON.stringify(rowContext, null, 2)}
 ENRICHMENT TASK:
 ${resolvedPrompt}
 
-Respond with ONLY the enrichment result. Be concise and factual. If you cannot determine the answer with confidence, respond with "N/A".`
+RESPONSE FORMAT:
+Respond with a JSON object containing two fields:
+- "answer": Your concise, factual enrichment result (string). If you cannot determine the answer, use "N/A".
+- "sources": An array of sources you used. Each source is an object with "title" (short description) and optionally "url" (if a specific web URL is known). If no sources, use an empty array.
+
+Example: {"answer": "Series B, raised $50M in Jan 2025", "sources": [{"title": "TechCrunch article on funding round", "url": "https://example.com/article"}]}
+
+Respond with ONLY the JSON object, no markdown or extra text.`
 
         // Call AI provider (OpenRouter if model specified, otherwise Claude)
-        const result = useOpenRouter
+        const rawResult = useOpenRouter
           ? await callOpenRouter(prompt, openrouterApiKey, enrichmentModel!)
           : await callClaude(prompt, anthropicApiKey)
-        const confidence = scoreConfidence(result)
 
-        // Upsert cell with result
+        // Parse structured response (answer + sources)
+        let answer = rawResult
+        let sources: { title?: string; url?: string }[] = []
+        try {
+          // Strip markdown code fences if present
+          const cleaned = rawResult.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+          const parsed = JSON.parse(cleaned)
+          if (parsed && typeof parsed.answer === 'string') {
+            answer = parsed.answer
+            sources = Array.isArray(parsed.sources) ? parsed.sources : []
+          }
+        } catch {
+          // AI returned plain text — use as-is, no sources
+        }
+
+        const confidence = scoreConfidence(answer)
+        const cellMetadata = sources.length > 0 ? { sources } : null
+
+        // Upsert cell with result (sources in metadata, not in value)
         const { error: upsertError } = await serviceClient
           .from('dynamic_table_cells')
           .upsert(
             {
               row_id: row.id,
               column_id,
-              value: result,
+              value: answer,
               confidence,
               source: 'ai_enrichment',
               status: 'complete',
               error_message: null,
+              metadata: cellMetadata,
             },
             { onConflict: 'row_id,column_id' }
           )
@@ -598,7 +649,7 @@ Respond with ONLY the enrichment result. Be concise and factual. If you cannot d
         await serviceClient.from('enrichment_job_results').insert({
           job_id: jobId,
           row_id: row.id,
-          result,
+          result: answer,
           confidence,
           source: 'ai_enrichment',
         })

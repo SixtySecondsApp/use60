@@ -125,6 +125,7 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
   outreach: 'outreach.io',
   salesloft: 'salesloft.com',
   apollo: 'apollo.io',
+  instantly: 'instantly.ai',
   'instantly-ai': 'instantly.ai',
   woodpecker: 'woodpecker.co',
   sendgrid: 'sendgrid.com',

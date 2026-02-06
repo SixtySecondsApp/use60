@@ -1,6 +1,6 @@
 // @ts-nocheck — Deno edge function
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { HubSpotClient } from '../_shared/hubspot.ts'
 
 /**
@@ -14,6 +14,8 @@ import { HubSpotClient } from '../_shared/hubspot.ts'
  *     fieldMappings: { opsColumnKey: string, hubspotProperty: string }[],
  *     duplicateStrategy: 'update' | 'skip' | 'create',
  *     listId?: string,
+ *     createNewList?: boolean,
+ *     newListName?: string,
  *   }
  * }
  */
@@ -114,7 +116,13 @@ serve(async (req: Request) => {
     }
 
     // 4. Batch upsert to HubSpot
-    const results = { pushed: 0, updated: 0, skipped: 0, failed: 0, errors: [] as string[] }
+    const results = {
+      pushed: 0, updated: 0, skipped: 0, failed: 0,
+      errors: [] as string[],
+      list_id: null as string | null,
+      list_contacts_added: 0,
+    }
+    const allHubSpotContactIds: string[] = []
 
     // Process in batches of 100
     for (let i = 0; i < contacts.length; i += HUBSPOT_BATCH_SIZE) {
@@ -122,58 +130,48 @@ serve(async (req: Request) => {
 
       const inputs = batch.map((c) => ({
         properties: c.properties,
-        id: c.properties.email ?? undefined, // For upsert by email
+        id: c.properties.email ?? undefined,
       }))
 
       try {
         if (duplicateStrategy === 'update') {
-          // Use batch upsert with email as idProperty
-          const response = await hubspot.request<any>(
-            '/crm/v3/objects/contacts/batch/upsert',
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                inputs: inputs.map((inp) => ({
-                  properties: inp.properties,
-                  id: inp.properties.email,
-                  idProperty: 'email',
-                })),
-              }),
+          const response = await hubspot.request<any>({
+            method: 'POST',
+            path: '/crm/v3/objects/contacts/batch/upsert',
+            body: {
+              inputs: inputs.map((inp) => ({
+                properties: inp.properties,
+                id: inp.properties.email,
+                idProperty: 'email',
+              })),
             },
-          )
+          })
 
           for (let j = 0; j < batch.length; j++) {
             const result = response?.results?.[j]
+            if (result?.id) allHubSpotContactIds.push(result.id)
             const status = result?.new ? 'Pushed' : 'Updated'
             results.pushed++
 
-            // Update CRM status cell
             if (column_id) {
               await supabase
                 .from('dynamic_table_cells')
                 .upsert(
-                  {
-                    row_id: batch[j].rowId,
-                    column_id,
-                    value: status,
-                    status: 'complete',
-                    source: 'hubspot',
-                    confidence: 1.0,
-                  },
+                  { row_id: batch[j].rowId, column_id, value: status, status: 'complete', source: 'hubspot', confidence: 1.0 },
                   { onConflict: 'row_id,column_id' },
                 )
             }
           }
         } else if (duplicateStrategy === 'create') {
-          // Create new contacts (no dedup)
-          const response = await hubspot.request<any>(
-            '/crm/v3/objects/contacts/batch/create',
-            {
-              method: 'POST',
-              body: JSON.stringify({ inputs: inputs.map((inp) => ({ properties: inp.properties })) }),
-            },
-          )
+          const response = await hubspot.request<any>({
+            method: 'POST',
+            path: '/crm/v3/objects/contacts/batch/create',
+            body: { inputs: inputs.map((inp) => ({ properties: inp.properties })) },
+          })
 
+          for (const r of response?.results ?? []) {
+            if (r?.id) allHubSpotContactIds.push(r.id)
+          }
           results.pushed += batch.length
 
           for (let j = 0; j < batch.length; j++) {
@@ -187,19 +185,18 @@ serve(async (req: Request) => {
             }
           }
         } else {
-          // Skip — check existence first then create new only
-          // For simplicity, use batch create and handle 409 conflicts
+          // Skip — batch create, handle 409 conflicts
           try {
-            await hubspot.request<any>(
-              '/crm/v3/objects/contacts/batch/create',
-              {
-                method: 'POST',
-                body: JSON.stringify({ inputs: inputs.map((inp) => ({ properties: inp.properties })) }),
-              },
-            )
+            const response = await hubspot.request<any>({
+              method: 'POST',
+              path: '/crm/v3/objects/contacts/batch/create',
+              body: { inputs: inputs.map((inp) => ({ properties: inp.properties })) },
+            })
+            for (const r of response?.results ?? []) {
+              if (r?.id) allHubSpotContactIds.push(r.id)
+            }
             results.pushed += batch.length
           } catch (e: any) {
-            // Some may already exist — mark as skipped
             results.skipped += batch.length
           }
 
@@ -218,7 +215,6 @@ serve(async (req: Request) => {
         results.failed += batch.length
         results.errors.push(error.message ?? String(error))
 
-        // Mark batch as failed
         for (const contact of batch) {
           if (column_id) {
             await supabase
@@ -232,14 +228,46 @@ serve(async (req: Request) => {
       }
     }
 
-    // 5. Add to HubSpot list if specified
-    if (config.listId && results.pushed > 0) {
+    // 5. Create new HubSpot list if requested
+    let listId = config.listId as string | undefined
+    if (config.createNewList && config.newListName) {
       try {
-        // Get HubSpot contact IDs that were just created/updated
-        // For now, skip list assignment — could be added via a separate call
-        console.log(`[push-to-hubspot] List assignment for list ${config.listId} — not yet implemented`)
-      } catch (listError) {
-        console.error('[push-to-hubspot] List assignment error:', listError)
+        console.log(`[push-to-hubspot] Creating new HubSpot list: "${config.newListName}"`)
+        const listResponse = await hubspot.request<any>({
+          method: 'POST',
+          path: '/crm/v3/lists',
+          body: {
+            name: config.newListName,
+            objectTypeId: '0-1', // contacts
+            processingType: 'MANUAL',
+          },
+        })
+        listId = listResponse?.listId ?? listResponse?.list?.listId
+        if (listId) {
+          console.log(`[push-to-hubspot] Created list ${listId}: "${config.newListName}"`)
+          results.list_id = listId
+        }
+      } catch (listError: any) {
+        console.error('[push-to-hubspot] List creation error:', listError?.message ?? listError)
+        results.errors.push(`List creation failed: ${listError?.message ?? String(listError)}`)
+      }
+    }
+
+    // 6. Add contacts to HubSpot list if specified
+    if (listId && allHubSpotContactIds.length > 0) {
+      try {
+        console.log(`[push-to-hubspot] Adding ${allHubSpotContactIds.length} contacts to list ${listId}`)
+        await hubspot.request<any>({
+          method: 'PUT',
+          path: `/crm/v3/lists/${listId}/memberships/add`,
+          body: allHubSpotContactIds,
+        })
+        results.list_contacts_added = allHubSpotContactIds.length
+        results.list_id = listId
+        console.log(`[push-to-hubspot] Added ${allHubSpotContactIds.length} contacts to list ${listId}`)
+      } catch (listError: any) {
+        console.error('[push-to-hubspot] List assignment error:', listError?.message ?? listError)
+        results.errors.push(`List assignment failed: ${listError?.message ?? String(listError)}`)
       }
     }
 

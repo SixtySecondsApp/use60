@@ -221,7 +221,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Pages that should behave like an app-within-the-app (no document scrolling).
   // The page itself manages its own internal scroll regions (e.g. Copilot chat).
   const isFullHeightPage = useMemo(() => {
-    return location.pathname === '/copilot';
+    return location.pathname === '/copilot' || location.pathname.startsWith('/ops/');
   }, [location.pathname]);
 
   // Keyboard shortcut for SmartSearch (⌘K) - Disabled

@@ -23,12 +23,22 @@ export function useHubSpotSync(tableId: string | undefined) {
 
       if (resp.error) throw new Error(resp.error.message || 'Failed to sync');
       if (resp.data?.error) throw new Error(resp.data.error);
-      return resp.data as { new_rows: number; updated_rows: number; last_synced_at: string };
+      return resp.data as {
+        new_rows: number;
+        updated_rows: number;
+        removed_rows?: number;
+        returned_rows?: number;
+        last_synced_at: string;
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
-      toast.success(`Synced: ${data.new_rows} new, ${data.updated_rows} updated`);
+
+      const parts = [`${data.new_rows} new`, `${data.updated_rows} updated`];
+      if (data.removed_rows) parts.push(`${data.removed_rows} removed`);
+      if (data.returned_rows) parts.push(`${data.returned_rows} returned`);
+      toast.success(`Synced: ${parts.join(', ')}`);
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to sync from HubSpot');

@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,6 +58,47 @@ interface ProcessJobRequest {
 }
 
 type RequestBody = AnalyzeFocusAreasRequest | GenerateGoalsRequest | GenerateSOWRequest | GenerateProposalRequest | GetJobStatusRequest | ProcessJobRequest
+
+// =============================================================================
+// Structured JSON Output Types (REL-003)
+// =============================================================================
+
+interface ProposalSection {
+  id: string
+  type: 'cover' | 'executive_summary' | 'problem' | 'solution' | 'approach' | 'timeline' | 'pricing' | 'terms' | 'custom'
+  title: string
+  content: string  // HTML content for this section
+  order: number
+}
+
+interface ProposalSections {
+  sections: ProposalSection[]
+  metadata?: {
+    generated_at: string
+    model: string
+    token_count?: number
+  }
+}
+
+// JSON Schema for validation
+const PROPOSAL_SECTIONS_SCHEMA = {
+  required: ['sections'],
+  properties: {
+    sections: {
+      type: 'array',
+      items: {
+        required: ['id', 'type', 'title', 'content', 'order'],
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string', enum: ['cover', 'executive_summary', 'problem', 'solution', 'approach', 'timeline', 'pricing', 'terms', 'custom'] },
+          title: { type: 'string' },
+          content: { type: 'string' },
+          order: { type: 'number' }
+        }
+      }
+    }
+  }
+}
 
 /**
  * Get model settings from system_config
@@ -275,6 +316,641 @@ async function getOpenRouterApiKey(supabase: any, userId: string): Promise<strin
   return sharedKey.trim()
 }
 
+// =============================================================================
+// Proposal Progress Tracking (REL-004)
+// =============================================================================
+
+/**
+ * Update proposal generation progress for Supabase Realtime subscribers.
+ *
+ * Stores detailed progress in `brand_config._generation_progress` (JSONB) and
+ * keeps `generation_status` in sync using the allowed enum values:
+ *   'pending' | 'processing' | 'complete' | 'failed'
+ *
+ * Clients subscribe to Realtime changes on the specific proposals row to
+ * receive progress updates as they happen.
+ */
+async function updateProposalProgress(
+  supabase: any,
+  proposalId: string | null,
+  step: string,
+  percent: number,
+  message: string
+) {
+  if (!proposalId) return
+  try {
+    // Read current brand_config so we can merge progress into it
+    const { data: current } = await supabase
+      .from('proposals')
+      .select('brand_config')
+      .eq('id', proposalId)
+      .maybeSingle()
+
+    const brandConfig = current?.brand_config || {}
+    brandConfig._generation_progress = {
+      step,
+      percent,
+      message,
+      updated_at: new Date().toISOString(),
+    }
+
+    // Map percent to the allowed generation_status values
+    let generationStatus: string
+    if (percent >= 100) {
+      generationStatus = 'complete'
+    } else if (step === 'failed') {
+      generationStatus = 'failed'
+    } else if (percent > 0) {
+      generationStatus = 'processing'
+    } else {
+      generationStatus = 'pending'
+    }
+
+    await supabase
+      .from('proposals')
+      .update({
+        generation_status: generationStatus,
+        brand_config: brandConfig,
+      })
+      .eq('id', proposalId)
+
+    console.log(`📊 Proposal ${proposalId} progress: ${step} (${percent}%) - ${message}`)
+  } catch (err) {
+    console.warn('Failed to update proposal progress:', err)
+  }
+}
+
+// =============================================================================
+// Chunked Transcript Processing Utilities (REL-001 / REL-002)
+// =============================================================================
+
+/** Approximate character-to-token ratio (1 token ~ 4 chars for English text) */
+const CHARS_PER_TOKEN = 4
+
+/** Default max tokens per chunk. ~15,000 tokens = ~60,000 chars */
+const DEFAULT_CHUNK_MAX_TOKENS = 15000
+
+/** Character threshold that triggers chunked processing */
+const CHUNK_CHAR_THRESHOLD = DEFAULT_CHUNK_MAX_TOKENS * CHARS_PER_TOKEN // 60,000 chars
+
+/**
+ * Split a long transcript into chunks at sentence boundaries.
+ *
+ * The function tries to break on sentence-ending punctuation (. ! ?) followed
+ * by whitespace.  If no sentence boundary is found within the allowed window it
+ * falls back to the nearest paragraph break (\n\n), then line break (\n), then
+ * a hard cut at maxChars.
+ *
+ * @param text       The full transcript text
+ * @param maxTokens  Maximum approximate tokens per chunk (default 15 000)
+ * @returns          Array of text chunks, each <= maxChars characters
+ */
+function chunkTranscript(text: string, maxTokens: number = DEFAULT_CHUNK_MAX_TOKENS): string[] {
+  const maxChars = maxTokens * CHARS_PER_TOKEN
+
+  // Fast path: text fits in a single chunk
+  if (text.length <= maxChars) {
+    return [text]
+  }
+
+  const chunks: string[] = []
+  let remaining = text
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxChars) {
+      chunks.push(remaining.trim())
+      break
+    }
+
+    // Search for the best split point within maxChars
+    let splitAt = -1
+
+    // 1) Try sentence boundary (. ! ? followed by whitespace) — search backwards
+    //    from maxChars to 70% of maxChars to keep chunks reasonably large.
+    const searchStart = Math.floor(maxChars * 0.7)
+    for (let i = maxChars; i >= searchStart; i--) {
+      const ch = remaining[i - 1] // character just before potential split
+      if ((ch === '.' || ch === '!' || ch === '?') && /\s/.test(remaining[i] || '')) {
+        splitAt = i
+        break
+      }
+    }
+
+    // 2) Fallback: paragraph break (\n\n)
+    if (splitAt === -1) {
+      const paragraphIdx = remaining.lastIndexOf('\n\n', maxChars)
+      if (paragraphIdx > searchStart) {
+        splitAt = paragraphIdx + 2 // include the double newline in the first chunk
+      }
+    }
+
+    // 3) Fallback: line break (\n)
+    if (splitAt === -1) {
+      const lineIdx = remaining.lastIndexOf('\n', maxChars)
+      if (lineIdx > searchStart) {
+        splitAt = lineIdx + 1
+      }
+    }
+
+    // 4) Last resort: hard cut at maxChars
+    if (splitAt === -1) {
+      splitAt = maxChars
+    }
+
+    chunks.push(remaining.substring(0, splitAt).trim())
+    remaining = remaining.substring(splitAt).trim()
+  }
+
+  console.log(`chunkTranscript: split ${text.length} chars into ${chunks.length} chunks (maxTokens=${maxTokens})`)
+  return chunks
+}
+
+/**
+ * Process an array of text chunks in parallel.
+ *
+ * Each chunk is passed to `processor`.  All promises run concurrently via
+ * Promise.allSettled so that individual failures do not prevent other chunks
+ * from completing.  Failed chunks are logged and their error messages are
+ * included in the result array prefixed with "[CHUNK_ERROR]" so the caller can
+ * decide how to handle partial failures.
+ *
+ * @param chunks     Array of text chunks to process
+ * @param processor  Async function that processes a single chunk and returns a string
+ * @returns          Array of result strings (same order as input chunks)
+ */
+async function processChunksInParallel(
+  chunks: string[],
+  processor: (chunk: string) => Promise<string>,
+): Promise<string[]> {
+  console.log(`processChunksInParallel: processing ${chunks.length} chunks in parallel`)
+  const startTime = Date.now()
+
+  const settled = await Promise.allSettled(chunks.map((chunk, idx) => {
+    console.log(`  chunk ${idx + 1}/${chunks.length}: ${chunk.length} chars`)
+    return processor(chunk)
+  }))
+
+  const results: string[] = settled.map((outcome, idx) => {
+    if (outcome.status === 'fulfilled') {
+      return outcome.value
+    }
+    const errMsg = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
+    console.error(`  chunk ${idx + 1} failed: ${errMsg}`)
+    return `[CHUNK_ERROR] Chunk ${idx + 1} failed: ${errMsg}`
+  })
+
+  const elapsed = Date.now() - startTime
+  const failedCount = settled.filter(s => s.status === 'rejected').length
+  console.log(`processChunksInParallel: completed in ${elapsed}ms (${failedCount} failures)`)
+
+  return results
+}
+
+/** HTTP status codes that should NOT be retried (client errors) */
+const NON_RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404, 422])
+
+/**
+ * Custom error class that carries an HTTP status code for non-retryable errors.
+ */
+class NonRetryableError extends Error {
+  public readonly statusCode: number
+  constructor(message: string, statusCode: number) {
+    super(message)
+    this.name = 'NonRetryableError'
+    this.statusCode = statusCode
+  }
+}
+
+/**
+ * Retry an async function with exponential backoff.
+ *
+ * Non-retryable errors (those with `statusCode` in NON_RETRYABLE_STATUS_CODES,
+ * or instances of `NonRetryableError`) fail immediately without consuming
+ * remaining retries.
+ *
+ * On final failure the returned error includes the attempt count for
+ * observability.
+ *
+ * @param fn       The async function to execute
+ * @param retries  Maximum number of retry attempts (default 3)
+ * @param delays   Array of millisecond delays between retries (default [1000, 3000, 9000])
+ * @returns        The resolved value of `fn`
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  retries: number = 3,
+  delays: number[] = [1000, 3000, 9000],
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      // Non-retryable errors fail immediately
+      if (error instanceof NonRetryableError) {
+        console.error(`retryWithBackoff: non-retryable error on attempt ${attempt + 1}: ${lastError.message}`)
+        throw lastError
+      }
+      if ((error as any)?.statusCode && NON_RETRYABLE_STATUS_CODES.has((error as any).statusCode)) {
+        console.error(`retryWithBackoff: non-retryable status ${(error as any).statusCode} on attempt ${attempt + 1}: ${lastError.message}`)
+        throw lastError
+      }
+
+      // If retries exhausted, break
+      if (attempt >= retries) {
+        break
+      }
+
+      // Wait before next attempt
+      const delay = delays[Math.min(attempt, delays.length - 1)]
+      console.log(`retryWithBackoff: attempt ${attempt + 1}/${retries + 1} failed, retrying in ${delay}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  // All retries exhausted — augment error with attempt count
+  const finalError = new Error(
+    `${lastError?.message || 'Unknown error'} [failed after ${retries + 1} attempts]`
+  )
+  ;(finalError as any).attempts = retries + 1
+  ;(finalError as any).cause = lastError
+  throw finalError
+}
+
+// =============================================================================
+// Structured JSON Output Validation & Parsing (REL-003)
+// =============================================================================
+
+/**
+ * Validate that an object conforms to the ProposalSections schema.
+ */
+function validateProposalSections(output: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+
+  if (!output || typeof output !== 'object') {
+    errors.push('Output must be a JSON object')
+    return { valid: false, errors }
+  }
+
+  if (!Array.isArray(output.sections)) {
+    errors.push('Output must contain a "sections" array')
+    return { valid: false, errors }
+  }
+
+  const validTypes = ['cover', 'executive_summary', 'problem', 'solution', 'approach', 'timeline', 'pricing', 'terms', 'custom']
+
+  for (let i = 0; i < output.sections.length; i++) {
+    const section = output.sections[i]
+    if (!section.id) errors.push(`Section ${i}: missing "id"`)
+    if (!section.type || !validTypes.includes(section.type)) errors.push(`Section ${i}: invalid "type" (got "${section.type}")`)
+    if (!section.title) errors.push(`Section ${i}: missing "title"`)
+    if (typeof section.content !== 'string') errors.push(`Section ${i}: "content" must be a string`)
+    if (typeof section.order !== 'number') errors.push(`Section ${i}: "order" must be a number`)
+  }
+
+  return { valid: errors.length === 0, errors }
+}
+
+/**
+ * Convert raw HTML/text content into structured ProposalSection[] by splitting
+ * on h1/h2 headings. This is a deterministic fallback when AI does not return
+ * structured JSON.
+ */
+function convertHtmlToSections(html: string): ProposalSection[] {
+  const sections: ProposalSection[] = []
+
+  // Split by h1 or h2 tags
+  const parts = html.split(/<h[12][^>]*>/i)
+
+  // Map common heading patterns to section types
+  const typePatterns: Record<string, RegExp> = {
+    'cover': /cover|title\s*page/i,
+    'executive_summary': /executive\s*summary|overview|summary/i,
+    'problem': /problem|challenge|issue|pain\s*point/i,
+    'solution': /solution|approach|recommendation|proposed/i,
+    'approach': /methodology|approach|process|how\s*we/i,
+    'timeline': /timeline|schedule|phases|milestones|implementation\s*plan/i,
+    'pricing': /pricing|cost|investment|budget|fees/i,
+    'terms': /terms|conditions|legal|agreement|next\s*steps/i,
+  }
+
+  let order = 0
+  for (const part of parts) {
+    if (!part.trim()) continue
+
+    // Extract title from closing h1/h2 tag content
+    const titleMatch = part.match(/^(.*?)<\/h[12]>/i)
+    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : `Section ${order + 1}`
+    const content = titleMatch ? part.slice(titleMatch[0].length).trim() : part.trim()
+
+    if (!content && !title) continue
+
+    // Detect section type from title
+    let type: ProposalSection['type'] = 'custom'
+    for (const [sType, pattern] of Object.entries(typePatterns)) {
+      if (pattern.test(title)) {
+        type = sType as ProposalSection['type']
+        break
+      }
+    }
+
+    sections.push({
+      id: `section-${order}`,
+      type,
+      title,
+      content: content || '',
+      order: order++
+    })
+  }
+
+  // If no sections found (no h1/h2 tags), try splitting by markdown headings
+  if (sections.length === 0) {
+    const mdParts = html.split(/^#{1,2}\s+/m)
+    const mdHeadings = html.match(/^#{1,2}\s+(.+)$/gm) || []
+
+    if (mdParts.length > 1) {
+      // First part before any heading
+      if (mdParts[0].trim()) {
+        sections.push({
+          id: 'section-0',
+          type: 'cover',
+          title: 'Introduction',
+          content: mdParts[0].trim(),
+          order: order++
+        })
+      }
+
+      for (let i = 1; i < mdParts.length; i++) {
+        const headingRaw = mdHeadings[i - 1] || ''
+        const headingTitle = headingRaw.replace(/^#+\s+/, '').trim() || `Section ${order + 1}`
+        const sectionContent = mdParts[i].trim()
+
+        let type: ProposalSection['type'] = 'custom'
+        for (const [sType, pattern] of Object.entries(typePatterns)) {
+          if (pattern.test(headingTitle)) {
+            type = sType as ProposalSection['type']
+            break
+          }
+        }
+
+        sections.push({
+          id: `section-${order}`,
+          type,
+          title: headingTitle,
+          content: sectionContent,
+          order: order++
+        })
+      }
+    }
+  }
+
+  // If still no sections found, wrap entire content as single section
+  if (sections.length === 0) {
+    sections.push({
+      id: 'section-0',
+      type: 'custom',
+      title: 'Proposal',
+      content: html,
+      order: 0
+    })
+  }
+
+  return sections
+}
+
+/**
+ * Parse AI output into structured ProposalSections, with a deterministic
+ * fallback that splits raw HTML/markdown by headings.
+ *
+ * @param rawContent        The raw AI output (HTML, markdown, or JSON)
+ * @param model             The model ID used for generation (stored in metadata)
+ * @param _openRouterApiKey OpenRouter API key (reserved for future retry-with-stricter-prompt)
+ * @param retryCount        Internal retry counter
+ */
+async function parseAndValidateAIOutput(
+  rawContent: string,
+  model: string,
+  _openRouterApiKey: string,
+  retryCount: number = 0
+): Promise<ProposalSections> {
+  // First try: parse the raw content as JSON if it looks like JSON
+  let parsed: any = null
+
+  // Try to extract JSON from the response (AI may wrap in markdown code blocks)
+  const jsonMatch = rawContent.match(/```(?:json)?\s*([\s\S]*?)```/) || rawContent.match(/(\{[\s\S]*\})/)
+  if (jsonMatch) {
+    try {
+      parsed = JSON.parse(jsonMatch[1])
+    } catch (_e) {
+      // Not valid JSON
+    }
+  }
+
+  if (!parsed) {
+    try {
+      parsed = JSON.parse(rawContent)
+    } catch (_e) {
+      // Not JSON at all - need to convert
+    }
+  }
+
+  // If we got JSON, validate it
+  if (parsed) {
+    const validation = validateProposalSections(parsed)
+    if (validation.valid) {
+      return {
+        ...parsed,
+        metadata: {
+          generated_at: new Date().toISOString(),
+          model,
+          ...(parsed.metadata || {})
+        }
+      }
+    }
+
+    // Invalid structure - log and fall through to conversion
+    if (retryCount === 0) {
+      console.warn('AI output validation failed, falling back to HTML/markdown conversion:', validation.errors)
+    }
+  }
+
+  // Convert raw HTML/text content into structured sections
+  // This is a deterministic fallback - split by h1/h2 headings
+  const sections = convertHtmlToSections(rawContent)
+
+  return {
+    sections,
+    metadata: {
+      generated_at: new Date().toISOString(),
+      model,
+      token_count: Math.ceil(rawContent.length / 4)
+    }
+  }
+}
+
+// =============================================================================
+// End of Structured JSON Output Validation & Parsing
+// =============================================================================
+
+/**
+ * Call OpenRouter to process a single text chunk and return the response text.
+ *
+ * This is a low-level helper used by the chunked transcript processing paths.
+ * It includes proper error classification so `retryWithBackoff` can skip
+ * non-retryable errors.
+ */
+async function callOpenRouterForChunk(
+  openRouterApiKey: string,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens: number,
+): Promise<string> {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${openRouterApiKey}`,
+      'HTTP-Referer': 'https://sixtyseconds.video',
+      'X-Title': 'Sixty Sales Dashboard Proposal Generation',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: maxTokens,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    let errorMessage = `OpenRouter API error: ${response.status} - ${errorText}`
+
+    // Parse the error body for a friendlier message
+    try {
+      const errorData = JSON.parse(errorText)
+      if (errorData.error?.message) {
+        errorMessage = `OpenRouter error: ${errorData.error.message}`
+      }
+    } catch (_) {
+      // keep raw errorMessage
+    }
+
+    // Non-retryable client errors
+    if (NON_RETRYABLE_STATUS_CODES.has(response.status)) {
+      throw new NonRetryableError(errorMessage, response.status)
+    }
+
+    // Retryable error (e.g. 429, 500, 502, 503)
+    const err = new Error(errorMessage)
+    ;(err as any).statusCode = response.status
+    throw err
+  }
+
+  const data = await response.json()
+  const content = data.choices?.[0]?.message?.content || data.content?.[0]?.text || ''
+  return content
+}
+
+/**
+ * Process transcripts with chunking when they exceed the token threshold.
+ *
+ * For short transcripts this is a simple pass-through.  For long transcripts
+ * the text is split into chunks, each chunk is processed independently (with
+ * retry), and the partial results are stitched back together.
+ *
+ * @param transcriptsText  The concatenated transcript text
+ * @param openRouterApiKey OpenRouter API key
+ * @param model            Model ID to use
+ * @param systemPrompt     System prompt for the AI
+ * @param buildUserPrompt  Function that wraps a (possibly partial) transcript into the full user prompt
+ * @param maxTokens        Max output tokens per AI call
+ * @param stitchPrompt     Optional system prompt used for a final stitching pass when chunks > 1
+ * @returns                The final generated content string
+ */
+async function processTranscriptWithChunking(
+  transcriptsText: string,
+  openRouterApiKey: string,
+  model: string,
+  systemPrompt: string,
+  buildUserPrompt: (transcriptPart: string) => string,
+  maxTokens: number,
+  stitchPrompt?: string,
+): Promise<{ content: string; chunked: boolean; chunkCount: number }> {
+  // If transcript is short enough, process directly (no chunking)
+  if (transcriptsText.length <= CHUNK_CHAR_THRESHOLD) {
+    console.log(`processTranscriptWithChunking: transcript is ${transcriptsText.length} chars, processing directly (threshold: ${CHUNK_CHAR_THRESHOLD})`)
+    const content = await retryWithBackoff(() =>
+      callOpenRouterForChunk(openRouterApiKey, model, systemPrompt, buildUserPrompt(transcriptsText), maxTokens)
+    )
+    return { content, chunked: false, chunkCount: 1 }
+  }
+
+  // Transcript exceeds threshold — chunk it
+  const chunks = chunkTranscript(transcriptsText)
+  console.log(`processTranscriptWithChunking: transcript is ${transcriptsText.length} chars, chunked into ${chunks.length} pieces`)
+
+  // Process each chunk with retry, in parallel
+  const chunkResults = await processChunksInParallel(chunks, (chunk) =>
+    retryWithBackoff(() =>
+      callOpenRouterForChunk(
+        openRouterApiKey,
+        model,
+        systemPrompt,
+        buildUserPrompt(chunk),
+        maxTokens,
+      )
+    )
+  )
+
+  // Check for partial failures
+  const failedChunks = chunkResults.filter(r => r.startsWith('[CHUNK_ERROR]'))
+  if (failedChunks.length > 0) {
+    console.warn(`processTranscriptWithChunking: ${failedChunks.length}/${chunks.length} chunks failed`)
+  }
+
+  // Filter out failed chunks for stitching
+  const successResults = chunkResults.filter(r => !r.startsWith('[CHUNK_ERROR]'))
+
+  if (successResults.length === 0) {
+    throw new Error(`All ${chunks.length} transcript chunks failed to process. ${failedChunks[0]}`)
+  }
+
+  // If only one successful result, return directly
+  if (successResults.length === 1) {
+    return { content: successResults[0], chunked: true, chunkCount: chunks.length }
+  }
+
+  // Stitch results together using an AI call for coherence
+  const stitchSystemPrompt = stitchPrompt || `You are an expert editor. You will receive multiple partial analyses of a meeting transcript that were processed in chunks. Your job is to:
+
+1. Merge the partial results into a single, coherent document
+2. Remove any duplicate information that appears across chunks
+3. Ensure smooth transitions between sections
+4. Maintain consistent formatting and style throughout
+5. Preserve all unique information from each chunk
+
+Output ONLY the merged document. Do not add explanations or commentary about the merging process.`
+
+  const stitchUserPrompt = `Merge the following ${successResults.length} partial analyses into a single coherent document:\n\n${successResults.map((r, i) => `--- PART ${i + 1} OF ${successResults.length} ---\n${r}`).join('\n\n')}`
+
+  console.log(`processTranscriptWithChunking: stitching ${successResults.length} chunk results together`)
+  const stitchedContent = await retryWithBackoff(() =>
+    callOpenRouterForChunk(openRouterApiKey, model, stitchSystemPrompt, stitchUserPrompt, maxTokens)
+  )
+
+  return { content: stitchedContent, chunked: true, chunkCount: chunks.length }
+}
+
+// =============================================================================
+// End of Chunked Transcript Processing Utilities
+// =============================================================================
+
 /**
  * Process a proposal generation job
  */
@@ -316,7 +992,10 @@ async function processJob(
       .update({ status: 'processing', started_at: new Date().toISOString() })
       .eq('id', job.id)
 
-    const { transcripts, goals, contact_name, company_name, focus_areas, length_target, word_limit, page_target } = job.input_data
+    const { transcripts, goals, contact_name, company_name, focus_areas, length_target, word_limit, page_target, proposal_id: proposalId } = job.input_data
+
+    // REL-004: Signal that generation has started
+    await updateProposalProgress(supabase, proposalId, 'analyzing', 10, 'Analyzing input and loading templates...')
 
     // Get model settings
     const modelSettings = await getModelSettings(supabase)
@@ -349,10 +1028,14 @@ async function processJob(
 Use this date as the reference for "today" when creating timelines, deadlines, or any date references in the proposal.
 `
 
+    // Track whether we need chunked processing (for large transcripts in generate_goals)
+    let useChunkedProcessing = false
+    let chunkedTranscriptsText = ''
+
     if (action === 'generate_goals') {
       systemPrompt = `${dateContext}
 
-You are an expert business consultant who extracts strategic goals and objectives from sales call transcripts. 
+You are an expert business consultant who extracts strategic goals and objectives from sales call transcripts.
 Your task is to analyze call transcripts and create a comprehensive Goals & Objectives document.
 
 Use the following example structure as a reference for format and style:
@@ -365,9 +1048,16 @@ Key requirements:
 - Maintain professional, clear language
 - Structure similar to the example provided`
 
-      const transcriptsText = Array.isArray(transcripts) 
-        ? transcripts.join('\n\n---\n\n') 
+      const transcriptsText = Array.isArray(transcripts)
+        ? transcripts.join('\n\n---\n\n')
         : transcripts || ''
+
+      // Check if transcript exceeds chunk threshold
+      if (transcriptsText.length > CHUNK_CHAR_THRESHOLD) {
+        useChunkedProcessing = true
+        chunkedTranscriptsText = transcriptsText
+        console.log(`processJob: generate_goals transcript is ${transcriptsText.length} chars (> ${CHUNK_CHAR_THRESHOLD}), will use chunked processing`)
+      }
 
       const focusAreasText = focus_areas && focus_areas.length > 0
         ? `\n\nFOCUS AREAS TO EMPHASIZE:\n${focus_areas.map((fa: string, idx: number) => `${idx + 1}. ${fa}`).join('\n')}\n\nPlease ensure these focus areas are prominently featured in the Goals & Objectives document.`
@@ -740,6 +1430,121 @@ Output ONLY markdown text starting with a # header.`
     // Use appropriate token limits based on action
     const maxTokens = action === 'generate_proposal' ? 16384 : action === 'generate_goals' ? 8192 : 8192
 
+    // REL-004: Focus areas identified, prompts built — ready to generate
+    await updateProposalProgress(supabase, proposalId, 'focus_complete', 25, 'Focus areas identified')
+
+    // --- Chunked processing path for large transcripts (generate_goals only) ---
+    if (useChunkedProcessing && action === 'generate_goals') {
+      console.log(`processJob: using chunked transcript processing for generate_goals`)
+
+      // REL-004: Starting chunked content generation
+      await updateProposalProgress(supabase, proposalId, 'generating', 40, 'Generating proposal content (chunked)...')
+
+      const focusAreasText = focus_areas && focus_areas.length > 0
+        ? `\n\nFOCUS AREAS TO EMPHASIZE:\n${focus_areas.map((fa: string, idx: number) => `${idx + 1}. ${fa}`).join('\n')}\n\nPlease ensure these focus areas are prominently featured in the Goals & Objectives document.`
+        : ''
+
+      const buildGoalsUserPrompt = (transcriptPart: string) => `Analyze the following sales call transcripts and create a comprehensive Goals & Objectives document.
+
+${contact_name ? `Client: ${contact_name}` : ''}
+${company_name ? `Company: ${company_name}` : ''}
+
+Call Transcripts:
+${transcriptPart}${focusAreasText}
+
+Create a Goals & Objectives document following the structure and style of the example provided. Include all strategic objectives, immediate actions, success metrics, timelines, and any other relevant information from the calls.`
+
+      try {
+        const { content: chunkedContent, chunked, chunkCount } = await processTranscriptWithChunking(
+          chunkedTranscriptsText,
+          openRouterApiKey,
+          model,
+          systemPrompt,
+          buildGoalsUserPrompt,
+          maxTokens,
+        )
+
+        console.log(`processJob: chunked processing complete (${chunkCount} chunks, chunked=${chunked})`)
+
+        // REL-004: Chunked content generated, now assembling
+        await updateProposalProgress(supabase, proposalId, 'assembling', 80, 'Assembling final document...')
+
+        // Parse and validate AI output into structured sections (REL-003)
+        let chunkedSections: ProposalSections | null = null
+        try {
+          chunkedSections = await parseAndValidateAIOutput(chunkedContent, model, openRouterApiKey)
+          console.log(`processJob: parsed chunked content into ${chunkedSections.sections.length} structured sections`)
+        } catch (sectionsError) {
+          console.warn('processJob: failed to parse chunked content into sections (non-fatal):', sectionsError)
+        }
+
+        // Create an SSE response that sends the final content (since chunked path is non-streaming)
+        const encoder = new TextEncoder()
+        const chunkStream = new ReadableStream({
+          start(controller) {
+            // Send the complete content as a single chunk then done
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: chunkedContent })}\n\n`))
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done', content: chunkedContent })}\n\n`))
+            controller.close()
+
+            // REL-004: Mark proposal as complete (fire and forget)
+            updateProposalProgress(supabase, proposalId, 'complete', 100, 'Proposal ready')
+              .catch((err: Error) => console.warn('Proposal progress update failed (chunked):', err))
+
+            // Update job (fire and forget)
+            supabase
+              .from('proposal_jobs')
+              .update({
+                status: 'completed',
+                output_content: chunkedContent,
+                ...(chunkedSections ? { sections: chunkedSections } : {}),
+                output_usage: {
+                  chunked: true,
+                  chunk_count: chunkCount,
+                },
+                completed_at: new Date().toISOString(),
+              })
+              .eq('id', job.id)
+              .then(() => console.log('Job updated successfully (chunked)'))
+              .catch((err: Error) => console.error('Job update failed (chunked):', err))
+          },
+        })
+
+        return new Response(chunkStream, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        })
+      } catch (chunkedError) {
+        console.error('processJob: chunked processing failed:', chunkedError)
+        const chunkedErrMsg = chunkedError instanceof Error ? chunkedError.message : 'Chunked processing error'
+
+        // REL-004: Mark proposal as failed
+        await updateProposalProgress(supabase, proposalId, 'failed', 0, chunkedErrMsg)
+
+        // Update job with error
+        await supabase
+          .from('proposal_jobs')
+          .update({
+            status: 'failed',
+            error_message: chunkedErrMsg,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', job.id)
+
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: chunkedErrMsg,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        )
+      }
+    }
+
     // Determine if streaming should be used based on action
     // Proposals, SOW, email, markdown, and goals all stream when async mode is enabled
     const shouldStream = action === 'generate_proposal' || action === 'generate_sow' || action === 'stream_proposal' || action === 'generate_goals' || action === 'generate_email' || action === 'generate_markdown'
@@ -747,6 +1552,9 @@ Output ONLY markdown text starting with a # header.`
     // For streaming proposals and SOW, use SSE
     // Goals use streaming only if the job was created with stream: true (check input_data if needed)
     if (shouldStream) {
+      // REL-004: Starting content generation via streaming
+      await updateProposalProgress(supabase, proposalId, 'generating', 40, 'Generating proposal content...')
+
       // Use OpenRouter streaming API
       const streamResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -864,6 +1672,10 @@ Output ONLY markdown text starting with a # header.`
 
                     // Process completion for both OpenAI and Anthropic formats
                     if (streamComplete) {
+                      // REL-004: Content generation done, assembling final output
+                      updateProposalProgress(supabase, proposalId, 'assembling', 80, 'Assembling final document...')
+                        .catch((err: Error) => console.warn('Proposal progress update failed (assembling):', err))
+
                       let finalContent = accumulatedContent
 
                       if (action === 'generate_goals') {
@@ -975,9 +1787,22 @@ Output ONLY markdown text starting with a # header.`
                         }
                       }
 
+                      // Parse and validate AI output into structured sections (REL-003)
+                      let streamSections: ProposalSections | null = null
+                      try {
+                        streamSections = await parseAndValidateAIOutput(finalContent, model, openRouterApiKey)
+                        console.log(`processJob: parsed streamed content into ${streamSections.sections.length} structured sections`)
+                      } catch (sectionsError) {
+                        console.warn('processJob: failed to parse streamed content into sections (non-fatal):', sectionsError)
+                      }
+
                       // Send completion event FIRST (don't block on job update)
                       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done', content: finalContent })}\n\n`))
                       controller.close()
+
+                      // REL-004: Mark proposal as complete (fire and forget)
+                      updateProposalProgress(supabase, proposalId, 'complete', 100, 'Proposal ready')
+                        .catch((err: Error) => console.warn('Proposal progress update failed (complete):', err))
 
                       // Update job with final content (non-blocking, fire and forget)
                       supabase
@@ -985,6 +1810,7 @@ Output ONLY markdown text starting with a # header.`
                         .update({
                           status: 'completed',
                           output_content: finalContent,
+                          ...(streamSections ? { sections: streamSections } : {}),
                           output_usage: {
                             input_tokens: totalInputTokens,
                             output_tokens: totalOutputTokens,
@@ -1006,16 +1832,21 @@ Output ONLY markdown text starting with a # header.`
               }
             }
           } catch (error) {
+            const streamErrMsg = error instanceof Error ? error.message : 'Streaming error'
+
+            // REL-004: Mark proposal as failed
+            await updateProposalProgress(supabase, proposalId, 'failed', 0, streamErrMsg)
+
             // Update job with error
             await supabase
               .from('proposal_jobs')
               .update({
                 status: 'failed',
-                error_message: error instanceof Error ? error.message : 'Streaming error',
+                error_message: streamErrMsg,
                 completed_at: new Date().toISOString(),
               })
               .eq('id', job.id)
-            
+
             controller.error(error)
           }
         },
@@ -1032,49 +1863,64 @@ Output ONLY markdown text starting with a # header.`
     }
 
     // Non-streaming path (for SOW and goals) - should rarely be used now
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openRouterApiKey}`,
-        'HTTP-Referer': 'https://sixtyseconds.video',
-        'X-Title': 'Sixty Sales Dashboard Proposal Generation',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-        max_tokens: maxTokens,
-      }),
+    // REL-004: Starting non-streaming content generation
+    await updateProposalProgress(supabase, proposalId, 'generating', 40, 'Generating proposal content...')
+
+    // Wrapped in retryWithBackoff for transient error resilience (REL-002)
+    const data = await retryWithBackoff(async () => {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openRouterApiKey}`,
+          'HTTP-Referer': 'https://sixtyseconds.video',
+          'X-Title': 'Sixty Sales Dashboard Proposal Generation',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: maxTokens,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = `OpenRouter API error: ${response.status} - ${errorText}`
+
+        // Parse error for better messaging
+        try {
+          const errorData = JSON.parse(errorText)
+          if (errorData.error?.metadata?.raw) {
+            const rawError = errorData.error.metadata.raw
+            if (rawError.includes('rate-limited')) {
+              errorMessage = `Model is temporarily rate-limited. ${rawError.includes('add your own key') ? 'Consider adding your Anthropic API key to OpenRouter settings to increase rate limits.' : 'Please retry in a few moments.'}`
+            } else if (rawError.includes('rate limit')) {
+              errorMessage = `Rate limit exceeded. Please wait a moment and try again, or add your API key to OpenRouter for higher limits.`
+            }
+          } else if (errorData.error?.message) {
+            errorMessage = `OpenRouter error: ${errorData.error.message}`
+          }
+        } catch (e) {
+          // Keep original error message if parsing fails
+        }
+
+        // Non-retryable client errors fail immediately
+        if (NON_RETRYABLE_STATUS_CODES.has(response.status)) {
+          throw new NonRetryableError(errorMessage, response.status)
+        }
+
+        // Retryable error (e.g. 429, 500, 502, 503)
+        const err = new Error(errorMessage)
+        ;(err as any).statusCode = response.status
+        throw err
+      }
+
+      return await response.json()
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      let errorMessage = `OpenRouter API error: ${response.status} - ${errorText}`
-      
-      // Parse error for better messaging
-      try {
-        const errorData = JSON.parse(errorText)
-        if (errorData.error?.metadata?.raw) {
-          const rawError = errorData.error.metadata.raw
-          if (rawError.includes('rate-limited')) {
-            errorMessage = `Model is temporarily rate-limited. ${rawError.includes('add your own key') ? 'Consider adding your Anthropic API key to OpenRouter settings to increase rate limits.' : 'Please retry in a few moments.'}`
-          } else if (rawError.includes('rate limit')) {
-            errorMessage = `Rate limit exceeded. Please wait a moment and try again, or add your API key to OpenRouter for higher limits.`
-          }
-        } else if (errorData.error?.message) {
-          errorMessage = `OpenRouter error: ${errorData.error.message}`
-        }
-      } catch (e) {
-        // Keep original error message if parsing fails
-      }
-      
-      throw new Error(errorMessage)
-    }
-
-    const data = await response.json()
     // OpenRouter uses OpenAI-compatible format
     let generatedContent = data.choices?.[0]?.message?.content || data.content?.[0]?.text || ''
     const wasTruncated = data.choices?.[0]?.finish_reason === 'length' || data.stop_reason === 'max_tokens'
@@ -1147,12 +1993,25 @@ Output ONLY markdown text starting with a # header.`
       }
     }
 
+    // Parse and validate AI output into structured sections (REL-003)
+    let syncSections: ProposalSections | null = null
+    try {
+      syncSections = await parseAndValidateAIOutput(finalContent, model, openRouterApiKey)
+      console.log(`processJob: parsed non-streaming content into ${syncSections.sections.length} structured sections`)
+    } catch (sectionsError) {
+      console.warn('processJob: failed to parse non-streaming content into sections (non-fatal):', sectionsError)
+    }
+
+    // REL-004: Assembling and completing
+    await updateProposalProgress(supabase, proposalId, 'assembling', 80, 'Assembling final document...')
+
     // Update job with results
     await supabase
       .from('proposal_jobs')
       .update({
         status: 'completed',
         output_content: finalContent,
+        ...(syncSections ? { sections: syncSections } : {}),
         output_usage: {
           input_tokens: data.usage?.input_tokens || 0,
           output_tokens: outputTokens,
@@ -1161,6 +2020,9 @@ Output ONLY markdown text starting with a # header.`
         completed_at: new Date().toISOString(),
       })
       .eq('id', job.id)
+
+    // REL-004: Mark proposal as complete
+    await updateProposalProgress(supabase, proposalId, 'complete', 100, 'Proposal ready')
 
     return new Response(
       JSON.stringify({
@@ -1177,13 +2039,19 @@ Output ONLY markdown text starting with a # header.`
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (error) {
+    const topLevelErrMsg = error instanceof Error ? error.message : 'Unknown error'
+
+    // REL-004: Mark proposal as failed (extract proposalId from input_data if available)
+    const topLevelProposalId = job?.input_data?.proposal_id || null
+    await updateProposalProgress(supabase, topLevelProposalId, 'failed', 0, topLevelErrMsg)
+
     // Update job with error
     if (job && job.id) {
       await supabase
         .from('proposal_jobs')
         .update({
           status: 'failed',
-          error_message: error instanceof Error ? error.message : 'Unknown error',
+          error_message: topLevelErrMsg,
           completed_at: new Date().toISOString(),
         })
         .eq('id', job.id)
@@ -1584,38 +2452,21 @@ This design system provides:
         console.log(`✅ Using validated Claude Haiku model: ${haikuModelId}`)
       }
 
-      const transcriptsText = Array.isArray(transcripts) 
-        ? transcripts.join('\n\n---\n\n') 
+      const transcriptsText = Array.isArray(transcripts)
+        ? transcripts.join('\n\n---\n\n')
         : transcripts || ''
 
-      const prompt = `Analyze the following meeting transcripts and identify 5-10 key focus areas that should be included in a proposal or Statement of Work.
-
-${contact_name ? `Client: ${contact_name}` : ''}
-${company_name ? `Company: ${company_name}` : ''}
-
-Meeting Transcripts:
-${transcriptsText}
+      const focusAreaSystemPrompt = `You are an expert business analyst who identifies key focus areas from meeting transcripts.
+Analyze the provided transcript and identify 5-10 key focus areas for a proposal or Statement of Work.
 
 For each focus area, provide:
 1. A concise title (5-8 words)
-2. A brief description (20-40 words) explaining what this area covers
-3. A category (e.g., "Strategy", "Technology", "Operations", "Marketing", "Financial", "Timeline", "Deliverables", "Risk Management")
-
-Focus on:
-- Strategic objectives and goals mentioned
-- Key challenges or pain points discussed
-- Solutions or approaches proposed
-- Important deliverables or outcomes
-- Timeline or milestone discussions
-- Budget or pricing considerations
-- Risk factors or concerns raised
-- Success metrics or KPIs mentioned
+2. A brief description (20-40 words)
+3. A category (Strategy, Technology, Operations, Marketing, Financial, Timeline, Deliverables, Risk Management)
 
 CRITICAL INSTRUCTIONS:
-- You MUST return ONLY valid JSON - no explanatory text, no apologies, no "I cannot find..."
+- Return ONLY valid JSON - no explanatory text
 - If the transcript lacks clear focus areas, infer reasonable ones from any business discussion
-- If the transcript is minimal, create general focus areas like "Project Scope", "Timeline", "Budget"
-- NEVER return text explanations - ALWAYS return the JSON structure below
 - Start your response with { and end with }
 
 Return ONLY valid JSON (no markdown, no code blocks):
@@ -1630,200 +2481,174 @@ Return ONLY valid JSON (no markdown, no code blocks):
   ]
 }`
 
-      // Retry logic for rate limit errors with longer delays
-      let lastError: Error | null = null
-      const maxRetries = 3
-      const baseDelay = 5000 // 5 seconds (increased from 2s for rate limits)
-      
-      try {
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          try {
-            console.log(`Focus area analysis attempt ${attempt + 1}/${maxRetries + 1}`)
-            console.log(`Using model: ${modelSettings.focus_model}`)
-            console.log(`OpenRouter API key prefix: ${openRouterApiKey.substring(0, 10)}...`)
-            
-            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${openRouterApiKey}`,
-                'HTTP-Referer': 'https://sixtyseconds.video',
-                'X-Title': 'Sixty Sales Dashboard Focus Analysis',
-              },
-              body: JSON.stringify({
-                // Use validated Claude Haiku 4.5 model ID
-                model: haikuModelId,
-                max_tokens: 4096,
-                messages: [{ role: 'user', content: prompt }],
-              }),
-            })
-            
-            console.log(`OpenRouter response status: ${response.status}`)
+      /**
+       * Helper to parse focus area JSON from an AI response string
+       */
+      const parseFocusAreaJson = (content: string): any => {
+        let jsonContent = content.trim()
 
-            if (!response.ok) {
-              const errorText = await response.text()
-              console.error(`OpenRouter API error (status ${response.status}):`, errorText)
-              let errorMessage = `OpenRouter API error: ${response.status} - ${errorText}`
-              let isRateLimit = false
-              
-              // Parse error for better messaging
-              try {
-                const errorData = JSON.parse(errorText)
-                console.error('Parsed error data:', JSON.stringify(errorData, null, 2))
-                
-                if (errorData.error?.metadata?.raw) {
-                  const rawError = errorData.error.metadata.raw
-                  console.error('Raw error from provider:', rawError)
-                  if (rawError.includes('rate-limited') || rawError.includes('rate limit')) {
-                    isRateLimit = true
-                    // Check if it's specifically about needing to add Anthropic key
-                    if (rawError.includes('add your own key') || rawError.includes('add your Anthropic')) {
-                      errorMessage = `Model is temporarily rate-limited. To increase rate limits, add your Anthropic API key to OpenRouter at https://openrouter.ai/settings/integrations. Your OpenRouter API key is already configured.`
-                    } else {
-                      // This might be your own Anthropic quota limit
-                      errorMessage = `Rate limit exceeded. This may be due to:\n1. Your Anthropic account tier limits (check https://console.anthropic.com/)\n2. Temporary rate limiting - wait a few minutes and try again\n3. Ensure your Anthropic key is properly configured in OpenRouter`
-                    }
-                  }
-                } else if (errorData.error?.message) {
-                  console.error('Error message:', errorData.error.message)
-                  if (errorData.error.message.includes('rate') || response.status === 429) {
-                    isRateLimit = true
-                  }
-                  errorMessage = `OpenRouter error: ${errorData.error.message}`
-                }
-              } catch (e) {
-                console.error('Failed to parse error JSON:', e)
-                // Keep original error message if parsing fails
-                if (response.status === 429) {
-                  isRateLimit = true
-                }
-              }
-              
-              // Retry on rate limit errors with exponential backoff
-              if (isRateLimit && attempt < maxRetries) {
-                const delay = baseDelay * Math.pow(2, attempt) // Exponential backoff: 5s, 10s, 20s
-                console.log(`Rate limit hit (attempt ${attempt + 1}/${maxRetries + 1}), waiting ${delay}ms before retry...`)
-                await new Promise(resolve => setTimeout(resolve, delay))
-                lastError = new Error(errorMessage)
-                continue // Retry
-              }
-              
-              throw new Error(errorMessage)
+        // Remove markdown code blocks if present
+        if (jsonContent.startsWith('```')) {
+          jsonContent = jsonContent.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+        }
+
+        // Extract JSON object
+        const firstBrace = jsonContent.indexOf('{')
+        const lastBrace = jsonContent.lastIndexOf('}')
+
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonContent = jsonContent.substring(firstBrace, lastBrace + 1)
+        }
+
+        jsonContent = jsonContent.trim()
+        console.log(`Extracted JSON length: ${jsonContent.length} characters`)
+        console.log(`JSON preview: ${jsonContent.substring(0, 200)}...`)
+
+        try {
+          return JSON.parse(jsonContent)
+        } catch (parseError) {
+          console.error('JSON parse error:', parseError)
+          console.error('Failed to parse content:', jsonContent.substring(0, 500))
+          if (jsonContent.toLowerCase().includes('unable to') ||
+              jsonContent.toLowerCase().includes('cannot find') ||
+              jsonContent.toLowerCase().includes('not enough')) {
+            throw new Error('The AI model could not analyze the transcript. Please try again - the transcript may need more context.')
+          }
+          throw new Error(`Failed to parse AI response. The model may have returned text instead of JSON. Please try again.`)
+        }
+      }
+
+      try {
+        console.log(`Using model: ${haikuModelId}`)
+        console.log(`OpenRouter API key prefix: ${openRouterApiKey.substring(0, 10)}...`)
+        console.log(`Transcript length: ${transcriptsText.length} chars (chunk threshold: ${CHUNK_CHAR_THRESHOLD})`)
+
+        let allFocusAreas: any[] = []
+
+        if (transcriptsText.length <= CHUNK_CHAR_THRESHOLD) {
+          // Short transcript — single call with retry
+          const buildPrompt = (text: string) => `Analyze the following meeting transcripts and identify 5-10 key focus areas that should be included in a proposal or Statement of Work.
+
+${contact_name ? `Client: ${contact_name}` : ''}
+${company_name ? `Company: ${company_name}` : ''}
+
+Meeting Transcripts:
+${text}
+
+Focus on:
+- Strategic objectives and goals mentioned
+- Key challenges or pain points discussed
+- Solutions or approaches proposed
+- Important deliverables or outcomes
+- Timeline or milestone discussions
+- Budget or pricing considerations
+- Risk factors or concerns raised
+- Success metrics or KPIs mentioned
+
+Return ONLY valid JSON with the focus_areas array. Start with { and end with }.`
+
+          const content = await retryWithBackoff(
+            () => callOpenRouterForChunk(openRouterApiKey, haikuModelId, focusAreaSystemPrompt, buildPrompt(transcriptsText), 4096),
+            3,
+            [5000, 10000, 20000], // Longer delays for rate limits on focus analysis
+          )
+
+          const parsed = parseFocusAreaJson(content)
+          allFocusAreas = parsed.focus_areas || []
+        } else {
+          // Long transcript — chunk, process in parallel, merge focus areas
+          const chunks = chunkTranscript(transcriptsText)
+          console.log(`Focus area analysis: chunked ${transcriptsText.length} chars into ${chunks.length} chunks`)
+
+          const chunkResults = await processChunksInParallel(chunks, (chunk) =>
+            retryWithBackoff(
+              () => callOpenRouterForChunk(
+                openRouterApiKey,
+                haikuModelId,
+                focusAreaSystemPrompt,
+                `Analyze the following meeting transcript excerpt and identify key focus areas.
+
+${contact_name ? `Client: ${contact_name}` : ''}
+${company_name ? `Company: ${company_name}` : ''}
+
+Meeting Transcript (partial):
+${chunk}
+
+Return ONLY valid JSON with the focus_areas array. Start with { and end with }.`,
+                4096,
+              ),
+              3,
+              [5000, 10000, 20000],
+            )
+          )
+
+          // Parse and merge focus areas from all chunks
+          for (const result of chunkResults) {
+            if (result.startsWith('[CHUNK_ERROR]')) {
+              console.warn(`Skipping failed chunk: ${result}`)
+              continue
             }
-            
-            // Success - break out of retry loop
-            console.log(`Focus area analysis succeeded on attempt ${attempt + 1}`)
-            const data = await response.json()
-            // OpenRouter uses OpenAI-compatible format: data.choices[0].message.content
-            const content = data.choices?.[0]?.message?.content || data.content?.[0]?.text || ''
-            
-            console.log(`Raw content length: ${content.length} characters`)
-            console.log(`Raw content preview: ${content.substring(0, 200)}...`)
-            
-            // Parse JSON from response (may be wrapped in markdown code blocks or have extra text)
-            let jsonContent = content.trim()
-            
-            // Remove markdown code blocks if present
-            if (jsonContent.startsWith('```')) {
-              jsonContent = jsonContent.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
-            }
-            
-            // Try to extract JSON object if there's extra text before/after
-            // Look for the first { and last } to extract just the JSON
-            const firstBrace = jsonContent.indexOf('{')
-            const lastBrace = jsonContent.lastIndexOf('}')
-            
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-              jsonContent = jsonContent.substring(firstBrace, lastBrace + 1)
-            }
-            
-            // Clean up any remaining whitespace
-            jsonContent = jsonContent.trim()
-            
-            console.log(`Extracted JSON length: ${jsonContent.length} characters`)
-            console.log(`JSON preview: ${jsonContent.substring(0, 200)}...`)
-            
-            let parsed
             try {
-              parsed = JSON.parse(jsonContent)
-            } catch (parseError) {
-              console.error('JSON parse error:', parseError)
-              console.error('Failed to parse content:', jsonContent.substring(0, 500))
-              // If the AI returned text instead of JSON, provide a helpful error
-              if (jsonContent.toLowerCase().includes('unable to') ||
-                  jsonContent.toLowerCase().includes('cannot find') ||
-                  jsonContent.toLowerCase().includes('not enough')) {
-                throw new Error('The AI model could not analyze the transcript. Please try again - the transcript may need more context.')
+              const parsed = parseFocusAreaJson(result)
+              if (parsed.focus_areas && Array.isArray(parsed.focus_areas)) {
+                allFocusAreas.push(...parsed.focus_areas)
               }
-              throw new Error(`Failed to parse AI response. The model may have returned text instead of JSON. Please try again.`)
+            } catch (parseErr) {
+              console.warn(`Failed to parse focus areas from chunk: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`)
             }
-            
-            return new Response(
-              JSON.stringify({
-                success: true,
-                focus_areas: parsed.focus_areas || [],
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-            )
-          } catch (error) {
-            lastError = error instanceof Error ? error : new Error(String(error))
-            
-            // If it's not a rate limit error, break immediately
-            if (!lastError.message.includes('rate-limited') && !lastError.message.includes('rate limit')) {
-              console.log(`Non-rate-limit error on attempt ${attempt + 1}, stopping retries:`, lastError.message)
-              break
-            }
-            
-            // If we've exhausted retries, break
-            if (attempt >= maxRetries) {
-              console.log(`All ${maxRetries + 1} attempts exhausted, giving up`)
-              break
-            }
-            
-            // Otherwise, continue to retry (rate limit error)
-            const delay = baseDelay * Math.pow(2, attempt)
-            console.log(`Retrying after ${delay}ms delay...`)
-            await new Promise(resolve => setTimeout(resolve, delay))
+          }
+
+          // Deduplicate focus areas by title similarity
+          const seen = new Set<string>()
+          allFocusAreas = allFocusAreas.filter((fa: any) => {
+            const key = (fa.title || '').toLowerCase().trim()
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+
+          // Re-number IDs
+          allFocusAreas = allFocusAreas.map((fa: any, idx: number) => ({
+            ...fa,
+            id: `focus-${idx + 1}`,
+          }))
+
+          // Cap at 10 focus areas
+          if (allFocusAreas.length > 10) {
+            allFocusAreas = allFocusAreas.slice(0, 10)
           }
         }
-        
-        // If we get here, all retries failed
-        console.error('Focus area analysis failed after all retries:', lastError?.message)
-        if (lastError) {
-          // If it's a rate limit error, provide more helpful guidance
-          if (lastError.message.includes('rate-limited') || lastError.message.includes('rate limit')) {
-            const helpfulError = new Error(
-              `Rate limit exceeded after ${maxRetries + 1} attempts. ` +
-              `To resolve this:\n\n` +
-              `1. Add your Anthropic API key to OpenRouter:\n` +
-              `   → Go to https://openrouter.ai/settings/integrations\n` +
-              `   → Add your Anthropic API key (get it from https://console.anthropic.com/)\n` +
-              `   → This will use your own quota and significantly increase rate limits\n\n` +
-              `2. Wait a few minutes and try again\n\n` +
-              `Your OpenRouter API key is configured, but adding your Anthropic key will give you much higher rate limits.`
-            )
-            throw helpfulError
-          }
-          throw lastError
+
+        if (allFocusAreas.length === 0) {
+          throw new Error('No focus areas could be extracted from the transcript. Please try again.')
         }
-        
-        throw new Error('Failed to analyze focus areas after retries')
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            focus_areas: allFocusAreas,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        )
       } catch (error) {
         console.error('Error analyzing focus areas:', error)
-        
+
         // Provide helpful error message for rate limits
         let errorMessage = error instanceof Error ? error.message : 'Failed to analyze focus areas'
         let statusCode = 500
-        
-        if (errorMessage.includes('rate limit') || errorMessage.includes('rate-limited')) {
+
+        if (errorMessage.includes('rate limit') || errorMessage.includes('rate-limited') || errorMessage.includes('429')) {
           statusCode = 429 // Too Many Requests
+          if (!errorMessage.includes('openrouter.ai/settings')) {
+            errorMessage += '\n\nTo increase rate limits, add your Anthropic API key to OpenRouter at https://openrouter.ai/settings/integrations'
+          }
         }
-        
+
         return new Response(
           JSON.stringify({
             success: false,
             error: errorMessage,
-            error_type: errorMessage.includes('rate limit') ? 'rate_limit' : 'unknown',
+            error_type: errorMessage.includes('rate limit') || errorMessage.includes('429') ? 'rate_limit' : 'unknown',
             help_url: errorMessage.includes('rate limit') ? 'https://openrouter.ai/settings/integrations' : undefined,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: statusCode }
@@ -1842,6 +2667,8 @@ Return ONLY valid JSON (no markdown, no code blocks):
     const page_target = (body as GenerateSOWRequest | GenerateProposalRequest).page_target
     const async = (body as GenerateProposalRequest | GenerateGoalsRequest).async
     const stream = (body as GenerateProposalRequest | GenerateGoalsRequest).stream
+    // REL-004: Optional proposal_id for progress tracking via Supabase Realtime
+    const proposal_id = (body as any).proposal_id
 
     // For proposals, SOW, and goals, ALWAYS use async mode to avoid timeouts
     // Goals now use streaming by default when async is enabled
@@ -1860,6 +2687,8 @@ Return ONLY valid JSON (no markdown, no code blocks):
         length_target,
         word_limit,
         page_target,
+        // REL-004: Pass proposal_id so processJob can stream progress to the proposals row
+        proposal_id: proposal_id || undefined,
       }
 
       const { data: job, error: jobError } = await supabase
@@ -2410,94 +3239,161 @@ Output ONLY markdown text starting with a # header.`
     // Call Claude Sonnet 4.5 for generation
     // This synchronous path only handles goals (SOW and proposals use async/streaming)
     const model = modelSettings.goals_model
-    
+
     // Use reasonable token limits
     // Note: This synchronous path is only for goals (fallback when async: false), not proposals or SOW
     const maxTokens = 8192 // Reduced for sync path to avoid timeouts
-    
+
+    // --- Chunked processing for sync goals fallback (large transcripts) ---
+    const syncTranscriptsText = Array.isArray(transcripts)
+      ? transcripts.join('\n\n---\n\n')
+      : (transcripts || '')
+
+    if (action === 'generate_goals' && syncTranscriptsText.length > CHUNK_CHAR_THRESHOLD) {
+      console.log(`Sync goals fallback: transcript is ${syncTranscriptsText.length} chars, using chunked processing`)
+
+      const syncFocusAreasText = focus_areas && focus_areas.length > 0
+        ? `\n\nFOCUS AREAS TO EMPHASIZE:\n${focus_areas.map((fa: string, idx: number) => `${idx + 1}. ${fa}`).join('\n')}\n\nPlease ensure these focus areas are prominently featured in the Goals & Objectives document.`
+        : ''
+
+      const buildSyncGoalsPrompt = (transcriptPart: string) => `Analyze the following sales call transcripts and create a comprehensive Goals & Objectives document.
+
+${contact_name ? `Client: ${contact_name}` : ''}
+${company_name ? `Company: ${company_name}` : ''}
+
+Call Transcripts:
+${transcriptPart}${syncFocusAreasText}
+
+Create a Goals & Objectives document following the structure and style of the example provided. Include all strategic objectives, immediate actions, success metrics, timelines, and any other relevant information from the calls.`
+
+      try {
+        const { content: chunkedContent, chunkCount } = await processTranscriptWithChunking(
+          syncTranscriptsText,
+          openRouterApiKey,
+          model,
+          systemPrompt,
+          buildSyncGoalsPrompt,
+          maxTokens,
+        )
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            content: chunkedContent,
+            usage: {
+              chunked: true,
+              chunk_count: chunkCount,
+            },
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        )
+      } catch (chunkedError) {
+        console.error('Sync goals chunked processing failed:', chunkedError)
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: chunkedError instanceof Error ? chunkedError.message : 'Chunked processing error',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        )
+      }
+    }
+
     // Add timeout wrapper for synchronous requests (goals fallback only)
     // Proposals and SOW should never reach here - they use async mode
     // Increased timeout to 90 seconds for goals generation with focus areas
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 90000) // 90 seconds for sync requests
-    
+
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openRouterApiKey}`,
-          'HTTP-Referer': 'https://sixtyseconds.video',
-          'X-Title': 'Sixty Sales Dashboard Proposal Generation',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-            { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: prompt,
+      // Wrapped in retryWithBackoff for transient error resilience (REL-002)
+      const data = await retryWithBackoff(async () => {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openRouterApiKey}`,
+            'HTTP-Referer': 'https://sixtyseconds.video',
+            'X-Title': 'Sixty Sales Dashboard Proposal Generation',
           },
-        ],
-          max_tokens: maxTokens,
-      }),
-        signal: controller.signal,
-    })
-      
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: prompt },
+            ],
+            max_tokens: maxTokens,
+          }),
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          let errorMessage = `OpenRouter API error: ${response.status} - ${errorText}`
+
+          // Parse error for better messaging
+          try {
+            const errorData = JSON.parse(errorText)
+            if (errorData.error?.metadata?.raw) {
+              const rawError = errorData.error.metadata.raw
+              if (rawError.includes('rate-limited')) {
+                errorMessage = `Model is temporarily rate-limited. ${rawError.includes('add your own key') ? 'Consider adding your Anthropic API key to OpenRouter settings to increase rate limits.' : 'Please retry in a few moments.'}`
+              } else if (rawError.includes('rate limit')) {
+                errorMessage = `Rate limit exceeded. Please wait a moment and try again, or add your API key to OpenRouter for higher limits.`
+              }
+            } else if (errorData.error?.message) {
+              errorMessage = `OpenRouter error: ${errorData.error.message}`
+            }
+          } catch (e) {
+            // Keep original error message if parsing fails
+          }
+
+          // Non-retryable client errors fail immediately
+          if (NON_RETRYABLE_STATUS_CODES.has(response.status)) {
+            throw new NonRetryableError(errorMessage, response.status)
+          }
+
+          // Retryable error (e.g. 429, 500, 502, 503)
+          const err = new Error(errorMessage)
+          ;(err as any).statusCode = response.status
+          throw err
+        }
+
+        return await response.json()
+      })
+
       clearTimeout(timeoutId)
 
-    if (!response.ok) {
-      const errorText = await response.text()
-        let errorMessage = `OpenRouter API error: ${response.status} - ${errorText}`
-        
-        // Parse error for better messaging
-        try {
-          const errorData = JSON.parse(errorText)
-          if (errorData.error?.metadata?.raw) {
-            const rawError = errorData.error.metadata.raw
-            if (rawError.includes('rate-limited')) {
-              errorMessage = `Model is temporarily rate-limited. ${rawError.includes('add your own key') ? 'Consider adding your Anthropic API key to OpenRouter settings to increase rate limits.' : 'Please retry in a few moments.'}`
-            } else if (rawError.includes('rate limit')) {
-              errorMessage = `Rate limit exceeded. Please wait a moment and try again, or add your API key to OpenRouter for higher limits.`
-            }
-          } else if (errorData.error?.message) {
-            errorMessage = `OpenRouter error: ${errorData.error.message}`
-          }
-        } catch (e) {
-          // Keep original error message if parsing fails
-        }
-        
-        throw new Error(errorMessage)
-    }
-
-    const data = await response.json()
       // OpenRouter uses OpenAI-compatible format
       let generatedContent = data.choices?.[0]?.message?.content || data.content?.[0]?.text || ''
-      
+
       // Note: This synchronous path is only for goals generation
       // SOW and proposals use async/streaming mode, so HTML/Markdown processing is done there
-      
+
       // Check if response was truncated (finish_reason === 'length' or stop_reason === 'max_tokens')
       const wasTruncated = data.choices?.[0]?.finish_reason === 'length' || data.stop_reason === 'max_tokens'
       const outputTokens = data.usage?.completion_tokens || data.usage?.output_tokens || 0
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        content: generatedContent,
-        usage: {
-          input_tokens: data.usage?.input_tokens || 0,
+      return new Response(
+        JSON.stringify({
+          success: true,
+          content: generatedContent,
+          usage: {
+            input_tokens: data.usage?.input_tokens || 0,
             output_tokens: outputTokens,
             total_tokens: data.usage?.input_tokens + outputTokens || 0,
-        },
+          },
           ...(wasTruncated ? { warning: `Response reached token limit: ${outputTokens}/${maxTokens} tokens` } : {}),
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    )
-  } catch (error) {
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      )
+    } catch (error) {
       clearTimeout(timeoutId)
       if (error instanceof Error && error.name === 'AbortError') {
         const actionName = action === 'generate_goals' ? 'Goals generation' : action === 'generate_sow' ? 'SOW generation' : 'Document generation'

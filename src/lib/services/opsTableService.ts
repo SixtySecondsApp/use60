@@ -84,6 +84,7 @@ export interface OpsTableCell {
   source: string | null;
   status: 'none' | 'pending' | 'complete' | 'failed';
   error_message: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 // Filter operators for views
@@ -105,6 +106,16 @@ export interface FilterCondition {
   value: string;
 }
 
+export type SortConfig = { key: string; dir: 'asc' | 'desc' };
+
+export type AggregateType = 'count' | 'sum' | 'average' | 'min' | 'max' | 'filled_percent' | 'unique_count' | 'none';
+
+export interface GroupConfig {
+  column_key: string;
+  collapsed_by_default?: boolean;
+  sort_groups_by?: 'alpha' | 'count';
+}
+
 export interface SavedView {
   id: string;
   table_id: string;
@@ -113,9 +124,11 @@ export interface SavedView {
   is_default: boolean;
   is_system: boolean;
   filter_config: FilterCondition[];
-  sort_config: { key: string; dir: 'asc' | 'desc' } | null;
+  sort_config: SortConfig | SortConfig[] | null;
   column_config: string[] | null; // array of column keys in display order
   formatting_rules: any[] | null; // conditional formatting rules
+  group_config: GroupConfig | null;
+  summary_config: Record<string, AggregateType> | null;
   position: number;
   created_at: string;
   updated_at: string;
@@ -134,6 +147,7 @@ interface RawCell {
   source: string | null;
   status: string;
   error_message: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface RawRow {
@@ -160,10 +174,10 @@ const ROW_COLUMNS =
   'id, table_id, row_index, source_id, source_data, created_at';
 
 const CELL_COLUMNS =
-  'id, row_id, column_id, value, confidence, source, status, error_message';
+  'id, row_id, column_id, value, confidence, source, status, error_message, metadata';
 
 const VIEW_COLUMNS =
-  'id, table_id, created_by, name, is_default, is_system, filter_config, sort_config, column_config, formatting_rules, position, created_at, updated_at';
+  'id, table_id, created_by, name, is_default, is_system, filter_config, sort_config, column_config, formatting_rules, group_config, summary_config, position, created_at, updated_at';
 
 // ---------------------------------------------------------------------------
 // Service
@@ -313,6 +327,8 @@ export class OpsTableService {
       position?: number;
       dropdownOptions?: DropdownOption[];
       formulaExpression?: string;
+      enrichmentPrompt?: string;
+      enrichmentModel?: string;
     }
   ): Promise<OpsTableColumn> {
     const payload: Record<string, unknown> = {};
@@ -322,6 +338,8 @@ export class OpsTableService {
     if (updates.position !== undefined) payload.position = updates.position;
     if (updates.dropdownOptions !== undefined) payload.dropdown_options = updates.dropdownOptions;
     if (updates.formulaExpression !== undefined) payload.formula_expression = updates.formulaExpression;
+    if (updates.enrichmentPrompt !== undefined) payload.enrichment_prompt = updates.enrichmentPrompt;
+    if (updates.enrichmentModel !== undefined) payload.enrichment_model = updates.enrichmentModel;
 
     const { data, error } = await this.supabase
       .from('dynamic_table_columns')
@@ -526,6 +544,12 @@ export class OpsTableService {
       rows = [...rows].sort((a, b) => {
         const aVal = a.cells[sortColumn]?.value ?? '';
         const bVal = b.cells[sortColumn]?.value ?? '';
+        const aEmpty = !aVal || aVal.trim() === '';
+        const bEmpty = !bVal || bVal.trim() === '';
+        // Push empty values to the end regardless of sort direction
+        if (aEmpty && !bEmpty) return 1;
+        if (!aEmpty && bEmpty) return -1;
+        if (aEmpty && bEmpty) return 0;
         const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
         return ascending ? cmp : -cmp;
       });
@@ -727,9 +751,11 @@ export class OpsTableService {
     isDefault?: boolean;
     isSystem?: boolean;
     filterConfig?: FilterCondition[];
-    sortConfig?: { key: string; dir: 'asc' | 'desc' } | null;
+    sortConfig?: SortConfig | SortConfig[] | null;
     columnConfig?: string[] | null;
     formattingRules?: any[] | null;
+    groupConfig?: GroupConfig | null;
+    summaryConfig?: Record<string, AggregateType> | null;
     position?: number;
   }): Promise<SavedView> {
     const { data, error } = await this.supabase
@@ -744,6 +770,8 @@ export class OpsTableService {
         sort_config: params.sortConfig ?? null,
         column_config: params.columnConfig ?? null,
         formatting_rules: params.formattingRules ?? null,
+        group_config: params.groupConfig ?? null,
+        summary_config: params.summaryConfig ?? null,
         position: params.position ?? 0,
       })
       .select(VIEW_COLUMNS)
@@ -759,9 +787,12 @@ export class OpsTableService {
       name?: string;
       isDefault?: boolean;
       filterConfig?: FilterCondition[];
-      sortConfig?: { key: string; dir: 'asc' | 'desc' } | null;
+      sortConfig?: SortConfig | SortConfig[] | null;
       columnConfig?: string[] | null;
       position?: number;
+      formattingRules?: any[] | null;
+      groupConfig?: GroupConfig | null;
+      summaryConfig?: Record<string, AggregateType> | null;
     }
   ): Promise<SavedView> {
     const payload: Record<string, unknown> = {};
@@ -771,6 +802,9 @@ export class OpsTableService {
     if (updates.sortConfig !== undefined) payload.sort_config = updates.sortConfig;
     if (updates.columnConfig !== undefined) payload.column_config = updates.columnConfig;
     if (updates.position !== undefined) payload.position = updates.position;
+    if (updates.formattingRules !== undefined) payload.formatting_rules = updates.formattingRules;
+    if (updates.groupConfig !== undefined) payload.group_config = updates.groupConfig;
+    if (updates.summaryConfig !== undefined) payload.summary_config = updates.summaryConfig;
 
     const { data, error } = await this.supabase
       .from('dynamic_table_views')
@@ -784,10 +818,10 @@ export class OpsTableService {
   }
 
   async deleteView(viewId: string): Promise<void> {
-    // First check if it's a system view
+    // Pre-check: block system view deletion client-side
     const { data: view, error: fetchError } = await this.supabase
       .from('dynamic_table_views')
-      .select('is_system, created_by')
+      .select('is_system')
       .eq('id', viewId)
       .maybeSingle();
 
@@ -795,18 +829,22 @@ export class OpsTableService {
     if (!view) throw new Error('View not found');
     if (view.is_system) throw new Error('Cannot delete system views');
 
-    const { data: deletedRows, error } = await this.supabase
+    const { error } = await this.supabase
       .from('dynamic_table_views')
       .delete()
-      .eq('id', viewId)
-      .select('id');
+      .eq('id', viewId);
 
     if (error) throw error;
 
-    // RLS may silently block deletion if user doesn't own the view
-    // The delete succeeds but affects 0 rows
-    if (!deletedRows || deletedRows.length === 0) {
-      throw new Error('Cannot delete this view - you may not have permission');
+    // Verify deletion — RLS may silently block if user doesn't own the view
+    const { data: stillExists } = await this.supabase
+      .from('dynamic_table_views')
+      .select('id')
+      .eq('id', viewId)
+      .maybeSingle();
+
+    if (stillExists) {
+      throw new Error('Cannot delete this view — you may not have permission');
     }
   }
 
@@ -843,6 +881,7 @@ export class OpsTableService {
           source: cell.source,
           status: cell.status as OpsTableCell['status'],
           error_message: cell.error_message,
+          metadata: cell.metadata,
         };
       }
 
@@ -856,6 +895,61 @@ export class OpsTableService {
         cells,
       };
     });
+  }
+
+  // -----------------------------------------------------------------------
+  // Move Rows (reorder)
+  // -----------------------------------------------------------------------
+
+  async moveRows(
+    tableId: string,
+    conditions: FilterCondition[],
+    position: 'top' | 'bottom'
+  ): Promise<{ movedCount: number }> {
+    // Get columns for filter evaluation
+    const { data: columns, error: colError } = await this.supabase
+      .from('dynamic_table_columns')
+      .select('id, key, column_type')
+      .eq('table_id', tableId);
+
+    if (colError) throw colError;
+
+    const keyToColumnId = new Map<string, string>();
+    const keyToColumnType = new Map<string, string>();
+    for (const col of (columns ?? []) as { id: string; key: string; column_type: string }[]) {
+      keyToColumnId.set(col.key, col.id);
+      keyToColumnType.set(col.key, col.column_type);
+    }
+
+    // Get matching row IDs
+    const matchingRowIds = await this.getFilteredRowIds(
+      tableId, conditions, keyToColumnId, keyToColumnType
+    );
+
+    if (matchingRowIds.length === 0) return { movedCount: 0 };
+
+    // Get current row_index bounds
+    const { data: bounds } = await this.supabase
+      .from('dynamic_table_rows')
+      .select('row_index')
+      .eq('table_id', tableId)
+      .order('row_index', { ascending: position === 'top' })
+      .limit(1)
+      .single();
+
+    const edgeIndex = bounds?.row_index ?? 0;
+    const offset = position === 'bottom' ? 1 : -matchingRowIds.length;
+
+    // Update each matching row's row_index
+    for (let i = 0; i < matchingRowIds.length; i++) {
+      const newIndex = edgeIndex + offset + i;
+      await this.supabase
+        .from('dynamic_table_rows')
+        .update({ row_index: newIndex })
+        .eq('id', matchingRowIds[i]);
+    }
+
+    return { movedCount: matchingRowIds.length };
   }
 
   // -----------------------------------------------------------------------
@@ -1398,5 +1492,293 @@ export class OpsTableService {
     }
 
     return { totalRows, groups, columnStats };
+  }
+
+  // ===========================================================================
+  // OI-013: Insights & Workflows Methods
+  // ===========================================================================
+
+  async getActiveInsights(tableId: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-insights-engine',
+      {
+        body: { tableId, action: 'get_active' },
+      }
+    );
+
+    if (error) throw error;
+    return data.insights;
+  }
+
+  async dismissInsight(insightId: string) {
+    const { error } = await this.supabase
+      .from('ops_table_insights')
+      .update({
+        dismissed_at: new Date().toISOString(),
+        dismissed_by: (await this.supabase.auth.getUser()).data.user?.id,
+      })
+      .eq('id', insightId);
+
+    if (error) throw error;
+  }
+
+  async getWorkflows(tableId: string) {
+    const { data, error } = await this.supabase
+      .from('ops_table_workflows')
+      .select('*')
+      .eq('table_id', tableId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  }
+
+  async saveWorkflow(workflow: any) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-workflow-engine',
+      {
+        body: {
+          tableId: workflow.tableId,
+          action: 'save',
+          workflow,
+        },
+      }
+    );
+
+    if (error) throw error;
+    return data.workflow;
+  }
+
+  async executeWorkflow(workflowId: string, tableId: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-workflow-engine',
+      {
+        body: { tableId, action: 'execute', workflowId },
+      }
+    );
+
+    if (error) throw error;
+    return data;
+  }
+
+  async toggleWorkflow(workflowId: string, isActive: boolean) {
+    const { error } = await this.supabase
+      .from('ops_table_workflows')
+      .update({ is_active: isActive })
+      .eq('id', workflowId);
+
+    if (error) throw error;
+  }
+
+  // ===========================================================================
+  // OI-017: Recipe Methods
+  // ===========================================================================
+
+  async getRecipes(tableId: string) {
+    const { data, error } = await this.supabase
+      .from('ops_table_recipes')
+      .select('*')
+      .eq('table_id', tableId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  }
+
+  async saveRecipe(recipe: any) {
+    const { data, error } = await this.supabase
+      .from('ops_table_recipes')
+      .insert(recipe)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async executeRecipe(recipeId: string) {
+    const { data: recipe, error: recipeError } = await this.supabase
+      .from('ops_table_recipes')
+      .select('*')
+      .eq('id', recipeId)
+      .single();
+
+    if (recipeError) throw recipeError;
+
+    // Execute via ai-query with saved parsed_config
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-ai-query',
+      {
+        body: {
+          tableId: recipe.table_id,
+          action: 'execute_recipe',
+          recipeId,
+        },
+      }
+    );
+
+    if (error) throw error;
+
+    // Update run count
+    await this.supabase
+      .from('ops_table_recipes')
+      .update({
+        run_count: (recipe.run_count || 0) + 1,
+        last_run_at: new Date().toISOString(),
+      })
+      .eq('id', recipeId);
+
+    return data;
+  }
+
+  async toggleRecipeShare(recipeId: string, isShared: boolean) {
+    const { error } = await this.supabase
+      .from('ops_table_recipes')
+      .update({ is_shared: isShared })
+      .eq('id', recipeId);
+
+    if (error) throw error;
+  }
+
+  async deleteRecipe(recipeId: string) {
+    const { error } = await this.supabase
+      .from('ops_table_recipes')
+      .delete()
+      .eq('id', recipeId);
+
+    if (error) throw error;
+  }
+
+  // ===========================================================================
+  // OI-023: Cross-Query Methods
+  // ===========================================================================
+
+  async getAvailableDataSources(orgId: string) {
+    const { data, error } = await this.supabase.rpc(
+      'get_available_data_sources',
+      { p_org_id: orgId }
+    );
+
+    if (error) throw error;
+    return data;
+  }
+
+  async executeCrossQuery(tableId: string, query: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-cross-query',
+      {
+        body: { tableId, query },
+      }
+    );
+
+    if (error) throw error;
+    return data;
+  }
+
+  async keepEnrichedColumn(tableId: string, columnConfig: any) {
+    // Persist a temporary enriched column to the schema
+    const { data, error } = await this.supabase
+      .from('dynamic_table_columns')
+      .insert({
+        table_id: tableId,
+        key: columnConfig.key,
+        name: columnConfig.name,
+        column_type: columnConfig.column_type || 'text',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  // ===========================================================================
+  // OI-030: Chat Session Methods
+  // ===========================================================================
+
+  async createChatSession(tableId: string) {
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await this.supabase
+      .from('ops_table_chat_sessions')
+      .insert({
+        table_id: tableId,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async getChatSession(sessionId: string) {
+    const { data, error } = await this.supabase
+      .from('ops_table_chat_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async appendMessage(sessionId: string, message: any) {
+    const { data: session } = await this.getChatSession(sessionId);
+    const messages = [...(session.messages || []), message];
+
+    const { error } = await this.supabase
+      .from('ops_table_chat_sessions')
+      .update({ messages })
+      .eq('id', sessionId);
+
+    if (error) throw error;
+  }
+
+  async clearChatSession(sessionId: string) {
+    const { error } = await this.supabase
+      .from('ops_table_chat_sessions')
+      .delete()
+      .eq('id', sessionId);
+
+    if (error) throw error;
+  }
+
+  // ===========================================================================
+  // OI-034: Prediction Methods
+  // ===========================================================================
+
+  async getActivePredictions(tableId: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-predictions',
+      {
+        body: { tableId, action: 'get_active' },
+      }
+    );
+
+    if (error) throw error;
+    return data.predictions;
+  }
+
+  async dismissPrediction(predictionId: string) {
+    const { error } = await this.supabase
+      .from('ops_table_predictions')
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq('id', predictionId);
+
+    if (error) throw error;
+  }
+
+  async runPredictions(tableId: string) {
+    const { data, error } = await this.supabase.functions.invoke(
+      'ops-table-predictions',
+      {
+        body: { tableId, action: 'analyze' },
+      }
+    );
+
+    if (error) throw error;
+    return data;
   }
 }

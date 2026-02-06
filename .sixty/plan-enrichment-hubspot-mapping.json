@@ -1,0 +1,245 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "createdAt": "2026-02-06T00:00:00Z"
+  },
+  "features": [
+    {
+      "id": "enrich-hubspot",
+      "name": "Enrichment Column HubSpot Mapping",
+      "status": "pending",
+      "description": "Allow enrichment columns to be mapped to HubSpot fields and display with orange HubSpot styling",
+      "consultReport": null,
+      "createdAt": "2026-02-06T00:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "EH-001",
+      "feature": "enrich-hubspot",
+      "title": "Verify enrichment columns can have hubspot_property_name",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["EH-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "Verify dynamic_table_columns.hubspot_property_name field exists",
+        "Confirm no CHECK constraints prevent enrichment columns from having this field",
+        "Document that both is_enrichment and hubspot_property_name can be true simultaneously"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260205800000_hubspot_property_column.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EH-002",
+      "feature": "enrich-hubspot",
+      "title": "Add HubSpot property mapping to enrichment column creation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["EH-001"],
+        "files": ["src/components/ops/HubSpotPropertyPicker.tsx"],
+        "schema": ["dynamic_table_columns"]
+      },
+      "blocks": ["EH-003", "EH-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "AddColumnModal shows 'Map to HubSpot field (optional)' section after enrichment config",
+        "Section only visible if sourceType === 'hubspot'",
+        "Reuses HubSpotPropertyPicker component",
+        "Selected property stored in hubspot_property_name when creating column",
+        "Can create enrichment column without HubSpot mapping (optional feature)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/AddColumnModal.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EH-003",
+      "feature": "enrich-hubspot",
+      "title": "Add HubSpot property mapping to enrichment edit modal",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["EH-002"],
+        "files": ["src/components/ops/EditEnrichmentModal.tsx"],
+        "schema": []
+      },
+      "blocks": ["EH-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "EditEnrichmentModal shows 'HubSpot Mapping' section",
+        "Displays currently mapped property if exists",
+        "Button to open HubSpotPropertyPicker",
+        "Can clear mapping (set hubspot_property_name to null)",
+        "Updates column via mutation on save"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/EditEnrichmentModal.tsx",
+        "src/components/ops/ColumnHeaderMenu.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EH-004",
+      "feature": "enrich-hubspot",
+      "title": "Update column styling for enrichment + HubSpot",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["EH-002"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["EH-005"],
+      "parallelWith": ["EH-003"],
+      "acceptance": [
+        "Column header: orange (bg-orange-500/20) if is_enrichment && hubspot_property_name",
+        "Column header: violet (bg-violet-500/5) if is_enrichment && !hubspot_property_name",
+        "Column header: orange (bg-orange-500/20) if !is_enrichment && hubspot_property_name",
+        "Data cells: orange (bg-orange-500/5) if is_enrichment && hubspot_property_name",
+        "Data cells: violet (bg-violet-500/[0.03]) if is_enrichment && !hubspot_property_name",
+        "Orange takes precedence when both flags are true"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/OpsTable.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EH-005",
+      "feature": "enrich-hubspot",
+      "title": "Add dual icon indicator for enrichment + HubSpot columns",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["EH-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["EH-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Show Sparkles icon for enrichment-only columns",
+        "Show Sparkles + Download icon when is_enrichment && hubspot_property_name",
+        "Icons stacked or side-by-side with proper spacing",
+        "Tooltip shows 'Enrichment column synced to HubSpot'",
+        "Icons properly sized (h-3.5 w-3.5 for consistency)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/OpsTable.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EH-006",
+      "feature": "enrich-hubspot",
+      "title": "Auto-sync enrichment results to HubSpot when mapped",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["EH-001", "EH-002"],
+        "files": ["supabase/functions/push-cell-to-hubspot/index.ts", "src/lib/hooks/useHubSpotWriteBack.ts"],
+        "schema": []
+      },
+      "blocks": ["EH-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "After enrichment completes, check if column.hubspot_property_name exists",
+        "If yes, trigger push-cell-to-hubspot edge function",
+        "Only sync if table.sync_direction = 'bidirectional'",
+        "Log sync status in enrichment_job_results or console",
+        "Handle sync failures gracefully without breaking enrichment",
+        "Use existing bidirectional sync infrastructure"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/enrich-dynamic-table/index.ts",
+        "src/lib/hooks/useHubSpotWriteBack.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EH-007",
+      "feature": "enrich-hubspot",
+      "title": "Add visual feedback and error handling for HubSpot sync",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["EH-006"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Toast notifications for sync success/failure",
+        "Column menu option 'View HubSpot sync history' for mapped enrichment columns",
+        "Warning shown if sync_direction is 'pull_only' when mapping",
+        "Error handling for type mismatches (enrichment returns text, HubSpot expects number)",
+        "Sync status visible in cell tooltip or indicator"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/ColumnHeaderMenu.tsx",
+        "src/components/ops/AddColumnModal.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "currentFeature": "enrich-hubspot",
+    "lastUpdated": "2026-02-06T00:00:00Z"
+  }
+}

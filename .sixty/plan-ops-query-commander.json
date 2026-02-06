@@ -3,8 +3,9 @@
     "id": "ops-query-commander",
     "name": "Ops Query Commander — Clay-Killer Natural Language Command Center",
     "description": "Expand the Ops query bar from 3 tools (filter/delete/update) to 12 tools, turning it into a full natural language command center for sales ops. Covers data cleanup, enrichment, scoring, segmentation, outreach prep, bulk actions, analytics, and view management — all from plain English.",
-    "status": "pending",
+    "status": "complete",
     "createdAt": "2026-02-05T00:00:00Z",
+    "completedAt": "2026-02-06T00:00:00Z",
     "previousWork": "plan-ops-ai-query.json (complete) — established the 3-tool foundation"
   },
 
@@ -13,7 +14,8 @@
       "id": "QC-001",
       "title": "Expand edge function to multi-action architecture with 12 tools",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 1,
 
       "description": "Refactor ops-table-ai-query edge function from 3 tools to 12 tools. Upgrade model from Haiku to Sonnet for complex reasoning. Add new tool definitions for: transform_column, create_column, create_view, sort_rows, summarize_table, deduplicate_rows, conditional_update, apply_formatting, export_rows, cross_column_validate, batch_create_views, create_tasks. Each tool returns a structured response the frontend can interpret and execute.",
@@ -46,7 +48,8 @@
       "id": "QC-002",
       "title": "Implement transform_column backend execution",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 2,
 
       "description": "Create a new edge function ops-table-transform-column that applies an AI transformation to every cell in a column. Takes a transformation prompt (e.g. 'Format as E.164 phone number', 'Trim whitespace', 'Extract domain from email') and processes cells in batches using Claude Haiku for speed.",
@@ -80,7 +83,8 @@
       "id": "QC-003",
       "title": "Implement summarize_table backend execution",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 2,
 
       "description": "Add a summarize_table handler to the AI query edge function that computes aggregation stats entirely server-side (no AI needed for computation). Supports group-by with counts, percentages, and basic stats (min/max/avg for numeric columns).",
@@ -114,7 +118,8 @@
       "id": "QC-004",
       "title": "Implement create_column and create_view backend handlers",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 2,
 
       "description": "Add handlers so the AI query can create new enrichment columns (with auto-run) and save current filters as named views. create_column returns the column definition; create_view saves filter/sort config as a named view.",
@@ -149,7 +154,8 @@
       "id": "QC-005",
       "title": "Implement deduplicate_rows and conditional_update handlers",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 2,
 
       "description": "Add deduplicate_rows tool that groups by a column, picks a winner per group (by most recent, most filled, etc.), and returns row IDs to delete. Add conditional_update tool that supports multiple condition→value mappings (e.g. 'East Coast → Phil, West Coast → Drue').",
@@ -183,7 +189,8 @@
       "id": "QC-006",
       "title": "Implement sort_rows, apply_formatting, and batch_create_views handlers",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 2,
 
       "description": "Add sort_rows tool for multi-column sorting, apply_formatting for conditional highlighting (row colors based on conditions), and batch_create_views to split a table into views by unique values in a column.",
@@ -215,7 +222,8 @@
       "id": "QC-007",
       "title": "Implement export_rows and cross_column_validate handlers",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 2,
 
       "description": "Add export_rows tool to generate CSV downloads of filtered data. Add cross_column_validate tool that uses AI to compare two columns and flag mismatches (e.g. email domain vs company website).",
@@ -247,7 +255,8 @@
       "id": "QC-008",
       "title": "Expand frontend to handle all 12 action types",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 3,
 
       "description": "Update OpsDetailPage handleQuerySubmit to dispatch on the new action types. Each type has its own execution path: some show preview modals (destructive), some apply directly (non-destructive), some show inline results (summary), some trigger background jobs (transform, validate).",
@@ -289,7 +298,8 @@
       "id": "QC-009",
       "title": "Build inline summary card component for analytics queries",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 4,
 
       "description": "Create AiQuerySummaryCard that renders below the query bar when the user asks analytics questions. Shows group-by breakdowns, percentages, and key stats in a clean card format with optional mini chart.",
@@ -324,7 +334,8 @@
       "id": "QC-010",
       "title": "Build transform preview modal with before/after samples",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 4,
 
       "description": "Create AiTransformPreviewModal that shows before/after samples of the transformation before executing on all rows. Shows 5 sample rows with original value → transformed value side by side.",
@@ -359,7 +370,8 @@
       "id": "QC-011",
       "title": "Build deduplication preview modal with group visualization",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 4,
 
       "description": "Create AiDeduplicatePreviewModal that shows duplicate groups with the row that will be kept highlighted and the rows to be deleted marked. User can review and confirm.",
@@ -392,7 +404,8 @@
       "id": "QC-012",
       "title": "Add service layer methods for new operations",
       "type": "service",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 3,
 
       "description": "Add methods to opsTableService for the new operations: executeDeduplicate, executeConditionalUpdate, generateCSVExport, getColumnUniqueValues (for batch views), and getColumnStats (for summaries).",
@@ -425,7 +438,8 @@
       "id": "QC-013",
       "title": "Upgrade query bar UX with suggestions and history",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 5,
 
       "description": "Enhance the query bar with: (1) example suggestions dropdown showing contextual query examples based on current table columns, (2) query history (last 10 queries stored in localStorage), (3) keyboard shortcut (Cmd+K) to focus the query bar.",
@@ -460,7 +474,8 @@
       "id": "QC-014",
       "title": "Deploy all new edge functions to staging and test end-to-end",
       "type": "test",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-06T00:00:00Z",
       "priority": 6,
 
       "description": "Deploy the updated ops-table-ai-query and new ops-table-transform-column edge functions to staging. Test all 12 tool types end-to-end with real table data.",
@@ -497,7 +512,7 @@
 
   "execution": {
     "totalStories": 14,
-    "completedStories": 0,
+    "completedStories": 14,
     "estimatedMinutes": 330,
     "parallelGroups": [
       ["QC-001"],

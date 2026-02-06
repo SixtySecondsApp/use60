@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, FileText, FileCode, CheckCircle2, ArrowRight, ArrowLeft, Calendar, Clock, Users, Share2, Link, Lock, Copy, Check, Eye, Mail, AlertCircle, X } from 'lucide-react';
+import { Loader2, FileText, FileCode, CheckCircle2, ArrowRight, ArrowLeft, Calendar, Clock, Users, Share2, Link, Lock, Copy, Check, Eye, Mail, AlertCircle, X, Monitor, Layout, Palette, File, Download, BookTemplate, Upload } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -32,10 +32,24 @@ import {
   updateProposalShareSettings,
   getProposalShareUrl,
   extractGoalsFromMeeting,
+  getProposalTemplates,
+  getStructuredTemplates,
+  downloadProposalDocx,
+  downloadProposalPdf,
+  subscribeToProposalProgress,
   type GenerateResponse,
   type JobStatus,
   type FocusArea,
+  type ProposalTemplate,
+  type StructuredTemplate,
+  type TemplateExtraction,
+  uploadAndParseDocument,
+  createTemplateFromExtraction,
 } from '@/lib/services/proposalService';
+import BrandConfigPanel from './BrandConfigPanel';
+import ProposalPreview from './ProposalPreview';
+import type { ProposalSection, BrandConfig } from './ProposalPreview';
+import SaveTemplateModal from './SaveTemplateModal';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { useOrgId } from '@/lib/contexts/OrgContext';
@@ -161,6 +175,9 @@ interface SavedWizardState {
   savedAt: string;
   contactName?: string;
   companyName?: string;
+  outputFormat?: 'html' | 'docx' | 'pdf';
+  selectedTemplateId?: string | null;
+  brandingEnabled?: boolean;
 }
 
 // Generate storage key based on meeting IDs or contact
@@ -299,6 +316,26 @@ export function ProposalWizard({
   const [selectedWorkflow, setSelectedWorkflow] = useState<OrgProposalWorkflow | null>(null);
   const [workflowsLoading, setWorkflowsLoading] = useState(false);
 
+  // WIZ-001: Output format, template picker, and branding toggle
+  const [outputFormat, setOutputFormat] = useState<'html' | 'docx' | 'pdf'>('html');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [brandingEnabled, setBrandingEnabled] = useState(true);
+  const [templates, setTemplates] = useState<ProposalTemplate[]>([]);
+  const [structuredTemplates, setStructuredTemplates] = useState<StructuredTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+
+  // UPL-005: Upload example proposal flow in template picker
+  const [wizardUploadProcessing, setWizardUploadProcessing] = useState(false);
+
+  // WIZ-002: Brand configuration
+  const [brandConfig, setBrandConfig] = useState<BrandConfig>({});
+
+  // WIZ-003: Structured sections, download state, save-template modal, progress
+  const [proposalSections, setProposalSections] = useState<ProposalSection[]>([]);
+  const [downloading, setDownloading] = useState<'docx' | 'pdf' | null>(null);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ step: string; percent: number; message: string } | null>(null);
+
   // Fetch org workflows on mount
   useEffect(() => {
     if (orgId && open) {
@@ -313,6 +350,44 @@ export function ProposalWizard({
         .finally(() => setWorkflowsLoading(false));
     }
   }, [orgId, open]);
+
+  // Fetch proposal templates on mount (both prompt-style and structured)
+  useEffect(() => {
+    if (open) {
+      setTemplatesLoading(true);
+      Promise.all([
+        getProposalTemplates().catch(() => []),
+        getStructuredTemplates().catch(() => []),
+      ])
+        .then(([promptTemplates, structured]) => {
+          setTemplates(promptTemplates);
+          setStructuredTemplates(structured);
+        })
+        .catch((err) => {
+          console.error('[ProposalWizard] Failed to load templates:', err);
+          setTemplates([]);
+          setStructuredTemplates([]);
+        })
+        .finally(() => setTemplatesLoading(false));
+    }
+  }, [open]);
+
+  // TPL-002: When a structured template is selected, pre-populate sections and brand_config
+  const handleSelectStructuredTemplate = (tmpl: StructuredTemplate) => {
+    setSelectedTemplateId(tmpl.id);
+    if (tmpl.sections && tmpl.sections.length > 0) {
+      setProposalSections(tmpl.sections.map(s => ({
+        id: s.id,
+        type: s.type as ProposalSection['type'],
+        title: s.title,
+        content: s.content,
+        order: s.order,
+      })));
+    }
+    if (tmpl.brand_config) {
+      setBrandConfig(tmpl.brand_config as BrandConfig);
+    }
+  };
 
   // Auto-scroll HTML code textarea to bottom while generating
   useEffect(() => {
@@ -350,6 +425,9 @@ export function ProposalWizard({
       savedAt: new Date().toISOString(),
       contactName,
       companyName,
+      outputFormat,
+      selectedTemplateId,
+      brandingEnabled,
     };
     saveWizardState(storageKey, stateToSave);
   };
@@ -363,6 +441,9 @@ export function ProposalWizard({
     setSelectedFormat(state.selectedFormat);
     setDocumentConfig(state.documentConfig);
     setFinalContent(state.finalContent);
+    setOutputFormat(state.outputFormat ?? 'html');
+    setSelectedTemplateId(state.selectedTemplateId ?? null);
+    setBrandingEnabled(state.brandingEnabled ?? true);
     // Skip 'loading' step - go to the last completable step
     const targetStep = state.step === 'loading' ? 'review_goals' : state.step;
     setStep(targetStep);
@@ -385,6 +466,9 @@ export function ProposalWizard({
     setError(null);
     setStatusMessage(null);
     setTranscripts([]); // Clear transcripts to force reload
+    setOutputFormat('html');
+    setSelectedTemplateId(null);
+    setBrandingEnabled(true);
 
     // If we have initial meeting IDs, skip meeting selection and reload transcripts
     if (initialMeetingIds && initialMeetingIds.length > 0) {
@@ -416,6 +500,9 @@ export function ProposalWizard({
       }
       if (targetIndex <= stepOrder.indexOf('choose_format')) {
         setSelectedFormat(null);
+        setOutputFormat('html');
+        setSelectedTemplateId(null);
+        setBrandingEnabled(true);
       }
       if (targetIndex <= stepOrder.indexOf('configure_document')) {
         setDocumentConfig({});
@@ -1237,6 +1324,10 @@ ${htmlContent}
     setIsPublicEnabled(false);
     setLinkCopied(false);
     setSavingShare(false);
+    // Reset WIZ-001 state
+    setOutputFormat('html');
+    setSelectedTemplateId(null);
+    setBrandingEnabled(true);
     onOpenChange(false);
   };
 
@@ -1776,7 +1867,18 @@ ${htmlContent}
         {!showResumeDialog && step === 'configure_document' && (
           <div className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold mb-2">Configure {selectedFormat === 'sow' ? 'SOW' : selectedFormat === 'email' ? 'Email Proposal' : selectedFormat === 'markdown' ? 'Markdown Proposal' : 'Proposal'}</h3>
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                Configure {selectedFormat === 'sow' ? 'SOW' : selectedFormat === 'email' ? 'Email Proposal' : selectedFormat === 'markdown' ? 'Markdown Proposal' : 'Proposal'}
+                {selectedTemplateId && (() => {
+                  const tmplName = structuredTemplates.find(t => t.id === selectedTemplateId)?.name
+                    || templates.find(t => t.id === selectedTemplateId)?.name;
+                  return tmplName ? (
+                    <span className="text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">
+                      {tmplName}
+                    </span>
+                  ) : null;
+                })()}
+              </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
                 Set the focus and length for your {selectedFormat === 'sow' ? 'Statement of Work' : selectedFormat === 'email' ? 'email proposal' : selectedFormat === 'markdown' ? 'markdown proposal' : 'proposal'}.
               </p>
@@ -1839,9 +1941,9 @@ ${htmlContent}
                   step="1"
                   placeholder="e.g., 3"
                   value={documentConfig.page_target || ''}
-                  onChange={(e) => setDocumentConfig(prev => ({ 
-                    ...prev, 
-                    page_target: e.target.value ? parseInt(e.target.value) : undefined 
+                  onChange={(e) => setDocumentConfig(prev => ({
+                    ...prev,
+                    page_target: e.target.value ? parseInt(e.target.value) : undefined
                   }))}
                   className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700"
                 />
@@ -1849,17 +1951,305 @@ ${htmlContent}
                   Target number of pages for the document
                 </p>
               </div>
+
+              {/* WIZ-002: Brand Configuration */}
+              {(selectedFormat === 'proposal' || outputFormat !== 'html') && (
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-5">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Palette className="w-4 h-4" />
+                    Brand Configuration
+                  </h4>
+                  <BrandConfigPanel
+                    brandConfig={brandConfig}
+                    onBrandConfigChange={setBrandConfig}
+                    orgId={orgId || ''}
+                    contactEmail={null}
+                    proposalId={null}
+                    templateBrandConfig={null}
+                    brandingEnabled={brandingEnabled}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* Step 4: Choose Format / Workflow */}
         {!showResumeDialog && step === 'choose_format' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <h3 className="text-lg font-semibold mb-2">Choose Proposal Workflow</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
               Select a workflow to generate your proposal outputs.
             </p>
+
+            {/* WIZ-001: Output Format Selector */}
+            <div>
+              <Label className="text-sm font-medium mb-3 block">Output Format</Label>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { value: 'html' as const, label: 'HTML', subtitle: 'Live Preview', icon: Monitor },
+                  { value: 'docx' as const, label: 'DOCX', subtitle: 'Word Document', icon: FileText },
+                  { value: 'pdf' as const, label: 'PDF', subtitle: 'PDF Document', icon: File },
+                ]).map(({ value, label, subtitle, icon: Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setOutputFormat(value)}
+                    className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all text-left ${
+                      outputFormat === value
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
+                      outputFormat === value
+                        ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                    }`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className={`font-semibold text-sm ${
+                        outputFormat === value
+                          ? 'text-blue-900 dark:text-blue-100'
+                          : 'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {label}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {subtitle}
+                      </div>
+                    </div>
+                    {outputFormat === value && (
+                      <CheckCircle2 className="w-5 h-5 text-blue-500 ml-auto flex-shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* WIZ-001: Template Picker */}
+            <div>
+              <Label className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Layout className="w-4 h-4" />
+                Template
+              </Label>
+              {templatesLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600 dark:text-blue-400" />
+                  <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Loading templates...</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Start Fresh option */}
+                  <Card
+                    className={`cursor-pointer transition-all hover:scale-[1.02] ${
+                      selectedTemplateId === null ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedTemplateId(null);
+                      setProposalSections([]);
+                      setBrandConfig({});
+                    }}
+                  >
+                    <CardContent className="p-4 flex items-center gap-3">
+                      <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
+                        selectedTemplateId === null
+                          ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                      }`}>
+                        <FileCode className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                          Start Fresh
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Generate from scratch without a template
+                        </div>
+                      </div>
+                      {selectedTemplateId === null && (
+                        <CheckCircle2 className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Structured templates (with sections) */}
+                  {structuredTemplates.map((tmpl) => (
+                    <Card
+                      key={tmpl.id}
+                      className={`cursor-pointer transition-all hover:scale-[1.02] ${
+                        selectedTemplateId === tmpl.id ? 'ring-2 ring-blue-500' : ''
+                      }`}
+                      onClick={() => handleSelectStructuredTemplate(tmpl)}
+                    >
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <div
+                          className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
+                            selectedTemplateId === tmpl.id
+                              ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                          }`}
+                          style={
+                            selectedTemplateId === tmpl.id && (tmpl.brand_config as Record<string, string> | null)?.primary_color
+                              ? { backgroundColor: `${(tmpl.brand_config as Record<string, string>).primary_color}20` }
+                              : undefined
+                          }
+                        >
+                          <Layout className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                            {tmpl.name}
+                            {tmpl.category === 'starter' && (
+                              <span className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">
+                                Starter
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {tmpl.description || `${tmpl.sections?.length || 0} sections`}
+                          </div>
+                        </div>
+                        {selectedTemplateId === tmpl.id && (
+                          <CheckCircle2 className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {/* Upload Example card */}
+                  <Card
+                    className={`cursor-pointer transition-all hover:scale-[1.02] border-dashed ${
+                      wizardUploadProcessing ? 'opacity-70 pointer-events-none' : ''
+                    }`}
+                    onClick={() => {
+                      if (wizardUploadProcessing) return;
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.docx,.pdf';
+                      input.onchange = async (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (!file) return;
+                        // Validate
+                        const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+                        if (!allowedTypes.includes(file.type)) {
+                          const ext = file.name.toLowerCase().split('.').pop();
+                          if (ext !== 'pdf' && ext !== 'docx') {
+                            toast.error('Only .docx and .pdf files are supported');
+                            return;
+                          }
+                        }
+                        if (file.size > 15 * 1024 * 1024) {
+                          toast.error('File too large. Maximum size: 15MB');
+                          return;
+                        }
+                        setWizardUploadProcessing(true);
+                        try {
+                          const { extraction, assetId } = await uploadAndParseDocument(file, orgId || '');
+                          const templateName = file.name.replace(/\.(docx|pdf)$/i, '').replace(/[-_]/g, ' ');
+                          const template = await createTemplateFromExtraction(
+                            templateName,
+                            `Auto-created from ${file.name}`,
+                            extraction,
+                            orgId || '',
+                            assetId
+                          );
+                          if (template) {
+                            // Add to structured templates list and auto-select
+                            setStructuredTemplates(prev => [template, ...prev]);
+                            handleSelectStructuredTemplate(template);
+                            toast.success(`Template "${template.name}" created from ${file.name}`);
+                          }
+                        } catch (err: unknown) {
+                          toast.error(err instanceof Error ? err.message : 'Failed to process document');
+                        } finally {
+                          setWizardUploadProcessing(false);
+                        }
+                      };
+                      input.click();
+                    }}
+                  >
+                    <CardContent className="p-4 flex items-center gap-3">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                        {wizardUploadProcessing ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                        ) : (
+                          <Upload className="w-5 h-5" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                          {wizardUploadProcessing ? 'Analysing document...' : 'Upload Example'}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {wizardUploadProcessing ? 'Extracting structure and branding' : 'Create template from .docx or .pdf'}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Legacy prompt templates */}
+                  {templates.map((template) => (
+                    <Card
+                      key={template.id}
+                      className={`cursor-pointer transition-all hover:scale-[1.02] ${
+                        selectedTemplateId === template.id ? 'ring-2 ring-blue-500' : ''
+                      }`}
+                      onClick={() => setSelectedTemplateId(template.id)}
+                    >
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
+                          selectedTemplateId === template.id
+                            ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                        }`}>
+                          <Layout className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                            {template.name}
+                            {template.is_default && (
+                              <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {template.type === 'sow' ? 'Statement of Work' :
+                             template.type === 'proposal' ? 'Proposal' :
+                             template.type === 'goals' ? 'Goals' :
+                             template.type === 'design_system' ? 'Design System' :
+                             template.type}
+                          </div>
+                        </div>
+                        {selectedTemplateId === template.id && (
+                          <CheckCircle2 className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* WIZ-001: Client Branding Toggle */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border">
+              <div className="flex items-center gap-3">
+                <Palette className="w-5 h-5 text-gray-500" />
+                <div>
+                  <Label htmlFor="branding-toggle" className="font-medium">Client Branding</Label>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Enable Logo.dev branding integration for client logos
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="branding-toggle"
+                checked={brandingEnabled}
+                onCheckedChange={setBrandingEnabled}
+              />
+            </div>
 
             {/* Loading state */}
             {workflowsLoading && (
@@ -1871,167 +2261,173 @@ ${htmlContent}
 
             {/* Org workflows */}
             {!workflowsLoading && workflows.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {workflows.map((workflow) => {
-                  const outputTypes = getWorkflowOutputTypes(workflow);
-                  return (
-                    <Card
-                      key={workflow.id}
-                      className={`cursor-pointer transition-all hover:scale-105 ${
-                        selectedWorkflow?.id === workflow.id ? 'ring-2 ring-blue-500' : ''
-                      }`}
-                      onClick={() => {
-                        setSelectedWorkflow(workflow);
-                        // Set primary format based on workflow (for backwards compatibility)
-                        const primaryFormat: 'sow' | 'proposal' | 'email' | 'markdown' =
-                          workflow.include_html
-                            ? 'proposal'
-                            : workflow.include_sow
-                              ? 'sow'
-                              : workflow.include_email
-                                ? 'email'
-                                : workflow.include_markdown
-                                  ? 'markdown'
-                                  : // Safety: ensure downstream steps never receive null
-                                    'proposal';
-                        setSelectedFormat(primaryFormat);
-                        setStep('configure_document');
-                      }}
-                    >
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <FileText className="w-5 h-5" />
-                          {workflow.name}
-                          {workflow.is_default && (
-                            <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
-                              Default
-                            </span>
-                          )}
-                        </CardTitle>
-                        <CardDescription>
-                          {workflow.description || `Generates: ${outputTypes.join(', ')}`}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex flex-wrap gap-1.5">
-                          {outputTypes.map((type) => (
-                            <span
-                              key={type}
-                              className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded"
-                            >
-                              {type}
-                            </span>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+              <div>
+                <Label className="text-sm font-medium mb-3 block">Proposal Type</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {workflows.map((workflow) => {
+                    const outputTypes = getWorkflowOutputTypes(workflow);
+                    return (
+                      <Card
+                        key={workflow.id}
+                        className={`cursor-pointer transition-all hover:scale-105 ${
+                          selectedWorkflow?.id === workflow.id ? 'ring-2 ring-blue-500' : ''
+                        }`}
+                        onClick={() => {
+                          setSelectedWorkflow(workflow);
+                          // Set primary format based on workflow (for backwards compatibility)
+                          const primaryFormat: 'sow' | 'proposal' | 'email' | 'markdown' =
+                            workflow.include_html
+                              ? 'proposal'
+                              : workflow.include_sow
+                                ? 'sow'
+                                : workflow.include_email
+                                  ? 'email'
+                                  : workflow.include_markdown
+                                    ? 'markdown'
+                                    : // Safety: ensure downstream steps never receive null
+                                      'proposal';
+                          setSelectedFormat(primaryFormat);
+                          setStep('configure_document');
+                        }}
+                      >
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <FileText className="w-5 h-5" />
+                            {workflow.name}
+                            {workflow.is_default && (
+                              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                                Default
+                              </span>
+                            )}
+                          </CardTitle>
+                          <CardDescription>
+                            {workflow.description || `Generates: ${outputTypes.join(', ')}`}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-1.5">
+                            {outputTypes.map((type) => (
+                              <span
+                                key={type}
+                                className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded"
+                              >
+                                {type}
+                              </span>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             {/* Fallback: Legacy format selection if no workflows */}
             {!workflowsLoading && workflows.length === 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card
-                  className={`cursor-pointer transition-all hover:scale-105 ${
-                    selectedFormat === 'sow' ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  onClick={() => {
-                    setSelectedFormat('sow');
-                    setStep('configure_document');
-                  }}
-                >
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="w-5 h-5" />
-                      Statement of Work
-                    </CardTitle>
-                    <CardDescription>
-                      A comprehensive SOW document in Markdown format
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Includes project objectives, proposed solution, pricing, timeline, and terms.
-                    </p>
-                  </CardContent>
-                </Card>
+              <div>
+                <Label className="text-sm font-medium mb-3 block">Proposal Type</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card
+                    className={`cursor-pointer transition-all hover:scale-105 ${
+                      selectedFormat === 'sow' ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedFormat('sow');
+                      setStep('configure_document');
+                    }}
+                  >
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        Statement of Work
+                      </CardTitle>
+                      <CardDescription>
+                        A comprehensive SOW document in Markdown format
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Includes project objectives, proposed solution, pricing, timeline, and terms.
+                      </p>
+                    </CardContent>
+                  </Card>
 
-                <Card
-                  className={`cursor-pointer transition-all hover:scale-105 ${
-                    selectedFormat === 'proposal' ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  onClick={() => {
-                    setSelectedFormat('proposal');
-                    setStep('configure_document');
-                  }}
-                >
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileCode className="w-5 h-5" />
-                      HTML Proposal
-                    </CardTitle>
-                    <CardDescription>
-                      An interactive HTML presentation with modern design
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Beautiful, interactive proposal with slides, animations, and professional styling.
-                    </p>
-                  </CardContent>
-                </Card>
+                  <Card
+                    className={`cursor-pointer transition-all hover:scale-105 ${
+                      selectedFormat === 'proposal' ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedFormat('proposal');
+                      setStep('configure_document');
+                    }}
+                  >
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileCode className="w-5 h-5" />
+                        HTML Proposal
+                      </CardTitle>
+                      <CardDescription>
+                        An interactive HTML presentation with modern design
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Beautiful, interactive proposal with slides, animations, and professional styling.
+                      </p>
+                    </CardContent>
+                  </Card>
 
-                <Card
-                  className={`cursor-pointer transition-all hover:scale-105 ${
-                    selectedFormat === 'email' ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  onClick={() => {
-                    setSelectedFormat('email');
-                    setStep('configure_document');
-                  }}
-                >
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Mail className="w-5 h-5" />
-                      Email Proposal
-                    </CardTitle>
-                    <CardDescription>
-                      A simple email proposal in Markdown format
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Professional email format ready to send directly to clients.
-                    </p>
-                  </CardContent>
-                </Card>
+                  <Card
+                    className={`cursor-pointer transition-all hover:scale-105 ${
+                      selectedFormat === 'email' ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedFormat('email');
+                      setStep('configure_document');
+                    }}
+                  >
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Mail className="w-5 h-5" />
+                        Email Proposal
+                      </CardTitle>
+                      <CardDescription>
+                        A simple email proposal in Markdown format
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Professional email format ready to send directly to clients.
+                      </p>
+                    </CardContent>
+                  </Card>
 
-                <Card
-                  className={`cursor-pointer transition-all hover:scale-105 ${
-                    selectedFormat === 'markdown' ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  onClick={() => {
-                    setSelectedFormat('markdown');
-                    setStep('configure_document');
-                  }}
-                >
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="w-5 h-5" />
-                      Markdown Proposal
-                    </CardTitle>
-                    <CardDescription>
-                      A simple Markdown document proposal
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Clean, simple proposal in Markdown format. Easy to edit and share.
-                    </p>
-                  </CardContent>
-                </Card>
+                  <Card
+                    className={`cursor-pointer transition-all hover:scale-105 ${
+                      selectedFormat === 'markdown' ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedFormat('markdown');
+                      setStep('configure_document');
+                    }}
+                  >
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        Markdown Proposal
+                      </CardTitle>
+                      <CardDescription>
+                        A simple Markdown document proposal
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Clean, simple proposal in Markdown format. Easy to edit and share.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             )}
           </div>
@@ -2044,19 +2440,94 @@ ${htmlContent}
               <h3 className="text-lg font-semibold">
                 {proposalMode === 'quick' ? 'Quick Summary & Follow-up Email' : 'Preview Generated Document'}
               </h3>
-              {selectedFormat === 'proposal' && proposalMode === 'advanced' && (
-                <Button
-                  onClick={() => {
-                    const blob = new Blob([finalContent], { type: 'text/html' });
-                    const url = URL.createObjectURL(blob);
-                    window.open(url, '_blank');
-                  }}
-                  variant="secondary"
-                >
-                  Open in New Tab
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {/* WIZ-003: Download buttons */}
+                {savedProposalId && !loading && proposalMode === 'advanced' && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!!downloading}
+                      onClick={async () => {
+                        setDownloading('docx');
+                        try {
+                          await downloadProposalDocx(savedProposalId);
+                          toast.success('DOCX downloaded');
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : 'Download failed');
+                        } finally {
+                          setDownloading(null);
+                        }
+                      }}
+                    >
+                      {downloading === 'docx' ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1.5" />}
+                      DOCX
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!!downloading}
+                      onClick={async () => {
+                        setDownloading('pdf');
+                        try {
+                          await downloadProposalPdf(savedProposalId);
+                          toast.success('PDF downloaded');
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : 'Download failed');
+                        } finally {
+                          setDownloading(null);
+                        }
+                      }}
+                    >
+                      {downloading === 'pdf' ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1.5" />}
+                      PDF
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowSaveTemplateModal(true)}
+                    >
+                      <BookTemplate className="w-3.5 h-3.5 mr-1.5" />
+                      Save Template
+                    </Button>
+                  </>
+                )}
+                {selectedFormat === 'proposal' && proposalMode === 'advanced' && (
+                  <Button
+                    onClick={() => {
+                      const blob = new Blob([finalContent], { type: 'text/html' });
+                      const url = URL.createObjectURL(blob);
+                      window.open(url, '_blank');
+                    }}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    Open in New Tab
+                  </Button>
+                )}
+              </div>
             </div>
+
+            {/* WIZ-003: Generation progress stepper */}
+            {loading && generationProgress && (
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                      {generationProgress.message}
+                    </div>
+                    <div className="mt-1.5 h-1.5 bg-blue-100 dark:bg-blue-900 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                        style={{ width: `${generationProgress.percent}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-xs text-blue-500 font-mono">{generationProgress.percent}%</span>
+                </div>
+              </div>
+            )}
 
             {/* Quick Mode Preview */}
             {proposalMode === 'quick' && quickModeSummary && (
@@ -2527,6 +2998,17 @@ ${htmlContent}
           )}
         </div>
       </DialogContent>
+
+      {/* WIZ-003 / TPL-001: Save as Template Modal */}
+      {savedProposalId && orgId && (
+        <SaveTemplateModal
+          open={showSaveTemplateModal}
+          onOpenChange={setShowSaveTemplateModal}
+          proposalId={savedProposalId}
+          orgId={orgId}
+          defaultName={`${companyName || contactName || ''} Proposal Template`.trim()}
+        />
+      )}
     </Dialog>
   );
 }

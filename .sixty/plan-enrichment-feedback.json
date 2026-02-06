@@ -1,0 +1,138 @@
+{
+  "project": {
+    "name": "Enrichment Feedback UX",
+    "description": "Improve enrichment feedback with Coda-style hover-to-enrich, per-cell status indicators, re-enrich value clearing, and live row-by-row progress",
+    "createdAt": "2026-02-06T12:00:00Z",
+    "parentFeature": "ops-tables"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "ai": "openrouter"
+  },
+  "features": [
+    {
+      "id": "enrichment-feedback",
+      "name": "Enrichment Feedback UX",
+      "status": "complete",
+      "priority": 1,
+      "description": "Per-cell status indicators, hover lightning bolt for single-row enrichment, re-enrich clears old values, faster polling for live updates"
+    }
+  ],
+  "stories": [
+    {
+      "id": "ENR-001",
+      "feature": "enrichment-feedback",
+      "title": "Mark cells pending in edge function before processing",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["dynamic_table_cells"] },
+      "blocks": ["ENR-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "All cells in batch set to status='pending' before AI processing begins",
+        "Old values cleared (value=null, confidence=null, metadata=null) on re-enrichment",
+        "Upsert in chunks of 500 to stay within Supabase limits"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 8,
+      "files": [
+        "supabase/functions/enrich-dynamic-table/index.ts"
+      ]
+    },
+    {
+      "id": "ENR-002",
+      "feature": "enrichment-feedback",
+      "title": "Faster polling and single-row enrichment in useEnrichment hook",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["ENR-001"], "files": ["src/lib/hooks/useEnrichment.ts"], "schema": [] },
+      "blocks": ["ENR-003", "ENR-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Poll interval reduced from 3000ms to 1500ms during active enrichment jobs",
+        "Batch chain delay reduced from 500ms to 200ms for faster visual feedback",
+        "Optimistic cache update clears target cells to pending within ~100ms",
+        "New startSingleRowEnrichment mutation exported (no toast on success)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 12,
+      "files": [
+        "src/lib/hooks/useEnrichment.ts"
+      ]
+    },
+    {
+      "id": "ENR-003",
+      "feature": "enrichment-feedback",
+      "title": "Pass onEnrichRow callback through OpsTable",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["ENR-002"], "files": ["src/components/ops/OpsTable.tsx"], "schema": [] },
+      "blocks": ["ENR-004"],
+      "parallelWith": ["ENR-005"],
+      "acceptance": [
+        "OpsTableProps includes onEnrichRow?: (rowId: string, columnId: string) => void",
+        "Callback passed to OpsTableCell only for enrichment columns"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": 3,
+      "files": [
+        "src/components/ops/OpsTable.tsx"
+      ]
+    },
+    {
+      "id": "ENR-004",
+      "feature": "enrichment-feedback",
+      "title": "Hover lightning bolt and improved cell status indicators",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["ENR-003"], "files": ["src/components/ops/OpsTableCell.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Hovering any enrichment cell shows a violet Zap icon",
+        "Clicking Zap triggers single-row enrichment (stopPropagation prevents expand overlay)",
+        "Pending cells show violet 'Processing...' spinner with no Zap",
+        "Failed cells show red state with retry Zap on hover"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 10,
+      "files": [
+        "src/components/ops/OpsTableCell.tsx"
+      ]
+    },
+    {
+      "id": "ENR-005",
+      "feature": "enrichment-feedback",
+      "title": "Wire single-row enrichment handler in OpsDetailPage",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["ENR-002"], "files": ["src/pages/OpsDetailPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ENR-003"],
+      "acceptance": [
+        "startSingleRowEnrichment destructured from useEnrichment hook",
+        "handleEnrichRow callback created and passed to OpsTable",
+        "Clicking cell lightning bolt enriches that single row with visible progress"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": 3,
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 5,
+    "currentFeature": "enrichment-feedback",
+    "lastUpdated": "2026-02-06T14:00:00Z"
+  }
+}

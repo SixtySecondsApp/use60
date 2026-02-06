@@ -77,6 +77,7 @@ export const BillingAnalytics = lazyWithRetry(() => import('@/pages/admin/Billin
 export const SaasAdminDashboard = lazyWithRetry(() => import('@/pages/SaasAdminDashboard'));
 export const QuickAddSimulator = lazyWithRetry(() => import('@/pages/platform/QuickAddSimulator'));
 export const EmailActionCenter = lazyWithRetry(() => import('@/pages/EmailActionCenter'));
+export const DocsAdminPage = lazyWithRetry(() => import('@/pages/platform/DocsAdminPage'));
 
 // Integration Testing
 export const IntegrationsDashboard = lazyWithRetry(() => import('@/pages/admin/IntegrationsDashboard'));
@@ -138,6 +139,7 @@ export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
+export const DocsPage = lazyWithRetry(() => import('@/pages/DocsPage'));
 
 // ============================================================
 // SETTINGS PAGES

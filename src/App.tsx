@@ -72,7 +72,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre,
+  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -83,7 +83,7 @@ import {
   MeetingsPage, MeetingIntelligence, MeetingSentimentAnalytics, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   TasksPage, ProjectsHub, GoogleTasksSettings, Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage,
-  OpsPage, OpsDetailPage,
+  OpsPage, OpsDetailPage, DocsPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
@@ -405,6 +405,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/copilot-lab" element={<PlatformAdminRouteGuard><AppLayout><CopilotLabPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Agent Performance Dashboard - Observability and analytics */}
                 <Route path="/platform/agent-performance" element={<PlatformAdminRouteGuard><AppLayout><AgentPerformanceDashboard /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* Documentation CMS Admin */}
+                <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}
                 <Route path="/skills/:skillKey" element={<AppLayout><SkillDetailPage /></AppLayout>} />
                 <Route path="/platform/features" element={<PlatformAdminRouteGuard><AppLayout><SaasAdminDashboard /></AppLayout></PlatformAdminRouteGuard>} />
@@ -481,6 +483,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/projects" element={<InternalRouteGuard><AppLayout><ProjectsHub /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/docs" element={<AppLayout><DocsPage /></AppLayout>} />
                 <Route path="/tasks/settings" element={<InternalRouteGuard><AppLayout><GoogleTasksSettings /></AppLayout></InternalRouteGuard>} />
                 <Route path="/calendar" element={<ExternalRedirect url="https://calendar.google.com" />} />
                 <Route path="/events" element={<InternalRouteGuard><AppLayout><Events /></AppLayout></InternalRouteGuard>} />

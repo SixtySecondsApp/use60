@@ -1,0 +1,92 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "template": null,
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-02-06T00:00:00Z"
+  },
+  "features": [
+    {
+      "id": "ops-list-redesign",
+      "name": "Ops List Redesign — Card Grid with Enrichment Stats",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-02-06T00:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "OLR-001",
+      "feature": "ops-list-redesign",
+      "title": "Add enrichment stats query to OpsPage",
+      "type": "data",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/OpsPage.tsx"],
+        "schema": ["dynamic_table_cells"]
+      },
+      "blocks": ["OLR-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "New React Query fetches per-table enrichment stats: total cells with status='complete' + confidence IS NOT NULL, cells with status='pending', cells with status='failed'",
+        "Query batches all table IDs into a single Supabase RPC or aggregation query for efficiency",
+        "Returns a map of tableId → { enriched: number, pending: number, failed: number }",
+        "Derives per-table status: 'running' if pending > 0, 'error' if failed > 0 and no pending, 'success' if enriched > 0 and no pending/failed, 'idle' otherwise"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/OpsPage.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OLR-002",
+      "feature": "ops-list-redesign",
+      "title": "Restyle OpsPage with card grid design, filters, and stats bar",
+      "type": "ui",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["OLR-001"],
+        "files": ["src/pages/OpsPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Header: emerald gradient icon + 'Ops' title + subtitle + 'New Table' button (emerald-500)",
+        "Quick stats bar: table count, total rows, total enriched (emerald), running count (blue spinner) — separated by dividers",
+        "Search input + source filter dropdown + status filter dropdown",
+        "Card grid (3-col lg, 2-col md, 1-col sm) with: status indicator, name, source badge, row count, enriched count, enrichment progress bar, relative timestamp, hover actions (Open + More)",
+        "Empty state preserved with updated styling",
+        "All existing create-table modals (CSV, HubSpot, CrossOp) remain wired to 'New Table' button"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/OpsPage.tsx"
+      ],
+      "designRef": "User-provided OpsListView design mockup",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "execution": {
+    "totalStories": 2,
+    "completedStories": 2,
+    "currentFeature": "ops-list-redesign",
+    "lastUpdated": "2026-02-06T00:00:00Z"
+  }
+}
