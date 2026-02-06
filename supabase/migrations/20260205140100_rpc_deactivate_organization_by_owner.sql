@@ -53,21 +53,9 @@ begin
     return jsonb_build_object('success', false, 'error', 'Only organization owners can deactivate');
   end if;
 
-  -- Check if user has at least one other active organization
-  select count(*) into v_other_active_orgs
-  from organization_memberships om
-  join organizations o on om.org_id = o.id
-  where om.user_id = v_user_id
-    and o.is_active = true
-    and om.role = 'owner'
-    and o.id != p_org_id;
-
-  if v_other_active_orgs = 0 then
-    return jsonb_build_object(
-      'success', false,
-      'error', 'You must maintain at least one active organization'
-    );
-  end if;
+  -- NOTE: Removed validation that required users to maintain at least one active organization.
+  -- Users should be able to deactivate their only active organization.
+  -- Frontend is responsible for redirect logic to /learnmore when activeOrgId is deactivated.
 
   -- Deactivate the organization
   update organizations
