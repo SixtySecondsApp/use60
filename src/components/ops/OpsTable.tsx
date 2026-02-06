@@ -535,7 +535,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
       <div
         ref={parentRef}
         className="overflow-auto"
-        style={{ maxHeight: 'calc(100vh - 220px)' }}
+        style={{ maxHeight: 'var(--ops-table-max-height, calc(100vh - 220px))' }}
       >
         <div style={{ width: totalWidth, minWidth: '100%' }}>
           {/* ---- HEADER ---- */}

@@ -24,6 +24,8 @@ import {
   Save,
   Clock,
   List,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -193,6 +195,34 @@ function OpsDetailPage() {
   const [isLoadingLists, setIsLoadingLists] = useState(false);
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- Fullscreen mode ----
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Dispatch event to AppLayout to hide/show sidebar
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('ops-fullscreen-change', { detail: { isFullscreen } }));
+    return () => {
+      // Ensure sidebar is restored on unmount
+      window.dispatchEvent(new CustomEvent('ops-fullscreen-change', { detail: { isFullscreen: false } }));
+    };
+  }, [isFullscreen]);
+
+  // Keyboard shortcut: Cmd/Ctrl + Shift + F
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'f') {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+      // Escape exits fullscreen
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   // ---- Save as Recipe state ----
   const [lastSuccessfulQuery, setLastSuccessfulQuery] = useState<{ query: string; resultType: string; parsedResult: any } | null>(null);
@@ -1573,20 +1603,22 @@ function OpsDetailPage() {
   // ---- Render ----
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col min-h-screen">
       {/* Top section: back nav + query bar + metadata */}
-      <div className="shrink-0 border-b border-gray-800 bg-gray-950 px-6 pb-4 pt-5">
-        {/* Back button */}
-        <button
-          onClick={() => navigate('/ops')}
-          className="mb-4 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Ops
-        </button>
+      <div className={`shrink-0 border-b border-gray-800 bg-gray-950 px-6 ${isFullscreen ? 'pb-3 pt-3' : 'pb-4 pt-5'}`}>
+        {/* Back button — hidden in fullscreen */}
+        {!isFullscreen && (
+          <button
+            onClick={() => navigate('/ops')}
+            className="mb-4 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Ops
+          </button>
+        )}
 
-        {/* View selector tabs */}
-        {views.length > 0 && (
+        {/* View selector tabs — hidden in fullscreen */}
+        {!isFullscreen && views.length > 0 && (
           <div className="mb-3">
             <ViewSelector
               views={views}
@@ -1619,8 +1651,8 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* Quick filter bar */}
-        {rows.length > 0 && (
+        {/* Quick filter bar — hidden in fullscreen */}
+        {!isFullscreen && rows.length > 0 && (
           <div className="mb-3">
             <QuickFilterBar
               columns={columns}
@@ -1632,8 +1664,8 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* Smart view suggestions */}
-        {viewSuggestions.length > 0 && (
+        {/* Smart view suggestions — hidden in fullscreen */}
+        {!isFullscreen && viewSuggestions.length > 0 && (
           <SmartViewSuggestions
             suggestions={viewSuggestions}
             onApply={(suggestion) => {
@@ -1794,11 +1826,23 @@ function OpsDetailPage() {
             >
               <HelpCircle className="h-3.5 w-3.5" />
             </a>
+            {/* Fullscreen toggle */}
+            <button
+              onClick={() => setIsFullscreen((prev) => !prev)}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                isFullscreen
+                  ? 'border-violet-500/50 bg-violet-600/20 text-violet-300 hover:bg-violet-600/30'
+                  : 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+              }`}
+              title={isFullscreen ? 'Exit fullscreen (Ctrl+Shift+F)' : 'Fullscreen (Ctrl+Shift+F)'}
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
           </div>
         </div>
 
-        {/* Save as Recipe bar — shown after successful query */}
-        {lastSuccessfulQuery && !showSaveRecipeDialog && (
+        {/* Save as Recipe bar — shown after successful query, hidden in fullscreen */}
+        {!isFullscreen && lastSuccessfulQuery && !showSaveRecipeDialog && (
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-700/30 bg-amber-900/10 px-3 py-1.5">
             <BookOpen className="h-3.5 w-3.5 text-amber-400 shrink-0" />
             <span className="text-xs text-amber-300/80 truncate flex-1">
@@ -1823,8 +1867,8 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* Save Recipe mini dialog */}
-        {showSaveRecipeDialog && lastSuccessfulQuery && (
+        {/* Save Recipe mini dialog — hidden in fullscreen */}
+        {!isFullscreen && showSaveRecipeDialog && lastSuccessfulQuery && (
           <div className="mb-3 rounded-xl border border-amber-700/30 bg-gray-900 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-amber-400" />
@@ -1874,19 +1918,21 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* OI-010: AI Insights Banner + OI-033: Predictions */}
-        <AiInsightsBanner
-          tableId={tableId!}
-          onActionClick={(action: any) => {
-            if (action.action_type === 'filter') {
-              // Apply filter from insight action
-              toast.info('Applying insight filter...');
-            }
-          }}
-        />
+        {/* OI-010: AI Insights Banner + OI-033: Predictions — hidden in fullscreen */}
+        {!isFullscreen && (
+          <AiInsightsBanner
+            tableId={tableId!}
+            onActionClick={(action: any) => {
+              if (action.action_type === 'filter') {
+                // Apply filter from insight action
+                toast.info('Applying insight filter...');
+              }
+            }}
+          />
+        )}
 
-        {/* OI-022: Cross-Query Results */}
-        {crossQueryResult && (
+        {/* OI-022: Cross-Query Results — hidden in fullscreen */}
+        {!isFullscreen && crossQueryResult && (
           <CrossQueryResultPanel
             result={crossQueryResult}
             onKeepColumn={(col: any) => {
@@ -1897,8 +1943,8 @@ function OpsDetailPage() {
           />
         )}
 
-        {/* AI Summary Card */}
-        {summaryData && (
+        {/* AI Summary Card — hidden in fullscreen */}
+        {!isFullscreen && summaryData && (
           <div className="mb-4">
             <AiQuerySummaryCard
               data={summaryData}
@@ -1908,41 +1954,46 @@ function OpsDetailPage() {
         )}
       </div>
 
-      {/* Tab bar */}
-      <div className="shrink-0 border-b border-gray-800 bg-gray-950 px-6">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setActiveTab('data')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-              activeTab === 'data'
-                ? 'border-violet-500 text-white'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            Data
-          </button>
-          <button
-            onClick={() => setActiveTab('rules')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 flex items-center gap-1.5 ${
-              activeTab === 'rules'
-                ? 'border-violet-500 text-white'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            <Zap className="h-3.5 w-3.5" />
-            Rules
-            {rules.length > 0 && (
-              <span className="ml-1 text-[10px] font-medium bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded-full">
-                {rules.length}
-              </span>
-            )}
-          </button>
+      {/* Tab bar — hidden in fullscreen */}
+      {!isFullscreen && (
+        <div className="shrink-0 border-b border-gray-800 bg-gray-950 px-6">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab('data')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'data'
+                  ? 'border-violet-500 text-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              Data
+            </button>
+            <button
+              onClick={() => setActiveTab('rules')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 flex items-center gap-1.5 ${
+                activeTab === 'rules'
+                  ? 'border-violet-500 text-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Rules
+              {rules.length > 0 && (
+                <span className="ml-1 text-[10px] font-medium bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded-full">
+                  {rules.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Table area */}
       {activeTab === 'data' && (
-        <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
+        <div
+          className="px-6 py-4"
+          style={{ '--ops-table-max-height': isFullscreen ? 'calc(100vh - 90px)' : 'calc(100vh - 220px)' } as React.CSSProperties}
+        >
           <OpsTable
             columns={columns}
             rows={rows}
@@ -1970,7 +2021,7 @@ function OpsDetailPage() {
 
       {/* Rules tab */}
       {activeTab === 'rules' && (
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        <div className="px-6 py-4">
           <div className="max-w-2xl mx-auto space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white">Automation Rules</h2>

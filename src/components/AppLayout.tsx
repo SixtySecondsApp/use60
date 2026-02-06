@@ -138,6 +138,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Note: topOffsetPx is used for inline paddingTop style since dynamic Tailwind classes
   // like pt-[${px}px] don't work at runtime (Tailwind JIT needs to see them at build time)
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isOpsFullscreen, setIsOpsFullscreen] = useState(false);
   const [isMobileMenuOpen, toggleMobileMenu] = useCycle(false, true);
   const [hasMounted, setHasMounted] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
@@ -216,10 +217,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [location.pathname]);
 
+  // Listen for ops fullscreen toggle to hide/show sidebar
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { isFullscreen } = (e as CustomEvent).detail;
+      setIsOpsFullscreen(isFullscreen);
+    };
+    window.addEventListener('ops-fullscreen-change', handler);
+    return () => window.removeEventListener('ops-fullscreen-change', handler);
+  }, []);
+
   // Pages that should behave like an app-within-the-app (no document scrolling).
   // The page itself manages its own internal scroll regions (e.g. Copilot chat).
+  // Note: /ops/ pages removed — they use normal page scroll so users can scroll
+  // when the mouse is outside the table.
   const isFullHeightPage = useMemo(() => {
-    return location.pathname === '/copilot' || location.pathname.startsWith('/ops/');
+    return location.pathname === '/copilot';
   }, [location.pathname]);
 
   // Keyboard shortcut for SmartSearch (⌘K) - Disabled
@@ -331,7 +344,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       
       <div className={cn(
       "fixed left-0 right-0 flex items-center justify-between z-[90] p-4 bg-white/80 dark:bg-gray-950/50 backdrop-blur-sm border-b border-[#E2E8F0] dark:border-gray-800/50 lg:hidden transition-all duration-200",
-      isImpersonating ? "top-[44px]" : "top-0"
+      isImpersonating ? "top-[44px]" : "top-0",
+      isOpsFullscreen && "hidden"
     )}>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg overflow-hidden">
@@ -376,7 +390,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       
       {/* Quick Add FAB - Only shown for admins in internal view */}
-      {location.pathname !== '/workflows' && !isViewingAsExternal && isUserAdmin(userData) && (
+      {location.pathname !== '/workflows' && !isViewingAsExternal && !isOpsFullscreen && isUserAdmin(userData) && (
         <motion.button
           type="button"
           whileHover={{ scale: 1.05 }}
@@ -565,7 +579,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         )}
       </AnimatePresence>
 
-      {/* Desktop Top Bar */}
+      {/* Desktop Top Bar — hidden in ops fullscreen */}
+      {!isOpsFullscreen && (
       <div className={cn(
         'fixed left-0 right-0 h-16 bg-white/80 dark:bg-gray-950/50 backdrop-blur-sm border-b border-[#E2E8F0] dark:border-gray-800/50 z-[90]',
         'hidden lg:flex items-center justify-between px-6',
@@ -679,8 +694,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </DropdownMenu>
         </div>
       </div>
+      )}
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar — hidden in ops fullscreen */}
+      {!isOpsFullscreen && (
       <motion.div
         initial={!hasMounted ? { opacity: 0, x: -20 } : false}
         animate={!hasMounted ? { opacity: 1, x: 0 } : false}
@@ -948,20 +965,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </motion.div>
+      )}
       <main
         style={
           {
             // Used by full-height pages to avoid double-counting the top padding.
-            '--app-top-offset': `${topOffsetPx}px`,
+            '--app-top-offset': `${isOpsFullscreen ? 0 : topOffsetPx}px`,
             // Dynamic padding for banners - inline style because dynamic Tailwind classes don't work at runtime
-            paddingTop: `${topOffsetPx}px`,
+            paddingTop: isOpsFullscreen ? 0 : `${topOffsetPx}px`,
           } as React.CSSProperties
         }
         className={cn(
         isFullHeightPage && 'h-[100dvh] overflow-hidden',
         'flex-1 transition-[margin] duration-300 ease-in-out min-h-screen',
         'bg-[#F8FAFC] dark:bg-gray-950',
-        isCollapsed ? 'lg:ml-[96px]' : 'lg:ml-[256px]',
+        isOpsFullscreen ? 'lg:ml-0' : isCollapsed ? 'lg:ml-[96px]' : 'lg:ml-[256px]',
         'ml-0'
       )}
       >
