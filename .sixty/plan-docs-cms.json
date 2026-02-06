@@ -1,0 +1,387 @@
+{
+  "project": {
+    "name": "Documentation CMS",
+    "description": "Interactive documentation system with CMS admin, personalized examples, and AI-proposed updates with Slack approval",
+    "createdAt": "2026-02-06T00:00:00Z"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind"
+  },
+  "features": [
+    {
+      "id": "schema",
+      "name": "Documentation Database Schema",
+      "status": "pending",
+      "priority": 1,
+      "description": "Database tables for docs articles, versions, feedback, and AI proposals"
+    },
+    {
+      "id": "api",
+      "name": "Documentation API Edge Function",
+      "status": "pending",
+      "priority": 2,
+      "description": "Edge function for CRUD operations, version tracking, and AI proposal submission"
+    },
+    {
+      "id": "docs-page",
+      "name": "User-Facing Docs Page",
+      "status": "pending",
+      "priority": 3,
+      "description": "Scrollable docs page with sticky nav, search, personalized examples, Try It buttons, copy buttons, and feedback"
+    },
+    {
+      "id": "cms-admin",
+      "name": "CMS Admin Editor",
+      "status": "pending",
+      "priority": 4,
+      "description": "Platform admin markdown editor with live preview, version history, diff view, and article management"
+    },
+    {
+      "id": "ops-content",
+      "name": "Ops Intelligence Documentation Content",
+      "status": "pending",
+      "priority": 5,
+      "description": "Seed all 6 Ops Intelligence feature docs with beginner/intermediate/advanced examples"
+    },
+    {
+      "id": "contextual-help",
+      "name": "Contextual Help Icons in Ops",
+      "status": "pending",
+      "priority": 6,
+      "description": "Add ? icon help links in Ops features that deep-link to relevant docs sections"
+    },
+    {
+      "id": "ai-proposals",
+      "name": "AI Doc Update Proposals with Slack Approval",
+      "status": "pending",
+      "priority": 7,
+      "description": "AI proposes doc changes via API, sends to Slack for admin approval, auto-publishes on approve"
+    }
+  ],
+  "stories": [
+    {
+      "id": "DOC-001",
+      "feature": "schema",
+      "title": "Create docs_articles and docs_versions tables",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["DOC-002", "DOC-003", "DOC-005", "DOC-006", "DOC-009", "DOC-014"],
+      "acceptance": [
+        "docs_articles table with id, slug, title, category, content (markdown), metadata, org_id, published, order_index, created/updated timestamps",
+        "docs_versions table with article_id FK, version_number, content snapshot, changed_by, diff summary, created_at",
+        "docs_feedback table with article_id FK, user_id, helpful boolean, comment, section_slug",
+        "docs_ai_proposals table with article_id FK, proposed_content, reason, status (pending/approved/rejected), slack_message_ts",
+        "RLS policies: all authenticated users can read published articles, platform admins can CRUD"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260206100000_docs_cms_schema.sql"
+      ]
+    },
+    {
+      "id": "DOC-002",
+      "feature": "api",
+      "title": "Create docs-api edge function for CRUD and versioning",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["DOC-001"], "files": [], "schema": ["docs_articles", "docs_versions"] },
+      "blocks": ["DOC-005", "DOC-006", "DOC-009"],
+      "acceptance": [
+        "GET /docs-api?action=list returns published articles grouped by category",
+        "GET /docs-api?action=get&slug=x returns single article with version count",
+        "POST /docs-api action=create|update creates/updates article with auto-version snapshot",
+        "POST /docs-api action=feedback records user feedback",
+        "POST /docs-api action=propose_update creates AI proposal with pending status",
+        "All mutations require platformAdmin role except feedback"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/docs-api/index.ts"
+      ]
+    },
+    {
+      "id": "DOC-003",
+      "feature": "docs-page",
+      "title": "Create DocsPage with sticky sidebar navigation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["DOC-001"], "files": [], "schema": ["docs_articles"] },
+      "blocks": ["DOC-004", "DOC-007", "DOC-008", "DOC-013"],
+      "acceptance": [
+        "New /docs route registered in routeConfig.ts with BookOpen icon in tools navSection",
+        "Lazy loaded in lazyPages.tsx and added to App.tsx routes",
+        "DocsPage.tsx renders category-grouped sticky sidebar on left with smooth scroll-to anchors",
+        "Main content area renders markdown articles with proper heading hierarchy",
+        "Responsive: sidebar collapses to top nav on mobile"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/DocsPage.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "DOC-004",
+      "feature": "docs-page",
+      "title": "Add search, copy buttons, and feedback to DocsPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["DOC-003"], "files": ["src/pages/DocsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "Search input at top filters articles by title and content in real-time",
+        "Code blocks in markdown have copy-to-clipboard button with toast confirmation",
+        "Each article section has 'Was this helpful?' thumbs up/down that calls docs-api feedback endpoint",
+        "Feedback submission shows toast and disables re-voting"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/DocsPage.tsx",
+        "src/components/docs/DocsSearch.tsx",
+        "src/components/docs/DocsFeedback.tsx"
+      ]
+    },
+    {
+      "id": "DOC-005",
+      "feature": "docs-page",
+      "title": "Add personalized examples and Try It buttons",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["DOC-003", "DOC-002"], "files": ["src/pages/DocsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "DocsPage loads user's org tables and columns via opsTableService",
+        "Markdown content supports {{column_name}}, {{table_name}}, {{dropdown_values}} template variables",
+        "Template variables are replaced with actual org data at render time (fallback to generic if no data)",
+        "Try It buttons navigate to /ops/:tableId with pre-filled query in URL search params",
+        "Try It buttons are styled as prominent CTAs within the docs content"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/DocsPage.tsx",
+        "src/components/docs/PersonalizedExample.tsx",
+        "src/components/docs/TryItButton.tsx"
+      ]
+    },
+    {
+      "id": "DOC-006",
+      "feature": "cms-admin",
+      "title": "Create DocsAdminPage with article list and CRUD",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["DOC-001", "DOC-002"], "files": [], "schema": ["docs_articles"] },
+      "blocks": ["DOC-007", "DOC-008"],
+      "acceptance": [
+        "New /platform/docs-admin route accessible to platformAdmin users",
+        "Lists all articles grouped by category with title, status (draft/published), last updated",
+        "Create new article button opens editor",
+        "Delete article with confirmation dialog",
+        "Toggle published/draft status"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/DocsAdminPage.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx",
+        "src/lib/routes/routeConfig.ts"
+      ]
+    },
+    {
+      "id": "DOC-007",
+      "feature": "cms-admin",
+      "title": "Build markdown editor with live preview",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["DOC-006"], "files": ["src/pages/platform/DocsAdminPage.tsx"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "Split-pane editor: markdown textarea on left, rendered preview on right",
+        "Toolbar with common formatting buttons (bold, italic, headings, code, links, images)",
+        "Supports custom blocks: :::beginner, :::intermediate, :::advanced for skill-level content",
+        "Supports {{template_var}} syntax highlighting in editor",
+        "Auto-save draft every 30 seconds, manual save creates new version",
+        "Category and slug editing in article metadata panel"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/docs/MarkdownEditor.tsx",
+        "src/components/docs/MarkdownPreview.tsx",
+        "src/pages/platform/DocsAdminPage.tsx"
+      ]
+    },
+    {
+      "id": "DOC-008",
+      "feature": "cms-admin",
+      "title": "Add version history with diff view and revert",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["DOC-006"], "files": ["src/pages/platform/DocsAdminPage.tsx"], "schema": ["docs_versions"] },
+      "blocks": [],
+      "acceptance": [
+        "Version history panel in editor sidebar shows all versions with timestamps and authors",
+        "Click version shows side-by-side diff (additions green, removals red)",
+        "Revert button restores selected version content into editor (creates new version on save)",
+        "Version count badge shown on articles in the list view"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/docs/VersionHistory.tsx",
+        "src/components/docs/DiffView.tsx",
+        "src/pages/platform/DocsAdminPage.tsx"
+      ]
+    },
+    {
+      "id": "DOC-009",
+      "feature": "ops-content",
+      "title": "Seed Ops Intelligence documentation content",
+      "type": "content",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["DOC-001", "DOC-002"], "files": [], "schema": ["docs_articles"] },
+      "blocks": ["DOC-013"],
+      "acceptance": [
+        "Migration seeds 6 articles covering all Ops Intelligence features",
+        "Each article has beginner/intermediate/advanced sections with real sales query examples",
+        "Articles use {{template_var}} syntax for personalized examples",
+        "Articles include screenshot placeholder descriptions",
+        "Categories: Getting Started, Query Bar, Conversations, Cross-Table, Workflows, Recipes, Insights & Predictions"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260206100001_seed_ops_intelligence_docs.sql"
+      ]
+    },
+    {
+      "id": "DOC-010",
+      "feature": "ops-content",
+      "title": "Create Getting Started and AI Query Bar documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["DOC-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOC-011", "DOC-012"],
+      "acceptance": [
+        "Getting Started article: what Ops tables are, how to create one, first query walkthrough",
+        "AI Query Bar article: all 15 tools explained with beginner/intermediate/advanced examples",
+        "Query examples use {{column}} template vars that resolve to org's actual column names",
+        "Includes: filter, sort, update, delete, create_column, create_view, summarize, transform, deduplicate, export, conditional_update, cross_column_validate, formatting, batch_create_views, cross_table_query"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260206100001_seed_ops_intelligence_docs.sql"
+      ]
+    },
+    {
+      "id": "DOC-011",
+      "feature": "ops-content",
+      "title": "Create Conversations, Workflows, and Recipes documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["DOC-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOC-010", "DOC-012"],
+      "acceptance": [
+        "Conversations article: how context works, example 3-step conversation chain, session management",
+        "Workflows article: creating workflows from natural language, trigger types, monitoring executions",
+        "Recipes article: saving queries, sharing with team, auto-run recipes, recipe library"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260206100001_seed_ops_intelligence_docs.sql"
+      ]
+    },
+    {
+      "id": "DOC-012",
+      "feature": "ops-content",
+      "title": "Create Cross-Table and Insights/Predictions documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["DOC-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOC-010", "DOC-011"],
+      "acceptance": [
+        "Cross-Table article: available data sources, query examples for CRM/meetings/other tables, enrichment patterns",
+        "Insights article: how proactive insights work, dismissing/acting on insights, insight types",
+        "Predictions article: behavioral patterns, confidence scores, acting on predictions"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260206100001_seed_ops_intelligence_docs.sql"
+      ]
+    },
+    {
+      "id": "DOC-013",
+      "feature": "contextual-help",
+      "title": "Add contextual ? help icons in Ops features",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["DOC-003", "DOC-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "? icon next to AI Query Bar links to /docs#query-bar",
+        "? icon in Workflows panel links to /docs#workflows",
+        "? icon in Recipe Library links to /docs#recipes",
+        "? icon on Insights Banner links to /docs#insights",
+        "? icon on Chat Thread links to /docs#conversations",
+        "Icons use consistent HelpCircle from lucide-react, tooltip shows 'Learn more'"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    },
+    {
+      "id": "DOC-014",
+      "feature": "ai-proposals",
+      "title": "Add AI doc proposal API and Slack approval flow",
+      "type": "backend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["DOC-001", "DOC-002"], "files": [], "schema": ["docs_ai_proposals"] },
+      "blocks": [],
+      "acceptance": [
+        "POST /docs-api action=propose_update accepts article_id, proposed_content, reason from AI",
+        "Creates docs_ai_proposals record with status=pending",
+        "Sends Slack Block Kit message with article title, reason, diff preview, Approve/Reject buttons",
+        "Slack interaction handler updates proposal status and publishes approved content as new version",
+        "Rejected proposals logged with optional reject reason"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/docs-api/index.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 0,
+    "currentFeature": "schema",
+    "estimatedHours": 4.5,
+    "parallelGroups": [
+      { "group": 1, "stories": ["DOC-001"] },
+      { "group": 2, "stories": ["DOC-002", "DOC-003"] },
+      { "group": 3, "stories": ["DOC-004", "DOC-005", "DOC-006"] },
+      { "group": 4, "stories": ["DOC-007", "DOC-008", "DOC-009"] },
+      { "group": 5, "stories": ["DOC-010", "DOC-011", "DOC-012"] },
+      { "group": 6, "stories": ["DOC-013", "DOC-014"] }
+    ]
+  }
+}
