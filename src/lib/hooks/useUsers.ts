@@ -123,7 +123,10 @@ export function useUsers() {
       });
 
       // Transform data to match expected User interface
-      const usersData = (profiles || []).map((profile) => {
+      // Filter out deleted users (those with email like deleted_*@deleted.local)
+      const usersData = (profiles || [])
+        .filter(profile => !profile.email?.startsWith('deleted_'))
+        .map((profile) => {
           const email = profile.email || `user_${profile.id.slice(0, 8)}@private.local`;
           return {
             id: profile.id,
