@@ -40,6 +40,7 @@ import AuthCallback from '@/pages/auth/AuthCallback';
 import AcceptInvitation from '@/pages/auth/AcceptInvitation';
 import InviteSignup from '@/pages/auth/InviteSignup';
 import PendingApprovalPage from '@/pages/auth/PendingApprovalPage';
+import InactiveOrganizationScreen from '@/pages/InactiveOrganizationScreen';
 import TestGoogleTasks from '@/pages/TestGoogleTasks';
 import MeetingThumbnail from '@/pages/MeetingThumbnail';
 import BrowserlessTest from '@/pages/BrowserlessTest';
@@ -298,6 +299,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
             <Suspense fallback={<RouteLoader />}>
               <Routes>
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/inactive-organization" element={<InactiveOrganizationScreen />} />
                 <Route path="/debug-auth" element={<DebugAuth />} />
                 <Route path="/debug/auth" element={<AuthDebug />} />
                 <Route path="/debug-permissions" element={<DebugPermissions />} />

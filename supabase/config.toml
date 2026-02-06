@@ -299,3 +299,18 @@ verify_jwt = false
 # Called by pg_cron or admin trigger with CRON_SECRET or service role key
 [functions.cleanup-incomplete-onboarding]
 verify_jwt = false
+
+# Save organization skills - called from browser during onboarding
+# Function decodes JWT manually inside the handler (CORS preflight needs to work)
+[functions.save-organization-skills]
+verify_jwt = false
+
+# Compile organization skills - called from browser during onboarding and settings
+# Uses service role key internally, handles auth manually
+[functions.compile-organization-skills]
+verify_jwt = false
+
+# Deep enrich organization - called from browser during onboarding and settings
+# Uses service role key internally, handles auth manually
+[functions.deep-enrich-organization]
+verify_jwt = false
