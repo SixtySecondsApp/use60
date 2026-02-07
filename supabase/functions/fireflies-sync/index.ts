@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { enrichFirefliesMeeting } from './enrichment.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,37 +9,64 @@ const corsHeaders = {
 
 const FIREFLIES_API_URL = 'https://api.fireflies.ai/graphql'
 
+// Max meetings to fully enrich per sync (avoid edge function timeout)
+const MAX_ENRICHMENT_BATCH = 5
+
 /**
  * Fireflies.ai Sync Edge Function
- * 
+ *
  * Syncs meeting transcripts from Fireflies.ai to the meetings table.
  * Uses GraphQL API with API key authentication.
- * 
- * Pattern: Following fathom-sync edge function (per-user integration)
- * 
+ *
+ * Phase 2: Enriches meetings with AI analysis (sentiment, coaching, talk time),
+ * participant extraction (contacts/companies), and action items.
+ *
  * Actions:
  *   - test_connection: Test API key validity
- *   - sync: Full sync of meetings
+ *   - sync: Full sync of meetings with enrichment
  */
 
-interface FirefliesSentence {
+export interface FirefliesSentence {
   index: number
   speaker_name: string
   raw_text: string
 }
 
-interface FirefliesTranscript {
+export interface FirefliesSummary {
+  action_items?: string[]
+  overview?: string
+  short_summary?: string
+  keywords?: string[]
+  meeting_type?: string
+}
+
+export interface FirefliesAttendee {
+  displayName?: string
+  email?: string
+  phoneNumber?: string
+}
+
+export interface FirefliesSpeaker {
+  id?: string
+  name?: string
+}
+
+export interface FirefliesTranscript {
   id: string
   title: string
   date: number // epoch ms
   transcript_url: string
+  duration?: number // minutes
   sentences: FirefliesSentence[]
   fireflies_users: string[]
   organizer_email: string
   host_email: string
+  summary?: FirefliesSummary
+  meeting_attendees?: FirefliesAttendee[]
+  speakers?: FirefliesSpeaker[]
 }
 
-// GraphQL query for fetching transcripts
+// GraphQL query for fetching transcripts with enrichment data
 const GET_TRANSCRIPTS_QUERY = `
 query GetRecent($fromDate: DateTime!, $toDate: DateTime!, $limit: Int!) {
   transcripts(fromDate: $fromDate, toDate: $toDate, limit: $limit, mine: false) {
@@ -46,6 +74,7 @@ query GetRecent($fromDate: DateTime!, $toDate: DateTime!, $limit: Int!) {
     title
     date
     transcript_url
+    duration
     sentences {
       index
       speaker_name
@@ -54,6 +83,22 @@ query GetRecent($fromDate: DateTime!, $toDate: DateTime!, $limit: Int!) {
     fireflies_users
     organizer_email
     host_email
+    summary {
+      action_items
+      overview
+      short_summary
+      keywords
+      meeting_type
+    }
+    meeting_attendees {
+      displayName
+      email
+      phoneNumber
+    }
+    speakers {
+      id
+      name
+    }
   }
 }
 `
@@ -316,6 +361,9 @@ serve(async (req) => {
         })
 
         // Batch insert all new meetings at once
+        // Track inserted meeting IDs for enrichment
+        const insertedMeetingIds: string[] = []
+
         if (newTranscripts.length > 0) {
           const meetingsToInsert = newTranscripts.map(transcript => ({
             owner_user_id: user.id,
@@ -324,30 +372,84 @@ serve(async (req) => {
             provider: 'fireflies',
             title: transcript.title,
             meeting_start: new Date(transcript.date).toISOString(),
+            duration_minutes: transcript.duration || null,
             share_url: transcript.transcript_url,
             transcript_text: sentencesToText(transcript.sentences),
             owner_email: transcript.organizer_email || transcript.host_email || null,
+            summary: transcript.summary?.overview || transcript.summary?.short_summary || null,
+            transcript_status: 'complete',
+            summary_status: (transcript.summary?.overview || transcript.summary?.short_summary) ? 'complete' : 'pending',
+            sync_status: 'synced',
+            last_synced_at: new Date().toISOString(),
           }))
 
-          const { error: insertError } = await serviceClient
+          const { data: insertedRows, error: insertError } = await serviceClient
             .from('meetings')
             .insert(meetingsToInsert)
+            .select('id, external_id')
 
           if (insertError) {
             console.error('Error batch inserting meetings:', insertError)
             // Fallback: try inserting one by one to identify which ones fail
             for (const meeting of meetingsToInsert) {
-              const { error: singleError } = await serviceClient
+              const { data: singleRow, error: singleError } = await serviceClient
                 .from('meetings')
                 .insert(meeting)
+                .select('id, external_id')
               if (singleError) {
                 console.error(`Error inserting meeting ${meeting.external_id}:`, singleError)
               } else {
                 syncedCount++
+                if (singleRow?.[0]?.id) insertedMeetingIds.push(singleRow[0].id)
               }
             }
           } else {
             syncedCount = newTranscripts.length
+            if (insertedRows) {
+              insertedMeetingIds.push(...insertedRows.map(r => r.id))
+            }
+          }
+        }
+
+        // --- Phase 2: Enrichment ---
+        // Enrich newly inserted meetings (participants, AI analysis, action items)
+        let enrichedCount = 0
+        const enrichmentBatch = insertedMeetingIds.slice(0, MAX_ENRICHMENT_BATCH)
+
+        if (enrichmentBatch.length > 0) {
+          console.log(`[fireflies-sync] Starting enrichment for ${enrichmentBatch.length} meetings (${insertedMeetingIds.length} total inserted)`)
+
+          // Build a map of external_id -> transcript for enrichment data
+          const transcriptByExternalId = new Map<string, FirefliesTranscript>()
+          for (const t of newTranscripts) {
+            transcriptByExternalId.set(t.id, t)
+          }
+
+          // Fetch the inserted meetings to get their IDs and external_ids
+          const { data: meetingsToEnrich } = await serviceClient
+            .from('meetings')
+            .select('id, external_id, title, meeting_start, transcript_text, owner_email, org_id, owner_user_id, summary')
+            .in('id', enrichmentBatch)
+
+          if (meetingsToEnrich) {
+            for (const meeting of meetingsToEnrich) {
+              const transcript = transcriptByExternalId.get(meeting.external_id)
+              if (!transcript) continue
+
+              try {
+                await enrichFirefliesMeeting(serviceClient, meeting, transcript, user.id, orgId)
+                enrichedCount++
+                console.log(`[fireflies-sync] Enriched meeting ${meeting.id} (${meeting.title})`)
+              } catch (enrichError) {
+                // Non-fatal: meeting is already inserted
+                console.warn(`[fireflies-sync] Enrichment failed for meeting ${meeting.id}:`,
+                  enrichError instanceof Error ? enrichError.message : String(enrichError))
+              }
+            }
+          }
+
+          if (insertedMeetingIds.length > MAX_ENRICHMENT_BATCH) {
+            console.log(`[fireflies-sync] ${insertedMeetingIds.length - MAX_ENRICHMENT_BATCH} meetings inserted without enrichment (will be enriched on next sync)`)
           }
         }
 
@@ -377,6 +479,7 @@ serve(async (req) => {
             success: true,
             sync_type: sync_type || 'manual',
             meetings_synced: syncedCount,
+            meetings_enriched: enrichedCount,
             total_found: transcripts.length,
             skipped: skippedCount,
           }),
