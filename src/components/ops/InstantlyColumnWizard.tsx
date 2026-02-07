@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Zap, CheckCircle2, ChevronRight, ChevronLeft, Key, Radio, Send, ArrowDownToLine, Plus, Search, AlertCircle } from 'lucide-react';
+import { Loader2, Zap, CheckCircle2, ChevronRight, ChevronLeft, Key, Radio, Send, ArrowDownToLine, Plus, Search, AlertCircle, Sparkles, Calculator } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -17,6 +17,9 @@ interface ColumnConfig {
   isEnrichment: boolean;
   integrationType?: string;
   integrationConfig?: Record<string, unknown>;
+  formulaExpression?: string;
+  enrichmentPrompt?: string;
+  autoRunRows?: number | 'all';
 }
 
 interface InstantlyColumnWizardProps {
@@ -60,6 +63,42 @@ export function InstantlyColumnWizard({
   const [stepCount, setStepCount] = useState(3);
   const [variableMapping, setVariableMapping] = useState<Record<string, string>>({});
   const [isLinking, setIsLinking] = useState(false);
+
+  // Content generation config per step (for author_steps mode)
+  type ContentGenMode = 'formula' | 'ai';
+  interface StepContentConfig {
+    subjectMode: ContentGenMode;
+    bodyMode: ContentGenMode;
+    subjectFormula: string;
+    bodyFormula: string;
+    subjectPrompt: string;
+    bodyPrompt: string;
+  }
+  const makeDefaultStepConfig = (stepNum: number): StepContentConfig => ({
+    subjectMode: 'formula',
+    bodyMode: 'ai',
+    subjectFormula: stepNum === 1
+      ? '"Hey " & @first_name & ", quick question about " & @company_name'
+      : `"Re: " & @company_name & " — follow-up #${stepNum}"`,
+    bodyFormula: '',
+    subjectPrompt: `Write a short, personalized cold email subject line for @first_name at @company_name. Step ${stepNum} of the sequence. Keep it casual and under 60 characters.`,
+    bodyPrompt: stepNum === 1
+      ? 'Write a 2-3 sentence personalized cold email body for @first_name at @company_name. Reference their role and company. Keep it casual, concise, and end with a soft CTA.'
+      : `Write a brief follow-up email (step ${stepNum}) for @first_name at @company_name. Reference the previous outreach. Keep it shorter than the first email — 1-2 sentences max.`,
+  });
+  const [stepConfigs, setStepConfigs] = useState<StepContentConfig[]>(
+    Array.from({ length: 5 }, (_, i) => makeDefaultStepConfig(i + 1))
+  );
+  // Keep step configs in sync when stepCount changes
+  useEffect(() => {
+    setStepConfigs(prev => {
+      const next = [...prev];
+      while (next.length < stepCount) {
+        next.push(makeDefaultStepConfig(next.length + 1));
+      }
+      return next;
+    });
+  }, [stepCount]);
 
   // Check connection on mount
   useEffect(() => {
@@ -226,18 +265,56 @@ export function InstantlyColumnWizard({
       // 3. Auto-scaffold sequence step columns if author mode
       if (sequenceMode === 'author_steps') {
         for (let i = 1; i <= stepCount; i++) {
-          columns.push({
-            key: `instantly_step_${i}_subject`,
-            label: `Step ${i} Subject`,
-            columnType: 'text',
-            isEnrichment: false,
-          });
-          columns.push({
-            key: `instantly_step_${i}_body`,
-            label: `Step ${i} Body`,
-            columnType: 'text',
-            isEnrichment: false,
-          });
+          const cfg = stepConfigs[i - 1];
+          if (!cfg) continue;
+
+          const stepIntegrationBase = {
+            instantly_subtype: 'sequence_step' as const,
+          };
+
+          // Subject column
+          if (cfg.subjectMode === 'formula') {
+            columns.push({
+              key: `instantly_step_${i}_subject`,
+              label: `Step ${i} Subject`,
+              columnType: 'formula',
+              isEnrichment: false,
+              formulaExpression: cfg.subjectFormula,
+              integrationConfig: { ...stepIntegrationBase, step_config: { step_number: i, field: 'subject' } },
+            });
+          } else {
+            columns.push({
+              key: `instantly_step_${i}_subject`,
+              label: `Step ${i} Subject`,
+              columnType: 'enrichment',
+              isEnrichment: true,
+              enrichmentPrompt: cfg.subjectPrompt,
+              autoRunRows: 'all' as const,
+              integrationConfig: { ...stepIntegrationBase, step_config: { step_number: i, field: 'subject' } },
+            });
+          }
+
+          // Body column
+          if (cfg.bodyMode === 'formula') {
+            columns.push({
+              key: `instantly_step_${i}_body`,
+              label: `Step ${i} Body`,
+              columnType: 'formula',
+              isEnrichment: false,
+              formulaExpression: cfg.bodyFormula,
+              integrationConfig: { ...stepIntegrationBase, step_config: { step_number: i, field: 'body' } },
+            });
+          } else {
+            columns.push({
+              key: `instantly_step_${i}_body`,
+              label: `Step ${i} Body`,
+              columnType: 'enrichment',
+              isEnrichment: true,
+              enrichmentPrompt: cfg.bodyPrompt,
+              autoRunRows: 'all' as const,
+              integrationConfig: { ...stepIntegrationBase, step_config: { step_number: i, field: 'body' } },
+            });
+          }
         }
       }
 
@@ -488,6 +565,145 @@ export function InstantlyColumnWizard({
               <p className="mt-1 text-xs text-gray-500">
                 Creates {stepCount * 2} columns (Subject + Body per step)
               </p>
+            </div>
+          )}
+
+          {/* Content Generation Config (author_steps only) */}
+          {sequenceMode === 'author_steps' && (
+            <div className="space-y-3">
+              <label className="block text-xs font-medium text-gray-400">Content Generation</label>
+              <p className="text-xs text-gray-500">
+                Choose how to generate subject &amp; body for each step. Use <code className="rounded bg-gray-800 px-1 text-violet-300">@column_key</code> to reference other columns.
+              </p>
+              {Array.from({ length: stepCount }, (_, i) => {
+                const cfg = stepConfigs[i];
+                if (!cfg) return null;
+                const updateCfg = (patch: Partial<StepContentConfig>) =>
+                  setStepConfigs(prev => prev.map((c, j) => j === i ? { ...c, ...patch } : c));
+                return (
+                  <div key={i} className="rounded-lg border border-gray-700 bg-gray-800/30 p-3 space-y-2.5">
+                    <p className="text-xs font-medium text-gray-300">Step {i + 1}</p>
+
+                    {/* Subject */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-16 shrink-0 text-xs text-gray-500">Subject</span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => updateCfg({ subjectMode: 'formula' })}
+                            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+                              cfg.subjectMode === 'formula'
+                                ? 'bg-blue-500/15 text-blue-300 border border-blue-500/40'
+                                : 'text-gray-500 border border-gray-700 hover:border-gray-600'
+                            }`}
+                          >
+                            <Calculator className="h-3 w-3" />
+                            Formula
+                          </button>
+                          <button
+                            onClick={() => updateCfg({ subjectMode: 'ai' })}
+                            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+                              cfg.subjectMode === 'ai'
+                                ? 'bg-violet-500/15 text-violet-300 border border-violet-500/40'
+                                : 'text-gray-500 border border-gray-700 hover:border-gray-600'
+                            }`}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            AI Prompt
+                          </button>
+                        </div>
+                      </div>
+                      {cfg.subjectMode === 'formula' ? (
+                        <input
+                          type="text"
+                          value={cfg.subjectFormula}
+                          onChange={(e) => updateCfg({ subjectFormula: e.target.value })}
+                          placeholder='"Hey " & @first_name & ", ..."'
+                          className="w-full rounded-md border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-xs text-gray-100 font-mono placeholder-gray-600 outline-none focus:border-blue-500"
+                        />
+                      ) : (
+                        <textarea
+                          value={cfg.subjectPrompt}
+                          onChange={(e) => updateCfg({ subjectPrompt: e.target.value })}
+                          placeholder="Write a cold email subject for @first_name at @company_name..."
+                          rows={2}
+                          className="w-full rounded-md border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 outline-none focus:border-violet-500 resize-none"
+                        />
+                      )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-16 shrink-0 text-xs text-gray-500">Body</span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => updateCfg({ bodyMode: 'formula' })}
+                            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+                              cfg.bodyMode === 'formula'
+                                ? 'bg-blue-500/15 text-blue-300 border border-blue-500/40'
+                                : 'text-gray-500 border border-gray-700 hover:border-gray-600'
+                            }`}
+                          >
+                            <Calculator className="h-3 w-3" />
+                            Formula
+                          </button>
+                          <button
+                            onClick={() => updateCfg({ bodyMode: 'ai' })}
+                            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+                              cfg.bodyMode === 'ai'
+                                ? 'bg-violet-500/15 text-violet-300 border border-violet-500/40'
+                                : 'text-gray-500 border border-gray-700 hover:border-gray-600'
+                            }`}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            AI Prompt
+                          </button>
+                        </div>
+                      </div>
+                      {cfg.bodyMode === 'formula' ? (
+                        <textarea
+                          value={cfg.bodyFormula}
+                          onChange={(e) => updateCfg({ bodyFormula: e.target.value })}
+                          placeholder='"Hi " & @first_name & ",\n\nI noticed " & @company_name & " is..."'
+                          rows={3}
+                          className="w-full rounded-md border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-xs text-gray-100 font-mono placeholder-gray-600 outline-none focus:border-blue-500 resize-none"
+                        />
+                      ) : (
+                        <textarea
+                          value={cfg.bodyPrompt}
+                          onChange={(e) => updateCfg({ bodyPrompt: e.target.value })}
+                          placeholder="Write a personalized cold email body for @first_name at @company_name..."
+                          rows={3}
+                          className="w-full rounded-md border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 outline-none focus:border-violet-500 resize-none"
+                        />
+                      )}
+                    </div>
+
+                    {/* Column reference helper */}
+                    {existingColumns.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-xs text-gray-600">Columns:</span>
+                        {existingColumns.slice(0, 8).map((col) => (
+                          <button
+                            key={col.key}
+                            type="button"
+                            onClick={() => {
+                              // Copy @column_key to clipboard for easy insertion
+                              navigator.clipboard?.writeText(`@${col.key}`);
+                              toast.success(`Copied @${col.key}`);
+                            }}
+                            className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-400 hover:text-violet-300 hover:bg-gray-700 transition-colors"
+                            title={`Click to copy @${col.key}`}
+                          >
+                            @{col.key}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 

@@ -1,0 +1,630 @@
+{
+  "project": {
+    "name": "Ops × Instantly Integration",
+    "template": null,
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-02-06T00:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "instantly-infra",
+      "name": "Instantly Infrastructure",
+      "status": "pending",
+      "description": "Database schema, API client, credential storage, admin edge function"
+    },
+    {
+      "id": "instantly-campaigns",
+      "name": "Campaign Management",
+      "status": "pending",
+      "description": "Campaign CRUD, activate/pause, campaign picker UI"
+    },
+    {
+      "id": "instantly-push",
+      "name": "Lead Push",
+      "status": "pending",
+      "description": "Push Ops table rows as leads to Instantly campaigns"
+    },
+    {
+      "id": "instantly-pull",
+      "name": "Engagement Pull",
+      "status": "pending",
+      "description": "Sync lead engagement data back into Ops table columns"
+    },
+    {
+      "id": "instantly-analytics",
+      "name": "Campaign Analytics",
+      "status": "pending",
+      "description": "Campaign-level analytics visible from Ops"
+    },
+    {
+      "id": "instantly-ui",
+      "name": "Ops Table UI Integration",
+      "status": "pending",
+      "description": "Connect table to campaign, sync buttons, status indicators, button actions"
+    },
+    {
+      "id": "instantly-content-gen",
+      "name": "Email Content Generation",
+      "status": "pending",
+      "description": "Generate email subject/body via formulas or AI prompts, auto-push as custom_variables"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "INS-001",
+      "feature": "instantly-infra",
+      "title": "Create Instantly database schema and credentials tables",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["organization_memberships"]
+      },
+      "blocks": ["INS-002", "INS-003", "INS-004", "INS-005", "INS-006", "INS-007", "INS-008", "INS-009", "INS-010", "INS-011", "INS-012", "INS-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "instantly_org_credentials table created (org_id PK, api_key encrypted, updated_at) with NO RLS (service-role-only access)",
+        "instantly_org_integrations table created (org_id, is_active, is_connected, connected_by, connected_at, last_sync_at) with RLS for org members",
+        "instantly_sync_history table created (table_id, campaign_id, synced_by, new_leads_count, updated_leads_count, sync_duration_ms, error_message, snapshot JSONB)",
+        "instantly_campaign_links table created (table_id, campaign_id, campaign_name, field_mapping JSONB, auto_sync_columns, linked_by, linked_at) — tracks which tables are connected to which campaigns"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260206100000_instantly_integration_schema.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-002",
+      "feature": "instantly-infra",
+      "title": "Create InstantlyClient API wrapper with rate limiting and retry",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["INS-001"],
+        "files": ["supabase/functions/_shared/hubspot.ts"],
+        "schema": []
+      },
+      "blocks": ["INS-003", "INS-004", "INS-005", "INS-006", "INS-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "InstantlyClient class in supabase/functions/_shared/instantly.ts with Bearer token auth",
+        "Rate limiting (100ms min delay between requests) matching HubSpot pattern",
+        "Exponential backoff retry on 429 and 5xx (max 3 retries)",
+        "Typed request method with generic return type and query/body support",
+        "InstantlyError class with status, message, retryAfterMs fields"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/instantly.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-003",
+      "feature": "instantly-infra",
+      "title": "Create instantly-admin edge function with auth and connection management",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["INS-001", "INS-002"],
+        "files": ["supabase/functions/hubspot-admin/index.ts"],
+        "schema": ["instantly_org_credentials", "instantly_org_integrations"]
+      },
+      "blocks": ["INS-004", "INS-005", "INS-006", "INS-007", "INS-008", "INS-009", "INS-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function with JWT auth validation (user-scoped client) and org admin role check",
+        "Actions: 'connect' (save API key, verify with GET /api/v2/campaigns), 'disconnect', 'status'",
+        "On connect: validate API key by calling Instantly API, store in instantly_org_credentials, mark integration active",
+        "On disconnect: clear credentials, mark integration inactive",
+        "On status: return connection state, last sync time, linked campaigns count",
+        "Deploy with --no-verify-jwt to staging"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/instantly-admin/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-004",
+      "feature": "instantly-campaigns",
+      "title": "Add campaign CRUD actions to instantly-admin edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["INS-003"],
+        "files": ["supabase/functions/instantly-admin/index.ts"],
+        "schema": []
+      },
+      "blocks": ["INS-008", "INS-009"],
+      "parallelWith": ["INS-005"],
+      "acceptance": [
+        "Action 'list_campaigns': GET /api/v2/campaigns with pagination, return id/name/status",
+        "Action 'get_campaign': GET /api/v2/campaigns/{id} with full details",
+        "Action 'create_campaign': POST /api/v2/campaigns with name, schedule, sequences",
+        "Action 'activate_campaign': POST /api/v2/campaigns/{id}/activate",
+        "Action 'pause_campaign': POST /api/v2/campaigns/{id}/pause"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/instantly-admin/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-005",
+      "feature": "instantly-campaigns",
+      "title": "Add campaign analytics action to instantly-admin",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["INS-003"],
+        "files": ["supabase/functions/instantly-admin/index.ts"],
+        "schema": []
+      },
+      "blocks": ["INS-012"],
+      "parallelWith": ["INS-004"],
+      "acceptance": [
+        "Action 'campaign_analytics': GET /api/v2/campaigns/analytics/overview for a specific campaign_id",
+        "Returns: leads_count, contacted_count, emails_sent_count, open_count_unique, reply_count_unique, bounced_count, unsubscribed_count, completed_count",
+        "Action 'campaign_analytics_daily': GET /api/v2/campaigns/analytics/daily for trend data"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/instantly-admin/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-006",
+      "feature": "instantly-push",
+      "title": "Create push-to-instantly edge function for bulk lead export",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["INS-002", "INS-003"],
+        "files": ["supabase/functions/_shared/instantly.ts"],
+        "schema": ["instantly_org_credentials", "instantly_campaign_links", "dynamic_table_rows", "dynamic_table_cells"]
+      },
+      "blocks": ["INS-010"],
+      "parallelWith": ["INS-007"],
+      "acceptance": [
+        "Accept table_id, campaign_id, row_ids (optional — all if omitted), field_mapping",
+        "Fetch rows + cells, map columns to Instantly lead fields (email required, first_name, last_name, company_name, rest → custom_variables)",
+        "Push via POST /api/v2/leads/bulk in chunks of 100 with skip_if_in_campaign: true",
+        "Store source mapping: update rows with instantly_lead_id in source_data",
+        "Create/update instantly_campaign_links record with field_mapping",
+        "Return summary: pushed_count, skipped_count, error_count"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/push-to-instantly/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-007",
+      "feature": "instantly-pull",
+      "title": "Create sync-instantly-engagement edge function for pulling lead status back",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["INS-002", "INS-003"],
+        "files": ["supabase/functions/_shared/instantly.ts"],
+        "schema": ["instantly_org_credentials", "instantly_campaign_links", "dynamic_table_columns", "dynamic_table_cells"]
+      },
+      "blocks": ["INS-011"],
+      "parallelWith": ["INS-006"],
+      "acceptance": [
+        "Accept table_id and campaign_id, fetch instantly_campaign_links for field mapping",
+        "Auto-create engagement columns if not exist: instantly_status, instantly_email_status, instantly_last_contacted, instantly_reply_count, instantly_open_count",
+        "Fetch leads from Instantly via POST /api/v2/leads/list with campaign_id, paginate through all",
+        "Match leads to rows by email (fuzzy match via lowercase comparison)",
+        "Batch upsert cells with engagement data using onConflict: 'row_id,column_id'",
+        "Record sync in instantly_sync_history with counts and duration"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/sync-instantly-engagement/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-008",
+      "feature": "instantly-ui",
+      "title": "Build Instantly settings panel in org settings for API key connection",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["INS-003"],
+        "files": [],
+        "schema": ["instantly_org_integrations"]
+      },
+      "blocks": ["INS-009", "INS-010", "INS-011", "INS-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "New 'Instantly' section in platform integrations settings page",
+        "API key input field (masked after save) with 'Connect' button",
+        "On connect: call instantly-admin with action 'connect', show success/error",
+        "Show connection status: connected/disconnected badge, connected_at timestamp",
+        "Disconnect button with confirmation dialog",
+        "Uses supabase.functions.invoke() pattern (not raw fetch)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/platform/InstantlySettingsPanel.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-009",
+      "feature": "instantly-ui",
+      "title": "Build campaign picker modal and 'Connect to Instantly' flow in Ops table",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["INS-004", "INS-008"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": ["instantly_campaign_links"]
+      },
+      "blocks": ["INS-010", "INS-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "New 'Instantly' toolbar button in OpsDetailPage (next to HubSpot sync button) — only visible when org has Instantly connected",
+        "Dropdown menu with: Connect to Campaign, Push Leads, Sync Engagement, View Analytics, Disconnect",
+        "Campaign picker modal: fetch campaigns from instantly-admin 'list_campaigns', show name + status, search/filter, select one",
+        "Field mapping step: auto-detect email/name/company columns, let user confirm/adjust mapping",
+        "On connect: create instantly_campaign_links record, show success toast",
+        "Show connected campaign badge in toolbar when table is linked"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/InstantlyCampaignPickerModal.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-010",
+      "feature": "instantly-ui",
+      "title": "Build push-to-Instantly flow with field mapping confirmation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["INS-006", "INS-009"],
+        "files": ["src/components/ops/InstantlyCampaignPickerModal.tsx"],
+        "schema": []
+      },
+      "blocks": ["INS-013"],
+      "parallelWith": ["INS-011"],
+      "acceptance": [
+        "useInstantlyPush hook: calls push-to-instantly edge function, invalidates queries, shows toast with summary",
+        "Push modal: shows row count, field mapping preview, 'Push to {campaign_name}' button",
+        "Support pushing selected rows (from bulk selection) or all rows",
+        "Progress indicator during push (loading state)",
+        "Add 'push_to_instantly' action type to button column config for one-click push per row"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/hooks/useInstantlyPush.ts",
+        "src/components/ops/InstantlyPushModal.tsx",
+        "src/lib/hooks/useActionExecution.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-011",
+      "feature": "instantly-ui",
+      "title": "Build sync-engagement flow with auto-column creation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["INS-007", "INS-009"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["INS-010"],
+      "acceptance": [
+        "useInstantlySync hook: calls sync-instantly-engagement edge function, invalidates table data queries, shows toast with sync summary",
+        "'Sync Engagement' button in Instantly toolbar dropdown triggers sync",
+        "Auto-columns appear after first sync (instantly_status, instantly_email_status, etc.)",
+        "Sync history viewable in a sheet/panel (like HubSpotSyncHistory)",
+        "Loading state during sync with progress indication"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/hooks/useInstantlySync.ts",
+        "src/components/ops/InstantlySyncHistory.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-012",
+      "feature": "instantly-analytics",
+      "title": "Build campaign analytics panel in Ops table",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": {
+        "stories": ["INS-005", "INS-008"],
+        "files": [],
+        "schema": ["instantly_campaign_links"]
+      },
+      "blocks": [],
+      "parallelWith": ["INS-013"],
+      "acceptance": [
+        "'View Analytics' in Instantly dropdown opens analytics sheet/panel",
+        "Shows campaign overview: leads_count, contacted, emails_sent, unique_opens, unique_replies, bounced, unsubscribed",
+        "Key metrics as stat cards with percentages (open rate, reply rate, bounce rate)",
+        "Fetches data via instantly-admin 'campaign_analytics' action",
+        "Auto-refresh on panel open, manual refresh button"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/InstantlyAnalyticsPanel.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INS-013",
+      "feature": "instantly-ui",
+      "title": "Add push_to_instantly button action type and TypeScript types",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": {
+        "stories": ["INS-010"],
+        "files": ["src/lib/hooks/useActionExecution.ts", "src/components/ops/ButtonColumnConfigPanel.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["INS-012"],
+      "acceptance": [
+        "Add 'push_to_instantly' to action_type union in TypeScript types",
+        "useActionExecution handles 'push_to_instantly' action: pushes single row to linked campaign",
+        "ButtonColumnConfigPanel shows 'Push to Instantly' as action option when table has campaign linked",
+        "Add InstantlyCampaignLink, InstantlyAnalytics, InstantlySyncHistoryEntry TypeScript interfaces"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/hooks/useActionExecution.ts",
+        "src/components/ops/ButtonColumnConfigPanel.tsx",
+        "src/lib/types/instantly.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSGEN-001",
+      "feature": "instantly-content-gen",
+      "title": "Add content generation mode picker to Instantly wizard Step 3",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/ops/InstantlyColumnWizard.tsx"],
+        "schema": []
+      },
+      "blocks": ["INSGEN-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "When sequenceMode is 'author_steps', a new sub-section appears below the step count picker: 'Content Generation'",
+        "User chooses per-step between 'Formula template' and 'AI prompt' via radio/toggle",
+        "Formula mode: text input with @column_key reference helper showing existing columns",
+        "AI mode: textarea for prompt with @column_key mentions, optional model picker dropdown",
+        "Default formula template for subject: '\"Hey \" & @first_name & \", quick question about \" & @company_name'",
+        "Default AI prompt for body: 'Write a 2-3 sentence personalized cold email body for @first_name at @company_name. Keep it casual and concise.'"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/InstantlyColumnWizard.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSGEN-002",
+      "feature": "instantly-content-gen",
+      "title": "Create step columns as formula or enrichment type with integration_config tagging",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": {
+        "stories": ["INSGEN-001"],
+        "files": ["src/components/ops/InstantlyColumnWizard.tsx"],
+        "schema": []
+      },
+      "blocks": ["INSGEN-003", "INSGEN-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "handleFinish() creates step columns with columnType 'formula' (when user picked formula) or columnType 'enrichment' + isEnrichment:true (when user picked AI)",
+        "Formula columns include formulaExpression from the wizard input",
+        "Enrichment columns include enrichmentPrompt from the wizard textarea and autoRunRows: 'all'",
+        "All step columns include integrationConfig with { instantly_subtype: 'sequence_step', step_config: { step_number, field: 'subject'|'body' } }",
+        "Column keys remain: instantly_step_{n}_subject, instantly_step_{n}_body"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/InstantlyColumnWizard.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSGEN-003",
+      "feature": "instantly-content-gen",
+      "title": "Auto-evaluate formula and enrichment step columns on creation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": {
+        "stories": ["INSGEN-002"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["INSGEN-004"],
+      "acceptance": [
+        "In addColumnMutation.onSuccess, formula step columns auto-trigger recalcFormulaMutation (already exists for column_type=formula)",
+        "Enrichment step columns auto-trigger startEnrichment when autoRunRows is set (existing logic already handles is_enrichment + autoRunRows)",
+        "Verify the existing auto-eval paths work for step columns created by the wizard (formula_expression and enrichment_prompt are passed through addColumn params)"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSGEN-004",
+      "feature": "instantly-content-gen",
+      "title": "Update push-to-instantly to auto-detect and send step column values as custom_variables",
+      "type": "backend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": {
+        "stories": ["INSGEN-002"],
+        "files": ["supabase/functions/push-to-instantly/index.ts"],
+        "schema": ["dynamic_table_columns"]
+      },
+      "blocks": ["INSGEN-005"],
+      "parallelWith": ["INSGEN-003"],
+      "acceptance": [
+        "After building leads from field_mapping, query dynamic_table_columns for columns where integration_config->>'instantly_subtype' = 'sequence_step' in the same table",
+        "For each step column found, read the cell value per row from the existing rowCellMap",
+        "Map step column values into custom_variables using predictable keys: step_{n}_subject, step_{n}_body",
+        "Merge with any existing custom_variables from field_mapping (step columns take precedence)",
+        "Deploy updated function to staging with --no-verify-jwt"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/push-to-instantly/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSGEN-005",
+      "feature": "instantly-content-gen",
+      "title": "End-to-end testing of content generation and push flow",
+      "type": "test",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": {
+        "stories": ["INSGEN-003", "INSGEN-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Create Instantly column via wizard with author_steps mode selecting formula for subject and AI for body",
+        "Formula step columns evaluate immediately after creation — cells populate with template output",
+        "AI enrichment step columns start enrichment job — cells populate with AI-generated content",
+        "Push to Instantly sends leads with custom_variables containing step_1_subject, step_1_body values",
+        "Verify leads appear in Instantly campaign with correct custom variable data via campaign_analytics or get_campaign"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 18,
+    "completedStories": 0,
+    "currentFeature": "instantly-content-gen",
+    "lastUpdated": "2026-02-07T00:00:00Z"
+  }
+}
