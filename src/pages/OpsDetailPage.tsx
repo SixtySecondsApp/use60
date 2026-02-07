@@ -176,6 +176,7 @@ function OpsDetailPage() {
   const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
   const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
   const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
+  const [createCampaignFromStepColumn, setCreateCampaignFromStepColumn] = useState<OpsTableColumn | null>(null);
   const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
@@ -2504,6 +2505,9 @@ function OpsDetailPage() {
           onRegenerateEmails={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
             const config = extractEmailGenConfig(activeColumn);
             regenerateEmailsMutation.mutate(config);
+          } : undefined}
+          onCreateCampaignFromSteps={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
+            setCreateCampaignFromStepColumn(activeColumn);
           } : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
         />

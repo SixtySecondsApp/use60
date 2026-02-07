@@ -86,6 +86,8 @@ export function EditInstantlySettingsModal({
   currentConfig,
   orgId,
   existingColumns = [],
+  initialMode = 'select',
+  onCampaignCreated,
 }: EditInstantlySettingsModalProps) {
   const [campaigns, setCampaigns] = useState<InstantlyCampaign[]>([]);
   const [loading, setLoading] = useState(false);
@@ -101,6 +103,39 @@ export function EditInstantlySettingsModal({
   const [stepConfigs, setStepConfigs] = useState<StepContentConfig[]>(
     Array.from({ length: 5 }, (_, i) => makeDefaultStepConfig(i + 1))
   );
+
+  // Create campaign state
+  const [campaignMode, setCampaignMode] = useState<'select' | 'create'>(initialMode);
+  const [newCampaignName, setNewCampaignName] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  // Detect step columns from existingColumns
+  const detectedSteps = useMemo(() => {
+    const stepPattern = /^instantly_step_(\d+)_(subject|body)$/;
+    const stepMap = new Map<number, Set<string>>();
+    for (const col of existingColumns) {
+      const m = col.key.match(stepPattern);
+      if (!m) continue;
+      const num = parseInt(m[1]);
+      if (!stepMap.has(num)) stepMap.set(num, new Set());
+      stepMap.get(num)!.add(m[2]);
+    }
+    return [...stepMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([num, parts]) => ({
+        stepNumber: num,
+        hasSubject: parts.has('subject'),
+        hasBody: parts.has('body'),
+      }));
+  }, [existingColumns]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setCampaignMode(initialMode);
+      setNewCampaignName('');
+      setCreating(false);
+    }
+  }, [isOpen, initialMode]);
 
   useEffect(() => {
     if (isOpen && currentConfig) {
@@ -154,6 +189,58 @@ export function EditInstantlySettingsModal({
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
       onClose();
+    }
+  };
+
+  const handleCreateCampaign = async () => {
+    if (!newCampaignName.trim()) {
+      toast.error('Enter a campaign name');
+      return;
+    }
+    if (detectedSteps.length === 0) {
+      toast.error('No email step columns found in this table');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const sequences = buildSequenceFromStepColumns(existingColumns);
+      const { data, error } = await supabase.functions.invoke('instantly-admin', {
+        body: {
+          action: 'create_campaign',
+          org_id: orgId,
+          name: newCampaignName.trim(),
+          sequences,
+        },
+      });
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Failed to create campaign');
+      }
+
+      const campaignId = data.campaign?.id;
+      const campaignName = data.campaign?.name || newCampaignName.trim();
+
+      if (!campaignId) {
+        throw new Error('Campaign created but no ID returned');
+      }
+
+      toast.success(`Campaign "${campaignName}" created in Instantly`);
+
+      // Notify parent about created campaign
+      onCampaignCreated?.(campaignId, campaignName);
+
+      // Also call onSave with the new campaign info
+      onSave({
+        campaign_id: campaignId,
+        campaign_name: campaignName,
+      });
+
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create campaign');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -270,28 +357,106 @@ export function EditInstantlySettingsModal({
 
           {/* Campaign selector — only for campaign_config and push_action */}
           {(subtype === 'campaign_config' || subtype === 'push_action') && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-300">
-                Campaign
-              </label>
-              {loading ? (
-                <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading campaigns...
+            <div className="space-y-3">
+              {/* Mode toggle */}
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setCampaignMode('select')}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                    campaignMode === 'select'
+                      ? 'border-blue-500 bg-blue-500/15 text-blue-300'
+                      : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
+                  }`}
+                >
+                  Select Existing
+                </button>
+                <button
+                  onClick={() => setCampaignMode('create')}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                    campaignMode === 'create'
+                      ? 'border-violet-500 bg-violet-500/15 text-violet-300'
+                      : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
+                  }`}
+                >
+                  Create New
+                </button>
+              </div>
+
+              {campaignMode === 'select' ? (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                    Campaign
+                  </label>
+                  {loading ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading campaigns...
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedCampaignId}
+                      onChange={(e) => setSelectedCampaignId(e.target.value)}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-violet-500"
+                    >
+                      <option value="">Select campaign...</option>
+                      {campaigns.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               ) : (
-                <select
-                  value={selectedCampaignId}
-                  onChange={(e) => setSelectedCampaignId(e.target.value)}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-violet-500"
-                >
-                  <option value="">Select campaign...</option>
-                  {campaigns.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                      Campaign Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newCampaignName}
+                      onChange={(e) => setNewCampaignName(e.target.value)}
+                      placeholder="e.g. Q1 Cold Outreach"
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-violet-500 placeholder-gray-600"
+                    />
+                  </div>
+
+                  {/* Step preview */}
+                  {detectedSteps.length > 0 ? (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-gray-400">
+                        Email Sequence ({detectedSteps.length} step{detectedSteps.length !== 1 ? 's' : ''})
+                      </label>
+                      <div className="space-y-1">
+                        {detectedSteps.map(({ stepNumber, hasSubject, hasBody }) => (
+                          <div
+                            key={stepNumber}
+                            className="flex items-center gap-2 rounded-md border border-gray-700/60 bg-gray-800/40 px-3 py-2 text-xs"
+                          >
+                            <Mail className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                            <span className="text-gray-300">
+                              Step {stepNumber}:
+                            </span>
+                            <span className="text-gray-500">
+                              {[hasSubject && 'Subject', hasBody && 'Body'].filter(Boolean).join(' + ')}
+                            </span>
+                            <span className="ml-auto text-gray-600 font-mono text-[10px]">
+                              {'{{'} step_{stepNumber}_* {'}}'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Emails will be personalized per lead using your step columns as template variables.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-400/80">
+                      No email step columns detected. Add step columns first (from a campaign_config column).
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -522,13 +687,28 @@ export function EditInstantlySettingsModal({
           >
             Cancel
           </button>
-          <button
-            onClick={handleSave}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
-          >
-            <Send className="w-3.5 h-3.5" />
-            Save
-          </button>
+          {campaignMode === 'create' && (subtype === 'campaign_config' || subtype === 'push_action') ? (
+            <button
+              onClick={handleCreateCampaign}
+              disabled={creating || !newCampaignName.trim() || detectedSteps.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5" />
+              )}
+              {creating ? 'Creating...' : 'Create Campaign'}
+            </button>
+          ) : (
+            <button
+              onClick={handleSave}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+            >
+              <Send className="w-3.5 h-3.5" />
+              Save
+            </button>
+          )}
         </div>
       </div>
     </div>
