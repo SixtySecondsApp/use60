@@ -11,6 +11,13 @@ import {
   buildHITLActionedConfirmation,
   type HITLActionedConfirmation,
   type HITLResourceType,
+  buildActionConfirmation,
+  type ActionConfirmationData,
+  section,
+  context as contextBlock,
+  divider,
+  actions as actionsBlock,
+  header as headerBlock,
 } from '../_shared/slackBlocks.ts';
 import {
   handleMomentumSetNextStep,
@@ -358,6 +365,513 @@ async function updateMessage(
   } catch (error) {
     console.error('Error updating message:', error);
   }
+}
+
+// ============================================================================
+// SLACK-001: Snooze Action Handler
+// ============================================================================
+
+/**
+ * Parse snooze duration string into milliseconds offset.
+ * Supports: '2h', '1d', 'tomorrow', '3d', '1w'
+ */
+function parseSnoozeDuration(duration: string): { ms: number; label: string } {
+  const map: Record<string, { ms: number; label: string }> = {
+    '2h': { ms: 2 * 60 * 60 * 1000, label: '2 hours' },
+    '1d': { ms: 24 * 60 * 60 * 1000, label: 'tomorrow' },
+    'tomorrow': { ms: 24 * 60 * 60 * 1000, label: 'tomorrow' },
+    '3d': { ms: 3 * 24 * 60 * 60 * 1000, label: '3 days' },
+    '1w': { ms: 7 * 24 * 60 * 60 * 1000, label: '1 week' },
+  };
+  return map[duration] || map['1d'];
+}
+
+/**
+ * Handle snooze::{entity_type}::{entity_id} actions from any Slack message.
+ * Stores the snooze in slack_snoozed_items and updates the original message.
+ */
+async function handleSnoozeAction(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  // Format: snooze::{entity_type}::{entity_id}
+  if (parts.length < 3) {
+    console.error('[Snooze] Invalid action_id format:', action.action_id);
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const entityType = parts[1]; // 'deal', 'task', 'notification', etc.
+  const entityId = parts[2];
+
+  // Parse value for duration and context
+  let snoozeData: { entityType?: string; entityId?: string; entityName?: string; duration?: string } = {};
+  try {
+    snoozeData = JSON.parse(action.value || '{}');
+  } catch {
+    snoozeData = { duration: '1d' };
+  }
+
+  const duration = parseSnoozeDuration(snoozeData.duration || '1d');
+  const snoozeUntil = new Date(Date.now() + duration.ms);
+
+  // Get user context
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Your Slack account is not linked to Sixty. Please link it in Settings.' } }],
+        text: 'Account not linked',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Store snooze
+  const { error: insertError } = await supabase
+    .from('slack_snoozed_items')
+    .insert({
+      org_id: ctx.orgId,
+      user_id: ctx.userId,
+      entity_type: entityType,
+      entity_id: entityId,
+      snooze_until: snoozeUntil.toISOString(),
+      original_message_blocks: payload.message?.blocks || null,
+      original_context: {
+        entityName: snoozeData.entityName || entityId,
+        notificationType: 'morning_brief',
+      },
+      notification_type: 'morning_brief',
+      slack_user_id: payload.user.id,
+    });
+
+  if (insertError) {
+    console.error('[Snooze] Insert error:', insertError);
+  }
+
+  // Update original message with confirmation
+  if (payload.response_url) {
+    const snoozeLabel = snoozeUntil.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+    });
+    const confirmation = buildActionConfirmation({
+      action: 'snoozed',
+      slackUserId: payload.user.id,
+      timestamp: new Date().toISOString(),
+      entitySummary: snoozeData.entityName || `${entityType}: ${entityId}`,
+      detail: `Snoozed until ${snoozeLabel}`,
+    });
+    await updateMessage(payload.response_url, confirmation.blocks);
+  }
+
+  // Log interaction
+  await logSlackInteraction(supabase, {
+    userId: ctx.userId,
+    orgId: ctx.orgId || null,
+    actionType: `snooze_${duration.label.replace(' ', '_')}`,
+    actionCategory: 'notifications',
+    entityType,
+    entityId,
+    metadata: { duration: snoozeData.duration, snooze_until: snoozeUntil.toISOString() },
+  });
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============================================================================
+// SLACK-007: Dismiss Action Handler
+// ============================================================================
+
+/**
+ * Handle dismiss::{notification_type}::{notification_id} actions.
+ * Marks notification as dismissed and updates message.
+ */
+async function handleDismissAction(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const notificationType = parts[1] || 'unknown';
+  const notificationId = parts[2] || 'unknown';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+
+  // Parse value for entity context
+  let dismissData: { entityName?: string } = {};
+  try {
+    dismissData = JSON.parse(action.value || '{}');
+  } catch {
+    dismissData = {};
+  }
+
+  // Update original message with dismissed confirmation
+  if (payload.response_url) {
+    const confirmation = buildActionConfirmation({
+      action: 'dismissed',
+      slackUserId: payload.user.id,
+      timestamp: new Date().toISOString(),
+      entitySummary: dismissData.entityName || `${notificationType}`,
+      notificationType,
+    });
+    await updateMessage(payload.response_url, confirmation.blocks);
+  }
+
+  // Log dismiss for Smart Engagement tracking
+  await logSlackInteraction(supabase, {
+    userId: ctx?.userId || null,
+    orgId: ctx?.orgId || null,
+    actionType: 'notification_dismissed',
+    actionCategory: 'notifications',
+    entityType: notificationType,
+    entityId: notificationId,
+    metadata: { notification_type: notificationType },
+  });
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============================================================================
+// SLACK-004: Draft Follow-up Action Handler
+// ============================================================================
+
+/**
+ * Handle draft_followup::{resource_type}::{resource_id} actions.
+ * Fetches context, generates email draft via Claude, creates HITL approval.
+ */
+async function handleDraftFollowupAction(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const resourceType = parts[1] || 'deal'; // 'deal', 'contact', 'meeting'
+  const resourceId = parts[2] || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Your Slack account is not linked to Sixty. Please link it in Settings.' } }],
+        text: 'Account not linked',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Send immediate acknowledgement
+  if (payload.response_url) {
+    await sendEphemeral(payload.response_url, {
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Drafting follow-up email...' } }],
+      text: 'Drafting follow-up...',
+    });
+  }
+
+  // Fetch context based on resource type
+  let contactName = '';
+  let contactEmail = '';
+  let dealContext = '';
+  let recentActivity = '';
+  let recipientName = '';
+
+  try {
+    if (resourceType === 'deal') {
+      const { data: deal } = await supabase
+        .from('deals')
+        .select('id, title, value, stage, owner_id, contacts:contact_id(id, full_name, email)')
+        .eq('id', resourceId)
+        .maybeSingle();
+
+      if (deal) {
+        dealContext = `Deal: ${deal.title} (${deal.stage}, value: ${deal.value})`;
+        const contact = deal.contacts as any;
+        if (contact) {
+          contactName = contact.full_name || '';
+          contactEmail = contact.email || '';
+          recipientName = contactName;
+        }
+      }
+
+      // Get last meeting context
+      const { data: lastMeeting } = await supabase
+        .from('meetings')
+        .select('id, title, summary, created_at')
+        .eq('deal_id', resourceId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastMeeting?.summary) {
+        recentActivity = `Last meeting: ${lastMeeting.title}\nSummary: ${lastMeeting.summary}`;
+      }
+    } else if (resourceType === 'contact') {
+      const { data: contact } = await supabase
+        .from('contacts')
+        .select('id, full_name, email, company_id(name)')
+        .eq('id', resourceId)
+        .maybeSingle();
+
+      if (contact) {
+        contactName = contact.full_name || '';
+        contactEmail = contact.email || '';
+        recipientName = contactName;
+        const company = contact.company_id as any;
+        dealContext = company?.name ? `Company: ${company.name}` : '';
+      }
+
+      // Get recent activities
+      const { data: activities } = await supabase
+        .from('activities')
+        .select('type, title, created_at')
+        .eq('contact_id', resourceId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (activities && activities.length > 0) {
+        recentActivity = activities.map(a => `${a.type}: ${a.title}`).join('\n');
+      }
+    }
+  } catch (err) {
+    console.error('[DraftFollowup] Context fetch error:', err);
+  }
+
+  // Generate email draft via Claude
+  let emailDraft = {
+    subject: `Following up — ${dealContext || recipientName}`,
+    body: `Hi ${recipientName || 'there'},\n\nI wanted to follow up on our recent conversation. Looking forward to hearing your thoughts.\n\nBest regards`,
+  };
+
+  try {
+    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+    if (anthropicKey) {
+      // Get user profile for sender name
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', ctx.userId)
+        .maybeSingle();
+
+      const senderName = profile?.full_name || 'the team';
+      const currentDate = new Date().toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      });
+
+      const prompt = `Write a professional, concise follow-up email.
+
+Context:
+- Sender: ${senderName}
+- Recipient: ${recipientName || 'the contact'}
+- ${dealContext}
+- ${recentActivity || 'No recent activity context available'}
+- Today's date: ${currentDate}
+
+Requirements:
+- Subject line: short, specific, conversational
+- Body: 3-5 sentences max, warm but professional
+- Include a clear next step or question
+- Sign off with just the sender's first name
+
+Return JSON: { "subject": "...", "body": "..." }`;
+
+      const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 500,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (aiResponse.ok) {
+        const aiData = await aiResponse.json();
+        const text = aiData.content?.[0]?.text || '';
+        // Try to parse JSON from response
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          emailDraft = { subject: parsed.subject || emailDraft.subject, body: parsed.body || emailDraft.body };
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[DraftFollowup] AI draft error:', err);
+    // Fall back to template
+  }
+
+  // Create HITL pending approval
+  const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+  const { data: approval, error: approvalError } = await supabase
+    .from('hitl_pending_approvals')
+    .insert({
+      org_id: ctx.orgId,
+      user_id: ctx.userId,
+      resource_type: 'email_draft',
+      resource_id: resourceId,
+      resource_name: `Follow-up: ${recipientName || resourceType}`,
+      slack_team_id: payload.team?.id || '',
+      slack_channel_id: payload.channel?.id || '',
+      slack_message_ts: payload.message?.ts || '',
+      status: 'pending',
+      original_content: {
+        to: contactEmail,
+        toName: recipientName,
+        subject: emailDraft.subject,
+        body: emailDraft.body,
+        resourceType,
+        resourceId,
+      },
+      callback_type: 'edge_function',
+      callback_target: 'hitl-send-followup-email',
+      expires_at: expiresAt.toISOString(),
+    })
+    .select('id')
+    .single();
+
+  if (approvalError) {
+    console.error('[DraftFollowup] Approval insert error:', approvalError);
+  }
+
+  // Send HITL DM with email preview
+  if (orgConnection?.botToken && approval?.id) {
+    // Open DM with user
+    const dmResponse = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${orgConnection.botToken}`,
+      },
+      body: JSON.stringify({ users: payload.user.id }),
+    });
+
+    const dmData = await dmResponse.json();
+    const dmChannelId = dmData.channel?.id;
+
+    if (dmChannelId) {
+      const hitlBlocks = [
+        headerBlock('Follow-up Draft Ready'),
+        section(`*To:* ${recipientName || 'Contact'} ${contactEmail ? `(${contactEmail})` : ''}\n*Subject:* ${emailDraft.subject}`),
+        divider(),
+        section(emailDraft.body),
+        divider(),
+        actionsBlock([
+          { text: 'Send', actionId: `approve::email_draft::${approval.id}`, value: JSON.stringify({ approvalId: approval.id }), style: 'primary' },
+          { text: 'Edit', actionId: `edit::email_draft::${approval.id}`, value: JSON.stringify({ approvalId: approval.id }) },
+          { text: 'Dismiss', actionId: `reject::email_draft::${approval.id}`, value: JSON.stringify({ approvalId: approval.id }) },
+        ]),
+        contextBlock([`Expires in 24 hours | ${resourceType}: ${recipientName || resourceId}`]),
+      ];
+
+      await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${orgConnection.botToken}`,
+        },
+        body: JSON.stringify({
+          channel: dmChannelId,
+          blocks: hitlBlocks,
+          text: `Follow-up draft ready for ${recipientName || 'your contact'}`,
+        }),
+      });
+    }
+  }
+
+  // Log interaction
+  await logSlackInteraction(supabase, {
+    userId: ctx.userId,
+    orgId: ctx.orgId || null,
+    actionType: 'draft_followup',
+    actionCategory: 'email',
+    entityType: resourceType,
+    entityId: resourceId,
+  });
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============================================================================
+// SLACK-003: Prep Meeting Handler (from morning brief)
+// ============================================================================
+
+/**
+ * Handle prep_meeting::{meeting_id} actions.
+ * Triggers the meeting prep skill for the specified meeting.
+ */
+async function handlePrepMeetingAction(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const meetingId = parts[1] || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Acknowledge immediately
+  if (payload.response_url) {
+    await sendEphemeral(payload.response_url, {
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Preparing meeting brief...' } }],
+      text: 'Preparing meeting brief...',
+    });
+  }
+
+  // Trigger the meeting-prep function
+  try {
+    await supabase.functions.invoke('slack-meeting-prep', {
+      body: {
+        meetingId,
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        slackUserId: payload.user.id,
+        isManualTrigger: true,
+      },
+    });
+  } catch (err) {
+    console.error('[PrepMeeting] Error invoking meeting-prep:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Failed to prepare meeting brief. Try again or check the app.' } }],
+        text: 'Meeting prep failed',
+      });
+    }
+  }
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
 
 /**
@@ -6289,6 +6803,20 @@ serve(async (req) => {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
+        }
+
+        // =====================================================================
+        // SLACK-001/003/004/007: Proactive Copilot action handlers
+        // Format: {action}::{entity_type}::{entity_id}
+        // =====================================================================
+        if (action.action_id.startsWith('snooze::')) {
+          return handleSnoozeAction(supabase, payload, action);
+        } else if (action.action_id.startsWith('dismiss::')) {
+          return handleDismissAction(supabase, payload, action);
+        } else if (action.action_id.startsWith('draft_followup::')) {
+          return handleDraftFollowupAction(supabase, payload, action);
+        } else if (action.action_id.startsWith('prep_meeting::')) {
+          return handlePrepMeetingAction(supabase, payload, action);
         }
 
         // =====================================================================

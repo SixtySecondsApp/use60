@@ -5,8 +5,9 @@
  * Allows configuration of notification features, channel selection, and user mappings.
  */
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -35,6 +36,7 @@ import {
   RefreshCw,
   Building2,
   Info,
+  Clock,
 } from 'lucide-react';
 
 import { SlackChannelSelector } from '@/components/settings/SlackChannelSelector';
@@ -605,6 +607,309 @@ function FeatureSettingsCard({
   );
 }
 
+/**
+ * SLACK-013: Morning Brief Time Preference
+ * Lets each user set their preferred morning brief delivery time + timezone.
+ */
+function MorningBriefPreferences() {
+  const { activeOrgId } = useOrg();
+  const queryClient = useQueryClient();
+
+  // Fetch current user's briefing preferences from slack_user_mappings
+  const { data: prefs, isLoading } = useQuery({
+    queryKey: ['slack', 'briefing-prefs', activeOrgId],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data } = await supabase
+        .from('slack_user_mappings')
+        .select('preferred_briefing_time, preferred_timezone')
+        .eq('org_id', activeOrgId!)
+        .eq('sixty_user_id', user.id)
+        .maybeSingle();
+
+      return data;
+    },
+    enabled: !!activeOrgId,
+  });
+
+  const updatePrefs = useMutation({
+    mutationFn: async (updates: { preferred_briefing_time?: string; preferred_timezone?: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !activeOrgId) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('slack_user_mappings')
+        .update(updates)
+        .eq('org_id', activeOrgId)
+        .eq('sixty_user_id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['slack', 'briefing-prefs'] });
+      toast.success('Briefing preferences saved');
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to save preferences');
+    },
+  });
+
+  const [time, setTime] = useState('08:00');
+  const [tz, setTz] = useState('America/New_York');
+
+  useEffect(() => {
+    if (prefs) {
+      if (prefs.preferred_briefing_time) setTime(prefs.preferred_briefing_time.slice(0, 5));
+      if (prefs.preferred_timezone) setTz(prefs.preferred_timezone);
+    }
+  }, [prefs]);
+
+  const handleSave = useCallback(() => {
+    updatePrefs.mutate({ preferred_briefing_time: time, preferred_timezone: tz });
+  }, [time, tz, updatePrefs]);
+
+  if (isLoading) return null;
+
+  // Only show if user has a linked Slack mapping
+  if (!prefs) return null;
+
+  return (
+    <div className="space-y-3 pt-2">
+      <Separator />
+      <div className="flex items-center gap-2">
+        <Clock className="h-4 w-4 text-muted-foreground" />
+        <Label className="text-sm font-medium">Morning Brief</Label>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Choose when you receive your daily morning brief DM.
+      </p>
+      <div className="flex items-end gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Time</Label>
+          <Select value={time} onValueChange={setTime}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIME_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Timezone</Label>
+          <Select value={tz} onValueChange={setTz}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIMEZONES.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleSave}
+          disabled={updatePrefs.isPending}
+        >
+          {updatePrefs.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            'Save'
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SLACK-019: Per-user notification preferences
+ * Lets each user toggle notification types on/off and set quiet hours.
+ */
+const NOTIFICATION_FEATURES = [
+  { key: 'morning_brief', label: 'Morning Brief', description: 'Daily pipeline summary DM' },
+  { key: 'post_meeting', label: 'Post-Meeting Debrief', description: 'Meeting summaries and follow-up drafts' },
+  { key: 'deal_risk', label: 'Deal Risk Alerts', description: 'Alerts when deals go cold or at risk' },
+  { key: 'campaign_alerts', label: 'Campaign Alerts', description: 'Instantly campaign reply and bounce alerts' },
+  { key: 'task_reminders', label: 'Task Reminders', description: 'Overdue and due-today task notifications' },
+  { key: 'deal_momentum', label: 'Deal Momentum', description: 'Momentum nudges for qualifying deals' },
+] as const;
+
+function NotificationPreferences() {
+  const { activeOrgId } = useOrg();
+  const queryClient = useQueryClient();
+
+  const { data: prefs, isLoading } = useQuery({
+    queryKey: ['slack', 'notification-prefs', activeOrgId],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data } = await supabase
+        .from('slack_user_preferences')
+        .select('feature, is_enabled, quiet_hours_start, quiet_hours_end, max_notifications_per_hour')
+        .eq('user_id', user.id)
+        .eq('org_id', activeOrgId!);
+
+      return data || [];
+    },
+    enabled: !!activeOrgId,
+  });
+
+  const toggleFeature = useMutation({
+    mutationFn: async ({ feature, enabled }: { feature: string; enabled: boolean }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !activeOrgId) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('slack_user_preferences')
+        .upsert({
+          user_id: user.id,
+          org_id: activeOrgId,
+          feature,
+          is_enabled: enabled,
+        }, { onConflict: 'user_id,org_id,feature' });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['slack', 'notification-prefs'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to update preference');
+    },
+  });
+
+  const updateQuietHours = useMutation({
+    mutationFn: async ({ start, end }: { start: string; end: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !activeOrgId) throw new Error('Not authenticated');
+
+      // Update all feature rows with the same quiet hours
+      for (const f of NOTIFICATION_FEATURES) {
+        await supabase
+          .from('slack_user_preferences')
+          .upsert({
+            user_id: user.id,
+            org_id: activeOrgId,
+            feature: f.key,
+            quiet_hours_start: start,
+            quiet_hours_end: end,
+          }, { onConflict: 'user_id,org_id,feature' });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['slack', 'notification-prefs'] });
+      toast.success('Quiet hours saved');
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to update quiet hours');
+    },
+  });
+
+  const [quietStart, setQuietStart] = useState('20:00');
+  const [quietEnd, setQuietEnd] = useState('07:00');
+
+  useEffect(() => {
+    if (prefs && prefs.length > 0) {
+      const first = prefs[0];
+      if (first.quiet_hours_start) setQuietStart(first.quiet_hours_start.slice(0, 5));
+      if (first.quiet_hours_end) setQuietEnd(first.quiet_hours_end.slice(0, 5));
+    }
+  }, [prefs]);
+
+  if (isLoading) return null;
+
+  const isFeatureEnabled = (feature: string) => {
+    const pref = prefs?.find(p => p.feature === feature);
+    return pref ? pref.is_enabled : true; // Default enabled
+  };
+
+  return (
+    <div className="space-y-3 pt-2">
+      <Separator />
+      <div className="flex items-center gap-2">
+        <Bell className="h-4 w-4 text-muted-foreground" />
+        <Label className="text-sm font-medium">Notification Preferences</Label>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Control which Slack notifications you receive.
+      </p>
+
+      <div className="space-y-2">
+        {NOTIFICATION_FEATURES.map(f => (
+          <div key={f.key} className="flex items-center justify-between py-1">
+            <div>
+              <span className="text-sm font-medium">{f.label}</span>
+              <p className="text-xs text-muted-foreground">{f.description}</p>
+            </div>
+            <Switch
+              checked={isFeatureEnabled(f.key)}
+              onCheckedChange={(checked) => toggleFeature.mutate({ feature: f.key, enabled: checked })}
+              disabled={toggleFeature.isPending}
+            />
+          </div>
+        ))}
+      </div>
+
+      <Separator />
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Quiet Hours</Label>
+        <p className="text-xs text-muted-foreground">
+          No notifications during these hours (in your timezone).
+        </p>
+        <div className="flex items-end gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">From</Label>
+            <Select value={quietStart} onValueChange={setQuietStart}>
+              <SelectTrigger className="w-[90px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIME_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">To</Label>
+            <Select value={quietEnd} onValueChange={setQuietEnd}>
+              <SelectTrigger className="w-[90px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIME_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => updateQuietHours.mutate({ start: quietStart, end: quietEnd })}
+            disabled={updateQuietHours.isPending}
+          >
+            {updateQuietHours.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SlackSettings() {
   const { activeOrgId, userRole } = useOrg();
   const isAdmin = useIsOrgAdmin();
@@ -829,6 +1134,12 @@ export default function SlackSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <SlackSelfMapping />
+
+          {/* SLACK-013: Morning Brief Time Preference */}
+          <MorningBriefPreferences />
+
+          {/* SLACK-019: Notification Preferences */}
+          <NotificationPreferences />
 
           {/* Read-only org summary for regular users */}
           {!isAdmin && (
