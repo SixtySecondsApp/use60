@@ -1,0 +1,400 @@
+{
+  "feature": "nl-table-builder",
+  "name": "Natural Language Table Builder",
+  "description": "A natural language interface on the Ops table that decomposes prospecting/outreach prompts into skill chains — Apollo search, enrichment, email generation, Instantly campaign creation — and executes autonomously with a single approval gate before sending.",
+  "consultReport": ".sixty/consult/nl-table-builder.md",
+  "createdAt": "2026-02-07T00:00:00Z",
+  "status": "pending",
+
+  "features": [
+    {
+      "id": "context",
+      "name": "Business Context Infrastructure",
+      "status": "pending",
+      "description": "Unified business context loader, email sign-off preference, and context auto-pull for autonomous execution"
+    },
+    {
+      "id": "orchestrator",
+      "name": "Workflow Orchestrator",
+      "status": "pending",
+      "description": "Edge function that decomposes NL prompts into skill chains and executes them with SSE progress streaming"
+    },
+    {
+      "id": "email-gen",
+      "name": "Email Sequence Generation",
+      "status": "pending",
+      "description": "AI-powered email sequence generation with personalised intros, tone matching, and business context awareness"
+    },
+    {
+      "id": "campaign-mgmt",
+      "name": "Campaign Management Enhancements",
+      "status": "pending",
+      "description": "Add-to-existing-campaign support, campaign approval gate, and launch flow"
+    },
+    {
+      "id": "ui",
+      "name": "Frontend — Query Bar & Progress UI",
+      "status": "pending",
+      "description": "Enhanced NL query bar, execution progress stepper, clarifying questions UX, and approval banner"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "NLT-001",
+      "feature": "context",
+      "title": "Build unified business context loader edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "description": "Create a shared helper module `_shared/businessContext.ts` that loads all org/user business context needed for autonomous execution. Fetches from: (1) ICP profiles (icp_profiles table), (2) org onboarding data (business_ai_training or org_settings for value_prop, tone_of_voice, pain_points, competitors), (3) integration credentials (Apollo key, Instantly key), (4) user email sign-off preference (profiles table or user_preferences). Returns a typed BusinessContext object. Used by the orchestrator and email generation functions.",
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/_shared/"],
+        "schema": ["icp_profiles", "integration_credentials", "profiles"]
+      },
+      "blocks": ["NLT-003", "NLT-006"],
+      "parallelWith": ["NLT-002"],
+      "acceptance": [
+        "BusinessContext type exported with fields: icp, valueProp, toneOfVoice, painPoints, competitors, emailSignOff, apolloApiKey, instantlyApiKey",
+        "Loads ICP profiles for the org (returns first/default profile)",
+        "Loads org-level business training data (value_prop, tone_of_voice)",
+        "Loads user-level email sign-off preference",
+        "Returns null fields gracefully when data is missing (never throws)",
+        "Callable from other edge functions via import"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/businessContext.ts"
+      ]
+    },
+    {
+      "id": "NLT-002",
+      "feature": "context",
+      "title": "Add email sign-off preference to user settings",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 1,
+      "description": "Add an 'email_sign_off' TEXT column to the profiles table (or user_preferences if it exists). Build a small settings section under Settings page where users can set how they close emails (e.g. 'Best, Andrew' or 'Cheers, AB'). The field should be editable from the Settings > Profile section. No onboarding changes needed yet — the copilot will ask on first use if not set.",
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/Settings.tsx"],
+        "schema": ["profiles"]
+      },
+      "blocks": ["NLT-001"],
+      "parallelWith": ["NLT-001"],
+      "acceptance": [
+        "Migration adds email_sign_off TEXT to profiles table",
+        "Settings page shows 'Email Sign-Off' field under Profile section",
+        "Users can save and update their sign-off text",
+        "Value persists across sessions",
+        "businessContext loader can read this field"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260207100000_email_sign_off.sql",
+        "src/pages/Settings.tsx"
+      ]
+    },
+    {
+      "id": "NLT-003",
+      "feature": "orchestrator",
+      "title": "Create ops-workflow-orchestrator edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "description": "Core orchestrator edge function that receives a natural language prompt and executes a multi-step workflow. Steps: (1) Load business context via _shared/businessContext.ts, (2) Call Claude to decompose the prompt into a skill plan (search params, enrichment needs, email gen config, campaign config), (3) Execute each skill sequentially: parse-apollo-query → copilot-dynamic-table → apollo-enrich → generate-email-sequence → instantly-admin, (4) Stream progress updates via SSE (step_start, step_complete, step_error, done events), (5) Return the completed table_id and execution summary. The orchestrator should handle partial failures gracefully — continue execution and report gaps. Implements rate limiting pauses between API-heavy steps.",
+      "dependencies": {
+        "stories": ["NLT-001"],
+        "files": ["supabase/functions/_shared/businessContext.ts"],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": ["NLT-005", "NLT-009", "NLT-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function accepts POST with { prompt: string, config?: { table_name?, max_results?, skip_enrichment? } }",
+        "Streams SSE events: plan_created, step_start, step_progress, step_complete, step_error, workflow_complete",
+        "Calls Claude to decompose NL prompt into structured skill plan",
+        "Executes skill chain: search → table creation → enrichment → email gen → campaign creation",
+        "Returns { table_id, execution_summary: { steps: [], errors: [], duration_ms } }",
+        "Handles partial failures (e.g. enrichment fails for some rows) without stopping workflow"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-004",
+      "feature": "orchestrator",
+      "title": "Add clarifying questions detection to orchestrator",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "description": "Enhance the orchestrator's Claude prompt decomposition step to detect when clarifying questions are needed. When Claude determines the prompt is ambiguous or missing critical info, it returns a 'needs_clarification' response with questions (visual select or free text). The orchestrator streams a 'clarification_needed' SSE event with the questions. The frontend can then collect answers and re-submit. Questions should only be asked when genuinely needed — if ICP, tone, credentials are all present, proceed directly. Format: { type: 'select' | 'text', question: string, options?: string[] }.",
+      "dependencies": {
+        "stories": ["NLT-003"],
+        "files": ["supabase/functions/ops-workflow-orchestrator/index.ts"],
+        "schema": []
+      },
+      "blocks": ["NLT-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Claude system prompt includes instruction to detect ambiguity and return clarifying questions",
+        "Questions formatted as { type: 'select' | 'text', question: string, options?: string[] }",
+        "SSE event 'clarification_needed' sent with questions array when needed",
+        "If all context is present and prompt is clear, no questions asked (proceeds directly)",
+        "Re-submission with answers resumes workflow from where it paused"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-005",
+      "feature": "email-gen",
+      "title": "Create generate-email-sequence edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "description": "New edge function that generates personalised email sequences for Ops table rows. Input: table_id, row_ids, sequence_config (num_steps, campaign_angle), business_context (tone, value_prop, sign_off, pain_points). For each row: (1) Read prospect data from cells (name, title, company, company description from source_data), (2) Generate personalised intro line + full email body in a SINGLE Claude/Gemini call (not separate steps — ensures coherence), (3) Write results as cells on step columns (instantly_step_N_subject, instantly_step_N_body). Uses Gemini Flash for speed/cost at scale. Batch processes rows with concurrency limiter (5 parallel). Creates the step columns if they don't exist yet.",
+      "dependencies": {
+        "stories": ["NLT-003"],
+        "files": ["supabase/functions/_shared/businessContext.ts"],
+        "schema": ["dynamic_table_columns", "dynamic_table_cells"]
+      },
+      "blocks": ["NLT-007"],
+      "parallelWith": ["NLT-006"],
+      "acceptance": [
+        "Edge function accepts { table_id, row_ids?, sequence_config: { num_steps, angle? }, business_context }",
+        "Generates subject + body for each step, personalised per row",
+        "Uses single AI call per row (intro + body together for coherence)",
+        "Respects tone_of_voice and email_sign_off from business context",
+        "Creates step columns automatically if missing (instantly_step_N_subject/body)",
+        "Writes cells with status='complete', source='enrichment'",
+        "Handles batch processing with concurrency limiter (5 parallel)",
+        "Returns { generated_count, failed_count, step_columns_created }"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/generate-email-sequence/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-006",
+      "feature": "campaign-mgmt",
+      "title": "Add 'add to existing campaign' support to instantly-push",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "description": "Extend the instantly-push edge function to support adding leads to an existing Instantly campaign. Currently it only pushes leads with field mapping. Enhancement: (1) Accept optional 'mode' field: 'new_campaign' | 'existing_campaign', (2) For 'existing_campaign': fetch the campaign details from Instantly API to understand existing email steps and variables, (3) Map table columns to campaign variables, (4) Push leads using the existing campaign's variable schema. Also update instantly-admin to expose a 'get_campaign_details' action that returns campaign structure including email steps.",
+      "dependencies": {
+        "stories": ["NLT-001"],
+        "files": ["supabase/functions/instantly-push/index.ts", "supabase/functions/instantly-admin/index.ts"],
+        "schema": []
+      },
+      "blocks": ["NLT-011"],
+      "parallelWith": ["NLT-005"],
+      "acceptance": [
+        "instantly-push accepts { mode: 'new_campaign' | 'existing_campaign' }",
+        "For 'existing_campaign': fetches campaign details and maps variables automatically",
+        "instantly-admin supports 'get_campaign_details' action returning campaign structure",
+        "Existing push-to-instantly functionality unchanged (backwards compatible)",
+        "Returns campaign variable schema so frontend can show mapping preview"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/instantly-push/index.ts",
+        "supabase/functions/instantly-admin/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-007",
+      "feature": "campaign-mgmt",
+      "title": "Build campaign creation with generated email steps",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "description": "Extend the orchestrator's Instantly campaign creation step to create campaigns WITH email step content from the generate-email-sequence output. The orchestrator reads the step column cells, constructs the Instantly campaign_schedule and email steps, and creates the campaign via instantly-admin. The campaign is created in PAUSED state (not active) so the user can review before launching. The step content uses {{variable}} placeholders that map to the per-lead personalised content from the table.",
+      "dependencies": {
+        "stories": ["NLT-005"],
+        "files": ["supabase/functions/instantly-admin/index.ts"],
+        "schema": []
+      },
+      "blocks": ["NLT-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Campaign created with email steps populated from step column cells",
+        "Campaign created in PAUSED state (not active)",
+        "Email steps use {{variable}} placeholders for personalised fields",
+        "Campaign name auto-generated from search criteria if not provided",
+        "Returns campaign_id and campaign preview data"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts",
+        "supabase/functions/instantly-admin/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-008",
+      "feature": "campaign-mgmt",
+      "title": "Build campaign approval gate and launch flow",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 4,
+      "description": "Create the approval UX for reviewing and launching a campaign. When the orchestrator completes, the OpsDetailPage shows an approval banner at the top: 'Campaign ready — X leads, Y steps. [Review] [Launch] [Dismiss]'. The Review action opens a modal showing campaign summary (leads count, email previews, error summary). The Launch action activates the campaign in Instantly and pushes all leads. The Dismiss action keeps the table data but doesn't launch. Also add status tracking to the table (campaign_status column showing 'draft', 'ready', 'launched').",
+      "dependencies": {
+        "stories": ["NLT-007"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Approval banner shown on OpsDetailPage when campaign is ready",
+        "Banner shows lead count, step count, and error summary",
+        "Review modal shows email previews (sample 3 leads) and campaign config",
+        "Launch button activates campaign in Instantly and pushes all leads",
+        "Dismiss button keeps table but doesn't launch campaign",
+        "Campaign status tracked on dynamic_tables record",
+        "Toast notification on successful launch"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/OpsDetailPage.tsx",
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/components/ops/CampaignReviewModal.tsx"
+      ]
+    },
+    {
+      "id": "NLT-009",
+      "feature": "ui",
+      "title": "Enhance query bar for workflow-level prompts",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "description": "Upgrade the existing AiQueryBar component (or the NL input area on OpsPage) to detect and handle workflow-level prompts. When user types a prospecting/outreach prompt (vs a simple filter query), the bar should: (1) Show a 'Creating workflow...' state with skill plan preview, (2) Call the ops-workflow-orchestrator edge function, (3) Stream SSE events and display progress in a stepper UI, (4) Navigate to the completed table on success. The input should also show placeholder examples like 'Find 100 CTOs in fintech and create an outreach sequence'. Distinguish between 'filter this table' queries (handled locally) and 'create a new workflow' queries (sent to orchestrator).",
+      "dependencies": {
+        "stories": ["NLT-003"],
+        "files": ["src/components/ops/AiQueryBar.tsx", "src/pages/OpsPage.tsx"],
+        "schema": []
+      },
+      "blocks": ["NLT-010", "NLT-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "Query bar accepts workflow-level prompts and routes to orchestrator",
+        "Placeholder text shows example workflow prompts",
+        "Loading state shows 'Creating workflow...' with current step name",
+        "SSE events from orchestrator displayed as progress steps",
+        "Navigates to new table on workflow completion",
+        "Simple filter queries still work (route to existing filter logic)",
+        "Error states handled with user-friendly messages"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/ops/WorkflowQueryBar.tsx",
+        "src/pages/OpsPage.tsx",
+        "src/lib/hooks/useWorkflowOrchestrator.ts"
+      ]
+    },
+    {
+      "id": "NLT-010",
+      "feature": "ui",
+      "title": "Build execution progress stepper component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "description": "Create a WorkflowProgressStepper component that visualises the multi-step execution in real-time. Shows each skill step with status (pending, running, complete, error). Steps: Search → Table Created → Enriching → Generating Emails → Creating Campaign. Each step shows a brief summary on completion (e.g. '87 leads found', '82 emails generated'). Supports clarifying questions inline — when the orchestrator sends a clarification_needed event, the stepper pauses and shows the question with answer options. Also build the useWorkflowOrchestrator hook that manages SSE connection and state.",
+      "dependencies": {
+        "stories": ["NLT-009", "NLT-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Stepper shows 5 workflow steps with real-time status updates",
+        "Each completed step shows brief summary (lead count, enrichment count, etc.)",
+        "Running step shows animated indicator",
+        "Error steps show error message with option to retry or skip",
+        "Clarifying questions render inline with select/text input",
+        "Answers submitted and workflow resumes automatically",
+        "Total elapsed time shown",
+        "Hook manages SSE connection lifecycle (connect, reconnect, cleanup)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/ops/WorkflowProgressStepper.tsx",
+        "src/lib/hooks/useWorkflowOrchestrator.ts"
+      ]
+    },
+    {
+      "id": "NLT-011",
+      "feature": "ui",
+      "title": "Wire end-to-end flow and add error summary notification",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 4,
+      "description": "Connect all the pieces end-to-end: (1) User types prompt in WorkflowQueryBar, (2) WorkflowProgressStepper shows execution, (3) On completion, navigate to OpsDetailPage with CampaignApprovalBanner, (4) User reviews and launches. Also implement the error summary notification — when workflow completes with partial failures, show a notification (toast or inline) summarising: 'Campaign ready: 87/100 leads enriched, 3 missing emails, 2 enrichment failures. Review before sending.' This story is the integration/polish pass that ensures smooth UX across all the individual components.",
+      "dependencies": {
+        "stories": ["NLT-009", "NLT-008", "NLT-006"],
+        "files": ["src/pages/OpsPage.tsx", "src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Full workflow executes from NL prompt to campaign approval without errors",
+        "Error summary notification shown on completion with partial failures",
+        "Navigation from OpsPage → progress stepper → OpsDetailPage is seamless",
+        "Campaign approval banner shows on OpsDetailPage after orchestrator completion",
+        "Edge cases handled: empty search results, no Instantly credentials, all enrichments fail",
+        "Loading states consistent across all steps"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/OpsPage.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/components/ops/WorkflowQueryBar.tsx",
+        "src/lib/hooks/useWorkflowOrchestrator.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 11,
+    "completedStories": 0,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-07T00:00:00Z",
+    "estimatedTotalMinutes": 290,
+    "parallelGroups": [
+      {
+        "name": "Foundation (parallel)",
+        "stories": ["NLT-001", "NLT-002"],
+        "note": "Business context loader and email sign-off can be built in parallel"
+      },
+      {
+        "name": "Core Backend (sequential)",
+        "stories": ["NLT-003", "NLT-004"],
+        "note": "Orchestrator first, then clarifying questions enhancement"
+      },
+      {
+        "name": "Skills (parallel after orchestrator)",
+        "stories": ["NLT-005", "NLT-006"],
+        "note": "Email generation and campaign management can be built in parallel"
+      },
+      {
+        "name": "Campaign Flow (sequential)",
+        "stories": ["NLT-007", "NLT-008"],
+        "note": "Campaign creation then approval gate"
+      },
+      {
+        "name": "Frontend (sequential)",
+        "stories": ["NLT-009", "NLT-010", "NLT-011"],
+        "note": "Query bar → progress stepper → end-to-end wiring"
+      }
+    ]
+  }
+}

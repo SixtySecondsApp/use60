@@ -1,0 +1,519 @@
+{
+  "feature": "apollo-integration",
+  "name": "Full Apollo Integration for Ops",
+  "description": "Add Apollo People Enrichment, Organization Enrichment, Bulk Enrichment, and Advanced Search Filters to Ops tables. Uses 'enrich once, column many' pattern \u2014 stores full Apollo response in source_data, lets users pick which fields to surface as columns.",
+  "consultReport": ".sixty/consult/apollo-full-integration.md",
+  "createdAt": "2026-02-06T00:00:00Z",
+  "status": "complete",
+  "stories": [
+    {
+      "id": "APO-001",
+      "feature": "apollo-integration",
+      "title": "Add apollo_property column type to database schema",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "description": "Create migration to add 'apollo_property' to the dynamic_table_columns column_type CHECK constraint (same pattern as hubspot_property migration). Add apollo_property_name TEXT column to store which Apollo field this column maps to (e.g. 'email', 'phone', 'company_employees').",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "dynamic_table_columns"
+        ]
+      },
+      "blocks": [
+        "APO-002",
+        "APO-003",
+        "APO-004",
+        "APO-005"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration creates successfully on dev/staging Supabase",
+        "'apollo_property' accepted as valid column_type value",
+        "apollo_property_name TEXT column exists on dynamic_table_columns",
+        "Existing column types still work (no regressions)",
+        "NOTIFY pgrst reload schema fired"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260206100000_apollo_property_column.sql"
+      ]
+    },
+    {
+      "id": "APO-002",
+      "feature": "apollo-integration",
+      "title": "Build apollo-enrich edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Create edge function that enriches rows via Apollo People Enrichment API (POST /v1/people/match). Key design: checks source_data.apollo cache first \u2014 only calls API for rows without cached data. Stores full Apollo response in source_data.apollo JSONB for future columns. Extracts the specific field (from apollo_property_name) and writes to cell. Supports reveal_personal_emails and reveal_phone_number toggles. Uses concurrency limiter (5) and fetchWithRetry for rate limit handling. Match strategy: email > name+domain > linkedin_url. Follows run-reoon-verification pattern.",
+      "dependencies": {
+        "stories": [
+          "APO-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/rateLimiter.ts",
+          "supabase/functions/apollo-search/index.ts"
+        ],
+        "schema": [
+          "dynamic_table_columns",
+          "dynamic_table_rows",
+          "dynamic_table_cells",
+          "integration_credentials"
+        ]
+      },
+      "blocks": [
+        "APO-006",
+        "APO-009"
+      ],
+      "parallelWith": [
+        "APO-003",
+        "APO-004"
+      ],
+      "acceptance": [
+        "Enriches rows by calling Apollo /v1/people/match with correct match params",
+        "Caches full Apollo response in source_data.apollo (JSONB merge)",
+        "Reads from cache when source_data.apollo already exists (0 API calls)",
+        "Extracts specific field value via nested path resolution (e.g. 'organization.industry')",
+        "Supports reveal_personal_emails and reveal_phone_number flags",
+        "Marks cells as pending/complete/failed with proper error messages",
+        "Respects max_rows limit and row_ids filter",
+        "Handles 429 rate limits with retry + backoff",
+        "Skips rows with insufficient data for matching (no name, no email, no linkedin)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/apollo-enrich/index.ts"
+      ]
+    },
+    {
+      "id": "APO-003",
+      "feature": "apollo-integration",
+      "title": "Build ApolloPropertyPicker component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Create a field picker component mirroring HubSpotPropertyPicker. Shows all 26 Apollo enrichment fields grouped by category (Contact, Professional, Location, Social, Company). Static field list (no API call). Features: search/filter, multi-select with checkboxes, 'Recommended' fields first (email, phone, title, company_name, linkedin_url, email_status), type badges, Apollo blue accent color. Same interface as HubSpotPropertyPicker for consistency.",
+      "dependencies": {
+        "stories": [
+          "APO-001"
+        ],
+        "files": [
+          "src/components/ops/HubSpotPropertyPicker.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "APO-005"
+      ],
+      "parallelWith": [
+        "APO-002",
+        "APO-004"
+      ],
+      "acceptance": [
+        "Shows 26 Apollo fields grouped into 5 categories: Contact Info, Professional, Location, Social, Company",
+        "Search input filters fields by name or label",
+        "Recommended fields (email, phone, title, company_name, linkedin_url, email_status) shown first",
+        "Multi-select mode with checkboxes and 'Add N Columns' button",
+        "Single-select mode calls onSelect immediately",
+        "Type badges show field type (email, phone, url, text, number, tags)",
+        "Excludes already-added Apollo properties",
+        "Apollo blue accent color (not HubSpot orange)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/ApolloPropertyPicker.tsx"
+      ]
+    },
+    {
+      "id": "APO-004",
+      "feature": "apollo-integration",
+      "title": "Add apolloPropertyName to opsTableService and TypeScript types",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Extend OpsTableService.addColumn to accept and persist apolloPropertyName. Add the field to the insert query mapping to apollo_property_name column. Update TypeScript types for OpsTableColumn to include apollo_property_name field.",
+      "dependencies": {
+        "stories": [
+          "APO-001"
+        ],
+        "files": [
+          "src/lib/services/opsTableService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "APO-005"
+      ],
+      "parallelWith": [
+        "APO-002",
+        "APO-003"
+      ],
+      "acceptance": [
+        "addColumn accepts apolloPropertyName parameter",
+        "apollo_property_name written to dynamic_table_columns on insert",
+        "OpsTableColumn TypeScript type includes apollo_property_name?: string",
+        "Column select queries include apollo_property_name field"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ]
+    },
+    {
+      "id": "APO-005",
+      "feature": "apollo-integration",
+      "title": "Integrate Apollo property into AddColumnModal with enrichment controls",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "description": "Add 'Apollo Property' as a column type option in AddColumnModal (always visible, not just Apollo tables). When selected, show: ApolloPropertyPicker (multi-select), credit option toggles (reveal personal emails, reveal phone numbers), and batch run controls (Don't run / 10 / 50 / 100 / All rows) with credit estimate. Follow exact same pattern as HubSpot Property section (lines 573-619) and enrichment auto-run section (lines 693-717).",
+      "dependencies": {
+        "stories": [
+          "APO-003",
+          "APO-004"
+        ],
+        "files": [
+          "src/components/ops/AddColumnModal.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "APO-007"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "'Apollo Property' appears in column type dropdown for all tables",
+        "ApolloPropertyPicker shown when Apollo Property selected",
+        "Multi-select adds multiple Apollo columns at once (onAddMultiple pattern)",
+        "Toggle for 'Reveal personal emails (+1 credit/row)' \u2014 default off",
+        "Toggle for 'Reveal phone numbers (+8 credits/row)' \u2014 default off",
+        "Batch run grid: Don't run / 10 rows / 50 rows / 100 rows / All rows",
+        "Credit estimate shown below run controls: '~N credits' based on row count \u00d7 credit cost",
+        "Can't add without selecting at least one property"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/AddColumnModal.tsx"
+      ]
+    },
+    {
+      "id": "APO-006",
+      "feature": "apollo-integration",
+      "title": "Create useApolloEnrichment hook",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "description": "Create React hook following useEnrichment pattern. Provides mutations for: startApolloEnrichment (bulk with optimistic pending updates), singleRowApolloEnrichment (per-row, no toast), reEnrich (force_refresh). Each mutation calls supabase.functions.invoke('apollo-enrich') with appropriate params. Optimistic updates mark target cells as 'pending' immediately. Invalidates table data queries on success.",
+      "dependencies": {
+        "stories": [
+          "APO-002"
+        ],
+        "files": [
+          "src/lib/hooks/useEnrichment.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "APO-007"
+      ],
+      "parallelWith": [
+        "APO-005"
+      ],
+      "acceptance": [
+        "startApolloEnrichment mutation: invokes apollo-enrich edge function with table_id, column_id, row_ids, max_rows, reveal flags",
+        "Optimistic update: marks target cells as status='pending' in React Query cache",
+        "On error: rolls back optimistic update, shows toast error",
+        "On success: invalidates ops-table-data queries, shows toast",
+        "singleRowApolloEnrichment: same but for 1 row, no toast (cell update is feedback)",
+        "reEnrich: calls with force_refresh=true to re-call Apollo API even if cached"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/useApolloEnrichment.ts"
+      ]
+    },
+    {
+      "id": "APO-007",
+      "feature": "apollo-integration",
+      "title": "Wire Apollo enrichment into OpsDetailPage",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "description": "Connect useApolloEnrichment to OpsDetailPage. Auto-trigger enrichment when an apollo_property column is added (using autoRunRows from addColumnMutation params). Pass apolloPropertyName and apollo enrich config through the mutation. Wire up re-enrich action in ColumnHeaderMenu for apollo_property columns.",
+      "dependencies": {
+        "stories": [
+          "APO-005",
+          "APO-006"
+        ],
+        "files": [
+          "src/pages/OpsDetailPage.tsx",
+          "src/components/ops/ColumnHeaderMenu.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "APO-009"
+      ],
+      "parallelWith": [
+        "APO-008"
+      ],
+      "acceptance": [
+        "addColumnMutation passes apolloPropertyName and apolloEnrichConfig to service",
+        "addColumnMutation.onSuccess auto-triggers startApolloEnrichment when column_type is apollo_property and runRows is set",
+        "Row count limits (10/50/100) correctly passed as maxRows to edge function",
+        "ColumnHeaderMenu shows 'Re-enrich with Apollo' option for apollo_property columns",
+        "Re-enrich calls startApolloEnrichment with forceRefresh=true"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/OpsDetailPage.tsx",
+        "src/components/ops/ColumnHeaderMenu.tsx"
+      ]
+    },
+    {
+      "id": "APO-008",
+      "feature": "apollo-integration",
+      "title": "Render apollo_property cells with status badges and type formatting",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "description": "Add apollo_property column rendering to OpsTableCell. Show status badges: pending (yellow 'Enriching...'), failed (red 'Failed' with error tooltip), none (gray 'Not enriched' with clickable enrich icon). For complete status: render value with type-appropriate formatting \u2014 emails as mailto links, phones as tel links, URLs as clickable links, numbers formatted, tags as badges. Show Apollo logo in column header (extend existing integration logo pattern in OpsTable.tsx).",
+      "dependencies": {
+        "stories": [
+          "APO-004"
+        ],
+        "files": [
+          "src/components/ops/OpsTableCell.tsx",
+          "src/components/ops/OpsTable.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "APO-009"
+      ],
+      "parallelWith": [
+        "APO-007"
+      ],
+      "acceptance": [
+        "pending cells show yellow 'Enriching...' badge with spinner",
+        "complete cells display value with type formatting (email\u2192mailto, phone\u2192tel, url\u2192link)",
+        "failed cells show red 'Failed' badge with error message tooltip",
+        "Cells with no Apollo data show gray 'Not enriched' with clickable Zap icon to trigger enrichment",
+        "Column header shows Apollo favicon/logo (via existing getIntegrationDomain pattern)",
+        "Tags-type fields (departments, tech_stack) render as colored tag badges"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/OpsTable.tsx"
+      ]
+    },
+    {
+      "id": "APO-009",
+      "feature": "apollo-integration",
+      "title": "Deploy and end-to-end test Apollo enrichment on staging",
+      "type": "test",
+      "status": "complete",
+      "priority": 5,
+      "description": "Deploy apollo-enrich edge function to staging (--no-verify-jwt). Run migration on staging. Test full flow: create Apollo property column on an existing table, enrich 10 rows, verify emails/phones appear. Test cache: add second column (phone), verify it reads from cached data (no new API calls). Test cross-source: add Apollo column to a HubSpot-imported table. Test error cases: invalid API key, rows without name/company.",
+      "dependencies": {
+        "stories": [
+          "APO-002",
+          "APO-007",
+          "APO-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration applied to staging without errors",
+        "apollo-enrich edge function deployed to staging",
+        "Can add Apollo Property column to any Ops table via AddColumnModal",
+        "Enrichment of 10 rows returns emails/phones from Apollo API",
+        "Second Apollo column reads from cached source_data.apollo (0 additional API calls)",
+        "Cross-source enrichment works: HubSpot table enriched by matching name+company",
+        "Rows with insufficient data gracefully show 'Skipped' status",
+        "Rate limit errors handled with retry"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    },
+    {
+      "id": "APO-010",
+      "feature": "apollo-integration",
+      "title": "Add bulk enrichment support using Apollo Bulk API",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "description": "Extend apollo-enrich edge function to use Apollo's Bulk People Enrichment API (/v1/people/bulk_match) when enriching 10+ rows. Batch rows into groups of 10 for the bulk API. Use enrichment_jobs table for progress tracking on large runs. Support auto-chaining (has_more pattern) for tables with 50+ rows. Rate limit: 50% of per-minute rate for bulk.",
+      "dependencies": {
+        "stories": [
+          "APO-009"
+        ],
+        "files": [
+          "supabase/functions/apollo-enrich/index.ts"
+        ],
+        "schema": [
+          "enrichment_jobs"
+        ]
+      },
+      "blocks": [
+        "APO-011"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Enrichment of 10+ rows uses bulk_match API (batches of 10)",
+        "Creates enrichment_jobs record for tracking on 50+ row runs",
+        "Progress updates visible via useEnrichment polling",
+        "Auto-chains next batch when has_more is true",
+        "Single-row enrichment still uses /people/match (not bulk)",
+        "Credits consumed reported accurately in response stats"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/apollo-enrich/index.ts"
+      ]
+    },
+    {
+      "id": "APO-011",
+      "feature": "apollo-integration",
+      "title": "Add Organization Enrichment column type and edge function",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 7,
+      "description": "Add org-level enrichment: new column type 'apollo_org_property' in CHECK constraint. New edge function apollo-org-enrich calling GET /v1/organizations/enrich?domain=... Caches in source_data.apollo_org (separate from person enrichment). Add 'Apollo Company' fields to ApolloPropertyPicker (revenue, tech_stack, funding, employee_count, industry, etc.). Match by company_domain column.",
+      "dependencies": {
+        "stories": [
+          "APO-010"
+        ],
+        "files": [
+          "src/components/ops/ApolloPropertyPicker.tsx",
+          "supabase/functions/apollo-enrich/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "APO-012"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "apollo_org_property column type added to CHECK constraint",
+        "apollo-org-enrich edge function calls Apollo Organization Enrichment API",
+        "Response cached in source_data.apollo_org (separate from person cache)",
+        "ApolloPropertyPicker shows 'Company Enrichment' section with org fields",
+        "Matches by company_domain (or company_name as fallback)",
+        "Returns: revenue, industry, tech stack, funding stage, employee count, HQ location"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260206200000_apollo_org_property.sql",
+        "supabase/functions/apollo-org-enrich/index.ts",
+        "src/components/ops/ApolloPropertyPicker.tsx",
+        "src/components/ops/AddColumnModal.tsx"
+      ]
+    },
+    {
+      "id": "APO-012",
+      "feature": "apollo-integration",
+      "title": "Add advanced search filters to Apollo search UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "description": "Extend the existing Apollo search wizard to expose additional filters: person_seniorities, person_departments, person_functions, q_organization_domains, contact_email_status. Update the apollo-search edge function to pass these new params. UI-only additions to the existing search form.",
+      "dependencies": {
+        "stories": [
+          "APO-011"
+        ],
+        "files": [
+          "supabase/functions/apollo-search/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Seniority filter: multi-select with C-Level, VP, Director, Manager, etc.",
+        "Department filter: multi-select with Engineering, Sales, Marketing, etc.",
+        "Domain filter: text input for specific company domains",
+        "Email status filter: 'Verified only' toggle",
+        "New params passed to apollo-search edge function correctly",
+        "Existing filters continue to work unchanged"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/apollo-search/index.ts",
+        "src/components/ops/ApolloSearchWizard.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 12,
+    "completedStories": 12,
+    "estimatedMinutes": 255,
+    "phases": [
+      {
+        "name": "Phase 1: Per-Row Enrichment",
+        "stories": [
+          "APO-001",
+          "APO-002",
+          "APO-003",
+          "APO-004",
+          "APO-005",
+          "APO-006",
+          "APO-007",
+          "APO-008",
+          "APO-009"
+        ],
+        "estimatedMinutes": 180,
+        "delivers": "Apollo property columns with field picker, batch enrichment controls, cache-aware enrichment, cross-source matching"
+      },
+      {
+        "name": "Phase 2: Bulk Enrichment",
+        "stories": [
+          "APO-010"
+        ],
+        "estimatedMinutes": 25,
+        "delivers": "Efficient bulk API usage for large tables with progress tracking"
+      },
+      {
+        "name": "Phase 3: Organization Enrichment",
+        "stories": [
+          "APO-011"
+        ],
+        "estimatedMinutes": 30,
+        "delivers": "Company-level enrichment (revenue, tech stack, funding, industry)"
+      },
+      {
+        "name": "Phase 4: Advanced Search",
+        "stories": [
+          "APO-012"
+        ],
+        "estimatedMinutes": 20,
+        "delivers": "Seniority, department, domain, and email status search filters"
+      }
+    ],
+    "parallelGroups": [
+      {
+        "group": [
+          "APO-002",
+          "APO-003",
+          "APO-004"
+        ],
+        "reason": "Edge function, picker component, and service updates are independent after schema",
+        "timeSaved": "25min"
+      },
+      {
+        "group": [
+          "APO-007",
+          "APO-008"
+        ],
+        "reason": "OpsDetailPage wiring and cell rendering are independent",
+        "timeSaved": "20min"
+      }
+    ]
+  }
+}

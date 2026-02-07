@@ -1,0 +1,1000 @@
+{
+  "project": {
+    "name": "Sixty Sales Dashboard",
+    "template": null,
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth"
+    },
+    "createdAt": "2026-02-07T12:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "slack-proactive-copilot",
+      "name": "Phase 1: @60 in Slack — From Static Digest to Proactive Copilot",
+      "status": "pending",
+      "prd": null,
+      "description": "Transform Slack from a notification channel into an interactive command surface where reps can act on their pipeline without leaving Slack. Buttons that work, dynamic content, proactive intelligence.",
+      "createdAt": "2026-02-07T12:00:00Z",
+      "architectureNotes": "PRD proposed Cloudflare Workers + D1. Decision: use existing Supabase Edge Functions + Vercel cron infrastructure. The codebase already has 20+ Slack edge functions, a 66k-line interactive handler, HITL approval flow, Block Kit builders, dedupe system, and proactive delivery layer. Building on this is faster, more maintainable, and avoids a split-brain architecture."
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "SLACK-001",
+      "feature": "slack-proactive-copilot",
+      "sprint": 1,
+      "title": "Add snooze action handler with re-notification scheduling",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/slack-interactive/index.ts", "supabase/functions/_shared/slackBlocks.ts"],
+        "schema": ["slack_notifications_sent"]
+      },
+      "blocks": ["SLACK-002", "SLACK-003"],
+      "parallelWith": ["SLACK-004", "SLACK-006", "SLACK-007"],
+      "acceptance": [
+        "Handle snooze::{resource_type}::{resource_id} action_ids in slack-interactive",
+        "Store snooze in slack_snoozed_items table (entity_type, entity_id, user_id, snooze_until, org_id, original_message_blocks)",
+        "Support durations: 2h, tomorrow, 3d, 1w (parsed from button value)",
+        "Update original message to show 'Snoozed by @user until {date}' with disabled buttons"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/migrations/20260208000001_slack_snoozed_items.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-002",
+      "feature": "slack-proactive-copilot",
+      "sprint": 1,
+      "title": "Add snooze re-notification cron job",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["SLACK-001"],
+        "files": [],
+        "schema": ["slack_snoozed_items"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-005"],
+      "acceptance": [
+        "Edge function slack-snooze-check runs every 15 minutes via Vercel cron",
+        "Queries slack_snoozed_items WHERE snooze_until <= now() AND resurfaced_at IS NULL",
+        "Re-sends notification as new DM with original context + fresh action buttons",
+        "Marks item as resurfaced_at = now() after sending"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-snooze-check/index.ts",
+        "api/cron/slack-snooze-check.ts",
+        "vercel.json"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-003",
+      "feature": "slack-proactive-copilot",
+      "sprint": 1,
+      "title": "Wire morning brief action buttons to interactive handlers",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["SLACK-001", "SLACK-004", "SLACK-006"],
+        "files": ["supabase/functions/_shared/slackBlocks.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Each meeting in morning brief has 'Prep me' button with action_id prep_meeting::{meetingId}",
+        "Each stale/at-risk deal has 'Snooze' and 'Draft follow-up' buttons with entity-scoped action_ids",
+        "Each overdue task has 'Complete' and 'Snooze' buttons",
+        "All buttons route to existing interactive handlers (prep_meeting → meeting-prep skill, etc.)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-morning-brief/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-004",
+      "feature": "slack-proactive-copilot",
+      "sprint": 1,
+      "title": "Add 'Draft follow-up' action handler with HITL approval",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/slack-interactive/index.ts"],
+        "schema": ["hitl_pending_approvals"]
+      },
+      "blocks": ["SLACK-003"],
+      "parallelWith": ["SLACK-001", "SLACK-006", "SLACK-007"],
+      "acceptance": [
+        "Handle draft_followup::{resource_type}::{resource_id} action_ids in slack-interactive",
+        "Fetch last meeting/activity context for the entity from DB",
+        "Generate email draft via Claude (Haiku 4.5) with meeting context and business tone",
+        "Create hitl_pending_approvals record with callback to send-email function",
+        "Send new HITL DM with email preview + Approve/Edit/Reject buttons"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-005",
+      "feature": "slack-proactive-copilot",
+      "sprint": 1,
+      "title": "Add action expiry daemon for stale HITL approvals",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["hitl_pending_approvals"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-002"],
+      "acceptance": [
+        "Edge function slack-expire-actions runs hourly via Vercel cron",
+        "Finds hitl_pending_approvals WHERE status='pending' AND expires_at <= now()",
+        "Updates status to 'expired' in database",
+        "Updates original Slack message to show 'Expired — action no longer available' with disabled buttons"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-expire-actions/index.ts",
+        "api/cron/slack-expire-actions.ts",
+        "vercel.json",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-006",
+      "feature": "slack-proactive-copilot",
+      "sprint": 1,
+      "title": "Standardize message update confirmation pattern",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/_shared/slackBlocks.ts"],
+        "schema": []
+      },
+      "blocks": ["SLACK-003"],
+      "parallelWith": ["SLACK-001", "SLACK-004", "SLACK-007"],
+      "acceptance": [
+        "New buildActionConfirmation() Block Kit builder in slackBlocks.ts",
+        "Shows: action emoji + label, 'by @user at HH:MM', original context as collapsed mrkdwn",
+        "Applied to all action types: approve, reject, snooze, complete, dismiss, expired",
+        "Existing handlers updated to use new confirmation builder"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-007",
+      "feature": "slack-proactive-copilot",
+      "sprint": 1,
+      "title": "Add dismiss action handler with engagement tracking",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/slack-interactive/index.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-001", "SLACK-004", "SLACK-006"],
+      "acceptance": [
+        "Handle dismiss::{notification_type}::{notification_id} action_ids",
+        "Update original message to show 'Dismissed' with buildActionConfirmation()",
+        "Log dismiss to user_activity_events for Smart Engagement tracking",
+        "Track dismiss rate per notification type for notification tuning"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-008",
+      "feature": "slack-proactive-copilot",
+      "sprint": 2,
+      "title": "Add delta detection to morning brief",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["SLACK-003"],
+        "files": ["supabase/functions/slack-morning-brief/index.ts"],
+        "schema": ["daily_digest_analyses"]
+      },
+      "blocks": ["SLACK-009"],
+      "parallelWith": ["SLACK-011", "SLACK-013"],
+      "acceptance": [
+        "Store briefing snapshot in daily_digest_analyses after each send (deals state, task state, meeting state)",
+        "On next briefing, compare against previous snapshot to detect changes",
+        "Only surface items that are new, changed, or escalated since last briefing",
+        "Tag items as 'NEW', 'CHANGED', 'ESCALATED' in the message"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-morning-brief/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-009",
+      "feature": "slack-proactive-copilot",
+      "sprint": 2,
+      "title": "Add priority scoring algorithm for briefing items",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["SLACK-008"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SLACK-012"],
+      "parallelWith": ["SLACK-010", "SLACK-014"],
+      "acceptance": [
+        "Score each item: deal_value × urgency_multiplier × days_waiting_factor",
+        "Urgency multipliers: overdue task 3x, close date passed 2.5x, stale deal 2x, meeting today 1.5x",
+        "Sort items by priority score descending, cap at top 5 per section",
+        "Items scoring above threshold go into 'NEEDS ACTION' section"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-morning-brief/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-010",
+      "feature": "slack-proactive-copilot",
+      "sprint": 2,
+      "title": "Add 'all clear' briefing logic",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["SLACK-008"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SLACK-012"],
+      "parallelWith": ["SLACK-009", "SLACK-014"],
+      "acceptance": [
+        "If no actionable items after delta detection + priority scoring, send short 'All clear' message",
+        "All clear message includes: meeting count today, pipeline health one-liner, checkmark emoji",
+        "Message is 3-4 lines max, no sections or dividers"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-morning-brief/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-011",
+      "feature": "slack-proactive-copilot",
+      "sprint": 2,
+      "title": "Add Instantly campaign section to morning brief",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["SLACK-003"],
+        "files": ["supabase/functions/_shared/instantly.ts"],
+        "schema": ["integration_credentials"]
+      },
+      "blocks": ["SLACK-012"],
+      "parallelWith": ["SLACK-008", "SLACK-013"],
+      "acceptance": [
+        "Query Instantly API for active campaigns with notable events since last briefing",
+        "Show campaigns with: new replies (count), high bounce rate (>5%), completion milestone",
+        "Action buttons per campaign: 'View replies' (deeplink), 'Pause campaign' (action_id)",
+        "Skip section entirely if no Instantly integration configured or no notable events"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-morning-brief/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/instantly.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-012",
+      "feature": "slack-proactive-copilot",
+      "sprint": 2,
+      "title": "Redesign morning brief Block Kit message to match PRD",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["SLACK-009", "SLACK-010", "SLACK-011", "SLACK-014"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Header: greeting with user name + date + item count needing attention",
+        "NEEDS ACTION section: top priority items with action buttons (draft follow-up, snooze, view deal)",
+        "TODAY section: meetings with time and 'Prep me' buttons",
+        "CAMPAIGNS section: notable Instantly campaign events (if any)",
+        "Compact footer with app deeplink"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-morning-brief/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-013",
+      "feature": "slack-proactive-copilot",
+      "sprint": 2,
+      "title": "Add per-user briefing time preference",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["SLACK-003"],
+        "files": [],
+        "schema": ["slack_user_mappings"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-008", "SLACK-011"],
+      "acceptance": [
+        "Add preferred_briefing_time (TIME) and preferred_timezone (TEXT) columns to slack_user_mappings or new preferences table",
+        "Settings UI: time picker for preferred morning brief time (default 08:00)",
+        "Cron runs every 15 minutes, checks which users are due based on their timezone + preferred time",
+        "Dedupe still enforced (one brief per user per day)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260208000002_user_briefing_preferences.sql",
+        "supabase/functions/slack-morning-brief/index.ts",
+        "src/pages/settings/SlackSettings.tsx",
+        "src/lib/hooks/useSlackSettings.ts",
+        "vercel.json"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-014",
+      "feature": "slack-proactive-copilot",
+      "sprint": 2,
+      "title": "Add deal movement detection for morning brief",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["SLACK-008"],
+        "files": [],
+        "schema": ["deals"]
+      },
+      "blocks": ["SLACK-012"],
+      "parallelWith": ["SLACK-009", "SLACK-010"],
+      "acceptance": [
+        "Compare current deal state against last briefing snapshot for each user's deals",
+        "Detect: stage changes, value changes, activity gap > 5 days, close date passed",
+        "Each detected change gets contextual label: 'Stage changed to Proposal', 'No activity for 6 days'",
+        "Action buttons per deal change: 'Re-engage', 'Update forecast', 'View deal'"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-morning-brief/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-015",
+      "feature": "slack-proactive-copilot",
+      "sprint": 3,
+      "title": "Add deal risk monitoring with real-time alerts",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": {
+        "stories": ["SLACK-006"],
+        "files": ["supabase/functions/_shared/proactive/deliverySlack.ts"],
+        "schema": ["deals", "slack_user_mappings"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-016", "SLACK-017", "SLACK-018", "SLACK-022"],
+      "acceptance": [
+        "New edge function slack-deal-risk-alert checks every 30 minutes via cron",
+        "Triggers on: close date passed, activity gap > configurable threshold (default 5 days), stage regression",
+        "Sends DM to deal owner with risk context + action buttons",
+        "Buttons: 'Draft re-engagement', 'Update close date', 'Mark as lost', 'Snooze'",
+        "Respects dedupe (one alert per deal per day)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-deal-risk-alert/index.ts",
+        "api/cron/slack-deal-risk-alert.ts",
+        "vercel.json",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-016",
+      "feature": "slack-proactive-copilot",
+      "sprint": 3,
+      "title": "Add Instantly campaign event monitoring with alerts",
+      "type": "backend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": {
+        "stories": ["SLACK-006"],
+        "files": ["supabase/functions/_shared/instantly.ts"],
+        "schema": ["integration_credentials"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-015", "SLACK-017", "SLACK-018", "SLACK-022"],
+      "acceptance": [
+        "New edge function slack-campaign-alerts checks every 30 minutes via cron",
+        "Monitors for: first reply on campaign, bounce rate > 5%, campaign completion, prospect replies",
+        "Sends DM to campaign owner with event context + action buttons",
+        "Buttons: 'View replies', 'Pause campaign', 'Adjust sequence', 'Dismiss'",
+        "Respects dedupe (one alert per campaign per event type per day)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-campaign-alerts/index.ts",
+        "api/cron/slack-campaign-alerts.ts",
+        "vercel.json",
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/instantly.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-017",
+      "feature": "slack-proactive-copilot",
+      "sprint": 3,
+      "title": "Add task reminder proactive notifications",
+      "type": "backend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": {
+        "stories": ["SLACK-006"],
+        "files": ["supabase/functions/_shared/proactive/deliverySlack.ts"],
+        "schema": ["tasks", "slack_user_mappings"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-015", "SLACK-016", "SLACK-018", "SLACK-022"],
+      "acceptance": [
+        "New edge function slack-task-reminders runs daily at 08:30 UTC via cron",
+        "Sends DM per user with: tasks due today, overdue tasks, each with deal context",
+        "Buttons per task: 'Mark done', 'Snooze to tomorrow', 'Reassign', 'Dismiss'",
+        "Skip if user already received morning brief with same tasks (cross-dedup)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-task-reminders/index.ts",
+        "api/cron/slack-task-reminders.ts",
+        "vercel.json",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-018",
+      "feature": "slack-proactive-copilot",
+      "sprint": 3,
+      "title": "Add per-user notification preferences schema",
+      "type": "schema",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["slack_user_mappings"]
+      },
+      "blocks": ["SLACK-019", "SLACK-020"],
+      "parallelWith": ["SLACK-015", "SLACK-016", "SLACK-017", "SLACK-022"],
+      "acceptance": [
+        "New table slack_user_preferences with: user_id, org_id, feature (enum), is_enabled (bool), quiet_hours_start (TIME), quiet_hours_end (TIME), max_notifications_per_hour (int)",
+        "Feature enum values: morning_brief, post_meeting, deal_risk, campaign_alerts, task_reminders, deal_momentum",
+        "Default row per user per feature created on first notification attempt (all enabled, quiet 20:00-07:00, max 5/hr)",
+        "RLS policies: users can read/write their own preferences"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260208000003_slack_user_preferences.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-019",
+      "feature": "slack-proactive-copilot",
+      "sprint": 3,
+      "title": "Build per-user notification preferences settings UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": {
+        "stories": ["SLACK-018"],
+        "files": ["src/pages/settings/SlackSettings.tsx"],
+        "schema": ["slack_user_preferences"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-020", "SLACK-021"],
+      "acceptance": [
+        "New section in Slack settings for personal notification preferences",
+        "Toggle each notification type on/off (morning_brief, post_meeting, deal_risk, campaign, tasks)",
+        "Quiet hours picker: start time and end time",
+        "Max notifications per hour slider (1-10, default 5)",
+        "Changes save immediately via Supabase upsert"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/settings/SlackSettings.tsx",
+        "src/lib/hooks/useSlackSettings.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-020",
+      "feature": "slack-proactive-copilot",
+      "sprint": 3,
+      "title": "Add quiet hours and rate limiting to delivery layer",
+      "type": "backend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": {
+        "stories": ["SLACK-018"],
+        "files": ["supabase/functions/_shared/proactive/deliverySlack.ts", "supabase/functions/_shared/proactive/settings.ts"],
+        "schema": ["slack_user_preferences"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-019", "SLACK-021"],
+      "acceptance": [
+        "deliverToSlack() checks user preferences before sending",
+        "If in quiet hours: queue notification for next morning (store in slack_snoozed_items with type='quiet_hours')",
+        "If rate limit exceeded: skip notification, log as rate_limited",
+        "If feature disabled: skip entirely, log as user_disabled",
+        "Count recent notifications from slack_notifications_sent for rate limit check"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/proactive/deliverySlack.ts",
+        "supabase/functions/_shared/proactive/settings.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-021",
+      "feature": "slack-proactive-copilot",
+      "sprint": 3,
+      "title": "Add cross-briefing deduplication",
+      "type": "backend",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": {
+        "stories": ["SLACK-008"],
+        "files": ["supabase/functions/_shared/proactive/dedupe.ts"],
+        "schema": ["slack_notifications_sent"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-019", "SLACK-020"],
+      "acceptance": [
+        "If an entity was surfaced in today's morning brief, don't alert about it again unless escalated",
+        "Escalation criteria: priority increased, status worsened (e.g., stale → critical), new event type",
+        "Store briefing entity IDs in slack_notifications_sent with feature='morning_brief' + entity_id",
+        "Event-driven alerts check morning brief entities before sending"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/proactive/dedupe.ts",
+        "supabase/functions/slack-morning-brief/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-022",
+      "feature": "slack-proactive-copilot",
+      "sprint": 3,
+      "title": "Activate deal momentum cron trigger",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/slack-deal-momentum/index.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-015", "SLACK-016", "SLACK-017", "SLACK-018"],
+      "acceptance": [
+        "Add cron entry in vercel.json for slack-deal-momentum (daily at 10:00 UTC)",
+        "Create api/cron/slack-deal-momentum.ts relay handler",
+        "Verify end-to-end: cron fires → edge function runs → DMs sent for at-risk deals",
+        "Confirm interactive buttons (Set Next Step, Mark Milestone) work via existing momentum handlers"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "vercel.json",
+        "api/cron/slack-deal-momentum.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-023",
+      "feature": "slack-proactive-copilot",
+      "sprint": 4,
+      "title": "Wire app_mention events to copilot skill router",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": {
+        "stories": ["SLACK-006"],
+        "files": ["supabase/functions/slack-events/index.ts"],
+        "schema": ["slack_user_mappings"]
+      },
+      "blocks": ["SLACK-024"],
+      "parallelWith": ["SLACK-027", "SLACK-028"],
+      "acceptance": [
+        "app_mention events in slack-events routed to new handleMention() function",
+        "Resolve Slack user → Sixty user context (fail with 'Please link your account' if unmapped)",
+        "Extract message text (strip @60 mention prefix)",
+        "Acknowledge in-thread immediately: 'On it...' with typing indicator",
+        "Pass to intent parser → skill router → respond in-thread with result"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-events/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-024",
+      "feature": "slack-proactive-copilot",
+      "sprint": 4,
+      "title": "Add natural language intent parser for @60 mentions",
+      "type": "backend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": {
+        "stories": ["SLACK-023"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SLACK-025", "SLACK-026"],
+      "parallelWith": [],
+      "acceptance": [
+        "New _shared/slackIntentParser.ts module",
+        "Keyword-based intent matching for known patterns (follow-up, add to campaign, deal summary, prep, pipeline, find contacts, focus)",
+        "Claude Haiku fallback for ambiguous intents (returns structured intent + entities)",
+        "Maps parsed intent to existing slash command handler functions",
+        "Returns null for unrecognizable intents (triggers fallback handler)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/slackIntentParser.ts",
+        "supabase/functions/slack-events/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-025",
+      "feature": "slack-proactive-copilot",
+      "sprint": 4,
+      "title": "Add 'add to campaign' command for @60 mentions",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": {
+        "stories": ["SLACK-024"],
+        "files": ["supabase/functions/_shared/instantly.ts"],
+        "schema": ["integration_credentials"]
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-026"],
+      "acceptance": [
+        "Handle '@60 add [contact] to [campaign]' intent",
+        "Resolve contact by name/email (search contacts table, Apollo enrichment if not found)",
+        "Resolve campaign by name (search Instantly campaigns)",
+        "Add contact to campaign via Instantly API",
+        "Confirm in-thread: 'Added Sarah Chen to AI Round Table campaign' with 'View campaign' button"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-slash-commands/handlers/campaign.ts",
+        "supabase/functions/slack-events/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-026",
+      "feature": "slack-proactive-copilot",
+      "sprint": 4,
+      "title": "Add 'find contacts like X' command for @60 mentions",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": {
+        "stories": ["SLACK-024"],
+        "files": ["supabase/functions/apollo-search/index.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-025"],
+      "acceptance": [
+        "Handle '@60 find me N contacts like [contact/company]' intent",
+        "Extract target contact/company and count (default 10)",
+        "Call apollo-search edge function with lookalike parameters",
+        "Present results in-thread as compact list with title, company, role",
+        "Each result has 'Add to campaign' button (reuses SLACK-025 handler)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-slash-commands/handlers/lookalike.ts",
+        "supabase/functions/slack-events/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-027",
+      "feature": "slack-proactive-copilot",
+      "sprint": 4,
+      "title": "Add fallback handler with capability list for unrecognized commands",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/_shared/slackBlocks.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-023", "SLACK-028"],
+      "acceptance": [
+        "When intent parser returns null, respond with helpful capability list",
+        "Compact Block Kit message: 'I can help with:' + bullet list of supported commands",
+        "Include examples for each: 'draft a follow-up for [person]', 'add [contact] to [campaign]', etc.",
+        "Never a dead end — always suggests next step"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-events/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SLACK-028",
+      "feature": "slack-proactive-copilot",
+      "sprint": 4,
+      "title": "Add command analytics and per-user rate limiting",
+      "type": "backend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SLACK-023", "SLACK-027"],
+      "acceptance": [
+        "New slack_command_analytics table: user_id, org_id, command_type, intent, response_time_ms, success, created_at",
+        "Log every @60 command and slash command to analytics table",
+        "Rate limit: max 20 commands per user per hour (configurable), return friendly message if exceeded",
+        "Migration for new table with index on (user_id, created_at)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260208000004_slack_command_analytics.sql",
+        "supabase/functions/slack-events/index.ts",
+        "supabase/functions/slack-slash-commands/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 28,
+    "completedStories": 0,
+    "currentFeature": "slack-proactive-copilot",
+    "lastUpdated": "2026-02-07T12:00:00Z",
+    "sprints": [
+      {
+        "id": 1,
+        "name": "Foundation — Make Buttons Work",
+        "stories": ["SLACK-001", "SLACK-002", "SLACK-003", "SLACK-004", "SLACK-005", "SLACK-006", "SLACK-007"],
+        "parallelGroups": [
+          ["SLACK-001", "SLACK-004", "SLACK-006", "SLACK-007"],
+          ["SLACK-002", "SLACK-003", "SLACK-005"]
+        ],
+        "goal": "Every button in every Slack message triggers a real action and updates the message.",
+        "definitionOfDone": "A HITL message can be sent, buttons clicked, action executed, original message updated — end to end."
+      },
+      {
+        "id": 2,
+        "name": "Smart Morning Briefing",
+        "stories": ["SLACK-008", "SLACK-009", "SLACK-010", "SLACK-011", "SLACK-012", "SLACK-013", "SLACK-014"],
+        "parallelGroups": [
+          ["SLACK-008", "SLACK-011", "SLACK-013"],
+          ["SLACK-009", "SLACK-010", "SLACK-014"],
+          ["SLACK-012"]
+        ],
+        "goal": "Replace the static 8am message with a dynamic, personalised, actionable briefing.",
+        "definitionOfDone": "Morning briefing reflects real pipeline state with working action buttons, delta detection, and priority scoring."
+      },
+      {
+        "id": 3,
+        "name": "Proactive Event-Driven Messages",
+        "stories": ["SLACK-015", "SLACK-016", "SLACK-017", "SLACK-018", "SLACK-019", "SLACK-020", "SLACK-021", "SLACK-022"],
+        "parallelGroups": [
+          ["SLACK-015", "SLACK-016", "SLACK-017", "SLACK-018", "SLACK-022"],
+          ["SLACK-019", "SLACK-020", "SLACK-021"]
+        ],
+        "goal": "@60 alerts reps in real-time when something that matters happens.",
+        "definitionOfDone": "Post-meeting summary within 5 minutes, deal risk alerts with action buttons, campaign milestones, task reminders — all with quiet hours and rate limiting."
+      },
+      {
+        "id": 4,
+        "name": "@60 Command Input",
+        "stories": ["SLACK-023", "SLACK-024", "SLACK-025", "SLACK-026", "SLACK-027", "SLACK-028"],
+        "parallelGroups": [
+          ["SLACK-023", "SLACK-027", "SLACK-028"],
+          ["SLACK-024"],
+          ["SLACK-025", "SLACK-026"]
+        ],
+        "goal": "Reps can talk to @60 in any Slack channel and get things done.",
+        "definitionOfDone": "A rep types '@60 draft a follow-up for Acme' and receives a context-aware email draft with send/edit/dismiss buttons, all working end to end."
+      }
+    ]
+  }
+}
