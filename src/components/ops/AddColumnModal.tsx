@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Sparkles, Newspaper, Cpu, Swords, AlertTriangle, AtSign, Plus, Trash2 } from 'lucide-react';
-import type { DropdownOption } from '@/lib/services/opsTableService';
+import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 import { HubSpotPropertyPicker } from './HubSpotPropertyPicker';
+import { ApolloPropertyPicker } from './ApolloPropertyPicker';
 import { OpenRouterModelPicker } from './OpenRouterModelPicker';
+import { ButtonColumnConfigPanel } from './ButtonColumnConfigPanel';
+import { InstantlyColumnWizard } from './InstantlyColumnWizard';
 
 interface ExistingColumn {
   key: string;
@@ -22,6 +26,13 @@ interface ColumnConfig {
   integrationType?: string;
   integrationConfig?: Record<string, unknown>;
   hubspotPropertyName?: string;
+  apolloPropertyName?: string;
+  apolloEnrichConfig?: {
+    reveal_personal_emails?: boolean;
+    reveal_phone_number?: boolean;
+  };
+  actionType?: string;
+  actionConfig?: ButtonConfig | Record<string, unknown>;
 }
 
 interface AddColumnModalProps {
@@ -30,7 +41,107 @@ interface AddColumnModalProps {
   onAdd: (column: ColumnConfig) => void;
   onAddMultiple?: (columns: ColumnConfig[]) => void;
   existingColumns?: ExistingColumn[];
+  sampleRowValues?: Record<string, string>;
   sourceType?: 'manual' | 'csv' | 'hubspot' | null;
+  tableId?: string;
+  orgId?: string;
+}
+
+/** Lightweight client-side formula evaluator for preview */
+function evaluateFormulaPreview(expression: string, sampleValues: Record<string, string>): string {
+  if (!expression.trim()) return '';
+  try {
+    // Step 1: Substitute @column_key with values (wrap in quotes for later eval)
+    let expr = expression.replace(/@([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
+      const val = sampleValues[key];
+      return val !== undefined && val !== '' ? `"${val}"` : '""';
+    });
+
+    // Step 2: Handle CONCAT(...) — extract args, strip quotes, join (skip empty)
+    expr = expr.replace(/CONCAT\s*\(([^)]*)\)/gi, (_, argsStr: string) => {
+      const args = splitArgs(argsStr);
+      const resolved = args.map(stripQuotes).filter((v) => v !== '' && v !== 'N/A');
+      return `"${resolved.join('')}"`;
+    });
+
+    // Step 3: Handle IF(cond, then, else)
+    expr = expr.replace(/IF\s*\(([^)]*)\)/gi, (_, argsStr: string) => {
+      const args = splitArgs(argsStr);
+      if (args.length < 3) return '""';
+      const cond = stripQuotes(args[0]);
+      // Simple equality check: val = "something" or val = something
+      const eqMatch = cond.match(/^(.+?)\s*=\s*(.+)$/);
+      if (eqMatch) {
+        const left = stripQuotes(eqMatch[1].trim());
+        const right = stripQuotes(eqMatch[2].trim());
+        return left === right ? args[1].trim() : args[2].trim();
+      }
+      // Can't evaluate complex conditions — return then branch
+      return args[1].trim();
+    });
+
+    // Step 4: Handle & concatenation
+    if (expr.includes('&')) {
+      const parts: string[] = [];
+      let current = '';
+      let inStr: string | null = null;
+      for (let i = 0; i < expr.length; i++) {
+        const ch = expr[i];
+        if (inStr) { current += ch; if (ch === inStr) inStr = null; continue; }
+        if (ch === '"' || ch === "'") { inStr = ch; current += ch; continue; }
+        if (ch === '&') { parts.push(current); current = ''; continue; }
+        current += ch;
+      }
+      if (current) parts.push(current);
+      const resolved = parts.map((p) => stripQuotes(p.trim())).filter((v) => v !== '' && v !== 'N/A');
+      return resolved.join('');
+    }
+
+    // Step 5: Simple math (+, -, *, /)
+    const mathMatch = expr.match(/^"?(-?\d+(?:\.\d+)?)"?\s*([+\-*/])\s*"?(-?\d+(?:\.\d+)?)"?$/);
+    if (mathMatch) {
+      const a = parseFloat(mathMatch[1]);
+      const op = mathMatch[2];
+      const b = parseFloat(mathMatch[3]);
+      switch (op) {
+        case '+': return String(a + b);
+        case '-': return String(a - b);
+        case '*': return String(a * b);
+        case '/': return b !== 0 ? String(a / b) : 'ERR:DIV/0';
+      }
+    }
+
+    // Fallback: just strip quotes from the result
+    return stripQuotes(expr);
+  } catch {
+    return stripQuotes(expression);
+  }
+}
+
+function stripQuotes(s: string): string {
+  const t = s.trim();
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    return t.slice(1, -1);
+  }
+  return t;
+}
+
+function splitArgs(argsStr: string): string[] {
+  const args: string[] = [];
+  let current = '';
+  let depth = 0;
+  let inStr: string | null = null;
+  for (let i = 0; i < argsStr.length; i++) {
+    const ch = argsStr[i];
+    if (inStr) { current += ch; if (ch === inStr) inStr = null; continue; }
+    if (ch === '"' || ch === "'") { inStr = ch; current += ch; continue; }
+    if (ch === '(') { depth++; current += ch; continue; }
+    if (ch === ')') { depth--; current += ch; continue; }
+    if (ch === ',' && depth === 0) { args.push(current); current = ''; continue; }
+    current += ch;
+  }
+  if (current) args.push(current);
+  return args;
 }
 
 const BASE_COLUMN_TYPES = [
@@ -43,11 +154,14 @@ const BASE_COLUMN_TYPES = [
   { value: 'dropdown', label: 'Dropdown' },
   { value: 'tags', label: 'Tags' },
   { value: 'formula', label: 'Formula' },
+  { value: 'button', label: 'Button' },
   { value: 'integration', label: 'Integration' },
   { value: 'enrichment', label: 'Enrichment' },
 ];
 
 const HUBSPOT_COLUMN_TYPE = { value: 'hubspot_property', label: 'HubSpot Property' };
+const APOLLO_COLUMN_TYPE = { value: 'apollo_property', label: 'Apollo Property' };
+const INSTANTLY_COLUMN_TYPE = { value: 'instantly', label: 'Instantly Campaign' };
 
 const INTEGRATION_TYPES = [
   { value: 'reoon_email_verify', label: 'Reoon Email Verification' },
@@ -85,10 +199,14 @@ function toSnakeCase(str: string): string {
     .replace(/\s+/g, '_');
 }
 
-export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existingColumns = [], sourceType }: AddColumnModalProps) {
+export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existingColumns = [], sampleRowValues = {}, sourceType, tableId, orgId }: AddColumnModalProps) {
   const isHubSpotTable = sourceType === 'hubspot';
   const COLUMN_TYPES = useMemo(() => {
-    return isHubSpotTable ? [HUBSPOT_COLUMN_TYPE, ...BASE_COLUMN_TYPES] : BASE_COLUMN_TYPES;
+    const types = [...BASE_COLUMN_TYPES];
+    if (isHubSpotTable) types.push(HUBSPOT_COLUMN_TYPE);
+    types.push(APOLLO_COLUMN_TYPE);
+    types.push(INSTANTLY_COLUMN_TYPE);
+    return types;
   }, [isHubSpotTable]);
   const [label, setLabel] = useState('');
   const [columnType, setColumnType] = useState('text');
@@ -103,24 +221,42 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
   const [apifyActorId, setApifyActorId] = useState('');
   const [hubspotPropertyName, setHubspotPropertyName] = useState('');
   const [hubspotPropertyColumnType, setHubspotPropertyColumnType] = useState('text');
+  const [apolloPropertyName, setApolloPropertyName] = useState('');
+  const [apolloPropertyColumnType, setApolloPropertyColumnType] = useState('text');
+  const [apolloRevealEmails, setApolloRevealEmails] = useState(false);
+  const [apolloRevealPhone, setApolloRevealPhone] = useState(false);
+  const [apolloAutoRunRows, setApolloAutoRunRows] = useState<string>('none');
   const [enrichmentModel, setEnrichmentModel] = useState('google/gemini-3-flash-preview');
+  const [buttonConfig, setButtonConfig] = useState<ButtonConfig>({
+    label: '', color: '#8b5cf6', actions: [],
+  });
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const formulaRef = useRef<HTMLTextAreaElement>(null);
 
-  // @mention dropdown state
+  // @mention dropdown state (enrichment prompt)
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStartPos, setMentionStartPos] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // @mention dropdown state (formula editor)
+  const [formulaMentionOpen, setFormulaMentionOpen] = useState(false);
+  const [formulaMentionQuery, setFormulaMentionQuery] = useState('');
+  const [formulaMentionIndex, setFormulaMentionIndex] = useState(0);
+  const [formulaMentionStartPos, setFormulaMentionStartPos] = useState(0);
+  const formulaDropdownRef = useRef<HTMLDivElement>(null);
+
   const isEnrichment = columnType === 'enrichment';
   const isDropdownOrTags = columnType === 'dropdown' || columnType === 'tags';
   const isFormula = columnType === 'formula';
   const isIntegration = columnType === 'integration';
   const isHubSpotProperty = columnType === 'hubspot_property';
+  const isApolloProperty = columnType === 'apollo_property';
+  const isButton = columnType === 'button';
+  const isInstantly = columnType === 'instantly';
   const key = toSnakeCase(label);
   const canAdd =
     label.trim().length > 0
@@ -128,9 +264,12 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     && (!isDropdownOrTags || dropdownOptions.length > 0)
     && (!isFormula || formulaExpression.trim().length > 0)
     && (!isIntegration || (integrationType === 'apify_actor' ? apifyActorId.trim().length > 0 : integrationSourceColumn.length > 0))
-    && (!isHubSpotProperty || hubspotPropertyName.length > 0);
+    && (!isHubSpotProperty || hubspotPropertyName.length > 0)
+    && (!isApolloProperty || apolloPropertyName.length > 0)
+    && (!isButton || (buttonConfig.label.trim().length > 0 && buttonConfig.actions.length > 0))
+    && !isInstantly; // Instantly uses its own wizard flow, not the standard Add button
 
-  // Filter columns for the @mention dropdown (exclude enrichment columns being created)
+  // Filter columns for the @mention dropdown (enrichment prompt)
   const filteredColumns = useMemo(() => {
     if (!mentionOpen) return [];
     const q = mentionQuery.toLowerCase();
@@ -141,9 +280,20 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     );
   }, [existingColumns, mentionQuery, mentionOpen]);
 
+  // Filter columns for the @mention dropdown (formula editor)
+  const filteredFormulaColumns = useMemo(() => {
+    if (!formulaMentionOpen) return [];
+    const q = formulaMentionQuery.toLowerCase();
+    return existingColumns.filter(
+      (col) =>
+        col.key.toLowerCase().includes(q) ||
+        col.label.toLowerCase().includes(q),
+    );
+  }, [existingColumns, formulaMentionQuery, formulaMentionOpen]);
+
   const reset = useCallback(() => {
     setLabel('');
-    setColumnType(isHubSpotTable ? 'hubspot_property' : 'text');
+    setColumnType('text');
     setEnrichmentPrompt('');
     setAutoRunRows('all');
     setDropdownOptions([{ value: 'option_1', label: 'Option 1', color: '#8b5cf6' }]);
@@ -153,10 +303,19 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     setApifyActorId('');
     setHubspotPropertyName('');
     setHubspotPropertyColumnType('text');
+    setApolloPropertyName('');
+    setApolloPropertyColumnType('text');
+    setApolloRevealEmails(false);
+    setApolloRevealPhone(false);
+    setApolloAutoRunRows('none');
     setEnrichmentModel('google/gemini-3-flash-preview');
+    setButtonConfig({ label: '', color: '#8b5cf6', actions: [] });
     setMentionOpen(false);
     setMentionQuery('');
     setMentionIndex(0);
+    setFormulaMentionOpen(false);
+    setFormulaMentionQuery('');
+    setFormulaMentionIndex(0);
   }, [isHubSpotTable]);
 
   useEffect(() => {
@@ -169,7 +328,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !mentionOpen) onClose();
+      if (e.key === 'Escape' && !mentionOpen && !formulaMentionOpen) onClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
@@ -186,10 +345,15 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     const parsedAutoRun = autoRunRows === 'all' ? 'all' as const
       : autoRunRows === 'none' ? undefined
       : Number(autoRunRows);
+    const parsedApolloAutoRun = apolloAutoRunRows === 'all' ? 'all' as const
+      : apolloAutoRunRows === 'none' ? undefined
+      : Number(apolloAutoRunRows);
     onAdd({
-      key,
-      label: label.trim(),
-      columnType: isHubSpotProperty ? hubspotPropertyColumnType : columnType,
+      key: isApolloProperty ? apolloPropertyName : key,
+      label: isApolloProperty ? label.trim() || apolloPropertyName : label.trim(),
+      columnType: isHubSpotProperty ? hubspotPropertyColumnType
+        : isApolloProperty ? apolloPropertyColumnType
+        : columnType,
       isEnrichment,
       ...(isEnrichment ? {
         enrichmentPrompt: enrichmentPrompt.trim(),
@@ -204,7 +368,19 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
           ? { actor_id: apifyActorId.trim(), input_template: {}, result_path: '' }
           : { source_column_key: integrationSourceColumn },
       } : {}),
+      ...(isButton ? {
+        actionType: 'button',
+        actionConfig: buttonConfig,
+      } : {}),
       ...(isHubSpotProperty ? { hubspotPropertyName } : {}),
+      ...(isApolloProperty ? {
+        apolloPropertyName,
+        autoRunRows: parsedApolloAutoRun,
+        apolloEnrichConfig: {
+          reveal_personal_emails: apolloRevealEmails,
+          reveal_phone_number: apolloRevealPhone,
+        },
+      } : {}),
     });
     onClose();
   };
@@ -306,12 +482,85 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     [mentionOpen, filteredColumns, mentionIndex, insertMention],
   );
 
-  // Scroll active dropdown item into view
+  // Scroll active dropdown item into view (enrichment)
   useEffect(() => {
     if (!mentionOpen || !dropdownRef.current) return;
     const activeItem = dropdownRef.current.querySelector('[data-active="true"]');
     activeItem?.scrollIntoView({ block: 'nearest' });
   }, [mentionIndex, mentionOpen]);
+
+  // ---- Formula @mention handlers ----
+
+  const insertFormulaMention = useCallback(
+    (column: ExistingColumn) => {
+      const textarea = formulaRef.current;
+      if (!textarea) return;
+      const before = formulaExpression.slice(0, formulaMentionStartPos);
+      const after = formulaExpression.slice(textarea.selectionStart);
+      const inserted = `@${column.key}`;
+      const newValue = before + inserted + after;
+      setFormulaExpression(newValue);
+      setFormulaMentionOpen(false);
+      setFormulaMentionQuery('');
+      setFormulaMentionIndex(0);
+      const cursorPos = before.length + inserted.length;
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(cursorPos, cursorPos);
+      });
+    },
+    [formulaExpression, formulaMentionStartPos],
+  );
+
+  const handleFormulaChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      const cursorPos = e.target.selectionStart;
+      setFormulaExpression(value);
+      if (existingColumns.length === 0) return;
+      const textBeforeCursor = value.slice(0, cursorPos);
+      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+      if (lastAtIndex === -1) { setFormulaMentionOpen(false); return; }
+      if (lastAtIndex > 0 && !/[\s(,]/.test(textBeforeCursor[lastAtIndex - 1])) {
+        setFormulaMentionOpen(false);
+        return;
+      }
+      const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
+      if (/\s/.test(textAfterAt)) { setFormulaMentionOpen(false); return; }
+      setFormulaMentionStartPos(lastAtIndex);
+      setFormulaMentionQuery(textAfterAt);
+      setFormulaMentionIndex(0);
+      setFormulaMentionOpen(true);
+    },
+    [existingColumns.length],
+  );
+
+  const handleFormulaKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (!formulaMentionOpen || filteredFormulaColumns.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFormulaMentionIndex((prev) => (prev + 1) % filteredFormulaColumns.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFormulaMentionIndex((prev) => (prev - 1 + filteredFormulaColumns.length) % filteredFormulaColumns.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        insertFormulaMention(filteredFormulaColumns[formulaMentionIndex]);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setFormulaMentionOpen(false);
+      }
+    },
+    [formulaMentionOpen, filteredFormulaColumns, formulaMentionIndex, insertFormulaMention],
+  );
+
+  // Scroll active formula dropdown item into view
+  useEffect(() => {
+    if (!formulaMentionOpen || !formulaDropdownRef.current) return;
+    const activeItem = formulaDropdownRef.current.querySelector('[data-active="true"]');
+    activeItem?.scrollIntoView({ block: 'nearest' });
+  }, [formulaMentionIndex, formulaMentionOpen]);
 
   if (!isOpen) return null;
 
@@ -448,25 +697,77 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
                   <textarea
                     ref={formulaRef}
                     value={formulaExpression}
-                    onChange={(e) => setFormulaExpression(e.target.value)}
-                    placeholder="e.g. @price * @quantity or IF(@status = 'won', @revenue, 0)"
+                    onChange={handleFormulaChange}
+                    onKeyDown={handleFormulaKeyDown}
+                    placeholder="e.g. @first_name & &quot; &quot; & @last_name or IF(@status = 'won', @revenue, 0)"
                     rows={2}
                     className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 font-mono text-sm text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
                   />
-                  {existingColumns.length > 0 && (
+
+                  {/* @mention dropdown for formula (portal to avoid overflow clipping) */}
+                  {formulaMentionOpen && filteredFormulaColumns.length > 0 && formulaRef.current && createPortal(
+                    <div
+                      ref={formulaDropdownRef}
+                      style={{
+                        position: 'fixed',
+                        top: formulaRef.current.getBoundingClientRect().bottom + 4,
+                        left: formulaRef.current.getBoundingClientRect().left,
+                        width: formulaRef.current.getBoundingClientRect().width,
+                      }}
+                      className="z-[100] max-h-48 overflow-y-auto rounded-lg border border-gray-700 bg-gray-800 shadow-xl"
+                    >
+                      {filteredFormulaColumns.map((col, idx) => (
+                        <button
+                          key={col.key}
+                          data-active={idx === formulaMentionIndex}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            insertFormulaMention(col);
+                          }}
+                          onMouseEnter={() => setFormulaMentionIndex(idx)}
+                          className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${
+                            idx === formulaMentionIndex
+                              ? 'bg-violet-600/20 text-violet-200'
+                              : 'text-gray-300 hover:bg-gray-700/50'
+                          }`}
+                        >
+                          <AtSign className="h-3.5 w-3.5 shrink-0 text-violet-400" />
+                          <span className="font-medium">{col.label}</span>
+                          <span className="ml-auto font-mono text-xs text-gray-500">
+                            {col.key}
+                          </span>
+                        </button>
+                      ))}
+                    </div>,
+                    document.body,
+                  )}
+
+                  {!formulaMentionOpen && existingColumns.length > 0 && (
                     <p className="mt-1 text-xs text-gray-500">
                       <AtSign className="mr-0.5 inline-block h-3 w-3" />
-                      Use <span className="font-mono text-gray-400">@column_key</span> to reference column values
+                      Type <span className="font-mono text-gray-400">@</span> to reference a column value
                     </p>
                   )}
                 </div>
               </div>
+
+              {/* Formula Preview */}
+              {formulaExpression.trim() && Object.keys(sampleRowValues).length > 0 && (
+                <div className="rounded-lg border border-gray-700/60 bg-gray-800/30 px-3.5 py-2.5">
+                  <p className="mb-1 text-xs font-medium text-gray-500">Preview (Row 1)</p>
+                  <p className="text-sm text-gray-200">
+                    {evaluateFormulaPreview(formulaExpression, sampleRowValues) || <span className="italic text-gray-500">empty</span>}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-gray-500">
                   Quick Insert
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {[
+                    { label: 'JOIN (&)', expr: '@first_name & " " & @last_name' },
                     { label: 'SUM', expr: '@col1 + @col2' },
                     { label: 'IF', expr: 'IF(@col = "value", "yes", "no")' },
                     { label: 'CONCAT', expr: 'CONCAT(@first, " ", @last)' },
@@ -545,6 +846,15 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
             </div>
           )}
 
+          {/* Button Column Section */}
+          {isButton && (
+            <ButtonColumnConfigPanel
+              value={buttonConfig}
+              onChange={setButtonConfig}
+              existingColumns={existingColumns}
+            />
+          )}
+
           {/* HubSpot Property Section */}
           {isHubSpotProperty && (
             <div className="space-y-3">
@@ -591,6 +901,160 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
                 }}
                 excludeProperties={existingColumns.map((c) => c.key)}
               />
+            </div>
+          )}
+
+          {/* Apollo Property Section */}
+          {isApolloProperty && (
+            <div className="space-y-4">
+              {/* Run controls — shown first so user sees it immediately */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Run enrichment on add
+                </label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[
+                    { value: 'none', label: "Don't run" },
+                    { value: '10', label: '10 rows' },
+                    { value: '50', label: '50 rows' },
+                    { value: '100', label: '100 rows' },
+                    { value: 'all', label: 'All rows' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setApolloAutoRunRows(opt.value)}
+                      className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                        apolloAutoRunRows === opt.value
+                          ? 'border-blue-500 bg-blue-500/15 text-blue-300'
+                          : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  How many rows to enrich with Apollo when the column is added
+                </p>
+              </div>
+
+              {/* Enrichment Options */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Enrichment Options
+                </label>
+                <label className="flex items-center gap-3 rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2.5 cursor-pointer hover:border-gray-600 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={apolloRevealEmails}
+                    onChange={(e) => setApolloRevealEmails(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500/30"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm text-gray-200">Reveal personal emails</span>
+                    <span className="ml-2 text-xs text-gray-500">+1 credit/row</span>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2.5 cursor-pointer hover:border-gray-600 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={apolloRevealPhone}
+                    onChange={(e) => setApolloRevealPhone(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500/30"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm text-gray-200">Reveal phone numbers</span>
+                    <span className="ml-2 text-xs text-gray-500">+8 credits/row</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Property picker — scrollable list at bottom */}
+              <div className="space-y-3">
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Select Apollo Properties
+                </label>
+                <p className="text-xs text-gray-500 -mt-2">
+                  Select multiple properties to add them all at once
+                </p>
+                <ApolloPropertyPicker
+                  multiSelect={true}
+                  onSelect={(property) => {
+                    setApolloPropertyName(property.name);
+                    setApolloPropertyColumnType(property.columnType);
+                    if (!label.trim()) {
+                      setLabel(property.label);
+                    }
+                  }}
+                  onSelectMultiple={(properties) => {
+                    if (onAddMultiple && properties.length > 0) {
+                      const parsedRun = apolloAutoRunRows === 'all' ? 'all' as const
+                        : apolloAutoRunRows === 'none' ? undefined
+                        : Number(apolloAutoRunRows);
+                      const columns = properties.map((p) => ({
+                        key: p.name,
+                        label: p.label,
+                        columnType: p.isOrgEnrichment ? 'apollo_org_property' : p.columnType,
+                        isEnrichment: false,
+                        apolloPropertyName: p.name,
+                        autoRunRows: parsedRun,
+                        apolloEnrichConfig: p.isOrgEnrichment ? undefined : {
+                          reveal_personal_emails: apolloRevealEmails,
+                          reveal_phone_number: apolloRevealPhone,
+                        },
+                      }));
+                      onAddMultiple(columns);
+                      onClose();
+                    } else if (properties.length === 1) {
+                      const p = properties[0];
+                      const parsedRun = apolloAutoRunRows === 'all' ? 'all' as const
+                        : apolloAutoRunRows === 'none' ? undefined
+                        : Number(apolloAutoRunRows);
+                      onAdd({
+                        key: p.name,
+                        label: p.label,
+                        columnType: p.isOrgEnrichment ? 'apollo_org_property' : p.columnType,
+                        isEnrichment: false,
+                        apolloPropertyName: p.name,
+                        autoRunRows: parsedRun,
+                        apolloEnrichConfig: p.isOrgEnrichment ? undefined : {
+                          reveal_personal_emails: apolloRevealEmails,
+                          reveal_phone_number: apolloRevealPhone,
+                        },
+                      });
+                      onClose();
+                    }
+                  }}
+                  excludeProperties={existingColumns.map((c) => c.key)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Instantly Campaign Section */}
+          {isInstantly && tableId && orgId && (
+            <InstantlyColumnWizard
+              tableId={tableId}
+              orgId={orgId}
+              existingColumns={existingColumns}
+              onComplete={(columns) => {
+                if (columns.length === 1) {
+                  onAdd(columns[0]);
+                } else if (onAddMultiple && columns.length > 1) {
+                  onAddMultiple(columns);
+                }
+                onClose();
+              }}
+              onCancel={onClose}
+            />
+          )}
+
+          {isInstantly && (!tableId || !orgId) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm text-amber-300">
+                Save this table first before adding Instantly columns.
+              </p>
             </div>
           )}
 

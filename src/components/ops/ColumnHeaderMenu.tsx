@@ -30,6 +30,10 @@ interface ColumnHeaderMenuProps {
   onRetryFailed?: () => void;
   onEditEnrichment?: () => void;
   onReEnrich?: () => void;
+  onEditFormula?: () => void;
+  onEditButton?: () => void;
+  onEditApollo?: () => void;
+  onEditInstantly?: () => void;
   anchorRect?: DOMRect;
 }
 
@@ -48,6 +52,10 @@ export function ColumnHeaderMenu({
   onRetryFailed,
   onEditEnrichment,
   onReEnrich,
+  onEditFormula,
+  onEditButton,
+  onEditApollo,
+  onEditInstantly,
   anchorRect,
 }: ColumnHeaderMenuProps) {
   const [isRenaming, setIsRenaming] = useState(false);
@@ -194,6 +202,54 @@ export function ColumnHeaderMenu({
           label="Re-enrich all rows"
           onClick={() => {
             onReEnrich();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit formula (formula columns only) */}
+      {column.column_type === 'formula' && onEditFormula && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit formula"
+          onClick={() => {
+            onEditFormula();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit Apollo settings */}
+      {(column.column_type === 'apollo_property' || column.column_type === 'apollo_org_property') && onEditApollo && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit settings"
+          onClick={() => {
+            onEditApollo();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit Instantly settings */}
+      {column.column_type === 'instantly' && onEditInstantly && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit campaign settings"
+          onClick={() => {
+            onEditInstantly();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit button config (button columns only) */}
+      {column.column_type === 'button' && onEditButton && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit button"
+          onClick={() => {
+            onEditButton();
             onClose();
           }}
         />

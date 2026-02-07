@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink } from 'lucide-react';
-import type { DropdownOption } from '@/lib/services/opsTableService';
+import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink, Send, Clock, MessageSquare, Eye } from 'lucide-react';
+import type { InstantlyColumnConfig } from '@/lib/types/instantly';
+import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 
 interface CellData {
   value: string | null;
@@ -26,6 +27,12 @@ interface OpsTableCellProps {
   columnLabel?: string;
   metadata?: Record<string, unknown> | null;
   onEnrichRow?: () => void;
+  /** Button column config (label, color, actions) */
+  buttonConfig?: ButtonConfig | null;
+  /** All cell values for this row, keyed by column key — for dynamic label resolution */
+  rowCellValues?: Record<string, string>;
+  /** Instantly column config (subtype, campaign, field mapping) */
+  integrationConfig?: Record<string, unknown> | null;
 }
 
 /**
@@ -46,6 +53,9 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   columnLabel,
   metadata,
   onEnrichRow,
+  buttonConfig,
+  rowCellValues,
+  integrationConfig,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(cell.value ?? '');
@@ -461,6 +471,82 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     );
   }
 
+  // Apollo property column — uses Zap icon like enrichment columns
+  if (columnType === 'apollo_property' || columnType === 'apollo_org_property') {
+    if (isEditing) {
+      return renderInput();
+    }
+
+    if (cell.status === 'pending') {
+      return (
+        <div className="w-full h-full flex items-center cursor-text" onClick={startEditing}>
+          <span className="text-xs text-blue-300 italic flex items-center gap-1.5">
+            <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+            Enriching...
+          </span>
+        </div>
+      );
+    }
+
+    if (cell.status === 'failed') {
+      return (
+        <div className="w-full h-full flex items-center group/apollo-fail cursor-text" onClick={startEditing}>
+          <span className="text-xs text-red-400 flex items-center gap-1.5">
+            <AlertCircle className="w-3 h-3" />
+            Failed
+          </span>
+          {onEnrichRow && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+              className="ml-auto opacity-0 group-hover/apollo-fail:opacity-100 transition-opacity p-0.5 rounded hover:bg-blue-500/20"
+              title="Retry enrichment"
+            >
+              <Zap className="w-3.5 h-3.5 text-blue-400" />
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    if (cell.status === 'complete' && cell.value != null) {
+      return (
+        <div className="w-full h-full flex items-center cursor-text group/apollo" onClick={startEditing}>
+          <span className="truncate text-sm text-gray-200" title={cell.value}>
+            {cell.value}
+          </span>
+          {onEnrichRow && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+              className="ml-auto opacity-0 group-hover/apollo:opacity-100 transition-opacity p-0.5 rounded hover:bg-blue-500/20 shrink-0"
+              title="Re-enrich this row"
+            >
+              <Zap className="w-3.5 h-3.5 text-blue-400" />
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // No data yet — show zap icon to enrich
+    return (
+      <div className="w-full h-full flex items-center cursor-text group/apollo-await" onClick={startEditing}>
+        <span className="text-gray-600 text-xs italic">Not enriched</span>
+        {onEnrichRow && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+            className="ml-auto opacity-0 group-hover/apollo-await:opacity-100 transition-opacity p-0.5 rounded hover:bg-blue-500/20"
+            title="Enrich this row"
+          >
+            <Zap className="w-3.5 h-3.5 text-blue-400" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // Integration column (status badge + value)
   if (columnType === 'integration') {
     const statusColors: Record<string, string> = {
@@ -514,27 +600,41 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     );
   }
 
-  // Action column (button)
-  if (columnType === 'action') {
+  // Button / Action column
+  if (columnType === 'button' || columnType === 'action') {
     const isRunning = cell.status === 'pending' || cell.status === 'running';
     const isDone = cell.status === 'complete';
     const isFailed = cell.status === 'failed';
 
+    // Resolve dynamic label: replace @column_key refs with row values
+    const rawLabel = buttonConfig?.label || '';
+    const resolvedLabel = rawLabel.replace(/@([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
+      return rowCellValues?.[key] ?? '';
+    }).trim();
+    const displayLabel = resolvedLabel || 'Run';
+    const btnColor = buttonConfig?.color || '#8b5cf6';
+
+    // Build action summary for tooltip
+    const actionSummary = buttonConfig?.actions?.length
+      ? buttonConfig.actions.map((a) => a.type.replace(/_/g, ' ')).join(' → ')
+      : undefined;
+
     return (
-      <div className="w-full h-full flex items-center justify-center">
+      <div className="w-full h-full flex items-center justify-center" title={actionSummary}>
         <button
           type="button"
           onClick={() => onEdit?.('execute')}
           disabled={isRunning}
-          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border ${
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border"
+          style={
             isDone
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+              ? { borderColor: '#10b98160', backgroundColor: '#10b98115', color: '#10b981' }
               : isFailed
-                ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                ? { borderColor: '#ef444460', backgroundColor: '#ef444415', color: '#ef4444' }
                 : isRunning
-                  ? 'border-blue-500/30 bg-blue-500/10 text-blue-400 cursor-wait'
-                  : 'border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20'
-          }`}
+                  ? { borderColor: btnColor + '60', backgroundColor: btnColor + '15', color: btnColor, cursor: 'wait' }
+                  : { borderColor: btnColor + '60', backgroundColor: btnColor + '15', color: btnColor }
+          }
         >
           {isRunning ? (
             <Loader2 className="w-3 h-3 animate-spin" />
@@ -545,7 +645,7 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
           ) : (
             <Play className="w-3 h-3" />
           )}
-          {isDone ? 'Done' : isFailed ? 'Retry' : isRunning ? 'Running' : 'Run'}
+          {isDone ? displayLabel : isFailed ? displayLabel : isRunning ? displayLabel : displayLabel}
         </button>
       </div>
     );
@@ -694,6 +794,181 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
             <Zap className="w-3.5 h-3.5 text-violet-400" />
           </button>
         )}
+      </div>
+    );
+  }
+
+  // --- Instantly column subtypes ---
+  if (columnType === 'instantly') {
+    const config = integrationConfig as InstantlyColumnConfig | null | undefined;
+    const subtype = config?.instantly_subtype;
+
+    // Campaign config — shows campaign name + status
+    if (subtype === 'campaign_config') {
+      const campaignName = config?.campaign_name || cell.value;
+      return (
+        <div className="w-full h-full flex items-center min-w-0">
+          <span className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/30">
+            <Send className="w-3 h-3" />
+            {campaignName || 'No campaign'}
+          </span>
+        </div>
+      );
+    }
+
+    // Push action — button to push row to Instantly
+    if (subtype === 'push_action') {
+      const isRunning = cell.status === 'pending';
+      const isDone = cell.status === 'complete';
+      const isFailed = cell.status === 'failed';
+      return (
+        <div className="w-full h-full flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => onEdit?.('execute')}
+            disabled={isRunning}
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border"
+            style={
+              isDone
+                ? { borderColor: '#10b98160', backgroundColor: '#10b98115', color: '#10b981' }
+                : isFailed
+                  ? { borderColor: '#ef444460', backgroundColor: '#ef444415', color: '#ef4444' }
+                  : isRunning
+                    ? { borderColor: '#3b82f660', backgroundColor: '#3b82f615', color: '#3b82f6', cursor: 'wait' }
+                    : { borderColor: '#3b82f660', backgroundColor: '#3b82f615', color: '#3b82f6' }
+            }
+          >
+            {isRunning ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : isDone ? (
+              <Check className="w-3 h-3" />
+            ) : isFailed ? (
+              <AlertCircle className="w-3 h-3" />
+            ) : (
+              <Send className="w-3 h-3" />
+            )}
+            {isDone ? 'Pushed' : isFailed ? 'Failed' : isRunning ? 'Pushing...' : 'Push'}
+          </button>
+        </div>
+      );
+    }
+
+    // Engagement status — colored badge
+    if (subtype === 'engagement_status') {
+      const status = cell.value;
+      if (!status) {
+        return (
+          <div className="w-full h-full flex items-center">
+            <span className="text-gray-600 text-xs italic">—</span>
+          </div>
+        );
+      }
+      const statusColors: Record<string, string> = {
+        Interested: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+        'Meeting Booked': 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+        'Meeting Completed': 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
+        Closed: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+        'Not Interested': 'bg-red-500/15 text-red-400 border-red-500/30',
+        'Out of Office': 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+        'Wrong Person': 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+      };
+      const badgeClass = statusColors[status] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30';
+      return (
+        <div className="w-full h-full flex items-center">
+          <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium border ${badgeClass}`}>
+            {status}
+          </span>
+        </div>
+      );
+    }
+
+    // Email status — badge (Sent, Opened, Replied, Bounced)
+    if (subtype === 'email_status') {
+      const status = cell.value;
+      if (!status) {
+        return (
+          <div className="w-full h-full flex items-center">
+            <span className="text-gray-600 text-xs italic">—</span>
+          </div>
+        );
+      }
+      const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
+        Sent: { color: 'bg-blue-500/15 text-blue-400 border-blue-500/30', icon: <Send className="w-3 h-3" /> },
+        Opened: { color: 'bg-amber-500/15 text-amber-400 border-amber-500/30', icon: <Eye className="w-3 h-3" /> },
+        Replied: { color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', icon: <MessageSquare className="w-3 h-3" /> },
+        Bounced: { color: 'bg-red-500/15 text-red-400 border-red-500/30', icon: <AlertCircle className="w-3 h-3" /> },
+      };
+      const cfg = statusConfig[status] ?? { color: 'bg-gray-500/15 text-gray-400 border-gray-500/30', icon: null };
+      return (
+        <div className="w-full h-full flex items-center">
+          <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border ${cfg.color}`}>
+            {cfg.icon}
+            {status}
+          </span>
+        </div>
+      );
+    }
+
+    // Last contacted — relative date
+    if (subtype === 'last_contacted') {
+      if (!cell.value) {
+        return (
+          <div className="w-full h-full flex items-center">
+            <span className="text-gray-600 text-xs italic">—</span>
+          </div>
+        );
+      }
+      const date = new Date(cell.value);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const relative = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : `${diffDays}d ago`;
+      return (
+        <div className="w-full h-full flex items-center gap-1.5" title={date.toLocaleString()}>
+          <Clock className="w-3 h-3 text-gray-500 shrink-0" />
+          <span className="text-sm text-gray-300">{relative}</span>
+        </div>
+      );
+    }
+
+    // Reply count / Open count — plain number
+    if (subtype === 'reply_count' || subtype === 'open_count') {
+      const icon = subtype === 'reply_count'
+        ? <MessageSquare className="w-3 h-3 text-emerald-500 shrink-0" />
+        : <Eye className="w-3 h-3 text-amber-500 shrink-0" />;
+      const count = cell.value ? Number(cell.value) : 0;
+      return (
+        <div className="w-full h-full flex items-center gap-1.5">
+          {icon}
+          <span className={`text-sm ${count > 0 ? 'text-gray-200 font-medium' : 'text-gray-600'}`}>
+            {count}
+          </span>
+        </div>
+      );
+    }
+
+    // Sequence step — editable text with step indicator
+    if (subtype === 'sequence_step') {
+      const stepNum = config?.step_config?.step_number ?? 0;
+      const stepField = config?.step_config?.field ?? 'body';
+      if (isEditing) return renderInput();
+      return (
+        <div className="w-full h-full flex items-center gap-1.5 min-w-0 cursor-text" onClick={startEditing}>
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold bg-violet-500/20 text-violet-400 shrink-0">
+            {stepNum}
+          </span>
+          <span className="text-[10px] text-gray-500 uppercase shrink-0">{stepField === 'subject' ? 'Subj' : 'Body'}</span>
+          <span className="truncate text-sm text-gray-200" title={cell.value ?? undefined}>
+            {cell.value || <span className="text-gray-600">Enter content...</span>}
+          </span>
+        </div>
+      );
+    }
+
+    // Fallback for unknown subtype
+    return (
+      <div className="w-full h-full flex items-center">
+        <span className="truncate text-sm text-gray-200">{cell.value ?? '—'}</span>
       </div>
     );
   }

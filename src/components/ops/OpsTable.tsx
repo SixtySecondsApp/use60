@@ -61,6 +61,7 @@ interface Column {
   action_type?: string | null;
   action_config?: Record<string, unknown> | null;
   hubspot_property_name?: string | null;
+  apollo_property_name?: string | null;
 }
 
 interface Row {
@@ -478,7 +479,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
 
   const renderColumnIcon = (col: Column) => {
     // Integration column: show integration logo (HubSpot, Apollo, Instantly, etc.)
-    const integrationId = col.hubspot_property_name ? 'hubspot' : col.integration_type;
+    const integrationId = col.hubspot_property_name ? 'hubspot' : col.apollo_property_name ? 'apollo' : col.integration_type;
     if (integrationId) {
       // Extract base integration name from types like "apollo_enrich" -> "apollo"
       const baseName = integrationId.split('_')[0];
@@ -707,12 +708,17 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           isEnrichment={col.is_enrichment}
                           firstName={firstName}
                           lastName={lastName}
-                          onEdit={(col.is_enrichment || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
+                          onEdit={((col.is_enrichment && col.column_type !== 'apollo_property' && col.column_type !== 'apollo_org_property') || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
                           dropdownOptions={col.dropdown_options}
                           formulaExpression={col.formula_expression}
                           columnLabel={col.label}
                           metadata={cellData.metadata}
-                          onEnrichRow={col.is_enrichment ? () => onEnrichRow?.(row.id, col.id) : undefined}
+                          onEnrichRow={(col.is_enrichment || col.column_type === 'apollo_property' || col.column_type === 'apollo_org_property') ? () => onEnrichRow?.(row.id, col.id) : undefined}
+                          buttonConfig={(col.column_type === 'button' || col.column_type === 'action') ? col.action_config as any : undefined}
+                          rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly') ? Object.fromEntries(
+                            Object.entries(row.cells).map(([k, v]) => [k, v.value ?? ''])
+                          ) : undefined}
+                          integrationConfig={col.column_type === 'instantly' ? col.integration_config : undefined}
                         />
                       </div>
                     );

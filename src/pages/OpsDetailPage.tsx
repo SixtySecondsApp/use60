@@ -34,6 +34,9 @@ import { OpsTable } from '@/components/ops/OpsTable';
 import { AddColumnModal } from '@/components/ops/AddColumnModal';
 import { ColumnHeaderMenu } from '@/components/ops/ColumnHeaderMenu';
 import { EditEnrichmentModal } from '@/components/ops/EditEnrichmentModal';
+import { EditColumnSettingsModal } from '@/components/ops/EditColumnSettingsModal';
+import { EditApolloSettingsModal } from '@/components/ops/EditApolloSettingsModal';
+import { EditInstantlySettingsModal } from '@/components/ops/EditInstantlySettingsModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
 import { BulkActionsBar } from '@/components/ops/BulkActionsBar';
@@ -45,6 +48,7 @@ import { ViewConfigPanel, normalizeSortConfig, type ViewConfigState } from '@/co
 import type { SavedView, FilterCondition, OpsTableColumn, SortConfig, GroupConfig, AggregateType } from '@/lib/services/opsTableService';
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
+import { useApolloEnrichment } from '@/lib/hooks/useApolloEnrichment';
 import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { useIntegrationPolling } from '@/lib/hooks/useIntegrationStatus';
 import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
@@ -53,6 +57,7 @@ import { HubSpotSyncHistory } from '@/components/ops/HubSpotSyncHistory';
 import { HubSpotSyncSettingsModal } from '@/components/ops/HubSpotSyncSettingsModal';
 import { SaveAsHubSpotListModal } from '@/components/ops/SaveAsHubSpotListModal';
 import { useOpsRules } from '@/lib/hooks/useOpsRules';
+import { useActionExecution } from '@/lib/hooks/useActionExecution';
 import { RuleBuilder } from '@/components/ops/RuleBuilder';
 import { RuleList } from '@/components/ops/RuleList';
 import { AiQueryPreviewModal, type AiQueryOperation } from '@/components/ops/AiQueryPreviewModal';
@@ -69,6 +74,7 @@ import { AutomationsDropdown } from '@/components/ops/AutomationsDropdown';
 import { CrossQueryResultPanel } from '@/components/ops/CrossQueryResultPanel';
 import { QuickFilterBar } from '@/components/ops/QuickFilterBar';
 import { SmartViewSuggestions } from '@/components/ops/SmartViewSuggestions';
+// Instantly top-bar UI removed — integration moved to column system
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
 
@@ -162,6 +168,10 @@ function OpsDetailPage() {
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotPush, setShowHubSpotPush] = useState(false);
   const [editEnrichmentColumn, setEditEnrichmentColumn] = useState<OpsTableColumn | null>(null);
+  const [editFormulaColumn, setEditFormulaColumn] = useState<OpsTableColumn | null>(null);
+  const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
+  const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
+  const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
@@ -195,6 +205,8 @@ function OpsDetailPage() {
   const [isLoadingLists, setIsLoadingLists] = useState(false);
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- Instantly state (moved to column system) ----
 
   // ---- Fullscreen mode ----
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -288,13 +300,19 @@ function OpsDetailPage() {
 
   // ---- Enrichment hook ----
   const { startEnrichment, startSingleRowEnrichment } = useEnrichment(tableId ?? '');
+  const { startApolloEnrichment, singleRowApolloEnrichment, reEnrichApollo, startApolloOrgEnrichment } = useApolloEnrichment(tableId ?? '');
 
   // ---- HubSpot sync hook ----
   const { sync: syncHubSpot, isSyncing: isHubSpotSyncing } = useHubSpotSync(tableId);
   const { writeBack: pushCellToHubSpot } = useHubSpotWriteBack();
 
+  // ---- Instantly (moved to column system — hooks removed) ----
+
   // ---- Rules hook ----
   const { rules, createRule, toggleRule, deleteRule, isCreating: isRuleCreating } = useOpsRules(tableId);
+
+  // ---- Button/Action execution ----
+  const { executeButton, executeSingleAction } = useActionExecution(tableId);
 
   // ---- Derived data ----
 
@@ -393,7 +411,11 @@ function OpsDetailPage() {
       formulaExpression?: string;
       integrationType?: string;
       integrationConfig?: Record<string, unknown>;
+      actionType?: string;
+      actionConfig?: Record<string, unknown>;
       hubspotPropertyName?: string;
+      apolloPropertyName?: string;
+      apolloEnrichConfig?: { reveal_personal_emails?: boolean; reveal_phone_number?: boolean };
     }) => {
       const column = await tableService.addColumn({
         tableId: tableId!,
@@ -406,12 +428,21 @@ function OpsDetailPage() {
         formulaExpression: params.formulaExpression,
         integrationType: params.integrationType,
         integrationConfig: params.integrationConfig,
+        actionType: params.actionType,
+        actionConfig: params.actionConfig,
         hubspotPropertyName: params.hubspotPropertyName,
+        apolloPropertyName: params.apolloPropertyName,
         position: (table?.columns?.length ?? 0),
       });
-      return { column, autoRunRows: params.autoRunRows, hubspotPropertyName: params.hubspotPropertyName };
+      return {
+        column,
+        autoRunRows: params.autoRunRows,
+        hubspotPropertyName: params.hubspotPropertyName,
+        apolloPropertyName: params.apolloPropertyName,
+        apolloEnrichConfig: params.apolloEnrichConfig,
+      };
     },
-    onSuccess: async ({ column, autoRunRows: runRows, hubspotPropertyName }) => {
+    onSuccess: async ({ column, autoRunRows: runRows, hubspotPropertyName, apolloPropertyName: apolloProp, apolloEnrichConfig }) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       toast.success('Column added');
@@ -428,6 +459,34 @@ function OpsDetailPage() {
 
         if (allRowIds && allRowIds.length > 0) {
           startEnrichment({ columnId: column.id, rowIds: rowIdsToEnrich });
+        }
+      }
+
+      // Auto-trigger Apollo enrichment if requested
+      if (apolloProp && runRows != null) {
+        const allRowIds = tableData?.rows?.map((r) => r.id);
+        let rowIdsToEnrich: string[] | undefined;
+
+        if (typeof runRows === 'number' && allRowIds) {
+          rowIdsToEnrich = allRowIds.slice(0, runRows);
+        }
+
+        if (allRowIds && allRowIds.length > 0) {
+          if (column.column_type === 'apollo_org_property') {
+            startApolloOrgEnrichment({
+              columnId: column.id,
+              rowIds: rowIdsToEnrich,
+              maxRows: typeof runRows === 'number' ? runRows : undefined,
+            });
+          } else {
+            startApolloEnrichment({
+              columnId: column.id,
+              rowIds: rowIdsToEnrich,
+              maxRows: typeof runRows === 'number' ? runRows : undefined,
+              revealPersonalEmails: apolloEnrichConfig?.reveal_personal_emails,
+              revealPhoneNumber: apolloEnrichConfig?.reveal_phone_number,
+            });
+          }
         }
       }
 
@@ -488,6 +547,47 @@ function OpsDetailPage() {
       toast.success('Enrichment settings updated');
     },
     onError: () => toast.error('Failed to update enrichment settings'),
+  });
+
+  const updateFormulaMutation = useMutation({
+    mutationFn: ({ columnId, formulaExpression }: { columnId: string; formulaExpression: string }) =>
+      tableService.updateColumn(columnId, { formulaExpression }),
+    onSuccess: (_data, { columnId }) => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Formula updated — recalculating…');
+      recalcFormulaMutation.mutate(columnId);
+    },
+    onError: () => toast.error('Failed to update formula'),
+  });
+
+  const updateButtonConfigMutation = useMutation({
+    mutationFn: ({ columnId, actionConfig }: { columnId: string; actionConfig: Record<string, unknown> }) =>
+      tableService.updateColumn(columnId, { actionConfig }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Button settings updated');
+    },
+    onError: () => toast.error('Failed to update button settings'),
+  });
+
+  const updateApolloConfigMutation = useMutation({
+    mutationFn: ({ columnId, config }: { columnId: string; config: { reveal_personal_emails: boolean; reveal_phone_number: boolean } }) =>
+      tableService.updateColumn(columnId, { integrationConfig: config }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Apollo settings updated');
+    },
+    onError: () => toast.error('Failed to update Apollo settings'),
+  });
+
+  const updateInstantlyConfigMutation = useMutation({
+    mutationFn: ({ columnId, config }: { columnId: string; config: Record<string, unknown> }) =>
+      tableService.updateColumn(columnId, { integrationConfig: config }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Instantly settings updated');
+    },
+    onError: () => toast.error('Failed to update Instantly settings'),
   });
 
   const resizeColumnMutation = useMutation({
@@ -921,6 +1021,100 @@ function OpsDetailPage() {
       const cell = fullRow?.cells[columnKey];
       const col = columns.find((c) => c.key === columnKey);
 
+      // ---- Button/Action column: intercept 'execute' and dispatch actions ----
+      if (value === 'execute' && col && (col.column_type === 'button' || col.column_type === 'action')) {
+        const buttonConfig = col.action_config as import('@/lib/services/opsTableService').ButtonConfig | null;
+        if (buttonConfig?.actions?.length) {
+          // Build row cell values for @column resolution
+          const rowCellValues: Record<string, string> = {};
+          if (fullRow?.cells) {
+            for (const [key, c] of Object.entries(fullRow.cells)) {
+              if (c.value) rowCellValues[key] = c.value;
+            }
+          }
+
+          // Set cell to pending
+          cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+
+          executeButton.mutate(
+            {
+              columnId: col.id,
+              rowId,
+              buttonConfig,
+              rowCellValues,
+              onUpdateCell: (targetKey: string, newValue: string) => {
+                // Trigger a regular cell edit for set_value actions
+                handleCellEdit(rowId, targetKey, newValue);
+              },
+            },
+            {
+              onSuccess: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+              },
+              onError: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+              },
+            },
+          );
+          return;
+        }
+
+        // Legacy action column (no buttonConfig) — use single action dispatch
+        if (col.action_type && col.action_type !== 'button') {
+          cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+          executeSingleAction.mutate(
+            { columnId: col.id, rowId, actionType: col.action_type, actionConfig: col.action_config as Record<string, unknown> },
+            {
+              onSuccess: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+              },
+              onError: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+              },
+            },
+          );
+          return;
+        }
+      }
+
+      // ---- Instantly push_action column: intercept 'execute' and push to Instantly ----
+      if (value === 'execute' && col && col.column_type === 'instantly') {
+        const config = col.integration_config as { instantly_subtype?: string; push_config?: { campaign_id?: string; auto_field_mapping?: boolean } } | null;
+        if (config?.instantly_subtype === 'push_action' && config?.push_config?.campaign_id) {
+          // Build field mapping from row values
+          const rowCellValues: Record<string, string> = {};
+          if (fullRow?.cells) {
+            for (const [key, c] of Object.entries(fullRow.cells)) {
+              if (c.value) rowCellValues[key] = c.value;
+            }
+          }
+
+          // Set cell to pending
+          cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+
+          executeSingleAction.mutate(
+            {
+              columnId: col.id,
+              rowId,
+              actionType: 'push_to_instantly',
+              actionConfig: {
+                campaign_id: config.push_config.campaign_id,
+                field_mapping: config.push_config.auto_field_mapping ? undefined : rowCellValues,
+              },
+            },
+            {
+              onSuccess: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+              },
+              onError: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+              },
+            },
+          );
+          return;
+        }
+      }
+
       const onSuccess = () => {
         // Fire-and-forget: push to HubSpot if bi-directional
         if (
@@ -951,7 +1145,7 @@ function OpsDetailPage() {
         );
       }
     },
-    [tableData?.rows, columns, cellEditMutation, table, tableId, pushCellToHubSpot],
+    [tableData?.rows, columns, cellEditMutation, table, tableId, pushCellToHubSpot, executeButton, executeSingleAction],
   );
 
   const handleColumnHeaderClick = useCallback(
@@ -973,9 +1167,16 @@ function OpsDetailPage() {
 
   const handleEnrichRow = useCallback(
     (rowId: string, columnId: string) => {
-      startSingleRowEnrichment({ columnId, rowId });
+      const col = columns.find((c) => c.id === columnId);
+      if (col?.column_type === 'apollo_property') {
+        singleRowApolloEnrichment({ columnId, rowId });
+      } else if (col?.column_type === 'apollo_org_property') {
+        startApolloOrgEnrichment({ columnId, rowIds: [rowId], maxRows: 1 });
+      } else {
+        startSingleRowEnrichment({ columnId, rowId });
+      }
     },
-    [startSingleRowEnrichment],
+    [columns, startSingleRowEnrichment, singleRowApolloEnrichment, startApolloOrgEnrichment],
   );
 
   const handleStartEditName = useCallback(() => {
@@ -1765,6 +1966,7 @@ function OpsDetailPage() {
               onOpenWorkflows={() => setShowWorkflows(true)}
               onOpenRecipes={() => setShowRecipeLibrary(true)}
             />
+            {/* Instantly actions moved to column system — see InstantlyColumnWizard */}
             {/* HubSpot sync buttons (only for hubspot-sourced tables) */}
             {table.source_type === 'hubspot' && (
               <div className="flex items-center gap-1">
@@ -2014,7 +2216,30 @@ function OpsDetailPage() {
             onColumnResize={(columnId, width) => resizeColumnMutation.mutate({ columnId, width })}
             onEnrichRow={handleEnrichRow}
             groupConfig={groupConfig}
-            summaryConfig={summaryConfig}
+            summaryConfig={(() => {
+              // Auto-add summary aggregates for Instantly engagement columns
+              const instantlySummary: Record<string, AggregateType> = {};
+              for (const col of columns) {
+                if (col.column_type !== 'instantly') continue;
+                const cfg = col.integration_config as { instantly_subtype?: string } | null;
+                if (!cfg?.instantly_subtype) continue;
+                switch (cfg.instantly_subtype) {
+                  case 'reply_count':
+                  case 'open_count':
+                    instantlySummary[col.key] = 'sum';
+                    break;
+                  case 'engagement_status':
+                  case 'email_status':
+                    instantlySummary[col.key] = 'filled_percent';
+                    break;
+                  case 'push_action':
+                    instantlySummary[col.key] = 'count';
+                    break;
+                }
+              }
+              if (Object.keys(instantlySummary).length === 0) return summaryConfig ?? null;
+              return { ...instantlySummary, ...(summaryConfig ?? {}) };
+            })()}
           />
         </div>
       )}
@@ -2064,13 +2289,16 @@ function OpsDetailPage() {
         onClose={() => setShowAddColumn(false)}
         onAdd={(col) => addColumnMutation.mutate(col)}
         onAddMultiple={async (cols) => {
-          // Add multiple HubSpot property columns sequentially
+          // Add multiple property columns (HubSpot or Apollo) sequentially
           for (const col of cols) {
             await addColumnMutation.mutateAsync(col);
           }
         }}
         existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
         sourceType={table?.source_type as 'manual' | 'csv' | 'hubspot' | null}
+        tableId={tableId}
+        orgId={table?.organization_id}
       />
 
       {/* Column Header Menu */}
@@ -2116,6 +2344,22 @@ function OpsDetailPage() {
           } : undefined}
           onReEnrich={activeColumn.is_enrichment ? () => {
             startEnrichment({ columnId: activeColumn.id });
+          } : activeColumn.column_type === 'apollo_property' ? () => {
+            reEnrichApollo({ columnId: activeColumn.id });
+          } : activeColumn.column_type === 'apollo_org_property' ? () => {
+            startApolloOrgEnrichment({ columnId: activeColumn.id });
+          } : undefined}
+          onEditFormula={activeColumn.column_type === 'formula' ? () => {
+            setEditFormulaColumn(activeColumn);
+          } : undefined}
+          onEditButton={activeColumn.column_type === 'button' ? () => {
+            setEditButtonColumn(activeColumn);
+          } : undefined}
+          onEditApollo={(activeColumn.column_type === 'apollo_property' || activeColumn.column_type === 'apollo_org_property') ? () => {
+            setEditApolloColumn(activeColumn);
+          } : undefined}
+          onEditInstantly={activeColumn.column_type === 'instantly' ? () => {
+            setEditInstantlyColumn(activeColumn);
           } : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
         />
@@ -2137,6 +2381,78 @@ function OpsDetailPage() {
           currentModel={editEnrichmentColumn.enrichment_model ?? 'anthropic/claude-3.5-sonnet'}
           columnLabel={editEnrichmentColumn.label}
           existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Edit Formula Modal */}
+      {editFormulaColumn && (
+        <EditColumnSettingsModal
+          isOpen={!!editFormulaColumn}
+          onClose={() => setEditFormulaColumn(null)}
+          mode="formula"
+          currentFormula={editFormulaColumn.formula_expression ?? ''}
+          onSave={(formula) => {
+            updateFormulaMutation.mutate({
+              columnId: editFormulaColumn.id,
+              formulaExpression: formula,
+            });
+          }}
+          columnLabel={editFormulaColumn.label}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
+        />
+      )}
+
+      {/* Edit Button Config Modal */}
+      {editButtonColumn && (
+        <EditColumnSettingsModal
+          isOpen={!!editButtonColumn}
+          onClose={() => setEditButtonColumn(null)}
+          mode="button"
+          currentConfig={(editButtonColumn.action_config as any) ?? { label: '', color: '#8b5cf6', actions: [] }}
+          onSave={(config) => {
+            updateButtonConfigMutation.mutate({
+              columnId: editButtonColumn.id,
+              actionConfig: config as unknown as Record<string, unknown>,
+            });
+          }}
+          columnLabel={editButtonColumn.label}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Edit Apollo Settings Modal */}
+      {editApolloColumn && (
+        <EditApolloSettingsModal
+          isOpen={!!editApolloColumn}
+          onClose={() => setEditApolloColumn(null)}
+          onSave={(config) => {
+            updateApolloConfigMutation.mutate({
+              columnId: editApolloColumn.id,
+              config,
+            });
+          }}
+          columnLabel={editApolloColumn.label}
+          apolloPropertyName={editApolloColumn.apollo_property_name ?? editApolloColumn.key}
+          currentConfig={(editApolloColumn.integration_config as any) ?? undefined}
+        />
+      )}
+
+      {/* Edit Instantly Settings Modal */}
+      {editInstantlyColumn && (
+        <EditInstantlySettingsModal
+          isOpen={!!editInstantlyColumn}
+          onClose={() => setEditInstantlyColumn(null)}
+          onSave={(config) => {
+            const merged = { ...(editInstantlyColumn.integration_config as Record<string, unknown> ?? {}), ...config };
+            updateInstantlyConfigMutation.mutate({
+              columnId: editInstantlyColumn.id,
+              config: merged,
+            });
+          }}
+          columnLabel={editInstantlyColumn.label}
+          currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
+          orgId={table?.organization_id}
         />
       )}
 
@@ -2380,6 +2696,8 @@ function OpsDetailPage() {
         onSave={(config) => createHubSpotListMutation.mutate(config)}
         isSaving={createHubSpotListMutation.isPending}
       />
+
+      {/* Instantly integration moved to column system — old modals removed */}
     </div>
   );
 }
