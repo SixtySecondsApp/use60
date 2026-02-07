@@ -1,13 +1,15 @@
 import React from 'react';
-import { X, Upload, FileSpreadsheet, Table2 } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, Table2, Search, Wand2 } from 'lucide-react';
 
 interface CreateTableModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectCSV: () => void;
   onSelectHubSpot: () => void;
+  onSelectApollo: () => void;
   onSelectOpsTable: () => void;
   onSelectBlank: () => void;
+  onSelectWorkflow?: () => void;
 }
 
 // HubSpot logo as inline SVG
@@ -23,6 +25,16 @@ const SOURCE_OPTIONS = [
     title: 'Upload CSV',
     description: 'Import contacts from a CSV or Excel file',
     icon: Upload,
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/10',
+    borderColor: 'border-blue-500/30',
+    hoverBorder: 'hover:border-blue-500/60',
+  },
+  {
+    id: 'apollo',
+    title: 'Apollo Search',
+    description: 'Find leads by title, seniority, company, and more',
+    icon: Search,
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/10',
     borderColor: 'border-blue-500/30',
@@ -49,6 +61,16 @@ const SOURCE_OPTIONS = [
     hoverBorder: 'hover:border-indigo-500/60',
   },
   {
+    id: 'workflow',
+    title: 'Describe Workflow',
+    description: 'Describe your outreach in plain English and let AI build it',
+    icon: Wand2,
+    color: 'text-violet-400',
+    bgColor: 'bg-violet-500/10',
+    borderColor: 'border-violet-500/30',
+    hoverBorder: 'hover:border-violet-500/60',
+  },
+  {
     id: 'blank',
     title: 'Blank Table',
     description: 'Start with an empty table and add rows manually',
@@ -65,8 +87,10 @@ export function CreateTableModal({
   onClose,
   onSelectCSV,
   onSelectHubSpot,
+  onSelectApollo,
   onSelectOpsTable,
   onSelectBlank,
+  onSelectWorkflow,
 }: CreateTableModalProps) {
   if (!isOpen) return null;
 
@@ -76,11 +100,17 @@ export function CreateTableModal({
       case 'csv':
         onSelectCSV();
         break;
+      case 'apollo':
+        onSelectApollo();
+        break;
       case 'hubspot':
         onSelectHubSpot();
         break;
       case 'ops_table':
         onSelectOpsTable();
+        break;
+      case 'workflow':
+        onSelectWorkflow?.();
         break;
       case 'blank':
         onSelectBlank();

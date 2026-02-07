@@ -21,6 +21,10 @@ interface OpsTableCellProps {
   isEnrichment: boolean;
   firstName?: string;
   lastName?: string;
+  /** Profile photo URL (from Apollo enrichment) */
+  photoUrl?: string;
+  /** Company domain for logo.dev logo (from Apollo enrichment) */
+  companyDomain?: string;
   onEdit?: (value: string) => void;
   dropdownOptions?: DropdownOption[] | null;
   formulaExpression?: string | null;
@@ -47,6 +51,8 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   isEnrichment,
   firstName,
   lastName,
+  photoUrl,
+  companyDomain,
   onEdit,
   dropdownOptions,
   formulaExpression,
@@ -269,7 +275,18 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     const initials = `${(firstName ?? '')[0] ?? ''}${(lastName ?? '')[0] ?? ''}`.toUpperCase();
     return (
       <div className="w-full h-full flex items-center gap-2 min-w-0 cursor-text" onClick={startEditing}>
-        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-[10px] font-semibold shrink-0">
+        {photoUrl ? (
+          <img
+            src={photoUrl}
+            alt=""
+            className="w-6 h-6 rounded-full object-cover shrink-0"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+            }}
+          />
+        ) : null}
+        <div className={`w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-[10px] font-semibold shrink-0 ${photoUrl ? 'hidden' : ''}`}>
           {initials || <User className="w-3 h-3" />}
         </div>
         <span className="truncate font-medium text-gray-100 text-sm">
@@ -283,7 +300,18 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   if (columnType === 'company') {
     return (
       <div className="w-full h-full flex items-center gap-2 min-w-0 cursor-text" onClick={startEditing}>
-        <div className="w-5 h-5 rounded bg-gray-800 flex items-center justify-center shrink-0">
+        {companyDomain ? (
+          <img
+            src={`https://img.logo.dev/${companyDomain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=32&format=png`}
+            alt=""
+            className="w-5 h-5 rounded object-contain shrink-0"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+            }}
+          />
+        ) : null}
+        <div className={`w-5 h-5 rounded bg-gray-800 flex items-center justify-center shrink-0 ${companyDomain ? 'hidden' : ''}`}>
           <Building2 className="w-3 h-3 text-gray-500" />
         </div>
         <span className="truncate text-gray-100 text-sm">
@@ -803,12 +831,18 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     const config = integrationConfig as InstantlyColumnConfig | null | undefined;
     const subtype = config?.instantly_subtype;
 
-    // Campaign config — shows campaign name + status
+    // Campaign config — shows campaign name + status badge
     if (subtype === 'campaign_config') {
       const campaignName = config?.campaign_name || cell.value;
+      const campaignStatus = (config as Record<string, unknown>)?.campaign_status as string | undefined;
+      const isActive = campaignStatus === 'active' || campaignStatus === '1';
+      const isPaused = campaignStatus === 'paused' || campaignStatus === 'draft' || campaignStatus === '0';
+      const badgeBg = isActive ? 'bg-green-500/15' : isPaused ? 'bg-amber-500/15' : 'bg-blue-500/15';
+      const badgeText = isActive ? 'text-green-400' : isPaused ? 'text-amber-400' : 'text-blue-400';
+      const badgeBorder = isActive ? 'border-green-500/30' : isPaused ? 'border-amber-500/30' : 'border-blue-500/30';
       return (
         <div className="w-full h-full flex items-center min-w-0">
-          <span className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/30">
+          <span className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-medium ${badgeBg} ${badgeText} border ${badgeBorder}`}>
             <Send className="w-3 h-3" />
             {campaignName || 'No campaign'}
           </span>
@@ -847,7 +881,7 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
             ) : (
               <Send className="w-3 h-3" />
             )}
-            {isDone ? 'Pushed' : isFailed ? 'Failed' : isRunning ? 'Pushing...' : 'Push'}
+            {isDone ? 'Repush' : isFailed ? 'Retry' : isRunning ? 'Pushing...' : 'Push'}
           </button>
         </div>
       );

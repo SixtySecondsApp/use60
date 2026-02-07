@@ -37,6 +37,7 @@ import { EditEnrichmentModal } from '@/components/ops/EditEnrichmentModal';
 import { EditColumnSettingsModal } from '@/components/ops/EditColumnSettingsModal';
 import { EditApolloSettingsModal } from '@/components/ops/EditApolloSettingsModal';
 import { EditInstantlySettingsModal } from '@/components/ops/EditInstantlySettingsModal';
+import { EditEmailGenerationModal, type EmailGenerationConfig } from '@/components/ops/EditEmailGenerationModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
 import { BulkActionsBar } from '@/components/ops/BulkActionsBar';
@@ -74,6 +75,9 @@ import { AutomationsDropdown } from '@/components/ops/AutomationsDropdown';
 import { CrossQueryResultPanel } from '@/components/ops/CrossQueryResultPanel';
 import { QuickFilterBar } from '@/components/ops/QuickFilterBar';
 import { SmartViewSuggestions } from '@/components/ops/SmartViewSuggestions';
+import { CampaignApprovalBanner } from '@/components/ops/CampaignApprovalBanner';
+import { useWorkflowOrchestrator, isWorkflowPrompt } from '@/lib/hooks/useWorkflowOrchestrator';
+import { WorkflowProgressStepper } from '@/components/ops/WorkflowProgressStepper';
 // Instantly top-bar UI removed — integration moved to column system
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
@@ -172,6 +176,7 @@ function OpsDetailPage() {
   const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
   const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
   const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
+  const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
@@ -250,6 +255,22 @@ function OpsDetailPage() {
   const [isAiQueryLoading, setIsAiQueryLoading] = useState(false);
   const [isAiQueryExecuting, setIsAiQueryExecuting] = useState(false);
   const [showAiQueryPreview, setShowAiQueryPreview] = useState(false);
+
+  // ---- Workflow orchestrator (NLT) ----
+  const workflow = useWorkflowOrchestrator();
+
+  // When workflow completes and creates a new table, navigate to it
+  useEffect(() => {
+    if (workflow.result?.status === 'complete' && workflow.result.table_id && workflow.result.table_id !== tableId) {
+      navigate(`/ops/${workflow.result.table_id}`);
+      workflow.reset();
+    } else if (workflow.result?.status === 'complete' || workflow.result?.status === 'partial') {
+      // Refresh current table data
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['instantly-campaign-links', tableId] });
+    }
+  }, [workflow.result, tableId, navigate, queryClient, workflow]);
 
   // ---- New AI Query Commander state ----
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
@@ -588,6 +609,90 @@ function OpsDetailPage() {
       toast.success('Instantly settings updated');
     },
     onError: () => toast.error('Failed to update Instantly settings'),
+  });
+
+  // --- Email generation config helpers ---
+
+  const extractEmailGenConfig = (column: OpsTableColumn): EmailGenerationConfig => {
+    const ic = column.integration_config as Record<string, unknown> | null;
+    const gc = (ic?.generation_config ?? {}) as Record<string, unknown>;
+    return {
+      num_steps: (gc.num_steps as number) ?? 3,
+      angle: (gc.angle as string) ?? '',
+      email_type: (gc.email_type as EmailGenerationConfig['email_type']) ?? 'cold_outreach',
+      event_details: (gc.event_details as EmailGenerationConfig['event_details']) ?? null,
+      sign_off: (gc.sign_off as string) ?? '',
+      model: (gc.model as string) ?? 'anthropic/claude-sonnet-4-5-20250929',
+      tier_strategy: (gc.tier_strategy as 'two_tier' | 'single_tier') ?? 'two_tier',
+    };
+  };
+
+  const updateEmailGenConfigMutation = useMutation({
+    mutationFn: async (config: EmailGenerationConfig) => {
+      // Find all step columns for this table and update their integration_config
+      const stepColumns = columns.filter(c => /^instantly_step_\d+_(subject|body)$/.test(c.key));
+      await Promise.all(
+        stepColumns.map(col => {
+          const match = col.key.match(/^instantly_step_(\d+)_(subject|body)$/);
+          if (!match) return Promise.resolve();
+          return tableService.updateColumn(col.id, {
+            integrationConfig: {
+              email_generation: true,
+              generation_config: config,
+              step_number: parseInt(match[1], 10),
+              step_part: match[2],
+            },
+          });
+        })
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Email generation config updated');
+    },
+    onError: () => toast.error('Failed to update email generation config'),
+  });
+
+  const regenerateEmailsMutation = useMutation({
+    mutationFn: async (config: EmailGenerationConfig) => {
+      // First save the config
+      const stepColumns = columns.filter(c => /^instantly_step_\d+_(subject|body)$/.test(c.key));
+      await Promise.all(
+        stepColumns.map(col => {
+          const match = col.key.match(/^instantly_step_(\d+)_(subject|body)$/);
+          if (!match) return Promise.resolve();
+          return tableService.updateColumn(col.id, {
+            integrationConfig: {
+              email_generation: true,
+              generation_config: config,
+              step_number: parseInt(match[1], 10),
+              step_part: match[2],
+            },
+          });
+        })
+      );
+      // Then call the edge function to regenerate
+      const { error } = await supabase.functions.invoke('generate-email-sequence', {
+        body: {
+          table_id: tableId,
+          sequence_config: {
+            num_steps: config.num_steps,
+            angle: config.angle,
+            email_type: config.email_type,
+            event_details: config.event_details,
+          },
+          sign_off: config.sign_off,
+          model: config.model,
+        },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      setEditEmailGenColumn(null);
+      toast.success('Emails regenerated successfully');
+    },
+    onError: (err) => toast.error(`Failed to regenerate emails: ${(err as Error).message}`),
   });
 
   const resizeColumnMutation = useMutation({
@@ -1079,8 +1184,9 @@ function OpsDetailPage() {
 
       // ---- Instantly push_action column: intercept 'execute' and push to Instantly ----
       if (value === 'execute' && col && col.column_type === 'instantly') {
-        const config = col.integration_config as { instantly_subtype?: string; push_config?: { campaign_id?: string; auto_field_mapping?: boolean } } | null;
-        if (config?.instantly_subtype === 'push_action' && config?.push_config?.campaign_id) {
+        const config = col.integration_config as { instantly_subtype?: string; campaign_id?: string; push_config?: { campaign_id?: string; auto_field_mapping?: boolean } } | null;
+        const campaignId = config?.push_config?.campaign_id || config?.campaign_id;
+        if (config?.instantly_subtype === 'push_action' && campaignId) {
           // Build field mapping from row values
           const rowCellValues: Record<string, string> = {};
           if (fullRow?.cells) {
@@ -1098,8 +1204,8 @@ function OpsDetailPage() {
               rowId,
               actionType: 'push_to_instantly',
               actionConfig: {
-                campaign_id: config.push_config.campaign_id,
-                field_mapping: config.push_config.auto_field_mapping ? undefined : rowCellValues,
+                campaign_id: campaignId,
+                field_mapping: config.push_config?.auto_field_mapping ? undefined : rowCellValues,
               },
             },
             {
@@ -1239,10 +1345,18 @@ function OpsDetailPage() {
       e.preventDefault();
       if (!queryInput.trim() || !tableId) return;
 
+      const submittedQuery = queryInput.trim();
+
+      // NLT: Detect workflow-level prompts and route to orchestrator
+      if (isWorkflowPrompt(submittedQuery)) {
+        setQueryInput('');
+        workflow.execute(submittedQuery);
+        return;
+      }
+
       setIsAiQueryParsing(true);
 
       try {
-        const submittedQuery = queryInput.trim();
 
         // Build sample values from first 5 rows to help AI match column references
         const sampleValues: Record<string, string[]> = {};
@@ -1632,7 +1746,7 @@ function OpsDetailPage() {
         setIsAiQueryParsing(false);
       }
     },
-    [queryInput, tableId, columns, table, rows, activeViewId, filterConditions, sortState, queryClient, addColumnMutation, createViewMutation],
+    [queryInput, tableId, columns, table, rows, activeViewId, filterConditions, sortState, queryClient, addColumnMutation, createViewMutation, workflow],
   );
 
   const handleAiQueryConfirm = useCallback(async () => {
@@ -1804,7 +1918,7 @@ function OpsDetailPage() {
   // ---- Render ----
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Top section: back nav + query bar + metadata */}
       <div className={`shrink-0 border-b border-gray-800 bg-gray-950 px-6 ${isFullscreen ? 'pb-3 pt-3' : 'pb-4 pt-5'}`}>
         {/* Back button — hidden in fullscreen */}
@@ -1954,7 +2068,7 @@ function OpsDetailPage() {
               value={queryInput}
               onChange={setQueryInput}
               onSubmit={handleQuerySubmit}
-              isLoading={isAiQueryParsing}
+              isLoading={isAiQueryParsing || workflow.isRunning}
               columns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
               tableId={tableId!}
             />
@@ -2133,6 +2247,29 @@ function OpsDetailPage() {
           />
         )}
 
+        {/* NLT-008: Campaign Approval Banner — shown when workflow created a paused campaign */}
+        {!isFullscreen && table?.organization_id && (
+          <CampaignApprovalBanner
+            tableId={tableId!}
+            orgId={table.organization_id}
+          />
+        )}
+
+        {/* NLT-010: Workflow Progress Stepper */}
+        {(workflow.isRunning || workflow.result || workflow.clarifyingQuestions || workflow.steps.length > 0) && (
+          <WorkflowProgressStepper
+            isRunning={workflow.isRunning}
+            steps={workflow.steps}
+            plan={workflow.plan}
+            result={workflow.result}
+            clarifyingQuestions={workflow.clarifyingQuestions}
+            onAnswerClarifications={workflow.answerClarifications}
+            onAbort={workflow.abort}
+            onDismiss={workflow.reset}
+            onNavigateToTable={(id) => navigate(`/ops/${id}`)}
+          />
+        )}
+
         {/* OI-022: Cross-Query Results — hidden in fullscreen */}
         {!isFullscreen && crossQueryResult && (
           <CrossQueryResultPanel
@@ -2193,7 +2330,7 @@ function OpsDetailPage() {
       {/* Table area */}
       {activeTab === 'data' && (
         <div
-          className="px-6 py-4"
+          className="flex-1 min-h-0 min-w-0 overflow-hidden px-6 py-4"
           style={{ '--ops-table-max-height': isFullscreen ? 'calc(100vh - 90px)' : 'calc(100vh - 220px)' } as React.CSSProperties}
         >
           <OpsTable
@@ -2246,7 +2383,7 @@ function OpsDetailPage() {
 
       {/* Rules tab */}
       {activeTab === 'rules' && (
-        <div className="px-6 py-4">
+        <div className="flex-1 min-h-0 overflow-auto px-6 py-4">
           <div className="max-w-2xl mx-auto space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white">Automation Rules</h2>
@@ -2361,6 +2498,13 @@ function OpsDetailPage() {
           onEditInstantly={activeColumn.column_type === 'instantly' ? () => {
             setEditInstantlyColumn(activeColumn);
           } : undefined}
+          onEditEmailGeneration={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
+            setEditEmailGenColumn(activeColumn);
+          } : undefined}
+          onRegenerateEmails={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
+            const config = extractEmailGenConfig(activeColumn);
+            regenerateEmailsMutation.mutate(config);
+          } : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
         />
       )}
@@ -2450,9 +2594,33 @@ function OpsDetailPage() {
               config: merged,
             });
           }}
+          onAddStepColumns={async (stepCols) => {
+            for (const col of stepCols) {
+              await addColumnMutation.mutateAsync(col);
+            }
+            toast.success(`Added ${stepCols.length} step columns`);
+          }}
           columnLabel={editInstantlyColumn.label}
           currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
           orgId={table?.organization_id}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Edit Email Generation Modal */}
+      {editEmailGenColumn && (
+        <EditEmailGenerationModal
+          isOpen={!!editEmailGenColumn}
+          onClose={() => setEditEmailGenColumn(null)}
+          onSave={(config) => {
+            updateEmailGenConfigMutation.mutate(config);
+          }}
+          onSaveAndRegenerate={(config) => {
+            regenerateEmailsMutation.mutate(config);
+          }}
+          currentConfig={extractEmailGenConfig(editEmailGenColumn)}
+          columnLabel={editEmailGenColumn.label}
+          isRegenerating={regenerateEmailsMutation.isPending}
         />
       )}
 

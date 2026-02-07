@@ -6,7 +6,7 @@
  * and optional navigation to the newly created table.
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -17,6 +17,7 @@ import {
   type OpsTableResult,
   type ApolloSearchResult,
 } from '@/lib/services/apolloSearchService'
+import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2'
 
 interface UseOpsTableSearchOptions {
   /** When true, navigate to the new table on successful creation. Defaults to true. */
@@ -38,7 +39,12 @@ export function useOpsTableSearch(options: UseOpsTableSearchOptions = {}) {
       // Invalidate the ops tables list so the sidebar / list page refreshes
       queryClient.invalidateQueries({ queryKey: ['ops-tables'] })
 
-      toast.success(`Table "${result.table_name}" created with ${result.row_count} leads`)
+      const enriched = result.enriched_count || 0
+      const enrichMsg = enriched > 0 ? ` (${enriched} enriched)` : ''
+      const dedupMsg = result.dedup
+        ? ` — filtered ${result.dedup.duplicates} duplicates`
+        : ''
+      toast.success(`Table "${result.table_name}" created with ${result.row_count} leads${enrichMsg}${dedupMsg}`)
 
       if (navigateOnSuccess) {
         navigate(`/ops/${result.table_id}`)
@@ -60,6 +66,9 @@ export function useOpsTableSearch(options: UseOpsTableSearchOptions = {}) {
           break
         case 'NO_RESULTS':
           toast.warning('No results found. Try broadening your search criteria.')
+          break
+        case 'ALL_DUPLICATES':
+          toast.warning('All contacts are already in your CRM or previously imported.')
           break
         default:
           toast.error(error.message || 'Failed to create table from search')
@@ -92,4 +101,74 @@ export function useOpsTableSearch(options: UseOpsTableSearchOptions = {}) {
     isCreating: createTableFromSearch.isPending,
     isSearching: searchApollo.isPending,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Apollo credit / usage info
+// ---------------------------------------------------------------------------
+
+export interface ApolloCreditsData {
+  source: 'usage_stats' | 'rate_headers'
+  // From usage_stats (master key)
+  email_credits_used?: number
+  email_credits_limit?: number
+  email_credits_remaining?: number
+  phone_credits_used?: number
+  phone_credits_limit?: number
+  phone_credits_remaining?: number
+  // From rate headers (fallback)
+  rate_limits?: Record<string, string | null>
+  usage_stats_status?: number
+  usage_stats_message?: string
+  // Raw — pass through whatever Apollo returns
+  [key: string]: unknown
+}
+
+async function fetchApolloCredits(): Promise<ApolloCreditsData> {
+  const { data, error } = await supabase.functions.invoke('apollo-credits', {
+    body: {},
+  })
+  if (error) throw error
+  if (data?.error) throw new Error(data.error)
+  return data as ApolloCreditsData
+}
+
+export function useApolloCredits(enabled = true) {
+  return useQuery({
+    queryKey: ['apollo-credits'],
+    queryFn: fetchApolloCredits,
+    enabled,
+    staleTime: 5 * 60 * 1000, // 5 min
+    retry: false,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// NL → Apollo search params parser
+// ---------------------------------------------------------------------------
+
+export interface ParsedApolloQuery {
+  params: Partial<ApolloSearchParams>
+  summary: string
+  enrichment?: {
+    email?: boolean
+    phone?: boolean
+  }
+  suggested_table_name?: string
+}
+
+export function useParseApolloQuery() {
+  return useMutation<ParsedApolloQuery, Error, string>({
+    mutationFn: async (query: string) => {
+      const token = await getSupabaseAuthToken()
+      const { data, error } = await supabase.functions.invoke('parse-apollo-query', {
+        body: { query },
+        ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+      })
+
+      if (error) throw new Error(error.message || 'Failed to parse query')
+      if (data?.error) throw new Error(data.error)
+      return data as ParsedApolloQuery
+    },
+  })
 }

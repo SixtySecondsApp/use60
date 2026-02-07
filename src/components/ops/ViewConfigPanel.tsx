@@ -196,31 +196,35 @@ export function ViewConfigPanel({
   const [groupConfig, setGroupConfig] = useState<GroupConfig | null>(null);
   const [summaryConfig, setSummaryConfig] = useState<Record<string, AggregateType> | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const wasOpenRef = useRef(false);
 
-  // ---- initialize from existing config on open ----
+  // ---- initialize from existing config on open (only on open transition) ----
   useEffect(() => {
-    if (!isOpen) return;
-    if (existingConfig) {
-      setName(existingConfig.name ?? '');
-      setFilters(existingConfig.filters ?? []);
-      setSorts(existingConfig.sorts ?? []);
-      setVisibleColumns(
-        existingConfig.columnOrder ?? columns.filter((c) => c.is_visible).map((c) => c.key)
-      );
-      setFormattingRules(existingConfig.formattingRules ?? []);
-      setGroupConfig(existingConfig.groupConfig ?? null);
-      setSummaryConfig(existingConfig.summaryConfig ?? null);
-    } else {
-      setName('');
-      setFilters([]);
-      setSorts([]);
-      setVisibleColumns(columns.filter((c) => c.is_visible).map((c) => c.key));
-      setFormattingRules([]);
-      setGroupConfig(null);
-      setSummaryConfig(null);
+    if (isOpen && !wasOpenRef.current) {
+      // Panel just opened — initialize state
+      if (existingConfig) {
+        setName(existingConfig.name ?? '');
+        setFilters(existingConfig.filters ?? []);
+        setSorts(existingConfig.sorts ?? []);
+        setVisibleColumns(
+          existingConfig.columnOrder ?? columns.filter((c) => c.is_visible).map((c) => c.key)
+        );
+        setFormattingRules(existingConfig.formattingRules ?? []);
+        setGroupConfig(existingConfig.groupConfig ?? null);
+        setSummaryConfig(existingConfig.summaryConfig ?? null);
+      } else {
+        setName('');
+        setFilters([]);
+        setSorts([]);
+        setVisibleColumns(columns.filter((c) => c.is_visible).map((c) => c.key));
+        setFormattingRules([]);
+        setGroupConfig(null);
+        setSummaryConfig(null);
+      }
+      setTimeout(() => nameInputRef.current?.focus(), 200);
     }
-    setTimeout(() => nameInputRef.current?.focus(), 200);
-  }, [isOpen, existingConfig, columns]);
+    wasOpenRef.current = isOpen;
+  }, [isOpen]);
 
   // ---- live preview ----
   useEffect(() => {
@@ -383,6 +387,10 @@ export function ViewConfigPanel({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. High-Value Pipeline"
+                  autoComplete="off"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore
                   className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/20"
                 />
               </div>
