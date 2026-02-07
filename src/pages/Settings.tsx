@@ -44,6 +44,7 @@ import {
   CreditCard,
   Brain,
   Briefcase,
+  Zap,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -217,6 +218,14 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'instantly',
+      label: 'Instantly',
+      icon: Zap,
+      description: 'Email outreach campaigns, lead push, and engagement sync',
+      path: '/settings/integrations/instantly',
+      requiresOrgAdmin: true,
+    },
+    {
       id: 'team-members',
       label: 'Team Members',
       icon: Users,
@@ -303,7 +312,7 @@ export default function Settings() {
     );
     // Meeting recorder integrations (only shown when connected)
     const integrationSections = settingsSections.filter(s =>
-      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
+      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
       ['team-members', 'organization', 'branding', 'billing'].includes(s.id)

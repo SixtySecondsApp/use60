@@ -94,6 +94,7 @@ AFTER (Your Team Member):
 - Use `single()` when record might not exist (throws PGRST116)
 - Auto-commit without explicit user request
 - Skip TypeScript strict mode
+- Use emoji icons in the UI — always use Lucide React icons (`lucide-react`)
 
 ## Database Column Gotchas
 

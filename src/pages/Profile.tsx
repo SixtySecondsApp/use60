@@ -17,6 +17,7 @@ export default function Profile() {
     firstName: '',
     lastName: '',
     email: '',
+    emailSignOff: '',
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
@@ -47,7 +48,8 @@ export default function Profile() {
         ...prev,
         firstName: profileData.first_name || '',
         lastName: profileData.last_name || '',
-        email: profileData.email || ''
+        email: profileData.email || '',
+        emailSignOff: profileData.email_sign_off || '',
       }));
     }
   }, [userData, userProfile]);
@@ -74,7 +76,8 @@ export default function Profile() {
           .from('profiles')
           .update({
             first_name: formData.firstName,
-            last_name: formData.lastName
+            last_name: formData.lastName,
+            email_sign_off: formData.emailSignOff || null,
           })
           .eq('id', user.id);
 
@@ -292,6 +295,23 @@ export default function Profile() {
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Email address cannot be changed</p>
               </div>
+            </div>
+
+            {/* Email Sign-Off */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">
+                Email Sign-Off
+              </label>
+              <input
+                type="text"
+                value={formData.emailSignOff}
+                onChange={(e) => setFormData({ ...formData, emailSignOff: e.target.value })}
+                placeholder="e.g. Best, Andrew"
+                className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-all duration-200"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                How you close off emails. Used by AI when generating outreach sequences.
+              </p>
             </div>
 
             {/* Password Section */}
