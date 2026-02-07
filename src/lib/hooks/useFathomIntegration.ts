@@ -53,6 +53,7 @@ export function useFathomIntegration() {
   const [integration, setIntegration] = useState<FathomIntegration | null>(null);
   const [syncState, setSyncState] = useState<FathomSyncState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lifetimeMeetingsCount, setLifetimeMeetingsCount] = useState<number>(0);
   const [syncInProgress, setSyncInProgress] = useState(false); // Track local sync operation
@@ -69,7 +70,8 @@ export function useFathomIntegration() {
 
     const fetchIntegration = async () => {
       try {
-        setLoading(true);
+        // Only show loading spinner on first load, not on refetches
+        if (!initialLoadDone) setLoading(true);
         setError(null);
         // Get active user integration (per-user)
         const { data: integrationData, error: integrationError } = await supabaseAny
@@ -117,6 +119,7 @@ export function useFathomIntegration() {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
+        setInitialLoadDone(true);
       }
     };
 

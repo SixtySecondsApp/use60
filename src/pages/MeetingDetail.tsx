@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, ListTodo, Trash2, CheckCircle2, Plus, X, RefreshCw, BarChart3, Clock } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, ListTodo, Trash2, CheckCircle2, Plus, X, RefreshCw, BarChart3, Clock, Mic } from 'lucide-react';
 import FathomPlayerV2, { FathomPlayerV2Handle } from '@/components/FathomPlayerV2';
 import { VoiceMeetingPlayer } from '@/components/meetings/VoiceMeetingPlayer';
 import { AskAIChat } from '@/components/meetings/AskAIChat';
@@ -68,6 +68,8 @@ interface Meeting {
   video_url?: string | null;
   audio_url?: string | null;
   recording_id?: string | null;
+  // Meeting provider (fathom, fireflies, etc.)
+  provider?: string;
 }
 
 // Voice recording data for voice meetings
@@ -1043,6 +1045,22 @@ export function MeetingDetail() {
                 Your browser does not support the video element.
               </video>
             </div>
+          ) : meeting.provider === 'fireflies' ? (
+            /* Fireflies Meeting - Link to transcript */
+            <div className="glassmorphism-card p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Mic className="h-5 w-5 text-orange-500" />
+                <span className="font-semibold text-orange-600 dark:text-orange-400">Fireflies Recording</span>
+              </div>
+              {meeting.share_url && (
+                <Button asChild variant="outline" size="sm">
+                  <a href={meeting.share_url} target="_blank" rel="noopener noreferrer">
+                    Open in Fireflies
+                    <ExternalLink className="h-3 w-3 ml-2" />
+                  </a>
+                </Button>
+              )}
+            </div>
           ) : (meeting.fathom_recording_id || meeting.share_url) ? (
             /* Fathom Video Player */
             <div className="glassmorphism-card overflow-hidden">
@@ -1228,7 +1246,7 @@ export function MeetingDetail() {
                     {meeting.share_url && (
                       <Button asChild variant="outline" size="sm">
                         <a href={meeting.share_url} target="_blank" rel="noopener noreferrer">
-                          Open in Fathom
+                          Open in {meeting.provider === 'fireflies' ? 'Fireflies' : 'Fathom'}
                           <ExternalLink className="h-3 w-3 ml-2" />
                         </a>
                       </Button>
