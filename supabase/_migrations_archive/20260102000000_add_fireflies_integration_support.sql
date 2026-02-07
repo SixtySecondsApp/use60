@@ -191,12 +191,13 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- 8. Create triggers for updated_at
 -- ============================================================================
-
+DROP TRIGGER IF EXISTS update_fireflies_integrations_updated_at ON fireflies_integrations;
 CREATE TRIGGER update_fireflies_integrations_updated_at
   BEFORE UPDATE ON fireflies_integrations
   FOR EACH ROW
   EXECUTE FUNCTION update_fireflies_updated_at();
 
+DROP TRIGGER IF EXISTS update_fireflies_sync_state_updated_at ON fireflies_sync_state;
 CREATE TRIGGER update_fireflies_sync_state_updated_at
   BEFORE UPDATE ON fireflies_sync_state
   FOR EACH ROW

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { useTableSubscription } from '@/lib/hooks/useRealtimeHub';
 import { toast } from 'sonner';
 
@@ -40,6 +41,7 @@ export interface FirefliesSyncState {
 
 export function useFirefliesIntegration() {
   const { user } = useAuth();
+  const activeOrgId = useOrgStore((s) => s.activeOrgId);
   // Per-user integration: any user can manage their own Fireflies connection
   const canManage = true;
   // Supabase typed client may not include all integration tables - use narrow escape hatch
@@ -419,6 +421,7 @@ export function useFirefliesIntegration() {
           start_date: params?.start_date,
           end_date: params?.end_date,
           limit: params?.limit,
+          org_id: activeOrgId,
         },
       });
 

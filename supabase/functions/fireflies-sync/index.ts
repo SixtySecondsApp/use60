@@ -107,7 +107,7 @@ serve(async (req) => {
       )
     }
 
-    const { action, api_key, sync_type, start_date, end_date, limit } = body
+    const { action, api_key, sync_type, start_date, end_date, limit, org_id } = body
 
     // Get authorization header - Supabase automatically includes it from client session
     // Check multiple possible header names (case-insensitive)
@@ -284,56 +284,70 @@ serve(async (req) => {
         let skippedCount = 0
 
         // Get user's org_id for the meetings
-        const { data: orgMember } = await serviceClient
-          .from('organization_members')
-          .select('org_id')
-          .eq('user_id', user.id)
-          .maybeSingle()
+        // Prefer org_id from frontend (user's active org), fallback to DB lookup
+        let orgId = org_id || null
+        if (!orgId) {
+          const { data: orgMembers } = await serviceClient
+            .from('organization_members')
+            .select('org_id')
+            .eq('user_id', user.id)
+            .limit(1)
 
-        const orgId = orgMember?.org_id
+          orgId = orgMembers?.[0]?.org_id || null
+        }
 
-        // Process each transcript
-        for (const transcript of transcripts) {
-          // Check if already synced
-          const { data: existing } = await serviceClient
-            .from('meetings')
-            .select('id')
-            .eq('external_id', transcript.id)
-            .eq('provider', 'fireflies')
-            .maybeSingle()
+        // Batch dedup: fetch all existing external_ids in one query
+        const transcriptIds = transcripts.map(t => t.id)
+        const { data: existingMeetings } = await serviceClient
+          .from('meetings')
+          .select('external_id')
+          .eq('provider', 'fireflies')
+          .in('external_id', transcriptIds)
 
-          if (existing) {
+        const existingIds = new Set((existingMeetings || []).map(m => m.external_id))
+
+        // Filter to only new transcripts
+        const newTranscripts = transcripts.filter(t => {
+          if (existingIds.has(t.id)) {
             skippedCount++
-            continue
+            return false
           }
+          return true
+        })
 
-          // Convert sentences to transcript text
-          const transcriptText = sentencesToText(transcript.sentences)
+        // Batch insert all new meetings at once
+        if (newTranscripts.length > 0) {
+          const meetingsToInsert = newTranscripts.map(transcript => ({
+            owner_user_id: user.id,
+            org_id: orgId,
+            external_id: transcript.id,
+            provider: 'fireflies',
+            title: transcript.title,
+            meeting_start: new Date(transcript.date).toISOString(),
+            share_url: transcript.transcript_url,
+            transcript_text: sentencesToText(transcript.sentences),
+            owner_email: transcript.organizer_email || transcript.host_email || null,
+          }))
 
-          // Insert meeting
           const { error: insertError } = await serviceClient
             .from('meetings')
-            .insert({
-              owner_user_id: user.id,
-              org_id: orgId,
-              external_id: transcript.id,
-              provider: 'fireflies',
-              title: transcript.title,
-              meeting_start: new Date(transcript.date).toISOString(),
-              share_url: transcript.transcript_url,
-              transcript_text: transcriptText,
-              transcript_json: transcript.sentences,
-              source_users: transcript.fireflies_users || [],
-              organizer_email: transcript.organizer_email,
-              host_email: transcript.host_email,
-              sync_status: 'synced',
-              last_synced_at: new Date().toISOString(),
-            })
+            .insert(meetingsToInsert)
 
           if (insertError) {
-            console.error(`Error inserting meeting ${transcript.id}:`, insertError)
+            console.error('Error batch inserting meetings:', insertError)
+            // Fallback: try inserting one by one to identify which ones fail
+            for (const meeting of meetingsToInsert) {
+              const { error: singleError } = await serviceClient
+                .from('meetings')
+                .insert(meeting)
+              if (singleError) {
+                console.error(`Error inserting meeting ${meeting.external_id}:`, singleError)
+              } else {
+                syncedCount++
+              }
+            }
           } else {
-            syncedCount++
+            syncedCount = newTranscripts.length
           }
         }
 
