@@ -128,6 +128,32 @@ verify_jwt = false
 [functions.hubspot-oauth-initiate]
 verify_jwt = false
 
+# Fathom integration - called from browser, handle auth internally
+# OAuth initiate/callback + sync/disconnect + user mapping
+[functions.fathom-oauth-initiate]
+verify_jwt = false
+
+[functions.fathom-oauth-callback]
+verify_jwt = false
+
+[functions.fathom-sync]
+verify_jwt = false
+
+[functions.fathom-disconnect]
+verify_jwt = false
+
+[functions.fathom-self-map]
+verify_jwt = false
+
+[functions.fathom-update-user-mapping]
+verify_jwt = false
+
+[functions.fetch-transcript]
+verify_jwt = false
+
+[functions.backfill-transcripts]
+verify_jwt = false
+
 # Password reset email - called from admin panel with user JWT
 # We handle auth verification manually inside the function (CORS preflight needs to work)
 [functions.send-password-reset-email]
