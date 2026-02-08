@@ -97,13 +97,13 @@ export async function storeAIActionItems(
     return 0
   }
 
+  let storedCount = 0
   for (const item of uniqueAIActionItems) {
-    await supabase
+    const { error } = await supabase
       .from('meeting_action_items')
       .insert({
         meeting_id: meetingId,
         title: item.title,
-        description: item.title,
         priority: item.priority,
         category: item.category,
         assignee_name: item.assignedTo || null,
@@ -118,9 +118,15 @@ export async function storeAIActionItems(
         timestamp_seconds: null,
         playback_url: null,
       })
+
+    if (error) {
+      console.error(`[transcriptService] Failed to insert AI action item for meeting ${meetingId}:`, error.code, error.message)
+    } else {
+      storedCount++
+    }
   }
 
-  return uniqueAIActionItems.length
+  return storedCount
 }
 
 /**

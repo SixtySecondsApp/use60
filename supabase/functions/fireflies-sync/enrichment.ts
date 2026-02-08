@@ -47,36 +47,36 @@ export async function enrichFirefliesMeeting(
   try {
     await processFirefliesParticipants(supabase, meeting, transcript, userId)
   } catch (err) {
-    console.warn(`[fireflies-enrich] Participant processing failed for ${meeting.id}:`,
-      err instanceof Error ? err.message : String(err))
+    console.error(`[fireflies-enrich] Participant processing failed for ${meeting.id}:`,
+      err instanceof Error ? `${err.message}\n${err.stack}` : String(err))
   }
 
   // 2. Store Fireflies native action items
   try {
+    const rawItems = transcript.summary?.action_items
+    console.log(`[fireflies-enrich] Native action items available for ${meeting.id}: ${rawItems?.length ?? 0}`)
     const nativeCount = await storeFirefliesNativeActionItems(
-      supabase, meeting.id, transcript.summary?.action_items
+      supabase, meeting.id, rawItems
     )
-    if (nativeCount > 0) {
-      console.log(`[fireflies-enrich] Stored ${nativeCount} native action items for ${meeting.id}`)
-    }
+    console.log(`[fireflies-enrich] Stored ${nativeCount}/${rawItems?.length ?? 0} native action items for ${meeting.id}`)
   } catch (err) {
-    console.warn(`[fireflies-enrich] Native action items failed for ${meeting.id}:`,
-      err instanceof Error ? err.message : String(err))
+    console.error(`[fireflies-enrich] Native action items failed for ${meeting.id}:`,
+      err instanceof Error ? `${err.message}\n${err.stack}` : String(err))
   }
 
   // 3. Run Claude AI analysis (coaching, sentiment reasoning, enhanced action items)
   try {
     await runFirefliesAIAnalysis(supabase, meeting, transcript, userId, orgId)
   } catch (err) {
-    console.warn(`[fireflies-enrich] AI analysis failed for ${meeting.id}:`,
-      err instanceof Error ? err.message : String(err))
+    console.error(`[fireflies-enrich] AI analysis failed for ${meeting.id}:`,
+      err instanceof Error ? `${err.message}\n${err.stack}` : String(err))
   }
 
   // 4. Queue for AI search indexing
   try {
     await queueMeetingForIndexing(supabase, meeting.id, userId)
   } catch (err) {
-    console.warn(`[fireflies-enrich] Indexing queue failed for ${meeting.id}:`,
+    console.error(`[fireflies-enrich] Indexing queue failed for ${meeting.id}:`,
       err instanceof Error ? err.message : String(err))
   }
 
@@ -141,6 +141,8 @@ async function processFirefliesParticipants(
     }
   }
 
+  console.log(`[fireflies-enrich] Found ${participantMap.size} unique participants for meeting ${meeting.id} (ownerDomain=${ownerDomain})`)
+
   if (participantMap.size === 0) {
     console.log(`[fireflies-enrich] No participants with emails found for meeting ${meeting.id}`)
     return
@@ -153,7 +155,10 @@ async function processFirefliesParticipants(
     const participantDomain = extractDomain(email)
 
     // Skip if same domain as owner (internal) or if it's the owner themselves
-    if (ownerEmail && email === ownerEmail.toLowerCase()) continue
+    if (ownerEmail && email === ownerEmail.toLowerCase()) {
+      console.log(`[fireflies-enrich] Skipping owner email: ${email}`)
+      continue
+    }
     if (ownerDomain && participantDomain === ownerDomain) {
       // Internal participant - store in meeting_attendees
       await upsertMeetingAttendee(supabase, meeting.id, participant.name, email, false)
@@ -166,12 +171,17 @@ async function processFirefliesParticipants(
     )
     if (contactId) {
       externalContactIds.push(contactId)
+    } else {
+      console.warn(`[fireflies-enrich] processExternalParticipant returned null for ${email} in meeting ${meeting.id}`)
     }
   }
+
+  console.log(`[fireflies-enrich] External contacts found: ${externalContactIds.length} for meeting ${meeting.id}`)
 
   // Select primary contact and determine company
   if (externalContactIds.length > 0) {
     const primaryContactId = await selectPrimaryContact(supabase, externalContactIds, userId)
+    console.log(`[fireflies-enrich] Primary contact selected: ${primaryContactId} for meeting ${meeting.id}`)
     let meetingCompanyId: string | null = null
 
     if (primaryContactId) {
@@ -180,7 +190,7 @@ async function processFirefliesParticipants(
       )
 
       // Update meeting with CRM links
-      await supabase
+      const { error: meetingUpdateError } = await supabase
         .from('meetings')
         .update({
           primary_contact_id: primaryContactId,
@@ -189,21 +199,36 @@ async function processFirefliesParticipants(
         })
         .eq('id', meeting.id)
 
-      // Create meeting_contacts junctions
-      const junctionRecords = externalContactIds.map(contactId => ({
-        meeting_id: meeting.id,
-        contact_id: contactId,
-        is_primary: contactId === primaryContactId,
-        role: 'attendee',
-      }))
-
-      const { error: junctionError } = await supabase
-        .from('meeting_contacts')
-        .upsert(junctionRecords, { onConflict: 'meeting_id,contact_id' })
-
-      if (junctionError) {
-        console.warn(`[fireflies-enrich] Failed to create meeting_contacts:`, junctionError.message)
+      if (meetingUpdateError) {
+        console.error(`[fireflies-enrich] Failed to update meeting CRM links for ${meeting.id}:`,
+          meetingUpdateError.code, meetingUpdateError.message)
+      } else {
+        console.log(`[fireflies-enrich] Updated meeting ${meeting.id} with primary_contact=${primaryContactId}, company=${meetingCompanyId}`)
       }
+
+      // Create meeting_contacts junctions (one by one for better error visibility)
+      let junctionCreated = 0
+      for (const contactId of externalContactIds) {
+        const { error: junctionError } = await supabase
+          .from('meeting_contacts')
+          .upsert(
+            {
+              meeting_id: meeting.id,
+              contact_id: contactId,
+              is_primary: contactId === primaryContactId,
+              role: 'attendee',
+            },
+            { onConflict: 'meeting_id,contact_id' }
+          )
+
+        if (junctionError) {
+          console.error(`[fireflies-enrich] Failed to create meeting_contact for meeting=${meeting.id} contact=${contactId}:`,
+            junctionError.code, junctionError.message, junctionError.details)
+        } else {
+          junctionCreated++
+        }
+      }
+      console.log(`[fireflies-enrich] Created ${junctionCreated}/${externalContactIds.length} meeting_contacts for meeting ${meeting.id}`)
     }
 
     console.log(`[fireflies-enrich] Processed ${externalContactIds.length} external contacts for meeting ${meeting.id}`)
@@ -335,7 +360,6 @@ async function storeFirefliesNativeActionItems(
       .insert({
         meeting_id: meetingId,
         title: actionText.trim(),
-        description: actionText.trim(),
         ai_generated: false,
         needs_review: false,
         completed: false,
@@ -345,7 +369,7 @@ async function storeFirefliesNativeActionItems(
       })
 
     if (error) {
-      console.warn(`[fireflies-enrich] Failed to insert action item:`, error.message)
+      console.error(`[fireflies-enrich] Failed to insert action item for meeting ${meetingId}:`, error.code, error.message)
     } else {
       stored++
     }
@@ -433,9 +457,9 @@ async function runFirefliesAIAnalysis(
   }
 
   // Store AI-generated action items (deduplicated against Fireflies native items)
-  const existingNativeItems = (transcript.summary?.action_items || []).map(text => ({
-    title: text,
-    description: text,
+  const rawActionItems = transcript.summary?.action_items
+  const existingNativeItems = (Array.isArray(rawActionItems) ? rawActionItems : []).map(text => ({
+    title: String(text),
   }))
 
   const storedCount = await storeAIActionItems(supabase, meeting.id, analysis.actionItems, existingNativeItems)
