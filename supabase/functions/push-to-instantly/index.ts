@@ -109,7 +109,7 @@ serve(async (req) => {
       }
     }
 
-    // Get field mapping — either from request body or from campaign link
+    // Get field mapping — check: 1) request body, 2) campaign_links table, 3) column integration_config
     let mapping = field_mapping
     if (!mapping) {
       const { data: link } = await svc
@@ -120,6 +120,26 @@ serve(async (req) => {
         .maybeSingle()
 
       mapping = link?.field_mapping
+    }
+
+    // Fallback: check column integration_config (where EditInstantlySettingsModal saves it)
+    if (!mapping) {
+      const { data: configCol } = await svc
+        .from('dynamic_table_columns')
+        .select('integration_config')
+        .eq('table_id', table_id)
+        .eq('column_type', 'instantly')
+        .not('integration_config', 'is', null)
+
+      if (configCol) {
+        for (const col of configCol) {
+          const cfg = col.integration_config as Record<string, any> | null
+          if (cfg?.campaign_id === campaign_id && cfg?.field_mapping?.email) {
+            mapping = cfg.field_mapping
+            break
+          }
+        }
+      }
     }
 
     if (!mapping?.email) {

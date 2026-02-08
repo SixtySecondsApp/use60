@@ -2597,6 +2597,40 @@ function OpsDetailPage() {
               columnId: editInstantlyColumn.id,
               config: merged,
             });
+
+            // Also sync to instantly_campaign_links table so push-to-instantly can find the mapping
+            if (config.campaign_id && tableId && table?.organization_id) {
+              supabase.functions.invoke('instantly-admin', {
+                body: {
+                  action: 'link_campaign',
+                  org_id: table.organization_id,
+                  table_id: tableId,
+                  campaign_id: config.campaign_id,
+                  campaign_name: config.campaign_name,
+                  field_mapping: config.field_mapping || { email: 'email' },
+                },
+              }).catch(() => { /* link is supplementary */ });
+            }
+
+            // Also update push_action column if one exists (so per-row push works)
+            const pushActionCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'push_action' &&
+              c.id !== editInstantlyColumn.id
+            );
+            if (pushActionCol && config.campaign_id) {
+              const pushMerged = {
+                ...(pushActionCol.integration_config as Record<string, unknown> ?? {}),
+                push_config: {
+                  ...((pushActionCol.integration_config as any)?.push_config ?? {}),
+                  campaign_id: config.campaign_id,
+                },
+              };
+              updateInstantlyConfigMutation.mutate({
+                columnId: pushActionCol.id,
+                config: pushMerged,
+              });
+            }
           }}
           onAddStepColumns={async (stepCols) => {
             for (const col of stepCols) {
@@ -2606,6 +2640,77 @@ function OpsDetailPage() {
           }}
           columnLabel={editInstantlyColumn.label}
           currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
+          orgId={table?.organization_id}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Create Instantly Campaign from Step Columns */}
+      {createCampaignFromStepColumn && (
+        <EditInstantlySettingsModal
+          isOpen={!!createCampaignFromStepColumn}
+          onClose={() => setCreateCampaignFromStepColumn(null)}
+          initialMode="create"
+          onSave={(config) => {
+            // Update the campaign_config column if one exists
+            const campaignConfigCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'campaign_config'
+            );
+            if (campaignConfigCol) {
+              const merged = { ...(campaignConfigCol.integration_config as Record<string, unknown> ?? {}), ...config };
+              updateInstantlyConfigMutation.mutate({
+                columnId: campaignConfigCol.id,
+                config: merged,
+              });
+            }
+            // Also update push_action column if one exists
+            const pushActionCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'push_action'
+            );
+            if (pushActionCol && config.campaign_id) {
+              const pushMerged = {
+                ...(pushActionCol.integration_config as Record<string, unknown> ?? {}),
+                push_config: {
+                  ...((pushActionCol.integration_config as any)?.push_config ?? {}),
+                  campaign_id: config.campaign_id,
+                },
+              };
+              updateInstantlyConfigMutation.mutate({
+                columnId: pushActionCol.id,
+                config: pushMerged,
+              });
+            }
+          }}
+          onCampaignCreated={async (campaignId, campaignName) => {
+            // Link the campaign to the table
+            if (tableId && table?.organization_id) {
+              try {
+                await supabase.functions.invoke('instantly-admin', {
+                  body: {
+                    action: 'link_campaign',
+                    org_id: table.organization_id,
+                    table_id: tableId,
+                    campaign_id: campaignId,
+                    campaign_name: campaignName,
+                    field_mapping: { email: 'email' },
+                  },
+                });
+                queryClient.invalidateQueries({ queryKey: ['instantly-campaign-links', tableId] });
+              } catch {
+                // link is optional — campaign was already created
+              }
+            }
+          }}
+          columnLabel={createCampaignFromStepColumn.label}
+          currentConfig={(() => {
+            const campaignConfigCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'campaign_config'
+            );
+            return (campaignConfigCol?.integration_config as any) ?? { instantly_subtype: 'campaign_config' };
+          })()}
           orgId={table?.organization_id}
           existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
         />
@@ -2652,7 +2757,40 @@ function OpsDetailPage() {
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
           startEnrichment({ columnId: enrichCols[0].id, rowIds: Array.from(selectedRows) });
         }}
-        onPushToInstantly={() => toast.info('Push to Instantly coming soon.')}
+        onPushToInstantly={async () => {
+          // Find campaign_id from the campaign_config or push_action column
+          const instantlyCol = columns.find(c =>
+            c.column_type === 'instantly' &&
+            ((c.integration_config as any)?.instantly_subtype === 'campaign_config' ||
+             (c.integration_config as any)?.instantly_subtype === 'push_action')
+          );
+          const cfg = instantlyCol?.integration_config as any;
+          const campaignId = cfg?.campaign_id || cfg?.push_config?.campaign_id;
+          if (!campaignId) {
+            toast.error('No campaign linked. Open Instantly settings to link a campaign first.');
+            return;
+          }
+          const toastId = toast.loading(`Pushing ${selectedRows.size} leads to Instantly...`);
+          try {
+            const { data, error } = await supabase.functions.invoke('push-to-instantly', {
+              body: {
+                table_id: tableId,
+                campaign_id: campaignId,
+                row_ids: Array.from(selectedRows),
+                field_mapping: cfg?.field_mapping,
+              },
+            });
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+            toast.success(
+              `Pushed ${data.pushed_count} leads${data.skipped_count ? `, ${data.skipped_count} skipped (no email)` : ''}`,
+              { id: toastId },
+            );
+            queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+          } catch (err: any) {
+            toast.error(err.message || 'Push to Instantly failed', { id: toastId });
+          }
+        }}
         onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
         onReEnrich={() => {
           const enrichCols = columns.filter((c) => c.is_enrichment);

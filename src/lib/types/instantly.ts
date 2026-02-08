@@ -48,6 +48,8 @@ export interface InstantlyCampaign {
   is_evergreen?: boolean
   campaign_schedule?: any
   sequences?: any[]
+  timestamp?: string
+  created_at?: string
 }
 
 export interface InstantlyCampaignLink {

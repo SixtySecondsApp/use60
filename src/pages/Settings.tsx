@@ -45,6 +45,7 @@ import {
   Brain,
   Briefcase,
   Zap,
+  Eye,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -226,6 +227,13 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'smart-listening',
+      label: 'Smart Listening',
+      icon: Eye,
+      description: 'Monitor key accounts for job changes, funding, news, and custom research',
+      path: '/settings/smart-listening',
+    },
+    {
       id: 'team-members',
       label: 'Team Members',
       icon: Users,
@@ -308,7 +316,7 @@ export default function Settings() {
       ['account', 'appearance'].includes(s.id)
     );
     const aiSections = settingsSections.filter(s =>
-      ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types'].includes(s.id)
+      ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types', 'smart-listening'].includes(s.id)
     );
     // Meeting recorder integrations (only shown when connected)
     const integrationSections = settingsSections.filter(s =>

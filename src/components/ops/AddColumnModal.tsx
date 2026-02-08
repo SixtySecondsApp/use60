@@ -156,6 +156,7 @@ const BASE_COLUMN_TYPES = [
   { value: 'formula', label: 'Formula' },
   { value: 'button', label: 'Button' },
   { value: 'integration', label: 'Integration' },
+  { value: 'signal', label: 'Signal (Smart Listening)' },
   { value: 'enrichment', label: 'Enrichment' },
 ];
 

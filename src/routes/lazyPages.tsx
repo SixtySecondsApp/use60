@@ -169,6 +169,7 @@ export const JustCallSettings = lazyWithRetry(() => import('@/pages/settings/Jus
 export const HubSpotSettings = lazyWithRetry(() => import('@/pages/settings/HubSpotSettings'));
 export const BullhornSettings = lazyWithRetry(() => import('@/pages/settings/BullhornSettings'));
 export const InstantlySettings = lazyWithRetry(() => import('@/pages/settings/InstantlySettings'));
+export const SmartListeningSettings = lazyWithRetry(() => import('@/pages/settings/SmartListeningSettings'));
 // Integration settings pages (dedicated settings for each integration)
 export const GoogleWorkspaceIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/GoogleWorkspaceIntegrationPage'));
 export const FathomIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/FathomIntegrationPage'));

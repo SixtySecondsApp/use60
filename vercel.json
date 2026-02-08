@@ -239,6 +239,14 @@
     {
       "path": "/api/cron/waitlist-daily-digest",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/slack-account-monitor",
+      "schedule": "30 6 * * 1"
+    },
+    {
+      "path": "/api/cron/slack-account-digest",
+      "schedule": "0 7 * * 1"
     }
   ]
 } 

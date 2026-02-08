@@ -8,6 +8,8 @@ Generated: 2026-02-07
 - **Delivery**: In-app (Ops table) + Slack for high-priority signals
 - **Signal sources**: All three — Apollo signals, custom AI research prompts, web/news scraping
 - **Account scope**: Manual watchlist + auto-monitor from open deals
+- **Default frequency**: Weekly (Monday morning, before morning brief)
+- **User control**: Users can adjust frequency per-account with explicit cost/credit warnings before increasing
 
 ---
 
@@ -87,11 +89,11 @@ Cooldown: configurable per notification type
 
 | Severity | Area | Risk | Mitigation |
 |----------|------|------|------------|
-| **HIGH** | Apollo API | Periodic enrichment burns credits fast. 100 accounts × daily = 3,000/month minimum. Apollo standard plans have limited credits. | Budget-aware monitoring: check `apollo-credits` before each run. Priority tiers (daily/weekly/monthly). Only re-enrich changed fields. |
+| **HIGH** | Apollo API | Periodic enrichment burns credits. 100 accounts × weekly = ~400/month. Users who increase to daily = ~3,000/month. | Default weekly Monday cadence keeps costs low. Cost warnings shown before frequency increase. Budget check before each run — skip if exhausted. |
 | **HIGH** | Edge Function Timeout | Web scraping + AI analysis per account could exceed 60s Supabase timeout. | Process accounts in batches. Fan out to per-account sub-invocations. Use Perplexity API (fast) instead of raw scraping. |
 | **MEDIUM** | Schema Migration | New tables needed: `account_watchlist`, `account_signals`, `account_signal_snapshots`. Need RLS policies. | Follow existing migration patterns. Add RLS matching `contacts`/`deals` policies (owner_id OR org sharing). |
-| **MEDIUM** | Cost — AI Research | Custom prompts per account using Claude/Perplexity could get expensive at scale. | Configurable frequency. Cache results. Rate limit per org. Default to daily for watchlist, weekly for auto-monitored. |
-| **MEDIUM** | Slack Noise | Too many account signals = alert fatigue = reps mute notifications. | Digest mode (batch signals into 1 daily message). Priority filtering (only push high/urgent to Slack). Rest stays in-app. |
+| **MEDIUM** | Cost — AI Research | Custom prompts per account using Perplexity could get expensive at scale. | Weekly default keeps costs ~$0.05-0.10/account/week. Show per-account cost estimate in UI before enabling. |
+| **MEDIUM** | Slack Noise | Too many account signals = alert fatigue = reps mute notifications. | Weekly Monday digest batches everything into 1 message. Only critical signals (champion left, funding) get immediate DM. |
 | **LOW** | Data Freshness | Apollo data can be stale (updated monthly). Web scraping results vary. | Show signal age. Let reps trigger manual refresh. Mark confidence levels. |
 | **LOW** | Vercel Cron Limits | Already 23 crons. Vercel Pro allows unlimited. | Add 2 new crons (account-monitor, account-digest). Well within limits. |
 
@@ -273,8 +275,9 @@ CREATE TABLE account_watchlist (
   deal_id UUID REFERENCES deals(id),  -- if auto-added from deal
 
   -- Monitoring config
-  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'deal_auto', 'icp_auto')),
-  monitor_frequency TEXT NOT NULL DEFAULT 'daily' CHECK (monitor_frequency IN ('hourly', 'daily', 'weekly')),
+  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'deal_auto')),
+  monitor_frequency TEXT NOT NULL DEFAULT 'weekly' CHECK (monitor_frequency IN ('weekly', 'twice_weekly', 'daily')),
+  monitor_day TEXT NOT NULL DEFAULT 'monday' CHECK (monitor_day IN ('monday', 'tuesday', 'wednesday', 'thursday', 'friday')),
   enabled_sources TEXT[] DEFAULT ARRAY['apollo'],  -- apollo, web_intel, custom_prompt
   custom_research_prompt TEXT,  -- user-defined AI research prompt
 
@@ -354,6 +357,18 @@ CREATE INDEX idx_account_snapshots_watchlist ON account_signal_snapshots(watchli
 
 ## Questions Resolved During Analysis
 
-1. **System preference for auto-monitored accounts** → Auto-add from deals at any stage with value > $0 (configurable threshold)
-2. **Signal freshness** → Apollo data refreshed daily for watchlist, weekly for auto-monitored. Web intel refreshed daily for all.
-3. **Credit budgeting** → Check Apollo credits before each run. Skip accounts if budget exhausted. Prioritize manual watchlist over auto-monitored.
+1. **Default frequency** → Weekly Monday morning (6:30am UTC monitor, 7am UTC digest). Users can increase to twice-weekly or daily with cost warnings.
+2. **Auto-monitored accounts** → Auto-add companies from open deals. Weekly frequency for all by default.
+3. **Credit budgeting** → Check Apollo credits before each run. Skip accounts when budget exhausted. Prioritize manual watchlist over deal-auto.
+4. **Cost transparency** → Show per-account and aggregate cost projections in settings UI before user changes frequency or enables expensive sources.
+
+## Cost Model (Weekly Default)
+
+| Source | Per Account/Week | 50 Accounts/Week | 50 Accounts/Month |
+|--------|-----------------|-------------------|---------------------|
+| Apollo re-enrich | ~1 credit | ~50 credits | ~200 credits |
+| Perplexity web intel | ~$0.05 | ~$2.50 | ~$10 |
+| Custom AI prompt | ~$0.05 | ~$2.50 | ~$10 |
+| **All sources** | **~$0.10 + 1 credit** | **~$5 + 50 credits** | **~$20 + 200 credits** |
+
+**If user increases to daily**: Multiply costs by ~7x. UI warns before confirming.

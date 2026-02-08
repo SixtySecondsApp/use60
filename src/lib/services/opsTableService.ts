@@ -84,7 +84,8 @@ export interface OpsTableColumn {
     | 'hubspot_property'
     | 'apollo_property'
     | 'apollo_org_property'
-    | 'instantly';
+    | 'instantly'
+    | 'signal';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
   enrichment_model: string | null;

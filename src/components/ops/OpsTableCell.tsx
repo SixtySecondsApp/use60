@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink, Send, Clock, MessageSquare, Eye } from 'lucide-react';
+import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink, Send, Clock, MessageSquare, Eye, Radio } from 'lucide-react';
 import type { InstantlyColumnConfig } from '@/lib/types/instantly';
 import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 
@@ -1003,6 +1003,35 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     return (
       <div className="w-full h-full flex items-center">
         <span className="truncate text-sm text-gray-200">{cell.value ?? '—'}</span>
+      </div>
+    );
+  }
+
+  // Signal column — read-only badge showing latest signal
+  if (columnType === 'signal') {
+    if (!cell.value) {
+      return (
+        <div className="w-full h-full flex items-center">
+          <span className="text-gray-600 text-xs italic">No signals</span>
+        </div>
+      );
+    }
+    // cell.value is the signal summary text, metadata may contain signal_type and severity
+    const signalType = (metadata?.signal_type as string) ?? '';
+    const severity = (metadata?.severity as string) ?? 'low';
+    const severityColors: Record<string, string> = {
+      critical: 'border-red-400 bg-red-500/10 text-red-400',
+      high: 'border-orange-400 bg-orange-500/10 text-orange-400',
+      medium: 'border-yellow-400 bg-yellow-500/10 text-yellow-400',
+      low: 'border-gray-600 bg-gray-500/10 text-gray-400',
+    };
+    const badgeClass = severityColors[severity] ?? severityColors.low;
+    return (
+      <div className="w-full h-full flex items-center" title={cell.value}>
+        <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium ${badgeClass}`}>
+          <Radio className="w-3 h-3" />
+          <span className="truncate max-w-[120px]">{cell.value}</span>
+        </span>
       </div>
     );
   }

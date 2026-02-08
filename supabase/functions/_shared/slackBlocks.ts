@@ -2932,3 +2932,154 @@ export const buildClarificationQuestionMessage = (data: ClarificationQuestionDat
     text: `Question about ${data.dealName}: ${data.question}`,
   };
 };
+
+// =============================================================================
+// Smart Listening: Account Signal Alert
+// =============================================================================
+
+export interface AccountSignalAlertData {
+  companyName: string;
+  signalType: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  summary: string;
+  recommendedAction: string;
+  evidence?: string;
+  watchlistId: string;
+  signalId: string;
+  appUrl: string;
+}
+
+const SEVERITY_EMOJI: Record<string, string> = {
+  critical: ':red_circle:',
+  high: ':large_orange_circle:',
+  medium: ':large_yellow_circle:',
+  low: ':white_circle:',
+};
+
+const SIGNAL_TYPE_LABEL: Record<string, string> = {
+  job_change: 'Job Change',
+  title_change: 'Title Change',
+  company_change: 'Company Change',
+  funding_event: 'Funding Event',
+  company_news: 'Company News',
+  hiring_surge: 'Hiring Surge',
+  tech_stack_change: 'Tech Stack Change',
+  competitor_mention: 'Competitor Activity',
+  custom_research_result: 'Research Result',
+};
+
+export const buildAccountSignalAlert = (data: AccountSignalAlertData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+  const severityEmoji = SEVERITY_EMOJI[data.severity] || ':white_circle:';
+  const typeLabel = SIGNAL_TYPE_LABEL[data.signalType] || data.signalType;
+
+  blocks.push(header(safeHeaderText(`Account Signal — ${data.companyName}`)));
+  blocks.push(divider());
+
+  blocks.push(section(safeMrkdwn(
+    `${severityEmoji} *${data.severity.toUpperCase()}* — ${typeLabel}\n\n${data.title}`
+  )));
+
+  blocks.push(section(safeMrkdwn(data.summary)));
+
+  if (data.recommendedAction) {
+    blocks.push(section(safeMrkdwn(`*Recommended:* ${data.recommendedAction}`)));
+  }
+
+  blocks.push(divider());
+
+  blocks.push(actions([
+    {
+      text: 'View Signals',
+      actionId: 'account_signal_view',
+      url: `${data.appUrl}/ops?signal=${data.watchlistId}`,
+    },
+    {
+      text: 'Dismiss',
+      actionId: 'account_signal_dismiss',
+      value: safeButtonValue(JSON.stringify({ signalId: data.signalId })),
+    },
+  ]));
+
+  return {
+    blocks,
+    text: `Account Signal: ${data.companyName} — ${data.title}`,
+  };
+};
+
+// =============================================================================
+// Smart Listening: Weekly Account Intelligence Digest
+// =============================================================================
+
+export interface AccountDigestEntry {
+  companyName: string;
+  watchlistId: string;
+  signals: Array<{
+    signalType: string;
+    severity: string;
+    title: string;
+  }>;
+}
+
+export interface AccountDigestData {
+  recipientName: string;
+  weekDate: string;
+  accounts: AccountDigestEntry[];
+  totalSignals: number;
+  appUrl: string;
+}
+
+export const buildAccountIntelligenceDigest = (data: AccountDigestData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+
+  blocks.push(header(safeHeaderText(`Weekly Account Intelligence — ${data.weekDate}`)));
+  blocks.push(section(safeMrkdwn(
+    `Hey ${data.recipientName}! Here's what changed at your watched accounts this week.`
+  )));
+  blocks.push(divider());
+
+  // Group signals per account (max 10 accounts to stay within Slack limits)
+  const displayAccounts = data.accounts.slice(0, 10);
+
+  for (const account of displayAccounts) {
+    const signalLines = account.signals.slice(0, 5).map(s => {
+      const emoji = SEVERITY_EMOJI[s.severity] || ':white_circle:';
+      const label = SIGNAL_TYPE_LABEL[s.signalType] || s.signalType;
+      return `${emoji} ${label}: ${s.title}`;
+    }).join('\n');
+
+    const extra = account.signals.length > 5 ? `\n_+${account.signals.length - 5} more signals_` : '';
+
+    blocks.push(section(safeMrkdwn(
+      `*${account.companyName}* — ${account.signals.length} signal${account.signals.length > 1 ? 's' : ''}\n${signalLines}${extra}`
+    )));
+  }
+
+  if (data.accounts.length > 10) {
+    blocks.push(context([`_+${data.accounts.length - 10} more accounts with signals_`]));
+  }
+
+  blocks.push(divider());
+  blocks.push(context([
+    `${data.totalSignals} signal${data.totalSignals !== 1 ? 's' : ''} across ${data.accounts.length} account${data.accounts.length !== 1 ? 's' : ''} this week`,
+  ]));
+
+  blocks.push(actions([
+    {
+      text: 'View All Signals',
+      actionId: 'account_digest_view_all',
+      url: `${data.appUrl}/settings/smart-listening`,
+    },
+    {
+      text: 'Manage Watchlist',
+      actionId: 'account_digest_manage',
+      url: `${data.appUrl}/settings/smart-listening`,
+    },
+  ]));
+
+  return {
+    blocks,
+    text: `Weekly Account Intelligence: ${data.totalSignals} signals across ${data.accounts.length} accounts`,
+  };
+};
