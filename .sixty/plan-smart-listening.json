@@ -1,0 +1,240 @@
+{
+  "feature": "smart-listening",
+  "title": "Smart Listening — Account Intelligence & Intent Signals",
+  "description": "Proactive account monitoring that detects changes at key accounts (job changes, funding, news, custom research) and pushes intent signals to reps via Slack and in-app Ops table. Default weekly Monday cadence with user-configurable frequency and cost warnings.",
+  "consultReport": ".sixty/consult/smart-listening-account-intel.md",
+  "createdAt": "2026-02-07T23:30:00Z",
+  "defaults": {
+    "monitor_frequency": "weekly",
+    "monitor_day": "monday",
+    "monitor_time": "07:00 UTC (before morning brief)",
+    "enabled_sources": ["apollo"],
+    "slack_delivery": "weekly_digest"
+  },
+  "stories": [
+    {
+      "id": "SL-001",
+      "phase": 1,
+      "title": "Create account_watchlist, account_signals, and account_signal_snapshots tables with RLS",
+      "type": "schema",
+      "estimate": "30min",
+      "dependencies": [],
+      "description": "Create 3 new tables:\n\n1. `account_watchlist` — accounts to monitor\n   - org_id, user_id, account_type (company|contact), company_id, contact_id, deal_id\n   - source (manual|deal_auto), monitor_frequency DEFAULT 'weekly', monitor_day DEFAULT 'monday'\n   - enabled_sources TEXT[] DEFAULT ARRAY['apollo']\n   - custom_research_prompt TEXT (nullable)\n   - is_active, last_checked_at, next_check_at\n   - UNIQUE(org_id, user_id, company_id), UNIQUE(org_id, user_id, contact_id)\n\n2. `account_signals` — detected intent signals\n   - watchlist_id FK, signal_type, severity, relevance_score (0-100)\n   - title, summary, details JSONB, evidence TEXT\n   - source (apollo_diff|web_intel|custom_prompt), source_data JSONB\n   - is_read, is_dismissed, is_actioned, slack_notified, in_app_notified\n   - detected_at, created_at\n\n3. `account_signal_snapshots` — enrichment snapshots for diffing\n   - watchlist_id FK, snapshot_type, snapshot_data JSONB, created_at\n\nRLS policies:\n- Users can CRUD their own watchlist entries\n- Users can read signals for their watchlist entries\n- Org admins can read all org watchlist entries + signals\n- Service role for cron writes\n\nIndexes on: org_id+is_active, next_check_at (partial), watchlist_id+detected_at, org_id+is_read.",
+      "acceptance_criteria": [
+        "Migration runs cleanly on staging",
+        "RLS policies enforce user isolation",
+        "Indexes support efficient cron queries (next_check_at) and signal listing"
+      ]
+    },
+    {
+      "id": "SL-002",
+      "phase": 1,
+      "title": "Build useAccountWatchlist hook + watchlist service layer",
+      "type": "frontend",
+      "estimate": "30min",
+      "dependencies": ["SL-001"],
+      "description": "Create:\n\n1. `src/lib/hooks/useAccountWatchlist.ts`\n   - useAccountWatchlist(orgId) — fetch all active watchlist entries for current user\n   - useAddToWatchlist() mutation — add company/contact to watchlist\n   - useRemoveFromWatchlist() mutation\n   - useUpdateWatchlistFrequency() mutation — change frequency with cost estimate callback\n   - useAccountSignals(watchlistId) — fetch signals for a watchlist entry\n   - useUnreadSignalCount(orgId) — badge count for nav\n\n2. React Query keys under QUERY_KEYS.accountWatchlist, QUERY_KEYS.accountSignals\n\nFollow patterns from useApolloEnrichment.ts — optimistic updates, toast notifications, supabase.functions.invoke() for mutations.",
+      "acceptance_criteria": [
+        "Hook fetches watchlist entries with React Query caching",
+        "Add/remove mutations with optimistic UI",
+        "Unread signal count available for badge display"
+      ]
+    },
+    {
+      "id": "SL-003",
+      "phase": 1,
+      "title": "Build watchlist management UI with cost-aware frequency picker",
+      "type": "frontend",
+      "estimate": "60min",
+      "dependencies": ["SL-002"],
+      "description": "Create watchlist management accessible from:\n- Ops table header action ('Watch Account')\n- Account/contact detail pages\n- Dedicated 'Smart Listening' tab in Settings or Ops\n\nUI components:\n\n1. `AddToWatchlistButton` — contextual button that adds company/contact to watchlist\n   - Shows current watch status (watching / not watching)\n   - Quick toggle with default settings (weekly, apollo only)\n\n2. `WatchlistPanel` — full management panel\n   - List of all watched accounts with last-checked date, signal count\n   - Per-account frequency picker: weekly (default) | twice-weekly | daily\n   - **Cost warning UI**: When user selects higher frequency, show inline warning:\n     - Weekly → Twice-weekly: 'This will use ~2x Apollo credits per account'\n     - Weekly → Daily: '⚠️ This will use ~7x Apollo credits per account. Estimated: ~30 credits/week for this account.'\n   - Source toggles: Apollo (default on), Web Intel, Custom Prompt\n   - When 'Web Intel' enabled: show 'Uses ~$0.01-0.05 per check via Perplexity API'\n   - When 'Custom Prompt' enabled: show text input for research prompt + 'Uses ~$0.02-0.10 per check via AI'\n   - Remove from watchlist (with confirmation)\n\n3. `WatchlistCostSummary` — org-level cost projection\n   - Shows: X accounts watched, estimated weekly Apollo credits, estimated weekly AI cost\n   - Updates live as user changes frequency/sources\n\nDesign: Follow existing Settings panels (SlackSettings.tsx pattern). Use Radix primitives. Lucide icons only.",
+      "acceptance_criteria": [
+        "Users can add/remove accounts from watchlist",
+        "Frequency picker shows cost warnings before confirming increase",
+        "Cost summary shows aggregate projected usage",
+        "Default is weekly/Monday/Apollo-only (cheapest option)"
+      ]
+    },
+    {
+      "id": "SL-004",
+      "phase": 1,
+      "title": "Auto-add accounts from open deals to watchlist",
+      "type": "backend",
+      "estimate": "30min",
+      "dependencies": ["SL-001"],
+      "description": "Create a mechanism to auto-populate watchlist from deals:\n\n1. In the `account-monitor` edge function (SL-005), at startup:\n   - Query open deals (not won/lost) for the org\n   - For each deal with a company_id, check if company is already on watchlist\n   - If not, auto-insert with source='deal_auto', monitor_frequency='weekly'\n   - If deal closes (won/lost), mark auto-added entry as is_active=false\n\n2. Surface auto-added entries differently in UI (show 'Added from deal: DealName' badge)\n\nThis runs as part of the weekly cron — not a separate trigger. Keeps it simple.",
+      "acceptance_criteria": [
+        "Open deal companies are auto-added to watchlist on each monitor run",
+        "Closed deal companies are auto-deactivated",
+        "Auto-added entries show deal source in UI",
+        "No duplicate entries (UNIQUE constraint handles this)"
+      ]
+    },
+    {
+      "id": "SL-005",
+      "phase": 2,
+      "title": "Build account-monitor edge function — Apollo re-enrich + snapshot diffing",
+      "type": "backend",
+      "estimate": "90min",
+      "dependencies": ["SL-001"],
+      "description": "Create `supabase/functions/account-monitor/index.ts` — the core signal detection engine.\n\nAuth: cron secret OR service role (same pattern as slack-morning-brief).\n\nFlow:\n1. Query account_watchlist WHERE is_active=true AND next_check_at <= now()\n   - Order by monitor_frequency ASC (manual-added first, then deal_auto)\n   - Limit batch size (e.g., 50 per invocation)\n\n2. For each account, check Apollo credit budget before proceeding\n   - If credits exhausted, skip and log\n\n3. **Apollo Person Re-Enrich** (for contact-type entries):\n   - Call Apollo /v1/people/match with stored contact data\n   - Compare response against last snapshot in account_signal_snapshots\n   - Detect changes in: title, company, seniority, email, phone, linkedin\n   - For each change → create account_signal with signal_type, severity, diff details\n\n4. **Apollo Org Re-Enrich** (for company-type entries):\n   - Call Apollo /v1/organizations/enrich with domain\n   - Compare against last snapshot\n   - Detect: headcount changes, funding changes, tech stack changes, industry reclassification\n\n5. **Snapshot Storage**:\n   - After each enrichment, store new snapshot in account_signal_snapshots\n   - Keep only last 4 snapshots per watchlist entry (auto-prune older)\n\n6. **Update Timestamps**:\n   - Set last_checked_at = now()\n   - Set next_check_at based on monitor_frequency:\n     - weekly → next Monday 07:00 UTC\n     - twice_weekly → next Monday or Thursday 07:00 UTC\n     - daily → tomorrow 07:00 UTC\n\n7. Return summary: { accounts_checked, signals_detected, credits_used, accounts_skipped }\n\nConcurrency: Process accounts sequentially to respect Apollo rate limits (max 5 concurrent API calls).\n\nUse shared utilities from `_shared/proactive/` for delivery hooks.\nPin supabase-js to @2.43.4.",
+      "acceptance_criteria": [
+        "Edge function processes batch of due watchlist entries",
+        "Apollo enrichment diffs detect job changes, title changes, company changes",
+        "Snapshots stored for future diffing",
+        "Credit budget respected — skips accounts when exhausted",
+        "next_check_at correctly calculated per frequency"
+      ]
+    },
+    {
+      "id": "SL-006",
+      "phase": 2,
+      "title": "Add Perplexity web intelligence source to account-monitor",
+      "type": "backend",
+      "estimate": "45min",
+      "dependencies": ["SL-005"],
+      "description": "Extend account-monitor to support web intelligence via Perplexity API (already used in enrich-company).\n\nFor watchlist entries with 'web_intel' in enabled_sources:\n\n1. Call Perplexity API with structured prompt:\n   ```\n   What are the latest developments at {company_name} ({domain}) in the past 7 days?\n   Focus on: funding announcements, leadership changes, product launches, \n   partnerships, acquisitions, layoffs, or major news.\n   Return ONLY factual, verifiable information with dates.\n   If nothing notable, respond with 'No significant developments.'\n   ```\n\n2. Parse response into structured signals:\n   - funding_event: Look for funding/investment keywords\n   - company_news: General news items\n   - hiring_surge: Hiring/layoff indicators\n   - competitor_mention: Mentions of known competitors\n\n3. Compare against previous web_intel snapshot to avoid duplicate signals\n   - Use title similarity matching (>80% = duplicate)\n\n4. Store signals with source='web_intel' and raw Perplexity response in source_data\n\nCost tracking: Log Perplexity API calls to metadata for the cost summary UI.",
+      "acceptance_criteria": [
+        "Perplexity API called for web_intel-enabled accounts",
+        "Structured signals extracted from AI response",
+        "Duplicate detection prevents repeat signals week-over-week",
+        "Cost tracked in signal metadata"
+      ]
+    },
+    {
+      "id": "SL-007",
+      "phase": 2,
+      "title": "Add custom AI research prompts to account-monitor",
+      "type": "backend+frontend",
+      "estimate": "45min",
+      "dependencies": ["SL-005"],
+      "description": "For watchlist entries with 'custom_prompt' in enabled_sources AND a non-null custom_research_prompt:\n\n**Backend (in account-monitor):**\n1. Send user's custom prompt to Perplexity with company context:\n   ```\n   Context: {company_name} ({domain}), {industry}, {employee_count} employees\n   \n   Research prompt: {user's custom_research_prompt}\n   \n   Provide concise, factual findings. If nothing found, say 'No findings.'\n   ```\n\n2. If response contains findings (not 'No findings'):\n   - Create signal with signal_type='custom_research_result'\n   - Store prompt + response in details JSONB\n\n**Frontend (in WatchlistPanel from SL-003):**\n- Add text input for custom_research_prompt when 'Custom Prompt' source is enabled\n- Placeholder examples: 'Alert me if they post new job openings for engineers', 'Track any mentions of migrating away from Salesforce'\n- Show cost warning: 'Each check uses ~$0.02-0.10 in AI credits'\n- Save prompt to account_watchlist.custom_research_prompt",
+      "acceptance_criteria": [
+        "Custom prompts executed per-account during monitor run",
+        "Signals created when findings detected",
+        "UI allows editing prompt with cost warning",
+        "Empty/no-findings responses do not create signals"
+      ]
+    },
+    {
+      "id": "SL-008",
+      "phase": 2,
+      "title": "Build signal classifier + relevance scoring",
+      "type": "backend",
+      "estimate": "30min",
+      "dependencies": ["SL-005"],
+      "description": "Create `supabase/functions/_shared/signalClassifier.ts` — shared utility for scoring signals.\n\nClassification rules:\n\n| Signal Type | Default Severity | Relevance Score Factors |\n|-------------|-----------------|------------------------|\n| job_change (champion left) | critical | +40 if contact is on an open deal, +20 if contact is primary |\n| job_change (promotion) | high | +30 if at key account, +10 if seniority increased |\n| title_change | medium | +20 base, +15 if moved to decision-maker title |\n| company_change (person left company) | critical | +50 if on open deal |\n| funding_event | high | +35 base, +15 if > $10M |\n| company_news | medium | +15 base, +10 if mentions our product category |\n| hiring_surge | medium | +20 if in our department/function |\n| tech_stack_change | low | +10 base, +20 if added/removed our competitor |\n| custom_research_result | configurable | +25 base (user chose to monitor this) |\n\nOutput: { signal_type, severity, relevance_score (0-100), recommended_action: string }\n\nThe recommended_action is a one-liner suggestion like 'Send congratulations and request a catch-up' or 'Update deal risk assessment'.",
+      "acceptance_criteria": [
+        "All signal types have scoring logic",
+        "Relevance score considers deal context (open deal = higher score)",
+        "recommended_action generated for each signal type",
+        "Exported as shared utility for use in account-monitor and delivery functions"
+      ]
+    },
+    {
+      "id": "SL-009",
+      "phase": 3,
+      "title": "Add account_signal_alert + account_intelligence_digest to proactive notification engine",
+      "type": "backend",
+      "estimate": "30min",
+      "dependencies": ["SL-008"],
+      "description": "Extend the proactive notification system:\n\n1. Add to `ProactiveNotificationType` union in `_shared/proactive/types.ts`:\n   - 'account_signal_alert' — immediate high-priority signal\n   - 'account_intelligence_digest' — weekly Monday digest\n\n2. Add cooldown configs in `_shared/proactive/dedupe.ts`:\n   - account_signal_alert: 24h per entity (don't spam same account)\n   - account_intelligence_digest: 7 days (weekly)\n\n3. Add to `slack_notification_settings` feature options so orgs can enable/disable.\n\nFollow exact patterns from existing notification types.",
+      "acceptance_criteria": [
+        "New notification types registered in proactive engine",
+        "Cooldowns configured appropriately (24h per signal, 7d for digest)",
+        "Org settings respect enable/disable"
+      ]
+    },
+    {
+      "id": "SL-010",
+      "phase": 3,
+      "title": "Build Slack Block Kit templates for account signals",
+      "type": "backend",
+      "estimate": "30min",
+      "dependencies": ["SL-009"],
+      "description": "Add to `_shared/slackBlocks.ts`:\n\n1. `buildAccountSignalAlert(data: AccountSignalAlertData)` — for immediate high-priority signals:\n   ```\n   Header: '🔔 Account Signal — {company_name}'\n   Priority badge: 🔴 HIGH / 🟡 MEDIUM\n   Signal summary: '{contact_name} changed roles: {old_title} → {new_title}'\n   AI insight: 'This could impact your Q2 pipeline...'\n   Recommended action: bullet list\n   Actions: [View Account] [Take Action] [Dismiss]\n   ```\n\n2. `buildAccountIntelligenceDigest(data: AccountDigestData)` — for weekly Monday digest:\n   ```\n   Header: '📊 Weekly Account Intelligence — {date}'\n   Section per account with signals:\n     '{company_name} — {signal_count} signals'\n     • Job change: Marcus Chen → CTO\n     • Funding: Series C announced ($40M)\n   Summary: '{total_signals} signals across {account_count} accounts'\n   Actions: [View All Signals] [Manage Watchlist]\n   ```\n\nFollow truncation rules from existing slackBlocks.ts (header: 150 chars, section: 3000 chars).\nInterface types: AccountSignalAlertData, AccountDigestData.",
+      "acceptance_criteria": [
+        "Signal alert template renders correctly in Slack",
+        "Digest template groups signals by account",
+        "Truncation applied to long content",
+        "Action buttons have valid action_ids for slack-interactive handler"
+      ]
+    },
+    {
+      "id": "SL-011",
+      "phase": 3,
+      "title": "Create account-signal-digest edge function + Vercel cron (Monday 7am UTC)",
+      "type": "backend",
+      "estimate": "45min",
+      "dependencies": ["SL-009", "SL-010"],
+      "description": "Create `supabase/functions/account-signal-digest/index.ts` — sends weekly Monday intelligence digest.\n\nFlow:\n1. Auth: cron secret OR service role\n2. For each org with Slack connected + account_intelligence_digest enabled:\n   a. Get all unread signals from the past 7 days (account_signals WHERE is_read=false AND detected_at > 7 days ago)\n   b. Group by watchlist entry (account)\n   c. If no signals, skip this org\n   d. For each user with signals on their watched accounts:\n      - Check shouldSendNotification (dedupe: 7 day cooldown)\n      - Build digest using buildAccountIntelligenceDigest\n      - deliverToSlack (DM to user)\n      - deliverToInApp (mirror notification)\n      - recordNotificationSent\n\nAlso create `api/cron/slack-account-digest.ts` Vercel cron handler.\nAdd to vercel.json crons: `{ path: '/api/cron/slack-account-digest', schedule: '0 7 * * 1' }` (Monday 7am UTC).\n\nFor HIGH severity signals detected during account-monitor (SL-005), also send immediate Slack DM using account_signal_alert type (not just digest).",
+      "acceptance_criteria": [
+        "Weekly digest sent Monday morning with all unread signals",
+        "Signals grouped by account in the Slack message",
+        "High-severity signals also trigger immediate alerts (not just digest)",
+        "Cron registered in vercel.json",
+        "In-app notification mirrored"
+      ]
+    },
+    {
+      "id": "SL-012",
+      "phase": 3,
+      "title": "Add signal column type to Ops table",
+      "type": "frontend",
+      "estimate": "60min",
+      "dependencies": ["SL-008"],
+      "description": "Add a new 'signal' column type to the Ops table system.\n\n1. Add 'signal' to column type enum in opsTableService.ts\n\n2. In OpsTableCell.tsx, add signal column renderer:\n   - Shows latest signal as a compact badge: icon + short label\n   - Signal icons: 🔄 job_change, 💰 funding_event, 📰 company_news, 👥 hiring_surge, etc (use Lucide icons not emoji)\n   - Color-coded severity: red border (critical), orange (high), yellow (medium), gray (low)\n   - Click to expand: popover showing signal timeline (last 5 signals)\n   - 'No signals' state: subtle gray 'No activity' text\n\n3. In AddColumnModal.tsx, add 'Signal' option under a new 'Intelligence' category\n   - Auto-links to account_signals for the row's company/contact\n\n4. Signal data fetched by joining account_signals via company_id/contact_id on the row's source_data\n\nThe cell should feel lightweight — just a status indicator with drill-down. Not a full timeline in the cell.",
+      "acceptance_criteria": [
+        "Signal column type renders latest signal as compact badge",
+        "Click opens popover with signal timeline",
+        "Severity color coding matches design system",
+        "Works with existing Ops table virtualization"
+      ]
+    },
+    {
+      "id": "SL-013",
+      "phase": 3,
+      "title": "Build AccountSignalTimeline component",
+      "type": "frontend",
+      "estimate": "45min",
+      "dependencies": ["SL-012"],
+      "description": "Create `src/components/ops/AccountSignalTimeline.tsx` — full signal history for an account.\n\nUsed in:\n- Signal column popover (compact mode, last 5)\n- Dedicated signal panel (full mode, paginated)\n\nUI:\n- Vertical timeline layout (most recent first)\n- Each signal card shows:\n  - Icon + signal type label\n  - Severity badge (colored dot)\n  - Title + summary\n  - 'Detected {relative_time}' timestamp\n  - Source badge (Apollo | Web Intel | Custom)\n  - Actions: [Mark Read] [Dismiss] [Take Action →]\n- Empty state: 'No signals detected yet. Next check: {next_check_at}'\n- Loading state: skeleton cards\n\nUse Radix ScrollArea for the popover version. Follow existing component patterns (Lucide icons, Tailwind, named exports).",
+      "acceptance_criteria": [
+        "Timeline renders signals in reverse chronological order",
+        "Compact mode (popover) shows last 5 with 'View all' link",
+        "Full mode supports pagination",
+        "Mark read / dismiss actions update signal state"
+      ]
+    },
+    {
+      "id": "SL-014",
+      "phase": 3,
+      "title": "Create account-monitor Vercel cron (weekly Monday 6:30am UTC)",
+      "type": "backend",
+      "estimate": "20min",
+      "dependencies": ["SL-005"],
+      "description": "Create `api/cron/slack-account-monitor.ts` — Vercel cron that triggers the account-monitor edge function.\n\nPattern: exact copy of slack-deal-risk-alert.ts cron handler.\n- POST to `${SUPABASE_URL}/functions/v1/account-monitor`\n- x-cron-secret header validation\n- JSON response pass-through\n\nAdd to vercel.json crons:\n```json\n{ \"path\": \"/api/cron/slack-account-monitor\", \"schedule\": \"30 6 * * 1\" }\n```\n\nRuns Monday 6:30am UTC — 30 minutes BEFORE the digest at 7am UTC.\nThis gives the monitor time to detect signals before the digest sends them.\n\nNote: The edge function also supports on-demand invocation (for users who want immediate refresh from the UI).",
+      "acceptance_criteria": [
+        "Cron handler follows existing pattern exactly",
+        "Registered in vercel.json at 6:30am Monday UTC",
+        "Edge function invoked with proper auth"
+      ]
+    },
+    {
+      "id": "SL-015",
+      "phase": 3,
+      "title": "Add Smart Listening settings panel with cost projections",
+      "type": "frontend",
+      "estimate": "45min",
+      "dependencies": ["SL-003"],
+      "description": "Add Smart Listening section to Settings page (alongside existing Slack settings).\n\nUI sections:\n\n1. **Overview card**:\n   - 'Smart Listening monitors your key accounts for changes and pushes signals to you weekly.'\n   - Stats: {X} accounts watched, {Y} signals this month, next scan: Monday {date}\n\n2. **Global defaults** (org-level, admin only):\n   - Default frequency: Weekly (recommended) | Twice-weekly | Daily\n   - Default sources: checkboxes for Apollo, Web Intel, Custom Prompts\n   - Enable/disable weekly digest Slack notification\n   - Enable/disable immediate alerts for high-severity signals\n\n3. **Cost projection panel**:\n   - Dynamic calculation based on current watchlist:\n   ```\n   Estimated weekly usage:\n   ├── Apollo credits: ~{N} credits ({accounts} accounts × {frequency})\n   ├── Web intel (Perplexity): ~${cost} ({web_accounts} accounts)\n   ├── Custom prompts (AI): ~${cost} ({prompt_accounts} accounts)\n   └── Total estimated: ~${total}/week\n   \n   ⚠️ Increasing frequency to 'daily' would use ~7x more credits.\n   ```\n\n4. **Watchlist management** (link to WatchlistPanel from SL-003)\n\nFollow SlackSettings.tsx layout pattern. Use Radix Card, Switch, Select components.",
+      "acceptance_criteria": [
+        "Settings panel shows overview stats",
+        "Cost projection updates dynamically based on watchlist composition",
+        "Frequency changes show explicit cost impact warnings",
+        "Admin-only controls for org defaults",
+        "Individual users can override for their own watchlist entries"
+      ]
+    }
+  ]
+}

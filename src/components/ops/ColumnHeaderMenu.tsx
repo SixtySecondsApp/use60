@@ -13,6 +13,8 @@ import {
   RotateCcw,
   Sparkles,
   Settings,
+  Mail,
+  Zap,
 } from 'lucide-react';
 
 interface ColumnHeaderMenuProps {
@@ -30,6 +32,13 @@ interface ColumnHeaderMenuProps {
   onRetryFailed?: () => void;
   onEditEnrichment?: () => void;
   onReEnrich?: () => void;
+  onEditFormula?: () => void;
+  onEditButton?: () => void;
+  onEditApollo?: () => void;
+  onEditInstantly?: () => void;
+  onEditEmailGeneration?: () => void;
+  onRegenerateEmails?: () => void;
+  onCreateCampaignFromSteps?: () => void;
   anchorRect?: DOMRect;
 }
 
@@ -48,6 +57,13 @@ export function ColumnHeaderMenu({
   onRetryFailed,
   onEditEnrichment,
   onReEnrich,
+  onEditFormula,
+  onEditButton,
+  onEditApollo,
+  onEditInstantly,
+  onEditEmailGeneration,
+  onRegenerateEmails,
+  onCreateCampaignFromSteps,
   anchorRect,
 }: ColumnHeaderMenuProps) {
   const [isRenaming, setIsRenaming] = useState(false);
@@ -126,6 +142,9 @@ export function ColumnHeaderMenu({
 
   if (!isOpen) return null;
 
+  // Detect email step columns by key pattern
+  const isEmailStepColumn = /^instantly_step_\d+_(subject|body)$/.test(column.key);
+
   // Calculate position from anchor
   const style: React.CSSProperties = {};
   if (anchorRect) {
@@ -177,8 +196,40 @@ export function ColumnHeaderMenu({
         }}
       />
 
-      {/* Enrichment actions */}
-      {column.is_enrichment && onEditEnrichment && (
+      {/* Email step column actions */}
+      {isEmailStepColumn && onEditEmailGeneration && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit generation config"
+          onClick={() => {
+            onEditEmailGeneration();
+            onClose();
+          }}
+        />
+      )}
+      {isEmailStepColumn && onRegenerateEmails && (
+        <MenuItem
+          icon={<RefreshCw className="h-4 w-4" />}
+          label="Regenerate all emails"
+          onClick={() => {
+            onRegenerateEmails();
+            onClose();
+          }}
+        />
+      )}
+      {isEmailStepColumn && onCreateCampaignFromSteps && (
+        <MenuItem
+          icon={<Zap className="h-4 w-4" />}
+          label="Create Instantly campaign"
+          onClick={() => {
+            onCreateCampaignFromSteps();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Enrichment actions (suppressed for email step columns) */}
+      {column.is_enrichment && !isEmailStepColumn && onEditEnrichment && (
         <MenuItem
           icon={<Settings className="h-4 w-4" />}
           label="Edit prompt"
@@ -188,12 +239,60 @@ export function ColumnHeaderMenu({
           }}
         />
       )}
-      {column.is_enrichment && onReEnrich && (
+      {column.is_enrichment && !isEmailStepColumn && onReEnrich && (
         <MenuItem
           icon={<Sparkles className="h-4 w-4" />}
           label="Re-enrich all rows"
           onClick={() => {
             onReEnrich();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit formula (formula columns only) */}
+      {column.column_type === 'formula' && onEditFormula && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit formula"
+          onClick={() => {
+            onEditFormula();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit Apollo settings */}
+      {(column.column_type === 'apollo_property' || column.column_type === 'apollo_org_property') && onEditApollo && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit settings"
+          onClick={() => {
+            onEditApollo();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit Instantly settings */}
+      {column.column_type === 'instantly' && onEditInstantly && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit campaign settings"
+          onClick={() => {
+            onEditInstantly();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit button config (button columns only) */}
+      {column.column_type === 'button' && onEditButton && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit button"
+          onClick={() => {
+            onEditButton();
             onClose();
           }}
         />

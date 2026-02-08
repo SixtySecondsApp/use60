@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -13,6 +13,9 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
+  Wand2,
+  Send,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/lib/hooks/useUser';
@@ -23,7 +26,10 @@ import { formatDistanceToNow } from 'date-fns';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 import { HubSpotImportWizard } from '@/components/ops/HubSpotImportWizard';
 import { CrossOpImportWizard } from '@/components/ops/CrossOpImportWizard';
+import { ApolloSearchWizard } from '@/components/ops/ApolloSearchWizard';
 import { CreateTableModal } from '@/components/ops/CreateTableModal';
+import { useWorkflowOrchestrator } from '@/lib/hooks/useWorkflowOrchestrator';
+import { WorkflowProgressStepper } from '@/components/ops/WorkflowProgressStepper';
 
 const tableService = new OpsTableService(supabase);
 
@@ -186,7 +192,20 @@ function OpsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotImport, setShowHubSpotImport] = useState(false);
+  const [showApolloSearch, setShowApolloSearch] = useState(false);
   const [showCrossOpImport, setShowCrossOpImport] = useState(false);
+  const [showWorkflowPrompt, setShowWorkflowPrompt] = useState(false);
+  const [workflowInput, setWorkflowInput] = useState('');
+
+  const workflow = useWorkflowOrchestrator();
+
+  const handleWorkflowSubmit = useCallback(() => {
+    const prompt = workflowInput.trim();
+    if (!prompt) return;
+    setShowWorkflowPrompt(false);
+    setWorkflowInput('');
+    workflow.execute(prompt);
+  }, [workflowInput, workflow]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -480,8 +499,10 @@ function OpsPage() {
         onClose={() => setShowCreateModal(false)}
         onSelectCSV={() => setShowCSVImport(true)}
         onSelectHubSpot={() => setShowHubSpotImport(true)}
+        onSelectApollo={() => setShowApolloSearch(true)}
         onSelectOpsTable={() => setShowCrossOpImport(true)}
         onSelectBlank={() => createTableMutation.mutate()}
+        onSelectWorkflow={() => setShowWorkflowPrompt(true)}
       />
 
       <CSVImportOpsTableWizard
@@ -502,6 +523,15 @@ function OpsPage() {
         }}
       />
 
+      <ApolloSearchWizard
+        open={showApolloSearch}
+        onOpenChange={setShowApolloSearch}
+        onComplete={(tableId) => {
+          setShowApolloSearch(false);
+          navigate(`/ops/${tableId}`);
+        }}
+      />
+
       <CrossOpImportWizard
         open={showCrossOpImport}
         onOpenChange={setShowCrossOpImport}
@@ -510,6 +540,82 @@ function OpsPage() {
           navigate(`/ops/${tableId}`);
         }}
       />
+
+      {/* NLT: Workflow Prompt Dialog */}
+      {showWorkflowPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowWorkflowPrompt(false); }}
+        >
+          <div className="w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-700/60 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Wand2 className="h-5 w-5 text-violet-400" />
+                <h2 className="text-lg font-semibold text-white">Describe Your Workflow</h2>
+              </div>
+              <button
+                onClick={() => setShowWorkflowPrompt(false)}
+                className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-zinc-400">
+                Describe what you want to do in plain English. The AI will search for leads,
+                generate personalised emails, and create an Instantly campaign for you.
+              </p>
+              <textarea
+                value={workflowInput}
+                onChange={(e) => setWorkflowInput(e.target.value)}
+                placeholder="e.g. Find 50 VP Engineering at Series A-C SaaS companies in the US, write a 3-step cold email sequence about our developer productivity tool, and create an Instantly campaign"
+                rows={4}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-500 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/20 resize-none"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    handleWorkflowSubmit();
+                  }
+                }}
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-zinc-500">
+                  Cmd+Enter to submit
+                </span>
+                <button
+                  onClick={handleWorkflowSubmit}
+                  disabled={!workflowInput.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-violet-500/20 hover:from-violet-500 hover:to-purple-500 transition-all disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Run Workflow
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NLT: Workflow Progress Stepper (shown at bottom of page) */}
+      {(workflow.isRunning || workflow.result || workflow.clarifyingQuestions || workflow.steps.length > 0) && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-xl">
+          <WorkflowProgressStepper
+            isRunning={workflow.isRunning}
+            steps={workflow.steps}
+            plan={workflow.plan}
+            result={workflow.result}
+            clarifyingQuestions={workflow.clarifyingQuestions}
+            onAnswerClarifications={workflow.answerClarifications}
+            onAbort={workflow.abort}
+            onDismiss={workflow.reset}
+            onNavigateToTable={(id) => {
+              workflow.reset();
+              navigate(`/ops/${id}`);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

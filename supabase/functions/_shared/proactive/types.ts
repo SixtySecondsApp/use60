@@ -16,7 +16,9 @@ export type ProactiveNotificationType =
   | 'hitl_followup_email'
   | 'meeting_prep'
   | 'meeting_debrief'
-  | 'daily_digest';
+  | 'daily_digest'
+  | 'account_signal_alert'
+  | 'account_intelligence_digest';
 
 export interface ProactiveNotificationPayload {
   type: ProactiveNotificationType;

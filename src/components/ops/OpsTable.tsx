@@ -61,6 +61,7 @@ interface Column {
   action_type?: string | null;
   action_config?: Record<string, unknown> | null;
   hubspot_property_name?: string | null;
+  apollo_property_name?: string | null;
 }
 
 interface Row {
@@ -179,6 +180,7 @@ function SortableColumnHeader({
         relative flex items-center gap-1 px-2 border-r border-gray-800 shrink-0 select-none
         ${col.is_enrichment ? 'bg-violet-500/5' : ''}
         ${col.hubspot_property_name ? 'bg-orange-500/30' : ''}
+        ${col.apollo_property_name ? 'bg-blue-500/20' : ''}
         group cursor-pointer hover:bg-gray-800/40 transition-colors
       `}
       style={style}
@@ -459,14 +461,22 @@ export const OpsTable: React.FC<OpsTableProps> = ({
     [onCellEdit],
   );
 
-  // Extract first/last name from source_data for person columns
+  // Extract first/last name and enrichment metadata from source_data
   const getPersonNames = useCallback(
-    (row: Row): { firstName?: string; lastName?: string } => {
+    (row: Row): { firstName?: string; lastName?: string; photoUrl?: string; companyDomain?: string } => {
       const sd = row.source_data;
       if (!sd) return {};
+
+      // After Apollo enrichment, full data is cached under source_data.apollo
+      const apollo = sd.apollo as Record<string, unknown> | undefined;
+
       return {
         firstName: (sd.first_name ?? sd.firstName) as string | undefined,
         lastName: (sd.last_name ?? sd.lastName) as string | undefined,
+        photoUrl: (apollo?.photo_url as string) || undefined,
+        companyDomain: (apollo?.organization as Record<string, unknown>)?.primary_domain as string
+          || (sd.company_domain as string)
+          || undefined,
       };
     },
     [],
@@ -478,7 +488,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
 
   const renderColumnIcon = (col: Column) => {
     // Integration column: show integration logo (HubSpot, Apollo, Instantly, etc.)
-    const integrationId = col.hubspot_property_name ? 'hubspot' : col.integration_type;
+    const integrationId = col.hubspot_property_name ? 'hubspot' : col.apollo_property_name ? 'apollo' : col.integration_type;
     if (integrationId) {
       // Extract base integration name from types like "apollo_enrich" -> "apollo"
       const baseName = integrationId.split('_')[0];
@@ -530,12 +540,12 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   // -----------------------------------------------------------------------
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-950 overflow-hidden">
+    <div className="rounded-xl border border-gray-800 bg-gray-950 overflow-hidden w-full min-w-0">
       {/* Scrollable container */}
       <div
         ref={parentRef}
         className="overflow-auto"
-        style={{ maxHeight: 'calc(100vh - 220px)' }}
+        style={{ maxHeight: 'var(--ops-table-max-height, calc(100vh - 220px))', overscrollBehavior: 'contain' }}
       >
         <div style={{ width: totalWidth, minWidth: '100%' }}>
           {/* ---- HEADER ---- */}
@@ -631,7 +641,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
               // ---- DATA ROW ----
               const row = item.row;
               const isSelected = selectedRows.has(row.id);
-              const { firstName, lastName } = getPersonNames(row);
+              const { firstName, lastName, photoUrl, companyDomain } = getPersonNames(row);
               const rowFmtStyle = formattingRules.length > 0
                 ? evaluateRowFormatting(formattingRules, row.cells)
                 : null;
@@ -694,6 +704,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           flex items-center px-2 border-r border-gray-800/50 shrink-0 overflow-hidden
                           ${col.is_enrichment ? 'bg-violet-500/[0.03]' : ''}
                           ${col.hubspot_property_name ? 'bg-orange-500/10' : ''}
+                          ${col.apollo_property_name ? 'bg-blue-500/[0.07]' : ''}
                         `}
                         style={{ width: cellWidth, minWidth: cellWidth, ...fmtStyle }}
                       >
@@ -707,12 +718,19 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           isEnrichment={col.is_enrichment}
                           firstName={firstName}
                           lastName={lastName}
-                          onEdit={(col.is_enrichment || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
+                          photoUrl={photoUrl}
+                          companyDomain={companyDomain}
+                          onEdit={((col.is_enrichment && col.column_type !== 'apollo_property' && col.column_type !== 'apollo_org_property') || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
                           dropdownOptions={col.dropdown_options}
                           formulaExpression={col.formula_expression}
                           columnLabel={col.label}
                           metadata={cellData.metadata}
-                          onEnrichRow={col.is_enrichment ? () => onEnrichRow?.(row.id, col.id) : undefined}
+                          onEnrichRow={(col.is_enrichment || col.column_type === 'apollo_property' || col.column_type === 'apollo_org_property') ? () => onEnrichRow?.(row.id, col.id) : undefined}
+                          buttonConfig={(col.column_type === 'button' || col.column_type === 'action') ? col.action_config as any : undefined}
+                          rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly') ? Object.fromEntries(
+                            Object.entries(row.cells).map(([k, v]) => [k, v.value ?? ''])
+                          ) : undefined}
+                          integrationConfig={col.column_type === 'instantly' ? col.integration_config : undefined}
                         />
                       </div>
                     );

@@ -1,0 +1,91 @@
+{
+  "feature": "ops-icp-profiles",
+  "title": "ICP Profile Suggestions for Apollo Search",
+  "createdAt": "2026-02-07T00:00:00Z",
+  "consultReport": ".sixty/consult/ops-icp-profiles.md",
+  "totalEstimate": "2 hours",
+  "stories": [
+    {
+      "id": "ICP-001",
+      "title": "Create generate-icp-profiles edge function",
+      "type": "backend",
+      "estimate": "25min",
+      "status": "pending",
+      "dependencies": [],
+      "description": "Edge function that takes org_id, fetches organization_enrichment + organization_context + past Apollo search params from dynamic_tables, sends to Claude with structured output schema, returns 2-4 ICPProfile objects with pre-mapped ApolloSearchParams. Cache results in organization_context table.",
+      "acceptanceCriteria": [
+        "Authenticates user via JWT",
+        "Fetches org enrichment data, context, and past Apollo searches",
+        "Calls Claude with structured prompt including valid Apollo enum values",
+        "Returns 2-4 ICPProfile objects with name, description, emoji, filters, rationale",
+        "Caches profiles in organization_context (key: icp_apollo_profiles)",
+        "Returns cached profiles if they exist and are <24h old",
+        "Handles orgs with no enrichment data gracefully (returns empty array)"
+      ]
+    },
+    {
+      "id": "ICP-002",
+      "title": "Create useICPProfiles hook",
+      "type": "frontend",
+      "estimate": "15min",
+      "status": "pending",
+      "dependencies": ["ICP-001"],
+      "description": "React Query hook that calls the generate-icp-profiles edge function, manages loading/error states, and exposes the profile list. Include a regenerate function.",
+      "acceptanceCriteria": [
+        "Calls generate-icp-profiles via supabase.functions.invoke()",
+        "Exposes profiles array, isLoading, error, and regenerate() function",
+        "Caches with React Query (staleTime: 5min)",
+        "Returns empty array (not error) for orgs without enrichment"
+      ]
+    },
+    {
+      "id": "ICP-003",
+      "title": "Build ICPProfileSelector component",
+      "type": "frontend",
+      "estimate": "30min",
+      "status": "pending",
+      "dependencies": ["ICP-002"],
+      "description": "Card grid component showing AI-generated ICP profiles. Each card shows emoji, name, description, filter count. Clicking a card calls onSelect(profile). Always includes a 'Custom Search' card. Shows loading skeleton while profiles generate. Shows helpful empty state if no enrichment data.",
+      "acceptanceCriteria": [
+        "Renders 2-4 profile cards + 'Custom Search' card in grid",
+        "Cards show emoji, name, short description, filter count badge",
+        "Click handler calls onSelect with the full ICPProfile (or null for custom)",
+        "Loading state shows skeleton cards while AI generates profiles",
+        "Empty state message when org has no enrichment data (directs to Custom Search)",
+        "Follows Sixty design system (glassmorphic dark mode, zinc/blue palette)"
+      ]
+    },
+    {
+      "id": "ICP-004",
+      "title": "Integrate ICPProfileSelector into ApolloSearchWizard",
+      "type": "frontend",
+      "estimate": "20min",
+      "status": "pending",
+      "dependencies": ["ICP-003"],
+      "description": "Add ICPProfileSelector as Step 0 in the ApolloSearchWizard. When a profile is selected, pre-fill all filter state (titles, seniorities, departments, keywords, employee ranges, etc.) and advance to Step 1. User can modify any filter. 'Custom Search' goes to empty Step 1.",
+      "acceptanceCriteria": [
+        "Step indicator shows 3 steps: Profile → Search → Preview",
+        "Selecting a profile pre-fills all relevant filter state variables",
+        "User can modify any pre-filled filter before searching",
+        "'Custom Search' advances to Step 1 with empty filters (current behavior)",
+        "Back button from Step 1 returns to Step 0",
+        "Form reset clears profile selection state"
+      ]
+    },
+    {
+      "id": "ICP-005",
+      "title": "Deploy edge function and test",
+      "type": "ops",
+      "estimate": "10min",
+      "status": "pending",
+      "dependencies": ["ICP-004"],
+      "description": "Deploy generate-icp-profiles to staging, test with real org data, verify profiles generate correctly and pre-fill the wizard.",
+      "acceptanceCriteria": [
+        "Edge function deployed to staging with --no-verify-jwt",
+        "Profiles generate from real org enrichment data",
+        "Clicking a profile correctly pre-fills all wizard filters",
+        "Custom Search still works as before"
+      ]
+    }
+  ]
+}

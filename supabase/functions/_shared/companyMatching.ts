@@ -60,7 +60,7 @@ export function extractBusinessDomain(email: string): string | null {
 /**
  * Calculate string similarity using Levenshtein distance
  */
-function calculateStringSimilarity(str1: string, str2: string): number {
+export function calculateStringSimilarity(str1: string, str2: string): number {
   const s1 = str1.toLowerCase()
   const s2 = str2.toLowerCase()
 
@@ -102,7 +102,7 @@ function calculateStringSimilarity(str1: string, str2: string): number {
 /**
  * Normalize company name for fuzzy matching
  */
-function normalizeCompanyName(name: string): string {
+export function normalizeCompanyName(name: string): string {
   if (!name) return ''
 
   let normalized = name.toLowerCase().trim()

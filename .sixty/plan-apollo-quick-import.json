@@ -1,0 +1,162 @@
+{
+  "feature": "apollo-quick-import",
+  "name": "Apollo Quick Import — NL to Table in One Click",
+  "description": "Add a Quick Import flow that goes from natural language query directly to a populated, enriched Ops table in one click. Detects enrichment intent from the query ('with emails', 'with phone numbers'), auto-generates table name, and navigates to the result. Also fixes preview data to show Apollo availability flags correctly.",
+  "consultReport": ".sixty/consult/apollo-quick-import.md",
+  "createdAt": "2026-02-07T00:00:00Z",
+  "status": "complete",
+  "stories": [
+    {
+      "id": "APO-013",
+      "feature": "apollo-quick-import",
+      "title": "Add enrichment intent detection to parse-apollo-query",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "description": "Update the parse-apollo-query edge function to detect enrichment keywords in the NL query and return an enrichment object alongside search params. Add 'detect_enrichment' tool property to the Claude tool schema. Keywords: 'with emails' / 'with email addresses' -> email: true, 'with phone numbers' / 'with phones' / 'with mobile' -> phone: true, 'with contact details' / 'enriched' / 'full details' -> both. Also add 'suggested_table_name' output field that generates a short descriptive name from the query.",
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/parse-apollo-query/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["APO-014", "APO-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "'CEOs in Bristol with emails' returns enrichment: { email: true }",
+        "'VPs of Sales with phone numbers' returns enrichment: { phone: true }",
+        "'Directors in London with full contact details' returns enrichment: { email: true, phone: true }",
+        "'CTOs at startups' returns no enrichment field (not requested)",
+        "Returns suggested_table_name: e.g. 'CEOs - Bristol' or 'VP Sales - SaaS - London'",
+        "Existing search params parsing still works correctly"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/parse-apollo-query/index.ts"
+      ]
+    },
+    {
+      "id": "APO-014",
+      "feature": "apollo-quick-import",
+      "title": "Update ParsedApolloQuery type and hook to include enrichment + table name",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Update the ParsedApolloQuery interface in useOpsTableSearch.ts to include the new enrichment and suggested_table_name fields. Update the ApolloSearchWizard to use these fields: auto-enable enrichment checkboxes when detected, pre-fill table name from suggestion.",
+      "dependencies": {
+        "stories": ["APO-013"],
+        "files": [
+          "src/lib/hooks/useOpsTableSearch.ts",
+          "src/components/ops/ApolloSearchWizard.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["APO-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "ParsedApolloQuery type includes enrichment?: { email?: boolean, phone?: boolean } and suggested_table_name?: string",
+        "When NL parse returns enrichment.email, the 'Enrich emails' checkbox auto-enables on Step 2",
+        "When NL parse returns enrichment.phone, the 'Enrich phone numbers' checkbox auto-enables on Step 2",
+        "Table name field pre-fills with suggested_table_name from parse result",
+        "Manual filter workflow still works unchanged"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/hooks/useOpsTableSearch.ts",
+        "src/components/ops/ApolloSearchWizard.tsx"
+      ]
+    },
+    {
+      "id": "APO-015",
+      "feature": "apollo-quick-import",
+      "title": "Add Quick Import button with one-click NL-to-table flow",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "description": "Add a 'Quick Import' button next to the existing 'Search' button on the Step 0 NL bar. When clicked: 1) Parse NL query, 2) Call searchAndCreateTable directly (skip preview), 3) Auto-enrich based on detected enrichment keywords, 4) Show progress toast, 5) Close dialog and navigate to new table. Uses existing apolloSearchService.searchAndCreateTable which already supports auto_enrich. Add loading state with step progress indicator: 'Parsing query...' -> 'Searching Apollo...' -> 'Creating table...' -> 'Enriching contacts...'",
+      "dependencies": {
+        "stories": ["APO-013", "APO-014"],
+        "files": [
+          "src/components/ops/ApolloSearchWizard.tsx",
+          "src/lib/hooks/useOpsTableSearch.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["APO-016"],
+      "parallelWith": [],
+      "acceptance": [
+        "'Quick Import' button appears next to 'Search' on NL bar (Step 0 and Step 1)",
+        "Clicking Quick Import with 'CEOs in Bristol with emails': parses -> creates table -> enriches emails -> navigates",
+        "Progress toast shows current step: parsing, searching, creating, enriching",
+        "Error handling: shows specific error toasts for parse failure, search failure, create failure",
+        "Quick Import button is disabled while any operation is in progress",
+        "Without enrichment keywords, creates table without enrichment (just search + import)",
+        "Table auto-named from NL query (suggested_table_name from parser)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/ApolloSearchWizard.tsx"
+      ]
+    },
+    {
+      "id": "APO-016",
+      "feature": "apollo-quick-import",
+      "title": "Deploy and test Quick Import end-to-end on staging",
+      "type": "test",
+      "status": "complete",
+      "priority": 4,
+      "description": "Deploy updated parse-apollo-query to staging. Test full Quick Import flow: NL query with enrichment -> table created -> emails enriched -> navigate to table. Test edge cases: NL parse failure, empty search results, enrichment failures. Verify standard wizard flow still works unchanged.",
+      "dependencies": {
+        "stories": ["APO-015"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "parse-apollo-query deployed to staging with enrichment detection",
+        "'CEOs in Bristol with emails' Quick Import creates table with enriched emails in <30s",
+        "'VPs of Sales with phone numbers' creates table with enriched phones",
+        "'Engineers at startups' creates table without enrichment (no enrichment keywords)",
+        "Empty search results show 'No results found' toast (not a crash)",
+        "Standard wizard flow (Step 0 -> 1 -> 2) still works unchanged",
+        "Table name auto-generated correctly from query"
+      ],
+      "estimatedMinutes": 15,
+      "files": []
+    }
+  ],
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 0,
+    "estimatedMinutes": 75,
+    "phases": [
+      {
+        "name": "Phase 1: Backend — Enrichment Detection",
+        "stories": ["APO-013"],
+        "estimatedMinutes": 20,
+        "delivers": "NL parser detects enrichment intent and suggests table names"
+      },
+      {
+        "name": "Phase 2: Frontend — Type Updates + Auto-Fill",
+        "stories": ["APO-014"],
+        "estimatedMinutes": 15,
+        "delivers": "Enrichment options auto-fill from NL query"
+      },
+      {
+        "name": "Phase 3: Frontend — Quick Import Button",
+        "stories": ["APO-015"],
+        "estimatedMinutes": 25,
+        "delivers": "One-click NL to enriched table flow"
+      },
+      {
+        "name": "Phase 4: Deploy & Test",
+        "stories": ["APO-016"],
+        "estimatedMinutes": 15,
+        "delivers": "Verified end-to-end on staging"
+      }
+    ],
+    "parallelGroups": []
+  }
+}

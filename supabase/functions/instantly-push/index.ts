@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,6 +28,7 @@ interface InstantlyPushRequest {
   row_ids: string[]
   campaign_id?: string
   campaign_name?: string
+  mode?: 'new_campaign' | 'existing_campaign'
   variable_mapping: Record<string, string> // table column key -> Instantly variable name
 }
 
@@ -91,15 +92,29 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { data: integration } = await serviceClient
-      .from('integration_credentials')
-      .select('credentials')
+    // Check instantly_org_credentials first (primary), then integration_credentials (legacy)
+    const { data: instantlyCreds } = await serviceClient
+      .from('instantly_org_credentials')
+      .select('api_key')
       .eq('org_id', membership.org_id)
-      .eq('provider', 'instantly')
       .maybeSingle()
 
-    const instantlyApiKey = (integration?.credentials as Record<string, string>)?.api_key
-      || Deno.env.get('INSTANTLY_API_KEY')
+    let instantlyApiKey = instantlyCreds?.api_key || null
+
+    if (!instantlyApiKey) {
+      const { data: integration } = await serviceClient
+        .from('integration_credentials')
+        .select('credentials')
+        .eq('organization_id', membership.org_id)
+        .eq('provider', 'instantly')
+        .maybeSingle()
+
+      instantlyApiKey = (integration?.credentials as Record<string, string>)?.api_key || null
+    }
+
+    if (!instantlyApiKey) {
+      instantlyApiKey = Deno.env.get('INSTANTLY_API_KEY') || null
+    }
 
     if (!instantlyApiKey) {
       return new Response(
@@ -115,7 +130,7 @@ serve(async (req) => {
     // 3. Parse request body
     // -----------------------------------------------------------------------
     const body = await req.json() as InstantlyPushRequest
-    const { table_id, row_ids, campaign_id, campaign_name, variable_mapping } = body
+    const { table_id, row_ids, campaign_id, campaign_name, mode, variable_mapping } = body
 
     if (!table_id || !row_ids?.length) {
       return new Response(
@@ -141,6 +156,14 @@ serve(async (req) => {
           error: 'An email mapping is required. Please map one column to the "email" Instantly variable.',
           code: 'EMAIL_MAPPING_REQUIRED',
         }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // In existing_campaign mode, campaign_id is required
+    if (mode === 'existing_campaign' && !campaign_id) {
+      return new Response(
+        JSON.stringify({ error: 'campaign_id is required when mode is existing_campaign.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -281,8 +304,12 @@ serve(async (req) => {
     // -----------------------------------------------------------------------
     let resolvedCampaignId = campaign_id || ''
     let resolvedCampaignName = campaign_name || ''
+    let campaignCreated = false
 
-    if (!resolvedCampaignId && resolvedCampaignName) {
+    if (mode === 'existing_campaign') {
+      // Existing campaign mode — use the provided campaign_id directly, no creation
+      console.log(`[instantly-push] Using existing campaign: ${resolvedCampaignId}`)
+    } else if (!resolvedCampaignId && resolvedCampaignName) {
       // Create a new campaign
       console.log(`[instantly-push] Creating new campaign: ${resolvedCampaignName}`)
 
@@ -317,6 +344,7 @@ serve(async (req) => {
         throw new Error('Campaign created but no campaign ID was returned')
       }
 
+      campaignCreated = true
       console.log(`[instantly-push] Campaign created: ${resolvedCampaignId}`)
     }
 
@@ -364,6 +392,8 @@ serve(async (req) => {
         success: true,
         campaign_id: resolvedCampaignId,
         campaign_name: resolvedCampaignName,
+        campaign_created: campaignCreated,
+        mode: mode || 'new_campaign',
         leads_pushed: leadsPushed,
         failed_leads: failedLeads,
         errors: errors.length > 0 ? errors : undefined,

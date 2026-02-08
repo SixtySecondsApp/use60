@@ -199,7 +199,11 @@ PROJECT_DIR=$(echo "$input" | jq -r '.workspace.project_dir // ""' 2>/dev/null)
 [ -z "$PROJECT_DIR" ] && PROJECT_DIR=$(git rev-parse --show-toplevel 2>/dev/null)
 if [ -n "$PROJECT_DIR" ]; then
   # Detect from running Vite process --mode flag (source of truth)
-  vite_mode=$(ps aux 2>/dev/null | grep "[v]ite --mode" | grep -o '\-\-mode [a-z]*' | head -1 | awk '{print $2}')
+  vite_mode=$(ps -ww -eo args 2>/dev/null | grep "[v]ite" | grep -o '\-\-mode [a-z]*' | head -1 | awk '{print $2}')
+  # Fallback: marker file written by npm dev scripts
+  if [ -z "$vite_mode" ] && [ -f "$PROJECT_DIR/.vite-mode" ]; then
+    vite_mode=$(cat "$PROJECT_DIR/.vite-mode" 2>/dev/null | tr -d '[:space:]')
+  fi
   if [ -n "$vite_mode" ]; then
     envfile="$PROJECT_DIR/.env.${vite_mode}"
   else

@@ -1,0 +1,238 @@
+{
+  "feature": "ops-formula-buttons",
+  "name": "Enhanced Formulas + Coda-Style Button Columns",
+  "description": "Improve formula engine with & concatenation operator and smarter N/A handling. Add Coda-style button columns with configurable labels, colors, icons, and multi-action chaining.",
+  "consultReport": ".sixty/consult/ops-formula-buttons.md",
+  "createdAt": "2026-02-06T00:00:00Z",
+  "status": "complete",
+
+  "stories": [
+    {
+      "id": "FMB-001",
+      "feature": "ops-formula-buttons",
+      "title": "Add & string concatenation operator to formula engine",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "description": "Add the `&` operator to the formula evaluator so users can write `@first_name & \" \" & @last_name` as an alternative to CONCAT(). The `&` operator should be detected BEFORE math evaluation and treated as string concatenation. Also fix CONCAT to skip N/A values instead of propagating them (so `CONCAT(@first, \" \", @last)` returns just the first name if last is empty, not 'N/A').",
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/evaluate-formula/index.ts"],
+        "schema": []
+      },
+      "blocks": ["FMB-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "`@col1 & \" \" & @col2` concatenates two column values with a space",
+        "`&` works with string literals: `@name & \" (\" & @title & \")\"`",
+        "CONCAT(@first, \" \", @last) returns 'John' if @last is empty (not 'N/A')",
+        "Math expressions still work correctly (& doesn't break + - * /)",
+        "Existing CONCAT and IF formulas continue to work unchanged"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/evaluate-formula/index.ts"
+      ]
+    },
+    {
+      "id": "FMB-002",
+      "feature": "ops-formula-buttons",
+      "title": "Add formula quick-insert templates for & operator",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "description": "Update the AddColumnModal formula editor to include the `&` operator in quick-insert templates. Add a 'JOIN' template using `&` syntax. Keep existing SUM, IF, CONCAT, MULTIPLY templates.",
+      "dependencies": {
+        "stories": ["FMB-001"],
+        "files": ["src/components/ops/AddColumnModal.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New 'JOIN' quick-insert template: `@first_name & \" \" & @last_name`",
+        "Existing SUM, IF, CONCAT, MULTIPLY templates remain",
+        "Formula placeholder text updated to mention & operator"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/ops/AddColumnModal.tsx"
+      ]
+    },
+    {
+      "id": "FMB-003",
+      "feature": "ops-formula-buttons",
+      "title": "Design button column action_config schema and add 'button' column type",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "description": "Extend the action_config JSONB schema to support Coda-style buttons. The new schema stores button appearance (label, color, icon) and an ordered actions array for multi-action chaining. Add 'button' as an alias/upgrade of the existing 'action' column type in the frontend. No migration needed — action_config is already JSONB.",
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/lib/services/opsTableService.ts",
+          "src/components/ops/AddColumnModal.tsx"
+        ],
+        "schema": ["dynamic_table_columns"]
+      },
+      "blocks": ["FMB-004", "FMB-005", "FMB-006"],
+      "parallelWith": ["FMB-001"],
+      "acceptance": [
+        "action_config schema supports: { label, color, icon, actions: [{ type, config }] }",
+        "Action types defined: set_value, open_url, call_function, push_to_crm, re_enrich, start_sequence",
+        "OpsTableService addColumn/updateColumn handle new button config",
+        "'button' column type added to BASE_COLUMN_TYPES in AddColumnModal",
+        "TypeScript interfaces defined for ButtonConfig, ButtonAction"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/opsTableService.ts",
+        "src/components/ops/AddColumnModal.tsx"
+      ]
+    },
+    {
+      "id": "FMB-004",
+      "feature": "ops-formula-buttons",
+      "title": "Build ButtonColumnConfigPanel UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "description": "Create a configuration panel component for button columns. Shown inside AddColumnModal when column type is 'button'. Allows configuring: button label (static or formula-driven with @column refs), button color (preset palette), icon (from Lucide set), and an ordered list of actions. Each action has a type selector and type-specific config fields. Actions can be reordered and deleted. Follows existing modal styling patterns (gray-900 bg, violet accents).",
+      "dependencies": {
+        "stories": ["FMB-003"],
+        "files": [
+          "src/components/ops/AddColumnModal.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["FMB-007"],
+      "parallelWith": ["FMB-005"],
+      "acceptance": [
+        "Button label field with @column autocomplete (reuse existing mention pattern)",
+        "Color picker with 8 preset colors (violet, blue, green, amber, red, pink, cyan, gray)",
+        "Action list with add/remove/reorder",
+        "Action type selector: Set Value, Open URL, Call Function, Push to CRM, Re-enrich",
+        "Each action type shows relevant config fields (target column, URL column, function name, etc.)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/ops/ButtonColumnConfigPanel.tsx",
+        "src/components/ops/AddColumnModal.tsx"
+      ]
+    },
+    {
+      "id": "FMB-005",
+      "feature": "ops-formula-buttons",
+      "title": "Wire up action dispatch in OpsDetailPage + useActionExecution",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "description": "Connect the existing useActionExecution hook (currently unused) to OpsDetailPage's handleCellEdit flow. When a button/action column cell receives 'execute', dispatch the configured actions sequentially. Extend useActionExecution to support the new action types: set_value, open_url. Update cell status to pending/complete/failed during execution.",
+      "dependencies": {
+        "stories": ["FMB-003"],
+        "files": [
+          "src/pages/OpsDetailPage.tsx",
+          "src/lib/hooks/useActionExecution.ts",
+          "src/components/ops/OpsTableCell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["FMB-007"],
+      "parallelWith": ["FMB-004"],
+      "acceptance": [
+        "Button click triggers action dispatch (not just writing 'execute' to cell)",
+        "set_value action: updates another cell in the same row",
+        "open_url action: opens URL from column value in new tab",
+        "push_to_crm and re_enrich: existing edge function calls work",
+        "Cell status updates: pending while running, complete/failed after",
+        "Multi-action chaining: actions execute sequentially, stop on failure",
+        "Toast feedback for each action result"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/hooks/useActionExecution.ts"
+      ]
+    },
+    {
+      "id": "FMB-006",
+      "feature": "ops-formula-buttons",
+      "title": "Render configurable button cells with dynamic labels and colors",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "description": "Update OpsTableCell to render button columns with the configured appearance from action_config. Support: custom label (static text or resolved from @column formula), custom color, custom icon. Button states remain: idle, running, done, failed. Dynamic labels resolve @column references per-row from sibling cell values.",
+      "dependencies": {
+        "stories": ["FMB-003"],
+        "files": [
+          "src/components/ops/OpsTableCell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["FMB-007"],
+      "parallelWith": ["FMB-004", "FMB-005"],
+      "acceptance": [
+        "Button shows configured label instead of generic 'Run'",
+        "Button uses configured color (not just default violet)",
+        "Dynamic labels with @column refs resolve per-row (e.g., 'Email @first_name')",
+        "Done state shows configured label + checkmark (not generic 'Done')",
+        "Failed state shows configured label + retry icon",
+        "Tooltip shows action summary on hover"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/OpsTableCell.tsx"
+      ]
+    },
+    {
+      "id": "FMB-007",
+      "feature": "ops-formula-buttons",
+      "title": "End-to-end testing and deploy formula engine to staging",
+      "type": "test",
+      "status": "pending",
+      "priority": 6,
+      "description": "Test all formula changes (& operator, N/A fix) and button column features end-to-end. Deploy updated evaluate-formula edge function to staging. Verify: create button column, configure actions, click button, verify action executes. Verify: create formula with & operator, recalculate, verify results.",
+      "dependencies": {
+        "stories": ["FMB-001", "FMB-002", "FMB-004", "FMB-005", "FMB-006"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Formula with & operator evaluates correctly on staging",
+        "CONCAT with empty columns doesn't return N/A",
+        "Button column can be created with custom label and color",
+        "Button click dispatches configured action (set_value verified)",
+        "Multi-action chain executes sequentially",
+        "Edge function deployed to staging with --no-verify-jwt"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "estimatedMinutes": 160,
+    "parallelGroups": [
+      {
+        "group": ["FMB-001", "FMB-003"],
+        "reason": "Formula engine changes and schema design are independent",
+        "timeSaved": "20min"
+      },
+      {
+        "group": ["FMB-004", "FMB-005", "FMB-006"],
+        "reason": "Config UI, dispatch wiring, and cell rendering are independent after schema",
+        "timeSaved": "30min"
+      }
+    ],
+    "mvp": {
+      "stories": ["FMB-001", "FMB-002", "FMB-003", "FMB-005", "FMB-006"],
+      "estimatedMinutes": 110,
+      "delivers": "& operator in formulas + working button columns with set_value and open_url actions",
+      "deferred": ["Full config panel UI (FMB-004)", "End-to-end testing (FMB-007)"]
+    }
+  }
+}

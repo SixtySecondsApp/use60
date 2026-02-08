@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { normalizeCompanyName, calculateStringSimilarity } from '../_shared/companyMatching.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,6 +20,12 @@ interface CreateDynamicTableRequest {
     page?: number
   }
   table_name?: string
+  auto_enrich?: {
+    email?: boolean
+    phone?: boolean
+    reveal_personal_emails?: boolean
+    reveal_phone_number?: boolean
+  }
 }
 
 interface NormalizedContact {
@@ -35,6 +42,7 @@ interface NormalizedContact {
   email_status: string | null
   linkedin_url: string | null
   phone: string | null
+  website_url: string | null
   city: string | null
   state: string | null
   country: string | null
@@ -58,9 +66,10 @@ const APOLLO_COLUMNS = [
   { key: 'email', label: 'Email', column_type: 'email', position: 3, width: 220 },
   { key: 'linkedin_url', label: 'LinkedIn', column_type: 'linkedin', position: 4, width: 160 },
   { key: 'phone', label: 'Phone', column_type: 'text', position: 5, width: 140 },
-  { key: 'city', label: 'City', column_type: 'text', position: 6, width: 120 },
-  { key: 'funding_stage', label: 'Funding Stage', column_type: 'text', position: 7, width: 130 },
-  { key: 'employees', label: 'Employees', column_type: 'number', position: 8, width: 110 },
+  { key: 'website_url', label: 'Website', column_type: 'url', position: 6, width: 180 },
+  { key: 'city', label: 'City', column_type: 'text', position: 7, width: 120 },
+  { key: 'funding_stage', label: 'Funding Stage', column_type: 'text', position: 8, width: 130 },
+  { key: 'employees', label: 'Employees', column_type: 'number', position: 9, width: 110 },
 ] as const
 
 /**
@@ -116,6 +125,8 @@ function getCellValue(contact: NormalizedContact, key: string): string | null {
       return contact.linkedin_url
     case 'phone':
       return contact.phone
+    case 'website_url':
+      return contact.website_url
     case 'city':
       return contact.city
     case 'funding_stage':
@@ -198,45 +209,264 @@ serve(async (req) => {
       )
     }
 
-    const { query_description, search_params, table_name: requestedTableName } = body
+    const { query_description, search_params, table_name: requestedTableName, auto_enrich } = body
 
     // ---------------------------------------------------------------
-    // 4. Call the apollo-search edge function internally
+    // 4a. Build dedup lookup BEFORE searching (so we can page through dupes)
     // ---------------------------------------------------------------
-    console.log('[copilot-dynamic-table] Calling apollo-search with params:', JSON.stringify(search_params))
+    const serviceClientForDedup = createClient(supabaseUrl, supabaseServiceRoleKey)
 
-    const apolloResponse = await fetch(`${supabaseUrl}/functions/v1/apollo-search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: authHeader,
-      },
-      body: JSON.stringify(search_params),
-    })
+    const [{ data: orgMembers }, { data: orgTables }] = await Promise.all([
+      serviceClientForDedup
+        .from('organization_memberships')
+        .select('user_id')
+        .eq('org_id', orgId),
+      serviceClientForDedup
+        .from('dynamic_tables')
+        .select('id, source_type')
+        .eq('organization_id', orgId),
+    ])
 
-    if (!apolloResponse.ok) {
-      const errorBody = await apolloResponse.text()
-      console.error('[copilot-dynamic-table] Apollo search failed:', apolloResponse.status, errorBody)
+    const orgUserIds = (orgMembers || []).map((m: { user_id: string }) => m.user_id)
+    const allOrgTableIds = (orgTables || []).map((t: { id: string }) => t.id)
+    const apolloTableIds = (orgTables || [])
+      .filter((t: { source_type: string | null }) => t.source_type === 'apollo')
+      .map((t: { id: string }) => t.id)
 
-      // Forward specific error codes from apollo-search
-      try {
-        const parsed = JSON.parse(errorBody)
-        return new Response(
-          JSON.stringify({ error: parsed.error || 'Apollo search failed', code: parsed.code }),
-          { status: apolloResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      } catch {
-        return new Response(
-          JSON.stringify({ error: 'Apollo search failed' }),
-          { status: apolloResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
+    console.log(`[copilot-dynamic-table] Dedup context: ${orgUserIds.length} org users, ${allOrgTableIds.length} org tables (${apolloTableIds.length} Apollo)`)
+
+    const [crmResult, sourceIdResult, opsDataResult] = await Promise.all([
+      orgUserIds.length > 0
+        ? serviceClientForDedup
+            .from('contacts')
+            .select('first_name, last_name, title, company')
+            .in('owner_id', orgUserIds)
+            .limit(10000)
+        : Promise.resolve({ data: [] as Array<{ first_name: string | null; last_name: string | null; title: string | null; company: string | null }> }),
+
+      allOrgTableIds.length > 0
+        ? serviceClientForDedup
+            .from('dynamic_table_rows')
+            .select('source_id')
+            .in('table_id', allOrgTableIds)
+            .not('source_id', 'is', null)
+            .limit(50000)
+        : Promise.resolve({ data: [] as Array<{ source_id: string }> }),
+
+      apolloTableIds.length > 0
+        ? serviceClientForDedup
+            .from('dynamic_table_rows')
+            .select('source_data')
+            .in('table_id', apolloTableIds)
+            .not('source_data', 'is', null)
+            .limit(10000)
+        : Promise.resolve({ data: [] as Array<{ source_data: Record<string, unknown> | null }> }),
+    ])
+
+    const crmContacts = (('data' in crmResult ? crmResult.data : crmResult) || []) as Array<{
+      first_name: string | null
+      last_name: string | null
+      title: string | null
+      company: string | null
+    }>
+
+    const sourceIdRows = (('data' in sourceIdResult ? sourceIdResult.data : sourceIdResult) || []) as Array<{
+      source_id: string
+    }>
+
+    const opsDataRows = (('data' in opsDataResult ? opsDataResult.data : opsDataResult) || []) as Array<{
+      source_data: Record<string, unknown> | null
+    }>
+
+    const existingApolloIds = new Set(
+      sourceIdRows.map((r) => r.source_id).filter(Boolean)
+    )
+
+    console.log(`[copilot-dynamic-table] Dedup: ${crmContacts.length} CRM contacts, ${existingApolloIds.size} existing source IDs, ${opsDataRows.length} ops rows with data`)
+
+    const opsContacts: Array<{ first_name: string | null; title: string | null; company: string | null }> = []
+    for (const row of opsDataRows) {
+      if (!row.source_data) continue
+      const sd = row.source_data
+      opsContacts.push({
+        first_name: (sd.first_name as string) || null,
+        title: (sd.title as string) || null,
+        company: (sd.company as string) || (sd.organization_name as string) || null,
+      })
     }
 
-    const apolloData = (await apolloResponse.json()) as ApolloSearchResponse
-    const contacts = apolloData.contacts || []
+    const TITLE_ABBREVIATIONS: Record<string, string[]> = {
+      'vice president': ['vp', 'v.p.'],
+      'chief executive officer': ['ceo', 'c.e.o.'],
+      'chief technology officer': ['cto', 'c.t.o.'],
+      'chief financial officer': ['cfo', 'c.f.o.'],
+      'chief operating officer': ['coo', 'c.o.o.'],
+      'chief marketing officer': ['cmo', 'c.m.o.'],
+      'chief revenue officer': ['cro', 'c.r.o.'],
+      'chief information officer': ['cio', 'c.i.o.'],
+      'chief product officer': ['cpo', 'c.p.o.'],
+      'senior vice president': ['svp', 'sr vp', 'sr. vp'],
+      'executive vice president': ['evp'],
+      'managing director': ['md', 'm.d.'],
+      'general manager': ['gm', 'g.m.'],
+      'director': ['dir', 'dir.'],
+      'manager': ['mgr', 'mgr.'],
+      'senior': ['sr', 'sr.'],
+      'junior': ['jr', 'jr.'],
+    }
 
-    if (contacts.length === 0) {
+    function normalizeTitle(title: string): string {
+      if (!title) return ''
+      let normalized = title.toLowerCase().trim()
+      normalized = normalized.replace(/\s*\([^)]*\)\s*/g, ' ')
+      for (const [full, abbrevs] of Object.entries(TITLE_ABBREVIATIONS)) {
+        for (const abbrev of abbrevs) {
+          const pattern = new RegExp(`\\b${abbrev.replace(/\./g, '\\.')}\\b`, 'gi')
+          normalized = normalized.replace(pattern, full)
+        }
+      }
+      normalized = normalized.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+      const words = normalized.split(' ')
+      const deduped: string[] = []
+      for (const word of words) {
+        if (deduped.length === 0 || deduped[deduped.length - 1] !== word) {
+          deduped.push(word)
+        }
+      }
+      return deduped.join(' ')
+    }
+
+    const knownByFirstName = new Map<string, Array<{ title: string; company: string }>>()
+
+    const addToLookup = (firstName: string | null, title: string | null, company: string | null) => {
+      if (!firstName) return
+      const key = firstName.toLowerCase().trim()
+      if (!key) return
+      if (!knownByFirstName.has(key)) knownByFirstName.set(key, [])
+      knownByFirstName.get(key)!.push({
+        title: normalizeTitle(title || ''),
+        company: normalizeCompanyName(company || ''),
+      })
+    }
+
+    for (const c of crmContacts) {
+      addToLookup(c.first_name, c.title, c.company)
+    }
+    for (const c of opsContacts) {
+      addToLookup(c.first_name, c.title, c.company)
+    }
+
+    console.log(`[copilot-dynamic-table] Dedup lookup: ${knownByFirstName.size} unique first names across CRM + ops`)
+
+    // Dedup filter function (reused across pages)
+    function filterDuplicates(contacts: NormalizedContact[]): NormalizedContact[] {
+      return contacts.filter((contact) => {
+        if (existingApolloIds.has(contact.apollo_id)) return false
+
+        const firstName = (contact.first_name || '').toLowerCase().trim()
+        if (!firstName) return true
+
+        const candidates = knownByFirstName.get(firstName)
+        if (!candidates || candidates.length === 0) return true
+
+        const contactCompany = normalizeCompanyName(contact.company || '')
+        const contactTitle = normalizeTitle(contact.title || '')
+
+        for (const candidate of candidates) {
+          const companySim = contactCompany && candidate.company
+            ? calculateStringSimilarity(contactCompany, candidate.company)
+            : 0
+          const companyMatch = companySim >= 0.8
+
+          const titleSim = contactTitle && candidate.title
+            ? calculateStringSimilarity(contactTitle, candidate.title)
+            : 0
+          const titleMatch = titleSim >= 0.7
+
+          if (companyMatch && titleMatch) return false
+        }
+
+        return true
+      })
+    }
+
+    // ---------------------------------------------------------------
+    // 4b. Search Apollo with pagination — skip pages of all-duplicates
+    // ---------------------------------------------------------------
+    const MAX_PAGES = 5
+    const desiredCount = search_params.per_page || 25
+    let currentPage = search_params.page || 1
+    let allNewContacts: NormalizedContact[] = []
+    let totalSearched = 0
+    let totalDuplicates = 0
+    let hasMore = true
+
+    console.log(`[copilot-dynamic-table] Calling apollo-search with params:`, JSON.stringify(search_params))
+
+    for (let attempt = 0; attempt < MAX_PAGES && hasMore; attempt++) {
+      const searchParamsWithPage = { ...search_params, page: currentPage }
+      if (attempt > 0) {
+        console.log(`[copilot-dynamic-table] Page ${currentPage}: fetching more results (have ${allNewContacts.length}/${desiredCount} net-new so far)`)
+      }
+
+      const apolloResponse = await fetch(`${supabaseUrl}/functions/v1/apollo-search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+          apikey: supabaseAnonKey,
+        },
+        body: JSON.stringify(searchParamsWithPage),
+      })
+
+      if (!apolloResponse.ok) {
+        const errorBody = await apolloResponse.text()
+        console.error('[copilot-dynamic-table] Apollo search failed:', apolloResponse.status, errorBody)
+
+        // If we already have some results from previous pages, use those
+        if (allNewContacts.length > 0) break
+
+        try {
+          const parsed = JSON.parse(errorBody)
+          return new Response(
+            JSON.stringify({ error: parsed.error || 'Apollo search failed', code: parsed.code }),
+            { status: apolloResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        } catch {
+          return new Response(
+            JSON.stringify({ error: 'Apollo search failed' }),
+            { status: apolloResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
+      const apolloData = (await apolloResponse.json()) as ApolloSearchResponse
+      const pageContacts = apolloData.contacts || []
+      hasMore = apolloData.pagination?.has_more ?? false
+
+      if (pageContacts.length === 0) break
+
+      totalSearched += pageContacts.length
+
+      // Dedup this page
+      const netNew = filterDuplicates(pageContacts)
+      totalDuplicates += pageContacts.length - netNew.length
+      allNewContacts.push(...netNew)
+
+      // Also add new contacts to the dedup sets so cross-page dedup works
+      for (const c of netNew) {
+        existingApolloIds.add(c.apollo_id)
+      }
+
+      console.log(`[copilot-dynamic-table] Page ${currentPage}: ${pageContacts.length} results, ${netNew.length} net-new, ${allNewContacts.length} total net-new`)
+
+      // Enough net-new contacts? Stop paging
+      if (allNewContacts.length >= desiredCount) break
+
+      currentPage++
+    }
+
+    if (totalSearched === 0) {
       return new Response(
         JSON.stringify({
           error: 'No results found for your search criteria. Try broadening your filters.',
@@ -246,7 +476,24 @@ serve(async (req) => {
       )
     }
 
-    console.log(`[copilot-dynamic-table] Apollo returned ${contacts.length} contacts`)
+    const dedupStats = { total: totalSearched, duplicates: totalDuplicates, net_new: allNewContacts.length }
+
+    console.log(`[copilot-dynamic-table] Dedup final: ${totalSearched} total searched across ${currentPage - (search_params.page || 1) + 1} pages, ${totalDuplicates} duplicates removed, ${allNewContacts.length} net new`)
+
+    if (allNewContacts.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: `All ${totalSearched} contacts found across ${currentPage} pages are already in your CRM or previously imported. Try a different search.`,
+          code: 'ALL_DUPLICATES',
+          dedup: dedupStats,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Trim to desired count
+    const filteredContacts = allNewContacts.slice(0, desiredCount)
+    const duplicateCount = totalDuplicates
 
     // ---------------------------------------------------------------
     // 5. Generate table name
@@ -295,17 +542,45 @@ serve(async (req) => {
     const tableId = newTable.id
     console.log(`[copilot-dynamic-table] Created table: ${tableId} — "${newTable.name}"`)
 
-    // 6b. Insert standard columns
-    const columnInserts = APOLLO_COLUMNS.map((col) => ({
-      table_id: tableId,
-      key: col.key,
-      label: col.label,
-      column_type: col.column_type,
-      position: col.position,
-      width: col.width,
-      is_enrichment: false,
-      is_visible: true,
-    }))
+    // 6b. Insert standard columns (with apollo_property_name when auto-enrich is requested)
+    const enrichEmail = auto_enrich?.email === true
+    const enrichPhone = auto_enrich?.phone === true
+    const hasAnyEnrich = enrichEmail || enrichPhone
+
+    // Map column keys to their Apollo enrichment property names.
+    // When enrichment is requested, we tag additional columns so they can be
+    // populated from the cached Apollo response (zero extra API calls).
+    const ENRICH_COLUMN_MAP: Record<string, string> = {
+      email: 'email',
+      phone: 'phone',
+      linkedin_url: 'linkedin_url',
+      city: 'city',
+      website_url: 'company_website',
+      funding_stage: 'company_funding',
+      employees: 'company_employees',
+    }
+
+    const columnInserts = APOLLO_COLUMNS.map((col) => {
+      // Only tag email/phone columns if specifically requested
+      const tagEmail = col.key === 'email' && enrichEmail
+      const tagPhone = col.key === 'phone' && enrichPhone
+      // Tag other columns whenever ANY enrichment is requested (they use the cache)
+      const tagOther = hasAnyEnrich && col.key !== 'email' && col.key !== 'phone' && ENRICH_COLUMN_MAP[col.key]
+
+      return {
+        table_id: tableId,
+        key: col.key,
+        label: col.label,
+        column_type: col.column_type,
+        position: col.position,
+        width: col.width,
+        is_enrichment: false,
+        is_visible: true,
+        ...(tagEmail ? { apollo_property_name: 'email' } : {}),
+        ...(tagPhone ? { apollo_property_name: 'phone' } : {}),
+        ...(tagOther ? { apollo_property_name: ENRICH_COLUMN_MAP[col.key] } : {}),
+      }
+    })
 
     const { data: columns, error: columnsError } = await serviceClient
       .from('dynamic_table_columns')
@@ -329,7 +604,7 @@ serve(async (req) => {
     }
 
     // 6c. Insert rows
-    const rowInserts = contacts.map((contact, index) => ({
+    const rowInserts = filteredContacts.map((contact, index) => ({
       table_id: tableId,
       row_index: index,
       source_id: contact.apollo_id,
@@ -365,7 +640,7 @@ serve(async (req) => {
 
     for (let i = 0; i < sortedRows.length; i++) {
       const row = sortedRows[i]
-      const contact = contacts[i]
+      const contact = filteredContacts[i]
 
       for (const col of APOLLO_COLUMNS) {
         const columnId = columnKeyToId[col.key]
@@ -402,9 +677,179 @@ serve(async (req) => {
     )
 
     // ---------------------------------------------------------------
-    // 7. Build response for the DynamicTableResponse component
+    // 7. Auto-enrich email/phone if requested
     // ---------------------------------------------------------------
-    const previewContacts = contacts.slice(0, 5)
+    let enrichmentStats: { email?: Record<string, number>; phone?: Record<string, number> } = {}
+
+    // Primary enrichment: email and/or phone (these make the actual Apollo API calls)
+    const primaryEnrich: Array<{ columnId: string; key: string }> = []
+    if (enrichEmail && columnKeyToId['email']) {
+      primaryEnrich.push({ columnId: columnKeyToId['email'], key: 'email' })
+    }
+    if (enrichPhone && columnKeyToId['phone']) {
+      primaryEnrich.push({ columnId: columnKeyToId['phone'], key: 'phone' })
+    }
+
+    for (const { columnId, key } of primaryEnrich) {
+      try {
+        console.log(`[copilot-dynamic-table] Auto-enriching ${key} column: ${columnId}`)
+
+        const enrichResponse = await fetch(`${supabaseUrl}/functions/v1/apollo-enrich`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authHeader,
+            apikey: supabaseAnonKey,
+          },
+          body: JSON.stringify({
+            table_id: tableId,
+            column_id: columnId,
+            reveal_personal_emails: key === 'email' ? (auto_enrich?.reveal_personal_emails ?? false) : false,
+            reveal_phone_number: key === 'phone' ? (auto_enrich?.reveal_phone_number ?? false) : false,
+          }),
+        })
+
+        if (enrichResponse.ok) {
+          const enrichResult = await enrichResponse.json()
+          enrichmentStats[key as 'email' | 'phone'] = enrichResult
+          console.log(`[copilot-dynamic-table] ${key} enrichment:`, JSON.stringify(enrichResult))
+        } else {
+          const errorText = await enrichResponse.text()
+          console.error(`[copilot-dynamic-table] ${key} enrichment failed:`, enrichResponse.status, errorText)
+        }
+      } catch (enrichError) {
+        console.error(`[copilot-dynamic-table] ${key} enrichment error:`, enrichError)
+      }
+    }
+
+    // Secondary enrichment: fill additional columns from the cached Apollo data
+    // (zero API calls — apollo-enrich detects source_data.apollo cache and extracts)
+    if (hasAnyEnrich && primaryEnrich.length > 0) {
+      const secondaryKeys = ['linkedin_url', 'city', 'website_url', 'funding_stage', 'employees']
+      const secondaryEnrich = secondaryKeys
+        .filter((key) => columnKeyToId[key] && ENRICH_COLUMN_MAP[key])
+        .map((key) => ({ columnId: columnKeyToId[key], key, apolloProp: ENRICH_COLUMN_MAP[key] }))
+
+      if (secondaryEnrich.length > 0) {
+        console.log(`[copilot-dynamic-table] Filling ${secondaryEnrich.length} extra columns from cache: ${secondaryEnrich.map(s => s.key).join(', ')}`)
+
+        // Run all secondary enrichments in parallel (they only read from cache)
+        await Promise.allSettled(
+          secondaryEnrich.map(async ({ columnId, key }) => {
+            try {
+              const resp = await fetch(`${supabaseUrl}/functions/v1/apollo-enrich`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: authHeader,
+                  apikey: supabaseAnonKey,
+                },
+                body: JSON.stringify({
+                  table_id: tableId,
+                  column_id: columnId,
+                }),
+              })
+              if (!resp.ok) {
+                console.warn(`[copilot-dynamic-table] Secondary enrich ${key} failed:`, resp.status)
+              }
+            } catch (e) {
+              console.warn(`[copilot-dynamic-table] Secondary enrich ${key} error:`, e)
+            }
+          })
+        )
+      }
+
+      // Post-enrichment: update full_name cells and root source_data with unmasked data
+      // After apollo-enrich runs, source_data.apollo has the real first_name/last_name
+      try {
+        console.log('[copilot-dynamic-table] Post-enrichment: updating names and source_data with unmasked data')
+
+        // Re-read rows to get updated source_data with apollo cache
+        const { data: enrichedRows } = await serviceClient
+          .from('dynamic_table_rows')
+          .select('id, source_data')
+          .eq('table_id', tableId)
+
+        if (enrichedRows && enrichedRows.length > 0) {
+          const nameColumnId = columnKeyToId['full_name']
+          const nameCellUpserts: Array<{ row_id: string; column_id: string; value: string; source: string; status: string }> = []
+          const rowUpdates: Array<{ id: string; source_data: Record<string, unknown> }> = []
+
+          for (const row of enrichedRows) {
+            const sd = (row.source_data || {}) as Record<string, unknown>
+            const apolloData = sd.apollo as Record<string, unknown> | undefined
+            if (!apolloData) continue
+
+            const firstName = apolloData.first_name as string | undefined
+            const lastName = apolloData.last_name as string | undefined
+            const org = apolloData.organization as Record<string, unknown> | undefined
+            const companyDomain = org?.primary_domain as string | undefined
+
+            if (firstName || lastName) {
+              const fullName = [firstName, lastName].filter(Boolean).join(' ')
+
+              // Update full_name cell with unmasked name
+              if (nameColumnId && fullName) {
+                nameCellUpserts.push({
+                  row_id: row.id,
+                  column_id: nameColumnId,
+                  value: fullName,
+                  source: 'apollo',
+                  status: 'none',
+                })
+              }
+
+              // Update root source_data with unmasked fields
+              const updatedSourceData = {
+                ...sd,
+                first_name: firstName || sd.first_name,
+                last_name: lastName || sd.last_name,
+                full_name: fullName || sd.full_name,
+                ...(companyDomain ? { company_domain: companyDomain } : {}),
+              }
+              rowUpdates.push({ id: row.id, source_data: updatedSourceData })
+            }
+          }
+
+          // Batch upsert name cells
+          if (nameCellUpserts.length > 0) {
+            const { error: nameErr } = await serviceClient
+              .from('dynamic_table_cells')
+              .upsert(nameCellUpserts, { onConflict: 'row_id,column_id' })
+            if (nameErr) {
+              console.warn('[copilot-dynamic-table] Post-enrichment name cell upsert warning:', nameErr.message)
+            } else {
+              console.log(`[copilot-dynamic-table] Updated ${nameCellUpserts.length} name cells with unmasked data`)
+            }
+          }
+
+          // Batch update row source_data (in chunks of 50 for safety)
+          if (rowUpdates.length > 0) {
+            const CHUNK_SIZE = 50
+            for (let i = 0; i < rowUpdates.length; i += CHUNK_SIZE) {
+              const chunk = rowUpdates.slice(i, i + CHUNK_SIZE)
+              await Promise.allSettled(
+                chunk.map(({ id, source_data }) =>
+                  serviceClient
+                    .from('dynamic_table_rows')
+                    .update({ source_data })
+                    .eq('id', id)
+                )
+              )
+            }
+            console.log(`[copilot-dynamic-table] Updated ${rowUpdates.length} rows source_data with unmasked fields`)
+          }
+        }
+      } catch (postEnrichErr) {
+        console.warn('[copilot-dynamic-table] Post-enrichment update warning:', postEnrichErr)
+        // Non-fatal — table still works with masked names
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // 8. Build response for the DynamicTableResponse component
+    // ---------------------------------------------------------------
+    const previewContacts = filteredContacts.slice(0, 5)
     const previewRows = previewContacts.map((contact) => ({
       Name: contact.full_name,
       Title: contact.title,
@@ -413,16 +858,20 @@ serve(async (req) => {
       LinkedIn: contact.linkedin_url || '',
     }))
 
+    const totalEnriched = (enrichmentStats.email?.enriched ?? 0) + (enrichmentStats.phone?.enriched ?? 0)
+
     const response = {
       table_id: tableId,
       table_name: newTable.name,
-      row_count: contacts.length,
+      row_count: filteredContacts.length,
       column_count: APOLLO_COLUMNS.length,
       source_type: 'apollo' as const,
-      enriched_count: 0,
+      enriched_count: totalEnriched,
       preview_rows: previewRows,
       preview_columns: ['Name', 'Title', 'Company', 'Email', 'LinkedIn'],
       query_description,
+      enrichment: Object.keys(enrichmentStats).length > 0 ? enrichmentStats : undefined,
+      dedup: duplicateCount > 0 ? dedupStats : undefined,
     }
 
     return new Response(JSON.stringify(response), {

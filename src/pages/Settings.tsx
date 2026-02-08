@@ -43,6 +43,8 @@ import {
   CreditCard,
   Brain,
   Briefcase,
+  Zap,
+  Eye,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -216,6 +218,21 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'instantly',
+      label: 'Instantly',
+      icon: Zap,
+      description: 'Email outreach campaigns, lead push, and engagement sync',
+      path: '/settings/integrations/instantly',
+      requiresOrgAdmin: true,
+    },
+    {
+      id: 'smart-listening',
+      label: 'Smart Listening',
+      icon: Eye,
+      description: 'Monitor key accounts for job changes, funding, news, and custom research',
+      path: '/settings/smart-listening',
+    },
+    {
       id: 'organization-management',
       label: 'Organization Management',
       icon: Building2,
@@ -282,11 +299,11 @@ export default function Settings() {
       ['account', 'appearance'].includes(s.id)
     );
     const aiSections = settingsSections.filter(s =>
-      ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types'].includes(s.id)
+      ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types', 'smart-listening'].includes(s.id)
     );
     // Meeting recorder integrations (only shown when connected)
     const integrationSections = settingsSections.filter(s =>
-      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
+      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
       ['organization-management', 'billing'].includes(s.id)

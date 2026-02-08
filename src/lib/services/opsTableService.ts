@@ -24,6 +24,38 @@ export interface DropdownOption {
   color?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Button column types (Coda-style configurable buttons)
+// ---------------------------------------------------------------------------
+
+export type ButtonActionType =
+  | 'set_value'
+  | 'open_url'
+  | 'call_function'
+  | 'push_to_crm'
+  | 'push_to_instantly'
+  | 're_enrich'
+  | 'start_sequence';
+
+export interface ButtonAction {
+  type: ButtonActionType;
+  config: Record<string, unknown>;
+  // set_value:        { target_column_key: string; value: string }
+  // open_url:         { url_column_key?: string; static_url?: string }
+  // call_function:    { function_name: string; body_template?: Record<string, unknown> }
+  // push_to_crm:      { field_mappings?: Array<{ ops_key: string; hubspot_property: string }> }
+  // push_to_instantly: { campaign_id?: string; field_mapping?: Record<string, string> }
+  // re_enrich:        {}
+  // start_sequence:   { sequence_id: string; input_mapping?: Record<string, string> }
+}
+
+export interface ButtonConfig {
+  label: string;              // Static text or formula with @column refs e.g. "Email @first_name"
+  color: string;              // Hex color e.g. "#8b5cf6"
+  icon?: string;              // Lucide icon name e.g. "send", "zap", "play"
+  actions: ButtonAction[];    // Ordered list of actions (executed sequentially)
+}
+
 export interface OpsTableColumn {
   id: string;
   table_id: string;
@@ -48,7 +80,12 @@ export interface OpsTableColumn {
     | 'formula'
     | 'integration'
     | 'action'
-    | 'hubspot_property';
+    | 'button'
+    | 'hubspot_property'
+    | 'apollo_property'
+    | 'apollo_org_property'
+    | 'instantly'
+    | 'signal';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
   enrichment_model: string | null;
@@ -57,8 +94,9 @@ export interface OpsTableColumn {
   integration_type: string | null;
   integration_config: Record<string, unknown> | null;
   action_type: string | null;
-  action_config: Record<string, unknown> | null;
+  action_config: ButtonConfig | Record<string, unknown> | null;
   hubspot_property_name: string | null;
+  apollo_property_name: string | null;
   position: number;
   width: number;
   is_visible: boolean;
@@ -168,7 +206,7 @@ const TABLE_COLUMNS =
   'id, organization_id, created_by, name, description, source_type, source_query, row_count, created_at, updated_at';
 
 const COLUMN_COLUMNS =
-  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, enrichment_model, dropdown_options, formula_expression, integration_type, integration_config, action_type, action_config, hubspot_property_name, position, width, is_visible, created_at';
+  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, enrichment_model, dropdown_options, formula_expression, integration_type, integration_config, action_type, action_config, hubspot_property_name, apollo_property_name, position, width, is_visible, created_at';
 
 const ROW_COLUMNS =
   'id, table_id, row_index, source_id, source_data, created_at';
@@ -290,6 +328,7 @@ export class OpsTableService {
     actionType?: string;
     actionConfig?: Record<string, unknown>;
     hubspotPropertyName?: string;
+    apolloPropertyName?: string;
     position?: number;
   }): Promise<OpsTableColumn> {
     const { data, error } = await this.supabase
@@ -309,6 +348,7 @@ export class OpsTableService {
         action_type: params.actionType ?? null,
         action_config: params.actionConfig ?? null,
         hubspot_property_name: params.hubspotPropertyName ?? null,
+        apollo_property_name: params.apolloPropertyName ?? null,
         position: params.position ?? 0,
       })
       .select(COLUMN_COLUMNS)
@@ -329,6 +369,9 @@ export class OpsTableService {
       formulaExpression?: string;
       enrichmentPrompt?: string;
       enrichmentModel?: string;
+      actionType?: string;
+      actionConfig?: ButtonConfig | Record<string, unknown>;
+      integrationConfig?: Record<string, unknown>;
     }
   ): Promise<OpsTableColumn> {
     const payload: Record<string, unknown> = {};
@@ -340,6 +383,9 @@ export class OpsTableService {
     if (updates.formulaExpression !== undefined) payload.formula_expression = updates.formulaExpression;
     if (updates.enrichmentPrompt !== undefined) payload.enrichment_prompt = updates.enrichmentPrompt;
     if (updates.enrichmentModel !== undefined) payload.enrichment_model = updates.enrichmentModel;
+    if (updates.actionType !== undefined) payload.action_type = updates.actionType;
+    if (updates.actionConfig !== undefined) payload.action_config = updates.actionConfig;
+    if (updates.integrationConfig !== undefined) payload.integration_config = updates.integrationConfig;
 
     const { data, error } = await this.supabase
       .from('dynamic_table_columns')

@@ -24,6 +24,8 @@ import {
   Save,
   Clock,
   List,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -32,6 +34,10 @@ import { OpsTable } from '@/components/ops/OpsTable';
 import { AddColumnModal } from '@/components/ops/AddColumnModal';
 import { ColumnHeaderMenu } from '@/components/ops/ColumnHeaderMenu';
 import { EditEnrichmentModal } from '@/components/ops/EditEnrichmentModal';
+import { EditColumnSettingsModal } from '@/components/ops/EditColumnSettingsModal';
+import { EditApolloSettingsModal } from '@/components/ops/EditApolloSettingsModal';
+import { EditInstantlySettingsModal } from '@/components/ops/EditInstantlySettingsModal';
+import { EditEmailGenerationModal, type EmailGenerationConfig } from '@/components/ops/EditEmailGenerationModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
 import { BulkActionsBar } from '@/components/ops/BulkActionsBar';
@@ -43,6 +49,7 @@ import { ViewConfigPanel, normalizeSortConfig, type ViewConfigState } from '@/co
 import type { SavedView, FilterCondition, OpsTableColumn, SortConfig, GroupConfig, AggregateType } from '@/lib/services/opsTableService';
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
+import { useApolloEnrichment } from '@/lib/hooks/useApolloEnrichment';
 import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { useIntegrationPolling } from '@/lib/hooks/useIntegrationStatus';
 import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
@@ -51,6 +58,7 @@ import { HubSpotSyncHistory } from '@/components/ops/HubSpotSyncHistory';
 import { HubSpotSyncSettingsModal } from '@/components/ops/HubSpotSyncSettingsModal';
 import { SaveAsHubSpotListModal } from '@/components/ops/SaveAsHubSpotListModal';
 import { useOpsRules } from '@/lib/hooks/useOpsRules';
+import { useActionExecution } from '@/lib/hooks/useActionExecution';
 import { RuleBuilder } from '@/components/ops/RuleBuilder';
 import { RuleList } from '@/components/ops/RuleList';
 import { AiQueryPreviewModal, type AiQueryOperation } from '@/components/ops/AiQueryPreviewModal';
@@ -67,6 +75,10 @@ import { AutomationsDropdown } from '@/components/ops/AutomationsDropdown';
 import { CrossQueryResultPanel } from '@/components/ops/CrossQueryResultPanel';
 import { QuickFilterBar } from '@/components/ops/QuickFilterBar';
 import { SmartViewSuggestions } from '@/components/ops/SmartViewSuggestions';
+import { CampaignApprovalBanner } from '@/components/ops/CampaignApprovalBanner';
+import { useWorkflowOrchestrator, isWorkflowPrompt } from '@/lib/hooks/useWorkflowOrchestrator';
+import { WorkflowProgressStepper } from '@/components/ops/WorkflowProgressStepper';
+// Instantly top-bar UI removed — integration moved to column system
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
 
@@ -160,6 +172,12 @@ function OpsDetailPage() {
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotPush, setShowHubSpotPush] = useState(false);
   const [editEnrichmentColumn, setEditEnrichmentColumn] = useState<OpsTableColumn | null>(null);
+  const [editFormulaColumn, setEditFormulaColumn] = useState<OpsTableColumn | null>(null);
+  const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
+  const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
+  const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
+  const [createCampaignFromStepColumn, setCreateCampaignFromStepColumn] = useState<OpsTableColumn | null>(null);
+  const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
@@ -194,6 +212,36 @@ function OpsDetailPage() {
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
 
+  // ---- Instantly state (moved to column system) ----
+
+  // ---- Fullscreen mode ----
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Dispatch event to AppLayout to hide/show sidebar
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('ops-fullscreen-change', { detail: { isFullscreen } }));
+    return () => {
+      // Ensure sidebar is restored on unmount
+      window.dispatchEvent(new CustomEvent('ops-fullscreen-change', { detail: { isFullscreen: false } }));
+    };
+  }, [isFullscreen]);
+
+  // Keyboard shortcut: Cmd/Ctrl + Shift + F
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'f') {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      }
+      // Escape exits fullscreen
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
   // ---- Save as Recipe state ----
   const [lastSuccessfulQuery, setLastSuccessfulQuery] = useState<{ query: string; resultType: string; parsedResult: any } | null>(null);
   const [showSaveRecipeDialog, setShowSaveRecipeDialog] = useState(false);
@@ -208,6 +256,22 @@ function OpsDetailPage() {
   const [isAiQueryLoading, setIsAiQueryLoading] = useState(false);
   const [isAiQueryExecuting, setIsAiQueryExecuting] = useState(false);
   const [showAiQueryPreview, setShowAiQueryPreview] = useState(false);
+
+  // ---- Workflow orchestrator (NLT) ----
+  const workflow = useWorkflowOrchestrator();
+
+  // When workflow completes and creates a new table, navigate to it
+  useEffect(() => {
+    if (workflow.result?.status === 'complete' && workflow.result.table_id && workflow.result.table_id !== tableId) {
+      navigate(`/ops/${workflow.result.table_id}`);
+      workflow.reset();
+    } else if (workflow.result?.status === 'complete' || workflow.result?.status === 'partial') {
+      // Refresh current table data
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['instantly-campaign-links', tableId] });
+    }
+  }, [workflow.result, tableId, navigate, queryClient, workflow]);
 
   // ---- New AI Query Commander state ----
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
@@ -258,13 +322,19 @@ function OpsDetailPage() {
 
   // ---- Enrichment hook ----
   const { startEnrichment, startSingleRowEnrichment } = useEnrichment(tableId ?? '');
+  const { startApolloEnrichment, singleRowApolloEnrichment, reEnrichApollo, startApolloOrgEnrichment } = useApolloEnrichment(tableId ?? '');
 
   // ---- HubSpot sync hook ----
   const { sync: syncHubSpot, isSyncing: isHubSpotSyncing } = useHubSpotSync(tableId);
   const { writeBack: pushCellToHubSpot } = useHubSpotWriteBack();
 
+  // ---- Instantly (moved to column system — hooks removed) ----
+
   // ---- Rules hook ----
   const { rules, createRule, toggleRule, deleteRule, isCreating: isRuleCreating } = useOpsRules(tableId);
+
+  // ---- Button/Action execution ----
+  const { executeButton, executeSingleAction } = useActionExecution(tableId);
 
   // ---- Derived data ----
 
@@ -363,7 +433,11 @@ function OpsDetailPage() {
       formulaExpression?: string;
       integrationType?: string;
       integrationConfig?: Record<string, unknown>;
+      actionType?: string;
+      actionConfig?: Record<string, unknown>;
       hubspotPropertyName?: string;
+      apolloPropertyName?: string;
+      apolloEnrichConfig?: { reveal_personal_emails?: boolean; reveal_phone_number?: boolean };
     }) => {
       const column = await tableService.addColumn({
         tableId: tableId!,
@@ -376,12 +450,21 @@ function OpsDetailPage() {
         formulaExpression: params.formulaExpression,
         integrationType: params.integrationType,
         integrationConfig: params.integrationConfig,
+        actionType: params.actionType,
+        actionConfig: params.actionConfig,
         hubspotPropertyName: params.hubspotPropertyName,
+        apolloPropertyName: params.apolloPropertyName,
         position: (table?.columns?.length ?? 0),
       });
-      return { column, autoRunRows: params.autoRunRows, hubspotPropertyName: params.hubspotPropertyName };
+      return {
+        column,
+        autoRunRows: params.autoRunRows,
+        hubspotPropertyName: params.hubspotPropertyName,
+        apolloPropertyName: params.apolloPropertyName,
+        apolloEnrichConfig: params.apolloEnrichConfig,
+      };
     },
-    onSuccess: async ({ column, autoRunRows: runRows, hubspotPropertyName }) => {
+    onSuccess: async ({ column, autoRunRows: runRows, hubspotPropertyName, apolloPropertyName: apolloProp, apolloEnrichConfig }) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
       toast.success('Column added');
@@ -398,6 +481,34 @@ function OpsDetailPage() {
 
         if (allRowIds && allRowIds.length > 0) {
           startEnrichment({ columnId: column.id, rowIds: rowIdsToEnrich });
+        }
+      }
+
+      // Auto-trigger Apollo enrichment if requested
+      if (apolloProp && runRows != null) {
+        const allRowIds = tableData?.rows?.map((r) => r.id);
+        let rowIdsToEnrich: string[] | undefined;
+
+        if (typeof runRows === 'number' && allRowIds) {
+          rowIdsToEnrich = allRowIds.slice(0, runRows);
+        }
+
+        if (allRowIds && allRowIds.length > 0) {
+          if (column.column_type === 'apollo_org_property') {
+            startApolloOrgEnrichment({
+              columnId: column.id,
+              rowIds: rowIdsToEnrich,
+              maxRows: typeof runRows === 'number' ? runRows : undefined,
+            });
+          } else {
+            startApolloEnrichment({
+              columnId: column.id,
+              rowIds: rowIdsToEnrich,
+              maxRows: typeof runRows === 'number' ? runRows : undefined,
+              revealPersonalEmails: apolloEnrichConfig?.reveal_personal_emails,
+              revealPhoneNumber: apolloEnrichConfig?.reveal_phone_number,
+            });
+          }
         }
       }
 
@@ -458,6 +569,131 @@ function OpsDetailPage() {
       toast.success('Enrichment settings updated');
     },
     onError: () => toast.error('Failed to update enrichment settings'),
+  });
+
+  const updateFormulaMutation = useMutation({
+    mutationFn: ({ columnId, formulaExpression }: { columnId: string; formulaExpression: string }) =>
+      tableService.updateColumn(columnId, { formulaExpression }),
+    onSuccess: (_data, { columnId }) => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Formula updated — recalculating…');
+      recalcFormulaMutation.mutate(columnId);
+    },
+    onError: () => toast.error('Failed to update formula'),
+  });
+
+  const updateButtonConfigMutation = useMutation({
+    mutationFn: ({ columnId, actionConfig }: { columnId: string; actionConfig: Record<string, unknown> }) =>
+      tableService.updateColumn(columnId, { actionConfig }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Button settings updated');
+    },
+    onError: () => toast.error('Failed to update button settings'),
+  });
+
+  const updateApolloConfigMutation = useMutation({
+    mutationFn: ({ columnId, config }: { columnId: string; config: { reveal_personal_emails: boolean; reveal_phone_number: boolean } }) =>
+      tableService.updateColumn(columnId, { integrationConfig: config }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Apollo settings updated');
+    },
+    onError: () => toast.error('Failed to update Apollo settings'),
+  });
+
+  const updateInstantlyConfigMutation = useMutation({
+    mutationFn: ({ columnId, config }: { columnId: string; config: Record<string, unknown> }) =>
+      tableService.updateColumn(columnId, { integrationConfig: config }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Instantly settings updated');
+    },
+    onError: () => toast.error('Failed to update Instantly settings'),
+  });
+
+  // --- Email generation config helpers ---
+
+  const extractEmailGenConfig = (column: OpsTableColumn): EmailGenerationConfig => {
+    const ic = column.integration_config as Record<string, unknown> | null;
+    const gc = (ic?.generation_config ?? {}) as Record<string, unknown>;
+    return {
+      num_steps: (gc.num_steps as number) ?? 3,
+      angle: (gc.angle as string) ?? '',
+      email_type: (gc.email_type as EmailGenerationConfig['email_type']) ?? 'cold_outreach',
+      event_details: (gc.event_details as EmailGenerationConfig['event_details']) ?? null,
+      sign_off: (gc.sign_off as string) ?? '',
+      model: (gc.model as string) ?? 'anthropic/claude-sonnet-4-5-20250929',
+      tier_strategy: (gc.tier_strategy as 'two_tier' | 'single_tier') ?? 'two_tier',
+    };
+  };
+
+  const updateEmailGenConfigMutation = useMutation({
+    mutationFn: async (config: EmailGenerationConfig) => {
+      // Find all step columns for this table and update their integration_config
+      const stepColumns = columns.filter(c => /^instantly_step_\d+_(subject|body)$/.test(c.key));
+      await Promise.all(
+        stepColumns.map(col => {
+          const match = col.key.match(/^instantly_step_(\d+)_(subject|body)$/);
+          if (!match) return Promise.resolve();
+          return tableService.updateColumn(col.id, {
+            integrationConfig: {
+              email_generation: true,
+              generation_config: config,
+              step_number: parseInt(match[1], 10),
+              step_part: match[2],
+            },
+          });
+        })
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      toast.success('Email generation config updated');
+    },
+    onError: () => toast.error('Failed to update email generation config'),
+  });
+
+  const regenerateEmailsMutation = useMutation({
+    mutationFn: async (config: EmailGenerationConfig) => {
+      // First save the config
+      const stepColumns = columns.filter(c => /^instantly_step_\d+_(subject|body)$/.test(c.key));
+      await Promise.all(
+        stepColumns.map(col => {
+          const match = col.key.match(/^instantly_step_(\d+)_(subject|body)$/);
+          if (!match) return Promise.resolve();
+          return tableService.updateColumn(col.id, {
+            integrationConfig: {
+              email_generation: true,
+              generation_config: config,
+              step_number: parseInt(match[1], 10),
+              step_part: match[2],
+            },
+          });
+        })
+      );
+      // Then call the edge function to regenerate
+      const { error } = await supabase.functions.invoke('generate-email-sequence', {
+        body: {
+          table_id: tableId,
+          sequence_config: {
+            num_steps: config.num_steps,
+            angle: config.angle,
+            email_type: config.email_type,
+            event_details: config.event_details,
+          },
+          sign_off: config.sign_off,
+          model: config.model,
+        },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      setEditEmailGenColumn(null);
+      toast.success('Emails regenerated successfully');
+    },
+    onError: (err) => toast.error(`Failed to regenerate emails: ${(err as Error).message}`),
   });
 
   const resizeColumnMutation = useMutation({
@@ -891,6 +1127,101 @@ function OpsDetailPage() {
       const cell = fullRow?.cells[columnKey];
       const col = columns.find((c) => c.key === columnKey);
 
+      // ---- Button/Action column: intercept 'execute' and dispatch actions ----
+      if (value === 'execute' && col && (col.column_type === 'button' || col.column_type === 'action')) {
+        const buttonConfig = col.action_config as import('@/lib/services/opsTableService').ButtonConfig | null;
+        if (buttonConfig?.actions?.length) {
+          // Build row cell values for @column resolution
+          const rowCellValues: Record<string, string> = {};
+          if (fullRow?.cells) {
+            for (const [key, c] of Object.entries(fullRow.cells)) {
+              if (c.value) rowCellValues[key] = c.value;
+            }
+          }
+
+          // Set cell to pending
+          cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+
+          executeButton.mutate(
+            {
+              columnId: col.id,
+              rowId,
+              buttonConfig,
+              rowCellValues,
+              onUpdateCell: (targetKey: string, newValue: string) => {
+                // Trigger a regular cell edit for set_value actions
+                handleCellEdit(rowId, targetKey, newValue);
+              },
+            },
+            {
+              onSuccess: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+              },
+              onError: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+              },
+            },
+          );
+          return;
+        }
+
+        // Legacy action column (no buttonConfig) — use single action dispatch
+        if (col.action_type && col.action_type !== 'button') {
+          cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+          executeSingleAction.mutate(
+            { columnId: col.id, rowId, actionType: col.action_type, actionConfig: col.action_config as Record<string, unknown> },
+            {
+              onSuccess: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+              },
+              onError: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+              },
+            },
+          );
+          return;
+        }
+      }
+
+      // ---- Instantly push_action column: intercept 'execute' and push to Instantly ----
+      if (value === 'execute' && col && col.column_type === 'instantly') {
+        const config = col.integration_config as { instantly_subtype?: string; campaign_id?: string; push_config?: { campaign_id?: string; auto_field_mapping?: boolean } } | null;
+        const campaignId = config?.push_config?.campaign_id || config?.campaign_id;
+        if (config?.instantly_subtype === 'push_action' && campaignId) {
+          // Build field mapping from row values
+          const rowCellValues: Record<string, string> = {};
+          if (fullRow?.cells) {
+            for (const [key, c] of Object.entries(fullRow.cells)) {
+              if (c.value) rowCellValues[key] = c.value;
+            }
+          }
+
+          // Set cell to pending
+          cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+
+          executeSingleAction.mutate(
+            {
+              columnId: col.id,
+              rowId,
+              actionType: 'push_to_instantly',
+              actionConfig: {
+                campaign_id: campaignId,
+                field_mapping: config.push_config?.auto_field_mapping ? undefined : rowCellValues,
+              },
+            },
+            {
+              onSuccess: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+              },
+              onError: () => {
+                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+              },
+            },
+          );
+          return;
+        }
+      }
+
       const onSuccess = () => {
         // Fire-and-forget: push to HubSpot if bi-directional
         if (
@@ -921,7 +1252,7 @@ function OpsDetailPage() {
         );
       }
     },
-    [tableData?.rows, columns, cellEditMutation, table, tableId, pushCellToHubSpot],
+    [tableData?.rows, columns, cellEditMutation, table, tableId, pushCellToHubSpot, executeButton, executeSingleAction],
   );
 
   const handleColumnHeaderClick = useCallback(
@@ -943,9 +1274,16 @@ function OpsDetailPage() {
 
   const handleEnrichRow = useCallback(
     (rowId: string, columnId: string) => {
-      startSingleRowEnrichment({ columnId, rowId });
+      const col = columns.find((c) => c.id === columnId);
+      if (col?.column_type === 'apollo_property') {
+        singleRowApolloEnrichment({ columnId, rowId });
+      } else if (col?.column_type === 'apollo_org_property') {
+        startApolloOrgEnrichment({ columnId, rowIds: [rowId], maxRows: 1 });
+      } else {
+        startSingleRowEnrichment({ columnId, rowId });
+      }
     },
-    [startSingleRowEnrichment],
+    [columns, startSingleRowEnrichment, singleRowApolloEnrichment, startApolloOrgEnrichment],
   );
 
   const handleStartEditName = useCallback(() => {
@@ -1008,10 +1346,18 @@ function OpsDetailPage() {
       e.preventDefault();
       if (!queryInput.trim() || !tableId) return;
 
+      const submittedQuery = queryInput.trim();
+
+      // NLT: Detect workflow-level prompts and route to orchestrator
+      if (isWorkflowPrompt(submittedQuery)) {
+        setQueryInput('');
+        workflow.execute(submittedQuery);
+        return;
+      }
+
       setIsAiQueryParsing(true);
 
       try {
-        const submittedQuery = queryInput.trim();
 
         // Build sample values from first 5 rows to help AI match column references
         const sampleValues: Record<string, string[]> = {};
@@ -1401,7 +1747,7 @@ function OpsDetailPage() {
         setIsAiQueryParsing(false);
       }
     },
-    [queryInput, tableId, columns, table, rows, activeViewId, filterConditions, sortState, queryClient, addColumnMutation, createViewMutation],
+    [queryInput, tableId, columns, table, rows, activeViewId, filterConditions, sortState, queryClient, addColumnMutation, createViewMutation, workflow],
   );
 
   const handleAiQueryConfirm = useCallback(async () => {
@@ -1573,20 +1919,22 @@ function OpsDetailPage() {
   // ---- Render ----
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Top section: back nav + query bar + metadata */}
-      <div className="shrink-0 border-b border-gray-800 bg-gray-950 px-6 pb-4 pt-5">
-        {/* Back button */}
-        <button
-          onClick={() => navigate('/ops')}
-          className="mb-4 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Ops
-        </button>
+      <div className={`shrink-0 border-b border-gray-800 bg-gray-950 px-6 ${isFullscreen ? 'pb-3 pt-3' : 'pb-4 pt-5'}`}>
+        {/* Back button — hidden in fullscreen */}
+        {!isFullscreen && (
+          <button
+            onClick={() => navigate('/ops')}
+            className="mb-4 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Ops
+          </button>
+        )}
 
-        {/* View selector tabs */}
-        {views.length > 0 && (
+        {/* View selector tabs — hidden in fullscreen */}
+        {!isFullscreen && views.length > 0 && (
           <div className="mb-3">
             <ViewSelector
               views={views}
@@ -1619,8 +1967,8 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* Quick filter bar */}
-        {rows.length > 0 && (
+        {/* Quick filter bar — hidden in fullscreen */}
+        {!isFullscreen && rows.length > 0 && (
           <div className="mb-3">
             <QuickFilterBar
               columns={columns}
@@ -1632,8 +1980,8 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* Smart view suggestions */}
-        {viewSuggestions.length > 0 && (
+        {/* Smart view suggestions — hidden in fullscreen */}
+        {!isFullscreen && viewSuggestions.length > 0 && (
           <SmartViewSuggestions
             suggestions={viewSuggestions}
             onApply={(suggestion) => {
@@ -1721,7 +2069,7 @@ function OpsDetailPage() {
               value={queryInput}
               onChange={setQueryInput}
               onSubmit={handleQuerySubmit}
-              isLoading={isAiQueryParsing}
+              isLoading={isAiQueryParsing || workflow.isRunning}
               columns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
               tableId={tableId!}
             />
@@ -1733,6 +2081,7 @@ function OpsDetailPage() {
               onOpenWorkflows={() => setShowWorkflows(true)}
               onOpenRecipes={() => setShowRecipeLibrary(true)}
             />
+            {/* Instantly actions moved to column system — see InstantlyColumnWizard */}
             {/* HubSpot sync buttons (only for hubspot-sourced tables) */}
             {table.source_type === 'hubspot' && (
               <div className="flex items-center gap-1">
@@ -1794,11 +2143,23 @@ function OpsDetailPage() {
             >
               <HelpCircle className="h-3.5 w-3.5" />
             </a>
+            {/* Fullscreen toggle */}
+            <button
+              onClick={() => setIsFullscreen((prev) => !prev)}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                isFullscreen
+                  ? 'border-violet-500/50 bg-violet-600/20 text-violet-300 hover:bg-violet-600/30'
+                  : 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+              }`}
+              title={isFullscreen ? 'Exit fullscreen (Ctrl+Shift+F)' : 'Fullscreen (Ctrl+Shift+F)'}
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
           </div>
         </div>
 
-        {/* Save as Recipe bar — shown after successful query */}
-        {lastSuccessfulQuery && !showSaveRecipeDialog && (
+        {/* Save as Recipe bar — shown after successful query, hidden in fullscreen */}
+        {!isFullscreen && lastSuccessfulQuery && !showSaveRecipeDialog && (
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-700/30 bg-amber-900/10 px-3 py-1.5">
             <BookOpen className="h-3.5 w-3.5 text-amber-400 shrink-0" />
             <span className="text-xs text-amber-300/80 truncate flex-1">
@@ -1823,8 +2184,8 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* Save Recipe mini dialog */}
-        {showSaveRecipeDialog && lastSuccessfulQuery && (
+        {/* Save Recipe mini dialog — hidden in fullscreen */}
+        {!isFullscreen && showSaveRecipeDialog && lastSuccessfulQuery && (
           <div className="mb-3 rounded-xl border border-amber-700/30 bg-gray-900 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-amber-400" />
@@ -1874,19 +2235,44 @@ function OpsDetailPage() {
           </div>
         )}
 
-        {/* OI-010: AI Insights Banner + OI-033: Predictions */}
-        <AiInsightsBanner
-          tableId={tableId!}
-          onActionClick={(action: any) => {
-            if (action.action_type === 'filter') {
-              // Apply filter from insight action
-              toast.info('Applying insight filter...');
-            }
-          }}
-        />
+        {/* OI-010: AI Insights Banner + OI-033: Predictions — hidden in fullscreen */}
+        {!isFullscreen && (
+          <AiInsightsBanner
+            tableId={tableId!}
+            onActionClick={(action: any) => {
+              if (action.action_type === 'filter') {
+                // Apply filter from insight action
+                toast.info('Applying insight filter...');
+              }
+            }}
+          />
+        )}
 
-        {/* OI-022: Cross-Query Results */}
-        {crossQueryResult && (
+        {/* NLT-008: Campaign Approval Banner — shown when workflow created a paused campaign */}
+        {!isFullscreen && table?.organization_id && (
+          <CampaignApprovalBanner
+            tableId={tableId!}
+            orgId={table.organization_id}
+          />
+        )}
+
+        {/* NLT-010: Workflow Progress Stepper */}
+        {(workflow.isRunning || workflow.result || workflow.clarifyingQuestions || workflow.steps.length > 0) && (
+          <WorkflowProgressStepper
+            isRunning={workflow.isRunning}
+            steps={workflow.steps}
+            plan={workflow.plan}
+            result={workflow.result}
+            clarifyingQuestions={workflow.clarifyingQuestions}
+            onAnswerClarifications={workflow.answerClarifications}
+            onAbort={workflow.abort}
+            onDismiss={workflow.reset}
+            onNavigateToTable={(id) => navigate(`/ops/${id}`)}
+          />
+        )}
+
+        {/* OI-022: Cross-Query Results — hidden in fullscreen */}
+        {!isFullscreen && crossQueryResult && (
           <CrossQueryResultPanel
             result={crossQueryResult}
             onKeepColumn={(col: any) => {
@@ -1897,8 +2283,8 @@ function OpsDetailPage() {
           />
         )}
 
-        {/* AI Summary Card */}
-        {summaryData && (
+        {/* AI Summary Card — hidden in fullscreen */}
+        {!isFullscreen && summaryData && (
           <div className="mb-4">
             <AiQuerySummaryCard
               data={summaryData}
@@ -1908,41 +2294,46 @@ function OpsDetailPage() {
         )}
       </div>
 
-      {/* Tab bar */}
-      <div className="shrink-0 border-b border-gray-800 bg-gray-950 px-6">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setActiveTab('data')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-              activeTab === 'data'
-                ? 'border-violet-500 text-white'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            Data
-          </button>
-          <button
-            onClick={() => setActiveTab('rules')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 flex items-center gap-1.5 ${
-              activeTab === 'rules'
-                ? 'border-violet-500 text-white'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            <Zap className="h-3.5 w-3.5" />
-            Rules
-            {rules.length > 0 && (
-              <span className="ml-1 text-[10px] font-medium bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded-full">
-                {rules.length}
-              </span>
-            )}
-          </button>
+      {/* Tab bar — hidden in fullscreen */}
+      {!isFullscreen && (
+        <div className="shrink-0 border-b border-gray-800 bg-gray-950 px-6">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab('data')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'data'
+                  ? 'border-violet-500 text-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              Data
+            </button>
+            <button
+              onClick={() => setActiveTab('rules')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 flex items-center gap-1.5 ${
+                activeTab === 'rules'
+                  ? 'border-violet-500 text-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Rules
+              {rules.length > 0 && (
+                <span className="ml-1 text-[10px] font-medium bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded-full">
+                  {rules.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Table area */}
       {activeTab === 'data' && (
-        <div className="min-h-0 flex-1 overflow-hidden px-6 py-4">
+        <div
+          className="flex-1 min-h-0 min-w-0 overflow-hidden px-6 py-4"
+          style={{ '--ops-table-max-height': isFullscreen ? 'calc(100vh - 90px)' : 'calc(100vh - 220px)' } as React.CSSProperties}
+        >
           <OpsTable
             columns={columns}
             rows={rows}
@@ -1963,14 +2354,37 @@ function OpsDetailPage() {
             onColumnResize={(columnId, width) => resizeColumnMutation.mutate({ columnId, width })}
             onEnrichRow={handleEnrichRow}
             groupConfig={groupConfig}
-            summaryConfig={summaryConfig}
+            summaryConfig={(() => {
+              // Auto-add summary aggregates for Instantly engagement columns
+              const instantlySummary: Record<string, AggregateType> = {};
+              for (const col of columns) {
+                if (col.column_type !== 'instantly') continue;
+                const cfg = col.integration_config as { instantly_subtype?: string } | null;
+                if (!cfg?.instantly_subtype) continue;
+                switch (cfg.instantly_subtype) {
+                  case 'reply_count':
+                  case 'open_count':
+                    instantlySummary[col.key] = 'sum';
+                    break;
+                  case 'engagement_status':
+                  case 'email_status':
+                    instantlySummary[col.key] = 'filled_percent';
+                    break;
+                  case 'push_action':
+                    instantlySummary[col.key] = 'count';
+                    break;
+                }
+              }
+              if (Object.keys(instantlySummary).length === 0) return summaryConfig ?? null;
+              return { ...instantlySummary, ...(summaryConfig ?? {}) };
+            })()}
           />
         </div>
       )}
 
       {/* Rules tab */}
       {activeTab === 'rules' && (
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 min-h-0 overflow-auto px-6 py-4">
           <div className="max-w-2xl mx-auto space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white">Automation Rules</h2>
@@ -2013,13 +2427,16 @@ function OpsDetailPage() {
         onClose={() => setShowAddColumn(false)}
         onAdd={(col) => addColumnMutation.mutate(col)}
         onAddMultiple={async (cols) => {
-          // Add multiple HubSpot property columns sequentially
+          // Add multiple property columns (HubSpot or Apollo) sequentially
           for (const col of cols) {
             await addColumnMutation.mutateAsync(col);
           }
         }}
         existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
         sourceType={table?.source_type as 'manual' | 'csv' | 'hubspot' | null}
+        tableId={tableId}
+        orgId={table?.organization_id}
       />
 
       {/* Column Header Menu */}
@@ -2065,6 +2482,32 @@ function OpsDetailPage() {
           } : undefined}
           onReEnrich={activeColumn.is_enrichment ? () => {
             startEnrichment({ columnId: activeColumn.id });
+          } : activeColumn.column_type === 'apollo_property' ? () => {
+            reEnrichApollo({ columnId: activeColumn.id });
+          } : activeColumn.column_type === 'apollo_org_property' ? () => {
+            startApolloOrgEnrichment({ columnId: activeColumn.id });
+          } : undefined}
+          onEditFormula={activeColumn.column_type === 'formula' ? () => {
+            setEditFormulaColumn(activeColumn);
+          } : undefined}
+          onEditButton={activeColumn.column_type === 'button' ? () => {
+            setEditButtonColumn(activeColumn);
+          } : undefined}
+          onEditApollo={(activeColumn.column_type === 'apollo_property' || activeColumn.column_type === 'apollo_org_property') ? () => {
+            setEditApolloColumn(activeColumn);
+          } : undefined}
+          onEditInstantly={activeColumn.column_type === 'instantly' ? () => {
+            setEditInstantlyColumn(activeColumn);
+          } : undefined}
+          onEditEmailGeneration={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
+            setEditEmailGenColumn(activeColumn);
+          } : undefined}
+          onRegenerateEmails={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
+            const config = extractEmailGenConfig(activeColumn);
+            regenerateEmailsMutation.mutate(config);
+          } : undefined}
+          onCreateCampaignFromSteps={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
+            setCreateCampaignFromStepColumn(activeColumn);
           } : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
         />
@@ -2086,6 +2529,207 @@ function OpsDetailPage() {
           currentModel={editEnrichmentColumn.enrichment_model ?? 'anthropic/claude-3.5-sonnet'}
           columnLabel={editEnrichmentColumn.label}
           existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Edit Formula Modal */}
+      {editFormulaColumn && (
+        <EditColumnSettingsModal
+          isOpen={!!editFormulaColumn}
+          onClose={() => setEditFormulaColumn(null)}
+          mode="formula"
+          currentFormula={editFormulaColumn.formula_expression ?? ''}
+          onSave={(formula) => {
+            updateFormulaMutation.mutate({
+              columnId: editFormulaColumn.id,
+              formulaExpression: formula,
+            });
+          }}
+          columnLabel={editFormulaColumn.label}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
+        />
+      )}
+
+      {/* Edit Button Config Modal */}
+      {editButtonColumn && (
+        <EditColumnSettingsModal
+          isOpen={!!editButtonColumn}
+          onClose={() => setEditButtonColumn(null)}
+          mode="button"
+          currentConfig={(editButtonColumn.action_config as any) ?? { label: '', color: '#8b5cf6', actions: [] }}
+          onSave={(config) => {
+            updateButtonConfigMutation.mutate({
+              columnId: editButtonColumn.id,
+              actionConfig: config as unknown as Record<string, unknown>,
+            });
+          }}
+          columnLabel={editButtonColumn.label}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Edit Apollo Settings Modal */}
+      {editApolloColumn && (
+        <EditApolloSettingsModal
+          isOpen={!!editApolloColumn}
+          onClose={() => setEditApolloColumn(null)}
+          onSave={(config) => {
+            updateApolloConfigMutation.mutate({
+              columnId: editApolloColumn.id,
+              config,
+            });
+          }}
+          columnLabel={editApolloColumn.label}
+          apolloPropertyName={editApolloColumn.apollo_property_name ?? editApolloColumn.key}
+          currentConfig={(editApolloColumn.integration_config as any) ?? undefined}
+        />
+      )}
+
+      {/* Edit Instantly Settings Modal */}
+      {editInstantlyColumn && (
+        <EditInstantlySettingsModal
+          isOpen={!!editInstantlyColumn}
+          onClose={() => setEditInstantlyColumn(null)}
+          onSave={(config) => {
+            const merged = { ...(editInstantlyColumn.integration_config as Record<string, unknown> ?? {}), ...config };
+            updateInstantlyConfigMutation.mutate({
+              columnId: editInstantlyColumn.id,
+              config: merged,
+            });
+
+            // Also sync to instantly_campaign_links table so push-to-instantly can find the mapping
+            if (config.campaign_id && tableId && table?.organization_id) {
+              supabase.functions.invoke('instantly-admin', {
+                body: {
+                  action: 'link_campaign',
+                  org_id: table.organization_id,
+                  table_id: tableId,
+                  campaign_id: config.campaign_id,
+                  campaign_name: config.campaign_name,
+                  field_mapping: config.field_mapping || { email: 'email' },
+                },
+              }).catch(() => { /* link is supplementary */ });
+            }
+
+            // Also update push_action column if one exists (so per-row push works)
+            const pushActionCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'push_action' &&
+              c.id !== editInstantlyColumn.id
+            );
+            if (pushActionCol && config.campaign_id) {
+              const pushMerged = {
+                ...(pushActionCol.integration_config as Record<string, unknown> ?? {}),
+                push_config: {
+                  ...((pushActionCol.integration_config as any)?.push_config ?? {}),
+                  campaign_id: config.campaign_id,
+                },
+              };
+              updateInstantlyConfigMutation.mutate({
+                columnId: pushActionCol.id,
+                config: pushMerged,
+              });
+            }
+          }}
+          onAddStepColumns={async (stepCols) => {
+            for (const col of stepCols) {
+              await addColumnMutation.mutateAsync(col);
+            }
+            toast.success(`Added ${stepCols.length} step columns`);
+          }}
+          columnLabel={editInstantlyColumn.label}
+          currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
+          orgId={table?.organization_id}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Create Instantly Campaign from Step Columns */}
+      {createCampaignFromStepColumn && (
+        <EditInstantlySettingsModal
+          isOpen={!!createCampaignFromStepColumn}
+          onClose={() => setCreateCampaignFromStepColumn(null)}
+          initialMode="create"
+          onSave={(config) => {
+            // Update the campaign_config column if one exists
+            const campaignConfigCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'campaign_config'
+            );
+            if (campaignConfigCol) {
+              const merged = { ...(campaignConfigCol.integration_config as Record<string, unknown> ?? {}), ...config };
+              updateInstantlyConfigMutation.mutate({
+                columnId: campaignConfigCol.id,
+                config: merged,
+              });
+            }
+            // Also update push_action column if one exists
+            const pushActionCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'push_action'
+            );
+            if (pushActionCol && config.campaign_id) {
+              const pushMerged = {
+                ...(pushActionCol.integration_config as Record<string, unknown> ?? {}),
+                push_config: {
+                  ...((pushActionCol.integration_config as any)?.push_config ?? {}),
+                  campaign_id: config.campaign_id,
+                },
+              };
+              updateInstantlyConfigMutation.mutate({
+                columnId: pushActionCol.id,
+                config: pushMerged,
+              });
+            }
+          }}
+          onCampaignCreated={async (campaignId, campaignName) => {
+            // Link the campaign to the table
+            if (tableId && table?.organization_id) {
+              try {
+                await supabase.functions.invoke('instantly-admin', {
+                  body: {
+                    action: 'link_campaign',
+                    org_id: table.organization_id,
+                    table_id: tableId,
+                    campaign_id: campaignId,
+                    campaign_name: campaignName,
+                    field_mapping: { email: 'email' },
+                  },
+                });
+                queryClient.invalidateQueries({ queryKey: ['instantly-campaign-links', tableId] });
+              } catch {
+                // link is optional — campaign was already created
+              }
+            }
+          }}
+          columnLabel={createCampaignFromStepColumn.label}
+          currentConfig={(() => {
+            const campaignConfigCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'campaign_config'
+            );
+            return (campaignConfigCol?.integration_config as any) ?? { instantly_subtype: 'campaign_config' };
+          })()}
+          orgId={table?.organization_id}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Edit Email Generation Modal */}
+      {editEmailGenColumn && (
+        <EditEmailGenerationModal
+          isOpen={!!editEmailGenColumn}
+          onClose={() => setEditEmailGenColumn(null)}
+          onSave={(config) => {
+            updateEmailGenConfigMutation.mutate(config);
+          }}
+          onSaveAndRegenerate={(config) => {
+            regenerateEmailsMutation.mutate(config);
+          }}
+          currentConfig={extractEmailGenConfig(editEmailGenColumn)}
+          columnLabel={editEmailGenColumn.label}
+          isRegenerating={regenerateEmailsMutation.isPending}
         />
       )}
 
@@ -2113,7 +2757,40 @@ function OpsDetailPage() {
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
           startEnrichment({ columnId: enrichCols[0].id, rowIds: Array.from(selectedRows) });
         }}
-        onPushToInstantly={() => toast.info('Push to Instantly coming soon.')}
+        onPushToInstantly={async () => {
+          // Find campaign_id from the campaign_config or push_action column
+          const instantlyCol = columns.find(c =>
+            c.column_type === 'instantly' &&
+            ((c.integration_config as any)?.instantly_subtype === 'campaign_config' ||
+             (c.integration_config as any)?.instantly_subtype === 'push_action')
+          );
+          const cfg = instantlyCol?.integration_config as any;
+          const campaignId = cfg?.campaign_id || cfg?.push_config?.campaign_id;
+          if (!campaignId) {
+            toast.error('No campaign linked. Open Instantly settings to link a campaign first.');
+            return;
+          }
+          const toastId = toast.loading(`Pushing ${selectedRows.size} leads to Instantly...`);
+          try {
+            const { data, error } = await supabase.functions.invoke('push-to-instantly', {
+              body: {
+                table_id: tableId,
+                campaign_id: campaignId,
+                row_ids: Array.from(selectedRows),
+                field_mapping: cfg?.field_mapping,
+              },
+            });
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+            toast.success(
+              `Pushed ${data.pushed_count} leads${data.skipped_count ? `, ${data.skipped_count} skipped (no email)` : ''}`,
+              { id: toastId },
+            );
+            queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+          } catch (err: any) {
+            toast.error(err.message || 'Push to Instantly failed', { id: toastId });
+          }
+        }}
         onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
         onReEnrich={() => {
           const enrichCols = columns.filter((c) => c.is_enrichment);
@@ -2329,6 +3006,8 @@ function OpsDetailPage() {
         onSave={(config) => createHubSpotListMutation.mutate(config)}
         isSaving={createHubSpotListMutation.isPending}
       />
+
+      {/* Instantly integration moved to column system — old modals removed */}
     </div>
   );
 }

@@ -1,0 +1,340 @@
+{
+  "feature": "nl-e2e-fixes",
+  "name": "NL Table Builder E2E Test Fixes",
+  "description": "8 issues found testing the full NL Table Builder workflow: email content was sales-pitched instead of invitation-style, leads weren't reaching Instantly, auto-push shouldn't happen, and table scroll was broken.",
+  "test_prompt": "Find 10 CEOs in Bristol and create an instantly campaign to invite them to an AI Round Table breakfast on the 6th March at 9am - 11am at the Harbour Hotel",
+  "status": "pending",
+  "createdAt": "2026-02-07T00:00:00Z",
+  "stories": [
+    {
+      "id": "NLE-001",
+      "title": "Fix table horizontal overscroll chaining",
+      "phase": 1,
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "parallelWith": ["NLE-002", "NLE-003", "NLE-004"],
+      "acceptance": [
+        "OpsTable scroll container has overscrollBehavior: 'contain'",
+        "Horizontal scroll at edge does not propagate to page body"
+      ],
+      "estimatedMinutes": 2,
+      "files": ["src/components/ops/OpsTable.tsx"],
+      "changes": [
+        {
+          "file": "src/components/ops/OpsTable.tsx",
+          "line": 548,
+          "description": "Add overscrollBehavior: 'contain' to inline style on scroll container",
+          "old": "style={{ maxHeight: 'var(--ops-table-max-height, calc(100vh - 220px))' }}",
+          "new": "style={{ maxHeight: 'var(--ops-table-max-height, calc(100vh - 220px))', overscrollBehavior: 'contain' }}"
+        }
+      ]
+    },
+    {
+      "id": "NLE-002",
+      "title": "Remove auto-push from orchestrator and fix push_config structure",
+      "phase": 2,
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["NLE-005"],
+      "parallelWith": ["NLE-001", "NLE-003", "NLE-004"],
+      "acceptance": [
+        "orchestrator no longer pushes leads automatically (lines 508-563 removed)",
+        "push_action cells default to 'pending' not 'complete'",
+        "push_config nested correctly: integration_config.push_config.campaign_id",
+        "field_mapping stored on campaign link record (not used for auto-push)",
+        "Return summary says 'Review emails, push leads, then launch' with leads_pushed: 0"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/ops-workflow-orchestrator/index.ts"],
+      "changes": [
+        {
+          "description": "Remove auto-push block (lines 508-563): SSE event, fullMapping build, row fetch, instantly-push call, pushData handling",
+          "action": "delete_block",
+          "from_line": 508,
+          "to_line": 563
+        },
+        {
+          "description": "But KEEP fullMapping build for storing in campaign link field_mapping (move it before campaign creation or compute differently)",
+          "action": "restructure",
+          "note": "The fullMapping is needed for instantly_campaign_links.field_mapping — but we don't need to actually push. Build it after column creation instead."
+        },
+        {
+          "description": "Change push_action cell values from 'complete' to 'pending'",
+          "line": 629,
+          "old": "value: 'complete',\n          status: 'complete',",
+          "new": "value: 'pending',\n          status: 'idle',"
+        },
+        {
+          "description": "Add push_config to push_action column integration_config",
+          "line": 615,
+          "old_block": "integration_config: {\n            instantly_subtype: 'push_action',\n            campaign_id: campaignId,\n            campaign_name: campaignName,\n          }",
+          "new_block": "integration_config: {\n            instantly_subtype: 'push_action',\n            campaign_id: campaignId,\n            campaign_name: campaignName,\n            push_config: {\n              campaign_id: campaignId,\n              auto_field_mapping: false,\n            },\n          }"
+        },
+        {
+          "description": "Update return summary and set leads_pushed: 0",
+          "line": 667,
+          "old": "summary: `Campaign \"${campaignName}\" created with ${numSteps} email steps and ${pushedCount} leads (paused — review before launching)`",
+          "new": "summary: `Campaign \"${campaignName}\" created (paused). Review emails, push leads, then launch.`"
+        },
+        {
+          "description": "Set leads_pushed: 0 in return data",
+          "line": 671,
+          "old": "leads_pushed: pushedCount,",
+          "new": "leads_pushed: 0,"
+        }
+      ]
+    },
+    {
+      "id": "NLE-003",
+      "title": "Add email_type + event_details to planner (orchestrator)",
+      "phase": 3,
+      "type": "feature",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["NLE-004"],
+      "parallelWith": ["NLE-001", "NLE-002"],
+      "acceptance": [
+        "SkillPlan.email_sequence includes email_type and event_details fields",
+        "Planner prompt has rules 15-16 for classifying email_type and extracting event_details",
+        "Planner tool schema includes email_type enum and event_details object",
+        "executeEmailGeneration passes email_type and event_details to generate-email-sequence"
+      ],
+      "estimatedMinutes": 12,
+      "files": ["supabase/functions/ops-workflow-orchestrator/index.ts"],
+      "changes": [
+        {
+          "description": "Update SkillPlan.email_sequence type to include email_type and event_details",
+          "line": 57,
+          "old": "email_sequence: { num_steps: number; angle: string; step_delays?: number[] } | null",
+          "new": "email_sequence: {\n    num_steps: number\n    angle: string\n    step_delays?: number[]\n    email_type?: 'cold_outreach' | 'event_invitation' | 'meeting_request' | 'follow_up'\n    event_details?: { event_name?: string; date?: string; time?: string; venue?: string; description?: string }\n  } | null"
+        },
+        {
+          "description": "Add rules 15-16 to planner system prompt (after rule 14)",
+          "after_line": 144,
+          "insert": "15. Classify email_type: use 'event_invitation' when the prompt mentions an event/breakfast/dinner/roundtable/conference/webinar/meetup with a date/time/venue; 'meeting_request' for 1:1 meetings; 'follow_up' for follow-ups; 'cold_outreach' as default\n16. For event_invitation, extract event_details (event_name, date, time, venue) from the prompt — these are CRITICAL and must appear verbatim in generated emails"
+        },
+        {
+          "description": "Add email_type and event_details to planner tool schema email_sequence properties",
+          "after_line": 187,
+          "insert": "email_type: { type: 'string', enum: ['cold_outreach', 'event_invitation', 'meeting_request', 'follow_up'], description: 'Type of email sequence' },\nevent_details: { type: 'object', properties: { event_name: { type: 'string' }, date: { type: 'string' }, time: { type: 'string' }, venue: { type: 'string' }, description: { type: 'string' } }, description: 'Event details for event_invitation type' },"
+        },
+        {
+          "description": "In executeEmailGeneration, pass email_type and event_details in request body",
+          "line": 328,
+          "old_block": "sequence_config: {\n          num_steps: plan.email_sequence.num_steps,\n          angle: plan.email_sequence.angle,\n        }",
+          "new_block": "sequence_config: {\n          num_steps: plan.email_sequence.num_steps,\n          angle: plan.email_sequence.angle,\n          email_type: plan.email_sequence.email_type,\n          event_details: plan.email_sequence.event_details,\n        }"
+        }
+      ]
+    },
+    {
+      "id": "NLE-004",
+      "title": "Make email generation type-aware (generate-email-sequence)",
+      "phase": 3,
+      "type": "feature",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["NLE-003"], "files": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "SequenceConfig includes email_type and event_details",
+        "buildEmailSystemPrompt() returns invitation-specific prompt for event_invitation",
+        "filterContextForEmailType() strips VALUE_PROPOSITIONS, PAIN_POINTS, COMPETITORS for event_invitation",
+        "All three generation functions use type-aware prompts",
+        "Event details block appended to user messages when present",
+        "For event_invitation, 'cold email sequence' → 'event invitation email sequence' in user messages"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/generate-email-sequence/index.ts"],
+      "changes": [
+        {
+          "description": "Update SequenceConfig to include email_type and event_details",
+          "line": 42,
+          "old": "interface SequenceConfig {\n  num_steps: number\n  angle?: string\n}",
+          "new": "interface SequenceConfig {\n  num_steps: number\n  angle?: string\n  email_type?: 'cold_outreach' | 'event_invitation' | 'meeting_request' | 'follow_up'\n  event_details?: { event_name?: string; date?: string; time?: string; venue?: string; description?: string }\n}"
+        },
+        {
+          "description": "Add buildEmailSystemPrompt(config, signOff) helper after buildProspectBlock",
+          "after_line": 112,
+          "action": "insert_function",
+          "content": "Returns different system prompt based on config.email_type: event_invitation gets personalised invitation prompt with hard rules (use event details exactly, don't pitch products, don't reference prospect location as venue, don't ask for available times, personalise by role/expertise), cold_outreach gets existing prompt"
+        },
+        {
+          "description": "Add filterContextForEmailType(contextPrompt, emailType) helper",
+          "after": "buildEmailSystemPrompt",
+          "action": "insert_function",
+          "content": "For event_invitation: strip VALUE PROPOSITIONS, PAIN POINTS, COMPETITORS lines from context. Keep COMPANY, TONE OF VOICE, NEVER USE THESE WORDS, EMAIL SIGN-OFF, SENDER NAME. For cold_outreach: return full context unchanged."
+        },
+        {
+          "description": "Update generateExampleEmails — use buildEmailSystemPrompt and filterContextForEmailType",
+          "line": 130,
+          "action": "modify_function",
+          "note": "Add config parameter, use buildEmailSystemPrompt(config, signOff) for system prompt, filterContextForEmailType(contextPrompt, config.email_type) for context, change 'cold email sequence' to 'event invitation email sequence' when event_invitation, append event details block"
+        },
+        {
+          "description": "Update generateEmailsFromExample — same type-aware changes",
+          "line": 184,
+          "action": "modify_function"
+        },
+        {
+          "description": "Update generateEmailsDirectly — same type-aware changes",
+          "line": 258,
+          "action": "modify_function"
+        },
+        {
+          "description": "Update all callsites to pass full config (not just num_steps/angle)",
+          "lines": [604, 637, 643],
+          "action": "pass_full_config"
+        }
+      ]
+    },
+    {
+      "id": "NLE-005",
+      "title": "Add Push All Leads button + enable repush",
+      "phase": 4,
+      "type": "feature",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["NLE-002"], "files": [] },
+      "blocks": ["NLE-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Banner shows 'Push All Leads' button alongside 'Review & Launch'",
+        "Button fetches all row IDs, gets field_mapping from campaign link, calls instantly-push",
+        "Button label changes to 'Repush All' if any rows already pushed",
+        "Per-row push button shows 'Repush' (not 'Pushed') for completed rows",
+        "Repush is clickable (button not disabled when done)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/components/ops/OpsTableCell.tsx"
+      ],
+      "changes": [
+        {
+          "file": "src/components/ops/CampaignApprovalBanner.tsx",
+          "description": "Add pushAllMutation that fetches row IDs, gets field_mapping from link, calls instantly-push",
+          "action": "add_mutation"
+        },
+        {
+          "file": "src/components/ops/CampaignApprovalBanner.tsx",
+          "description": "Add 'Push All Leads' button in banner button row (changes to 'Repush All' if any pushed)",
+          "line": 166,
+          "action": "add_button"
+        },
+        {
+          "file": "src/components/ops/OpsTableCell.tsx",
+          "description": "Change push_action label for isDone from 'Pushed' to 'Repush'",
+          "line": 878,
+          "old": "{isDone ? 'Pushed' : isFailed ? 'Failed' : isRunning ? 'Pushing...' : 'Push'}",
+          "new": "{isDone ? 'Repush' : isFailed ? 'Retry' : isRunning ? 'Pushing...' : 'Push'}"
+        }
+      ]
+    },
+    {
+      "id": "NLE-006",
+      "title": "Campaign status control — show all statuses + pause button",
+      "phase": 5,
+      "type": "feature",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["NLE-005"], "files": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Banner shows for ALL linked campaigns (not just paused)",
+        "Paused/Draft: amber banner with 'Review & Launch' + 'Push All Leads'",
+        "Active: green banner with 'Pause Campaign' button",
+        "pauseMutation calls instantly-admin with pause_campaign action",
+        "Campaign config cell badge shows status color (green=active, amber=paused, gray=unknown)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/components/ops/OpsTableCell.tsx"
+      ],
+      "changes": [
+        {
+          "file": "src/components/ops/CampaignApprovalBanner.tsx",
+          "description": "Change line 113 filter from pausedCampaigns to allLinkedCampaigns — show banner for any status",
+          "line": 113
+        },
+        {
+          "file": "src/components/ops/CampaignApprovalBanner.tsx",
+          "description": "Add pauseMutation calling instantly-admin with pause_campaign",
+          "action": "add_mutation"
+        },
+        {
+          "file": "src/components/ops/CampaignApprovalBanner.tsx",
+          "description": "Conditionally render banner style: amber for paused/draft, green for active, gray for unknown. Different buttons per state.",
+          "action": "conditional_render"
+        },
+        {
+          "file": "src/components/ops/OpsTableCell.tsx",
+          "description": "Add status color to campaign_config badge (green=active, amber=paused, gray=unknown)",
+          "line": 839,
+          "action": "add_status_color"
+        }
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 0,
+    "parallelGroups": [
+      ["NLE-001", "NLE-002", "NLE-003"],
+      ["NLE-004"],
+      ["NLE-005"],
+      ["NLE-006"]
+    ],
+    "estimatedMinutes": 79,
+    "verification": {
+      "build": "npx vite build --mode staging",
+      "deploy": [
+        "npx supabase functions deploy ops-workflow-orchestrator --project-ref caerqjzvuerejfrdtygb --no-verify-jwt",
+        "npx supabase functions deploy generate-email-sequence --project-ref caerqjzvuerejfrdtygb --no-verify-jwt"
+      ],
+      "e2e_test": "Find 10 CEOs in Bristol and create an instantly campaign to invite them to an AI Round Table breakfast on the 6th March at 9am - 11am at the Harbour Hotel",
+      "verify_checklist": [
+        "Emails mention Harbour Hotel + 9-11am (not prospect's location)",
+        "No product pitch in emails",
+        "Push buttons show 'Push' (not auto-pushed)",
+        "Banner has 'Push All Leads' + 'Review & Launch'",
+        "Table doesn't scroll page horizontally"
+      ]
+    }
+  },
+  "filesModified": [
+    {
+      "file": "src/components/ops/OpsTable.tsx",
+      "stories": ["NLE-001"],
+      "summary": "overscrollBehavior: 'contain' on scroll container"
+    },
+    {
+      "file": "supabase/functions/ops-workflow-orchestrator/index.ts",
+      "stories": ["NLE-002", "NLE-003"],
+      "summary": "Remove auto-push, fix push_config, add email_type + event_details to planner & passthrough"
+    },
+    {
+      "file": "supabase/functions/generate-email-sequence/index.ts",
+      "stories": ["NLE-004"],
+      "summary": "Type-aware prompts, context filtering, event details passthrough"
+    },
+    {
+      "file": "src/components/ops/CampaignApprovalBanner.tsx",
+      "stories": ["NLE-005", "NLE-006"],
+      "summary": "Push All button, pause button, show all statuses"
+    },
+    {
+      "file": "src/components/ops/OpsTableCell.tsx",
+      "stories": ["NLE-005", "NLE-006"],
+      "summary": "Repush label, campaign status badge color"
+    }
+  ]
+}

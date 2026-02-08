@@ -1,0 +1,229 @@
+{
+  "feature": "nl-table-builder-v2",
+  "name": "NL Table Builder — Post-Test Fixes",
+  "description": "Fixes 8 issues found during end-to-end testing of the NL Table Builder workflow: masked names, missing logos, missing Instantly push column, sign-off, low search results, two-tier email generation (Claude Sonnet 4.5 templates + Gemini Flash variants), enrichment data for emails, and Instantly campaign step variables.",
+  "consultReport": null,
+  "createdAt": "2026-02-07T21:00:00Z",
+  "status": "complete",
+
+  "features": [
+    {
+      "id": "enrichment-fix",
+      "name": "Post-Enrichment Data Fixes",
+      "status": "complete",
+      "description": "Fix masked names and missing logos after Apollo enrichment by updating cells and source_data with unmasked data"
+    },
+    {
+      "id": "email-gen-v2",
+      "name": "Two-Tier Email Generation",
+      "status": "complete",
+      "description": "Claude Sonnet 4.5 writes example emails for first prospect, Gemini Flash generates for remaining prospects using examples as style reference"
+    },
+    {
+      "id": "workflow-fix",
+      "name": "Orchestrator Improvements",
+      "status": "complete",
+      "description": "Broader search, sign-off passthrough, Instantly column creation, campaign variable wiring"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "NLT-012",
+      "feature": "enrichment-fix",
+      "title": "Update name cells and source_data with unmasked data after enrichment",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "description": "After auto-enrichment in copilot-dynamic-table, the full_name cell still shows the masked Apollo search name (e.g. 'Chris Sh***d'). The enrichment caches full data in source_data.apollo with real first_name/last_name, but never updates the full_name cell or the root source_data. Add a post-enrichment step that: (1) re-reads rows with source_data.apollo, (2) updates full_name cells with unmasked names, (3) updates root source_data with first_name, last_name, full_name, and company_domain from organization.primary_domain. This also fixes the missing company logo (logo.dev needs company_domain).",
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/copilot-dynamic-table/index.ts"],
+        "schema": ["dynamic_table_cells", "dynamic_table_rows"]
+      },
+      "blocks": ["NLT-014"],
+      "parallelWith": ["NLT-013"],
+      "acceptance": [
+        "After enrichment, full_name cell updated with unmasked first_name + last_name from source_data.apollo",
+        "Root source_data updated with first_name, last_name, full_name, company_domain",
+        "Company logo renders via logo.dev using the company_domain from enrichment",
+        "Batch upserts used (not per-row queries)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/copilot-dynamic-table/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-013",
+      "feature": "email-gen-v2",
+      "title": "Add rich enrichment data extraction and sign-off fix to generate-email-sequence",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "description": "Fix two issues in generate-email-sequence: (1) Sign-off: when business_context_prompt is provided by the orchestrator, signOff stays empty because loadBusinessContext isn't called locally. Accept sign_off as explicit field in request body AND extract from context prompt as fallback. (2) Enrichment data: expand ProspectData to include rich Apollo data (industry, revenue, employees, tech_stack, headline, seniority, departments, funding_stage, company_keywords) extracted from source_data.apollo. This data feeds into the personalization step.",
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/generate-email-sequence/index.ts"],
+        "schema": []
+      },
+      "blocks": ["NLT-014"],
+      "parallelWith": ["NLT-012"],
+      "acceptance": [
+        "RequestBody accepts optional sign_off field",
+        "Sign-off extracted from context prompt regex if not provided explicitly",
+        "ProspectData includes: industry, revenue, employees, tech_stack, headline, seniority, departments, funding_stage, company_keywords",
+        "Rich data extracted from source_data.apollo.organization and source_data.apollo",
+        "Emails end with user's sign-off (not 'Best regards' fallback)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/generate-email-sequence/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-014",
+      "feature": "email-gen-v2",
+      "title": "Two-tier email generation: Claude example for row 1, Gemini for remaining rows",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Replace the single Gemini Flash per-lead generation with a two-tier approach: (1) Template generation (Claude Sonnet 4.5, runs ONCE per campaign): generates email templates with {{placeholders}} for personalization hooks. Takes campaign angle, business context, sign-off, and 2-3 sample prospects for audience context. Returns EmailTemplate[] with subject/body templates and personalization_hooks. (2) Per-lead personalization (Gemini Flash, runs per lead): takes the templates + rich enrichment data and fills in {{placeholders}} with prospect-specific content. Returns final EmailStep[] with subject/body. Import Anthropic SDK (already used in orchestrator). Model: claude-sonnet-4-5-20250929.",
+      "dependencies": {
+        "stories": ["NLT-012", "NLT-013"],
+        "files": ["supabase/functions/generate-email-sequence/index.ts"],
+        "schema": []
+      },
+      "blocks": ["NLT-016"],
+      "parallelWith": [],
+      "acceptance": [
+        "generateEmailTemplates() calls Claude Sonnet 4.5 once with sample prospects + context",
+        "Returns EmailTemplate[] with subject_template, body_template, personalization_hooks",
+        "personalizeEmailsForProspect() calls Gemini Flash per lead with templates + enrichment data",
+        "All {{placeholders}} replaced with prospect-specific content",
+        "Final emails read naturally (not fill-in-the-blank)",
+        "Concurrency limiter (5 parallel) for Gemini calls",
+        "Fallback: if Anthropic call fails, fall back to direct Gemini generation (original approach)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/generate-email-sequence/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-015",
+      "feature": "workflow-fix",
+      "title": "Broaden search and pass sign-off from orchestrator",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Fix two issues in the orchestrator: (1) Search too narrow: update Claude Haiku planner system prompt to add person_seniorities ['c_suite', 'owner', 'founder', 'partner'] when C-level titles are specified, and to broaden location when a specific city is mentioned. (2) Sign-off passthrough: store emailSignOff from business context and pass it as sign_off field in the generate-email-sequence request body.",
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/ops-workflow-orchestrator/index.ts"],
+        "schema": []
+      },
+      "blocks": ["NLT-016"],
+      "parallelWith": ["NLT-012", "NLT-013"],
+      "acceptance": [
+        "Planner adds person_seniorities when C-level titles specified",
+        "Planner broadens city searches to include surrounding region",
+        "sign_off passed to generate-email-sequence request body",
+        "emailSignOff stored at workflow level from business context",
+        "Search for 'CEOs in Bristol' returns more than 1 result"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-016",
+      "feature": "workflow-fix",
+      "title": "Create Instantly columns in table and wire campaign step variables",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "description": "After campaign creation in the orchestrator: (1) Create Instantly columns in the table: campaign_config column (shows campaign name badge) and push_action column (renders Push/Pushed button per row). Both use column_type='instantly' with integration_config containing instantly_subtype and campaign metadata. (2) Create instantly_campaign_links record linking the table to the campaign. (3) Mark all pushed rows with status='complete' in the push_action column. (4) Ensure the Instantly campaign has proper sequences with {{step_N_subject}} as subject and {{step_N_body}} as body for each step, so that when leads are pushed with their personalized custom variables, the campaign is ready to send. (5) Pass userId to executeCampaignCreation for the linked_by field.",
+      "dependencies": {
+        "stories": ["NLT-014", "NLT-015"],
+        "files": ["supabase/functions/ops-workflow-orchestrator/index.ts"],
+        "schema": ["dynamic_table_columns", "instantly_campaign_links"]
+      },
+      "blocks": ["NLT-017"],
+      "parallelWith": [],
+      "acceptance": [
+        "After campaign creation, instantly_campaign column created with campaign_config subtype",
+        "After campaign creation, instantly_push column created with push_action subtype",
+        "Push column cells marked 'complete' for all pushed rows",
+        "instantly_campaign_links record created with field_mapping",
+        "Instantly campaign sequences have {{step_N_subject}} in subject and {{step_N_body}} in body for each step",
+        "Leads pushed with custom variables mapping step columns to Instantly variables",
+        "CampaignApprovalBanner detects the linked campaign and shows review/launch UI"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts"
+      ]
+    },
+    {
+      "id": "NLT-017",
+      "feature": "workflow-fix",
+      "title": "Set email sign-off, deploy, and verify end-to-end",
+      "type": "deploy",
+      "status": "complete",
+      "priority": 4,
+      "description": "Final integration step: (1) Set email sign-off for andrew.bryce@sixtyseconds.video to 'Cheers,\\nAndrew' via direct DB update. (2) Build frontend to verify no TS errors. (3) Deploy all 3 modified edge functions to staging (copilot-dynamic-table, generate-email-sequence, ops-workflow-orchestrator). (4) Re-run the test: 'Find 10 CEOs in Bristol and create an instantly campaign to invite them to an AI Round Table breakfast on the 6th March at 9am - 11am at the Harbour Hotel'. (5) Verify: >1 row, unmasked names, logos showing, Instantly push column present, emails use Cheers/Andrew sign-off, two-tier generation, campaign has proper step variables.",
+      "dependencies": {
+        "stories": ["NLT-016"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Email sign-off set for user in DB",
+        "Frontend build succeeds (npx vite build --mode staging)",
+        "All 3 edge functions deployed to staging with --no-verify-jwt",
+        "Workflow test returns >1 lead with unmasked names",
+        "Company logos visible in table",
+        "Instantly push column present with 'Pushed' status",
+        "Emails end with 'Cheers,\\nAndrew'",
+        "Instantly campaign has sequences with {{step_N_subject/body}} variables",
+        "Links to ops table and Instantly campaign confirmed working"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 6,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-07T23:30:00Z",
+    "estimatedTotalMinutes": 115,
+    "parallelGroups": [
+      {
+        "name": "Foundation (parallel)",
+        "stories": ["NLT-012", "NLT-013", "NLT-015"],
+        "note": "Name fix, enrichment data, and search broadening are independent"
+      },
+      {
+        "name": "Email Generation (sequential)",
+        "stories": ["NLT-014"],
+        "note": "Depends on enrichment data (NLT-013) and name fix (NLT-012)"
+      },
+      {
+        "name": "Campaign Wiring (sequential)",
+        "stories": ["NLT-016"],
+        "note": "Depends on email gen and search fixes"
+      },
+      {
+        "name": "Deploy & Verify",
+        "stories": ["NLT-017"],
+        "note": "Final step — deploy and test end-to-end"
+      }
+    ]
+  }
+}

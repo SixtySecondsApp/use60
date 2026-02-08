@@ -407,6 +407,69 @@ export const actions = (
 });
 
 // =============================================================================
+// ACTION CONFIRMATION BUILDERS (SLACK-006)
+// =============================================================================
+
+/**
+ * Unified action confirmation — replaces original message after any action.
+ * Used for: snooze, dismiss, complete, approve, reject, expired.
+ */
+export interface ActionConfirmationData {
+  action: 'snoozed' | 'dismissed' | 'completed' | 'approved' | 'rejected' | 'expired' | 'sent' | 'created';
+  slackUserId?: string;
+  actionedBy?: string;
+  timestamp: string;
+  /** Short description of what was acted on, e.g. "Deal: Acme Corp — £35k" */
+  entitySummary: string;
+  /** Optional extra detail line, e.g. "Snoozed until Mon Feb 10" */
+  detail?: string;
+  /** Original notification type for context */
+  notificationType?: string;
+}
+
+const actionConfirmationConfig: Record<string, { emoji: string; label: string }> = {
+  'snoozed': { emoji: '⏰', label: 'Snoozed' },
+  'dismissed': { emoji: '🚫', label: 'Dismissed' },
+  'completed': { emoji: '✅', label: 'Completed' },
+  'approved': { emoji: '✅', label: 'Approved' },
+  'rejected': { emoji: '❌', label: 'Rejected' },
+  'expired': { emoji: '⏳', label: 'Expired' },
+  'sent': { emoji: '📨', label: 'Sent' },
+  'created': { emoji: '📝', label: 'Created' },
+};
+
+export const buildActionConfirmation = (data: ActionConfirmationData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+  const config = actionConfirmationConfig[data.action] || { emoji: '📋', label: data.action };
+  const userMention = data.slackUserId ? `<@${data.slackUserId}>` : (data.actionedBy || 'Unknown');
+
+  const formattedTime = new Date(data.timestamp).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+
+  // Main confirmation
+  blocks.push(
+    section(
+      `${config.emoji} *${config.label}* by ${userMention}\n` +
+      `_${truncate(data.entitySummary, 120)}_`
+    )
+  );
+
+  // Optional detail (e.g., snooze duration, rejection reason)
+  if (data.detail) {
+    blocks.push(context([truncate(data.detail, 200)]));
+  }
+
+  // Timestamp footer
+  blocks.push(context([formattedTime]));
+
+  return {
+    blocks,
+    text: `${config.label}: ${truncate(data.entitySummary, 80)}`,
+  };
+};
+
+// =============================================================================
 // MESSAGE BUILDERS
 // =============================================================================
 
@@ -1390,20 +1453,25 @@ export interface MorningBriefData {
   currencyCode?: string;
   currencyLocale?: string;
   meetings: Array<{
+    id?: string;
     time: string;
     title: string;
     contactName?: string;
     companyName?: string;
     dealValue?: number;
+    dealStage?: string;
     isImportant?: boolean;
   }>;
   tasks: {
     overdue: Array<{
+      id?: string;
       title: string;
       daysOverdue: number;
       dealName?: string;
+      contactId?: string;
     }>;
     dueToday: Array<{
+      id?: string;
       title: string;
       dealName?: string;
     }>;
@@ -1416,10 +1484,22 @@ export interface MorningBriefData {
     closeDate?: string;
     daysUntilClose?: number;
     isAtRisk?: boolean;
+    daysSinceActivity?: number;
+    deltaTag?: string; // SLACK-008/014: 'NEW', 'STAGE: x → y', 'VALUE UP', 'STALE'
   }>;
   emailsToRespond: number;
   insights: string[];
   priorities: string[];
+  // SLACK-011: Instantly campaign data
+  campaigns?: Array<{
+    id: string;
+    name: string;
+    newReplies: number;
+    totalSent: number;
+    bounceRate: number;
+    completionPct: number;
+    isNotable: boolean;
+  }>;
   appUrl: string;
 }
 
@@ -1445,100 +1525,173 @@ export const buildMorningBriefMessage = (data: MorningBriefData): SlackMessage =
   blocks.push(section(safeMrkdwn(`*Here's your day at a glance*`)));
   blocks.push(divider());
 
-  // Meetings section
-  if (data.meetings.length > 0) {
-    const meetingsText = data.meetings
-      .slice(0, 5)
-      .map(m => {
-        const dealInfo = m.dealValue ? ` _(${m.dealStage || 'Deal'}, ${formatCurrency(m.dealValue)})_` : '';
-        return `• ${m.time} - ${m.title}${dealInfo}`;
-      })
-      .join('\n');
-    
-    blocks.push(section(safeMrkdwn(`📅 *${data.meetings.length} meeting${data.meetings.length !== 1 ? 's' : ''} today*\n\n${meetingsText}`)));
+  // Count actionable items for header subtitle
+  const actionableCount =
+    data.tasks.overdue.length +
+    data.deals.filter(d => d.isAtRisk || (d.daysSinceActivity && d.daysSinceActivity > 5)).length;
+
+  if (actionableCount > 0) {
+    blocks.push(section(safeMrkdwn(`*${actionableCount} item${actionableCount !== 1 ? 's' : ''} need${actionableCount === 1 ? 's' : ''} attention*`)));
+  } else {
+    blocks.push(section(safeMrkdwn(`*Here's your day at a glance*`)));
+  }
+  blocks.push(divider());
+
+  // ─── NEEDS ACTION section (deals at risk, overdue tasks) ───
+  const needsAction: SlackBlock[] = [];
+
+  // Deals needing attention (at-risk or stale)
+  const urgentDeals = data.deals
+    .filter(d => d.isAtRisk || (d.daysSinceActivity && d.daysSinceActivity > 5))
+    .slice(0, 3);
+
+  if (urgentDeals.length > 0) {
+    urgentDeals.forEach(d => {
+      const riskReason = d.daysSinceActivity && d.daysSinceActivity > 5
+        ? `No activity for ${d.daysSinceActivity} days`
+        : d.daysUntilClose !== undefined && d.daysUntilClose <= 0
+          ? 'Close date passed'
+          : 'At risk';
+      // SLACK-008/014: Show delta tag if present
+      const deltaLabel = d.deltaTag ? ` \`${d.deltaTag}\`` : '';
+      needsAction.push(
+        section(safeMrkdwn(
+          `*${d.name}* — ${formatCurrency(d.value)}${deltaLabel}\n${riskReason}`
+        ))
+      );
+      needsAction.push(actions([
+        { text: 'Draft follow-up', actionId: `draft_followup::deal::${d.id}`, value: JSON.stringify({ dealId: d.id, dealName: d.name }), style: 'primary' },
+        { text: 'View deal', actionId: 'view_deal', value: d.id, url: `${data.appUrl}/deals/${d.id}` },
+        { text: 'Snooze', actionId: `snooze::deal::${d.id}`, value: JSON.stringify({ entityType: 'deal', entityId: d.id, entityName: d.name, duration: '3d' }) },
+      ]));
+    });
   }
 
-  // Priorities section
+  // Overdue tasks needing attention
+  if (data.tasks.overdue.length > 0) {
+    data.tasks.overdue.slice(0, 3).forEach(t => {
+      const overdueLabel = `Overdue by ${t.daysOverdue} day${t.daysOverdue !== 1 ? 's' : ''}`;
+      const dealCtx = t.dealName ? ` — ${t.dealName}` : '';
+      needsAction.push(
+        section(safeMrkdwn(`*${truncate(t.title, 80)}*${dealCtx}\n${overdueLabel}`))
+      );
+      if (t.id) {
+        needsAction.push(actions([
+          { text: 'Complete', actionId: 'task_complete', value: JSON.stringify({ taskId: t.id }) },
+          { text: 'Snooze', actionId: `snooze::task::${t.id}`, value: JSON.stringify({ entityType: 'task', entityId: t.id, entityName: t.title, duration: '1d' }) },
+          ...(t.contactId ? [{ text: 'Draft follow-up', actionId: `draft_followup::contact::${t.contactId}`, value: JSON.stringify({ contactId: t.contactId }) }] : []),
+        ]));
+      }
+    });
+  }
+
+  if (needsAction.length > 0) {
+    blocks.push(section(safeMrkdwn('*Needs attention*')));
+    blocks.push(...needsAction);
+    blocks.push(divider());
+  }
+
+  // ─── TODAY section (meetings with prep buttons) ───
+  if (data.meetings.length > 0) {
+    blocks.push(section(safeMrkdwn(`*Today — ${data.meetings.length} meeting${data.meetings.length !== 1 ? 's' : ''}*`)));
+    data.meetings.slice(0, 5).forEach(m => {
+      const dealInfo = m.dealValue ? ` _(${m.dealStage || 'Deal'}, ${formatCurrency(m.dealValue)})_` : '';
+      if (m.id) {
+        blocks.push(
+          sectionWithButton(
+            `${m.time} — ${m.title}${dealInfo}`,
+            'Prep me',
+            `prep_meeting::${m.id}`,
+            JSON.stringify({ meetingId: m.id })
+          )
+        );
+      } else {
+        blocks.push(section(safeMrkdwn(`${m.time} — ${m.title}${dealInfo}`)));
+      }
+    });
+    blocks.push(divider());
+  }
+
+  // ─── PRIORITIES section ───
   if (data.priorities.length > 0) {
     const prioritiesText = data.priorities
       .slice(0, 5)
       .map(p => `• ${p}`)
       .join('\n');
-    
-    blocks.push(section(safeMrkdwn(`⚡ *Top priorities*\n\n${prioritiesText}`)));
+    blocks.push(section(safeMrkdwn(`*Priorities*\n\n${prioritiesText}`)));
   }
 
-  // Tasks section
-  const totalTasks = data.tasks.overdue.length + data.tasks.dueToday.length;
-  if (totalTasks > 0) {
-    const tasksText: string[] = [];
-    if (data.tasks.overdue.length > 0) {
-      tasksText.push(`*Overdue:*`);
-      data.tasks.overdue.slice(0, 3).forEach(t => {
-        tasksText.push(`• ${t.title} _(overdue by ${t.daysOverdue} day${t.daysOverdue !== 1 ? 's' : ''})_`);
-      });
-    }
-    if (data.tasks.dueToday.length > 0) {
-      tasksText.push(`*Due today:*`);
-      data.tasks.dueToday.slice(0, 3).forEach(t => {
-        tasksText.push(`• ${t.title}`);
-      });
-    }
-    
-    blocks.push(section(safeMrkdwn(`📋 *Tasks*\n\n${tasksText.join('\n')}`)));
-  }
-
-  // Deals section
-  if (data.deals.length > 0) {
-    const dealsText = data.deals
+  // ─── TASKS section (due today only — overdue moved to Needs Action) ───
+  if (data.tasks.dueToday.length > 0) {
+    const tasksText = data.tasks.dueToday
       .slice(0, 3)
+      .map(t => `• ${t.title}${t.dealName ? ` _(${t.dealName})_` : ''}`)
+      .join('\n');
+    blocks.push(section(safeMrkdwn(`*Due today*\n\n${tasksText}`)));
+  }
+
+  // ─── DEALS section (non-urgent deals closing this week) ───
+  const nonUrgentDeals = data.deals
+    .filter(d => !d.isAtRisk && !(d.daysSinceActivity && d.daysSinceActivity > 5))
+    .slice(0, 3);
+
+  if (nonUrgentDeals.length > 0) {
+    const dealsText = nonUrgentDeals
       .map(d => {
-        const riskBadge = d.isAtRisk ? ' ⚠️' : '';
-        const closeInfo = d.daysUntilClose !== undefined 
+        const closeInfo = d.daysUntilClose !== undefined
           ? ` _(closing in ${d.daysUntilClose} day${d.daysUntilClose !== 1 ? 's' : ''})_`
           : '';
-        return `• ${d.name} - ${formatCurrency(d.value)}${closeInfo}${riskBadge}`;
+        // SLACK-008/014: Show delta tag if present
+        const deltaLabel = d.deltaTag ? ` \`${d.deltaTag}\`` : '';
+        return `• ${d.name} — ${formatCurrency(d.value)}${deltaLabel}${closeInfo}`;
       })
       .join('\n');
-    
-    blocks.push(section(safeMrkdwn(`🎯 *Deals closing this week*\n\n${dealsText}`)));
+    blocks.push(section(safeMrkdwn(`*Pipeline*\n\n${dealsText}`)));
   }
 
-  // Emails to respond
+  // ─── CAMPAIGNS section (SLACK-011: Instantly campaign highlights) ───
+  if (data.campaigns && data.campaigns.length > 0) {
+    const notableCampaigns = data.campaigns.filter(c => c.isNotable);
+    const campaignsToShow = notableCampaigns.length > 0 ? notableCampaigns : data.campaigns;
+
+    const campaignLines = campaignsToShow.slice(0, 3).map(c => {
+      const parts: string[] = [];
+      if (c.newReplies > 0) parts.push(`${c.newReplies} new repl${c.newReplies !== 1 ? 'ies' : 'y'}`);
+      if (c.bounceRate > 5) parts.push(`${c.bounceRate}% bounce`);
+      if (c.completionPct >= 90) parts.push(`${c.completionPct}% complete`);
+      if (parts.length === 0) parts.push(`${c.totalSent} sent`);
+      return `• *${truncate(c.name, 40)}* — ${parts.join(', ')}`;
+    });
+
+    blocks.push(section(safeMrkdwn(`*Campaigns*\n\n${campaignLines.join('\n')}`)));
+  }
+
+  // ─── EMAILS ───
   if (data.emailsToRespond > 0) {
-    blocks.push(section(safeMrkdwn(`📬 *${data.emailsToRespond} email${data.emailsToRespond !== 1 ? 's' : ''} need${data.emailsToRespond === 1 ? 's' : ''} response*`)));
+    blocks.push(section(safeMrkdwn(`*${data.emailsToRespond} email${data.emailsToRespond !== 1 ? 's' : ''} need${data.emailsToRespond === 1 ? 's' : ''} response*`)));
   }
 
-  // Insights
+  // ─── INSIGHTS ───
   if (data.insights.length > 0) {
     blocks.push(divider());
     const insightsText = data.insights
       .slice(0, 3)
       .map(i => `• ${i}`)
       .join('\n');
-    
-    blocks.push(section(safeMrkdwn(`💡 *Insights*\n\n${insightsText}`)));
+    blocks.push(section(safeMrkdwn(`*Insights*\n\n${insightsText}`)));
   }
 
   blocks.push(divider());
 
-  // Actions
+  // ─── FOOTER ACTIONS ───
   blocks.push(actions([
-    {
-      text: { type: 'plain_text', text: safeButtonText('📋 View Full Day'), emoji: true },
-      url: `${data.appUrl}/calendar`,
-      action_id: 'view_full_day',
-    },
-    {
-      text: { type: 'plain_text', text: safeButtonText('✅ Start Focus Mode'), emoji: true },
-      url: `${data.appUrl}/tasks`,
-      action_id: 'start_focus_mode',
-    },
+    { text: 'View Full Day', actionId: 'view_full_day', value: 'calendar', url: `${data.appUrl}/calendar` },
+    { text: 'Start Focus Mode', actionId: 'start_focus_mode', value: 'tasks', url: `${data.appUrl}/tasks` },
   ]));
 
   return {
     blocks,
-    text: `Good morning ${data.userName}! Here's your day at a glance.`,
+    text: `Good morning ${data.userName}! ${actionableCount > 0 ? `${actionableCount} items need attention.` : 'Here\'s your day at a glance.'}`,
   };
 };
 
@@ -2777,5 +2930,156 @@ export const buildClarificationQuestionMessage = (data: ClarificationQuestionDat
   return {
     blocks,
     text: `Question about ${data.dealName}: ${data.question}`,
+  };
+};
+
+// =============================================================================
+// Smart Listening: Account Signal Alert
+// =============================================================================
+
+export interface AccountSignalAlertData {
+  companyName: string;
+  signalType: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  summary: string;
+  recommendedAction: string;
+  evidence?: string;
+  watchlistId: string;
+  signalId: string;
+  appUrl: string;
+}
+
+const SEVERITY_EMOJI: Record<string, string> = {
+  critical: ':red_circle:',
+  high: ':large_orange_circle:',
+  medium: ':large_yellow_circle:',
+  low: ':white_circle:',
+};
+
+const SIGNAL_TYPE_LABEL: Record<string, string> = {
+  job_change: 'Job Change',
+  title_change: 'Title Change',
+  company_change: 'Company Change',
+  funding_event: 'Funding Event',
+  company_news: 'Company News',
+  hiring_surge: 'Hiring Surge',
+  tech_stack_change: 'Tech Stack Change',
+  competitor_mention: 'Competitor Activity',
+  custom_research_result: 'Research Result',
+};
+
+export const buildAccountSignalAlert = (data: AccountSignalAlertData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+  const severityEmoji = SEVERITY_EMOJI[data.severity] || ':white_circle:';
+  const typeLabel = SIGNAL_TYPE_LABEL[data.signalType] || data.signalType;
+
+  blocks.push(header(safeHeaderText(`Account Signal — ${data.companyName}`)));
+  blocks.push(divider());
+
+  blocks.push(section(safeMrkdwn(
+    `${severityEmoji} *${data.severity.toUpperCase()}* — ${typeLabel}\n\n${data.title}`
+  )));
+
+  blocks.push(section(safeMrkdwn(data.summary)));
+
+  if (data.recommendedAction) {
+    blocks.push(section(safeMrkdwn(`*Recommended:* ${data.recommendedAction}`)));
+  }
+
+  blocks.push(divider());
+
+  blocks.push(actions([
+    {
+      text: 'View Signals',
+      actionId: 'account_signal_view',
+      url: `${data.appUrl}/ops?signal=${data.watchlistId}`,
+    },
+    {
+      text: 'Dismiss',
+      actionId: 'account_signal_dismiss',
+      value: safeButtonValue(JSON.stringify({ signalId: data.signalId })),
+    },
+  ]));
+
+  return {
+    blocks,
+    text: `Account Signal: ${data.companyName} — ${data.title}`,
+  };
+};
+
+// =============================================================================
+// Smart Listening: Weekly Account Intelligence Digest
+// =============================================================================
+
+export interface AccountDigestEntry {
+  companyName: string;
+  watchlistId: string;
+  signals: Array<{
+    signalType: string;
+    severity: string;
+    title: string;
+  }>;
+}
+
+export interface AccountDigestData {
+  recipientName: string;
+  weekDate: string;
+  accounts: AccountDigestEntry[];
+  totalSignals: number;
+  appUrl: string;
+}
+
+export const buildAccountIntelligenceDigest = (data: AccountDigestData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+
+  blocks.push(header(safeHeaderText(`Weekly Account Intelligence — ${data.weekDate}`)));
+  blocks.push(section(safeMrkdwn(
+    `Hey ${data.recipientName}! Here's what changed at your watched accounts this week.`
+  )));
+  blocks.push(divider());
+
+  // Group signals per account (max 10 accounts to stay within Slack limits)
+  const displayAccounts = data.accounts.slice(0, 10);
+
+  for (const account of displayAccounts) {
+    const signalLines = account.signals.slice(0, 5).map(s => {
+      const emoji = SEVERITY_EMOJI[s.severity] || ':white_circle:';
+      const label = SIGNAL_TYPE_LABEL[s.signalType] || s.signalType;
+      return `${emoji} ${label}: ${s.title}`;
+    }).join('\n');
+
+    const extra = account.signals.length > 5 ? `\n_+${account.signals.length - 5} more signals_` : '';
+
+    blocks.push(section(safeMrkdwn(
+      `*${account.companyName}* — ${account.signals.length} signal${account.signals.length > 1 ? 's' : ''}\n${signalLines}${extra}`
+    )));
+  }
+
+  if (data.accounts.length > 10) {
+    blocks.push(context([`_+${data.accounts.length - 10} more accounts with signals_`]));
+  }
+
+  blocks.push(divider());
+  blocks.push(context([
+    `${data.totalSignals} signal${data.totalSignals !== 1 ? 's' : ''} across ${data.accounts.length} account${data.accounts.length !== 1 ? 's' : ''} this week`,
+  ]));
+
+  blocks.push(actions([
+    {
+      text: 'View All Signals',
+      actionId: 'account_digest_view_all',
+      url: `${data.appUrl}/settings/smart-listening`,
+    },
+    {
+      text: 'Manage Watchlist',
+      actionId: 'account_digest_manage',
+      url: `${data.appUrl}/settings/smart-listening`,
+    },
+  ]));
+
+  return {
+    blocks,
+    text: `Weekly Account Intelligence: ${data.totalSignals} signals across ${data.accounts.length} accounts`,
   };
 };

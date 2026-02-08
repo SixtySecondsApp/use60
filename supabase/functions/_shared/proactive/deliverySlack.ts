@@ -112,6 +112,103 @@ function truncateBlocks(blocks: any[]): any[] {
 }
 
 /**
+ * SLACK-020: Check quiet hours and rate limiting for a user
+ */
+async function checkUserDeliveryPolicy(
+  supabase: SupabaseClient,
+  payload: ProactiveNotificationPayload
+): Promise<{ allowed: boolean; reason?: string }> {
+  if (!payload.recipientUserId || !payload.orgId) {
+    return { allowed: true }; // No user context, allow
+  }
+
+  try {
+    // Map notification type to feature name for preferences lookup
+    const featureMap: Record<string, string> = {
+      morning_brief: 'morning_brief',
+      stale_deal_alert: 'deal_risk',
+      deal_momentum_nudge: 'deal_momentum',
+      post_call_summary: 'post_meeting',
+      meeting_prep: 'post_meeting',
+      meeting_debrief: 'post_meeting',
+    };
+    const feature = featureMap[payload.type];
+    if (!feature) return { allowed: true }; // Unknown type, allow
+
+    // Check user preferences
+    const { data: pref } = await supabase
+      .from('slack_user_preferences')
+      .select('is_enabled, quiet_hours_start, quiet_hours_end, max_notifications_per_hour')
+      .eq('user_id', payload.recipientUserId)
+      .eq('org_id', payload.orgId)
+      .eq('feature', feature)
+      .maybeSingle();
+
+    // If no preferences row, allow (default enabled)
+    if (!pref) return { allowed: true };
+
+    // Check if feature is disabled
+    if (!pref.is_enabled) {
+      return { allowed: false, reason: 'user_disabled' };
+    }
+
+    // Check quiet hours
+    if (pref.quiet_hours_start && pref.quiet_hours_end) {
+      // Get user timezone from slack_user_mappings
+      const { data: mapping } = await supabase
+        .from('slack_user_mappings')
+        .select('preferred_timezone')
+        .eq('org_id', payload.orgId)
+        .eq('sixty_user_id', payload.recipientUserId)
+        .maybeSingle();
+
+      const tz = mapping?.preferred_timezone || 'America/New_York';
+      try {
+        const now = new Date();
+        const userNow = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+        const currentMinutes = userNow.getHours() * 60 + userNow.getMinutes();
+
+        const [startH, startM] = pref.quiet_hours_start.split(':').map(Number);
+        const [endH, endM] = pref.quiet_hours_end.split(':').map(Number);
+        const quietStart = startH * 60 + startM;
+        const quietEnd = endH * 60 + endM;
+
+        // Handle overnight quiet hours (e.g., 20:00 - 07:00)
+        const isQuiet = quietStart > quietEnd
+          ? currentMinutes >= quietStart || currentMinutes < quietEnd
+          : currentMinutes >= quietStart && currentMinutes < quietEnd;
+
+        if (isQuiet) {
+          return { allowed: false, reason: 'quiet_hours' };
+        }
+      } catch {
+        // Invalid timezone, proceed
+      }
+    }
+
+    // Check rate limit
+    if (pref.max_notifications_per_hour) {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const { count } = await supabase
+        .from('slack_notifications_sent')
+        .select('*', { count: 'exact', head: true })
+        .eq('org_id', payload.orgId)
+        .eq('recipient_id', payload.recipientSlackUserId)
+        .gte('sent_at', oneHourAgo.toISOString());
+
+      if ((count || 0) >= pref.max_notifications_per_hour) {
+        return { allowed: false, reason: 'rate_limited' };
+      }
+    }
+
+    return { allowed: true };
+  } catch (err) {
+    console.warn('[proactive/deliverySlack] Error checking delivery policy, allowing:', err);
+    return { allowed: true }; // Fail open
+  }
+}
+
+/**
  * Deliver notification to Slack
  */
 export async function deliverToSlack(
@@ -123,6 +220,16 @@ export async function deliverToSlack(
     return {
       sent: false,
       error: 'No Slack user ID provided',
+    };
+  }
+
+  // SLACK-020: Check quiet hours + rate limiting
+  const policy = await checkUserDeliveryPolicy(supabase, payload);
+  if (!policy.allowed) {
+    console.log(`[proactive/deliverySlack] Blocked by ${policy.reason} for user ${payload.recipientSlackUserId}`);
+    return {
+      sent: false,
+      error: policy.reason,
     };
   }
 

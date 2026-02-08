@@ -89,7 +89,7 @@ import {
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, JustCallSettings, HubSpotSettings, BullhornSettings,
+  LogoSettings, SlackSettings, JustCallSettings, HubSpotSettings, BullhornSettings, InstantlySettings, SmartListeningSettings,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
   OrgBilling,
   // Insights
@@ -548,6 +548,10 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/integrations/hubspot" element={<AppLayout><HubSpotSettings /></AppLayout>} />
                 {/* Bullhorn Settings - visible only when Bullhorn is connected (enforced inside page) */}
                 <Route path="/settings/integrations/bullhorn" element={<AppLayout><BullhornSettings /></AppLayout>} />
+                {/* Instantly Settings */}
+                <Route path="/settings/integrations/instantly" element={<AppLayout><InstantlySettings /></AppLayout>} />
+                {/* Smart Listening Settings */}
+                <Route path="/settings/smart-listening" element={<AppLayout><SmartListeningSettings /></AppLayout>} />
                 <Route path="/settings/bullhorn" element={<Navigate to="/settings/integrations/bullhorn" replace />} />
                 {/* Google Workspace Settings - visible only when Google is connected (enforced inside page) */}
                 <Route path="/settings/integrations/google-workspace" element={<AppLayout><GoogleWorkspaceIntegrationPage /></AppLayout>} />
