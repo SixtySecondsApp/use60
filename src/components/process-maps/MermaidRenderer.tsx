@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, memo, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import { cn } from '@/lib/utils';
 import type { StepStatus } from '@/lib/types/processMapTesting';
 import { Button } from '@/components/ui/button';
@@ -1059,7 +1060,7 @@ export const MermaidRenderer = memo(function MermaidRenderer({
                 style={{
                   transform: `scale(${zoom})`,
                 }}
-                dangerouslySetInnerHTML={{ __html: svgContent }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(svgContent, { USE_PROFILES: { svg: true, svgFilters: true } }) }}
               />
             </div>
           )}

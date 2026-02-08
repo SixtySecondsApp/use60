@@ -1,4 +1,5 @@
 import React from 'react';
+import DOMPurify from 'dompurify';
 import { formatMeetingSummaryForDisplay } from '@/lib/utils/meetingSummaryParser';
 
 interface MeetingSummaryDisplayProps {
@@ -35,7 +36,7 @@ export const MeetingSummaryDisplay: React.FC<MeetingSummaryDisplayProps> = ({
     return (
       <div
         className={`prose prose-sm max-w-none dark:prose-invert ${className}`}
-        dangerouslySetInnerHTML={{ __html: content }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
       />
     );
   }

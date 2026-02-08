@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -394,7 +395,7 @@ function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <div
       className="prose prose-invert prose-sm max-w-none"
-      dangerouslySetInnerHTML={{ __html: `<div>${htmlContent}</div>` }}
+      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(`<div>${htmlContent}</div>`) }}
     />
   );
 }

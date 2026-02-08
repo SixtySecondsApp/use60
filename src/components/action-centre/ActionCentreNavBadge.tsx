@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 
 // ============================================================================
 // Component
@@ -28,6 +29,7 @@ interface ActionCentreNavBadgeProps {
 export function ActionCentreNavBadge({ className }: ActionCentreNavBadgeProps) {
   const { user } = useAuth();
   const userId = user?.id;
+  const actionCentrePolling = useSmartPollingInterval(30000, 'important');
 
   const { data: count } = useQuery({
     queryKey: ['action-centre-pending-count', userId],
@@ -44,7 +46,7 @@ export function ActionCentreNavBadge({ className }: ActionCentreNavBadgeProps) {
       return data as number;
     },
     enabled: !!userId,
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: actionCentrePolling,
     staleTime: 10000, // Consider stale after 10 seconds
   });
 
@@ -81,6 +83,7 @@ export function ActionCentreNavBadge({ className }: ActionCentreNavBadgeProps) {
 export function useActionCentrePendingCount() {
   const { user } = useAuth();
   const userId = user?.id;
+  const actionCentrePolling = useSmartPollingInterval(30000, 'important');
 
   const { data: count, isLoading, refetch } = useQuery({
     queryKey: ['action-centre-pending-count', userId],
@@ -97,7 +100,7 @@ export function useActionCentrePendingCount() {
       return data as number;
     },
     enabled: !!userId,
-    refetchInterval: 30000,
+    refetchInterval: actionCentrePolling,
     staleTime: 10000,
   });
 

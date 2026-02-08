@@ -1,0 +1,209 @@
+{
+  "project": {
+    "name": "Production Readiness Audit Fixes",
+    "description": "Fix critical security, performance, and scaling issues identified in the production readiness audit. Preparing for 100+ users deployment.",
+    "createdAt": "2026-02-08T00:30:00Z",
+    "consultReport": "Inline audit from 60/dev-consult session"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "ai": "anthropic-claude"
+  },
+  "features": [
+    {
+      "id": "security-critical",
+      "name": "Critical Security Fixes",
+      "status": "complete",
+      "priority": 0,
+      "description": "Remove VITE_ prefix from server-side API keys, fix XSS vulnerabilities with DOMPurify, replace wildcard CORS"
+    },
+    {
+      "id": "api-optimization",
+      "name": "API Call Optimization",
+      "status": "complete",
+      "priority": 1,
+      "description": "Migrate hardcoded polling to useSmartPolling, replace N+1 enrichment query with RPC, add pagination"
+    },
+    {
+      "id": "scaling-readiness",
+      "name": "Scaling Readiness",
+      "status": "complete",
+      "priority": 2,
+      "description": "Rate limiting, select(*) cleanup, edge function input validation"
+    }
+  ],
+  "stories": [
+    {
+      "id": "SEC-001",
+      "feature": "security-critical",
+      "title": "Remove VITE_ prefix from server-side-only API keys",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-08T10:00:00Z",
+      "priority": 1,
+      "estimatedMinutes": 30,
+      "description": "Remove VITE_ prefix from OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY, FREEPIK_API_KEY, GOOGLE_CLIENT_SECRET in all .env files. Update any frontend code that references these to use edge function proxies instead. These keys are currently bundled into the frontend JS and visible to anyone.",
+      "acceptanceCriteria": [
+        "No VITE_ prefixed server-side API keys in any .env file",
+        "Frontend code does not reference import.meta.env.VITE_OPENAI_API_KEY etc",
+        "AI features still work through edge function proxies",
+        "Build succeeds without these env vars in frontend"
+      ],
+      "files": [".env", ".env.development", ".env.staging", ".env.production", ".env.example"],
+      "dependencies": { "stories": [] }
+    },
+    {
+      "id": "SEC-002",
+      "feature": "security-critical",
+      "title": "Add DOMPurify sanitization to all dangerouslySetInnerHTML components",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-08T10:00:00Z",
+      "priority": 2,
+      "estimatedMinutes": 45,
+      "description": "Replace raw dangerouslySetInnerHTML with DOMPurify.sanitize() in 8 components: MermaidRenderer, ExpandableDescription, BulkGrantAccessModal, EmailPreview, MeetingSummaryDisplay, ContentGenerator, ProposalPreview, EmailThread. DOMPurify is already in package.json but unused in these components.",
+      "acceptanceCriteria": [
+        "All 8 components use DOMPurify.sanitize() before dangerouslySetInnerHTML",
+        "EmailThread replaces regex sanitization with DOMPurify",
+        "No raw HTML injection possible in any component",
+        "Components still render correctly with sanitized HTML"
+      ],
+      "files": [
+        "src/components/process-maps/MermaidRenderer.tsx",
+        "src/components/process-maps/ExpandableDescription.tsx",
+        "src/components/platform/waitlist/BulkGrantAccessModal.tsx",
+        "src/components/platform/simulator/EmailPreview.tsx",
+        "src/components/shared/MeetingSummaryDisplay.tsx",
+        "src/components/meetings/ContentGenerator.tsx",
+        "src/components/proposals/ProposalPreview.tsx",
+        "src/components/email/EmailThread.tsx"
+      ],
+      "dependencies": { "stories": [] }
+    },
+    {
+      "id": "SEC-003",
+      "feature": "security-critical",
+      "title": "Replace wildcard CORS with domain allowlist",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-08T10:00:00Z",
+      "priority": 3,
+      "estimatedMinutes": 40,
+      "description": "The deprecated cors.ts uses Access-Control-Allow-Origin: '*'. Migrate all edge functions to use corsHelper.ts with a domain allowlist (app.use60.com, staging domains, localhost for dev). Verify corsHelper.ts exists and is production-ready, then update the most critical edge functions.",
+      "acceptanceCriteria": [
+        "corsHelper.ts has proper domain allowlist",
+        "Critical edge functions (api-copilot, auth endpoints, payment endpoints) use corsHelper",
+        "cors.ts wildcard is replaced or deprecated with warning",
+        "Localhost still works for development"
+      ],
+      "files": [
+        "supabase/functions/_shared/cors.ts",
+        "supabase/functions/_shared/corsHelper.ts"
+      ],
+      "dependencies": { "stories": [] }
+    },
+    {
+      "id": "API-001",
+      "feature": "api-optimization",
+      "title": "Migrate hardcoded refetchInterval to useSmartPolling",
+      "type": "optimization",
+      "status": "complete",
+      "completedAt": "2026-02-08T10:00:00Z",
+      "priority": 4,
+      "estimatedMinutes": 60,
+      "description": "12+ queries use hardcoded refetchInterval (10s-60s) that bypass the smart polling system. Migrate each to useSmartPolling/useSmartRefetchConfig with appropriate tiers. Key targets: TeamMembersPage (10s!), ActionCentreNavBadge (30s x2 duplicate), OpsPage enrichment (30s), ActionCentre (30s), useRecordings (30s), useEmailActions (30s), useHITLRequests (30s), IntegrationReconnectBanner (60s), AiInsightsBanner (60s/120s). Also fix the duplicate ActionCentreNavBadge query.",
+      "acceptanceCriteria": [
+        "All hardcoded refetchInterval replaced with useSmartPolling",
+        "Duplicate ActionCentreNavBadge query consolidated",
+        "Off-hours polling reduced by 67%+",
+        "Idle user polling disabled for non-critical data",
+        "No functional regressions in data freshness"
+      ],
+      "files": [
+        "src/pages/settings/TeamMembersPage.tsx",
+        "src/components/action-centre/ActionCentreNavBadge.tsx",
+        "src/pages/platform/ActionCentre.tsx",
+        "src/pages/OpsPage.tsx",
+        "src/lib/hooks/useRecordings.ts",
+        "src/lib/hooks/useEmailActions.ts",
+        "src/lib/hooks/useHITLRequests.ts",
+        "src/components/IntegrationReconnectBanner.tsx",
+        "src/components/ops/AiInsightsBanner.tsx"
+      ],
+      "dependencies": { "stories": [] }
+    },
+    {
+      "id": "API-002",
+      "feature": "api-optimization",
+      "title": "Replace OpsPage N+1 enrichment query with database RPC",
+      "type": "optimization",
+      "status": "complete",
+      "completedAt": "2026-02-08T10:00:00Z",
+      "priority": 5,
+      "estimatedMinutes": 45,
+      "description": "OpsPage.tsx:234-290 fetches ALL rows for ALL tables, then ALL cells in 500-chunk loops every 30 seconds. Replace with a single Supabase RPC (get_enrichment_stats) that does the aggregation server-side. Create the SQL function and update the frontend query.",
+      "acceptanceCriteria": [
+        "New get_enrichment_stats(org_id) RPC returns {table_id, enriched, pending, failed}",
+        "OpsPage uses single RPC call instead of N+1 pattern",
+        "Query count reduced from 3+ to 1 per poll cycle",
+        "Enrichment stats still display correctly on OpsPage"
+      ],
+      "files": [
+        "src/pages/OpsPage.tsx",
+        "supabase/migrations/new_enrichment_stats_rpc.sql"
+      ],
+      "dependencies": { "stories": [] }
+    },
+    {
+      "id": "API-003",
+      "feature": "api-optimization",
+      "title": "Add pagination to unbounded list queries",
+      "type": "optimization",
+      "status": "complete",
+      "completedAt": "2026-02-08T11:00:00Z",
+      "priority": 6,
+      "estimatedMinutes": 60,
+      "description": "Several list queries fetch ALL rows without .limit() or .range(). Add pagination to: useClients.ts (clients, deals, activities queries), OpsPage table listing, and any other unbounded selects. Use .limit(50) as default with cursor-based pagination where applicable.",
+      "acceptanceCriteria": [
+        "All list queries have .limit() or .range()",
+        "useClients batch queries are paginated",
+        "OpsPage table list has reasonable limit",
+        "No visible UI regressions from pagination"
+      ],
+      "files": [
+        "src/lib/hooks/useClients.ts",
+        "src/pages/OpsPage.tsx"
+      ],
+      "dependencies": { "stories": ["API-002"] }
+    },
+    {
+      "id": "SCALE-001",
+      "feature": "scaling-readiness",
+      "title": "Add search debouncing to prevent per-keystroke API calls",
+      "type": "optimization",
+      "status": "complete",
+      "completedAt": "2026-02-08T11:00:00Z",
+      "priority": 7,
+      "estimatedMinutes": 20,
+      "description": "RecentActivityList copilot memory search has staleTime: 1000 (1 second), triggering a new RPC call on every keystroke. Add 300ms debounce to search inputs and increase staleTime to 30s for search results.",
+      "acceptanceCriteria": [
+        "Search inputs debounced at 300ms minimum",
+        "staleTime for search queries increased to 30s",
+        "Search still feels responsive to users",
+        "API calls reduced by 80%+ during active typing"
+      ],
+      "files": [
+        "src/components/action-centre/RecentActivityList.tsx"
+      ],
+      "dependencies": { "stories": [] }
+    }
+  ],
+  "execution": {
+    "completedStories": 7,
+    "totalStories": 7,
+    "lastUpdated": "2026-02-08T11:00:00Z"
+  }
+}

@@ -10,6 +10,7 @@ import { X, AlertTriangle, AlertCircle, RefreshCw, ArrowRight, Video, Settings }
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
@@ -45,6 +46,7 @@ export function IntegrationReconnectBanner({
   // Feature branch: Fathom-specific reconnection detection
   const { needsReconnect, loading: fathomLoading, dismiss: dismissFathom } = useIntegrationReconnectNeeded();
   const { connectFathom } = useFathomIntegration();
+  const integrationPolling = useSmartPollingInterval(120000, 'background');
 
   // Check if banner was dismissed
   const [isDismissed, setIsDismissed] = useState(() => {
@@ -79,7 +81,7 @@ export function IntegrationReconnectBanner({
       return data || [];
     },
     staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: 60 * 1000, // Refetch every minute
+    refetchInterval: integrationPolling,
   });
 
   const handleDismiss = () => {

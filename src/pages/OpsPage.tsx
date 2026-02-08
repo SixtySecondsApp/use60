@@ -30,6 +30,7 @@ import { ApolloSearchWizard } from '@/components/ops/ApolloSearchWizard';
 import { CreateTableModal } from '@/components/ops/CreateTableModal';
 import { useWorkflowOrchestrator } from '@/lib/hooks/useWorkflowOrchestrator';
 import { WorkflowProgressStepper } from '@/components/ops/WorkflowProgressStepper';
+import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 
 const tableService = new OpsTableService(supabase);
 
@@ -198,6 +199,7 @@ function OpsPage() {
   const [workflowInput, setWorkflowInput] = useState('');
 
   const workflow = useWorkflowOrchestrator();
+  const enrichmentPolling = useSmartPollingInterval(60000, 'standard');
 
   const handleWorkflowSubmit = useCallback(() => {
     const prompt = workflowInput.trim();
@@ -220,7 +222,8 @@ function OpsPage() {
         .from('dynamic_tables')
         .select('id, name, description, row_count, source_type, created_at, updated_at')
         .eq('organization_id', activeOrg.id)
-        .order('updated_at', { ascending: false });
+        .order('updated_at', { ascending: false })
+        .limit(100);
 
       if (error) throw error;
       return (data ?? []) as OpsTableItem[];
@@ -228,65 +231,31 @@ function OpsPage() {
     enabled: !!activeOrg?.id,
   });
 
-  // --- Data: enrichment stats per table (OLR-001) ---
-  const tableIds = useMemo(() => (tables ?? []).map((t) => t.id), [tables]);
-
+  // --- Data: enrichment stats per table (via server-side RPC) ---
   const { data: enrichmentMap } = useQuery({
-    queryKey: ['ops-enrichment-stats', tableIds],
+    queryKey: ['ops-enrichment-stats', activeOrg?.id],
     queryFn: async () => {
-      if (tableIds.length === 0) return {} as Record<string, EnrichmentStats>;
+      if (!activeOrg?.id) return {} as Record<string, EnrichmentStats>;
 
-      // Fetch rows for all tables in one query
-      const { data: rows, error: rowErr } = await supabase
-        .from('dynamic_table_rows')
-        .select('id, table_id')
-        .in('table_id', tableIds);
+      const { data, error } = await supabase.rpc('get_enrichment_stats', {
+        p_org_id: activeOrg.id,
+      });
 
-      if (rowErr) throw rowErr;
-      if (!rows || rows.length === 0) return {} as Record<string, EnrichmentStats>;
+      if (error) throw error;
+      if (!data || data.length === 0) return {} as Record<string, EnrichmentStats>;
 
-      // Build row→table lookup
-      const rowToTable = new Map<string, string>();
-      for (const r of rows) {
-        rowToTable.set(r.id, r.table_id);
-      }
-      const allRowIds = rows.map((r) => r.id);
-
-      // Fetch enrichment cells in chunks (Supabase IN limit)
-      const CHUNK = 500;
-      const cellRows: { row_id: string; status: string; confidence: number | null }[] = [];
-      for (let i = 0; i < allRowIds.length; i += CHUNK) {
-        const chunk = allRowIds.slice(i, i + CHUNK);
-        const { data: cells, error: cellErr } = await supabase
-          .from('dynamic_table_cells')
-          .select('row_id, status, confidence')
-          .in('row_id', chunk)
-          .in('status', ['complete', 'pending', 'failed']);
-
-        if (cellErr) throw cellErr;
-        if (cells) cellRows.push(...cells);
-      }
-
-      // Aggregate per table
       const statsMap: Record<string, EnrichmentStats> = {};
-      for (const cell of cellRows) {
-        const tableId = rowToTable.get(cell.row_id);
-        if (!tableId) continue;
-        if (!statsMap[tableId]) statsMap[tableId] = { enriched: 0, pending: 0, failed: 0 };
-        const s = statsMap[tableId];
-        if (cell.status === 'complete' && cell.confidence !== null) {
-          s.enriched++;
-        } else if (cell.status === 'pending') {
-          s.pending++;
-        } else if (cell.status === 'failed') {
-          s.failed++;
-        }
+      for (const row of data) {
+        statsMap[row.table_id] = {
+          enriched: Number(row.enriched) || 0,
+          pending: Number(row.pending) || 0,
+          failed: Number(row.failed) || 0,
+        };
       }
-
       return statsMap;
     },
-    enabled: tableIds.length > 0,
-    refetchInterval: 30_000, // Poll every 30s to pick up running enrichments
+    enabled: !!activeOrg?.id,
+    refetchInterval: enrichmentPolling,
   });
 
   // --- Create table mutation ---

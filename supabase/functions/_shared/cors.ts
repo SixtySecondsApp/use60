@@ -1,14 +1,24 @@
 // supabase/functions/_shared/cors.ts
-// 
-// DEPRECATED: This file uses wildcard CORS which is insecure for production.
-// For new code, use corsHelper.ts instead:
-//   import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 //
-// This file is kept for backwards compatibility with existing functions.
+// MIGRATION BRIDGE: Re-exports from corsHelper.ts.
+//
+// The static `corsHeaders` object is kept for backwards compatibility with 90+ functions.
+// NEW functions should use getCorsHeaders(req) from corsHelper.ts for origin-validated CORS.
+//
+// Migration plan:
+// 1. [DONE] corsHelper.ts has allowlist-based getCorsHeaders(req)
+// 2. [DONE] New functions (65+) already use corsHelper.ts directly
+// 3. [TODO] Gradually migrate remaining 90 functions from static corsHeaders to getCorsHeaders(req)
+//
+// For new code, import directly from corsHelper.ts:
+//   import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
-export const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // DEPRECATED: Use corsHelper.ts for allowlist-based CORS
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, x-cron-secret, x-internal-call',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Expose-Headers': 'x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset'
-} 
+export {
+  corsHeaders,
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  handleCorsPreflightWithResponse,
+  jsonResponse,
+  errorResponse,
+  isOriginAllowed,
+} from './corsHelper.ts';

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -115,12 +116,10 @@ export function EmailThread({
   const formatContent = (content: string, html?: string) => {
     // If HTML is available, render it safely
     if (html) {
-      // Sanitize HTML - remove potentially dangerous elements
-      const sanitizedHtml = html
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-        .replace(/on\w+="[^"]*"/gi, '') // Remove event handlers
-        .replace(/javascript:/gi, ''); // Remove javascript: URLs
+      const sanitizedHtml = DOMPurify.sanitize(html, {
+        FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+        FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+      });
       
       return (
         <div 

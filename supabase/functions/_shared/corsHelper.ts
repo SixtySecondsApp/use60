@@ -168,34 +168,46 @@ export function errorResponse(
 }
 
 /**
- * Legacy CORS headers (wildcard) - for backwards compatibility only
- * @deprecated Use getCorsHeaders() instead
+ * Get the primary frontend origin from environment.
+ * Falls back to production domain if not set.
+ */
+function getPrimaryOrigin(): string {
+  return Deno.env.get('FRONTEND_URL') || 'https://app.use60.com';
+}
+
+/**
+ * Legacy CORS headers - now uses FRONTEND_URL instead of wildcard
+ * @deprecated Use getCorsHeaders(req) for proper origin validation
  */
 export const legacyCorsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  get 'Access-Control-Allow-Origin'() { return getPrimaryOrigin(); },
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
 /**
- * Standard CORS headers - alias for legacyCorsHeaders for backwards compatibility
- * Many functions import this directly
+ * Standard CORS headers - uses FRONTEND_URL instead of wildcard '*'
+ * 90+ functions import this. For new code, use getCorsHeaders(req) instead.
+ *
+ * NOTE: This uses a getter so it reads FRONTEND_URL at runtime, not import time.
+ * Functions using this should migrate to getCorsHeaders(req) for full allowlist support.
  */
 export const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  get 'Access-Control-Allow-Origin'() { return getPrimaryOrigin(); },
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-cron-secret, x-internal-call',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
 /**
- * Handle CORS preflight request and return a Response directly
- * Used by functions that handle OPTIONS separately without the request object
+ * Handle CORS preflight request and return a Response directly.
+ * Used by functions that handle OPTIONS separately without the request object.
+ * Uses FRONTEND_URL instead of wildcard.
  */
 export function handleCorsPreflightWithResponse(): Response {
   return new Response('ok', {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getPrimaryOrigin(),
       'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-cron-secret, x-internal-call',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Max-Age': '86400',

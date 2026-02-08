@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import DOMPurify from 'dompurify';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { processTemplate, type EmailTemplate, type TemplateVariables } from '@/lib/services/emailTemplateService';
 import { Mail } from 'lucide-react';
@@ -60,7 +61,7 @@ export function EmailPreview({ template, variables, day }: EmailPreviewProps) {
           <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900 overflow-auto max-h-[600px] w-full overflow-x-hidden">
             <div
               className="email-preview-content text-sm text-gray-900 dark:text-gray-100 w-full max-w-full overflow-x-hidden break-words [&_*]:max-w-full [&_*]:overflow-x-hidden [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:table-auto [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mb-2 [&_h1]:break-words [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_h2]:break-words [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-2 [&_h3]:break-words [&_p]:mb-2 [&_p]:break-words [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:mb-2 [&_li]:mb-1 [&_li]:break-words [&_a]:text-blue-600 [&_a]:underline [&_a]:break-all [&_strong]:font-semibold"
-              dangerouslySetInnerHTML={{ __html: processedBody }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(processedBody) }}
             />
           </div>
 

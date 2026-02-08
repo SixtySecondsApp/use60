@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import DOMPurify from 'dompurify';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -58,7 +59,7 @@ export function ExpandableDescription({
       <div className={cn('text-sm text-muted-foreground', className)}>
         <div
           className="prose prose-sm dark:prose-invert max-w-none space-y-1 [&_li]:list-disc [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono"
-          dangerouslySetInnerHTML={{ __html: `<p>${formatMarkdown(long)}</p>` }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(`<p>${formatMarkdown(long)}</p>`) }}
         />
         <Button
           variant="link"
