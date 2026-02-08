@@ -202,6 +202,13 @@ verify_jwt = false
 [functions.backfill-transcripts]
 verify_jwt = false
 
+# Thumbnail generation - called internally by fathom-sync and backfill-thumbnails
+[functions.generate-video-thumbnail-v2]
+verify_jwt = false
+
+[functions.backfill-thumbnails]
+verify_jwt = false
+
 # Password reset email - called from admin panel with user JWT
 # We handle auth verification manually inside the function (CORS preflight needs to work)
 [functions.send-password-reset-email]
