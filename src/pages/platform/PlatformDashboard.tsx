@@ -230,6 +230,15 @@ const platformSections: Record<string, PlatformSection[]> = {
       badge: 'New',
     },
     {
+      id: 'copilot-console',
+      title: 'Copilot Console',
+      description: 'Test, monitor, and analyze your AI copilot in one place',
+      icon: Bot,
+      href: '/platform/copilot-console',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
+      badge: 'New',
+    },
+    {
       id: 'feature-flags',
       title: 'Feature Flags',
       description: 'Control feature availability per customer',

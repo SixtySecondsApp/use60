@@ -21,7 +21,6 @@ import { DefaultRoute } from '@/components/DefaultRoute';
 import { RecoveryTokenDetector } from '@/components/RecoveryTokenDetector';
 import { RouteLoader, ExternalRedirect } from '@/components/routing';
 
-const CopilotDemo = lazy(() => import('@/pages/CopilotDemo'));
 import { usePerformanceOptimization } from '@/lib/hooks/usePerformanceOptimization';
 import { IntelligentPreloader } from '@/components/LazyComponents';
 import { webVitalsOptimizer } from '@/lib/utils/webVitals';
@@ -65,7 +64,7 @@ const FathomCallbackWrapper = () => <FathomCallback />;
 import {
   // Platform Admin
   MeetingsWaitlist, WaitlistSlackSettings, OnboardingSimulator, TrialTimelineSimulator, PricingControl, CostAnalysis, AIUsageAdmin, ApiUsageDashboard, LaunchChecklist,
-  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, SkillsQAPage, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, CopilotLabPage, AgentPerformanceDashboard, Users, PipelineSettings,
+  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, SkillsQAPage, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, CopilotLabPage, AgentPerformanceDashboard, CopilotConsolePage, Users, PipelineSettings,
   AuditLogs, SmartTasksAdmin, PipelineAutomationAdmin, EmailTemplates, FunctionTesting,
   AIProviderSettings, GoogleIntegrationTestsLegacy, GoogleIntegrationTests, SettingsSavvyCal,
   SettingsBookingSources, HealthRules, EmailCategorizationSettings, AdminModelSettings,
@@ -401,6 +400,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/agent-sequences" element={<PlatformAdminRouteGuard><AppLayout><AgentSequencesPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-sequences/new" element={<PlatformAdminRouteGuard><AgentSequenceBuilderPage /></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-sequences/:sequenceKey" element={<PlatformAdminRouteGuard><AgentSequenceBuilderPage /></PlatformAdminRouteGuard>} />
+                {/* Unified Copilot Console - Test, monitor, and analyze */}
+                <Route path="/platform/copilot-console" element={<PlatformAdminRouteGuard><AppLayout><CopilotConsolePage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Copilot Test Page - Quality testing for AI assistant */}
                 <Route path="/platform/copilot-tests" element={<PlatformAdminRouteGuard><AppLayout><CopilotTestPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Copilot Lab - Testing, discovery, and improvement hub */}
@@ -590,8 +591,6 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/freepik-flow" element={<AppLayout><div className="h-[calc(100vh-4rem)]"><FreepikFlow /></div></AppLayout>} />
                 <Route path="/test-fallback" element={<ProtectedRoute><TestFallback /></ProtectedRoute>} />
                 <Route path="/test-google-tasks" element={<AppLayout><TestGoogleTasks /></AppLayout>} />
-                {/* Copilot response panel demo - dev review only */}
-                <Route path="/copilot-demo" element={<CopilotDemo />} />
               </Routes>
             </Suspense>
           </ProtectedRoute>
