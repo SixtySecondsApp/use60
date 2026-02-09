@@ -140,6 +140,7 @@ export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
+export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
 export const DocsPage = lazyWithRetry(() => import('@/pages/DocsPage'));
 
 // ============================================================

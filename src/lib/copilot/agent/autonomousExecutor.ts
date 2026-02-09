@@ -185,6 +185,9 @@ export class AutonomousExecutor {
     this.anthropic = new Anthropic();
   }
 
+  /** Whether the org has Apify connected */
+  private apifyConnected = false;
+
   /**
    * Initialize by loading all available skills as tools.
    * Only loads Tier 1 (metadata/frontmatter) — content_template is lazy-loaded
@@ -230,7 +233,31 @@ export class AutonomousExecutor {
       }
     }
 
-    console.log(`[AutonomousExecutor] Initialized with ${this.tools.length} tools from organization_skills`);
+    // Check if org has Apify connected
+    await this.checkApifyConnection();
+
+    console.log(`[AutonomousExecutor] Initialized with ${this.tools.length} tools from organization_skills${this.apifyConnected ? ' (Apify connected)' : ''}`);
+  }
+
+  /**
+   * Check if the organization has an active Apify integration.
+   * When connected, Apify skills (actor browse, run trigger, results query)
+   * are available via the standard skill/sequence execution path.
+   */
+  private async checkApifyConnection(): Promise<void> {
+    try {
+      const { data, error } = await supabase
+        .from('integration_credentials')
+        .select('id')
+        .eq('organization_id', this.config.organizationId)
+        .eq('provider', 'apify')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      this.apifyConnected = !error && !!data;
+    } catch {
+      this.apifyConnected = false;
+    }
   }
 
   /**
@@ -525,6 +552,21 @@ ${categoryList}
 
 The user belongs to organization: ${this.config.organizationId}
 ${Object.keys(this.config.orgContext).length > 0 ? `\nAvailable context: ${Object.keys(this.config.orgContext).join(', ')}` : ''}
+${this.apifyConnected ? `
+## Apify Web Scraping (Connected)
+
+This organization has Apify connected. Apify skills are available:
+- **apify-actor-browse**: Search the Apify marketplace for scrapers
+- **apify-run-trigger**: Configure and start actor runs
+- **apify-results-query**: Query mapped results from completed runs
+- **seq-apify-scrape-flow**: End-to-end scraping workflow
+
+When the user asks about scraping, web data extraction, or Apify, use these skills.
+` : `
+## Apify Web Scraping (Not Connected)
+
+If a user asks about Apify or web scraping, tell them: "Connect Apify in Settings > Integrations first."
+`}
 `;
 
     if (this.config.systemPromptAdditions) {

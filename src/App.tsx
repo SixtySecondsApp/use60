@@ -84,7 +84,7 @@ import {
   MeetingsPage, MeetingIntelligence, MeetingSentimentAnalytics, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   TasksPage, ProjectsHub, GoogleTasksSettings, Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage,
-  OpsPage, OpsDetailPage, DocsPage,
+  OpsPage, OpsDetailPage, ApifyOpsPage, DocsPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
@@ -485,6 +485,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/crm/tasks" element={<InternalRouteGuard><AppLayout><TasksPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/projects" element={<InternalRouteGuard><AppLayout><ProjectsHub /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/docs" element={<AppLayout><DocsPage /></AppLayout>} />
                 <Route path="/tasks/settings" element={<InternalRouteGuard><AppLayout><GoogleTasksSettings /></AppLayout></InternalRouteGuard>} />

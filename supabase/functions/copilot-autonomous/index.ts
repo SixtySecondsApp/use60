@@ -532,13 +532,47 @@ Return [] if no meaningful memories.`,
 }
 
 // =============================================================================
+// Apify Integration Check
+// =============================================================================
+
+interface ApifyConnectionInfo {
+  connected: boolean;
+  hasToken: boolean;
+}
+
+async function checkApifyConnection(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string | null
+): Promise<ApifyConnectionInfo> {
+  if (!orgId) return { connected: false, hasToken: false };
+
+  try {
+    const { data, error } = await supabase
+      .from('integration_credentials')
+      .select('id, credentials')
+      .eq('organization_id', orgId)
+      .eq('provider', 'apify')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error || !data) return { connected: false, hasToken: false };
+
+    const hasToken = !!(data.credentials as Record<string, unknown>)?.api_token;
+    return { connected: true, hasToken };
+  } catch {
+    return { connected: false, hasToken: false };
+  }
+}
+
+// =============================================================================
 // System Prompt
 // =============================================================================
 
 function buildSystemPrompt(
   organizationId?: string,
   context?: Record<string, unknown>,
-  memoryContext?: string
+  memoryContext?: string,
+  apifyConnection?: ApifyConnectionInfo
 ): string {
   return `You are an AI sales assistant for a platform called Sixty. You help sales professionals manage their pipeline, prepare for meetings, track contacts, and execute sales workflows.
 
@@ -591,6 +625,17 @@ ${memoryContext ? MEMORY_SYSTEM_ADDITION : ''}
 - Confirm before any CRM updates or notifications (execute_action write actions require params.confirm=true)
 - If a tool returns an error, explain what happened and suggest alternatives
 - Present data in a helpful, actionable way for sales professionals
+${apifyConnection?.connected ? `
+## Apify Web Scraping (Connected)
+
+This organization has Apify connected. You can help with web scraping workflows:
+- **Browse actors**: Use list_skills to find apify-actor-browse, then get_skill to learn how to search the marketplace
+- **Run scrapers**: Use the apify-run-trigger skill to configure and start actor runs
+- **Query results**: Use the apify-results-query skill to filter and explore scraped data
+- **Full pipeline**: Use the seq-apify-scrape-flow sequence for end-to-end scraping workflows
+
+When the user asks about scraping, web data extraction, or Apify — use these skills via execute_action with run_skill or run_sequence.
+` : ''}
 `;
 }
 
@@ -880,8 +925,14 @@ serve(async (req: Request) => {
       console.error('[copilot-autonomous] Background compaction error:', err)
     );
 
+    // Check if org has Apify connected (for system prompt injection)
+    const apifyConnection = await checkApifyConnection(supabase, organizationId || null);
+    if (apifyConnection.connected) {
+      console.log('[copilot-autonomous] Apify connected for org:', organizationId);
+    }
+
     // Build system prompt (no longer depends on per-skill tool defs)
-    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext);
+    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection);
 
     // Use the 4-tool architecture (same as api-copilot)
     const claudeTools = FOUR_TOOL_DEFINITIONS;
