@@ -161,6 +161,16 @@ verify_jwt = false
 [functions.backfill-thumbnails]
 verify_jwt = false
 
+# Deploy recording bot - called from browser with user JWT
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.deploy-recording-bot]
+verify_jwt = false
+
+# Get recording URL - called from browser to fetch signed S3 URL for video playback
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.get-recording-url]
+verify_jwt = false
+
 # Password reset email - called from admin panel with user JWT
 # We handle auth verification manually inside the function (CORS preflight needs to work)
 [functions.send-password-reset-email]
