@@ -257,11 +257,16 @@ const MeetingDetail: React.FC = () => {
     }
   }
 
-  // Ensure a thumbnail exists for this meeting (best-effort)
+  // Ensure a thumbnail exists for this meeting (Fathom only — other providers have no embeddable video)
   useEffect(() => {
     const ensureThumbnail = async () => {
       if (!meeting || thumbnailEnsured) return
       if (meeting.thumbnail_url) {
+        setThumbnailEnsured(true)
+        return
+      }
+      // Skip non-Fathom meetings (no embeddable video for thumbnail generation)
+      if (meeting.provider && meeting.provider !== 'fathom') {
         setThumbnailEnsured(true)
         return
       }

@@ -441,11 +441,16 @@ export function MeetingDetail() {
     }
   }, [meeting, progress?.first_summary_viewed, summaryViewTracked, trackFirstSummaryViewed]);
 
-  // Ensure thumbnail exists for this meeting
+  // Ensure thumbnail exists for this meeting (Fathom only — other providers have no embeddable video)
   useEffect(() => {
     const ensureThumbnail = async () => {
       if (!meeting || thumbnailEnsured) return;
       if (meeting.thumbnail_url) {
+        setThumbnailEnsured(true);
+        return;
+      }
+      // Skip non-Fathom meetings (no embeddable video for thumbnail generation)
+      if (meeting.provider && meeting.provider !== 'fathom') {
         setThumbnailEnsured(true);
         return;
       }
