@@ -7,6 +7,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useRecording, useRecordingRealtime } from '@/lib/hooks/useRecordings'
 import { recordingService } from '@/lib/services/recordingService'
+import { supabase } from '@/lib/supabase/clientV2'
+import { ProposalWizard } from '@/components/proposals/ProposalWizard'
 import { format, formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -31,7 +33,9 @@ import {
   AlertCircle,
   ExternalLink,
   ClipboardList,
-  RefreshCw
+  RefreshCw,
+  BarChart3,
+  TrendingUp
 } from 'lucide-react'
 import type { RecordingStatus, MeetingPlatform } from '@/lib/types/meetingBaaS'
 
@@ -64,6 +68,31 @@ const formatDuration = (seconds: number | null | undefined): string => {
   return `${minutes}m`
 }
 
+// Sentiment helpers
+const getSentimentLabel = (score: number): string => {
+  if (score >= 0.3) return 'Positive'
+  if (score >= -0.3) return 'Neutral'
+  return 'Needs Review'
+}
+
+const getSentimentColor = (score: number): string => {
+  if (score >= 0.3) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+  if (score >= -0.3) return 'bg-gray-100 text-gray-700 dark:bg-gray-500/10 dark:text-gray-400'
+  return 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400'
+}
+
+const getCoachColor = (rating: number): string => {
+  if (rating >= 70) return 'text-emerald-600 dark:text-emerald-400'
+  if (rating >= 40) return 'text-amber-600 dark:text-amber-400'
+  return 'text-red-600 dark:text-red-400'
+}
+
+const getTalkTimeColor = (judgement: string | null | undefined): string => {
+  if (judgement === 'good') return 'text-emerald-600 dark:text-emerald-400'
+  if (judgement === 'high' || judgement === 'low') return 'text-amber-600 dark:text-amber-400'
+  return 'text-gray-600 dark:text-gray-400'
+}
+
 // Skeleton for loading state
 const RecordingDetailSkeleton: React.FC = () => (
   <div className="p-6 space-y-6">
@@ -91,68 +120,57 @@ export const RecordingDetail: React.FC = () => {
   const [videoLoading, setVideoLoading] = useState(false)
   const [videoError, setVideoError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false)
+  const [showProposalWizard, setShowProposalWizard] = useState(false)
+  const [linkedMeetingId, setLinkedMeetingId] = useState<string | null>(null)
 
   // Fetch recording data
-  const { data: recording, isLoading, error } = useRecording(id || '')
+  const { recording, isLoading, error } = useRecording(id || '')
 
   // Subscribe to real-time updates
   useRecordingRealtime(id || '')
 
-  // Fetch fresh signed URL for video playback when recording is ready
+  // Fetch signed video URL when recording is ready
   useEffect(() => {
-    const fetchVideoUrl = async () => {
-      if (!id || !recording?.recording_s3_key) return
-      if (recording.status !== 'ready') return
-
-      setVideoLoading(true)
-      setVideoError(null)
-
-      try {
-        const result = await recordingService.getRecordingUrl(id)
-        if (result.success && result.url) {
-          setVideoUrl(result.url)
-        } else {
-          setVideoError(result.error || 'Failed to load video')
-        }
-      } catch (err) {
-        setVideoError('Failed to load video')
-      } finally {
-        setVideoLoading(false)
-      }
+    if (!id || !recording?.recording_s3_key || recording.status !== 'ready') {
+      setVideoUrl(null)
+      return
     }
 
-    fetchVideoUrl()
-  }, [id, recording?.recording_s3_key, recording?.status])
+    let cancelled = false
+    setIsLoadingVideo(true)
 
-  // Function to refresh video URL (in case it expires during viewing)
-  const refreshVideoUrl = async () => {
-    if (!id) return
-    setVideoLoading(true)
-    setVideoError(null)
-
-    try {
-      const result = await recordingService.getRecordingUrl(id)
+    recordingService.getRecordingUrl(id).then((result) => {
+      if (cancelled) return
       if (result.success && result.url) {
         setVideoUrl(result.url)
-        // If video element exists, update its src and reload
-        if (videoRef.current) {
-          const currentTime = videoRef.current.currentTime
-          videoRef.current.src = result.url
-          videoRef.current.load()
-          videoRef.current.currentTime = currentTime
-        }
-        toast.success('Video refreshed')
-      } else {
-        setVideoError(result.error || 'Failed to refresh video')
-        toast.error(result.error || 'Failed to refresh video')
       }
-    } catch (err) {
-      setVideoError('Failed to refresh video')
-      toast.error('Failed to refresh video')
-    } finally {
-      setVideoLoading(false)
-    }
-  }
+      setIsLoadingVideo(false)
+    })
+
+    return () => { cancelled = true }
+  }, [id, recording?.recording_s3_key, recording?.status])
+
+  // Look up the linked meeting for proposal generation
+  useEffect(() => {
+    if (!id || !recording || recording.status !== 'ready') return
+
+    let cancelled = false
+
+    supabase
+      .from('meetings')
+      .select('id')
+      .eq('recording_id', id)
+      .eq('source_type', '60_notetaker')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data) {
+          setLinkedMeetingId(data.id)
+        }
+      })
+
+    return () => { cancelled = true }
+  }, [id, recording?.status])
 
   // Handle download - fetches fresh signed URL and triggers download
   const handleDownload = async () => {
@@ -210,6 +228,7 @@ export const RecordingDetail: React.FC = () => {
 
   const status = statusConfig[recording.status]
   const platform = platformConfig[recording.meeting_platform]
+  const hasAiInsights = recording.sentiment_score != null || recording.coach_rating != null || recording.talk_time_rep_pct != null
 
   return (
     <div className="p-6 space-y-6">
@@ -259,6 +278,16 @@ export const RecordingDetail: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {linkedMeetingId && recording.status === 'ready' && (
+            <Button
+              size="sm"
+              onClick={() => setShowProposalWizard(true)}
+              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <FileText className="h-4 w-4" />
+              Generate Proposal
+            </Button>
+          )}
           {recording.recording_s3_key && (
             <Button
               variant="outline"
@@ -281,6 +310,34 @@ export const RecordingDetail: React.FC = () => {
           </Button>
         </div>
       </motion.div>
+
+      {/* Video Player */}
+      {recording.status === 'ready' && recording.recording_s3_key && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="bg-black rounded-xl overflow-hidden aspect-video">
+            {isLoadingVideo ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <Loader2 className="h-8 w-8 text-white animate-spin" />
+              </div>
+            ) : videoUrl ? (
+              <video
+                controls
+                className="w-full h-full"
+                src={videoUrl}
+                poster={recording.thumbnail_url || undefined}
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
+                <Video className="h-12 w-12" />
+                <p className="text-sm">Video unavailable</p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* HITL Alert */}
       {recording.hitl_required && (
@@ -336,25 +393,51 @@ export const RecordingDetail: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30">
-          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-1">
-            <Sparkles className="h-4 w-4" />
-            Highlights
+        {recording.sentiment_score != null ? (
+          <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30">
+            <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-1">
+              <TrendingUp className="h-4 w-4" />
+              Sentiment
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className={cn("text-xs", getSentimentColor(recording.sentiment_score))}>
+                {getSentimentLabel(recording.sentiment_score)}
+              </Badge>
+            </div>
           </div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {recording.highlights?.length || 0}
+        ) : (
+          <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30">
+            <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-1">
+              <Sparkles className="h-4 w-4" />
+              Highlights
+            </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {recording.highlights?.length || 0}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30">
-          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-1">
-            <Building2 className="h-4 w-4" />
-            CRM Links
+        {recording.coach_rating != null ? (
+          <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30">
+            <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-1">
+              <BarChart3 className="h-4 w-4" />
+              Coach Rating
+            </div>
+            <div className={cn("text-2xl font-bold", getCoachColor(recording.coach_rating))}>
+              {Math.round(recording.coach_rating)}/100
+            </div>
           </div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {recording.crm_contacts?.length || 0}
+        ) : (
+          <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30">
+            <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-1">
+              <Building2 className="h-4 w-4" />
+              CRM Links
+            </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {recording.crm_contacts?.length || 0}
+            </div>
           </div>
-        </div>
+        )}
       </motion.div>
 
       {/* Video Player */}
@@ -453,6 +536,12 @@ export const RecordingDetail: React.FC = () => {
               <ClipboardList className="h-4 w-4" />
               Actions
             </TabsTrigger>
+            {hasAiInsights && (
+              <TabsTrigger value="insights" className="gap-2">
+                <BarChart3 className="h-4 w-4" />
+                AI Insights
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="summary" className="mt-4">
@@ -634,8 +723,98 @@ export const RecordingDetail: React.FC = () => {
               )}
             </div>
           </TabsContent>
+
+          {/* AI Insights Tab */}
+          {hasAiInsights && (
+            <TabsContent value="insights" className="mt-4">
+              <div className="space-y-4">
+                {/* Sentiment Analysis */}
+                {recording.sentiment_score != null && (
+                  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-6 border border-gray-200/50 dark:border-gray-700/30">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">Sentiment Analysis</h3>
+                      <Badge className={getSentimentColor(recording.sentiment_score)}>
+                        {getSentimentLabel(recording.sentiment_score)} ({(recording.sentiment_score * 100).toFixed(0)}%)
+                      </Badge>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        className={cn(
+                          "h-2 rounded-full transition-all",
+                          recording.sentiment_score >= 0.3 ? 'bg-emerald-500' :
+                          recording.sentiment_score >= -0.3 ? 'bg-gray-400' : 'bg-red-500'
+                        )}
+                        style={{ width: `${Math.max(5, ((recording.sentiment_score + 1) / 2) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Talk Time */}
+                {recording.talk_time_rep_pct != null && recording.talk_time_customer_pct != null && (
+                  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-6 border border-gray-200/50 dark:border-gray-700/30">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">Talk Time Balance</h3>
+                      {recording.talk_time_judgement && (
+                        <Badge variant="outline" className={getTalkTimeColor(recording.talk_time_judgement)}>
+                          {recording.talk_time_judgement === 'good' ? 'Balanced' :
+                           recording.talk_time_judgement === 'high' ? 'Rep Dominant' : 'Low Rep Talk'}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="text-gray-600 dark:text-gray-400">Rep</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{Math.round(recording.talk_time_rep_pct)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div className="h-2 rounded-full bg-blue-500" style={{ width: `${recording.talk_time_rep_pct}%` }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="text-gray-600 dark:text-gray-400">Customer</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{Math.round(recording.talk_time_customer_pct)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${recording.talk_time_customer_pct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Coaching Insights */}
+                {recording.coach_rating != null && (
+                  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-6 border border-gray-200/50 dark:border-gray-700/30">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">Coaching Score</h3>
+                      <span className={cn("text-2xl font-bold", getCoachColor(recording.coach_rating))}>
+                        {Math.round(recording.coach_rating)}/100
+                      </span>
+                    </div>
+                    {recording.coach_summary && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                        {recording.coach_summary}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          )}
         </Tabs>
       </motion.div>
+
+      {/* Proposal Wizard */}
+      {linkedMeetingId && (
+        <ProposalWizard
+          open={showProposalWizard}
+          onOpenChange={setShowProposalWizard}
+          meetingIds={[linkedMeetingId]}
+        />
+      )}
     </div>
   )
 }

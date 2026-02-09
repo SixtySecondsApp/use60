@@ -64,6 +64,7 @@ interface RecordingInsert {
 
 interface MeetingInsert {
   source_type: '60_notetaker';
+  provider: '60_notetaker';
   org_id: string;
   owner_user_id: string;
   title: string | null;
@@ -565,6 +566,7 @@ serve(async (req) => {
     // Create unified meeting record for 60 Notetaker recordings
     const meetingData: MeetingInsert = {
       source_type: '60_notetaker',
+      provider: '60_notetaker',
       org_id: orgId,
       owner_user_id: userId,
       title: body.meeting_title || null,
