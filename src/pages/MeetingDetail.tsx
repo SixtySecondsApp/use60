@@ -132,6 +132,15 @@ function formatTimestamp(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** Parse "HH:MM:SS" or "MM:SS" timestamp to seconds */
+function parseTimestampToSeconds(ts: string): number | null {
+  const parts = ts.split(':').map(Number);
+  if (parts.some(isNaN)) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return null;
+}
+
 // Enhanced markdown parser for Fathom summaries with beautiful styling
 function parseMarkdownSummary(markdown: string): string {
   return markdown
@@ -494,13 +503,18 @@ export function MeetingDetail() {
     ensureThumbnail();
   }, [meeting, thumbnailEnsured]);
 
-  // Handle timestamp jumps in video player
+  // Handle timestamp jumps in video player.
+  // Updates currentTimestamp (passed as startSeconds to FathomPlayerV2).
+  // Also calls seekToTimestamp directly via ref for postMessage-based seeking,
+  // and scrolls the video player into view.
   const handleTimestampJump = useCallback((seconds: number) => {
-    setCurrentTimestamp(seconds);
-
-    if (playerRef.current) {
-      playerRef.current.seekToTimestamp(seconds);
-    }
+    // Call seek directly via ref (postMessage to Fathom embed)
+    playerRef.current?.seekToTimestamp(seconds);
+    // Also update state so FathomPlayerV2's useEffect fires (handles edge cases)
+    setCurrentTimestamp(prev => prev === seconds ? seconds + 0.001 : seconds);
+    // Scroll the video player into view
+    const playerEl = document.querySelector('[data-player-container]');
+    playerEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, []);
 
   // Toggle an action item's completion (bidirectional sync via DB triggers)
@@ -1045,7 +1059,7 @@ export function MeetingDetail() {
             </div>
           ) : (meeting.fathom_recording_id || meeting.share_url) ? (
             /* Fathom Video Player */
-            <div className="glassmorphism-card overflow-hidden">
+            <div className="glassmorphism-card overflow-hidden" data-player-container>
               <FathomPlayerV2
                 ref={playerRef}
                 shareUrl={meeting.share_url}
@@ -1242,7 +1256,30 @@ export function MeetingDetail() {
                     <div className="glassmorphism-light p-4 rounded-lg max-h-[600px] overflow-y-auto">
                       <div className="text-sm leading-relaxed space-y-3">
                         {meeting.transcript_text.split('\n').map((line, idx) => {
-                          // Check if line starts with a speaker name (pattern: "Name: text")
+                          // New format: [HH:MM:SS] Speaker: text
+                          const tsMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/);
+                          if (tsMatch) {
+                            const [, ts, speaker, text] = tsMatch;
+                            const seconds = parseTimestampToSeconds(ts);
+                            return (
+                              <div key={idx} className="flex gap-3 group">
+                                {seconds !== null ? (
+                                  <button
+                                    onClick={() => handleTimestampJump(seconds)}
+                                    className="text-xs text-zinc-500 hover:text-blue-400 font-mono shrink-0 w-[62px] text-right cursor-pointer transition-colors"
+                                    title={`Jump to ${ts}`}
+                                  >
+                                    {ts}
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-zinc-600 font-mono shrink-0 w-[62px] text-right">{ts}</span>
+                                )}
+                                <div className="font-semibold text-blue-400 shrink-0">{speaker}:</div>
+                                <div className="text-muted-foreground flex-1">{text}</div>
+                              </div>
+                            );
+                          }
+                          // Legacy format: Speaker: text (no timestamp)
                           const speakerMatch = line.match(/^([^:]+):\s*(.*)$/);
                           if (speakerMatch) {
                             const [, speaker, text] = speakerMatch;

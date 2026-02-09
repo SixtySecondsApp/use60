@@ -34,6 +34,7 @@ interface CliOptions {
   limit?: number;
   days?: number;
   dryRun?: boolean;
+  refetch?: boolean;  // Re-fetch existing transcripts to get timestamps
 }
 
 function parseArgs(): CliOptions {
@@ -63,6 +64,9 @@ function parseArgs(): CliOptions {
       }
       case '--dry-run':
         options.dryRun = true;
+        break;
+      case '--refetch':
+        options.refetch = true;
         break;
       case '--help':
       case '-h':
@@ -116,12 +120,14 @@ async function fetchTranscriptFromFathom(
 
     const data = await response.json();
 
-    // Handle array format (most common)
+    // Handle array format (most common) — includes timestamps
     if (Array.isArray(data.transcript)) {
       const lines = data.transcript.map((segment: any) => {
+        const timestamp = segment?.timestamp || null;
         const speaker = segment?.speaker?.display_name ? `${segment.speaker.display_name}: ` : '';
         const text = segment?.text || '';
-        return `${speaker}${text}`.trim();
+        const prefix = timestamp ? `[${timestamp}] ` : '';
+        return `${prefix}${speaker}${text}`.trim();
       });
       return lines.join('\n');
     }
@@ -211,13 +217,20 @@ async function main() {
   if (options.dryRun) {
   }
 
-  // Build query for meetings without transcripts
+  // Build query for meetings needing transcripts
   let query = supabase
     .from('meetings')
     .select('id, title, fathom_recording_id, owner_user_id, meeting_start, transcript_text')
-    .is('transcript_text', null)
     .not('fathom_recording_id', 'is', null)
     .order('meeting_start', { ascending: false });
+
+  if (options.refetch) {
+    // Re-fetch existing transcripts to get new timestamp format
+    query = query.not('transcript_text', 'is', null);
+  } else {
+    // Default: only missing transcripts
+    query = query.is('transcript_text', null);
+  }
 
   // Add date filter if specified
   if (options.days) {

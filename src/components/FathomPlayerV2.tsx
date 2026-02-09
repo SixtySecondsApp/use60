@@ -81,21 +81,23 @@ const FathomPlayerV2 = React.forwardRef<FathomPlayerV2Handle, FathomPlayerV2Prop
   const [currentSrc, setCurrentSrc] = useState<string>('')
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [seekKey, setSeekKey] = useState(0)
 
   const resolvedId = id ?? extractId(shareUrl)
 
   useEffect(() => {
     if (resolvedId || recordingId) {
-      const src = toEmbedSrc(resolvedId || '', {
-        autoplay,
-        timestamp: startSeconds,
-        recordingId
-      })
+      // Build embed URL; append #t=SECONDS for timestamp seeking
+      // Fathom uses the #t= hash fragment format (per their API docs)
+      let src = toEmbedSrc(resolvedId || '', { autoplay, recordingId })
+      if (startSeconds > 0) {
+        src += `#t=${Math.floor(startSeconds)}`
+      }
       setCurrentSrc(src)
       setLoaded(false)
       setFailed(false)
     }
-  }, [resolvedId, recordingId, autoplay, startSeconds])
+  }, [resolvedId, recordingId, autoplay, startSeconds, seekKey])
 
   // Timeout handler
   useEffect(() => {
@@ -123,11 +125,15 @@ const FathomPlayerV2 = React.forwardRef<FathomPlayerV2Handle, FathomPlayerV2Prop
     }
   }, [resolvedId, recordingId, timeoutMs, onError])
 
-  // Method to update timestamp programmatically
+  // Seek by rebuilding the embed URL with #t= and forcing iframe remount via key
   const seekToTimestamp = (seconds: number) => {
-    if (resolvedId) {
-      const src = toEmbedSrc(resolvedId, { autoplay: true, timestamp: seconds, recordingId })
+    if (resolvedId || recordingId) {
+      let src = toEmbedSrc(resolvedId || '', { autoplay: true, recordingId })
+      if (seconds > 0) {
+        src += `#t=${Math.floor(seconds)}`
+      }
       setCurrentSrc(src)
+      setSeekKey(prev => prev + 1) // Force iframe remount for clean load
       setLoaded(false)
       setFailed(false)
     }
@@ -168,8 +174,9 @@ const FathomPlayerV2 = React.forwardRef<FathomPlayerV2Handle, FathomPlayerV2Prop
     >
       {!failed && (
         <iframe
+          key={seekKey}
           ref={iframeRef}
-          src={currentSrc || (shareUrl ? toEmbedSrc(extractId(shareUrl) || '', { autoplay, timestamp: startSeconds, recordingId }) : '')}
+          src={currentSrc || (shareUrl ? toEmbedSrc(extractId(shareUrl) || '', { autoplay, recordingId }) : '')}
           title={title}
           className="absolute inset-0 w-full h-full border-0"
           loading="lazy"

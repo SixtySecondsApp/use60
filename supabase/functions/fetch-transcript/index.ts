@@ -1,53 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { fetchTranscriptFromFathom } from '../_shared/fathomTranscript.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-interface FathomTranscriptResponse {
-  transcript: string
-}
-
-async function fetchTranscriptFromFathom(
-  accessToken: string,
-  recordingId: string
-): Promise<string | null> {
-  try {
-    const url = `https://api.fathom.ai/external/v1/recordings/${recordingId}/transcript`
-    
-    // Try X-Api-Key first (preferred for Fathom API)
-    let response = await fetch(url, {
-      headers: {
-        'X-Api-Key': accessToken,
-        'Content-Type': 'application/json',
-      },
-    })
-    // If X-Api-Key fails with 401, try Bearer (for OAuth tokens)
-    if (response.status === 401) {
-      response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      })
-    }
-
-    if (response.status === 404) {
-      return null
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Failed to fetch transcript: HTTP ${response.status} - ${errorText.substring(0, 200)}`)
-    }
-
-    const data: FathomTranscriptResponse = await response.json()
-    return data.transcript || null
-  } catch (error) {
-    throw error
-  }
 }
 
 async function createGoogleDocForTranscript(
