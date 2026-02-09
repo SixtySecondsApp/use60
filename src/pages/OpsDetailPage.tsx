@@ -48,6 +48,10 @@ import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
 import { ViewConfigPanel, normalizeSortConfig, type ViewConfigState } from '@/components/ops/ViewConfigPanel';
 import type { SavedView, FilterCondition, OpsTableColumn, SortConfig, GroupConfig, AggregateType } from '@/lib/services/opsTableService';
 import { generateSystemViews } from '@/lib/utils/systemViewGenerator';
+import { ApolloSourceControls } from '@/components/ops/ApolloSourceControls';
+import { ApolloFilterSheet } from '@/components/ops/ApolloFilterSheet';
+import { ApolloCollectMoreModal } from '@/components/ops/ApolloCollectMoreModal';
+import type { ApolloSearchParams } from '@/lib/services/apolloSearchService';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
 import { useApolloEnrichment } from '@/lib/hooks/useApolloEnrichment';
 import { useAuthUser } from '@/lib/hooks/useAuthUser';
@@ -212,6 +216,10 @@ function OpsDetailPage() {
   const [isLoadingLists, setIsLoadingLists] = useState(false);
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- Apollo source controls ----
+  const [showApolloFilters, setShowApolloFilters] = useState(false);
+  const [showCollectMore, setShowCollectMore] = useState(false);
 
   // ---- Instantly state (moved to column system) ----
 
@@ -1186,26 +1194,40 @@ function OpsDetailPage() {
 
       // ---- Instantly push_action column: intercept 'execute' and push to Instantly ----
       if (value === 'execute' && col && col.column_type === 'instantly') {
-        const config = col.integration_config as { instantly_subtype?: string; campaign_id?: string; push_config?: { campaign_id?: string; auto_field_mapping?: boolean } } | null;
-        const campaignId = config?.push_config?.campaign_id || config?.campaign_id;
-        if (config?.instantly_subtype === 'push_action' && campaignId) {
+        const config = col.integration_config as { instantly_subtype?: string; campaign_id?: string; field_mapping?: Record<string, string>; push_config?: { campaign_id?: string; field_mapping?: Record<string, string> } } | null;
+        if (config?.instantly_subtype === 'push_action') {
+          // Resolve campaign_id: push_action column → campaign_config column fallback
+          let campaignId = config?.push_config?.campaign_id || config?.campaign_id;
+          let fieldMapping = config?.push_config?.field_mapping || config?.field_mapping;
+
+          if (!campaignId) {
+            const campaignConfigCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              (c.integration_config as any)?.instantly_subtype === 'campaign_config' &&
+              c.id !== col.id
+            );
+            if (campaignConfigCol) {
+              const ccConfig = campaignConfigCol.integration_config as any;
+              campaignId = ccConfig?.campaign_id;
+              if (!fieldMapping) fieldMapping = ccConfig?.field_mapping;
+            }
+          }
+
+          if (!campaignId) {
+            toast.error('No campaign linked. Open column settings to link a campaign.');
+            setEditInstantlyColumn(col);
+            return;
+          }
+
           // Validate + push in async IIFE (cell handler is synchronous)
           (async () => {
             // Validate campaign exists before pushing
             if (table?.organization_id) {
-              const validation = await validateInstantlyCampaign(table.organization_id, campaignId);
+              const validation = await validateInstantlyCampaign(table.organization_id, campaignId!);
               if (!validation.valid) {
                 toast.error('Campaign no longer exists. Please select a new campaign.');
                 setEditInstantlyColumn(col);
                 return;
-              }
-            }
-
-            // Build field mapping from row values
-            const rowCellValues: Record<string, string> = {};
-            if (fullRow?.cells) {
-              for (const [key, c] of Object.entries(fullRow.cells)) {
-                if (c.value) rowCellValues[key] = c.value;
               }
             }
 
@@ -1219,7 +1241,7 @@ function OpsDetailPage() {
                 actionType: 'push_to_instantly',
                 actionConfig: {
                   campaign_id: campaignId,
-                  field_mapping: config.push_config?.auto_field_mapping ? undefined : rowCellValues,
+                  field_mapping: fieldMapping,
                 },
               },
               {
@@ -2129,6 +2151,12 @@ function OpsDetailPage() {
                 </button>
               </div>
             )}
+            {table.source_type === 'apollo' && (
+              <ApolloSourceControls
+                onEditFilters={() => setShowApolloFilters(true)}
+                onCollectMore={() => setShowCollectMore(true)}
+              />
+            )}
             <button
               onClick={() => addRowMutation.mutate()}
               disabled={addRowMutation.isPending}
@@ -2614,7 +2642,18 @@ function OpsDetailPage() {
           isOpen={!!editInstantlyColumn}
           onClose={() => setEditInstantlyColumn(null)}
           onSave={(config) => {
-            const merged = { ...(editInstantlyColumn.integration_config as Record<string, unknown> ?? {}), ...config };
+            const existingConfig = editInstantlyColumn.integration_config as Record<string, unknown> ?? {};
+            const isPushAction = (existingConfig as any)?.instantly_subtype === 'push_action';
+            const merged = { ...existingConfig, ...config };
+
+            // When saving a push_action column, also set push_config.campaign_id for consistency
+            if (isPushAction && config.campaign_id) {
+              merged.push_config = {
+                ...((existingConfig as any)?.push_config ?? {}),
+                campaign_id: config.campaign_id,
+              };
+            }
+
             updateInstantlyConfigMutation.mutate({
               columnId: editInstantlyColumn.id,
               config: merged,
@@ -2652,6 +2691,26 @@ function OpsDetailPage() {
                 columnId: pushActionCol.id,
                 config: pushMerged,
               });
+            }
+
+            // Also update campaign_config column if editing from push_action
+            if (isPushAction && config.campaign_id) {
+              const campaignConfigCol = columns.find(c =>
+                c.column_type === 'instantly' &&
+                (c.integration_config as any)?.instantly_subtype === 'campaign_config' &&
+                c.id !== editInstantlyColumn.id
+              );
+              if (campaignConfigCol) {
+                const ccMerged = {
+                  ...(campaignConfigCol.integration_config as Record<string, unknown> ?? {}),
+                  campaign_id: config.campaign_id,
+                  campaign_name: config.campaign_name,
+                };
+                updateInstantlyConfigMutation.mutate({
+                  columnId: campaignConfigCol.id,
+                  config: ccMerged,
+                });
+              }
             }
           }}
           onAddStepColumns={async (stepCols) => {
@@ -2943,6 +3002,32 @@ function OpsDetailPage() {
           queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
         }}
       />
+
+      {/* Apollo Filter Sheet & Collect More Modal */}
+      {tableId && table?.source_type === 'apollo' && (
+        <>
+          <ApolloFilterSheet
+            open={showApolloFilters}
+            onOpenChange={setShowApolloFilters}
+            tableId={tableId}
+            currentSourceQuery={(table.source_query ?? {}) as ApolloSearchParams}
+            onSaved={() => {
+              queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+            }}
+          />
+          <ApolloCollectMoreModal
+            open={showCollectMore}
+            onOpenChange={setShowCollectMore}
+            tableId={tableId}
+            sourceQuery={(table.source_query ?? {}) as ApolloSearchParams}
+            currentRowCount={table.row_count}
+            onComplete={() => {
+              queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+              queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+            }}
+          />
+        </>
+      )}
 
       {/* OI-028: Conversational Chat Thread */}
       <AiChatThread

@@ -287,7 +287,7 @@ export class OpsTableService {
 
   async updateTable(
     tableId: string,
-    updates: { name?: string; description?: string }
+    updates: { name?: string; description?: string; source_query?: Record<string, unknown> }
   ): Promise<OpsTableRecord> {
     const { data, error } = await this.supabase
       .from('dynamic_tables')
