@@ -724,22 +724,27 @@ export function ApolloSearchWizard({
             onSuccess: (tableResult) => {
               setQuickImportStep(null);
               const enriched = tableResult.enriched_count || 0;
-              const enrichMsg = enriched > 0 ? ` (${enriched} enriched)` : '';
-              const dedupMsg = tableResult.dedup
-                ? ` — filtered ${tableResult.dedup.duplicates} duplicates`
+              const enrichMsg = enriched > 0 ? `, ${enriched} enriched` : '';
+              const dedupMsg = tableResult.dedup?.duplicates
+                ? `, ${tableResult.dedup.duplicates} duplicates filtered`
                 : '';
-              toast.success(`Table "${tableResult.table_name}" created with ${tableResult.row_count} leads${enrichMsg}${dedupMsg}`);
+              toast.success(`${tableResult.row_count} leads imported${enrichMsg}${dedupMsg}`);
               onOpenChange(false);
               resetForm();
               onComplete?.(tableResult.table_id);
               navigate(`/ops/${tableResult.table_id}`);
             },
-            onError: (error: Error & { code?: string }) => {
+            onError: (error: Error & { code?: string; dedup?: { total: number; duplicates: number; net_new: number } }) => {
               setQuickImportStep(null);
               if (error.code === 'ALL_DUPLICATES') {
-                toast.warning('All contacts are already in your CRM or previously imported.');
+                const count = error.dedup?.total ?? 0;
+                toast.warning(
+                  count > 0
+                    ? `Found ${count} contacts but all are already in your CRM or Ops tables. Try different filters or search LinkedIn directly.`
+                    : 'All contacts found are already in your CRM or previously imported.'
+                );
               } else if (error.code === 'NO_RESULTS') {
-                toast.warning('No results found. Try broadening your search criteria.');
+                toast.warning('No results matched your search criteria. Try broadening your filters.');
               } else if (error.code === 'APOLLO_NOT_CONFIGURED') {
                 toast.error('Apollo is not configured. Add your API key in Settings > Integrations.');
               } else {

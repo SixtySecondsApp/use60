@@ -24,6 +24,7 @@ import ReactDOM from 'react-dom';
 import { LazySubscriptionStats } from '@/components/LazySubscriptionStats';
 import { MonthYearPicker } from '@/components/MonthYearPicker';
 import { PendingJoinRequestBanner } from '@/components/PendingJoinRequestBanner';
+import { HelpPanel } from '@/components/docs/HelpPanel';
 import logger from '@/lib/utils/logger';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -696,7 +697,10 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
       {/* Header with Month Selection */}
       <div className="space-y-1 mt-12 lg:mt-0 mb-6 sm:mb-8">
-        <h1 className="text-3xl font-bold text-[#1E293B] dark:text-white">Welcome back{userData?.first_name ? `, ${userData.first_name}` : ''}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-[#1E293B] dark:text-white">Welcome back{userData?.first_name ? `, ${userData.first_name}` : ''}</h1>
+          <HelpPanel docSlug="customer-dashboard" tooltip="Dashboard help" />
+        </div>
         <div className="flex items-center justify-between mt-2">
           <p className="text-[#64748B] dark:text-gray-400">Here's how your sales performance is tracking</p>
           <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-2 border border-transparent dark:border-gray-800/50 shadow-sm dark:shadow-none">

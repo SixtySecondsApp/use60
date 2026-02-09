@@ -18,6 +18,7 @@ import {
   Square,
   X
 } from 'lucide-react';
+import { HelpPanel } from '@/components/docs/HelpPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -559,6 +560,7 @@ export default function ContactsTable() {
           <div className="flex items-center gap-3 mb-2">
             <Users className="w-8 h-8 text-green-400" />
             <h1 className="text-3xl font-bold text-[#1E293B] dark:text-white">Contacts</h1>
+            <HelpPanel docSlug="contacts-crm" tooltip="Contacts help" />
           </div>
           <p className="text-[#64748B] dark:text-gray-400">
             Manage your contact database • {filteredAndSortedContacts.length} of {contacts.length} contacts • Click any row to view details

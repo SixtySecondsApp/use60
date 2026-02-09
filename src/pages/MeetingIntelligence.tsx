@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import { HelpPanel } from '@/components/docs/HelpPanel';
 import {
   Search,
   RefreshCw,
@@ -379,14 +380,17 @@ export default function MeetingIntelligence() {
               <Search className="h-7 w-7 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">
-                <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent">
-                  Meeting
-                </span>{' '}
-                <span className="bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 bg-clip-text text-transparent">
-                  Intelligence
-                </span>
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-bold">
+                  <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent">
+                    Meeting
+                  </span>{' '}
+                  <span className="bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 bg-clip-text text-transparent">
+                    Intelligence
+                  </span>
+                </h1>
+                <HelpPanel docSlug="customer-meeting-intelligence" tooltip="Meeting Intelligence help" />
+              </div>
               <div className="flex items-center gap-2 mt-1">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <p className="text-sm text-gray-500 dark:text-gray-400">

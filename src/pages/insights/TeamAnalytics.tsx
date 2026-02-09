@@ -16,6 +16,7 @@ import { TeamKPIGrid, TeamKPIGridSkeleton } from '@/components/insights/TeamKPIG
 import { TeamTrendsChart, TeamTrendsChartSkeleton } from '@/components/insights/TeamTrendsChart';
 import { TeamComparisonMatrix, TeamComparisonMatrixSkeleton } from '@/components/insights/TeamComparisonMatrix';
 import { MetricDrillDownModal } from '@/components/insights/MetricDrillDownModal';
+import { HelpPanel } from '@/components/docs/HelpPanel';
 
 // Types
 import type { TimePeriod, DrillDownMetricType } from '@/lib/hooks/useTeamAnalytics';
@@ -112,14 +113,17 @@ export default function TeamAnalytics() {
                 <Users className="w-7 h-7 text-blue-400" />
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold">
-                  <span className="text-gray-900 dark:bg-gradient-to-r dark:from-white dark:via-gray-100 dark:to-white dark:bg-clip-text dark:text-transparent">
-                    Team
-                  </span>{' '}
-                  <span className="bg-gradient-to-r from-blue-600 via-indigo-500 to-violet-500 bg-clip-text text-transparent">
-                    Analytics
-                  </span>
-                </h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl sm:text-3xl font-bold">
+                    <span className="text-gray-900 dark:bg-gradient-to-r dark:from-white dark:via-gray-100 dark:to-white dark:bg-clip-text dark:text-transparent">
+                      Team
+                    </span>{' '}
+                    <span className="bg-gradient-to-r from-blue-600 via-indigo-500 to-violet-500 bg-clip-text text-transparent">
+                      Analytics
+                    </span>
+                  </h1>
+                  <HelpPanel docSlug="customer-team-analytics" tooltip="Team Analytics help" />
+                </div>
                 <div className="flex items-center gap-2 mt-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                   <p className="text-sm text-gray-600 dark:text-gray-400">
