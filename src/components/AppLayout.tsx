@@ -780,6 +780,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Desktop Sidebar — hidden in ops fullscreen */}
       {!isOpsFullscreen && (
+      <>
       <motion.div
         initial={!hasMounted ? { opacity: 0, x: -20 } : false}
         animate={!hasMounted ? { opacity: 1, x: 0 } : false}
@@ -1015,7 +1016,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </motion.div>
 
-
       {/* Sidebar Toggle Button - Positioned on Edge Outside Sidebar */}
       <motion.button
         whileHover={{ scale: 1.1 }}
@@ -1044,8 +1044,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <ChevronLeft className="w-3.5 h-3.5" />
         )}
       </motion.button>
-
+      </>
       )}
+
       <main
         style={
           {
