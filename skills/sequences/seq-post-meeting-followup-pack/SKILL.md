@@ -1,17 +1,57 @@
 ---
 name: Post-Meeting Follow-Up Pack
 description: |
-  From your most recent recorded meeting (or a provided meeting_id): extract truth, build a follow-up pack (email + Slack + tasks), and preview actions (approval-gated).
+  Complete post-meeting package: extracts truth from transcript, builds buyer email,
+  internal Slack update, and 3 tasks, then previews everything for approval. Use when a user
+  says "follow up from my last meeting", "post-meeting follow-up pack", "create follow-ups
+  from the call", "send meeting recap", or needs the full set of post-meeting deliverables.
+  Works with the most recent recorded meeting or a specific meeting ID.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "meeting_ended"
-    - pattern: "transcript_ready"
+    - pattern: "follow up from my last meeting"
+      intent: "post_meeting_followup"
+      confidence: 0.95
+      examples:
+        - "follow up from the meeting"
+        - "create follow-ups from my last call"
+        - "post-meeting follow-up"
+    - pattern: "post-meeting follow-up pack"
+      intent: "followup_pack"
+      confidence: 0.95
+      examples:
+        - "follow-up pack"
+        - "meeting follow-up package"
+        - "build a follow-up pack"
+    - pattern: "send meeting recap"
+      intent: "meeting_recap"
+      confidence: 0.90
+      examples:
+        - "recap of the meeting"
+        - "meeting recap email"
+        - "send recap to the client"
+    - pattern: "what do I need to do after the meeting"
+      intent: "post_meeting_actions"
+      confidence: 0.85
+      examples:
+        - "after meeting tasks"
+        - "post-meeting deliverables"
+        - "meeting action items"
+  keywords:
+    - "follow-up"
+    - "post-meeting"
+    - "recap"
+    - "meeting"
+    - "pack"
+    - "email"
+    - "slack"
+    - "tasks"
+    - "after meeting"
+    - "deliverables"
   requires_capabilities:
     - crm
     - email

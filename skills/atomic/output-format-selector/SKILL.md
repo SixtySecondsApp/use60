@@ -1,21 +1,62 @@
 ---
 name: Output Format Selector
 description: |
-  Select the optimal structured response format based on user intent and available context.
+  Internal system skill that selects the optimal structured response format from 48 available types.
+  Automatically consulted when the copilot needs to determine the best UI panel to display.
+  Not typically triggered directly by users. Matches intent to response type based on
+  available data and query patterns.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: output-format
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: any_copilot_response
+    - pattern: "format response"
+      intent: "format_selection"
+      confidence: 0.75
+      examples:
+        - "show as a table"
+        - "format this differently"
+        - "change the display format"
+    - pattern: "show results as"
+      intent: "display_preference"
+      confidence: 0.75
+      examples:
+        - "show results as cards"
+        - "display this as a list"
+        - "switch to chart view"
+  keywords:
+    - "format"
+    - "display"
+    - "show as"
+    - "view"
+    - "layout"
+    - "response type"
   required_context:
     - user_intent
     - available_data
+  inputs:
+    - name: user_intent
+      type: string
+      description: "The detected user intent or query pattern to match against response types"
+      required: true
+    - name: available_data
+      type: object
+      description: "Object describing which data types are available (meetings, deals, contacts, etc.)"
+      required: true
+    - name: is_write_operation
+      type: boolean
+      description: "Whether the operation involves creating or updating data"
+      required: false
+      default: false
   outputs:
-    - response_type
-    - response_config
+    - name: response_type
+      type: string
+      description: "The recommended CopilotResponseType from 48 available types"
+    - name: response_config
+      type: object
+      description: "Configuration object with confidence, reasoning, required data, and preview mode flag"
   requires_capabilities: []
   priority: system
   tags:

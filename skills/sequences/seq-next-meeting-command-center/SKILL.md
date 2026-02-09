@@ -1,16 +1,55 @@
 ---
 name: Next Meeting Command Center
 description: |
-  Find your next meeting, generate a one-page brief, then prepare a single prep task checklist (approval-gated).
+  Full next-meeting preparation: finds your next upcoming meeting, generates a one-page brief,
+  and creates a prep task with checklist. Use when a user says "prep for my next meeting",
+  "what's my next meeting", "get me ready for my next call", or "next meeting command center".
+  Automatically finds the next meeting -- no meeting ID needed.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: user_request
-    - pattern: before_meeting
+    - pattern: "prep for my next meeting"
+      intent: "next_meeting_prep"
+      confidence: 0.95
+      examples:
+        - "prepare for my next meeting"
+        - "get ready for my next call"
+        - "next meeting prep"
+    - pattern: "what's my next meeting"
+      intent: "next_meeting_info"
+      confidence: 0.90
+      examples:
+        - "when is my next meeting"
+        - "next meeting details"
+        - "what meeting is next"
+    - pattern: "next meeting command center"
+      intent: "command_center"
+      confidence: 0.95
+      examples:
+        - "meeting command center"
+        - "launch command center"
+        - "open command center"
+    - pattern: "get me ready for my next call"
+      intent: "next_call_prep"
+      confidence: 0.85
+      examples:
+        - "prep for the next call"
+        - "ready for my next meeting"
+        - "help me prepare for what's next"
+  keywords:
+    - "next meeting"
+    - "command center"
+    - "prep"
+    - "prepare"
+    - "next call"
+    - "ready"
+    - "upcoming"
+    - "meeting"
+    - "brief"
   required_context: []
   outputs:
     - next_meeting

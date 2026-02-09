@@ -1,27 +1,74 @@
 ---
 name: Deal MAP Builder (Mutual Action Plan)
 description: |
-  Generate a mutual action plan (MAP) for a deal: milestones, owners, dates, and a prioritized set of tasks.
+  Generate a Mutual Action Plan (MAP) for a deal with milestones, owners, dates, and tasks.
+  Use when a user asks "build a mutual action plan", "create a MAP for this deal",
+  "what are the milestones for closing this deal", or needs a structured closing plan.
+  Returns milestones, exit criteria, and concrete tasks aligned to close date.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "deal_at_risk"
-    - pattern: "deal_stage_changed"
+    - pattern: "mutual action plan"
+      intent: "build_map"
+      confidence: 0.90
+      examples:
+        - "build a mutual action plan"
+        - "create a MAP for this deal"
+        - "mutual action plan for"
+    - pattern: "closing plan"
+      intent: "deal_closing_plan"
+      confidence: 0.85
+      examples:
+        - "what's the plan to close this deal"
+        - "create a closing plan"
+        - "deal closing milestones"
+    - pattern: "deal milestones"
+      intent: "deal_milestones"
+      confidence: 0.80
+      examples:
+        - "what milestones do we need"
+        - "set up milestones for this deal"
+        - "map out the deal steps"
+  keywords:
+    - "MAP"
+    - "mutual action plan"
+    - "milestones"
+    - "closing plan"
+    - "deal plan"
+    - "action plan"
+    - "exit criteria"
+    - "stakeholder"
   requires_capabilities:
     - crm
   requires_context:
     - deal
     - open_tasks
+  inputs:
+    - name: deal_id
+      type: string
+      description: "The deal identifier to build a Mutual Action Plan for"
+      required: true
+    - name: deal_context
+      type: object
+      description: "Additional deal context such as stage, close date, stakeholders, or health"
+      required: false
   outputs:
-    - map
-    - milestones
-    - tasks_to_create
-    - summary
+    - name: map
+      type: object
+      description: "Mutual Action Plan with deal info, north star, risks, and assumptions"
+    - name: milestones
+      type: array
+      description: "4-7 milestones with owner, due date, and exit criteria"
+    - name: tasks_to_create
+      type: array
+      description: "5-8 task previews with checklist, due date, priority, and owner category"
+    - name: summary
+      type: array
+      description: "3-6 bullet point highlights of the plan"
   priority: critical
 ---
 

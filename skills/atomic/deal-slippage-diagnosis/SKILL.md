@@ -1,25 +1,77 @@
 ---
 name: Deal Slippage Diagnosis
 description: |
-  Diagnose at-risk deals: identify slippage signals, root causes, and generate rescue actions + MAP snippets.
+  Diagnose at-risk deals by identifying slippage signals, root causes, and generating rescue actions.
+  Use when a user asks "which deals are slipping", "show me at-risk deals", "deal slippage report",
+  or wants to understand why deals are stalling. Returns risk radar, rescue actions, and task previews.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: user_request
-    - pattern: deal_at_risk
-    - pattern: pipeline_review
+    - pattern: "which deals are slipping"
+      intent: "deal_slippage_check"
+      confidence: 0.90
+      examples:
+        - "show me slipping deals"
+        - "which deals are at risk"
+        - "deals that are stalling"
+    - pattern: "deal slippage report"
+      intent: "slippage_diagnosis"
+      confidence: 0.85
+      examples:
+        - "diagnose deal slippage"
+        - "why are my deals slipping"
+        - "deal risk analysis"
+    - pattern: "at risk deals"
+      intent: "at_risk_review"
+      confidence: 0.80
+      examples:
+        - "show me at-risk deals"
+        - "deals in trouble"
+        - "pipeline risks"
+  keywords:
+    - "slippage"
+    - "slipping"
+    - "at risk"
+    - "stalling"
+    - "risk"
+    - "diagnosis"
+    - "deals"
+    - "pipeline"
+    - "trouble"
   required_context:
     - at_risk_deals
     - deal_details
+  inputs:
+    - name: deal_id
+      type: string
+      description: "Specific deal identifier to diagnose (optional; omit to scan full pipeline)"
+      required: false
+    - name: deal_context
+      type: object
+      description: "Additional context such as health scores or activity history"
+      required: false
+    - name: limit
+      type: number
+      description: "Maximum number of at-risk deals to analyze"
+      required: false
+      default: 10
   outputs:
-    - risk_radar
-    - rescue_actions
-    - task_previews
-    - slack_update_preview
+    - name: risk_radar
+      type: array
+      description: "At-risk deals with risk signals, root cause, and severity rating"
+    - name: rescue_actions
+      type: array
+      description: "Ranked rescue actions with deal ID, priority, time estimate, and ROI rationale"
+    - name: task_previews
+      type: array
+      description: "Top 3 task previews ready to create from rescue actions"
+    - name: slack_update_preview
+      type: object
+      description: "Slack-formatted summary for manager notification with risks and actions"
   requires_capabilities:
     - crm
     - tasks

@@ -1,25 +1,77 @@
 ---
 name: Follow-Up Triage
 description: |
-  Identify email threads needing response: unanswered questions, promised deliverables, stale conversations.
+  Identify email threads that need a response: unanswered questions, promised deliverables,
+  and stale conversations. Use when a user asks "which emails need replies", "what follow-ups
+  am I missing", "triage my inbox", or wants to find threads they haven't responded to.
+  Returns prioritized threads needing attention.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "email_received"
+    - pattern: "which emails need replies"
+      intent: "email_triage"
+      confidence: 0.85
+      examples:
+        - "what emails need my response"
+        - "which threads am I behind on"
+        - "emails I haven't replied to"
+    - pattern: "triage my inbox"
+      intent: "inbox_triage"
+      confidence: 0.85
+      examples:
+        - "help me triage my inbox"
+        - "sort my follow-ups"
+        - "prioritize my email responses"
+    - pattern: "what follow-ups am I missing"
+      intent: "missed_followups"
+      confidence: 0.80
+      examples:
+        - "am I missing any follow-ups"
+        - "stale email threads"
+        - "overdue responses"
+  keywords:
+    - "email"
+    - "inbox"
+    - "triage"
+    - "follow-up"
+    - "reply"
+    - "respond"
+    - "unanswered"
+    - "stale"
+    - "overdue"
   requires_capabilities:
     - email
     - crm
   requires_context:
     - email_threads
     - recent_contacts
+  inputs:
+    - name: days_since_contact
+      type: number
+      description: "Number of days without contact to flag as stale"
+      required: false
+      default: 7
+    - name: limit
+      type: number
+      description: "Maximum number of threads to analyze"
+      required: false
+      default: 50
+    - name: filter
+      type: string
+      description: "Filter criteria for thread selection"
+      required: false
+      example: "deal_related"
   outputs:
-    - threads_needing_response
-    - priorities
+    - name: threads_needing_response
+      type: array
+      description: "5-10 threads needing response with contact, subject, reason, urgency, and context"
+    - name: priorities
+      type: array
+      description: "Top 3 most urgent threads requiring immediate attention"
   priority: high
 ---
 

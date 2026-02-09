@@ -1,16 +1,55 @@
 ---
 name: Meeting Digest with Follow-up
 description: |
-  Complete post-meeting workflow: extracts truth from transcript, creates tasks, drafts follow-up email and Slack update. All write actions are approval-gated.
+  Complete post-meeting workflow: extracts truth from transcript, creates commitment tasks,
+  drafts follow-up email, and posts Slack update. Use when a user says "digest my last meeting",
+  "process the meeting transcript", "meeting summary and follow-up", or "what happened in
+  the call and what do I need to do". All write actions require approval.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: meeting_ended
-    - pattern: transcript_ready
+    - pattern: "digest my last meeting"
+      intent: "meeting_digest"
+      confidence: 0.95
+      examples:
+        - "digest the meeting"
+        - "process my last meeting"
+        - "meeting digest"
+    - pattern: "meeting summary and follow-up"
+      intent: "meeting_summary_followup"
+      confidence: 0.90
+      examples:
+        - "summarize the meeting and create follow-ups"
+        - "meeting recap with tasks"
+        - "process the call"
+    - pattern: "process the meeting transcript"
+      intent: "transcript_processing"
+      confidence: 0.90
+      examples:
+        - "analyze the transcript"
+        - "what happened in the meeting"
+        - "extract from transcript"
+    - pattern: "what do I need to do after the meeting"
+      intent: "post_meeting_actions"
+      confidence: 0.85
+      examples:
+        - "post-meeting action items"
+        - "what came out of the meeting"
+        - "meeting commitments and tasks"
+  keywords:
+    - "digest"
+    - "meeting"
+    - "transcript"
+    - "summary"
+    - "follow-up"
+    - "commitments"
+    - "decisions"
+    - "action items"
+    - "post-meeting"
   required_context:
     - meeting_id
     - transcript_id

@@ -1,27 +1,94 @@
 ---
 name: Objection to Playbook Mapper
 description: |
-  Map objections to approved playbook responses with proof points, discovery questions, and disqualifiers. Enforces compliance constraints.
+  Map sales objections to approved playbook responses with proof points and discovery questions.
+  Use when a user asks "how do I handle this objection", "they said it's too expensive",
+  "respond to a pricing objection", or needs compliance-safe guidance for overcoming objections.
+  Returns playbook match, response framework, proof points, and discovery questions.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: objection_detected
-    - pattern: user_request
+    - pattern: "how do I handle this objection"
+      intent: "objection_handling"
+      confidence: 0.90
+      examples:
+        - "handle this objection"
+        - "they raised an objection"
+        - "objection response"
+    - pattern: "they said it's too expensive"
+      intent: "pricing_objection"
+      confidence: 0.85
+      examples:
+        - "pricing objection"
+        - "they think it's too costly"
+        - "budget pushback"
+    - pattern: "overcome this objection"
+      intent: "objection_overcome"
+      confidence: 0.85
+      examples:
+        - "help me overcome this objection"
+        - "what's the playbook response"
+        - "counter this objection"
+    - pattern: "competition objection"
+      intent: "competitive_objection"
+      confidence: 0.80
+      examples:
+        - "they mentioned a competitor"
+        - "how do I respond to competitive comparison"
+        - "competitor came up"
+  keywords:
+    - "objection"
+    - "pushback"
+    - "expensive"
+    - "competitor"
+    - "playbook"
+    - "handle"
+    - "overcome"
+    - "response"
+    - "pricing"
   required_context:
     - objection
     - deal_id
+  inputs:
+    - name: objection
+      type: string
+      description: "The objection text or description to map to a playbook response"
+      required: true
+    - name: deal_id
+      type: string
+      description: "Related deal identifier for enriching response with deal context"
+      required: false
+    - name: objection_category
+      type: string
+      description: "Pre-classified objection category if known"
+      required: false
+      example: "pricing"
   outputs:
-    - playbook_match
-    - response
-    - proof_points
-    - discovery_questions
-    - disqualifiers
-    - allowed_claims
-    - banned_phrases
+    - name: playbook_match
+      type: object
+      description: "Matched playbook section with objection type, section reference, and confidence"
+    - name: response
+      type: object
+      description: "Structured response with opening, main response, closing, and recommended tone"
+    - name: proof_points
+      type: array
+      description: "Relevant proof points with source and relevance explanation"
+    - name: discovery_questions
+      type: array
+      description: "Questions to ask with purpose and follow-up guidance"
+    - name: disqualifiers
+      type: array
+      description: "Disqualification criteria with assessment questions"
+    - name: allowed_claims
+      type: array
+      description: "Compliance-safe claims that can be made"
+    - name: banned_phrases
+      type: array
+      description: "Phrases to avoid from organization context"
   requires_capabilities:
     - crm
     - meetings

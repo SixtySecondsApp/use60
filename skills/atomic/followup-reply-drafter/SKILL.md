@@ -1,24 +1,74 @@
 ---
 name: Follow-Up Reply Drafter
 description: |
-  Draft contextual reply emails for threads needing response, with suggested subject lines and clear CTAs.
+  Draft contextual reply emails for threads that need a response, with subject lines and clear CTAs.
+  Use when a user asks "draft a reply", "help me respond to this email", "write a follow-up email",
+  or needs email drafts for outstanding threads. Returns reply drafts and follow-up task previews.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: writing
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: "followup_triage_complete"
+    - pattern: "draft a reply"
+      intent: "reply_drafting"
+      confidence: 0.85
+      examples:
+        - "draft a reply to this email"
+        - "help me respond to this thread"
+        - "write a reply"
+    - pattern: "write a follow-up email"
+      intent: "followup_email"
+      confidence: 0.85
+      examples:
+        - "draft a follow-up email"
+        - "help me write a follow-up"
+        - "compose a reply email"
+    - pattern: "respond to this email"
+      intent: "email_response"
+      confidence: 0.80
+      examples:
+        - "I need to reply to this"
+        - "help me answer this email"
+        - "what should I say in response"
+  keywords:
+    - "reply"
+    - "draft"
+    - "email"
+    - "respond"
+    - "follow-up"
+    - "compose"
+    - "write"
+    - "thread"
   requires_capabilities:
     - email
     - crm
   requires_context:
     - threads_needing_response
     - contact_data
+  inputs:
+    - name: context
+      type: string
+      description: "Email thread content or summary requiring a reply"
+      required: true
+    - name: tone
+      type: string
+      description: "Desired tone for the reply"
+      required: false
+      default: "professional"
+      example: "friendly"
+    - name: recipient_name
+      type: string
+      description: "Name of the person being replied to"
+      required: false
   outputs:
-    - reply_drafts
-    - task_previews
+    - name: reply_drafts
+      type: array
+      description: "3-5 email draft objects with to, subject, context, tone, and linked IDs"
+    - name: task_previews
+      type: array
+      description: "2-3 follow-up task previews with title, description, due date, and priority"
   priority: high
 ---
 

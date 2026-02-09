@@ -1,27 +1,95 @@
 ---
 name: Meeting Digest Truth Extractor
 description: |
-  Extract decisions, commitments, MEDDICC deltas, risks, and stakeholders from meeting transcripts. Enforces truth hierarchy (CRM > transcript > notes).
+  Extract decisions, commitments, risks, stakeholders, and MEDDICC updates from meeting transcripts.
+  Use when a user asks "summarize my meeting", "what was decided in the call", "extract action items
+  from the meeting", or needs a structured digest of what happened. Enforces truth hierarchy
+  (CRM > transcript > notes) and returns structured, actionable output.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: meeting_ended
-    - pattern: transcript_ready
+    - pattern: "summarize my meeting"
+      intent: "meeting_summary"
+      confidence: 0.85
+      examples:
+        - "summarize the meeting"
+        - "what happened in the meeting"
+        - "meeting summary"
+    - pattern: "what was decided in the call"
+      intent: "meeting_decisions"
+      confidence: 0.85
+      examples:
+        - "what decisions were made"
+        - "meeting decisions and commitments"
+        - "key takeaways from the call"
+    - pattern: "extract action items from the meeting"
+      intent: "meeting_actions"
+      confidence: 0.80
+      examples:
+        - "action items from the meeting"
+        - "meeting next steps"
+        - "what did we commit to"
+    - pattern: "meeting digest"
+      intent: "meeting_digest"
+      confidence: 0.85
+      examples:
+        - "create a meeting digest"
+        - "digest from my last call"
+        - "post-meeting digest"
+  keywords:
+    - "meeting"
+    - "digest"
+    - "summary"
+    - "decisions"
+    - "commitments"
+    - "action items"
+    - "transcript"
+    - "call"
+    - "MEDDICC"
+    - "next steps"
   required_context:
     - meeting_id
     - transcript_id
+  inputs:
+    - name: meeting_id
+      type: string
+      description: "The meeting identifier to extract a digest from"
+      required: true
+    - name: contact_id
+      type: string
+      description: "Primary contact associated with the meeting for CRM enrichment"
+      required: false
+    - name: include_transcript
+      type: boolean
+      description: "Whether to fetch and analyze the full transcript"
+      required: false
+      default: true
   outputs:
-    - decisions
-    - commitments
-    - meddicc_deltas
-    - risks
-    - stakeholders
-    - unknowns
-    - next_steps
+    - name: decisions
+      type: array
+      description: "Decisions made during the meeting with decision maker, confidence, and source"
+    - name: commitments
+      type: array
+      description: "Commitments made with owner, deadline, status, and missing info"
+    - name: meddicc_deltas
+      type: object
+      description: "Changes to MEDDICC fields (metrics, economic buyer, criteria, process, pain, champion, competition)"
+    - name: risks
+      type: array
+      description: "Identified risks with severity and suggested mitigations"
+    - name: stakeholders
+      type: array
+      description: "Stakeholders mentioned with role, influence level, and sentiment"
+    - name: unknowns
+      type: array
+      description: "Questions and unknowns that need follow-up"
+    - name: next_steps
+      type: array
+      description: "Recommended next steps with owners and deadlines"
   requires_capabilities:
     - meetings
     - crm

@@ -1,16 +1,57 @@
 ---
 name: Pipeline Focus Tasks
 description: |
-  From a natural-language request: select the deals you should focus on, generate an engagement checklist, and prepare a task (approval-gated).
+  Pipeline engagement sequence: pulls priority deals, generates an engagement checklist,
+  and creates a task. Use when a user asks "which deals should I work on this week",
+  "pipeline focus tasks", "review my pipeline", "what deals need attention",
+  or wants a clear engagement plan for their top opportunities.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: user_request
-    - pattern: pipeline_review
+    - pattern: "which deals should I work on"
+      intent: "pipeline_focus"
+      confidence: 0.95
+      examples:
+        - "which deals need attention"
+        - "what deals need attention"
+        - "what deals should I focus on"
+        - "which deals should I focus on"
+        - "top deals to work on"
+    - pattern: "pipeline focus tasks"
+      intent: "pipeline_tasks"
+      confidence: 0.95
+      examples:
+        - "pipeline tasks"
+        - "pipeline focus"
+        - "deal focus tasks"
+    - pattern: "review my pipeline"
+      intent: "pipeline_review"
+      confidence: 0.90
+      examples:
+        - "pipeline review"
+        - "check my pipeline"
+        - "pipeline health"
+    - pattern: "deals needing attention this week"
+      intent: "weekly_deal_focus"
+      confidence: 0.85
+      examples:
+        - "what deals need me this week"
+        - "priority deals this week"
+        - "weekly deal priorities"
+  keywords:
+    - "pipeline"
+    - "deals"
+    - "focus"
+    - "attention"
+    - "work on"
+    - "review"
+    - "tasks"
+    - "priorities"
+    - "this week"
   required_context: []
   outputs:
     - task_preview

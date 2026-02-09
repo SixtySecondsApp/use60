@@ -1,17 +1,55 @@
 ---
 name: Deal Slippage Guardrails
 description: |
-  Diagnose at-risk deals, generate rescue actions, and create top rescue task + optional Slack update (approval-gated).
+  Full deal slippage workflow: identifies at-risk deals across pipeline, diagnoses root causes,
+  generates rescue actions, and creates tasks plus Slack alerts. Use when a user asks
+  "which deals are slipping", "pipeline risk check", "deal slippage alerts",
+  or "are any of my deals at risk". Creates rescue tasks and Slack notifications with approval.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "deal_at_risk"
-    - pattern: "pipeline_review"
+    - pattern: "which deals are slipping"
+      intent: "deal_slippage_check"
+      confidence: 0.95
+      examples:
+        - "show me slipping deals"
+        - "deals that are slipping"
+        - "any deals falling behind"
+    - pattern: "pipeline risk check"
+      intent: "pipeline_risk"
+      confidence: 0.90
+      examples:
+        - "check my pipeline for risks"
+        - "pipeline health check"
+        - "are any deals at risk"
+    - pattern: "deal slippage alerts"
+      intent: "slippage_alerts"
+      confidence: 0.90
+      examples:
+        - "deal slippage report"
+        - "show slippage guardrails"
+        - "flag at-risk deals"
+    - pattern: "deals in trouble"
+      intent: "deal_trouble"
+      confidence: 0.85
+      examples:
+        - "which deals are in trouble"
+        - "problem deals"
+        - "struggling deals"
+  keywords:
+    - "slippage"
+    - "slipping"
+    - "at risk"
+    - "pipeline"
+    - "risk"
+    - "trouble"
+    - "guardrails"
+    - "deals"
+    - "alerts"
   requires_capabilities:
     - crm
     - tasks

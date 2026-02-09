@@ -2,21 +2,76 @@
 name: Event Follow-Up Analyzer
 description: |
   Analyze event attendees to identify warm leads and generate personalized follow-up recommendations.
+  Use when a user asks "who should I follow up with from the event", "event follow-up plan",
+  "analyze attendees from the conference", or needs post-event lead prioritization.
+  Returns priority leads, follow-up actions, and draft emails.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: event_completed
+    - pattern: "follow up from the event"
+      intent: "event_followup"
+      confidence: 0.85
+      examples:
+        - "who should I follow up with from the event"
+        - "event follow-up plan"
+        - "follow up on event attendees"
+    - pattern: "analyze event attendees"
+      intent: "event_analysis"
+      confidence: 0.85
+      examples:
+        - "analyze attendees from the conference"
+        - "review event contacts"
+        - "who were the best leads from the event"
+    - pattern: "post-event leads"
+      intent: "event_leads"
+      confidence: 0.80
+      examples:
+        - "warm leads from the webinar"
+        - "priority leads from the trade show"
+        - "who should I contact from the event"
+  keywords:
+    - "event"
+    - "attendees"
+    - "conference"
+    - "webinar"
+    - "trade show"
+    - "follow up"
+    - "leads"
+    - "post-event"
   required_context:
     - contacts
     - event_context
+  inputs:
+    - name: event_name
+      type: string
+      description: "Name of the event or conference to analyze follow-ups for"
+      required: true
+    - name: event_date
+      type: string
+      description: "Date of the event in ISO format"
+      required: false
+    - name: attendee_list
+      type: array
+      description: "List of attendee contacts or contact IDs from the event"
+      required: false
+    - name: event_topic
+      type: string
+      description: "Primary topic or theme of the event for personalizing follow-ups"
+      required: false
   outputs:
-    - priority_leads
-    - followup_recommendations
-    - email_drafts
+    - name: priority_leads
+      type: array
+      description: "Top leads ranked by priority (hot/warm/nurture) with engagement signals"
+    - name: followup_recommendations
+      type: array
+      description: "Recommended follow-up actions per contact with type, timing, and message"
+    - name: email_drafts
+      type: array
+      description: "Draft follow-up emails for top leads with subject, body, and personalization"
   requires_capabilities:
     - crm
   priority: high

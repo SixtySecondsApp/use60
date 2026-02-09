@@ -1,15 +1,55 @@
 ---
 name: Catch Me Up
 description: |
-  Generate an adaptive daily briefing based on time of day: morning focus, afternoon progress, evening wrap-up.
+  Full daily briefing sequence: fetches meetings, deals, contacts, and tasks, then generates
+  a time-aware summary. Use when a user says "catch me up", "what's going on today",
+  "morning briefing", "daily update", or wants a complete overview of their day.
+  Adapts to morning/afternoon/evening automatically.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: "user_request"
+    - pattern: "catch me up"
+      intent: "daily_catchup"
+      confidence: 0.95
+      examples:
+        - "catch me up on everything"
+        - "catch me up on today"
+        - "give me the catchup"
+    - pattern: "what's going on today"
+      intent: "daily_overview"
+      confidence: 0.90
+      examples:
+        - "what's happening today"
+        - "tell me about my day"
+        - "what do I have going on"
+    - pattern: "morning briefing"
+      intent: "morning_brief"
+      confidence: 0.90
+      examples:
+        - "good morning brief"
+        - "start of day briefing"
+        - "morning update"
+    - pattern: "daily update"
+      intent: "daily_update"
+      confidence: 0.85
+      examples:
+        - "give me my daily update"
+        - "daily summary"
+        - "today's overview"
+  keywords:
+    - "catch me up"
+    - "briefing"
+    - "today"
+    - "morning"
+    - "update"
+    - "overview"
+    - "summary"
+    - "what's happening"
+    - "daily"
   requires_capabilities:
     - calendar
     - crm

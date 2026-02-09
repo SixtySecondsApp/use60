@@ -1,16 +1,55 @@
 ---
 name: Follow-Up Zero Inbox
 description: |
-  Identify email threads needing response, draft replies, and create follow-up tasks (approval-gated).
+  Complete inbox zero workflow: scans emails and contacts, triages threads needing response,
+  drafts replies, and creates follow-up tasks. Use when a user says "zero inbox",
+  "catch up on emails", "help me clear my follow-ups", "what emails need replies",
+  or wants to systematically handle outstanding email threads.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "email_received"
+    - pattern: "zero inbox"
+      intent: "inbox_zero"
+      confidence: 0.95
+      examples:
+        - "help me get to zero inbox"
+        - "inbox zero mode"
+        - "clear my inbox"
+    - pattern: "catch up on emails"
+      intent: "email_catchup"
+      confidence: 0.90
+      examples:
+        - "catch up on my emails"
+        - "what emails do I need to handle"
+        - "email backlog"
+    - pattern: "help me clear my follow-ups"
+      intent: "followup_clearing"
+      confidence: 0.90
+      examples:
+        - "clear my follow-ups"
+        - "handle outstanding follow-ups"
+        - "process my follow-ups"
+    - pattern: "draft replies for my emails"
+      intent: "bulk_reply_drafting"
+      confidence: 0.85
+      examples:
+        - "help me reply to emails"
+        - "draft responses to pending emails"
+        - "write replies for my inbox"
+  keywords:
+    - "zero inbox"
+    - "inbox"
+    - "emails"
+    - "follow-ups"
+    - "replies"
+    - "catch up"
+    - "clear"
+    - "respond"
+    - "triage"
   requires_capabilities:
     - email
     - crm

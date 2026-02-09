@@ -1,23 +1,83 @@
 ---
 name: Post-Meeting Follow-up Drafter
 description: |
-  Generate follow-up email and internal Slack update from meeting digest. Includes recap, value, decisions, and clear CTAs. Approval-gated for sending.
+  Generate a follow-up email and internal Slack update from a meeting digest.
+  Use when a user asks "draft a follow-up email for the meeting", "write a post-meeting email",
+  "send meeting recap to the client", or needs professional follow-up communications.
+  Returns email draft with recap, decisions, next steps, and CTA plus a Slack update.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: writing
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: meeting_digest_complete
+    - pattern: "draft a follow-up email for the meeting"
+      intent: "post_meeting_email"
+      confidence: 0.85
+      examples:
+        - "write a follow-up email from the meeting"
+        - "post-meeting follow-up email"
+        - "draft meeting follow-up"
+    - pattern: "send meeting recap"
+      intent: "meeting_recap_email"
+      confidence: 0.85
+      examples:
+        - "send a recap to the client"
+        - "email the meeting summary"
+        - "share meeting recap"
+    - pattern: "meeting follow-up communications"
+      intent: "followup_comms"
+      confidence: 0.80
+      examples:
+        - "create meeting follow-up"
+        - "post-meeting email and slack"
+        - "follow-up from the call"
+  keywords:
+    - "follow-up"
+    - "email"
+    - "meeting"
+    - "recap"
+    - "post-meeting"
+    - "draft"
+    - "slack"
+    - "send"
+    - "summary"
   required_context:
     - meeting_digest
     - meeting_id
+  inputs:
+    - name: context
+      type: string
+      description: "Meeting digest or summary to generate follow-up communications from"
+      required: true
+    - name: tone
+      type: string
+      description: "Desired tone for the follow-up email"
+      required: false
+      default: "professional"
+      example: "executive"
+    - name: recipient_name
+      type: string
+      description: "Name of the primary recipient for the follow-up email"
+      required: false
+    - name: meeting_id
+      type: string
+      description: "Meeting identifier for fetching additional context"
+      required: false
   outputs:
-    - email_draft
-    - slack_update
-    - subject_lines
-    - cta
+    - name: email_draft
+      type: object
+      description: "Follow-up email with subject, body sections, recipients, and quotes"
+    - name: slack_update
+      type: object
+      description: "Internal Slack update with channel, message, and optional Block Kit payload"
+    - name: subject_lines
+      type: array
+      description: "Array of subject line options for the follow-up email"
+    - name: cta
+      type: string
+      description: "Clear call-to-action for the email"
   requires_capabilities:
     - email
     - messaging
