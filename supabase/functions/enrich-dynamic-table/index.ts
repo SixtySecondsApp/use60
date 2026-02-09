@@ -39,6 +39,8 @@ interface EnrichRequest {
   row_ids?: string[]
   /** Resume an existing job from where it left off */
   resume_job_id?: string
+  /** When true, skip rows where the cell already has status='complete' */
+  skip_completed?: boolean
 }
 
 interface JobSummary {
@@ -274,7 +276,7 @@ serve(async (req) => {
       )
     }
 
-    const { table_id, column_id, row_ids, resume_job_id } = body
+    const { table_id, column_id, row_ids, resume_job_id, skip_completed } = body
 
     // Verify the table exists and user has access (use user client for RLS check)
     const { data: table, error: tableError } = await userClient
@@ -399,9 +401,27 @@ serve(async (req) => {
     // Limit to BATCH_SIZE rows per invocation
     rowsQuery = rowsQuery.limit(BATCH_SIZE)
 
-    const { data: rows, error: rowsError } = await rowsQuery
+    const { data: rawRows, error: rowsError } = await rowsQuery
 
-    if (rowsError || !rows || rows.length === 0) {
+    // Filter out already-completed rows when skip_completed is enabled
+    let rows = rawRows ?? []
+    if (skip_completed && rows.length > 0) {
+      const rowIdList = rows.map((r) => r.id)
+      const { data: completedCells } = await serviceClient
+        .from('dynamic_table_cells')
+        .select('row_id')
+        .in('row_id', rowIdList)
+        .eq('column_id', column_id)
+        .eq('status', 'complete')
+
+      if (completedCells && completedCells.length > 0) {
+        const completedRowIds = new Set(completedCells.map((c) => c.row_id))
+        rows = rows.filter((r) => !completedRowIds.has(r.id))
+        console.log(`${LOG_PREFIX} skip_completed: filtered out ${completedCells.length} already-complete rows, ${rows.length} remaining`)
+      }
+    }
+
+    if (rowsError || rows.length === 0) {
       // If resuming and no more rows, the job is complete
       if (resume_job_id) {
         const finalStatus = existingJobFailed > 0 && existingJobProcessed === 0 ? 'failed' : 'complete'
@@ -435,12 +455,29 @@ serve(async (req) => {
     // Count total remaining rows (for progress tracking on new jobs)
     let totalRowCount = rows.length
     if (!resume_job_id && !row_ids) {
-      const { count } = await serviceClient
-        .from('dynamic_table_rows')
-        .select('id', { count: 'exact', head: true })
-        .eq('table_id', table_id)
+      if (skip_completed) {
+        // Count only non-complete rows across the whole table
+        const { count: allRowCount } = await serviceClient
+          .from('dynamic_table_rows')
+          .select('id', { count: 'exact', head: true })
+          .eq('table_id', table_id)
 
-      totalRowCount = count ?? rows.length
+        const { count: completedCount } = await serviceClient
+          .from('dynamic_table_cells')
+          .select('row_id', { count: 'exact', head: true })
+          .eq('column_id', column_id)
+          .eq('status', 'complete')
+
+        totalRowCount = (allRowCount ?? rows.length) - (completedCount ?? 0)
+        if (totalRowCount < 0) totalRowCount = rows.length
+      } else {
+        const { count } = await serviceClient
+          .from('dynamic_table_rows')
+          .select('id', { count: 'exact', head: true })
+          .eq('table_id', table_id)
+
+        totalRowCount = count ?? rows.length
+      }
     } else if (row_ids && row_ids.length > 0) {
       totalRowCount = row_ids.length
     }

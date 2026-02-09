@@ -2560,6 +2560,13 @@ function OpsDetailPage() {
           onEditEnrichment={activeColumn.is_enrichment ? () => {
             setEditEnrichmentColumn(activeColumn);
           } : undefined}
+          onEnrichRemaining={activeColumn.is_enrichment ? () => {
+            startEnrichment({ columnId: activeColumn.id, skipCompleted: true });
+          } : activeColumn.column_type === 'apollo_property' ? () => {
+            startApolloEnrichment({ columnId: activeColumn.id, skipCompleted: true });
+          } : activeColumn.column_type === 'apollo_org_property' ? () => {
+            startApolloOrgEnrichment({ columnId: activeColumn.id, skipCompleted: true });
+          } : undefined}
           onReEnrich={activeColumn.is_enrichment ? () => {
             startEnrichment({ columnId: activeColumn.id });
           } : activeColumn.column_type === 'apollo_property' ? () => {
@@ -2946,12 +2953,37 @@ function OpsDetailPage() {
 
             toastId = toast.loading(`Pushing ${selectedRows.size} leads to Instantly...`);
 
+            // Use saved field_mapping, or auto-detect from column keys
+            let pushMapping = cfg?.field_mapping;
+            if (!pushMapping?.email) {
+              pushMapping = { email: '' };
+              for (const col of columns) {
+                const k = col.key.toLowerCase();
+                const l = col.label.toLowerCase();
+                if (!pushMapping.email && (k === 'email' || k === 'email_address' || k === 'work_email' || l === 'email')) {
+                  pushMapping.email = col.key;
+                } else if (!pushMapping.first_name && (k === 'first_name' || k === 'firstname' || l === 'first name')) {
+                  pushMapping.first_name = col.key;
+                } else if (!pushMapping.last_name && (k === 'last_name' || k === 'lastname' || l === 'last name')) {
+                  pushMapping.last_name = col.key;
+                } else if (!pushMapping.company_name && (k === 'company' || k === 'company_name' || k === 'organization' || l === 'company')) {
+                  pushMapping.company_name = col.key;
+                }
+              }
+            }
+
+            if (!pushMapping.email) {
+              toast.dismiss(toastId);
+              toast.error('No email column found. Add an email column or configure field mapping first.');
+              return;
+            }
+
             const { data, error } = await supabase.functions.invoke('push-to-instantly', {
               body: {
                 table_id: tableId,
                 campaign_id: campaignId,
                 row_ids: Array.from(selectedRows),
-                field_mapping: cfg?.field_mapping,
+                field_mapping: pushMapping,
               },
             });
 

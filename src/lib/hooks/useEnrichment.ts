@@ -105,6 +105,7 @@ export function useEnrichment(tableId: string) {
     columnId: string;
     rowIds?: string[];
     resumeJobId?: string;
+    skipCompleted?: boolean;
   }): Promise<EnrichmentResult> => {
     const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
       body: {
@@ -112,6 +113,7 @@ export function useEnrichment(tableId: string) {
         column_id: params.columnId,
         row_ids: params.rowIds,
         resume_job_id: params.resumeJobId,
+        skip_completed: params.skipCompleted,
       },
     });
 
@@ -148,7 +150,7 @@ export function useEnrichment(tableId: string) {
    * resolve the real key from the cache via findAll (prefix match) rather
    * than using the short key which only works for cancel/invalidate.
    */
-  const optimisticPendingUpdate = async (columnId: string, rowIds?: string[]) => {
+  const optimisticPendingUpdate = async (columnId: string, rowIds?: string[], skipCompleted?: boolean) => {
     const filter = { queryKey: QUERY_KEYS.tableData(tableId) };
     await queryClient.cancelQueries(filter);
 
@@ -172,6 +174,9 @@ export function useEnrichment(tableId: string) {
           const updatedCells = { ...row.cells };
           for (const [key, cell] of Object.entries(updatedCells)) {
             if ((cell as { column_id?: string }).column_id === columnId) {
+              const currentStatus = (cell as { status?: string }).status;
+              // When skipCompleted, don't touch cells that are already complete
+              if (skipCompleted && currentStatus === 'complete') continue;
               updatedCells[key] = {
                 ...(cell as object),
                 value: null,
@@ -198,14 +203,16 @@ export function useEnrichment(tableId: string) {
     mutationFn: async ({
       columnId,
       rowIds,
+      skipCompleted,
     }: {
       columnId: string;
       rowIds?: string[];
+      skipCompleted?: boolean;
     }) => {
-      return invokeEnrichment({ columnId, rowIds });
+      return invokeEnrichment({ columnId, rowIds, skipCompleted });
     },
-    onMutate: async ({ columnId, rowIds }) => {
-      return await optimisticPendingUpdate(columnId, rowIds);
+    onMutate: async ({ columnId, rowIds, skipCompleted }) => {
+      return await optimisticPendingUpdate(columnId, rowIds, skipCompleted);
     },
     onError: (error: Error, _vars, context) => {
       // Rollback optimistic update on failure

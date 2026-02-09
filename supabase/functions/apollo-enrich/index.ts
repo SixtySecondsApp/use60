@@ -278,6 +278,7 @@ serve(async (req: Request) => {
       reveal_personal_emails = false,
       reveal_phone_number = false,
       force_refresh = false,
+      skip_completed = false,
     } = await req.json()
 
     if (!table_id || !column_id) {
@@ -379,11 +380,29 @@ serve(async (req: Request) => {
       }
     })
 
+    // 4b. Filter out already-completed rows when skip_completed is enabled
+    let filteredRows = rows
+    if (skip_completed && rows.length > 0) {
+      const rowIdList = rows.map((r) => r.id)
+      const { data: completedCells } = await serviceClient
+        .from('dynamic_table_cells')
+        .select('row_id')
+        .in('row_id', rowIdList)
+        .eq('column_id', column_id)
+        .eq('status', 'complete')
+
+      if (completedCells && completedCells.length > 0) {
+        const completedRowIds = new Set(completedCells.map((c) => c.row_id))
+        filteredRows = rows.filter((r) => !completedRowIds.has(r.id))
+        console.log(`[apollo-enrich] skip_completed: filtered out ${completedCells.length} already-complete rows, ${filteredRows.length} remaining`)
+      }
+    }
+
     // 5. Separate rows into cached vs needs-enrichment
     const cachedRows: RowData[] = []
     const needsEnrichment: RowData[] = []
 
-    for (const row of rows) {
+    for (const row of filteredRows) {
       const apolloCache = row.source_data?.apollo as Record<string, unknown> | undefined
       if (apolloCache && !force_refresh) {
         cachedRows.push(row)
@@ -627,7 +646,7 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
-        processed: rows.length,
+        processed: filteredRows.length,
         ...stats,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

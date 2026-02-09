@@ -31,6 +31,7 @@ interface ColumnHeaderMenuProps {
   onRunIntegration?: () => void;
   onRetryFailed?: () => void;
   onEditEnrichment?: () => void;
+  onEnrichRemaining?: () => void;
   onReEnrich?: () => void;
   onEditFormula?: () => void;
   onEditButton?: () => void;
@@ -56,6 +57,7 @@ export function ColumnHeaderMenu({
   onRunIntegration,
   onRetryFailed,
   onEditEnrichment,
+  onEnrichRemaining,
   onReEnrich,
   onEditFormula,
   onEditButton,
@@ -239,9 +241,19 @@ export function ColumnHeaderMenu({
           }}
         />
       )}
-      {column.is_enrichment && !isEmailStepColumn && onReEnrich && (
+      {column.is_enrichment && !isEmailStepColumn && onEnrichRemaining && (
         <MenuItem
           icon={<Sparkles className="h-4 w-4" />}
+          label="Enrich remaining"
+          onClick={() => {
+            onEnrichRemaining();
+            onClose();
+          }}
+        />
+      )}
+      {column.is_enrichment && !isEmailStepColumn && onReEnrich && (
+        <MenuItem
+          icon={<RotateCcw className="h-4 w-4" />}
           label="Re-enrich all rows"
           onClick={() => {
             onReEnrich();
@@ -269,6 +281,26 @@ export function ColumnHeaderMenu({
           label="Edit settings"
           onClick={() => {
             onEditApollo();
+            onClose();
+          }}
+        />
+      )}
+      {(column.column_type === 'apollo_property' || column.column_type === 'apollo_org_property') && onEnrichRemaining && (
+        <MenuItem
+          icon={<Sparkles className="h-4 w-4" />}
+          label="Enrich remaining"
+          onClick={() => {
+            onEnrichRemaining();
+            onClose();
+          }}
+        />
+      )}
+      {(column.column_type === 'apollo_property' || column.column_type === 'apollo_org_property') && onReEnrich && (
+        <MenuItem
+          icon={<RotateCcw className="h-4 w-4" />}
+          label="Re-enrich all rows"
+          onClick={() => {
+            onReEnrich();
             onClose();
           }}
         />
