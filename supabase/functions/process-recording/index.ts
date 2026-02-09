@@ -745,6 +745,7 @@ async function processRecording(
       recording_s3_key: uploadResult.storagePath || null,
       recording_s3_url: uploadResult.storageUrl || recordingData.url,
       speakers: speakers,
+      provider: '60_notetaker',
       updated_at: new Date().toISOString(),
     };
 

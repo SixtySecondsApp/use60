@@ -514,8 +514,9 @@ const MeetingsList: React.FC = () => {
       // Use explicit any to avoid deep type instantiation issues with Supabase query chaining
       const countQueryBase = supabase
         .from('meetings')
-        .select('*', { count: 'exact', head: true }) as any
-      
+        .select('*', { count: 'exact', head: true })
+        .neq('source_type', '60_notetaker') as any // 60 Notetaker has its own tab
+
       // Apply filters
       let countQuery = countQueryBase
       if (activeOrgId) {
@@ -543,6 +544,7 @@ const MeetingsList: React.FC = () => {
           action_items:meeting_action_items(completed),
           tasks!tasks_meeting_id_fkey(status)
         `)
+        .neq('source_type', '60_notetaker') // 60 Notetaker has its own tab
         .order(sortField, { ascending: sortDirection === 'asc' })
         .range(from, to) as any
 
