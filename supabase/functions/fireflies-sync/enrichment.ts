@@ -339,6 +339,50 @@ async function upsertMeetingAttendee(
 // ─── Native Action Items ──────────────────────────────────────────────
 
 /**
+ * Classify a native Fireflies action item by keyword analysis.
+ * Returns priority and category based on text content.
+ */
+function classifyNativeActionItem(text: string): { priority: 'high' | 'medium' | 'low'; category: string } {
+  const lower = text.toLowerCase()
+
+  // Priority classification
+  let priority: 'high' | 'medium' | 'low' = 'medium'
+  const highKeywords = [
+    'urgent', 'asap', 'immediately', 'critical', 'deadline', 'today',
+    'tomorrow', 'eod', 'end of day', 'this week', 'sign', 'contract',
+    'approve', 'budget', 'decision',
+  ]
+  const lowKeywords = [
+    'consider', 'explore', 'think about', 'look into', 'maybe',
+    'eventually', 'when possible', 'nice to have', 'optional',
+  ]
+  if (highKeywords.some(k => lower.includes(k))) {
+    priority = 'high'
+  } else if (lowKeywords.some(k => lower.includes(k))) {
+    priority = 'low'
+  }
+
+  // Category classification
+  let category = 'general'
+  const categoryMap: [string[], string][] = [
+    [['follow up', 'follow-up', 'circle back', 'check in', 'touch base', 'get back to'], 'follow_up'],
+    [['send email', 'email', 'reply', 'respond', 'message'], 'email'],
+    [['schedule', 'meeting', 'calendar', 'book', 'set up a call'], 'meeting'],
+    [['proposal', 'quote', 'pricing', 'estimate'], 'proposal'],
+    [['demo', 'demonstration', 'walkthrough', 'present'], 'demo'],
+    [['call', 'phone', 'ring', 'dial'], 'call'],
+  ]
+  for (const [keywords, cat] of categoryMap) {
+    if (keywords.some(k => lower.includes(k))) {
+      category = cat
+      break
+    }
+  }
+
+  return { priority, category }
+}
+
+/**
  * Store Fireflies' native action items (from summary.action_items)
  */
 async function storeFirefliesNativeActionItems(
@@ -355,6 +399,8 @@ async function storeFirefliesNativeActionItems(
   for (const actionText of actionItems) {
     if (!actionText || typeof actionText !== 'string' || actionText.trim().length === 0) continue
 
+    const { priority, category } = classifyNativeActionItem(actionText.trim())
+
     const { error } = await supabase
       .from('meeting_action_items')
       .insert({
@@ -364,8 +410,8 @@ async function storeFirefliesNativeActionItems(
         needs_review: false,
         completed: false,
         synced_to_task: false,
-        priority: 'medium',
-        category: 'general',
+        priority,
+        category,
       })
 
     if (error) {

@@ -30,6 +30,8 @@ export interface FirefliesSentence {
   index: number
   speaker_name: string
   raw_text: string
+  start_time?: number  // seconds from start
+  end_time?: number    // seconds from start
 }
 
 export interface FirefliesSummary {
@@ -56,6 +58,8 @@ export interface FirefliesTranscript {
   title: string
   date: number // epoch ms
   transcript_url: string
+  audio_url?: string   // 24h expiring download URL
+  video_url?: string   // requires Business/Enterprise plan
   duration?: number // minutes
   sentences: FirefliesSentence[]
   fireflies_users: string[]
@@ -74,11 +78,55 @@ query GetRecent($fromDate: DateTime!, $toDate: DateTime!, $limit: Int!) {
     title
     date
     transcript_url
+    audio_url
+    video_url
     duration
     sentences {
       index
       speaker_name
       raw_text
+      start_time
+      end_time
+    }
+    fireflies_users
+    organizer_email
+    host_email
+    summary {
+      action_items
+      overview
+      short_summary
+      keywords
+      meeting_type
+    }
+    meeting_attendees {
+      displayName
+      email
+      phoneNumber
+    }
+    speakers {
+      id
+      name
+    }
+  }
+}
+`
+
+// Fallback query without video_url (for Free/Pro plan users)
+const GET_TRANSCRIPTS_QUERY_NO_VIDEO = `
+query GetRecent($fromDate: DateTime!, $toDate: DateTime!, $limit: Int!) {
+  transcripts(fromDate: $fromDate, toDate: $toDate, limit: $limit, mine: false) {
+    id
+    title
+    date
+    transcript_url
+    audio_url
+    duration
+    sentences {
+      index
+      speaker_name
+      raw_text
+      start_time
+      end_time
     }
     fireflies_users
     organizer_email
@@ -128,10 +176,20 @@ async function callFirefliesAPI(apiKey: string, query: string, variables: Record
   return json.data
 }
 
-// Convert sentences to plain text transcript
+// Convert sentences to plain text transcript with optional timestamps
+// Outputs [HH:MM:SS] Speaker: text format (compatible with Fathom transcript rendering)
 function sentencesToText(sentences: FirefliesSentence[] | null | undefined): string {
   if (!sentences || !Array.isArray(sentences)) return ''
-  return sentences.map(s => `${s.speaker_name}: ${s.raw_text}`).join('\n')
+  return sentences.map(s => {
+    if (s.start_time != null) {
+      const h = Math.floor(s.start_time / 3600)
+      const m = Math.floor((s.start_time % 3600) / 60)
+      const sec = Math.floor(s.start_time % 60)
+      const ts = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+      return `[${ts}] ${s.speaker_name}: ${s.raw_text}`
+    }
+    return `${s.speaker_name}: ${s.raw_text}`
+  }).join('\n')
 }
 
 serve(async (req) => {
@@ -245,15 +303,27 @@ serve(async (req) => {
       }
 
       try {
-        // Test by fetching a small sample
+        // Test by fetching a small sample (with video_url fallback for Free/Pro plans)
         const now = new Date()
         const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        
-        const data = await callFirefliesAPI(testApiKey, GET_TRANSCRIPTS_QUERY, {
+        const testVariables = {
           fromDate: thirtyDaysAgo.toISOString(),
           toDate: now.toISOString(),
           limit: 5,
-        })
+        }
+
+        let data: any
+        try {
+          data = await callFirefliesAPI(testApiKey, GET_TRANSCRIPTS_QUERY, testVariables)
+        } catch (apiError: any) {
+          const errorMsg = apiError?.message?.toLowerCase() || ''
+          if (errorMsg.includes('video_url') || errorMsg.includes('plan') || errorMsg.includes('permission') || errorMsg.includes('subscribed') || errorMsg.includes('business')) {
+            console.warn('[fireflies-sync] video_url not available on this plan, retrying without it')
+            data = await callFirefliesAPI(testApiKey, GET_TRANSCRIPTS_QUERY_NO_VIDEO, testVariables)
+          } else {
+            throw apiError
+          }
+        }
 
         return new Response(
           JSON.stringify({
@@ -317,12 +387,24 @@ serve(async (req) => {
           toDate = new Date(end_date)
         }
 
-        // Fetch transcripts from Fireflies
-        const data = await callFirefliesAPI(integration.api_key, GET_TRANSCRIPTS_QUERY, {
+        // Fetch transcripts from Fireflies (with video_url fallback for Free/Pro plans)
+        const queryVariables = {
           fromDate: fromDate.toISOString(),
           toDate: toDate.toISOString(),
           limit: limit || 50,
-        })
+        }
+        let data: any
+        try {
+          data = await callFirefliesAPI(integration.api_key, GET_TRANSCRIPTS_QUERY, queryVariables)
+        } catch (apiError: any) {
+          const errorMsg = apiError?.message?.toLowerCase() || ''
+          if (errorMsg.includes('video_url') || errorMsg.includes('plan') || errorMsg.includes('permission') || errorMsg.includes('subscribed') || errorMsg.includes('business')) {
+            console.warn('[fireflies-sync] video_url not available on this plan, retrying without it')
+            data = await callFirefliesAPI(integration.api_key, GET_TRANSCRIPTS_QUERY_NO_VIDEO, queryVariables)
+          } else {
+            throw apiError
+          }
+        }
 
         const transcripts: FirefliesTranscript[] = data.transcripts || []
         let syncedCount = 0
@@ -373,7 +455,7 @@ serve(async (req) => {
             title: transcript.title,
             meeting_start: new Date(transcript.date).toISOString(),
             duration_minutes: transcript.duration || null,
-            share_url: transcript.transcript_url,
+            share_url: transcript.video_url || transcript.audio_url || transcript.transcript_url,
             transcript_text: sentencesToText(transcript.sentences),
             owner_email: transcript.organizer_email || transcript.host_email || null,
             summary: transcript.summary?.overview || transcript.summary?.short_summary || null,
