@@ -3,6 +3,27 @@ import { supabase } from '@/lib/supabase/clientV2'
 import { toast } from 'sonner'
 import type { InstantlyPushResult } from '@/lib/types/instantly'
 
+/**
+ * Validate that an Instantly campaign still exists and is accessible.
+ * Returns { valid: true, campaign } or { valid: false, error }.
+ */
+export async function validateInstantlyCampaign(
+  orgId: string,
+  campaignId: string
+): Promise<{ valid: true; campaign: any } | { valid: false; error: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('instantly-admin', {
+      body: { action: 'get_campaign', org_id: orgId, campaign_id: campaignId },
+    })
+    if (error || !data?.success) {
+      return { valid: false, error: data?.error || error?.message || 'Campaign not found' }
+    }
+    return { valid: true, campaign: data.campaign }
+  } catch (err: any) {
+    return { valid: false, error: err.message || 'Failed to validate campaign' }
+  }
+}
+
 interface PushParams {
   table_id: string
   campaign_id: string

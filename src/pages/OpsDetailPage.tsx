@@ -54,6 +54,7 @@ import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { useIntegrationPolling } from '@/lib/hooks/useIntegrationStatus';
 import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
 import { useHubSpotWriteBack } from '@/lib/hooks/useHubSpotWriteBack';
+import { validateInstantlyCampaign } from '@/lib/hooks/useInstantlyPush';
 import { HubSpotSyncHistory } from '@/components/ops/HubSpotSyncHistory';
 import { HubSpotSyncSettingsModal } from '@/components/ops/HubSpotSyncSettingsModal';
 import { SaveAsHubSpotListModal } from '@/components/ops/SaveAsHubSpotListModal';
@@ -1188,36 +1189,49 @@ function OpsDetailPage() {
         const config = col.integration_config as { instantly_subtype?: string; campaign_id?: string; push_config?: { campaign_id?: string; auto_field_mapping?: boolean } } | null;
         const campaignId = config?.push_config?.campaign_id || config?.campaign_id;
         if (config?.instantly_subtype === 'push_action' && campaignId) {
-          // Build field mapping from row values
-          const rowCellValues: Record<string, string> = {};
-          if (fullRow?.cells) {
-            for (const [key, c] of Object.entries(fullRow.cells)) {
-              if (c.value) rowCellValues[key] = c.value;
+          // Validate + push in async IIFE (cell handler is synchronous)
+          (async () => {
+            // Validate campaign exists before pushing
+            if (table?.organization_id) {
+              const validation = await validateInstantlyCampaign(table.organization_id, campaignId);
+              if (!validation.valid) {
+                toast.error('Campaign no longer exists. Please select a new campaign.');
+                setEditInstantlyColumn(col);
+                return;
+              }
             }
-          }
 
-          // Set cell to pending
-          cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+            // Build field mapping from row values
+            const rowCellValues: Record<string, string> = {};
+            if (fullRow?.cells) {
+              for (const [key, c] of Object.entries(fullRow.cells)) {
+                if (c.value) rowCellValues[key] = c.value;
+              }
+            }
 
-          executeSingleAction.mutate(
-            {
-              columnId: col.id,
-              rowId,
-              actionType: 'push_to_instantly',
-              actionConfig: {
-                campaign_id: campaignId,
-                field_mapping: config.push_config?.auto_field_mapping ? undefined : rowCellValues,
+            // Set cell to pending
+            cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+
+            executeSingleAction.mutate(
+              {
+                columnId: col.id,
+                rowId,
+                actionType: 'push_to_instantly',
+                actionConfig: {
+                  campaign_id: campaignId,
+                  field_mapping: config.push_config?.auto_field_mapping ? undefined : rowCellValues,
+                },
               },
-            },
-            {
-              onSuccess: () => {
-                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+              {
+                onSuccess: () => {
+                  cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+                },
+                onError: () => {
+                  cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+                },
               },
-              onError: () => {
-                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
-              },
-            },
-          );
+            );
+          })();
           return;
         }
       }
@@ -2253,6 +2267,14 @@ function OpsDetailPage() {
           <CampaignApprovalBanner
             tableId={tableId!}
             orgId={table.organization_id}
+            onCampaignInvalid={() => {
+              const instantlyCol = columns.find(c =>
+                c.column_type === 'instantly' &&
+                ((c.integration_config as any)?.instantly_subtype === 'campaign_config' ||
+                 (c.integration_config as any)?.instantly_subtype === 'push_action')
+              );
+              if (instantlyCol) setEditInstantlyColumn(instantlyCol);
+            }}
           />
         )}
 
@@ -2769,6 +2791,15 @@ function OpsDetailPage() {
           if (!campaignId) {
             toast.error('No campaign linked. Open Instantly settings to link a campaign first.');
             return;
+          }
+          // Validate campaign exists before pushing
+          if (table?.organization_id) {
+            const validation = await validateInstantlyCampaign(table.organization_id, campaignId);
+            if (!validation.valid) {
+              toast.error('Campaign no longer exists in Instantly. Please select a new campaign.');
+              if (instantlyCol) setEditInstantlyColumn(instantlyCol);
+              return;
+            }
           }
           const toastId = toast.loading(`Pushing ${selectedRows.size} leads to Instantly...`);
           try {
