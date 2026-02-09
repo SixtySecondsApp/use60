@@ -330,8 +330,8 @@ function OpsDetailPage() {
   });
 
   // ---- Enrichment hook ----
-  const { startEnrichment, startSingleRowEnrichment } = useEnrichment(tableId ?? '');
-  const { startApolloEnrichment, singleRowApolloEnrichment, reEnrichApollo, startApolloOrgEnrichment } = useApolloEnrichment(tableId ?? '');
+  const { startEnrichment, startSingleRowEnrichment, isEnriching } = useEnrichment(tableId ?? '');
+  const { startApolloEnrichment, singleRowApolloEnrichment, reEnrichApollo, startApolloOrgEnrichment, isEnrichingApollo, isEnrichingApolloOrg } = useApolloEnrichment(tableId ?? '');
 
   // ---- HubSpot sync hook ----
   const { sync: syncHubSpot, isSyncing: isHubSpotSyncing } = useHubSpotSync(tableId);
@@ -352,6 +352,33 @@ function OpsDetailPage() {
       (table?.columns ?? []).sort((a, b) => a.position - b.position),
     [table?.columns],
   );
+
+  // ---- Enrich All handler ----
+  const handleEnrichAll = useCallback(() => {
+    const apolloPropCols = columns.filter(c => c.column_type === 'apollo_property');
+    const apolloOrgCols = columns.filter(c => c.column_type === 'apollo_org_property');
+    const aiEnrichCols = columns.filter(c => c.is_enrichment);
+
+    const totalCount = apolloPropCols.length + apolloOrgCols.length + aiEnrichCols.length;
+    if (totalCount === 0) {
+      toast.info('No enrichable columns found in this table');
+      return;
+    }
+
+    toast.info(`Enriching ${totalCount} column${totalCount > 1 ? 's' : ''}...`);
+
+    // Fire Apollo enrichments first (synchronous/fast)
+    for (const col of apolloPropCols) {
+      startApolloEnrichment({ columnId: col.id });
+    }
+    for (const col of apolloOrgCols) {
+      startApolloOrgEnrichment({ columnId: col.id });
+    }
+    // Then AI enrichments (async with auto-chaining)
+    for (const col of aiEnrichCols) {
+      startEnrichment({ columnId: col.id });
+    }
+  }, [columns, startApolloEnrichment, startApolloOrgEnrichment, startEnrichment]);
 
   // Auto-create system views when a table has zero views
   useEffect(() => {
@@ -2155,6 +2182,8 @@ function OpsDetailPage() {
               <ApolloSourceControls
                 onEditFilters={() => setShowApolloFilters(true)}
                 onCollectMore={() => setShowCollectMore(true)}
+                onEnrichAll={handleEnrichAll}
+                isEnriching={isEnriching || isEnrichingApollo || isEnrichingApolloOrg}
               />
             )}
             <button
@@ -2661,6 +2690,23 @@ function OpsDetailPage() {
 
             // Also sync to instantly_campaign_links table so push-to-instantly can find the mapping
             if (config.campaign_id && tableId && table?.organization_id) {
+              // Use config field_mapping, or auto-detect from column keys
+              let linkMapping = config.field_mapping;
+              if (!linkMapping?.email) {
+                linkMapping = { email: 'email' };
+                for (const col of columns) {
+                  const k = col.key.toLowerCase();
+                  if (k === 'email' || k === 'email_address' || k === 'work_email') {
+                    linkMapping.email = col.key;
+                  } else if (k === 'first_name' || k === 'firstname') {
+                    linkMapping.first_name = col.key;
+                  } else if (k === 'last_name' || k === 'lastname') {
+                    linkMapping.last_name = col.key;
+                  } else if (k === 'company' || k === 'company_name' || k === 'organization') {
+                    linkMapping.company_name = col.key;
+                  }
+                }
+              }
               supabase.functions.invoke('instantly-admin', {
                 body: {
                   action: 'link_campaign',
@@ -2668,7 +2714,7 @@ function OpsDetailPage() {
                   table_id: tableId,
                   campaign_id: config.campaign_id,
                   campaign_name: config.campaign_name,
-                  field_mapping: config.field_mapping || { email: 'email' },
+                  field_mapping: linkMapping,
                 },
               }).catch(() => { /* link is supplementary */ });
             }
@@ -2763,11 +2809,41 @@ function OpsDetailPage() {
                 config: pushMerged,
               });
             }
+
+            // Sync to instantly_campaign_links so push-to-instantly can find the mapping
+            if (config.campaign_id && tableId && table?.organization_id) {
+              supabase.functions.invoke('instantly-admin', {
+                body: {
+                  action: 'link_campaign',
+                  org_id: table.organization_id,
+                  table_id: tableId,
+                  campaign_id: config.campaign_id,
+                  campaign_name: config.campaign_name,
+                  field_mapping: config.field_mapping || { email: 'email' },
+                },
+              }).catch(() => { /* link is supplementary */ });
+            }
           }}
           onCampaignCreated={async (campaignId, campaignName) => {
-            // Link the campaign to the table
+            // Link the campaign to the table — onSave also calls link_campaign
+            // but onCampaignCreated fires first, so this ensures the link exists
             if (tableId && table?.organization_id) {
               try {
+                // Auto-detect field mapping from existing columns
+                const autoMapping: Record<string, string> = { email: 'email' };
+                for (const col of columns) {
+                  const k = col.key.toLowerCase();
+                  if (k === 'email' || k === 'email_address' || k === 'work_email') {
+                    autoMapping.email = col.key;
+                  } else if (k === 'first_name' || k === 'firstname') {
+                    autoMapping.first_name = col.key;
+                  } else if (k === 'last_name' || k === 'lastname') {
+                    autoMapping.last_name = col.key;
+                  } else if (k === 'company' || k === 'company_name' || k === 'organization') {
+                    autoMapping.company_name = col.key;
+                  }
+                }
+
                 await supabase.functions.invoke('instantly-admin', {
                   body: {
                     action: 'link_campaign',
@@ -2775,7 +2851,7 @@ function OpsDetailPage() {
                     table_id: tableId,
                     campaign_id: campaignId,
                     campaign_name: campaignName,
-                    field_mapping: { email: 'email' },
+                    field_mapping: autoMapping,
                   },
                 });
                 queryClient.invalidateQueries({ queryKey: ['instantly-campaign-links', tableId] });

@@ -42,6 +42,24 @@ interface EditInstantlySettingsModalProps {
   onCampaignCreated?: (campaignId: string, campaignName: string) => void;
 }
 
+function autoDetectFieldMapping(columns: { key: string; label: string }[]): InstantlyFieldMapping {
+  const mapping: InstantlyFieldMapping = { email: '' };
+  for (const col of columns) {
+    const k = col.key.toLowerCase();
+    const l = col.label.toLowerCase();
+    if (k === 'email' || k === 'email_address' || k === 'work_email' || l === 'email') {
+      if (!mapping.email) mapping.email = col.key;
+    } else if (k === 'first_name' || k === 'firstname' || k === 'name' || l === 'first name') {
+      if (!mapping.first_name) mapping.first_name = col.key;
+    } else if (k === 'last_name' || k === 'lastname' || k === 'surname' || l === 'last name') {
+      if (!mapping.last_name) mapping.last_name = col.key;
+    } else if (k === 'company' || k === 'company_name' || k === 'organization' || l === 'company' || l === 'company name') {
+      if (!mapping.company_name) mapping.company_name = col.key;
+    }
+  }
+  return mapping;
+}
+
 function buildSequenceFromStepColumns(columns: { key: string }[]): any[] {
   const stepPattern = /^instantly_step_(\d+)_(subject|body)$/;
   const steps = new Map<number, Set<string>>();
@@ -193,12 +211,27 @@ export function EditInstantlySettingsModal({
   const loadCampaigns = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.functions.invoke('instantly-admin', {
-        body: { action: 'list_campaigns', org_id: orgId },
-      });
-      if (data?.campaigns) {
-        setCampaigns(data.campaigns);
+      // Fetch all campaigns with pagination (Instantly default limit is 50)
+      const allCampaigns: InstantlyCampaign[] = [];
+      let cursor: string | undefined;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data } = await supabase.functions.invoke('instantly-admin', {
+          body: {
+            action: 'list_campaigns',
+            org_id: orgId,
+            limit: 100,
+            ...(cursor ? { starting_after: cursor } : {}),
+          },
+        });
+        const batch = data?.campaigns ?? [];
+        allCampaigns.push(...batch);
+        cursor = data?.next_starting_after ?? null;
+        hasMore = !!cursor && batch.length > 0;
       }
+
+      setCampaigns(allCampaigns);
     } catch {
       // ignore
     } finally {
@@ -247,13 +280,25 @@ export function EditInstantlySettingsModal({
 
       toast.success(`Campaign "${campaignName}" created in Instantly`);
 
+      // Add the newly created campaign to local state so it appears immediately
+      setCampaigns(prev => [
+        { id: campaignId, name: campaignName, status: 0 } as InstantlyCampaign,
+        ...prev,
+      ]);
+
+      // Auto-detect field mapping from existing columns so push works immediately
+      const autoMapping: InstantlyFieldMapping = fieldMapping.email
+        ? fieldMapping
+        : autoDetectFieldMapping(existingColumns);
+
       // Notify parent about created campaign
       onCampaignCreated?.(campaignId, campaignName);
 
-      // Also call onSave with the new campaign info
+      // Save with campaign info AND field mapping so push-to-instantly can find it
       onSave({
         campaign_id: campaignId,
         campaign_name: campaignName,
+        field_mapping: autoMapping,
       });
 
       onClose();
