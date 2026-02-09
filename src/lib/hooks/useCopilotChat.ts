@@ -40,6 +40,7 @@ export interface ChatMessage {
   timestamp: Date;
   toolCalls?: ToolCall[];
   isStreaming?: boolean;
+  structuredResponse?: unknown;
 }
 
 export interface UseCopilotChatOptions {
@@ -208,6 +209,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
         const decoder = new TextDecoder();
         let buffer = '';
         let accumulatedContent = '';
+        let receivedStructuredResponse: unknown = undefined;
         const currentToolCalls: ToolCall[] = [];
 
         setIsStreaming(true);
@@ -313,6 +315,18 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                     }
                     break;
 
+                  case 'structured_response':
+                    // Attach structured response data to the assistant message
+                    receivedStructuredResponse = data;
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, structuredResponse: data }
+                          : m
+                      )
+                    );
+                    break;
+
                   case 'done':
                     setMessages((prev) =>
                       prev.map((m) =>
@@ -336,11 +350,15 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                           }))
                         : undefined;
 
+                      const metadata: Record<string, unknown> = {};
+                      if (toolCallsMeta) metadata.tool_calls = toolCallsMeta;
+                      if (receivedStructuredResponse) metadata.structuredResponse = receivedStructuredResponse;
+
                       sessionServiceRef.current.addMessage({
                         conversation_id: conversationId,
                         role: 'assistant',
                         content: accumulatedContent,
-                        metadata: toolCallsMeta ? { tool_calls: toolCallsMeta } : undefined,
+                        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
                       }).catch((err) => console.warn('[useCopilotChat] Error persisting assistant message:', err));
                     }
                     break;
@@ -451,6 +469,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
               error: tc.error,
               startedAt: new Date(),
             })),
+            structuredResponse: (m.metadata as Record<string, unknown>)?.structuredResponse,
           }));
           setMessages(chatMessages);
         }

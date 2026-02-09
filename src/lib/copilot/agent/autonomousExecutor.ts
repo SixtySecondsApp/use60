@@ -15,6 +15,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from '../../supabase/clientV2';
 import type { SkillFrontmatterV2 } from '../../types/skills';
+import { cleanUnresolvedVariables, hasUnresolvedVariables } from '../../utils/templateUtils';
 
 // =============================================================================
 // Types
@@ -215,11 +216,17 @@ export class AutonomousExecutor {
       })
     );
 
-    // Pre-cache content from the RPC response (already compiled for this org)
+    // Pre-cache content from the RPC response (already compiled for this org).
+    // The RPC uses COALESCE(compiled_content, content_template) so if compiled_content
+    // is NULL, raw platform_skills content_template with ${variable} placeholders may
+    // leak through. Clean any remaining placeholders as a safety net.
     this.skillContentCache.clear();
     for (const skill of activeSkills) {
       if (skill.content) {
-        this.skillContentCache.set(skill.skill_key, skill.content);
+        const content = hasUnresolvedVariables(skill.content)
+          ? cleanUnresolvedVariables(skill.content, '')
+          : skill.content;
+        this.skillContentCache.set(skill.skill_key, content);
       }
     }
 
@@ -412,19 +419,22 @@ export class AutonomousExecutor {
     // Tier 2: Load skill content (normally pre-cached from initialize RPC response)
     let skillContent = this.skillContentCache.get(tool._skillKey);
     if (!skillContent) {
-      // Fallback: fetch from organization_skills (compiled content for this org)
-      const { data, error: contentError } = await supabase
-        .from('organization_skills')
-        .select('compiled_content')
-        .eq('skill_id', tool._skillKey)
-        .eq('organization_id', this.config.organizationId)
-        .maybeSingle();
+      // Fallback: re-fetch from organization_skills via the same RPC (compiled, org-specific).
+      // Avoids direct table query that might miss the JOIN with platform_skills for category.
+      const { data: rpcSkills, error: rpcError } = await supabase
+        .rpc('get_organization_skills_for_agent', {
+          p_org_id: this.config.organizationId,
+        }) as { data: Array<{ skill_key: string; content: string }> | null; error: { message: string } | null };
 
-      if (contentError || !data?.compiled_content) {
+      const matched = (rpcSkills || []).find((s) => s.skill_key === tool._skillKey);
+      if (rpcError || !matched?.content) {
         throw new Error(`Failed to load content for skill: ${tool._skillKey}`);
       }
 
-      skillContent = data.compiled_content;
+      // Clean any unresolved ${variable} placeholders (safety net for COALESCE fallback)
+      skillContent = hasUnresolvedVariables(matched.content)
+        ? cleanUnresolvedVariables(matched.content, '')
+        : matched.content;
       this.skillContentCache.set(tool._skillKey, skillContent);
     }
 

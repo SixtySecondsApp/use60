@@ -4,7 +4,11 @@
  * Autonomous Copilot Edge Function
  *
  * Enables Claude to autonomously decide which skills to use via native tool use.
- * Skills are exposed as tools that Claude can discover and invoke based on user intent.
+ * Uses the same 4-tool architecture as api-copilot:
+ *   1. list_skills   - Discover available skills/sequences
+ *   2. get_skill      - Retrieve a compiled skill document
+ *   3. execute_action - Execute CRM actions with real data (deals, contacts, meetings, etc.)
+ *   4. resolve_entity - Resolve ambiguous person references (first-name-only)
  *
  * POST /copilot-autonomous
  * {
@@ -24,12 +28,25 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.32.1';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   rateLimitMiddleware,
   RATE_LIMIT_CONFIGS,
 } from '../_shared/rateLimiter.ts';
-import { logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
+import { executeAction } from '../_shared/copilot_adapters/executeAction.ts';
+import type { ExecuteActionName } from '../_shared/copilot_adapters/types.ts';
+import { resolveEntity } from '../_shared/resolveEntityAdapter.ts';
+import {
+  handleListSkills,
+  handleGetSkill,
+  resolveOrgId,
+} from '../_shared/skillsToolHandlers.ts';
+import {
+  detectAndStructureResponse,
+  type StructuredResponse,
+  type ToolExecutionDetail,
+} from '../_shared/structuredResponseDetector.ts';
 
 // =============================================================================
 // Configuration
@@ -54,192 +71,222 @@ interface RequestBody {
   stream?: boolean;
 }
 
-interface SkillToolDefinition {
-  name: string;
-  description: string;
-  input_schema: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
-  _skillId: string;
-  _skillKey: string;
-  _category: string;
-}
-
-interface SkillRow {
-  id: string;
-  skill_key: string;
-  category: string;
-  frontmatter: {
-    name?: string;
-    description?: string;
-    triggers?: Array<string | { pattern: string }>;
-    inputs?: Array<{
-      name: string;
-      type?: string;
-      description?: string;
-      required?: boolean;
-    }>;
-    outputs?: Array<{
-      name: string;
-      type?: string;
-      description?: string;
-    }>;
-    required_context?: string[];
-  };
-  content_template: string;
-}
-
 // =============================================================================
-// Skill Loading
+// 4-Tool Architecture (matches api-copilot)
 // =============================================================================
 
-async function loadSkillsAsTools(
-  supabase: ReturnType<typeof createClient>
-): Promise<{ tools: SkillToolDefinition[]; contentCache: Map<string, string> }> {
-  const { data: skills, error } = await supabase
-    .from('platform_skills')
-    .select('id, skill_key, category, frontmatter, content_template')
-    .eq('is_active', true)
-    .neq('category', 'hitl');
+const FOUR_TOOL_DEFINITIONS: Anthropic.Tool[] = [
+  // 1. resolve_entity - MUST BE FIRST for first-name-only references
+  {
+    name: 'resolve_entity',
+    description: `Resolve a person mentioned by first name (or partial name) to a specific contact by searching CRM contacts, recent meetings, and calendar events in parallel. Use this FIRST when the user mentions someone by name without full context.
 
-  if (error) {
-    console.error('[loadSkillsAsTools] Error:', error);
-    throw new Error(`Failed to load skills: ${error.message}`);
-  }
+WHEN TO USE:
+- User asks about "Stan" or "John" without providing email or ID
+- User references someone from a recent meeting
+- Any ambiguous person reference that needs resolution
 
-  const tools: SkillToolDefinition[] = [];
-  const contentCache = new Map<string, string>();
-
-  for (const skill of (skills || []) as SkillRow[]) {
-    const fm = skill.frontmatter || {};
-
-    // Build input schema
-    const properties: Record<string, unknown> = {};
-    const required: string[] = [];
-
-    if (fm.inputs && Array.isArray(fm.inputs)) {
-      for (const input of fm.inputs) {
-        properties[input.name] = {
-          type: input.type || 'string',
-          description: input.description || `Input: ${input.name}`,
-        };
-        if (input.required) {
-          required.push(input.name);
-        }
-      }
-    }
-
-    if (fm.required_context && Array.isArray(fm.required_context)) {
-      for (const ctx of fm.required_context) {
-        if (!properties[ctx]) {
-          properties[ctx] = {
-            type: 'string',
-            description: `Context: ${ctx}`,
-          };
-        }
-      }
-    }
-
-    if (Object.keys(properties).length === 0) {
-      properties['query'] = {
-        type: 'string',
-        description: 'The query or request for this skill',
-      };
-    }
-
-    // Build description
-    let description = fm.description || `Execute the ${fm.name || skill.skill_key} skill`;
-
-    if (fm.triggers && fm.triggers.length > 0) {
-      const triggerExamples = fm.triggers
-        .slice(0, 3)
-        .map((t) => (typeof t === 'string' ? t : t.pattern))
-        .join(', ');
-      description += ` Use when user mentions: ${triggerExamples}.`;
-    }
-
-    if (fm.outputs && fm.outputs.length > 0) {
-      const outputNames = fm.outputs.map((o) => o.name).join(', ');
-      description += ` Returns: ${outputNames}.`;
-    }
-
-    tools.push({
-      name: skill.skill_key.replace(/[^a-zA-Z0-9_-]/g, '_'),
-      description: description.slice(0, 1024),
-      input_schema: {
-        type: 'object',
-        properties,
-        required: required.length > 0 ? required : undefined,
+RETURNS ranked candidates by recency. If ONE clear match, proceed. If MULTIPLE, ask user to confirm.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: {
+          type: 'string',
+          description: 'First name or partial name to search for (e.g., "Stan", "John Smith")',
+        },
+        context_hint: {
+          type: 'string',
+          description: 'Optional context from user message to help disambiguate (e.g., "meeting yesterday", "deal")',
+        },
       },
-      _skillId: skill.id,
-      _skillKey: skill.skill_key,
-      _category: skill.category,
-    });
+      required: ['name'],
+    },
+  },
+  // 2. list_skills
+  {
+    name: 'list_skills',
+    description: 'List available compiled skills for the organization (optionally filtered by category).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        kind: {
+          type: 'string',
+          enum: ['skill', 'sequence', 'all'],
+          description: 'Filter to skills (single-step) vs sequences (category=agent-sequence). Default: all.',
+        },
+        category: {
+          type: 'string',
+          enum: ['sales-ai', 'writing', 'enrichment', 'workflows', 'data-access', 'output-format', 'agent-sequence'],
+          description: 'Optional skill category filter.',
+        },
+        enabled_only: {
+          type: 'boolean',
+          description: 'Only return enabled skills (default true).',
+        },
+      },
+    },
+  },
+  // 3. get_skill
+  {
+    name: 'get_skill',
+    description: 'Retrieve a compiled skill or sequence document by skill_key for the organization.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        skill_key: { type: 'string', description: 'Skill identifier (e.g., lead-qualification, get-contact-context)' },
+      },
+      required: ['skill_key'],
+    },
+  },
+  // 4. execute_action - Core CRM data access
+  {
+    name: 'execute_action',
+    description: `Execute an action to fetch real CRM data, meetings, emails, pipeline intelligence, or perform operations.
 
-    contentCache.set(skill.skill_key, skill.content_template);
-  }
+If you only have a FIRST NAME (e.g., "Stan", "John"), use the resolve_entity tool instead!
 
-  return { tools, contentCache };
-}
+ACTION PARAMETERS:
+
+## Contact & Lead Lookup
+- get_contact: { email?, full_name?, id? } - Search contacts by email, full name, or id
+- get_lead: { email?, full_name?, contact_id?, date_from?, date_to?, date_field? } - Get lead/prospect data with enrichment
+
+## Deal & Pipeline
+- get_deal: { name?, id?, close_date_from?, close_date_to?, status?, stage_id?, include_health?, limit? } - Search deals
+- get_pipeline_summary: {} - Get aggregated pipeline metrics
+- get_pipeline_deals: { filter?, days?, period?, include_health?, limit? } - Get filtered deal list (filter: "closing_soon"|"at_risk"|"stale"|"needs_attention")
+- get_pipeline_forecast: { period? } - Get quarterly forecast
+
+## Contacts & Relationships
+- get_contacts_needing_attention: { days_since_contact?, filter?, limit? } - Get contacts without recent follow-up
+- get_company_status: { company_id?, company_name?, domain? } - Holistic company view
+
+## Meetings & Calendar
+- get_meetings: { contactEmail?, contactId?, limit? } - Get meetings with a contact
+- get_meeting_count: { period?, timezone?, week_starts_on? } - Count meetings for a period
+- get_next_meeting: { include_context?, timezone? } - Get next upcoming meeting with CRM context
+- get_meetings_for_period: { period?, timezone?, week_starts_on?, include_context?, limit? } - Get meeting list for a period
+- get_time_breakdown: { period?, timezone?, week_starts_on? } - Time analysis
+- get_booking_stats: { period?, filter_by?, source?, org_wide? } - Meeting booking statistics
+
+## Tasks & Activities
+- create_task: { title, description?, due_date?, contact_id?, deal_id?, priority?, assignee_id? } - Create a task (requires params.confirm=true)
+- list_tasks: { status?, priority?, contact_id?, deal_id?, company_id?, due_before?, due_after?, limit? } - List tasks
+- create_activity: { type, client_name, details?, amount?, date?, status?, priority? } - Create an activity (requires params.confirm=true)
+
+## Email & Notifications
+- search_emails: { contact_email?, query?, limit? } - Search emails
+- draft_email: { to, subject?, context?, tone? } - Draft an email
+- send_notification: { channel: 'slack', message, blocks? } - Send a Slack notification
+
+## CRM Updates
+- update_crm: { entity, id, updates, confirm: true } - Update CRM record
+
+## Enrichment
+- enrich_contact: { email, name?, title?, company_name? } - Enrich contact data
+- enrich_company: { name, domain?, website? } - Enrich company data
+
+## Skill Execution
+- run_skill: { skill_key, skill_context? } - Execute an AI skill
+- run_sequence: { sequence_key, sequence_context?, is_simulation? } - Execute a multi-step sequence
+
+Write actions require params.confirm=true.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'get_contact',
+            'get_lead',
+            'get_deal',
+            'get_pipeline_summary',
+            'get_pipeline_deals',
+            'get_pipeline_forecast',
+            'get_contacts_needing_attention',
+            'get_company_status',
+            'get_meetings',
+            'get_booking_stats',
+            'get_meeting_count',
+            'get_next_meeting',
+            'get_meetings_for_period',
+            'get_time_breakdown',
+            'search_emails',
+            'draft_email',
+            'update_crm',
+            'send_notification',
+            'enrich_contact',
+            'enrich_company',
+            'invoke_skill',
+            'run_skill',
+            'run_sequence',
+            'create_task',
+            'list_tasks',
+            'create_activity',
+          ],
+          description: 'The action to execute',
+        },
+        params: {
+          type: 'object',
+          description: 'Parameters for the action',
+        },
+      },
+      required: ['action'],
+    },
+  },
+];
 
 // =============================================================================
-// Tool Execution
+// Tool Execution Router
 // =============================================================================
 
-async function executeTool(
-  anthropic: Anthropic,
+/**
+ * Route tool calls to the appropriate shared handler.
+ * Uses real Supabase queries -- no more LLM hallucination for CRM data.
+ */
+async function executeToolCall(
   toolName: string,
   input: Record<string, unknown>,
-  tools: SkillToolDefinition[],
-  contentCache: Map<string, string>,
-  context: Record<string, unknown>
+  client: ReturnType<typeof createClient>,
+  userId: string,
+  orgId: string | null
 ): Promise<unknown> {
-  const tool = tools.find((t) => t.name === toolName);
-  if (!tool) {
-    throw new Error(`Unknown tool: ${toolName}`);
-  }
+  // Resolve org for skills/execute_action tools
+  const resolvedOrgId = await resolveOrgId(client, userId, orgId);
 
-  const skillContent = contentCache.get(tool._skillKey);
-  if (!skillContent) {
-    throw new Error(`Skill content not found: ${tool._skillKey}`);
-  }
-
-  const fullContext = { ...context, ...input };
-
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: MAX_TOKENS,
-    system: `You are executing a skill. Follow the instructions precisely.
-
-${skillContent}
-
-Respond with a JSON object containing the result. If the skill defines outputs, include those fields.`,
-    messages: [
-      {
-        role: 'user',
-        content: `Execute this skill with the following context:\n\n${JSON.stringify(fullContext, null, 2)}`,
-      },
-    ],
-  });
-
-  const textContent = response.content.find((c) => c.type === 'text');
-  const responseText = textContent?.type === 'text' ? textContent.text : '';
-
-  try {
-    const jsonMatch =
-      responseText.match(/```json\n?([\s\S]*?)\n?```/) ||
-      responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const jsonStr = jsonMatch[1] || jsonMatch[0];
-      return JSON.parse(jsonStr);
+  switch (toolName) {
+    case 'resolve_entity': {
+      return await resolveEntity(client, userId, resolvedOrgId, {
+        name: input.name ? String(input.name) : undefined,
+        context_hint: input.context_hint ? String(input.context_hint) : undefined,
+      });
     }
-  } catch {
-    // If not JSON, return as text
-  }
 
-  return { result: responseText };
+    case 'list_skills': {
+      return await handleListSkills(client, resolvedOrgId, {
+        kind: input.kind ? String(input.kind) : undefined,
+        category: input.category ? String(input.category) : undefined,
+        enabled_only: input.enabled_only !== false,
+      });
+    }
+
+    case 'get_skill': {
+      const skillKey = input.skill_key ? String(input.skill_key) : '';
+      return await handleGetSkill(client, resolvedOrgId, skillKey);
+    }
+
+    case 'execute_action': {
+      const action = input.action as ExecuteActionName;
+      const params = (input.params || {}) as Record<string, unknown>;
+      if (!action) {
+        return { success: false, data: null, error: 'action is required for execute_action' };
+      }
+      return await executeAction(client, userId, resolvedOrgId, action, params);
+    }
+
+    default:
+      return { success: false, error: `Unknown tool: ${toolName}` };
+  }
 }
 
 // =============================================================================
@@ -489,43 +536,46 @@ Return [] if no meaningful memories.`,
 // =============================================================================
 
 function buildSystemPrompt(
-  tools: SkillToolDefinition[],
   organizationId?: string,
   context?: Record<string, unknown>,
   memoryContext?: string
 ): string {
-  const toolCategories = new Map<string, string[]>();
-  for (const tool of tools) {
-    const category = tool._category;
-    if (!toolCategories.has(category)) {
-      toolCategories.set(category, []);
-    }
-    toolCategories.get(category)!.push(tool.name);
-  }
+  return `You are an AI sales assistant for a platform called Sixty. You help sales professionals manage their pipeline, prepare for meetings, track contacts, and execute sales workflows.
 
-  const categoryList = Array.from(toolCategories.entries())
-    .map(([cat, toolNames]) => `- **${cat}**: ${toolNames.join(', ')}`)
-    .join('\n');
+## Your 4 Tools
 
-  return `You are an AI assistant for a sales intelligence platform called Sixty.
+1. **resolve_entity** - CRITICAL: Use FIRST when user mentions a person by first name only (e.g., "Stan", "John"). Searches CRM, meetings, and calendar in parallel to find the right person. DO NOT ask for clarification first.
+2. **list_skills** - See available skills and sequences by category
+3. **get_skill** - Retrieve a skill/sequence document for guidance (use exact skill_key from list)
+4. **execute_action** - Perform actions (query CRM, fetch meetings, search emails, manage pipeline, etc.)
 
-You have access to various skills (tools) that help users with sales tasks. Your job is to:
-1. Understand what the user wants to accomplish
-2. Decide which skill(s) to use to help them
-3. Execute those skills with appropriate inputs
-4. Synthesize the results into a helpful response
+## How To Work
 
-## Available Skill Categories
+1. **If user mentions a person by first name only** -> Use resolve_entity FIRST
+2. **If user needs data** (deals, contacts, meetings, pipeline) -> Use execute_action with the appropriate action
+3. **If task involves a skill or multi-step workflow** -> Use list_skills to discover, get_skill to retrieve, then follow the skill instructions
+4. Use execute_action to gather data or perform tasks
 
-${categoryList}
+## Common Patterns
 
-## Guidelines
+### Contact/Person Lookup
+1. Use execute_action with get_contact to find the contact by name/email
+2. Use execute_action with get_lead to get ALL enrichment data
+3. Use execute_action with get_meetings to find meetings with that contact
 
-- **Sequences First**: If a task involves multiple steps (e.g., "full deal review"), look for a sequence skill (category: agent-sequence) that orchestrates the workflow.
-- **Ask if Unclear**: If you need more information to execute a skill properly, ask the user before proceeding.
-- **Chain Skills**: You can call multiple skills in sequence if needed to accomplish a complex task.
-- **Explain Your Actions**: Briefly tell the user what you're doing when you use a skill.
-- **Handle Errors Gracefully**: If a skill fails, explain what happened and suggest alternatives.
+### Pipeline Intelligence
+- Use execute_action with get_pipeline_deals { filter: "closing_soon", period: "this_week" }
+- Use execute_action with get_pipeline_deals { filter: "stale", days: 14 }
+- Use execute_action with get_pipeline_summary {} for current pipeline snapshot
+- Use execute_action with get_pipeline_forecast { period: "this_quarter" }
+
+### Meeting Prep
+- Use execute_action with get_next_meeting { include_context: true } for next meeting
+- Use execute_action with get_meetings_for_period { period: "today" } for today's schedule
+
+### Follow-up Management
+- Use execute_action with get_contacts_needing_attention { days_since_contact: 14 }
+- Use execute_action with list_tasks { status: "pending" }
 
 ## Organization Context
 
@@ -533,6 +583,14 @@ ${organizationId ? `Organization ID: ${organizationId}` : 'No organization speci
 ${context && Object.keys(context).length > 0 ? `\nAvailable context: ${Object.keys(context).join(', ')}` : ''}
 ${memoryContext || ''}
 ${memoryContext ? MEMORY_SYSTEM_ADDITION : ''}
+
+## Behavior Guidelines
+
+- Be concise but thorough in your responses
+- When presenting CRM data, format it clearly
+- Confirm before any CRM updates or notifications (execute_action write actions require params.confirm=true)
+- If a tool returns an error, explain what happened and suggest alternatives
+- Present data in a helpful, actionable way for sales professionals
 `;
 }
 
@@ -636,7 +694,6 @@ async function logToolCall(
   supabase: ReturnType<typeof createClient>,
   executionId: string,
   toolName: string,
-  tools: SkillToolDefinition[],
   input: Record<string, unknown>,
   status: 'running' | 'completed' | 'error',
   output?: unknown,
@@ -644,7 +701,6 @@ async function logToolCall(
   startTime?: number
 ): Promise<string | null> {
   try {
-    const tool = tools.find((t) => t.name === toolName);
     const duration = startTime ? Date.now() - startTime : undefined;
 
     const { data, error } = await supabase
@@ -652,8 +708,6 @@ async function logToolCall(
       .insert({
         execution_id: executionId,
         tool_name: toolName,
-        skill_id: tool?._skillId,
-        skill_key: tool?._skillKey,
         input,
         output: output ? JSON.stringify(output) : null,
         status,
@@ -747,10 +801,11 @@ function sendSSE(
 // =============================================================================
 
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) return preflightResponse;
 
   // Only allow POST
   if (req.method !== 'POST') {
@@ -796,51 +851,40 @@ serve(async (req: Request) => {
       userId = user?.id || null;
     }
 
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Rate limiting
-    if (userId) {
-      const rateLimitResult = await rateLimitMiddleware(
-        req,
-        userId,
-        RATE_LIMIT_CONFIGS.copilot
-      );
-      if (rateLimitResult) {
-        return rateLimitResult;
-      }
+    const rateLimitResult = await rateLimitMiddleware(
+      req,
+      userId,
+      RATE_LIMIT_CONFIGS.copilot
+    );
+    if (rateLimitResult) {
+      return rateLimitResult;
     }
 
     // Initialize Anthropic
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-    // Load skills as tools
-    const { tools, contentCache } = await loadSkillsAsTools(supabase);
-
-    if (tools.length === 0) {
-      return new Response(JSON.stringify({ error: 'No skills available' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Build memory context for the user (if authenticated)
+    // Build memory context for the user
     let memoryContext = '';
-    if (userId) {
-      memoryContext = await buildContextWithMemories(supabase, userId, message);
+    memoryContext = await buildContextWithMemories(supabase, userId, message);
 
-      // Trigger compaction check in background (non-blocking)
-      handleCompactionIfNeeded(supabase, anthropic, userId, MODEL).catch((err) =>
-        console.error('[copilot-autonomous] Background compaction error:', err)
-      );
-    }
+    // Trigger compaction check in background (non-blocking)
+    handleCompactionIfNeeded(supabase, anthropic, userId, MODEL).catch((err) =>
+      console.error('[copilot-autonomous] Background compaction error:', err)
+    );
 
-    // Build system prompt
-    const systemPrompt = buildSystemPrompt(tools, organizationId, context, memoryContext);
+    // Build system prompt (no longer depends on per-skill tool defs)
+    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext);
 
-    // Convert tools to Claude format
-    const claudeTools: Anthropic.Tool[] = tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      input_schema: t.input_schema as Anthropic.Tool.InputSchema,
-    }));
+    // Use the 4-tool architecture (same as api-copilot)
+    const claudeTools = FOUR_TOOL_DEFINITIONS;
 
     // Set up streaming response
     if (stream) {
@@ -866,6 +910,7 @@ serve(async (req: Request) => {
 
         try {
           const toolsUsed: string[] = [];
+          const toolExecutionDetails: ToolExecutionDetail[] = [];
           let iterations = 0;
           let claudeMessages: Anthropic.MessageParam[] = [
             { role: 'user', content: message },
@@ -961,18 +1006,53 @@ serve(async (req: Request) => {
 
               // Send completion marker (tokens already streamed)
               await sendSSE(writer, encoder, 'message_complete', { content: finalResponseText });
+
+              // Detect structured response from tool executions OR user intent
+              // The detector has two paths:
+              //   1. Sequence-aware: maps tool executions (run_sequence) to response types
+              //   2. Intent-based: matches user message patterns to response types and
+              //      fetches data directly (e.g., "show me my pipeline" → PipelineResponse)
+              // Always call the detector so intent-based detection works even when
+              // Claude responds with plain text without calling any tools.
+              let structuredResponse: StructuredResponse | null = null;
+              try {
+                structuredResponse = await detectAndStructureResponse(
+                  message,
+                  finalResponseText,
+                  supabase,
+                  userId!,
+                  [...new Set(toolsUsed)],
+                  userId!, // requestingUserId
+                  context,
+                  toolExecutionDetails
+                );
+
+                if (structuredResponse) {
+                  console.log('[copilot-autonomous] Structured response detected:', structuredResponse.type);
+                  await sendSSE(writer, encoder, 'structured_response', structuredResponse);
+                }
+              } catch (srError) {
+                console.error('[copilot-autonomous] Structured response detection error (non-fatal):', srError);
+                // Non-fatal: continue without structured response
+              }
+
               await sendSSE(writer, encoder, 'done', {
                 toolsUsed: [...new Set(toolsUsed)],
                 iterations,
               });
 
+              // Extract skill/sequence keys for analytics
+              const skillExec = toolExecutionDetails.find(
+                (t) => t.toolName === 'execute_action' && (t.args as any)?.action === 'run_skill'
+              );
+              const skillKey = skillExec ? String((skillExec.args as any)?.params?.skill_key || '') || undefined : undefined;
+              const seqExec = toolExecutionDetails.find(
+                (t) => t.toolName === 'execute_action' && (t.args as any)?.action === 'run_sequence'
+              );
+              const sequenceKey = seqExec ? String((seqExec.args as any)?.params?.sequence_key || '') || undefined : undefined;
+
               // Log successful completion
               if (executionId) {
-                // Extract primary skill_key from tools used
-                const primarySkillKey = toolsUsed.length > 0
-                  ? tools.find((t) => t.name === toolsUsed[0])?._skillKey || null
-                  : null;
-
                 await logExecutionComplete(
                   supabase,
                   executionId,
@@ -982,9 +1062,9 @@ serve(async (req: Request) => {
                   [...new Set(toolsUsed)],
                   iterations,
                   undefined, // errorMessage
-                  undefined, // structuredResponse (copilot-autonomous doesn't produce these)
-                  primarySkillKey || undefined,
-                  undefined // sequenceKey
+                  structuredResponse || undefined,
+                  skillKey,
+                  sequenceKey
                 );
               }
               break;
@@ -1020,7 +1100,6 @@ serve(async (req: Request) => {
                     supabase,
                     executionId,
                     toolUse.name,
-                    tools,
                     toolUse.input as Record<string, unknown>,
                     'running'
                   );
@@ -1030,14 +1109,15 @@ serve(async (req: Request) => {
                 }
 
                 try {
-                  const result = await executeTool(
-                    anthropic,
+                  const result = await executeToolCall(
                     toolUse.name,
                     toolUse.input as Record<string, unknown>,
-                    tools,
-                    contentCache,
-                    context
+                    supabase,
+                    userId,
+                    organizationId || null
                   );
+
+                  const toolLatencyMs = Date.now() - toolStartTime;
 
                   await sendSSE(writer, encoder, 'tool_result', {
                     id: toolUse.id,
@@ -1051,6 +1131,15 @@ serve(async (req: Request) => {
                     await updateToolCall(supabase, toolCallId, 'completed', result, undefined, toolStartTime);
                   }
 
+                  // Track execution detail for structured response detection
+                  toolExecutionDetails.push({
+                    toolName: toolUse.name,
+                    args: toolUse.input,
+                    result,
+                    latencyMs: toolLatencyMs,
+                    success: true,
+                  });
+
                   toolResults.push({
                     type: 'tool_result',
                     tool_use_id: toolUse.id,
@@ -1058,6 +1147,7 @@ serve(async (req: Request) => {
                   });
                 } catch (toolError) {
                   const errorMsg = toolError instanceof Error ? toolError.message : String(toolError);
+                  const toolLatencyMs = Date.now() - toolStartTime;
 
                   await sendSSE(writer, encoder, 'tool_result', {
                     id: toolUse.id,
@@ -1070,6 +1160,15 @@ serve(async (req: Request) => {
                   if (toolCallId) {
                     await updateToolCall(supabase, toolCallId, 'error', undefined, errorMsg, toolStartTime);
                   }
+
+                  // Track failed execution detail
+                  toolExecutionDetails.push({
+                    toolName: toolUse.name,
+                    args: toolUse.input,
+                    result: { error: errorMsg },
+                    latencyMs: toolLatencyMs,
+                    success: false,
+                  });
 
                   toolResults.push({
                     type: 'tool_result',
@@ -1186,13 +1285,12 @@ serve(async (req: Request) => {
             toolsUsed.push(toolUse.name);
 
             try {
-              const result = await executeTool(
-                anthropic,
+              const result = await executeToolCall(
                 toolUse.name,
                 toolUse.input as Record<string, unknown>,
-                tools,
-                contentCache,
-                context
+                supabase,
+                userId,
+                organizationId || null
               );
 
               toolResults.push({
