@@ -18,6 +18,7 @@ export interface CopilotMessage {
   toolCall?: ToolCall;
   structuredResponse?: CopilotResponse; // New structured response format
   entityDisambiguation?: EntityDisambiguationData; // Interactive contact selection for disambiguation
+  isError?: boolean; // UX-001: Flag to indicate this message is an error response
 }
 
 export interface Recommendation {

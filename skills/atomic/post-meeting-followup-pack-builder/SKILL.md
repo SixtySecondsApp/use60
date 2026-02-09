@@ -1,17 +1,47 @@
 ---
 name: Post-Meeting Follow-Up Pack Builder
 description: |
-  Build a multi-thread follow-up pack: buyer email context, internal Slack update, and 3 task previews from meeting context + digest.
+  Build a complete follow-up pack after a meeting: buyer-facing email, internal Slack update,
+  and 3 actionable tasks. Use when a user asks "build a follow-up pack for the meeting",
+  "create post-meeting deliverables", "what do I need to send after the call", or needs
+  a full set of post-meeting communications and tasks ready to go.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: writing
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: "meeting_ended"
-    - pattern: "transcript_ready"
-    - pattern: "user_request"
+    - pattern: "follow-up pack for the meeting"
+      intent: "followup_pack"
+      confidence: 0.85
+      examples:
+        - "build a follow-up pack"
+        - "create post-meeting deliverables"
+        - "meeting follow-up package"
+    - pattern: "what do I need to send after the call"
+      intent: "post_call_actions"
+      confidence: 0.85
+      examples:
+        - "post-meeting tasks and emails"
+        - "after meeting to-dos"
+        - "what's needed after the meeting"
+    - pattern: "post-meeting email and tasks"
+      intent: "post_meeting_bundle"
+      confidence: 0.80
+      examples:
+        - "email and tasks from the meeting"
+        - "meeting follow-up bundle"
+        - "create follow-up from meeting"
+  keywords:
+    - "follow-up pack"
+    - "post-meeting"
+    - "email"
+    - "slack"
+    - "tasks"
+    - "meeting"
+    - "deliverables"
+    - "after call"
   requires_capabilities:
     - crm
     - email
@@ -19,10 +49,35 @@ metadata:
   requires_context:
     - meeting_data
     - meeting_digest
+  inputs:
+    - name: context
+      type: string
+      description: "Meeting digest or summary to build the follow-up pack from"
+      required: true
+    - name: tone
+      type: string
+      description: "Desired tone for the buyer-facing email"
+      required: false
+      default: "professional"
+      example: "friendly"
+    - name: recipient_name
+      type: string
+      description: "Name of the buyer/recipient for the follow-up email"
+      required: false
+    - name: meeting_id
+      type: string
+      description: "Meeting identifier for fetching meeting data and transcript"
+      required: false
   outputs:
-    - buyer_email
-    - slack_update
-    - tasks
+    - name: buyer_email
+      type: object
+      description: "Buyer-facing email with to, subject, structured context, and tone"
+    - name: slack_update
+      type: object
+      description: "Internal Slack update with summary, risks, next steps, and optional Block Kit"
+    - name: tasks
+      type: array
+      description: "3 actionable task previews: internal follow-up, customer follow-up, deal hygiene"
   priority: critical
 ---
 

@@ -4,6 +4,9 @@
     "command": ".claude/statusline.sh",
     "padding": 0
   },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "supabase@claude-plugins-official": true,

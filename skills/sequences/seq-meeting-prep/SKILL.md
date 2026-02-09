@@ -1,16 +1,48 @@
 ---
 name: Meeting Prep Sequence
 description: |
-  End-to-end meeting preparation: loads meeting, fetches primary contact, generates comprehensive brief with agenda and talking points. No follow-up email.
+  End-to-end meeting preparation: loads meeting details, fetches contact context,
+  and generates a comprehensive brief with agenda and talking points. Use when a user says
+  "prep for my meeting with", "prepare me for the call", "meeting brief for",
+  or needs to get ready for a specific upcoming meeting. Prep-only, no follow-up email.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: meeting_scheduled
-    - pattern: before_meeting
+    - pattern: "prep for my meeting"
+      intent: "meeting_prep"
+      confidence: 0.95
+      examples:
+        - "prep for the meeting with Acme"
+        - "prepare me for my meeting"
+        - "meeting prep"
+    - pattern: "prepare me for the call"
+      intent: "call_prep"
+      confidence: 0.90
+      examples:
+        - "get me ready for the call"
+        - "prepare for the call with"
+        - "brief me before the call"
+    - pattern: "meeting brief for"
+      intent: "meeting_brief"
+      confidence: 0.90
+      examples:
+        - "give me a brief for the meeting"
+        - "meeting brief"
+        - "brief for tomorrow's meeting"
+  keywords:
+    - "prep"
+    - "prepare"
+    - "meeting"
+    - "brief"
+    - "call"
+    - "ready"
+    - "agenda"
+    - "talking points"
+    - "before meeting"
   required_context:
     - meeting_id
     - event_id

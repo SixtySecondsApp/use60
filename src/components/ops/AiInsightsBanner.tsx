@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 import { X, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,18 +23,19 @@ export function AiInsightsBanner({ tableId, onActionClick }: AiInsightsBannerPro
   const { opsTableService } = useServices();
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(true);
+  const insightsPolling = useSmartPollingInterval(120000, 'background');
 
   const { data: insights = [] } = useQuery({
     queryKey: ['ops-insights', tableId],
     queryFn: () => opsTableService.getActiveInsights(tableId),
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: insightsPolling,
   });
 
   // OI-033: Also fetch predictions
   const { data: predictions = [] } = useQuery({
     queryKey: ['ops-predictions', tableId],
     queryFn: () => opsTableService.getActivePredictions(tableId),
-    refetchInterval: 120000, // Refresh every 2 minutes
+    refetchInterval: insightsPolling,
   });
 
   const dismissMutation = useMutation({

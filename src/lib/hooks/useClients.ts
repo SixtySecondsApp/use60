@@ -140,16 +140,16 @@ export function useClients(ownerId?: string) {
             query = query.eq('owner_id', ownerId);
           }
           
-          const result = await query.order('created_at', { ascending: false });
-          
+          const result = await query.order('created_at', { ascending: false }).limit(500);
+
           serviceClientsData = result.data;
           serviceError = result.error;
-          
+
           if (serviceError) {
             logger.error('❌ Service key basic query failed:', serviceError);
             throw serviceError;
           }
-          
+
           logger.log(`✅ Service key query successful: ${serviceClientsData?.length || 0} clients found`);
         } catch (relationshipError) {
           logger.error('❌ Service client query failed:', relationshipError);
@@ -216,11 +216,11 @@ export function useClients(ownerId?: string) {
             query = query.eq('owner_id', ownerId);
           }
           
-          const result = await query.order('created_at', { ascending: false });
-          
+          const result = await query.order('created_at', { ascending: false }).limit(500);
+
           clientsData = result.data;
           supabaseError = result.error;
-          
+
           if (supabaseError) {
             // Check if clients table doesn't exist
             if (supabaseError.message?.includes('relation "clients" does not exist')) {
@@ -248,11 +248,11 @@ export function useClients(ownerId?: string) {
               query = query.eq('owner_id', ownerId);
             }
             
-            const result = await query.order('created_at', { ascending: false });
-            
+            const result = await query.order('created_at', { ascending: false }).limit(500);
+
             clientsData = result.data;
             const serviceError = result.error;
-              
+
             if (serviceError) {
               // Check if clients table doesn't exist
               if (serviceError.message?.includes('relation "clients" does not exist')) {
@@ -550,18 +550,18 @@ export function useAggregatedClients(ownerId?: string) {
         // Fetch clients
         let clientsQuery = supabase.from('clients').select('*');
         if (ownerId) clientsQuery = clientsQuery.eq('owner_id', ownerId);
-        const { data: clients } = await clientsQuery;
-        
+        const { data: clients } = await clientsQuery.limit(1000);
+
         // Fetch deals
         let dealsQuery = supabase.from('deals').select('*').eq('status', 'won');
         if (ownerId) dealsQuery = dealsQuery.eq('owner_id', ownerId);
-        const { data: deals } = await dealsQuery;
-        
+        const { data: deals } = await dealsQuery.limit(5000);
+
         // Fetch activities
         let activitiesQuery = supabase.from('activities').select('*').eq('type', 'sale').eq('status', 'completed');
         if (ownerId) activitiesQuery = activitiesQuery.eq('user_id', ownerId);
-        const { data: activities } = await activitiesQuery;
-        
+        const { data: activities } = await activitiesQuery.limit(10000);
+
         clientsData = clients || [];
         dealsData = deals || [];
         activitiesData = activities || [];
@@ -569,15 +569,15 @@ export function useAggregatedClients(ownerId?: string) {
         // Use service key
         let clientsQuery = supabaseAdmin.from('clients').select('*');
         if (ownerId) clientsQuery = clientsQuery.eq('owner_id', ownerId);
-        const { data: clients } = await clientsQuery;
-        
+        const { data: clients } = await clientsQuery.limit(1000);
+
         let dealsQuery = supabaseAdmin.from('deals').select('*').eq('status', 'won');
         if (ownerId) dealsQuery = dealsQuery.eq('owner_id', ownerId);
-        const { data: deals } = await dealsQuery;
-        
+        const { data: deals } = await dealsQuery.limit(5000);
+
         let activitiesQuery = supabaseAdmin.from('activities').select('*').eq('type', 'sale').eq('status', 'completed');
         if (ownerId) activitiesQuery = activitiesQuery.eq('user_id', ownerId);
-        const { data: activities } = await activitiesQuery;
+        const { data: activities } = await activitiesQuery.limit(10000);
         
         clientsData = clients || [];
         dealsData = deals || [];
@@ -828,12 +828,12 @@ export function useMRR(ownerId?: string) {
         let clientsQuery = supabaseAdmin
           .from('clients')
           .select('*');
-        
+
         if (ownerId) {
           clientsQuery = clientsQuery.eq('owner_id', ownerId);
         }
-        
-        const { data: clientsWithDeals, error: clientsError } = await clientsQuery;
+
+        const { data: clientsWithDeals, error: clientsError } = await clientsQuery.limit(1000);
         
         if (clientsError) {
           logger.error('❌ Error fetching clients with deals for MRR calculation:', clientsError);
@@ -910,12 +910,12 @@ export function useMRR(ownerId?: string) {
       let clientsQuery = supabaseAdmin
         .from('clients')
         .select('*');
-      
+
       if (ownerId) {
         clientsQuery = clientsQuery.eq('owner_id', ownerId);
       }
-      
-      const { data: clientsData, error: clientsError } = await clientsQuery;
+
+      const { data: clientsData, error: clientsError } = await clientsQuery.limit(1000);
       
       if (clientsError) {
         logger.error('❌ Error fetching clients for MRR:', clientsError);
@@ -983,8 +983,9 @@ export function useMRR(ownerId?: string) {
               last_name,
               full_name
             )
-          `);
-        
+          `)
+          .limit(1000);
+
         if (error) {
           logger.error('❌ Error fetching clients with profiles for MRR by owner:', error);
           // If clients table doesn't exist, return empty array
@@ -1066,8 +1067,9 @@ export function useMRR(ownerId?: string) {
             last_name,
             full_name
           )
-        `);
-      
+        `)
+        .limit(1000);
+
       if (error) {
         logger.error('❌ Error fetching clients for MRR by owner:', error);
         throw error;
@@ -1159,7 +1161,8 @@ export function useMRR(ownerId?: string) {
       const { data: allClients, error: clientsError } = await supabaseAdmin
         .from('clients')
         .select('*')
-        .eq('owner_id', ownerId);
+        .eq('owner_id', ownerId)
+        .limit(1000);
 
       if (clientsError) {
         if (clientsError.message.includes('relation "clients" does not exist')) {

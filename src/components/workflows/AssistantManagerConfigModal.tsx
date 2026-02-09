@@ -127,7 +127,7 @@ export default function AssistantManagerConfigModal({
       const assistantsList = await openaiAssistantService.listAssistants();
       setAssistants(assistantsList);
     } catch (error) {
-      setError('Failed to load assistants. Please add your OpenAI API key by setting VITE_OPENAI_API_KEY in your .env file.');
+      setError('Failed to load assistants. Please add your OpenAI API key in Settings > AI Provider Settings.');
       setAssistants([]);
     } finally {
       setLoadingAssistants(false);

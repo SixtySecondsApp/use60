@@ -7,8 +7,8 @@
  * 2. toolCalls array (ToolCallCard) - for autonomous executor tool use
  */
 
-import React, { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Sparkles, RotateCcw, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { PriorityCard } from './PriorityCard';
@@ -19,6 +19,8 @@ import { EntityDisambiguationResponse } from './responses/EntityDisambiguationRe
 import type { CopilotMessage } from './types';
 import type { ToolCall as AutonomousToolCall } from '@/lib/hooks/useCopilotChat';
 import { useUser } from '@/lib/hooks/useUser';
+import { useCopilot } from '@/lib/contexts/CopilotContext';
+import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 
 interface ChatMessageProps {
@@ -31,11 +33,58 @@ interface ChatMessageProps {
 export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, toolCalls, onActionClick }) => {
   const isUser = message.role === 'user';
   const { userData } = useUser();
+  const { messages, sendMessage } = useCopilot();
   // US-009: Track if icon failed to load to show Sparkles fallback
   const [iconError, setIconError] = useState(false);
+  // UX-002: Track copy feedback state
+  const [copied, setCopied] = useState(false);
   // US-009: Use local 60 logo asset for consistent branding
   // Falls back to env override if provided for flexibility
   const botIconUrl = import.meta.env.VITE_COPILOT_BOT_ICON_URL as string | undefined || '/favicon_0_64x64.png';
+
+  // UX-001: Find the original user query that triggered this error message
+  const originalQuery = useCallback(() => {
+    if (!message.isError || message.role !== 'assistant') return null;
+    const msgIndex = messages.findIndex(m => m.id === message.id);
+    if (msgIndex <= 0) return null;
+    // Walk backwards to find the user message that triggered this assistant response
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        return messages[i].content;
+      }
+    }
+    return null;
+  }, [message.id, message.isError, message.role, messages]);
+
+  // UX-001: Handle retry click
+  const handleRetry = useCallback(() => {
+    const query = originalQuery();
+    if (query) {
+      sendMessage(query);
+    }
+  }, [originalQuery, sendMessage]);
+
+  // UX-002: Handle copy to clipboard
+  const handleCopy = useCallback(async () => {
+    // Extract text content: prefer structured response summary, then plain content
+    let textToCopy = '';
+    if (message.structuredResponse) {
+      textToCopy = message.structuredResponse.summary || message.content || '';
+    } else {
+      textToCopy = message.content || '';
+    }
+
+    if (!textToCopy) return;
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      toast.success('Copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Failed to copy to clipboard');
+    }
+  }, [message.content, message.structuredResponse]);
 
   return (
     <div className={cn('flex gap-3', isUser ? 'justify-end' : 'justify-start')}>
@@ -59,7 +108,29 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
             <p className="text-sm text-gray-900 dark:text-gray-100">{message.content}</p>
           </div>
         ) : (
-          <div className="w-full relative">
+          <div className="w-full relative group/assistant">
+            {/* UX-002: Copy button - appears on hover over assistant messages */}
+            {!isUser && (message.content || message.structuredResponse) && !message.isError && (
+              <button
+                type="button"
+                onClick={handleCopy}
+                className={cn(
+                  'absolute top-2 right-2 z-10 p-1.5 rounded-md transition-all duration-200',
+                  'bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700',
+                  'hover:bg-gray-200 dark:hover:bg-gray-700',
+                  'opacity-0 group-hover/assistant:opacity-100',
+                  copied && 'opacity-100'
+                )}
+                aria-label={copied ? 'Copied' : 'Copy message'}
+              >
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-green-500" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                )}
+              </button>
+            )}
+
             {/* Legacy Tool Call Indicator - Show until response is ready */}
             <AnimatePresence mode="wait">
               {message.toolCall && !message.structuredResponse && !message.content && (
@@ -142,7 +213,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
-                  className="bg-white dark:bg-gray-900/60 backdrop-blur-xl border border-gray-200 dark:border-gray-800/40 rounded-xl px-5 py-4 shadow-lg dark:shadow-none"
+                  className={cn(
+                    "bg-white dark:bg-gray-900/60 backdrop-blur-xl border rounded-xl px-5 py-4 shadow-lg dark:shadow-none",
+                    message.isError
+                      ? "border-red-200 dark:border-red-500/20"
+                      : "border-gray-200 dark:border-gray-800/40"
+                  )}
                 >
                   <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:underline">
                     <ReactMarkdown
@@ -160,6 +236,27 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
                       {message.content}
                     </ReactMarkdown>
                   </div>
+                  {/* UX-001: Retry button for error messages */}
+                  {message.isError && originalQuery() && (
+                    <div className="mt-3 pt-3 border-t border-red-100 dark:border-red-500/10">
+                      <button
+                        type="button"
+                        onClick={handleRetry}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all',
+                          'text-red-600 dark:text-red-400',
+                          'bg-red-50 dark:bg-red-500/10',
+                          'border border-red-200 dark:border-red-500/20',
+                          'hover:bg-red-100 dark:hover:bg-red-500/20',
+                          'hover:border-red-300 dark:hover:border-red-500/30',
+                          'active:scale-[0.98]'
+                        )}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Retry
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

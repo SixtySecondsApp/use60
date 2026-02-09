@@ -128,8 +128,9 @@ export const apolloSearchService = {
     // The edge function returns error payloads in the data body for
     // non-200 responses that supabase-js still resolves (e.g. 200 with NO_RESULTS).
     if (data?.error) {
-      const err = new Error(data.error) as Error & { code?: string }
+      const err = new Error(data.error) as Error & { code?: string; dedup?: { total: number; duplicates: number; net_new: number } }
       err.code = data.code
+      if (data.dedup) err.dedup = data.dedup
       throw err
     }
 

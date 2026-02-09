@@ -1,24 +1,77 @@
 ---
 name: Deal Next Best Actions
 description: |
-  Generate stage-aware, capacity-aware ranked action plan for a deal. Considers deal stage, recent activity, and user capacity.
+  Generate a ranked action plan for advancing a specific deal based on its stage,
+  recent activity, and your capacity. Use when a user asks "what should I do next
+  on this deal", "next steps for the Acme deal", or "how do I move this deal forward".
+  Returns prioritized actions with ROI rationale and time estimates.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: deal_updated
-    - pattern: deal_stage_changed
-    - pattern: user_request
+    - pattern: "next steps for this deal"
+      intent: "deal_next_actions"
+      confidence: 0.90
+      examples:
+        - "what should I do next on this deal"
+        - "next best actions for this deal"
+        - "what are the next steps"
+    - pattern: "how do I move this deal forward"
+      intent: "deal_advancement"
+      confidence: 0.85
+      examples:
+        - "how to advance this deal"
+        - "move this deal forward"
+        - "push this deal to the next stage"
+    - pattern: "deal action plan"
+      intent: "deal_actions"
+      confidence: 0.80
+      examples:
+        - "action plan for this deal"
+        - "what actions should I take on this deal"
+        - "recommend actions for this deal"
+  keywords:
+    - "next steps"
+    - "actions"
+    - "deal"
+    - "advance"
+    - "move forward"
+    - "priorities"
+    - "what to do"
+    - "recommendations"
   required_context:
     - deal_id
+  inputs:
+    - name: deal_id
+      type: string
+      description: "The deal identifier to generate next best actions for"
+      required: true
+    - name: deal_context
+      type: object
+      description: "Additional deal context such as recent activity or health signals"
+      required: false
+    - name: user_capacity
+      type: string
+      description: "User's current workload level affecting action volume"
+      required: false
+      default: "normal"
+      example: "busy"
   outputs:
-    - actions
-    - priorities
-    - roi_rationale
-    - minimum_viable_action
+    - name: actions
+      type: array
+      description: "Ranked action items with type, priority, ROI rationale, and time estimates"
+    - name: priorities
+      type: object
+      description: "Summary of priority distribution across actions"
+    - name: roi_rationale
+      type: string
+      description: "Overall rationale for the recommended action plan"
+    - name: minimum_viable_action
+      type: object
+      description: "Single most important action if user is busy"
   requires_capabilities:
     - crm
   priority: high

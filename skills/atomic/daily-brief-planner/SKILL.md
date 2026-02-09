@@ -1,23 +1,77 @@
 ---
 name: Daily Brief Planner
 description: |
-  Generate a time-aware daily briefing: morning focus, afternoon progress, evening wrap-up.
+  Generate a time-aware daily briefing that adapts to morning, afternoon, or evening.
+  Use when a user asks "catch me up", "what's happening today", "give me my daily brief",
+  or wants a summary of their schedule, deals, and tasks for the day.
+  Returns a scannable briefing with schedule, priority deals, contacts, and tasks.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: user_request
+    - pattern: "daily briefing"
+      intent: "daily_brief"
+      confidence: 0.85
+      examples:
+        - "give me my daily briefing"
+        - "daily briefing please"
+        - "morning briefing"
+    - pattern: "what's happening today"
+      intent: "daily_summary"
+      confidence: 0.85
+      examples:
+        - "what do I have today"
+        - "what's going on today"
+        - "today's summary"
+    - pattern: "catch me up"
+      intent: "catch_up"
+      confidence: 0.80
+      examples:
+        - "catch me up on everything"
+        - "give me the rundown"
+        - "what did I miss"
+    - pattern: "end of day summary"
+      intent: "evening_wrap"
+      confidence: 0.80
+      examples:
+        - "wrap up my day"
+        - "evening summary"
+        - "how did today go"
+  keywords:
+    - "briefing"
+    - "today"
+    - "summary"
+    - "morning"
+    - "afternoon"
+    - "evening"
+    - "schedule"
+    - "rundown"
+    - "catch up"
   required_context:
     - meetings
     - deals
     - contacts
     - tasks
     - time_of_day
+  inputs:
+    - name: date
+      type: string
+      description: "The date to generate the briefing for in ISO format"
+      required: false
+      default: "today"
+      example: "2025-01-15"
+    - name: time_of_day
+      type: string
+      description: "Time context that determines briefing mode (morning, afternoon, evening)"
+      required: false
+      example: "morning"
   outputs:
-    - daily_brief
+    - name: daily_brief
+      type: object
+      description: "Structured briefing with greeting, schedule, priority deals, contacts, tasks, and summary"
   requires_capabilities:
     - calendar
     - crm

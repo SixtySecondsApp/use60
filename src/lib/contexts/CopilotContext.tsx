@@ -120,6 +120,8 @@ interface CopilotContextValue {
     currentTool: AutonomousToolCall | null;
     toolsUsed: string[];
   };
+  /** Raw autonomous copilot messages — used by useToolResultContext to extract tool results */
+  autonomousMessages: import('@/lib/hooks/useCopilotChat').ChatMessage[];
   enableAutonomousMode: () => void;
   disableAutonomousMode: () => void;
 }
@@ -385,6 +387,56 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     currentTool: autonomousCopilot.currentTool,
     toolsUsed: autonomousCopilot.toolsUsed,
   };
+
+  // =============================================================================
+  // Extract resolved entity from autonomous tool calls for right panel
+  // =============================================================================
+  React.useEffect(() => {
+    if (!autonomousModeEnabled) return;
+    // Scan latest messages for resolve_entity tool results
+    for (let i = autonomousCopilot.messages.length - 1; i >= 0; i--) {
+      const msg = autonomousCopilot.messages[i];
+      if (msg.role !== 'assistant' || !msg.toolCalls) continue;
+      const entityCall = msg.toolCalls.find(
+        tc => tc.name === 'resolve_entity' && tc.status === 'completed' && tc.result
+      );
+      if (entityCall?.result) {
+        const result = entityCall.result as any;
+        // Handle disambiguation (multiple candidates)
+        if (result.candidates?.length > 1 || result.disambiguation_needed) {
+          const topCandidate = result.candidates?.[0];
+          if (topCandidate) {
+            setResolvedEntity({
+              name: topCandidate.full_name || topCandidate.name,
+              email: topCandidate.email,
+              company: topCandidate.company_name || topCandidate.company,
+              role: topCandidate.title || topCandidate.role,
+              recencyScore: topCandidate.recency_score || 0,
+              source: topCandidate.type || topCandidate.source || 'crm',
+              lastInteraction: topCandidate.last_interaction,
+              confidence: 'needs_clarification',
+              alternativeCandidates: (result.candidates?.length || 1) - 1,
+            });
+          }
+        } else if (result.contact) {
+          // Single clear match
+          const match = result.contact;
+          setResolvedEntity({
+            name: match.full_name || match.name,
+            email: match.email,
+            company: match.company_name || match.company,
+            role: match.title || match.role,
+            recencyScore: match.recency_score || 0,
+            source: match.type || match.source || 'crm',
+            lastInteraction: match.last_interaction,
+            confidence: 'high',
+            alternativeCandidates: 0,
+          });
+        }
+        return; // Found entity data, stop scanning
+      }
+    }
+  }, [autonomousModeEnabled, autonomousCopilot.messages]);
 
   // Cancel the current request
   const cancelRequest = useCallback(() => {
@@ -966,6 +1018,11 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     async (message: string) => {
       if (!message.trim() || state.isLoading) return;
 
+      // Detect relevant context types for the right panel BEFORE routing
+      // This enables context data fetching (HubSpot, Fathom, Calendar) in all modes
+      const contextTypes = detectRelevantContextTypes(message);
+      setRelevantContextTypes(contextTypes);
+
       // =============================================================================
       // Autonomous Copilot Mode Routing (new skill-based tool use)
       // =============================================================================
@@ -991,10 +1048,6 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       // Create new abort controller for this request
       abortControllerRef.current = new AbortController();
       const abortSignal = abortControllerRef.current.signal;
-
-      // Detect and set relevant context types for this query
-      const contextTypes = detectRelevantContextTypes(message);
-      setRelevantContextTypes(contextTypes);
 
       // Add user message to state
       const userMessage: CopilotMessage = {
@@ -1455,7 +1508,8 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
               return {
                 ...msg,
                 content: getErrorMessage(),
-                toolCall: undefined // Remove tool call to trigger fade out
+                toolCall: undefined, // Remove tool call to trigger fade out
+                isError: true // UX-001: Flag for retry button rendering
               };
             }
             return msg;
@@ -1551,6 +1605,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
         timestamp: msg.timestamp,
+        structuredResponse: msg.structuredResponse as CopilotMessage['structuredResponse'],
         // Note: toolCalls are passed separately via ChatMessage props
       }));
     }
@@ -1570,7 +1625,46 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   // US-007: Derive progress steps from the latest message's toolCall
   // This shows real-time progress in the right panel Progress section
   const progressSteps: ProgressStep[] = React.useMemo(() => {
-    // Find the latest assistant message with a toolCall
+    // Autonomous mode: derive progress from useCopilotChat tool calls
+    if (autonomousModeEnabled) {
+      const lastMsg = [...autonomousCopilot.messages]
+        .reverse()
+        .find(m => m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0);
+      if (lastMsg?.toolCalls) {
+        return lastMsg.toolCalls.map((tc, idx) => {
+          // Map tool names to user-friendly labels
+          const label = tc.name === 'execute_action'
+            ? `Running ${(tc.input as any)?.action?.replace(/_/g, ' ') || 'action'}`
+            : tc.name === 'list_skills'
+              ? 'Discovering available skills'
+              : tc.name === 'get_skill'
+                ? `Loading skill: ${(tc.input as any)?.skill_key || 'skill'}`
+                : tc.name === 'resolve_entity'
+                  ? `Looking up ${(tc.input as any)?.name || 'contact'}`
+                  : tc.name.replace(/_/g, ' ');
+          // Map tool icons
+          const icon = tc.name === 'execute_action' ? 'activity'
+            : tc.name === 'list_skills' ? 'database'
+            : tc.name === 'get_skill' ? 'file-text'
+            : tc.name === 'resolve_entity' ? 'user'
+            : 'activity';
+          const duration = tc.completedAt && tc.startedAt
+            ? tc.completedAt.getTime() - tc.startedAt.getTime()
+            : undefined;
+          return {
+            id: idx + 1,
+            label,
+            icon,
+            duration,
+            status: tc.status === 'completed' ? 'complete' as const
+              : tc.status === 'running' ? 'active' as const
+              : 'pending' as const,
+          };
+        });
+      }
+      return [];
+    }
+    // Regular mode: derive from toolCall.steps on CopilotMessage
     for (let i = activeMessages.length - 1; i >= 0; i--) {
       const msg = activeMessages[i];
       if (msg.role === 'assistant' && msg.toolCall?.steps?.length) {
@@ -1586,7 +1680,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       }
     }
     return [];
-  }, [activeMessages]);
+  }, [activeMessages, autonomousModeEnabled, autonomousCopilot.messages]);
 
   const value: CopilotContextValue = {
     // Core state
@@ -1621,6 +1715,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
 
     // Autonomous copilot mode (new skill-based tool use)
     autonomousMode,
+    autonomousMessages: autonomousCopilot.messages,
     enableAutonomousMode,
     disableAutonomousMode,
   };

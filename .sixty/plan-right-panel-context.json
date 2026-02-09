@@ -1,0 +1,235 @@
+{
+  "feature": {
+    "id": "right-panel-context",
+    "name": "Enhanced Right Panel — Rich Context + Smart Action Items",
+    "status": "complete",
+    "prd": null,
+    "designPlan": ".claude/plans/groovy-wandering-fox.md",
+    "createdAt": "2026-02-09T12:00:00Z",
+    "description": "Extract tool result data from autonomous copilot tool calls into the right panel Context section, and generate smart proactive action items from the data."
+  },
+
+  "stories": [
+    {
+      "id": "RPC-001",
+      "feature": "right-panel-context",
+      "title": "Add new context types and card components to CopilotRightPanel",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["RPC-003", "RPC-004"],
+      "parallelWith": ["RPC-002"],
+
+      "acceptance": [
+        "4 new context interfaces: MeetingsContext, PipelineContext, ContactsAttentionContext, TasksContext",
+        "4 new card components render correctly with sample data",
+        "ContextItem union updated, ContextItemCard switch routes new types",
+        "ContextSummary includes taskCount field",
+        "TypeScript compiles without errors"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/copilot/CopilotRightPanel.tsx"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "RPC-002",
+      "feature": "right-panel-context",
+      "title": "Expose autonomousMessages from CopilotContext",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/contexts/CopilotContext.tsx"],
+        "schema": []
+      },
+      "blocks": ["RPC-003", "RPC-004"],
+      "parallelWith": ["RPC-001"],
+
+      "acceptance": [
+        "CopilotContextValue interface has autonomousMessages: ChatMessage[]",
+        "Value object exposes autonomousCopilot.messages",
+        "External hooks can read raw tool call results via useCopilot()"
+      ],
+
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/contexts/CopilotContext.tsx"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "RPC-003",
+      "feature": "right-panel-context",
+      "title": "Create useToolResultContext hook — context extraction",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": ["RPC-001", "RPC-002"],
+        "files": [
+          "src/lib/contexts/CopilotContext.tsx",
+          "src/components/copilot/CopilotRightPanel.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["RPC-005"],
+      "parallelWith": ["RPC-004"],
+
+      "acceptance": [
+        "Hook scans autonomousMessages for completed execute_action tool calls",
+        "Maps get_meetings_for_period to MeetingsContext items",
+        "Maps get_pipeline_deals to PipelineContext items",
+        "Maps get_contacts_needing_attention to ContactsAttentionContext items",
+        "Maps list_tasks to TasksContext items"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/hooks/useToolResultContext.ts"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "RPC-004",
+      "feature": "right-panel-context",
+      "title": "Create useToolResultContext hook — smart action items",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": ["RPC-001", "RPC-002"],
+        "files": [
+          "src/lib/stores/actionItemStore.ts",
+          "src/lib/contexts/CopilotContext.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["RPC-005"],
+      "parallelWith": ["RPC-003"],
+
+      "acceptance": [
+        "Generates follow-up action items for meetings with external attendees",
+        "Generates reminder action items for at-risk deals",
+        "Generates follow-up items for ghost-risk contacts (>14 days no contact)",
+        "Generates reminder items for overdue/urgent tasks",
+        "processedToolCallIds ref prevents duplicate generation on re-renders"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/hooks/useToolResultContext.ts"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "RPC-005",
+      "feature": "right-panel-context",
+      "title": "Wire up merged context in Copilot.tsx and update summary types",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+
+      "dependencies": {
+        "stories": ["RPC-003", "RPC-004"],
+        "files": [
+          "src/components/Copilot.tsx",
+          "src/lib/hooks/useCopilotContextData.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["RPC-006"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Copilot.tsx imports useToolResultContext and merges with DB context",
+        "Tool context items render first, then DB items (no duplicates)",
+        "Context summary merges tool counts with DB counts (tool takes priority)",
+        "useCopilotContextData.ts ContextSummary has taskCount field",
+        "Build passes clean: npx vite build --mode development"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/Copilot.tsx",
+        "src/lib/hooks/useCopilotContextData.ts"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "RPC-006",
+      "feature": "right-panel-context",
+      "title": "Verify build and end-to-end flow",
+      "type": "verification",
+      "status": "complete",
+      "priority": 6,
+
+      "dependencies": {
+        "stories": ["RPC-005"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "npx vite build --mode development passes clean",
+        "No TypeScript errors in modified files",
+        "No console errors in dev server"
+      ],
+
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+
+      "files": [],
+
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 6,
+    "estimatedMinutes": 90,
+    "parallelGroups": [
+      ["RPC-001", "RPC-002"],
+      ["RPC-003", "RPC-004"],
+      ["RPC-005"],
+      ["RPC-006"]
+    ],
+    "lastUpdated": "2026-02-09T12:00:00Z"
+  }
+}

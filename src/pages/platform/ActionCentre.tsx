@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 
 // Components
 import { ActionListItem } from '@/components/action-centre/ActionListItem';
@@ -45,6 +46,7 @@ export default function ActionCentre() {
   const [searchQuery, setSearchQuery] = useState('');
   const [actionTypeFilter, setActionTypeFilter] = useState<ActionTypeFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const actionCentrePolling = useSmartPollingInterval(30000, 'important');
 
   // Track realtime subscription
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
@@ -69,7 +71,7 @@ export default function ActionCentre() {
       return (data as ActionCentreItem[]).map(toDisplayAction);
     },
     enabled: !!organizationId && !!userId,
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: actionCentrePolling,
   });
 
   // Fetch completed items (approved, dismissed, done)

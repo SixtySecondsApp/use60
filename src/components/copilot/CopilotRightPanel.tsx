@@ -460,7 +460,57 @@ export interface ResolvedEntityContext {
   alternativeCandidates?: number;
 }
 
-export type ContextItem = HubSpotContext | FathomContext | CalendarContext | ResolvedEntityContext;
+export interface MeetingsContext {
+  type: 'meetings';
+  period: string;
+  count: number;
+  meetings: Array<{
+    id: string;
+    title: string;
+    startTime: string;
+    attendees?: string[];
+    attendeeCount?: number;
+  }>;
+}
+
+export interface PipelineContext {
+  type: 'pipeline';
+  filter?: string;
+  count: number;
+  deals: Array<{
+    id: string;
+    name: string;
+    value?: number;
+    stage?: string;
+    healthLevel?: 'healthy' | 'at_risk' | 'critical';
+  }>;
+}
+
+export interface ContactsAttentionContext {
+  type: 'contacts_attention';
+  count: number;
+  contacts: Array<{
+    id: string;
+    name: string;
+    company?: string;
+    daysSinceContact?: number;
+    riskReason?: string;
+  }>;
+}
+
+export interface TasksContext {
+  type: 'tasks';
+  count: number;
+  tasks: Array<{
+    id: string;
+    title: string;
+    priority?: 'high' | 'medium' | 'low';
+    dueDate?: string;
+    isOverdue?: boolean;
+  }>;
+}
+
+export type ContextItem = HubSpotContext | FathomContext | CalendarContext | ResolvedEntityContext | MeetingsContext | PipelineContext | ContactsAttentionContext | TasksContext;
 
 /**
  * Context summary counts for real-time display
@@ -470,6 +520,7 @@ export interface ContextSummary {
   meetingCount: number;
   contactCount: number;
   calendarCount: number;
+  taskCount: number;
 }
 
 interface ContextSectionProps {
@@ -726,6 +777,196 @@ function ResolvedEntityContextCard({ data }: { data: ResolvedEntityContext }) {
   );
 }
 
+// Meetings context card — shows upcoming meetings from tool results
+function MeetingsContextCard({ data }: { data: MeetingsContext }) {
+  const displayMeetings = data.meetings.slice(0, 3);
+  const remaining = data.count - displayMeetings.length;
+
+  return (
+    <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
+          <Calendar className="w-3 h-3 text-white" />
+        </div>
+        <span className="text-xs font-medium text-blue-400">Meetings</span>
+        <span className="ml-auto text-xs text-slate-400">{data.count} found</span>
+      </div>
+      {data.period && (
+        <p className="text-[11px] text-slate-500 mb-2">{data.period}</p>
+      )}
+      <div className="space-y-1.5">
+        {displayMeetings.map((meeting) => {
+          const time = meeting.startTime
+            ? new Date(meeting.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+            : '';
+          const date = meeting.startTime
+            ? new Date(meeting.startTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+            : '';
+          return (
+            <div key={meeting.id} className="flex items-start gap-2 text-xs">
+              <Clock className="w-3 h-3 text-blue-400 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-white truncate">{meeting.title || 'Untitled'}</p>
+                <p className="text-slate-500">
+                  {date} {time && `at ${time}`}
+                  {meeting.attendeeCount ? ` · ${meeting.attendeeCount} attendees` : ''}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+        {remaining > 0 && (
+          <p className="text-[11px] text-slate-500 pl-5">+{remaining} more</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Pipeline context card — shows deals from tool results
+function PipelineContextCard({ data }: { data: PipelineContext }) {
+  const displayDeals = data.deals.slice(0, 3);
+  const remaining = data.count - displayDeals.length;
+
+  const healthColors: Record<string, string> = {
+    healthy: 'text-emerald-400 bg-emerald-500/20',
+    at_risk: 'text-amber-400 bg-amber-500/20',
+    critical: 'text-red-400 bg-red-500/20',
+  };
+
+  return (
+    <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center">
+          <DollarSign className="w-3 h-3 text-white" />
+        </div>
+        <span className="text-xs font-medium text-emerald-400">Pipeline</span>
+        <span className="ml-auto text-xs text-slate-400">{data.count} deal{data.count !== 1 ? 's' : ''}</span>
+      </div>
+      <div className="space-y-1.5">
+        {displayDeals.map((deal) => {
+          const formattedValue = deal.value
+            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(deal.value)
+            : null;
+          return (
+            <div key={deal.id} className="flex items-start gap-2 text-xs">
+              <DollarSign className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-white truncate">{deal.name}</p>
+                  {deal.healthLevel && (
+                    <span className={cn('px-1 py-0.5 rounded text-[10px] font-medium', healthColors[deal.healthLevel] || 'text-slate-400')}>
+                      {deal.healthLevel.replace('_', ' ')}
+                    </span>
+                  )}
+                </div>
+                <p className="text-slate-500">
+                  {deal.stage && <span>{deal.stage}</span>}
+                  {deal.stage && formattedValue && <span> · </span>}
+                  {formattedValue && <span className="text-emerald-400">{formattedValue}</span>}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+        {remaining > 0 && (
+          <p className="text-[11px] text-slate-500 pl-5">+{remaining} more</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Contacts needing attention card
+function ContactsAttentionContextCard({ data }: { data: ContactsAttentionContext }) {
+  const displayContacts = data.contacts.slice(0, 3);
+  const remaining = data.count - displayContacts.length;
+
+  return (
+    <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+          <AlertCircle className="w-3 h-3 text-white" />
+        </div>
+        <span className="text-xs font-medium text-amber-400">Needs Attention</span>
+        <span className="ml-auto text-xs text-slate-400">{data.count} contact{data.count !== 1 ? 's' : ''}</span>
+      </div>
+      <div className="space-y-1.5">
+        {displayContacts.map((contact) => (
+          <div key={contact.id} className="flex items-start gap-2 text-xs">
+            <User className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-white truncate">{contact.name}</p>
+              <p className="text-slate-500">
+                {contact.company && <span>{contact.company}</span>}
+                {contact.daysSinceContact != null && (
+                  <span>{contact.company ? ' · ' : ''}{contact.daysSinceContact}d since last contact</span>
+                )}
+              </p>
+              {contact.riskReason && (
+                <p className="text-amber-400/70 text-[11px]">{contact.riskReason}</p>
+              )}
+            </div>
+          </div>
+        ))}
+        {remaining > 0 && (
+          <p className="text-[11px] text-slate-500 pl-5">+{remaining} more</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Tasks context card
+function TasksContextCard({ data }: { data: TasksContext }) {
+  const displayTasks = data.tasks.slice(0, 3);
+  const remaining = data.count - displayTasks.length;
+
+  const priorityColors: Record<string, string> = {
+    high: 'text-red-400 bg-red-500/20',
+    medium: 'text-amber-400 bg-amber-500/20',
+    low: 'text-slate-400 bg-slate-500/20',
+  };
+
+  return (
+    <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+          <ListChecks className="w-3 h-3 text-white" />
+        </div>
+        <span className="text-xs font-medium text-violet-400">Tasks</span>
+        <span className="ml-auto text-xs text-slate-400">{data.count} task{data.count !== 1 ? 's' : ''}</span>
+      </div>
+      <div className="space-y-1.5">
+        {displayTasks.map((task) => (
+          <div key={task.id} className="flex items-start gap-2 text-xs">
+            <ListChecks className="w-3 h-3 text-violet-400 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className={cn('truncate', task.isOverdue ? 'text-red-400' : 'text-white')}>{task.title}</p>
+                {task.priority && (
+                  <span className={cn('px-1 py-0.5 rounded text-[10px] font-medium flex-shrink-0', priorityColors[task.priority] || 'text-slate-400')}>
+                    {task.priority}
+                  </span>
+                )}
+              </div>
+              {task.dueDate && (
+                <p className={cn('text-slate-500', task.isOverdue && 'text-red-400/70')}>
+                  {task.isOverdue ? 'Overdue: ' : 'Due: '}
+                  {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+        {remaining > 0 && (
+          <p className="text-[11px] text-slate-500 pl-5">+{remaining} more</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Render context item based on type
 function ContextItemCard({ item }: { item: ContextItem }) {
   switch (item.type) {
@@ -737,6 +978,14 @@ function ContextItemCard({ item }: { item: ContextItem }) {
       return <CalendarContextCard data={item} />;
     case 'resolved_entity':
       return <ResolvedEntityContextCard data={item} />;
+    case 'meetings':
+      return <MeetingsContextCard data={item} />;
+    case 'pipeline':
+      return <PipelineContextCard data={item} />;
+    case 'contacts_attention':
+      return <ContactsAttentionContextCard data={item} />;
+    case 'tasks':
+      return <TasksContextCard data={item} />;
     default:
       return null;
   }
@@ -752,6 +1001,7 @@ function ContextSection({ items = [], summary, isLoading = false }: ContextSecti
     if (summary.meetingCount > 0) summaryParts.push(`${summary.meetingCount} call${summary.meetingCount !== 1 ? 's' : ''}`);
     if (summary.contactCount > 0) summaryParts.push(`${summary.contactCount} contact${summary.contactCount !== 1 ? 's' : ''}`);
     if (summary.calendarCount > 0) summaryParts.push(`${summary.calendarCount} event${summary.calendarCount !== 1 ? 's' : ''}`);
+    if (summary.taskCount > 0) summaryParts.push(`${summary.taskCount} task${summary.taskCount !== 1 ? 's' : ''}`);
   }
   const summaryText = summaryParts.length > 0 ? summaryParts.join(' · ') : null;
 

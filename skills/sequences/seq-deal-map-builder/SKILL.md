@@ -1,16 +1,47 @@
 ---
 name: Deal MAP Builder
 description: |
-  Build a Mutual Action Plan (MAP) for a deal: load deal + open tasks, generate milestones + tasks, then preview/create the top tasks (approval-gated).
+  End-to-end Mutual Action Plan (MAP) builder: loads deal context and existing tasks,
+  generates milestones and new tasks, then creates top tasks with approval. Use when a user
+  asks "build a MAP for this deal", "create a mutual action plan", "closing plan for the deal",
+  or needs a structured approach to get a deal across the finish line.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "deal_at_risk"
+    - pattern: "build a MAP for this deal"
+      intent: "build_map"
+      confidence: 0.95
+      examples:
+        - "create a MAP for this deal"
+        - "mutual action plan for the deal"
+        - "build a mutual action plan"
+    - pattern: "create a closing plan"
+      intent: "closing_plan"
+      confidence: 0.90
+      examples:
+        - "closing plan for this deal"
+        - "plan to close this deal"
+        - "deal closing strategy"
+    - pattern: "map out the deal"
+      intent: "deal_mapping"
+      confidence: 0.85
+      examples:
+        - "map the steps to close"
+        - "milestones for this deal"
+        - "what's the path to close"
+  keywords:
+    - "MAP"
+    - "mutual action plan"
+    - "closing plan"
+    - "milestones"
+    - "deal"
+    - "close"
+    - "action plan"
+    - "strategy"
   requires_capabilities:
     - crm
   requires_context:

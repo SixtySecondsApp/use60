@@ -248,17 +248,24 @@ export class CopilotMemoryService {
    * Record access to a memory (updates last_accessed_at and access_count)
    */
   async recordAccess(memoryId: string): Promise<void> {
+    // Update the last_accessed_at timestamp
     const { error } = await this.supabase
       .from('copilot_memories')
       .update({
         last_accessed_at: new Date().toISOString(),
-        access_count: this.supabase.rpc('increment_access_count', { memory_id: memoryId }),
       })
       .eq('id', memoryId);
 
     if (error) {
       // Non-critical error, just log it
       console.warn('[CopilotMemoryService] Error recording access:', error);
+    }
+
+    // Increment access count via RPC (separate call, matching recordAccessBatch pattern)
+    const { error: rpcError } = await this.supabase.rpc('increment_access_count', { memory_id: memoryId });
+
+    if (rpcError) {
+      console.warn('[CopilotMemoryService] Error incrementing access count:', rpcError);
     }
   }
 

@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { cn } from '@/lib/utils';
 import {
   FileText,
@@ -214,7 +215,7 @@ function CoverSection({
           )}
           contentEditable={editing}
           suppressContentEditableWarning
-          dangerouslySetInnerHTML={!editing ? { __html: section.content } : undefined}
+          dangerouslySetInnerHTML={!editing ? { __html: DOMPurify.sanitize(section.content) } : undefined}
           onBlur={editing ? handleSave : undefined}
         />
       )}
@@ -349,7 +350,7 @@ function ContentSection({
         style={{ fontFamily }}
         contentEditable={editing}
         suppressContentEditableWarning
-        dangerouslySetInnerHTML={!editing ? { __html: section.content } : undefined}
+        dangerouslySetInnerHTML={!editing ? { __html: DOMPurify.sanitize(section.content) } : undefined}
         onBlur={editing ? handleSave : undefined}
       />
     </section>

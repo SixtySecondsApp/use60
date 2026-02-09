@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink, Send, Clock, MessageSquare, Eye, Radio } from 'lucide-react';
+import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink, Send, Clock, MessageSquare, Eye, Radio, Link2 } from 'lucide-react';
 import type { InstantlyColumnConfig } from '@/lib/types/instantly';
 import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 
@@ -25,6 +25,8 @@ interface OpsTableCellProps {
   photoUrl?: string;
   /** Company domain for logo.dev logo (from Apollo enrichment) */
   companyDomain?: string;
+  /** Company LinkedIn URL (from Apollo enrichment) */
+  companyLinkedinUrl?: string;
   onEdit?: (value: string) => void;
   dropdownOptions?: DropdownOption[] | null;
   formulaExpression?: string | null;
@@ -53,6 +55,7 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   lastName,
   photoUrl,
   companyDomain,
+  companyLinkedinUrl,
   onEdit,
   dropdownOptions,
   formulaExpression,
@@ -256,9 +259,19 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         </div>
       );
     }
+    const linkedinUrl = cell.value.startsWith('http') ? cell.value : `https://${cell.value}`;
     return (
       <div className="w-full h-full flex items-center min-w-0 group/cell">
-        <Linkedin className="w-3 h-3 text-blue-400 shrink-0 mr-1.5" />
+        <a
+          href={linkedinUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 mr-1.5 p-0.5 rounded hover:bg-blue-500/20 transition-colors"
+          title="Open LinkedIn profile"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Linkedin className="w-3 h-3 text-blue-400" />
+        </a>
         <span
           className="truncate text-sm text-blue-400 cursor-text"
           onClick={startEditing}
@@ -266,6 +279,59 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         >
           {cell.value}
         </span>
+        <a
+          href={linkedinUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 ml-1 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 hover:bg-blue-500/20 transition-all"
+          title="Open LinkedIn profile"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ExternalLink className="w-3 h-3 text-blue-400" />
+        </a>
+      </div>
+    );
+  }
+
+  // Website / URL
+  if (columnType === 'url') {
+    if (!cell.value) {
+      return (
+        <div className="w-full h-full flex items-center cursor-text" onClick={startEditing}>
+          <span className="text-gray-600 text-sm">Enter URL...</span>
+        </div>
+      );
+    }
+    const websiteUrl = cell.value.startsWith('http') ? cell.value : `https://${cell.value}`;
+    return (
+      <div className="w-full h-full flex items-center min-w-0 group/cell">
+        <a
+          href={websiteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 mr-1.5 p-0.5 rounded hover:bg-blue-500/20 transition-colors"
+          title="Open website"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Link2 className="w-3 h-3 text-blue-400" />
+        </a>
+        <span
+          className="truncate text-sm text-blue-400 cursor-text"
+          onClick={startEditing}
+          title={cell.value}
+        >
+          {cell.value}
+        </span>
+        <a
+          href={websiteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 ml-1 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 hover:bg-blue-500/20 transition-all"
+          title="Open website"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ExternalLink className="w-3 h-3 text-blue-400" />
+        </a>
       </div>
     );
   }
@@ -298,25 +364,64 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
 
   // Company
   if (columnType === 'company') {
+    const companyWebsiteUrl = companyDomain ? `https://${companyDomain}` : null;
     return (
-      <div className="w-full h-full flex items-center gap-2 min-w-0 cursor-text" onClick={startEditing}>
+      <div className="w-full h-full flex items-center gap-2 min-w-0 group/cell cursor-text" onClick={startEditing}>
         {companyDomain ? (
-          <img
-            src={`https://img.logo.dev/${companyDomain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=32&format=png`}
-            alt=""
-            className="w-5 h-5 rounded object-contain shrink-0"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-            }}
-          />
-        ) : null}
-        <div className={`w-5 h-5 rounded bg-gray-800 flex items-center justify-center shrink-0 ${companyDomain ? 'hidden' : ''}`}>
-          <Building2 className="w-3 h-3 text-gray-500" />
-        </div>
+          <a
+            href={companyWebsiteUrl!}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 rounded hover:ring-1 hover:ring-blue-500/40 transition-all"
+            title={`Open ${companyDomain}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={`https://img.logo.dev/${companyDomain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=32&format=png`}
+              alt=""
+              className="w-5 h-5 rounded object-contain"
+              onError={(e) => {
+                const img = e.target as HTMLImageElement;
+                img.style.display = 'none';
+                img.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+            <div className="w-5 h-5 rounded bg-gray-800 flex items-center justify-center hidden">
+              <Building2 className="w-3 h-3 text-gray-500" />
+            </div>
+          </a>
+        ) : (
+          <div className="w-5 h-5 rounded bg-gray-800 flex items-center justify-center shrink-0">
+            <Building2 className="w-3 h-3 text-gray-500" />
+          </div>
+        )}
         <span className="truncate text-gray-100 text-sm">
           {cell.value || <span className="text-gray-600">Enter company...</span>}
         </span>
+        {companyLinkedinUrl && (
+          <a
+            href={companyLinkedinUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 hover:bg-blue-500/20 transition-all"
+            title="Open company LinkedIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Linkedin className="w-3 h-3 text-blue-400" />
+          </a>
+        )}
+        {companyWebsiteUrl && (
+          <a
+            href={companyWebsiteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 p-0.5 rounded opacity-0 group-hover/cell:opacity-100 hover:bg-blue-500/20 transition-all"
+            title={`Open ${companyDomain}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink className="w-3 h-3 text-blue-400" />
+          </a>
+        )}
       </div>
     );
   }

@@ -1,5 +1,7 @@
 import React from 'react';
 import { Table2, Sparkles, ExternalLink, Rows3, Send } from 'lucide-react';
+import type { QuickActionResponse } from '../types';
+import { formatNumber } from '@/lib/utils/formatters';
 
 export interface OpsTableResponseData {
   table_id: string;
@@ -15,7 +17,7 @@ export interface OpsTableResponseData {
 
 interface OpsTableResponseProps {
   data: OpsTableResponseData;
-  onActionClick: (action: string, payload?: Record<string, unknown>) => void;
+  onActionClick: (action: QuickActionResponse) => void;
 }
 
 export const OpsTableResponse: React.FC<OpsTableResponseProps> = ({ data, onActionClick }) => {
@@ -32,6 +34,17 @@ export const OpsTableResponse: React.FC<OpsTableResponseProps> = ({ data, onActi
   } = data;
 
   const displayRows = preview_rows.slice(0, 5);
+
+  /** Emit a canonical action */
+  const emitAction = (callback: string, label: string, params?: Record<string, any>) => {
+    onActionClick({
+      id: `ops-${callback}-${table_id}`,
+      label,
+      type: 'primary',
+      callback,
+      params,
+    });
+  };
 
   return (
     <div className="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden">
@@ -107,21 +120,21 @@ export const OpsTableResponse: React.FC<OpsTableResponseProps> = ({ data, onActi
       {/* Action Buttons */}
       <div className="px-4 py-3 border-t border-gray-800 flex items-center gap-2 flex-wrap">
         <button
-          onClick={() => onActionClick('open_dynamic_table', { table_id })}
+          onClick={() => emitAction('open_dynamic_table', 'Open Table', { table_id })}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/30 transition-colors"
         >
           <ExternalLink className="w-3.5 h-3.5" />
           Open Table
         </button>
         <button
-          onClick={() => onActionClick('add_enrichment', { table_id })}
+          onClick={() => emitAction('add_enrichment', 'Add Enrichment', { table_id })}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 text-xs font-medium hover:bg-purple-500/30 transition-colors"
         >
           <Sparkles className="w-3.5 h-3.5" />
           Add Enrichment
         </button>
         <button
-          onClick={() => onActionClick('push_to_instantly', { table_id })}
+          onClick={() => emitAction('push_to_instantly', 'Push to Instantly', { table_id })}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/60 text-gray-300 text-xs font-medium hover:bg-gray-700/80 transition-colors"
         >
           <Send className="w-3.5 h-3.5" />

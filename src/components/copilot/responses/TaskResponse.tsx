@@ -4,43 +4,37 @@
  */
 
 import React, { useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, Clock, Calendar, Flag } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Clock, Calendar, Flag, Inbox } from 'lucide-react';
 import { ActionButtons } from '../ActionButtons';
 import { StatsFirstView } from './StatsFirstView';
-import type { TaskResponse as TaskResponseData, TaskItem } from '../types';
+import { MetricCard } from './shared';
+import { formatRelativeDate, formatDate } from '@/lib/utils/formatters';
+import type { TaskResponse as TaskResponseData, TaskItem, QuickActionResponse } from '../types';
 import { supabase } from '@/lib/supabase/clientV2';
 import { cleanUnresolvedVariables } from '@/lib/utils/templateUtils';
 
 interface TaskResponseProps {
   data: TaskResponseData;
-  onActionClick?: (action: any) => void;
+  onActionClick?: (action: QuickActionResponse) => void;
 }
 
-const formatDate = (dateString: string): string => {
+/** Task-specific relative date formatting that preserves the original behaviour for old dates */
+const formatTaskDate = (dateString: string): string => {
   if (!dateString) return 'No due date';
-  
+
   const date = new Date(dateString);
-  // Check if date is valid
-  if (isNaN(date.getTime())) {
-    return 'Invalid date';
-  }
-  
+  if (isNaN(date.getTime())) return 'Invalid date';
+
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const taskDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  
   const diffDays = Math.floor((taskDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  
-  // If the date is more than 1 year in the past, it's likely a data error
-  // Show the actual date instead of "X days ago"
+
+  // If the date is more than 1 year in the past, show the actual date
   if (diffDays < -365) {
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
+    return formatDate(dateString);
   }
-  
+
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Tomorrow';
   if (diffDays === -1) return 'Yesterday';
@@ -50,9 +44,9 @@ const formatDate = (dateString: string): string => {
 
 const formatDateTime = (dateString: string): string => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
+  return date.toLocaleDateString('en-US', {
     month: 'short',
+    day: 'numeric',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
@@ -85,26 +79,6 @@ const getStatusIcon = (status: string) => {
     default:
       return <Flag className="w-4 h-4 text-gray-400" />;
   }
-};
-
-const MetricCard: React.FC<{ label: string; value: string | number; variant?: 'danger' | 'warning' | 'success' | 'default' }> = ({
-  label,
-  value,
-  variant = 'default'
-}) => {
-  const variantColors = {
-    danger: 'text-red-400',
-    warning: 'text-amber-400',
-    success: 'text-emerald-400',
-    default: 'text-gray-100'
-  };
-
-  return (
-    <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-800/40 rounded-lg p-3">
-      <div className="text-xs text-gray-500 mb-1">{label}</div>
-      <div className={`text-lg font-semibold ${variantColors[variant]}`}>{value}</div>
-    </div>
-  );
 };
 
 const TaskCard: React.FC<{ 
@@ -338,7 +312,7 @@ const TaskCard: React.FC<{
           <Calendar className="w-3 h-3" />
           {task.dueDate ? (
             <span className={task.isOverdue ? 'text-red-400 font-medium' : ''}>
-              {formatDate(task.dueDate)}
+              {formatTaskDate(task.dueDate)}
               {task.isOverdue && task.daysUntilDue !== undefined && task.daysUntilDue > -365 && ' (Overdue)'}
               {task.daysUntilDue !== undefined && task.daysUntilDue >= 0 && !task.isOverdue && (
                 <span className="text-gray-400 ml-1">
@@ -383,6 +357,18 @@ export const TaskResponse: React.FC<TaskResponseProps> = React.memo(({ data, onA
   const filterTasks = (tasks: TaskItem[]) => {
     return tasks.filter(task => !completedTaskIds.has(task.id));
   };
+
+  // Empty state when no tasks available
+  const hasTasks = data.data.urgentTasks.length > 0 || data.data.highPriorityTasks.length > 0 ||
+    data.data.dueToday.length > 0 || data.data.overdue.length > 0 || data.data.upcoming.length > 0;
+  if (!hasTasks) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <Inbox className="w-8 h-8 text-gray-500 mb-2" />
+        <p className="text-sm text-gray-400">No tasks to display</p>
+      </div>
+    );
+  }
 
   const handleFilterSelect = (filterId: string, count: number) => {
     setSelectedFilter(filterId);
@@ -443,7 +429,7 @@ export const TaskResponse: React.FC<TaskResponseProps> = React.memo(({ data, onA
         <MetricCard
           label="Urgent"
           value={data.data.metrics.urgentCount}
-          variant="danger"
+          variant="critical"
         />
         <MetricCard
           label="Due Today"
@@ -453,7 +439,7 @@ export const TaskResponse: React.FC<TaskResponseProps> = React.memo(({ data, onA
         <MetricCard
           label="Overdue"
           value={data.data.metrics.overdueCount}
-          variant="danger"
+          variant="critical"
         />
       </div>
 

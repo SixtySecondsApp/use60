@@ -75,37 +75,73 @@ const APOLLO_COLUMNS = [
 /**
  * Generate a table name from the search params if one is not provided.
  */
+const FUNDING_LABELS: Record<string, string> = {
+  seed: 'Seed',
+  angel: 'Angel',
+  venture: 'Venture',
+  series_a: 'Series A',
+  series_b: 'Series B',
+  series_c: 'Series C',
+  series_d: 'Series D',
+  series_e: 'Series E',
+  series_unknown: 'Series',
+  private_equity: 'PE',
+  debt_financing: 'Debt',
+  convertible_note: 'Convertible',
+  grant: 'Grant',
+  corporate_round: 'Corporate',
+  equity_crowdfunding: 'Crowdfunding',
+  pre_seed: 'Pre-Seed',
+  secondary_market: 'Secondary',
+  post_ipo_equity: 'Post-IPO',
+  post_ipo_debt: 'Post-IPO Debt',
+  post_ipo_secondary: 'Post-IPO Secondary',
+  non_equity_assistance: 'Non-Equity',
+  undisclosed: 'Undisclosed',
+  initial_coin_offering: 'ICO',
+  other: 'Other',
+}
+
 function generateTableName(
   searchParams: CreateDynamicTableRequest['search_params'],
   queryDescription: string
 ): string {
-  const parts: string[] = []
+  // Pick the single most descriptive element for the name
+  let label = ''
 
   if (searchParams.person_titles?.length) {
-    parts.push(searchParams.person_titles.slice(0, 2).join(', '))
+    label = searchParams.person_titles[0]
+  } else if (searchParams.q_keywords) {
+    label = searchParams.q_keywords
+  } else if (searchParams.q_organization_keyword_tags?.length) {
+    label = searchParams.q_organization_keyword_tags[0]
   }
 
-  if (searchParams.organization_latest_funding_stage_cd?.length) {
-    parts.push(searchParams.organization_latest_funding_stage_cd.join('/'))
-  }
-
-  if (searchParams.q_organization_keyword_tags?.length) {
-    parts.push(searchParams.q_organization_keyword_tags.slice(0, 2).join(', '))
-  }
-
+  // Add a qualifier if available (location or funding stage — pick one)
+  let qualifier = ''
   if (searchParams.person_locations?.length) {
-    parts.push(searchParams.person_locations.slice(0, 2).join(', '))
+    qualifier = searchParams.person_locations[0]
+  } else if (searchParams.organization_latest_funding_stage_cd?.length) {
+    const stages = searchParams.organization_latest_funding_stage_cd
+    qualifier = stages.length <= 2
+      ? stages.map(s => FUNDING_LABELS[s] || s).join(', ')
+      : `${FUNDING_LABELS[stages[0]] || stages[0]}+${stages.length - 1} more`
   }
 
-  if (parts.length > 0) {
-    return `Apollo Search — ${parts.join(' at ')}`
+  if (label && qualifier) {
+    return truncateName(`${label} — ${qualifier}`)
+  }
+  if (label) {
+    return truncateName(label)
   }
 
   // Fall back to a truncated version of the query description
-  const truncated = queryDescription.length > 60
-    ? queryDescription.slice(0, 57) + '...'
-    : queryDescription
-  return `Apollo Search — ${truncated}`
+  return truncateName(queryDescription || 'Apollo Search')
+}
+
+function truncateName(name: string, max = 50): string {
+  if (name.length <= max) return name
+  return name.slice(0, max - 1).trimEnd() + '…'
 }
 
 /**

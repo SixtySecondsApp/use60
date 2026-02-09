@@ -35,12 +35,6 @@ class NanoBananaService {
     }
 
     if (!user) {
-      // No user, try environment variable directly
-      const envKey = import.meta.env.VITE_OPENROUTER_API_KEY;
-      if (envKey) {
-        console.log('[NanoBanana] Using environment OpenRouter API key (no user)');
-        return envKey;
-      }
       throw new Error(
         'OpenRouter API key not configured. ' +
         'Please add your OpenRouter API key in Settings > AI Provider Settings.'
@@ -82,13 +76,6 @@ class NanoBananaService {
       }
     } catch (error) {
       console.warn('[NanoBanana] Could not initialize AIProviderService:', error);
-    }
-
-    // Fallback to environment variable
-    const envKey = import.meta.env.VITE_OPENROUTER_API_KEY;
-    if (envKey) {
-      console.log('[NanoBanana] Using environment OpenRouter API key');
-      return envKey;
     }
 
     throw new Error(

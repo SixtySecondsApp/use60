@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
-import { useEffect, Suspense } from 'react';
+import { useEffect, Suspense, lazy } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { createApiMonitor } from '@/lib/utils/apiUtils';
 import { API_BASE_URL } from '@/lib/config';
@@ -20,6 +20,8 @@ import { RouteDebug } from '@/components/RouteDebug';
 import { DefaultRoute } from '@/components/DefaultRoute';
 import { RecoveryTokenDetector } from '@/components/RecoveryTokenDetector';
 import { RouteLoader, ExternalRedirect } from '@/components/routing';
+
+const CopilotDemo = lazy(() => import('@/pages/CopilotDemo'));
 import { usePerformanceOptimization } from '@/lib/hooks/usePerformanceOptimization';
 import { IntelligentPreloader } from '@/components/LazyComponents';
 import { webVitalsOptimizer } from '@/lib/utils/webVitals';
@@ -588,6 +590,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/freepik-flow" element={<AppLayout><div className="h-[calc(100vh-4rem)]"><FreepikFlow /></div></AppLayout>} />
                 <Route path="/test-fallback" element={<ProtectedRoute><TestFallback /></ProtectedRoute>} />
                 <Route path="/test-google-tasks" element={<AppLayout><TestGoogleTasks /></AppLayout>} />
+                {/* Copilot response panel demo - dev review only */}
+                <Route path="/copilot-demo" element={<CopilotDemo />} />
               </Routes>
             </Suspense>
           </ProtectedRoute>

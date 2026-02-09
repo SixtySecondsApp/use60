@@ -2,11 +2,11 @@
  * Copilot Empty State Component
  * Displays when no conversation has started
  * US-008: 4 action cards in 2x2 grid
+ * UX-004: Input removed -- unified input lives in AssistantShell
  */
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Mail, Calendar, Target, RefreshCw, ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import React from 'react';
+import { Mail, Calendar, Target, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDynamicPrompts } from '@/lib/hooks/useDynamicPrompts';
 
@@ -52,34 +52,9 @@ const suggestedActions = [
 
 export const CopilotEmpty: React.FC<CopilotEmptyProps> = ({ onPromptClick }) => {
   const { prompts: suggestedPrompts, isLoading: promptsLoading } = useDynamicPrompts(4);
-  const [inputValue, setInputValue] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [inputValue]);
-
-  const handleSend = () => {
-    if (inputValue.trim()) {
-      onPromptClick(inputValue);
-      setInputValue('');
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (inputValue.trim()) {
-        handleSend();
-      }
-    }
-  };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full min-h-0 w-full px-3 sm:px-4 py-6 sm:py-8 overflow-y-auto">
+    <div className="flex-1 flex flex-col items-center justify-center min-h-0 w-full px-3 sm:px-4 py-6 sm:py-8 overflow-y-auto">
       <div className="w-full max-w-3xl mx-auto flex flex-col items-center">
         {/* Welcome Section */}
         <div className="text-center mb-6 sm:mb-8">
@@ -128,52 +103,6 @@ export const CopilotEmpty: React.FC<CopilotEmptyProps> = ({ onPromptClick }) => 
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
             </button>
           ))}
-        </div>
-
-        {/* Input Box */}
-        <div className="w-full max-w-2xl mb-6">
-          <div
-            className={cn(
-              'bg-white dark:bg-white/[0.03] backdrop-blur-xl',
-              'border border-gray-200 dark:border-white/10 rounded-2xl p-5',
-              'shadow-lg dark:shadow-2xl dark:shadow-black/20',
-              'focus-within:border-violet-500/50 transition-all'
-            )}
-          >
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 sm:gap-4">
-              <div className="flex-1">
-                <textarea
-                  ref={textareaRef}
-                  rows={2}
-                  placeholder="Describe what you want to accomplish..."
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyPress}
-                  data-testid="copilot-input"
-                  className={cn(
-                    'w-full bg-transparent outline-none resize-none',
-                    'text-base text-gray-900 dark:text-white',
-                    'placeholder-gray-400 dark:placeholder-slate-500',
-                    'leading-relaxed'
-                  )}
-                />
-              </div>
-              <Button
-                onClick={handleSend}
-                disabled={!inputValue.trim()}
-                className={cn(
-                  'px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all flex-shrink-0',
-                  'w-full sm:w-auto',
-                  inputValue.trim()
-                    ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white dark:text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:from-violet-400 hover:to-purple-500'
-                    : 'bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-slate-600'
-                )}
-              >
-                Let&apos;s go
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
         </div>
 
         {/* Quick Prompts */}

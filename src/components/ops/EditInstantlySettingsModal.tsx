@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Send, Loader2, Plus, Sparkles, Calculator, Zap, Mail } from 'lucide-react';
+import { X, Send, Loader2, Plus, Sparkles, Calculator, Zap, Mail, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
 import type { InstantlyColumnConfig, InstantlyCampaign, InstantlyFieldMapping } from '@/lib/types/instantly';
@@ -56,7 +56,10 @@ function buildSequenceFromStepColumns(columns: { key: string }[]): any[] {
   return [{
     steps: sorted.map(([num], idx) => ({
       type: 'email',
+      // Instantly v2 API: delay is in days. Step 1 sends immediately (0),
+      // subsequent steps wait 2 days after the previous step was sent.
       delay: idx === 0 ? 0 : 2,
+      wait: idx === 0 ? 0 : 2,
       variants: [{ subject: `{{step_${num}_subject}}`, body: `{{step_${num}_body}}` }],
     })),
   }];
@@ -108,6 +111,7 @@ export function EditInstantlySettingsModal({
   const [campaignMode, setCampaignMode] = useState<'select' | 'create'>(initialMode);
   const [newCampaignName, setNewCampaignName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [campaignSearch, setCampaignSearch] = useState('');
 
   // Detect step columns from existingColumns
   const detectedSteps = useMemo(() => {
@@ -129,11 +133,27 @@ export function EditInstantlySettingsModal({
       }));
   }, [existingColumns]);
 
+  const filteredCampaigns = useMemo(
+    () => campaigns.filter((c) => !campaignSearch || c.name.toLowerCase().includes(campaignSearch.toLowerCase())),
+    [campaigns, campaignSearch]
+  );
+
+  const campaignStatusLabel = (status: number) => {
+    switch (status) {
+      case 0: return { label: 'Draft', color: 'text-gray-400 bg-gray-400/10' };
+      case 1: return { label: 'Active', color: 'text-emerald-400 bg-emerald-400/10' };
+      case 2: return { label: 'Paused', color: 'text-amber-400 bg-amber-400/10' };
+      case 3: return { label: 'Completed', color: 'text-blue-400 bg-blue-400/10' };
+      default: return { label: 'Unknown', color: 'text-gray-400 bg-gray-400/10' };
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       setCampaignMode(initialMode);
       setNewCampaignName('');
       setCreating(false);
+      setCampaignSearch('');
     }
   }, [isOpen, initialMode]);
 
@@ -383,7 +403,7 @@ export function EditInstantlySettingsModal({
               </div>
 
               {campaignMode === 'select' ? (
-                <div>
+                <div className="space-y-2">
                   <label className="mb-1.5 block text-sm font-medium text-gray-300">
                     Campaign
                   </label>
@@ -393,18 +413,46 @@ export function EditInstantlySettingsModal({
                       Loading campaigns...
                     </div>
                   ) : (
-                    <select
-                      value={selectedCampaignId}
-                      onChange={(e) => setSelectedCampaignId(e.target.value)}
-                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-200 outline-none focus:border-violet-500"
-                    >
-                      <option value="">Select campaign...</option>
-                      {campaigns.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" />
+                        <input
+                          type="text"
+                          value={campaignSearch}
+                          onChange={(e) => setCampaignSearch(e.target.value)}
+                          placeholder="Search campaigns..."
+                          className="w-full rounded-lg border border-gray-700 bg-gray-800 py-2 pl-9 pr-3 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-violet-500"
+                        />
+                      </div>
+                      <div className="max-h-48 space-y-1 overflow-y-auto">
+                        {filteredCampaigns.length === 0 ? (
+                          <p className="py-4 text-center text-xs text-gray-500">
+                            {campaigns.length === 0 ? 'No campaigns found.' : 'No matching campaigns.'}
+                          </p>
+                        ) : (
+                          filteredCampaigns.map((campaign) => {
+                            const status = campaignStatusLabel(campaign.status);
+                            const isSelected = selectedCampaignId === campaign.id;
+                            return (
+                              <button
+                                key={campaign.id}
+                                onClick={() => setSelectedCampaignId(campaign.id)}
+                                className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+                                  isSelected
+                                    ? 'border-violet-500 bg-violet-500/10 text-violet-200'
+                                    : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:border-gray-600'
+                                }`}
+                              >
+                                <span className="truncate font-medium">{campaign.name}</span>
+                                <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}>
+                                  {status.label}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               ) : (

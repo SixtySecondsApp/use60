@@ -270,6 +270,7 @@ export interface ContextSummary {
   meetingCount: number;
   contactCount: number;
   calendarCount: number;
+  taskCount: number;
 }
 
 export interface UseCopilotContextDataReturn {
@@ -379,6 +380,7 @@ export function useCopilotContextData(): UseCopilotContextDataReturn {
     meetingCount: fathomQuery.data?.callCount || 0,
     contactCount: contactQuery.data ? 1 : 0,
     calendarCount: calendarQuery.data ? 1 : 0,
+    taskCount: 0,
   };
 
   return {

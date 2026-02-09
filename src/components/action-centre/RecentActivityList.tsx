@@ -14,6 +14,7 @@
 
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { format, isToday, isYesterday, startOfDay, parseISO } from 'date-fns';
 import {
   Search,
@@ -145,6 +146,7 @@ export function RecentActivityList() {
   const userId = user?.id;
 
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [resumingId, setResumingId] = useState<string | null>(null);
 
   // Fetch recent memory
@@ -165,30 +167,30 @@ export function RecentActivityList() {
     enabled: !!userId,
   });
 
-  // Search memories
+  // Search memories (debounced to avoid per-keystroke RPC calls)
   const { data: searchResults, isLoading: searchLoading } = useQuery({
-    queryKey: ['copilot-memory-search', userId, searchQuery],
+    queryKey: ['copilot-memory-search', userId, debouncedSearch],
     queryFn: async () => {
-      if (!searchQuery.trim()) return null;
+      if (!debouncedSearch.trim()) return null;
 
       const { data, error } = await supabase.rpc('search_copilot_memory', {
         p_user_id: userId,
-        p_query: searchQuery,
+        p_query: debouncedSearch,
         p_limit: 20,
       });
 
       if (error) throw error;
       return data as (CopilotMemory & { rank: number })[];
     },
-    enabled: !!userId && searchQuery.trim().length > 0,
-    staleTime: 1000,
+    enabled: !!userId && debouncedSearch.trim().length > 0,
+    staleTime: 30_000,
   });
 
   // Group by day
   const dayGroups = useMemo(() => {
-    const items = searchQuery ? searchResults || [] : memories || [];
+    const items = debouncedSearch ? searchResults || [] : memories || [];
     return groupByDay(items);
-  }, [memories, searchResults, searchQuery]);
+  }, [memories, searchResults, debouncedSearch]);
 
   /**
    * SS-005: Resume conversation from Recent Activity
@@ -256,7 +258,7 @@ export function RecentActivityList() {
       </div>
 
       {/* Search loading state */}
-      {searchLoading && searchQuery && (
+      {(searchLoading || (searchQuery && searchQuery !== debouncedSearch)) && searchQuery && (
         <div className="space-y-3">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />

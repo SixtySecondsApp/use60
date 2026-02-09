@@ -463,20 +463,22 @@ export const OpsTable: React.FC<OpsTableProps> = ({
 
   // Extract first/last name and enrichment metadata from source_data
   const getPersonNames = useCallback(
-    (row: Row): { firstName?: string; lastName?: string; photoUrl?: string; companyDomain?: string } => {
+    (row: Row): { firstName?: string; lastName?: string; photoUrl?: string; companyDomain?: string; companyLinkedinUrl?: string } => {
       const sd = row.source_data;
       if (!sd) return {};
 
       // After Apollo enrichment, full data is cached under source_data.apollo
       const apollo = sd.apollo as Record<string, unknown> | undefined;
+      const org = apollo?.organization as Record<string, unknown> | undefined;
 
       return {
         firstName: (sd.first_name ?? sd.firstName) as string | undefined,
         lastName: (sd.last_name ?? sd.lastName) as string | undefined,
         photoUrl: (apollo?.photo_url as string) || undefined,
-        companyDomain: (apollo?.organization as Record<string, unknown>)?.primary_domain as string
+        companyDomain: (org?.primary_domain as string)
           || (sd.company_domain as string)
           || undefined,
+        companyLinkedinUrl: (org?.linkedin_url as string) || undefined,
       };
     },
     [],
@@ -641,7 +643,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
               // ---- DATA ROW ----
               const row = item.row;
               const isSelected = selectedRows.has(row.id);
-              const { firstName, lastName, photoUrl, companyDomain } = getPersonNames(row);
+              const { firstName, lastName, photoUrl, companyDomain, companyLinkedinUrl } = getPersonNames(row);
               const rowFmtStyle = formattingRules.length > 0
                 ? evaluateRowFormatting(formattingRules, row.cells)
                 : null;
@@ -720,6 +722,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           lastName={lastName}
                           photoUrl={photoUrl}
                           companyDomain={companyDomain}
+                          companyLinkedinUrl={companyLinkedinUrl}
                           onEdit={((col.is_enrichment && col.column_type !== 'apollo_property' && col.column_type !== 'apollo_org_property') || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
                           dropdownOptions={col.dropdown_options}
                           formulaExpression={col.formula_expression}

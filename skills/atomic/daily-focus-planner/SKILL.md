@@ -1,16 +1,49 @@
 ---
 name: Daily Focus Planner
 description: |
-  Generate a prioritized daily action plan: top deals/contacts needing attention + next best actions + task pack.
+  Generate a prioritized daily action plan with top deals, contacts needing attention,
+  next best actions, and a task pack. Use when a user asks "what should I focus on today",
+  "plan my day", "prioritize my tasks", or wants to know what needs their attention most.
+  Returns ranked priorities, concrete actions, and ready-to-create tasks.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "daily_standup"
+    - pattern: "what should I focus on today"
+      intent: "daily_focus"
+      confidence: 0.90
+      examples:
+        - "what should I focus on"
+        - "what are my priorities today"
+        - "plan my day"
+        - "daily focus"
+    - pattern: "prioritize my tasks"
+      intent: "task_prioritization"
+      confidence: 0.85
+      examples:
+        - "help me prioritize"
+        - "what needs my attention"
+        - "what's most important today"
+    - pattern: "create a plan for today"
+      intent: "daily_planning"
+      confidence: 0.80
+      examples:
+        - "make a plan"
+        - "daily plan"
+        - "organize my day"
+  keywords:
+    - "focus"
+    - "priorities"
+    - "plan"
+    - "today"
+    - "attention"
+    - "important"
+    - "organize"
+    - "tasks"
+    - "action plan"
   requires_capabilities:
     - crm
     - tasks
@@ -18,10 +51,34 @@ metadata:
     - pipeline_deals
     - contacts_needing_attention
     - open_tasks
+  inputs:
+    - name: date
+      type: string
+      description: "The date to generate the focus plan for in ISO format"
+      required: false
+      default: "today"
+      example: "2025-01-15"
+    - name: time_of_day
+      type: string
+      description: "Current time context for prioritization weighting"
+      required: false
+      example: "morning"
+    - name: user_capacity
+      type: string
+      description: "User's current workload level affecting task volume"
+      required: false
+      default: "normal"
+      example: "busy"
   outputs:
-    - priorities
-    - actions
-    - task_pack
+    - name: priorities
+      type: array
+      description: "5-8 priority items ranked by urgency with type, reason, and context"
+    - name: actions
+      type: array
+      description: "5-8 concrete next best actions with priority, time estimate, and ROI rationale"
+    - name: task_pack
+      type: array
+      description: "Top 3 task previews ready to create, targeting fastest pipeline movement"
   priority: critical
 ---
 

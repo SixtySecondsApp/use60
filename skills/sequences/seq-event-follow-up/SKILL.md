@@ -1,16 +1,48 @@
 ---
 name: Event Follow-Up
 description: |
-  After an event, identify priority leads and generate personalized follow-up actions and email drafts.
+  Post-event follow-up sequence: identifies priority leads from event attendees, generates
+  personalized follow-up recommendations, and creates tasks. Use when a user says
+  "follow up on the conference", "who should I contact from the webinar",
+  "event follow-up plan", or needs to act on leads from a recent event.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "event_completed"
+    - pattern: "follow up on the event"
+      intent: "event_followup"
+      confidence: 0.95
+      examples:
+        - "follow up on the conference"
+        - "event follow-up plan"
+        - "follow up from the trade show"
+    - pattern: "who should I contact from the webinar"
+      intent: "event_leads"
+      confidence: 0.90
+      examples:
+        - "who should I reach out to from the event"
+        - "best leads from the conference"
+        - "priority contacts from the webinar"
+    - pattern: "post-event action plan"
+      intent: "event_actions"
+      confidence: 0.85
+      examples:
+        - "what should I do after the event"
+        - "event lead follow-up"
+        - "conference follow-up tasks"
+  keywords:
+    - "event"
+    - "conference"
+    - "webinar"
+    - "trade show"
+    - "follow up"
+    - "attendees"
+    - "leads"
+    - "contacts"
+    - "post-event"
   requires_capabilities:
     - crm
     - tasks

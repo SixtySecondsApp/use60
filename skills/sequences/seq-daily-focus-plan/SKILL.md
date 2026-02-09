@@ -1,16 +1,55 @@
 ---
 name: Daily Focus Plan
 description: |
-  Generate today's prioritized action plan: top deals/contacts + next best actions + create top 3 tasks (approval-gated).
+  Full daily planning sequence: loads pipeline deals, contacts needing attention, and open tasks,
+  then generates prioritized actions and creates top tasks. Use when a user asks "plan my day",
+  "what should I focus on today", "daily action plan", or "set up my priorities for today".
+  Creates approval-gated tasks for the top actions.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: "user_request"
-    - pattern: "daily_standup"
+    - pattern: "plan my day"
+      intent: "daily_planning"
+      confidence: 0.95
+      examples:
+        - "help me plan my day"
+        - "set up my day"
+        - "daily plan"
+    - pattern: "what should I focus on today"
+      intent: "daily_focus"
+      confidence: 0.95
+      examples:
+        - "what should I focus on"
+        - "today's priorities"
+        - "what needs my attention today"
+    - pattern: "daily action plan"
+      intent: "action_planning"
+      confidence: 0.90
+      examples:
+        - "create my action plan"
+        - "today's action items"
+        - "set my priorities"
+    - pattern: "daily standup"
+      intent: "standup_prep"
+      confidence: 0.85
+      examples:
+        - "prep for standup"
+        - "standup update"
+        - "what do I report in standup"
+  keywords:
+    - "plan"
+    - "focus"
+    - "today"
+    - "priorities"
+    - "action plan"
+    - "standup"
+    - "daily"
+    - "attention"
+    - "tasks"
   requires_capabilities:
     - crm
     - tasks

@@ -1,26 +1,83 @@
 ---
 name: Meeting Prep Brief
 description: |
-  Generate a comprehensive pre-meeting brief with agenda, talking points, and risk assessment. Uses calendar, CRM, and optional transcript data.
+  Generate a comprehensive pre-meeting brief with agenda, talking points, and risk assessment.
+  Use when a user asks "brief me for my meeting", "prep for the call with Acme",
+  "meeting brief", or needs context before a sales call. Uses calendar, CRM, and transcript data.
+  Returns a structured brief with attendees, goals, talking points, and risks.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
   triggers:
-    - pattern: meeting_scheduled
-    - pattern: before_meeting
+    - pattern: "brief me for my meeting"
+      intent: "meeting_brief"
+      confidence: 0.85
+      examples:
+        - "meeting brief for tomorrow"
+        - "brief me before the call"
+        - "pre-meeting brief"
+    - pattern: "prep for my meeting"
+      intent: "meeting_prep"
+      confidence: 0.85
+      examples:
+        - "prep for the call with"
+        - "help me prepare for my meeting"
+        - "meeting preparation"
+    - pattern: "what should I know before the meeting"
+      intent: "meeting_context"
+      confidence: 0.80
+      examples:
+        - "context for my next call"
+        - "background for the meeting"
+        - "who am I meeting with"
+  keywords:
+    - "brief"
+    - "meeting"
+    - "prep"
+    - "preparation"
+    - "agenda"
+    - "talking points"
+    - "call"
+    - "before meeting"
   required_context:
     - meeting_id
     - event_id
+  inputs:
+    - name: meeting_id
+      type: string
+      description: "The meeting or calendar event identifier to prepare a brief for"
+      required: true
+    - name: contact_id
+      type: string
+      description: "Primary contact associated with the meeting"
+      required: false
+    - name: include_transcript
+      type: boolean
+      description: "Whether to include previous meeting transcript context"
+      required: false
+      default: false
   outputs:
-    - brief
-    - agenda
-    - talking_points
-    - risks
-    - questions
-    - context_summary
+    - name: brief
+      type: object
+      description: "Structured pre-meeting brief with attendees, goals, context, and success criteria"
+    - name: agenda
+      type: array
+      description: "Suggested agenda items for the meeting"
+    - name: talking_points
+      type: array
+      description: "Key talking points aligned to deal stage and company needs"
+    - name: risks
+      type: array
+      description: "Potential risks or objections to prepare for"
+    - name: questions
+      type: array
+      description: "Strategic questions to ask during the meeting"
+    - name: context_summary
+      type: string
+      description: "High-level summary of relationship and deal context"
   requires_capabilities:
     - calendar
     - crm

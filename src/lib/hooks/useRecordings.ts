@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 import { recordingService } from '@/lib/services/recordingService';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -600,6 +601,7 @@ export function useRecordingRealtime(recordingId: string | null) {
 export function useActiveRecordings() {
   const activeOrgId = useActiveOrgId();
   const orgId = activeOrgId;
+  const recordingsPolling = useSmartPollingInterval(30000, 'standard');
 
   const { data, isLoading, refetch } = useQuery<Recording[]>({
     queryKey: [...recordingKeys.lists(), 'active', orgId],
@@ -617,7 +619,7 @@ export function useActiveRecordings() {
       return [...result.recordings, ...joiningResult.recordings];
     },
     enabled: !!orgId,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: recordingsPolling,
   });
 
   return {

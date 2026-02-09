@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-import { BookOpen, Plus, Trash2, Eye, EyeOff, Edit2, X, Save, History } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Eye, EyeOff, Edit2, X, Save, History, Shield, Link2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { MarkdownEditor } from '@/components/docs/MarkdownEditor';
 import { MarkdownPreview } from '@/components/docs/MarkdownPreview';
@@ -30,6 +30,11 @@ export default function DocsAdminPage() {
     content: '',
     published: false,
     order_index: 0,
+    metadata: {
+      required_integrations: [] as string[],
+      target_roles: [] as string[],
+      target_audience: [] as string[],
+    },
   });
   const queryClient = useQueryClient();
 
@@ -115,9 +120,27 @@ export default function DocsAdminPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const action = editingId === 'new' ? 'create' : 'update';
+      // Build metadata — only include non-empty arrays
+      const metadata: Record<string, any> = {};
+      if (editorData.metadata.required_integrations.length > 0) {
+        metadata.required_integrations = editorData.metadata.required_integrations;
+      }
+      if (editorData.metadata.target_roles.length > 0) {
+        metadata.target_roles = editorData.metadata.target_roles;
+      }
+      if (editorData.metadata.target_audience.length > 0) {
+        metadata.target_audience = editorData.metadata.target_audience;
+      }
+
       const body: any = {
         action,
-        ...editorData,
+        title: editorData.title,
+        slug: editorData.slug,
+        category: editorData.category,
+        content: editorData.content,
+        published: editorData.published,
+        order_index: editorData.order_index,
+        metadata,
       };
 
       if (editingId !== 'new') {
@@ -146,6 +169,11 @@ export default function DocsAdminPage() {
         content: '',
         published: false,
         order_index: 0,
+        metadata: {
+          required_integrations: [],
+          target_roles: [],
+          target_audience: [],
+        },
       });
       setEditingId('new');
       return;
@@ -163,6 +191,7 @@ export default function DocsAdminPage() {
       return;
     }
 
+    const meta = data.metadata || {};
     setEditorData({
       title: data.title,
       slug: data.slug,
@@ -170,6 +199,11 @@ export default function DocsAdminPage() {
       content: data.content,
       published: data.published,
       order_index: data.order_index || 0,
+      metadata: {
+        required_integrations: meta.required_integrations || [],
+        target_roles: meta.target_roles || [],
+        target_audience: meta.target_audience || [],
+      },
     });
     setEditingId(articleId);
   };
@@ -333,7 +367,7 @@ export default function DocsAdminPage() {
 
               {/* Metadata Panel */}
               <div className="p-4 border-b border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-950/50">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Title *
@@ -372,6 +406,120 @@ export default function DocsAdminPage() {
                         bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                       placeholder="Getting Started"
                     />
+                  </div>
+                </div>
+                {/* Visibility Controls */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <Link2 className="w-3.5 h-3.5" />
+                      Required Integrations
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['hubspot', 'slack', 'google_calendar', 'fathom', 'meetingbaas', 'fireflies', 'apollo', 'instantly', 'justcall', 'bullhorn'].map((integration) => {
+                        const isSelected = editorData.metadata.required_integrations.includes(integration);
+                        return (
+                          <button
+                            key={integration}
+                            type="button"
+                            onClick={() => {
+                              const current = editorData.metadata.required_integrations;
+                              const updated = isSelected
+                                ? current.filter((i) => i !== integration)
+                                : [...current, integration];
+                              setEditorData({
+                                ...editorData,
+                                metadata: { ...editorData.metadata, required_integrations: updated },
+                              });
+                            }}
+                            className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                              isSelected
+                                ? 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-500/15 dark:border-blue-500/30 dark:text-blue-400'
+                                : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            {integration.replace(/_/g, ' ')}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Leave empty to show to all. If set, only shown when org has at least one.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <Shield className="w-3.5 h-3.5" />
+                      Target Roles
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['admin', 'member', 'viewer'].map((role) => {
+                        const isSelected = editorData.metadata.target_roles.includes(role);
+                        return (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() => {
+                              const current = editorData.metadata.target_roles;
+                              const updated = isSelected
+                                ? current.filter((r) => r !== role)
+                                : [...current, role];
+                              setEditorData({
+                                ...editorData,
+                                metadata: { ...editorData.metadata, target_roles: updated },
+                              });
+                            }}
+                            className={`px-2.5 py-1 text-xs rounded-md border transition-colors capitalize ${
+                              isSelected
+                                ? 'bg-purple-100 border-purple-300 text-purple-700 dark:bg-purple-500/15 dark:border-purple-500/30 dark:text-purple-400'
+                                : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            {role}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Leave empty to show to all roles. If set, only shown to selected roles.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <Users className="w-3.5 h-3.5" />
+                      Target Audience
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['internal', 'external'].map((audience) => {
+                        const isSelected = editorData.metadata.target_audience.includes(audience);
+                        return (
+                          <button
+                            key={audience}
+                            type="button"
+                            onClick={() => {
+                              const current = editorData.metadata.target_audience;
+                              const updated = isSelected
+                                ? current.filter((a) => a !== audience)
+                                : [...current, audience];
+                              setEditorData({
+                                ...editorData,
+                                metadata: { ...editorData.metadata, target_audience: updated },
+                              });
+                            }}
+                            className={`px-2.5 py-1 text-xs rounded-md border transition-colors capitalize ${
+                              isSelected
+                                ? 'bg-emerald-100 border-emerald-300 text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-500/30 dark:text-emerald-400'
+                                : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            {audience}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Leave empty to show to all. If set, only shown to matching user type.
+                    </p>
                   </div>
                 </div>
               </div>

@@ -120,18 +120,9 @@ export class AIProviderService {
    * Load API keys from environment variables
    */
   private loadFromEnvironment(): void {
-    const envKeys = {
-      openai: import.meta.env.VITE_OPENAI_API_KEY,
-      anthropic: import.meta.env.VITE_ANTHROPIC_API_KEY,
-      openrouter: import.meta.env.VITE_OPENROUTER_API_KEY,
-      gemini: import.meta.env.VITE_GEMINI_API_KEY,
-    };
-
-    Object.entries(envKeys).forEach(([provider, key]) => {
-      if (key && !this.apiKeys.has(provider)) {
-        this.apiKeys.set(provider, key);
-      }
-    });
+    // SECURITY: AI API keys must NOT be in frontend environment variables.
+    // They are loaded from user_settings in the database via initialize().
+    // If keys are needed server-side, use edge functions instead.
   }
 
   /**

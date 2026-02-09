@@ -40,18 +40,18 @@ export function useOpsTableSearch(options: UseOpsTableSearchOptions = {}) {
       queryClient.invalidateQueries({ queryKey: ['ops-tables'] })
 
       const enriched = result.enriched_count || 0
-      const enrichMsg = enriched > 0 ? ` (${enriched} enriched)` : ''
-      const dedupMsg = result.dedup
-        ? ` — filtered ${result.dedup.duplicates} duplicates`
+      const enrichMsg = enriched > 0 ? `, ${enriched} enriched` : ''
+      const dedupMsg = result.dedup?.duplicates
+        ? `, ${result.dedup.duplicates} duplicates filtered`
         : ''
-      toast.success(`Table "${result.table_name}" created with ${result.row_count} leads${enrichMsg}${dedupMsg}`)
+      toast.success(`${result.row_count} leads imported${enrichMsg}${dedupMsg}`)
 
       if (navigateOnSuccess) {
         navigate(`/ops/${result.table_id}`)
       }
     },
 
-    onError: (error: Error & { code?: string }) => {
+    onError: (error: Error & { code?: string; dedup?: { total: number; duplicates: number; net_new: number } }) => {
       const code = error.code
 
       switch (code) {
@@ -65,11 +65,17 @@ export function useOpsTableSearch(options: UseOpsTableSearchOptions = {}) {
           toast.error(error.message || 'A table with that name already exists.')
           break
         case 'NO_RESULTS':
-          toast.warning('No results found. Try broadening your search criteria.')
+          toast.warning('No results matched your search criteria. Try broadening your filters.')
           break
-        case 'ALL_DUPLICATES':
-          toast.warning('All contacts are already in your CRM or previously imported.')
+        case 'ALL_DUPLICATES': {
+          const count = error.dedup?.total ?? 0
+          toast.warning(
+            count > 0
+              ? `Found ${count} contacts but all are already in your CRM or Ops tables. Try different filters or search LinkedIn directly.`
+              : 'All contacts found are already in your CRM or previously imported.'
+          )
           break
+        }
         default:
           toast.error(error.message || 'Failed to create table from search')
       }

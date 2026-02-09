@@ -158,24 +158,33 @@ function calculateTriggerMatch(
 }
 
 /**
- * Get all active sequences with their linked skill counts.
- * Reads from organization_skills (compiled, org-specific) via RPC.
+ * Fetch all active organization skills via the RPC (single call).
+ * Returns the raw rows; callers filter by category as needed.
  */
-async function getActiveSequences(
+async function fetchOrgSkills(
   orgId: string
-): Promise<Array<SkillRow & { linked_skill_count: number }>> {
+): Promise<Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }>> {
   const { data, error } = await supabase
     .rpc('get_organization_skills_for_agent', {
       p_org_id: orgId,
     }) as { data: Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }> | null; error: { message: string } | null };
 
   if (error) {
-    console.error('[copilotRoutingService.getActiveSequences] Error:', error);
+    console.error('[copilotRoutingService.fetchOrgSkills] Error:', error);
     return [];
   }
 
-  // Filter to sequences and derive linked skill count from frontmatter
-  return (data || [])
+  return data || [];
+}
+
+/**
+ * Extract sequences from pre-fetched organization skills.
+ * Reads from organization_skills (compiled, org-specific) via RPC.
+ */
+function extractSequences(
+  allSkills: Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }>
+): Array<SkillRow & { linked_skill_count: number }> {
+  return allSkills
     .filter((s) => s.category === 'agent-sequence')
     .map((seq) => {
       const fm = seq.frontmatter as SkillFrontmatterV2;
@@ -191,25 +200,13 @@ async function getActiveSequences(
 }
 
 /**
- * Get all active individual skills (non-sequences).
+ * Extract individual (non-sequence, non-HITL) skills from pre-fetched organization skills.
  * Reads from organization_skills (compiled, org-specific) via RPC.
  */
-async function getActiveIndividualSkills(orgId: string): Promise<SkillRow[]> {
-  const { data, error } = await supabase
-    .rpc('get_organization_skills_for_agent', {
-      p_org_id: orgId,
-    }) as { data: Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }> | null; error: { message: string } | null };
-
-  if (error) {
-    console.error(
-      '[copilotRoutingService.getActiveIndividualSkills] Error:',
-      error
-    );
-    return [];
-  }
-
-  // Filter out sequences and HITL skills
-  return (data || [])
+function extractIndividualSkills(
+  allSkills: Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }>
+): SkillRow[] {
+  return allSkills
     .filter((s) => s.category !== 'agent-sequence' && s.category !== 'hitl')
     .map((s) => ({
       skill_key: s.skill_key,
@@ -252,8 +249,11 @@ export async function routeToSkill(
     };
   }
 
+  // Fetch all organization skills in a single RPC call (avoids duplicate requests)
+  const allOrgSkills = await fetchOrgSkills(orgId);
+
   // Step 1: Check sequences first
-  const sequences = await getActiveSequences(orgId);
+  const sequences = extractSequences(allOrgSkills);
 
   for (const seq of sequences) {
     const frontmatter = seq.frontmatter as SkillFrontmatterV2;
@@ -295,8 +295,8 @@ export async function routeToSkill(
     };
   }
 
-  // Step 2: Fall back to individual skills
-  const individualSkills = await getActiveIndividualSkills(orgId);
+  // Step 2: Fall back to individual skills (from same RPC response, no duplicate call)
+  const individualSkills = extractIndividualSkills(allOrgSkills);
 
   for (const skill of individualSkills) {
     const frontmatter = skill.frontmatter as SkillFrontmatterV2;

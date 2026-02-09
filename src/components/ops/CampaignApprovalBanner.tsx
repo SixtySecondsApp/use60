@@ -33,6 +33,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
+import { validateInstantlyCampaign } from '@/lib/hooks/useInstantlyPush';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,13 +63,14 @@ interface CampaignDetails {
 interface CampaignApprovalBannerProps {
   tableId: string;
   orgId: string;
+  onCampaignInvalid?: (campaignId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function CampaignApprovalBanner({ tableId, orgId }: CampaignApprovalBannerProps) {
+export function CampaignApprovalBanner({ tableId, orgId, onCampaignInvalid }: CampaignApprovalBannerProps) {
   const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -142,6 +144,15 @@ export function CampaignApprovalBanner({ tableId, orgId }: CampaignApprovalBanne
   // Push all leads mutation
   const pushAllMutation = useMutation({
     mutationFn: async (campaign: CampaignLink) => {
+      // Validate campaign still exists before pushing
+      const validation = await validateInstantlyCampaign(orgId, campaign.campaign_id);
+      if (!validation.valid) {
+        const err = new Error('Campaign not found in Instantly. It may have been deleted.');
+        (err as any).code = 'CAMPAIGN_NOT_FOUND';
+        (err as any).campaignId = campaign.campaign_id;
+        throw err;
+      }
+
       // Get all row IDs from the table
       const { data: rows, error: rowErr } = await supabase
         .from('dynamic_table_rows')
@@ -153,13 +164,12 @@ export function CampaignApprovalBanner({ tableId, orgId }: CampaignApprovalBanne
 
       const rowIds = rows.map(r => r.id);
 
-      const { data, error } = await supabase.functions.invoke('instantly-push', {
+      const { data, error } = await supabase.functions.invoke('push-to-instantly', {
         body: {
           table_id: tableId,
           row_ids: rowIds,
           campaign_id: campaign.campaign_id,
-          mode: 'existing_campaign',
-          variable_mapping: campaign.field_mapping || {},
+          field_mapping: campaign.field_mapping || undefined,
         },
       });
       if (error) throw new Error(error.message || 'Push failed');
@@ -168,10 +178,16 @@ export function CampaignApprovalBanner({ tableId, orgId }: CampaignApprovalBanne
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['instantly-sync-history', tableId] });
       toast.success(`Pushed ${data?.pushed_count ?? 'all'} leads to campaign`);
     },
-    onError: (err: Error) => {
-      toast.error(err.message);
+    onError: (err: any) => {
+      if (err.code === 'CAMPAIGN_NOT_FOUND') {
+        toast.error('Campaign no longer exists. Please select a new campaign.');
+        onCampaignInvalid?.(err.campaignId);
+      } else {
+        toast.error(err.message);
+      }
     },
   });
 

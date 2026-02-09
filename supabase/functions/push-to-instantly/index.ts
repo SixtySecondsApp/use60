@@ -81,6 +81,25 @@ serve(async (req) => {
 
     const instantly = new InstantlyClient({ apiKey: creds.api_key })
 
+    // Validate campaign still exists before building leads
+    try {
+      await instantly.request<any>({
+        method: 'GET',
+        path: `/api/v2/campaigns/${campaign_id}`,
+      })
+    } catch (e: any) {
+      const msg = e.message || ''
+      if (msg.includes('404') || msg.includes('not found') || msg.toLowerCase().includes('not_found')) {
+        return jsonResponse({
+          success: false,
+          error: 'Campaign not found in Instantly. It may have been deleted.',
+          code: 'CAMPAIGN_NOT_FOUND',
+        })
+      }
+      // Non-404 errors (rate limit, network) — let the push proceed and fail naturally
+      console.warn('[push-to-instantly] Campaign validation warning:', msg)
+    }
+
     // Get columns (for mapping) — include integration_config for step column detection
     const { data: columns } = await svc
       .from('dynamic_table_columns')

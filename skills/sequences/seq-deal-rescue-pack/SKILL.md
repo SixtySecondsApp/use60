@@ -1,16 +1,48 @@
 ---
 name: Deal Rescue Pack
 description: |
-  Load deal + health, generate a rescue plan, then preview MAP tasks (confirm to create).
+  Complete deal rescue workflow: loads deal health, diagnoses why it's at risk,
+  generates a rescue plan, and creates recovery tasks. Use when a user says "rescue this deal",
+  "this deal is dying", "save the Acme deal", "help me turn this deal around",
+  or needs an urgent intervention plan for a struggling opportunity.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: agent-sequence
   skill_type: sequence
   is_active: true
   triggers:
-    - pattern: user_request
-    - pattern: deal_health_changed
+    - pattern: "rescue this deal"
+      intent: "deal_rescue"
+      confidence: 0.95
+      examples:
+        - "help me rescue this deal"
+        - "save this deal"
+        - "deal rescue plan"
+    - pattern: "this deal is dying"
+      intent: "deal_emergency"
+      confidence: 0.90
+      examples:
+        - "this deal is in trouble"
+        - "the deal is falling apart"
+        - "deal going south"
+    - pattern: "turn this deal around"
+      intent: "deal_turnaround"
+      confidence: 0.90
+      examples:
+        - "help me turn this around"
+        - "recovery plan for this deal"
+        - "what can we do to save this"
+  keywords:
+    - "rescue"
+    - "save"
+    - "dying"
+    - "trouble"
+    - "at risk"
+    - "turn around"
+    - "recovery"
+    - "deal"
+    - "help"
   required_context:
     - deal_id
   outputs:
