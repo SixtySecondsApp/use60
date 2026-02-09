@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { InstantlyClient } from '../_shared/instantly.ts'
 
 type Action =
@@ -20,10 +20,14 @@ type Action =
   | 'link_campaign'
   | 'unlink_campaign'
 
+// Request-scoped helpers — pass `req` so CORS origin is validated per-request
+let _reqRef: Request | null = null
+
 function jsonResponse(data: any, status = 200) {
+  const cors = _reqRef ? getCorsHeaders(_reqRef) : {}
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   })
 }
 
@@ -51,8 +55,10 @@ async function getInstantlyClient(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (req.method !== 'POST') return errorResponse('Method not allowed', 405)
+  _reqRef = req
+  const preflightResponse = handleCorsPreflightRequest(req)
+  if (preflightResponse) return preflightResponse
+  console.log(`[instantly-admin] ${req.method} request from ${req.headers.get('origin') || 'unknown'}`)
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -317,7 +323,8 @@ serve(async (req) => {
               if (!step.type) step.type = 'email'
 
               // Resolve delay value — accept delay, wait, or wait_days (in days)
-              const delayDays = step.delay ?? step.wait ?? step.wait_days ?? (idx === 0 ? 0 : 2)
+              // Instantly API: delay on a step = days after THIS step before next sends
+              const delayDays = step.delay ?? step.wait ?? step.wait_days ?? 2
               // Send both 'delay' and 'wait' to cover Instantly API v2 variations
               step.delay = delayDays
               step.wait = delayDays
@@ -374,9 +381,8 @@ serve(async (req) => {
             for (let i = 0; i < seq.steps.length; i++) {
               const step = seq.steps[i]
               step.type = step.type || 'email'
-              const d = i === 0 ? 0 : 2
-              if (step.delay == null) step.delay = d
-              if (step.wait == null) step.wait = d
+              if (step.delay == null) step.delay = 2
+              if (step.wait == null) step.wait = 2
               if (!Array.isArray(step.variants) || step.variants.length === 0) {
                 step.variants = [{ subject: '', body: '' }]
               }
@@ -517,6 +523,14 @@ serve(async (req) => {
       if (!tableId || !campaignId) return errorResponse('Missing table_id or campaign_id')
       if (!fieldMapping?.email) return errorResponse('Field mapping must include email column')
 
+      // Remove any existing links for this table (one campaign per table)
+      await svc
+        .from('instantly_campaign_links')
+        .delete()
+        .eq('table_id', tableId)
+        .eq('org_id', orgId)
+        .neq('campaign_id', campaignId)
+
       const { error: linkError } = await svc
         .from('instantly_campaign_links')
         .upsert({
@@ -557,6 +571,7 @@ serve(async (req) => {
     return errorResponse(`Unknown action: ${action}`)
   } catch (e: any) {
     console.error('[instantly-admin] Unhandled error:', e)
-    return errorResponse(e.message || 'Internal server error', 500)
+    const status = e?.status ? ` (HTTP ${e.status})` : ''
+    return errorResponse(`${e.message || 'Internal server error'}${status}`, 500)
   }
 })

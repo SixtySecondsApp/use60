@@ -1,23 +1,24 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { InstantlyClient } from '../_shared/instantly.ts'
 
-const BULK_CHUNK_SIZE = 100
-
-function jsonResponse(data: any, _status = 200) {
-  // Always return 200 so supabase.functions.invoke() puts the body in `data`
-  return new Response(JSON.stringify(data), {
-    status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-}
+// Instantly V2 API has no bulk leads endpoint — leads are pushed individually
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (req.method !== 'POST') {
-    return jsonResponse({ success: false, error: 'Method not allowed' }, 405)
+  const cors = getCorsHeaders(req)
+
+  function jsonResponse(data: any) {
+    // Always return 200 so supabase.functions.invoke() puts the body in `data`
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
   }
+
+  if (req.method === 'OPTIONS') return handleCorsPreflightRequest(req)
+
+  console.log(`[push-to-instantly] ${req.method} request from ${req.headers.get('origin') || 'unknown'}`)
 
   const startTime = Date.now()
 
@@ -31,15 +32,20 @@ serve(async (req) => {
 
     // Auth
     const userToken = req.headers.get('Authorization')?.replace('Bearer ', '') || ''
-    if (!userToken) return jsonResponse({ success: false, error: 'Unauthorized' }, 401)
+    if (!userToken) return jsonResponse({ success: false, error: 'Unauthorized' })
 
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     })
     const { data: { user } } = await userClient.auth.getUser()
-    if (!user) return jsonResponse({ success: false, error: 'Unauthorized' }, 401)
+    if (!user) return jsonResponse({ success: false, error: 'Unauthorized' })
 
-    const body = await req.json()
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return jsonResponse({ success: false, error: 'Invalid or missing request body' })
+    }
     const { table_id, campaign_id, row_ids, field_mapping } = body
 
     if (!table_id || !campaign_id) {
@@ -61,12 +67,12 @@ serve(async (req) => {
 
     const { data: membership } = await svc
       .from('organization_memberships')
-      .select('id')
+      .select('role')
       .eq('org_id', table.organization_id)
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (!membership) return jsonResponse({ success: false, error: 'Access denied' }, 403)
+    if (!membership) return jsonResponse({ success: false, error: 'Access denied' })
 
     // Get Instantly API key
     const { data: creds } = await svc
@@ -232,9 +238,10 @@ serve(async (req) => {
         lead.company_name = cellValues[mapping.company_name]
       }
 
-      // All other mapped fields go into custom_variables
+      // Build custom_variables from all available data
       const customVars: Record<string, string | null> = {}
 
+      // 1. Explicit custom_variables from field_mapping
       if (mapping.custom_variables && typeof mapping.custom_variables === 'object') {
         for (const [instantlyKey, colKey] of Object.entries(mapping.custom_variables)) {
           const val = cellValues[colKey as string]
@@ -242,10 +249,25 @@ serve(async (req) => {
         }
       }
 
-      // Auto-include sequence step column values (subject/body from formulas or AI)
+      // 2. Auto-include sequence step columns (integration_config detection)
       for (const sc of stepColumns) {
         const val = cellValues[sc.key]
         if (val) customVars[sc.varName] = val
+      }
+
+      // 3. Auto-include all unmapped columns as custom_variables
+      //    This ensures personalization fields (step subjects/bodies, title, city, etc.) are sent
+      const mappedKeys = new Set([
+        mapping.email, mapping.first_name, mapping.last_name, mapping.company_name,
+      ].filter(Boolean))
+      for (const col of columns ?? []) {
+        if (mappedKeys.has(col.key)) continue // already mapped as standard field
+        if (col.column_type === 'instantly') continue // skip the Instantly config columns
+        const val = cellValues[col.key]
+        if (!val) continue
+        // For step columns like "instantly_step_1_subject" → variable "step_1_subject"
+        const varName = col.key.startsWith('instantly_') ? col.key.replace('instantly_', '') : col.key
+        if (!customVars[varName]) customVars[varName] = val
       }
 
       if (Object.keys(customVars).length > 0) {
@@ -255,30 +277,55 @@ serve(async (req) => {
       leads.push(lead)
     }
 
-    // Push in chunks via bulk API
+    // Push leads individually via V2 API
+    // POST creates new leads with custom_variables; for existing leads POST returns
+    // the old data without updating, so we follow up with PATCH to set custom_variables.
     let pushedTotal = 0
     let errorCount = 0
+    const errors: string[] = []
 
-    for (let i = 0; i < leads.length; i += BULK_CHUNK_SIZE) {
-      const chunk = leads.slice(i, i + BULK_CHUNK_SIZE)
-
-      // Strip _row_id before sending to Instantly
-      const instantlyLeads = chunk.map(({ _row_id, ...rest }) => rest)
-
+    for (const lead of leads) {
+      const { _row_id, ...leadData } = lead
       try {
-        await instantly.request<any>({
+        const leadBody = {
+          email: leadData.email,
+          first_name: leadData.first_name,
+          last_name: leadData.last_name,
+          company_name: leadData.company_name,
+          campaign: campaign_id,
+          ...(leadData.custom_variables && { custom_variables: leadData.custom_variables }),
+        }
+        const created = await instantly.request<any>({
           method: 'POST',
-          path: '/api/v2/leads/bulk',
-          body: {
-            campaign_id: campaign_id,
-            skip_if_in_campaign: true,
-            leads: instantlyLeads,
-          },
+          path: '/api/v2/leads',
+          body: leadBody,
         })
-        pushedTotal += chunk.length
+
+        // If lead already existed, POST doesn't update custom_variables — use PATCH
+        const hasCustomVars = leadData.custom_variables && Object.keys(leadData.custom_variables).length > 0
+        if (created?.id && hasCustomVars) {
+          const payloadHasVars = leadData.custom_variables && Object.keys(leadData.custom_variables).some(
+            k => created.payload?.[k] !== undefined
+          )
+          if (!payloadHasVars) {
+            await instantly.request<any>({
+              method: 'PATCH',
+              path: `/api/v2/leads/${created.id}`,
+              body: {
+                first_name: leadData.first_name,
+                last_name: leadData.last_name,
+                custom_variables: leadData.custom_variables,
+              },
+            })
+          }
+        }
+
+        pushedTotal++
       } catch (e: any) {
-        console.error(`[push-to-instantly] Bulk push failed for chunk ${i}:`, e.message)
-        errorCount += chunk.length
+        const errMsg = e.message || 'Unknown error'
+        console.error(`[push-to-instantly] Lead push failed for ${leadData.email}:`, errMsg)
+        errors.push(`${leadData.email}: ${errMsg}`)
+        errorCount++
       }
     }
 
@@ -306,6 +353,7 @@ serve(async (req) => {
       skipped_count: skipped,
       error_count: errorCount,
       total_rows: rows.length,
+      ...(errors.length > 0 && { errors }),
     })
   } catch (e: any) {
     console.error('[push-to-instantly] Unhandled error:', e)

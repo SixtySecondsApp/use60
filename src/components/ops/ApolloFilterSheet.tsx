@@ -107,7 +107,7 @@ export function ApolloFilterSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[420px] bg-zinc-900 border-zinc-700 text-white overflow-y-auto">
+      <SheetContent className="w-[420px] !top-16 !h-[calc(100vh-4rem)] bg-zinc-900 border-zinc-700 text-white overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="text-white flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-purple-400" />

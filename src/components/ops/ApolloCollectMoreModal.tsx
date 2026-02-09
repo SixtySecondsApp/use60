@@ -97,6 +97,7 @@ export function ApolloCollectMoreModal({
   onComplete,
 }: ApolloCollectMoreModalProps) {
   const [desiredCount, setDesiredCount] = useState(25);
+  const [isCustom, setIsCustom] = useState(false);
   const [enrichEmail, setEnrichEmail] = useState(false);
   const [enrichPhone, setEnrichPhone] = useState(false);
   const collectMore = useApolloCollectMore();
@@ -137,6 +138,7 @@ export function ApolloCollectMoreModal({
           onComplete();
           onOpenChange(false);
           // Reset state
+          setIsCustom(false);
           setEnrichEmail(false);
           setEnrichPhone(false);
         },
@@ -180,9 +182,9 @@ export function ApolloCollectMoreModal({
                 <button
                   key={n}
                   type="button"
-                  onClick={() => setDesiredCount(n)}
+                  onClick={() => { setDesiredCount(n); setIsCustom(false); }}
                   className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                    desiredCount === n
+                    desiredCount === n && !isCustom
                       ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
                       : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600 hover:text-zinc-300'
                   }`}
@@ -190,7 +192,30 @@ export function ApolloCollectMoreModal({
                   {n}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setIsCustom(true)}
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                  isCustom
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600 hover:text-zinc-300'
+                }`}
+              >
+                Custom
+              </button>
             </div>
+            {isCustom && (
+              <input
+                type="number"
+                min={1}
+                max={10000}
+                value={desiredCount}
+                onChange={(e) => setDesiredCount(Math.max(1, parseInt(e.target.value) || 1))}
+                placeholder="Enter amount..."
+                className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-purple-500/50 focus:outline-none focus:ring-1 focus:ring-purple-500/30"
+                autoFocus
+              />
+            )}
             <p className="mt-1.5 text-[11px] text-zinc-600">
               Currently {currentRowCount} rows in table
             </p>

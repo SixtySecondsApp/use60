@@ -1,0 +1,401 @@
+{
+  "feature": {
+    "id": "ai-ark",
+    "name": "AI Ark Integration",
+    "description": "Integrate AI Ark as a B2B data provider alongside Apollo — edge functions, frontend service, copilot skills, integration settings UI, and copilot-dynamic-table chaining",
+    "prd": "Provided inline via 60/dev-plan command",
+    "createdAt": "2026-02-09T00:00:00Z",
+    "status": "complete",
+    "phases": ["2a", "2b", "2c"]
+  },
+
+  "stories": [
+    {
+      "id": "ARK-001",
+      "feature": "ai-ark",
+      "phase": "2a",
+      "title": "Store AI Ark API credentials in integration_credentials",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["integration_credentials"] },
+      "blocks": ["ARK-002", "ARK-003", "ARK-004", "ARK-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "AI Ark credentials stored in integration_credentials with provider='ai_ark' and JSONB credentials containing api_key",
+        "useAiArkIntegration hook provides isConnected, connectApiKey, disconnect, refreshStatus",
+        "AiArkConfigModal renders API key input with masked display, save, and test connection",
+        "Integration card appears on Integrations settings page alongside Apollo/Instantly"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useAiArkIntegration.ts",
+        "src/components/integrations/AiArkConfigModal.tsx",
+        "src/pages/Integrations.tsx"
+      ],
+      "notes": "Follow exact patterns from useApolloIntegration + ApolloConfigModal. No migration needed — integration_credentials table already supports arbitrary providers via UNIQUE(organization_id, provider)."
+    },
+
+    {
+      "id": "ARK-002",
+      "feature": "ai-ark",
+      "phase": "2a",
+      "title": "Create ai-ark-search edge function (company + people search)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["ARK-001"], "files": ["supabase/functions/_shared/corsHelper.ts"], "schema": ["integration_credentials"] },
+      "blocks": ["ARK-005", "ARK-006"],
+      "parallelWith": ["ARK-003"],
+      "acceptance": [
+        "Edge function at supabase/functions/ai-ark-search/index.ts handles POST requests",
+        "Supports action='company_search' and action='people_search' in request body",
+        "Auth flow: JWT → user → org_id → AI Ark API key from integration_credentials",
+        "Returns normalised response with NormalizedCompany / NormalizedContact interface",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts for origin-validated CORS",
+        "Returns structured error codes: AI_ARK_NOT_CONFIGURED, RATE_LIMITED, INVALID_PARAMS"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/ai-ark-search/index.ts"
+      ],
+      "notes": "Mirror apollo-search auth pattern. Pin esm.sh imports to @2.43.4. Accept _auth_token in body as fallback. Normalise AI Ark response fields to consistent interface. Support pagination (page, per_page). Include preview mode flag (preview=true limits to 20 results, no credits consumed)."
+    },
+
+    {
+      "id": "ARK-003",
+      "feature": "ai-ark",
+      "phase": "2a",
+      "title": "Create ai-ark-enrich edge function (reverse lookup + enrichment)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["ARK-001"], "files": ["supabase/functions/_shared/corsHelper.ts"], "schema": ["integration_credentials"] },
+      "blocks": ["ARK-005", "ARK-007"],
+      "parallelWith": ["ARK-002"],
+      "acceptance": [
+        "Edge function at supabase/functions/ai-ark-enrich/index.ts handles POST requests",
+        "Supports action='reverse_lookup' (single contact) and action='bulk_enrich' (batch)",
+        "Batch mode processes rows from dynamic_table_cells keyed on email/LinkedIn/name+company",
+        "Caches full AI Ark response in source_data.ai_ark on dynamic_table_rows (enrich-once pattern)",
+        "Returns enriched fields: current_title, company, department, verified_email, phone, social_profiles"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/ai-ark-enrich/index.ts"
+      ],
+      "notes": "Follow apollo-enrich 'enrich once, column many' pattern. First enrichment call caches full response in source_data.ai_ark. Subsequent column enrichments read from cache (zero API calls). Batch in groups of 10 for bulk_enrich."
+    },
+
+    {
+      "id": "ARK-004",
+      "feature": "ai-ark",
+      "phase": "2a",
+      "title": "Create AI Ark frontend service and React hooks",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["ARK-001"], "files": [], "schema": [] },
+      "blocks": ["ARK-005", "ARK-006"],
+      "parallelWith": ["ARK-002", "ARK-003"],
+      "acceptance": [
+        "aiArkSearchService.ts provides searchCompanies(), searchPeople(), and searchAndCreateTable() methods",
+        "searchAndCreateTable() calls copilot-dynamic-table with source='ai_ark' to create ops tables",
+        "Standalone search methods call ai-ark-search directly with typed request/response interfaces",
+        "Includes NormalizedAiArkCompany and NormalizedAiArkContact TypeScript interfaces"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/aiArkSearchService.ts"
+      ],
+      "notes": "Mirror apolloSearchService.ts pattern. searchApollo() equivalent uses raw fetch() with _auth_token body fallback and redirect:'error' for browser extension detection. searchAndCreateTable() uses supabase.functions.invoke('copilot-dynamic-table')."
+    },
+
+    {
+      "id": "ARK-005",
+      "feature": "ai-ark",
+      "phase": "2a",
+      "title": "Wire AI Ark into copilot-dynamic-table as data source",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["ARK-002", "ARK-003", "ARK-004"], "files": ["supabase/functions/copilot-dynamic-table/index.ts"], "schema": ["dynamic_tables", "dynamic_table_columns", "dynamic_table_rows", "dynamic_table_cells"] },
+      "blocks": ["ARK-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "copilot-dynamic-table accepts source='ai_ark' alongside existing 'apollo' source",
+        "When source='ai_ark', calls ai-ark-search edge function instead of apollo-search",
+        "Deduplication logic works with AI Ark contact IDs (ai_ark_id field on dynamic_table_rows.source_id)",
+        "Column creation maps AI Ark fields to correct column types (text, url, number, email)",
+        "Auto-enrichment via ai-ark-enrich follows same pattern as apollo-enrich"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/copilot-dynamic-table/index.ts"
+      ],
+      "notes": "Add source parameter routing. When source='ai_ark', swap apollo-search URL for ai-ark-search URL. Reuse existing dedup logic (existingSourceIds set, fuzzy name+company matching). Map AI Ark fields to dynamic_table_columns with ai_ark_property_name equivalent. Consider adding a generic source_property_name column or reusing apollo_property_name with provider prefix."
+    },
+
+    {
+      "id": "ARK-006",
+      "feature": "ai-ark",
+      "phase": "2a",
+      "title": "Create copilot skills for AI Ark company and people search",
+      "type": "skills",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["ARK-002", "ARK-004", "ARK-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ARK-007"],
+      "acceptance": [
+        "skills/atomic/ai-ark-company-search/SKILL.md exists with correct frontmatter, triggers, inputs/outputs",
+        "skills/atomic/ai-ark-people-search/SKILL.md exists with correct frontmatter, triggers, inputs/outputs",
+        "skills/atomic/ai-ark-reverse-lookup/SKILL.md exists with correct frontmatter for enrichment",
+        "Triggers differentiate from Apollo skills (e.g. 'use ai ark to find', 'ai ark search')",
+        "npm run validate-skills passes for all new skills"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "skills/atomic/ai-ark-company-search/SKILL.md",
+        "skills/atomic/ai-ark-people-search/SKILL.md",
+        "skills/atomic/ai-ark-reverse-lookup/SKILL.md"
+      ],
+      "notes": "Category: enrichment. Triggers must be high-confidence (0.85+) for explicit AI Ark requests, and moderate (0.6-0.7) for generic company/people search (allowing planner to choose between Apollo and AI Ark). Input schemas should match ai-ark-search edge function params. Output schemas should match NormalizedAiArkCompany/Contact interfaces."
+    },
+
+    {
+      "id": "ARK-007",
+      "feature": "ai-ark",
+      "phase": "2a",
+      "title": "Create copilot skill for AI Ark enrichment",
+      "type": "skills",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["ARK-003"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ARK-006"],
+      "acceptance": [
+        "skills/atomic/ai-ark-enrichment/SKILL.md exists with correct frontmatter for bulk enrichment",
+        "Triggers include 'refresh contacts', 'enrich with latest job info', 'data hygiene'",
+        "Inputs accept table_id + column identifiers for batch processing",
+        "npm run validate-skills passes"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "skills/atomic/ai-ark-enrichment/SKILL.md"
+      ],
+      "notes": "Category: enrichment. This skill is invoked when users want to refresh existing data. Should specify that it runs ai-ark-enrich in bulk mode against table rows."
+    },
+
+    {
+      "id": "ARK-008",
+      "feature": "ai-ark",
+      "phase": "2b",
+      "title": "Create ai-ark-similarity edge function and skill",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["ARK-002"], "files": [], "schema": [] },
+      "blocks": ["ARK-010"],
+      "parallelWith": ["ARK-009"],
+      "acceptance": [
+        "Edge function at supabase/functions/ai-ark-similarity/index.ts handles POST requests",
+        "Accepts seed_company_domain, match_count, match_precision parameters",
+        "Returns normalised company list with similarity_score (0-100)",
+        "skills/atomic/ai-ark-similarity-search/SKILL.md exists with triggers for 'find companies similar to', 'lookalike companies'",
+        "npm run validate-skills passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/ai-ark-similarity/index.ts",
+        "skills/atomic/ai-ark-similarity-search/SKILL.md"
+      ],
+      "notes": "This is AI Ark's unique differentiator — no Apollo equivalent. Returns similarity_score as a sortable Number column in ops tables. Preview mode returns ~20 results. Full mode at target volume."
+    },
+
+    {
+      "id": "ARK-009",
+      "feature": "ai-ark",
+      "phase": "2b",
+      "title": "Create ai-ark-semantic edge function and skill",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["ARK-002"], "files": [], "schema": [] },
+      "blocks": ["ARK-010"],
+      "parallelWith": ["ARK-008"],
+      "acceptance": [
+        "Edge function at supabase/functions/ai-ark-semantic/index.ts handles POST requests",
+        "Accepts natural_language_query and max_results parameters",
+        "Returns normalised company list with relevance_score (0-100)",
+        "skills/atomic/ai-ark-semantic-search/SKILL.md exists with triggers for 'find companies that', 'search for companies doing'",
+        "npm run validate-skills passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/ai-ark-semantic/index.ts",
+        "skills/atomic/ai-ark-semantic-search/SKILL.md"
+      ],
+      "notes": "Natural language → company results. This allows intent-based queries without structured filters. relevance_score column in ops tables."
+    },
+
+    {
+      "id": "ARK-010",
+      "feature": "ai-ark",
+      "phase": "2c",
+      "title": "Create copilot sequences for multi-step AI Ark workflows",
+      "type": "skills",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["ARK-006", "ARK-007", "ARK-008", "ARK-009"], "files": [], "schema": [] },
+      "blocks": ["ARK-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "skills/sequences/seq-ai-ark-lookalike-prospecting/SKILL.md implements Pattern A (similarity → people → verify)",
+        "skills/sequences/seq-ai-ark-semantic-discovery/SKILL.md implements Pattern B (semantic → people → enrich)",
+        "skills/sequences/seq-ai-ark-data-refresh/SKILL.md implements Pattern C (batch enrichment → diff)",
+        "Workflow steps correctly chain skills with input/output mapping",
+        "npm run validate-skills passes for all sequences"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/sequences/seq-ai-ark-lookalike-prospecting/SKILL.md",
+        "skills/sequences/seq-ai-ark-semantic-discovery/SKILL.md",
+        "skills/sequences/seq-ai-ark-data-refresh/SKILL.md"
+      ],
+      "notes": "Category: agent-sequence. These sequences orchestrate multiple AI Ark skills. Pattern A is the key differentiator. Each sequence uses workflow steps with input_mapping from previous outputs."
+    },
+
+    {
+      "id": "ARK-011",
+      "feature": "ai-ark",
+      "phase": "2c",
+      "title": "Add hybrid Apollo + AI Ark routing logic to copilot planner",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": { "stories": ["ARK-006", "ARK-010"], "files": ["src/lib/services/copilotRoutingService.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "copilotRoutingService routes generic company/people queries based on user's data provider preference",
+        "Preference stored in org settings: 'always_ai_ark', 'always_apollo', 'hybrid', 'auto'",
+        "When preference='auto', planner considers query type, available credits, and data source strengths",
+        "Hybrid mode routes company firmographics to AI Ark and contacts to Apollo when both are configured"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/copilotRoutingService.ts"
+      ],
+      "notes": "This is the final piece — making the copilot smart about which data source to use. Should read org preference from integration settings. If only one provider is configured, always route to that one. If both configured, respect the preference or use auto-routing."
+    },
+
+    {
+      "id": "ARK-012",
+      "feature": "ai-ark",
+      "phase": "2a",
+      "title": "Add AI Ark credit tracking and usage display",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["ARK-001", "ARK-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ARK-005"],
+      "acceptance": [
+        "AiArkConfigModal shows credits consumed, rate limit status, and quota remaining",
+        "Credit estimate displayed before full export in copilot two-step preview flow",
+        "supabase/functions/ai-ark-credits/index.ts fetches usage data from AI Ark API"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/ai-ark-credits/index.ts",
+        "src/components/integrations/AiArkConfigModal.tsx"
+      ],
+      "notes": "Follow apollo-credits pattern. Try API usage endpoint first, fallback to rate limit headers. Display in config modal. Copilot should call this before full export to show credit estimate."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 12,
+    "completedStories": 0,
+    "estimatedTotalMinutes": 285,
+    "phases": {
+      "2a": {
+        "stories": ["ARK-001", "ARK-002", "ARK-003", "ARK-004", "ARK-005", "ARK-006", "ARK-007", "ARK-012"],
+        "description": "Core search, enrichment, settings UI, dynamic table integration, and base copilot skills",
+        "estimatedMinutes": 190,
+        "parallelGroups": [
+          ["ARK-002", "ARK-003", "ARK-004"],
+          ["ARK-005", "ARK-012"],
+          ["ARK-006", "ARK-007"]
+        ]
+      },
+      "2b": {
+        "stories": ["ARK-008", "ARK-009"],
+        "description": "AI-powered similarity and semantic search (AI Ark differentiators)",
+        "estimatedMinutes": 50,
+        "parallelGroups": [
+          ["ARK-008", "ARK-009"]
+        ]
+      },
+      "2c": {
+        "stories": ["ARK-010", "ARK-011"],
+        "description": "Multi-step sequences and hybrid Apollo+AI Ark routing",
+        "estimatedMinutes": 45,
+        "parallelGroups": []
+      }
+    }
+  },
+
+  "dependencyGraph": {
+    "ARK-001": { "blocks": ["ARK-002", "ARK-003", "ARK-004", "ARK-012"] },
+    "ARK-002": { "blocks": ["ARK-005", "ARK-006", "ARK-008", "ARK-009"] },
+    "ARK-003": { "blocks": ["ARK-005", "ARK-007"] },
+    "ARK-004": { "blocks": ["ARK-005", "ARK-006"] },
+    "ARK-005": { "blocks": ["ARK-006"] },
+    "ARK-006": { "blocks": ["ARK-010", "ARK-011"] },
+    "ARK-007": { "blocks": ["ARK-010"] },
+    "ARK-008": { "blocks": ["ARK-010"] },
+    "ARK-009": { "blocks": ["ARK-010"] },
+    "ARK-010": { "blocks": ["ARK-011"] },
+    "ARK-011": { "blocks": [] },
+    "ARK-012": { "blocks": [] }
+  },
+
+  "technicalNotes": {
+    "edgeFunctionPatterns": {
+      "auth": "JWT → userClient.auth.getUser() → org_id from organization_memberships → API key from integration_credentials(provider='ai_ark')",
+      "cors": "import { getCorsHeaders } from '../_shared/corsHelper.ts' — NOT legacy corsHeaders",
+      "esmImport": "Pin @supabase/supabase-js@2.43.4 on esm.sh to avoid 500 errors",
+      "browserExtensionWorkaround": "Accept _auth_token in request body as auth fallback",
+      "deployment": "npx supabase functions deploy <name> --project-ref caerqjzvuerejfrdtygb --no-verify-jwt"
+    },
+    "credentialStorage": {
+      "table": "integration_credentials",
+      "provider": "ai_ark",
+      "credentials": { "api_key": "<encrypted>" },
+      "constraint": "UNIQUE(organization_id, provider)",
+      "columnName": "organization_id (NOT org_id)"
+    },
+    "dynamicTableIntegration": {
+      "sourceField": "Add source_type='ai_ark' to dynamic_tables for provenance tracking",
+      "propertyColumn": "Consider generic data_provider_property_name on dynamic_table_columns or reuse apollo_property_name with prefix",
+      "enrichmentCache": "Cache AI Ark responses in source_data.ai_ark on dynamic_table_rows (parallel to source_data.apollo)"
+    },
+    "skillConventions": {
+      "directory": "skills/atomic/ai-ark-*/SKILL.md",
+      "category": "enrichment (atomic skills) or agent-sequence (sequences)",
+      "triggerConfidence": "0.85+ for explicit 'ai ark' requests, 0.6-0.7 for generic queries that could use either provider",
+      "validateCommand": "npm run validate-skills",
+      "syncCommand": "npm run sync-skills"
+    }
+  },
+
+  "openQuestions": [
+    "AI Ark API sandbox credentials needed before ARK-002/ARK-003 can be fully tested",
+    "Confirm preview API returns limited results without consuming credits (not just web UI)",
+    "Confirm exact AI Ark response field names for normalization mapping",
+    "Decide: add generic source_property_name column to dynamic_table_columns, or reuse apollo_property_name",
+    "AI Ark rate limit defaults — may need per-org tracking if limits are workspace-scoped"
+  ]
+}

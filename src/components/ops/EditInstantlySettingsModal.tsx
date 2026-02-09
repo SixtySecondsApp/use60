@@ -75,10 +75,10 @@ function buildSequenceFromStepColumns(columns: { key: string }[]): any[] {
   return [{
     steps: sorted.map(([num, parts], idx) => ({
       type: 'email',
-      // Instantly v2 API: delay is in days. Step 1 sends immediately (0),
-      // subsequent steps wait 2 days after the previous step was sent.
-      delay: idx === 0 ? 0 : 2,
-      wait: idx === 0 ? 0 : 2,
+      // Instantly v2 API: delay on a step = days to wait AFTER this step
+      // before sending the next one. All steps get 2-day gap by default.
+      delay: 2,
+      wait: 2,
       // If step has no subject column, leave subject empty so Instantly
       // replies in the same thread as the previous email.
       variants: [{

@@ -43,6 +43,10 @@ export function useActionExecution(tableId: string | undefined) {
             body: { table_id: tableId, row_ids: [rowId], ...(actionConfig ?? {}) },
           });
           if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          if (data?.pushed_count === 0 && data?.skipped_count > 0) {
+            throw new Error(`Skipped: no valid email found for this lead`);
+          }
           return data;
         }
         case 're_enrich': {
@@ -138,7 +142,7 @@ async function executeSingleButtonAction(
     }
 
     case 'push_to_instantly': {
-      const { error } = await supabase.functions.invoke('push-to-instantly', {
+      const { data, error } = await supabase.functions.invoke('push-to-instantly', {
         body: {
           table_id: ctx.tableId,
           row_ids: [ctx.rowId],
@@ -147,6 +151,7 @@ async function executeSingleButtonAction(
         },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return;
     }
 

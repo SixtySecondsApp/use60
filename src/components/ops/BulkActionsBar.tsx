@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Send, Trash2, X, Upload, RotateCcw } from 'lucide-react';
+import { Sparkles, Send, Trash2, X, Upload, RotateCcw, Loader2 } from 'lucide-react';
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -12,6 +12,7 @@ interface BulkActionsBarProps {
   onReEnrich?: () => void;
   onRetryFailed?: () => void;
   isEnriching?: boolean;
+  isPushingToInstantly?: boolean;
   enrichProgress?: number;
 }
 
@@ -26,6 +27,7 @@ export function BulkActionsBar({
   onReEnrich,
   onRetryFailed,
   isEnriching = false,
+  isPushingToInstantly = false,
   enrichProgress = 0,
 }: BulkActionsBarProps) {
   const isVisible = selectedCount > 0;
@@ -72,11 +74,15 @@ export function BulkActionsBar({
           {/* Push to Instantly Button */}
           <button
             onClick={onPushToInstantly}
-            disabled={isEnriching}
+            disabled={isEnriching || isPushingToInstantly}
             className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Send className="h-4 w-4" />
-            Push to Instantly
+            {isPushingToInstantly ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {isPushingToInstantly ? 'Pushing...' : 'Push to Instantly'}
           </button>
 
           {/* Push to HubSpot Button */}

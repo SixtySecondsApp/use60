@@ -39,6 +39,7 @@ import { HubSpotConfigModal } from '@/components/integrations/HubSpotConfigModal
 import { NotetakerConfigModal } from '@/components/integrations/NotetakerConfigModal';
 import { FirefliesConfigModal } from '@/components/integrations/FirefliesConfigModal';
 import { ApolloConfigModal } from '@/components/integrations/ApolloConfigModal';
+import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 
 // Hooks and stores
@@ -51,6 +52,7 @@ import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
 import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
 import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
 import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
+import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { getIntegrationDomain, getLogoS3Url, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { useUser } from '@/lib/hooks/useUser';
@@ -458,6 +460,21 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'ai-ark',
+    name: 'AI Ark',
+    description: 'B2B data, AI search & enrichment.',
+    permissions: [
+      { title: 'Search companies', description: 'Find companies by firmographic filters and AI similarity.' },
+      { title: 'Search people', description: 'Find contacts by role, seniority, and department.' },
+      { title: 'Enrich records', description: 'Refresh contact data with current job titles and emails.' },
+    ],
+    brandColor: 'violet',
+    iconBgColor: 'bg-violet-50 dark:bg-violet-900/20',
+    iconBorderColor: 'border-violet-100 dark:border-violet-800/40',
+    fallbackIcon: <Database className="w-6 h-6 text-violet-600 dark:text-violet-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'instantly',
     name: 'Instantly',
     description: 'Cold email campaigns at scale.',
@@ -732,6 +749,11 @@ export default function Integrations() {
   } = useApolloIntegration();
 
   const {
+    isConnected: aiArkConnected,
+    loading: aiArkLoading,
+  } = useAiArkIntegration();
+
+  const {
     isConnected: instantlyConnected,
     loading: instantlyLoading,
   } = useInstantlyIntegration();
@@ -813,6 +835,8 @@ export default function Integrations() {
         return firefliesConnected ? 'active' : 'inactive';
       case 'apollo':
         return apolloConnected ? 'active' : 'inactive';
+      case 'ai-ark':
+        return aiArkConnected ? 'active' : 'inactive';
       case 'instantly':
         return instantlyConnected ? 'active' : 'inactive';
       default:
@@ -855,6 +879,10 @@ export default function Integrations() {
       }
       if (integrationId === 'apollo') {
         setActiveConfigModal('apollo');
+        return;
+      }
+      if (integrationId === 'ai-ark') {
+        setActiveConfigModal('ai-ark');
         return;
       }
       if (integrationId === 'instantly') {
@@ -937,9 +965,10 @@ export default function Integrations() {
       '60-notetaker': notetakerLoading,
       fireflies: firefliesLoading,
       apollo: apolloLoading,
+      'ai-ark': aiArkLoading,
       instantly: instantlyLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, instantlyLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, instantlyLoading]
   );
 
   // Preload cached S3 logo URLs on page load to prevent any visible swap/flicker.
@@ -1120,6 +1149,10 @@ export default function Integrations() {
       />
       <ApolloConfigModal
         open={activeConfigModal === 'apollo'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <AiArkConfigModal
+        open={activeConfigModal === 'ai-ark'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
       <InstantlyConfigModal

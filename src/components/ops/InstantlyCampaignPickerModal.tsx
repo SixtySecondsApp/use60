@@ -78,13 +78,6 @@ export function InstantlyCampaignPickerModal({ open, onOpenChange, tableId, orgI
     enabled: open && !!orgId,
   })
 
-  // Auto-fetch all pages so newly created campaigns aren't hidden behind "Load more"
-  useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage && !isLoading) {
-      fetchNextPage()
-    }
-  }, [hasNextPage, isFetchingNextPage, isLoading, fetchNextPage])
-
   // Flatten all pages into one list
   const allCampaigns = useMemo(() => {
     return campaignPages?.pages.flatMap((p) => p.campaigns) ?? []

@@ -34,6 +34,7 @@ Sales intelligence platform: meeting AI, pipeline tracking, smart task automatio
 - Skip TypeScript strict mode
 - Use emoji icons in the UI -- always use Lucide React icons (`lucide-react`)
 - Use legacy `corsHeaders` in new edge functions -- use `getCorsHeaders(req)` from `corsHelper.ts` for origin-validated CORS
+- Create `<SheetContent>` or side panels without `!top-16 !h-[calc(100vh-4rem)]` -- they will render behind the fixed top bar
 
 ### Database Column Gotchas
 
@@ -199,6 +200,8 @@ See: `docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md` and `docs/security/SECUR
 **Authorization**: `import { isUserAdmin, canEditDeal } from '@/lib/utils/adminUtils'` -- check admin status and deal permissions before actions.
 
 **UI Components**: Radix UI primitives from `@/components/ui/` (Button, Dialog, etc.). Toast via `import { toast } from 'sonner'`. Always use Lucide React icons, never emoji.
+
+**Sheets & Panels (top bar offset)**: The app has a fixed top bar (`h-16` / 4rem). All `<SheetContent>` and side panels MUST include `!top-16 !h-[calc(100vh-4rem)]` (or `!top-16 !h-auto`) so they render below the top bar, not behind it. Dialogs/modals are unaffected since they center in the viewport.
 
 ## Documentation Index
 

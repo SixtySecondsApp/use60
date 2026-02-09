@@ -52,6 +52,55 @@ const INDIVIDUAL_CONFIDENCE_THRESHOLD = 0.5;
 const SEMANTIC_SIMILARITY_THRESHOLD = 0.6;
 const MAX_CANDIDATES = 5;
 
+// Data provider preference for hybrid Apollo + AI Ark routing
+export type DataProviderPreference = 'always_apollo' | 'always_ai_ark' | 'hybrid' | 'auto';
+
+// Skill keys that have provider-specific variants
+const PROVIDER_SKILL_PAIRS: Record<string, { apollo: string; ai_ark: string }> = {
+  company_search: { apollo: 'apollo-company-search', ai_ark: 'ai-ark-company-search' },
+  people_search: { apollo: 'apollo-people-search', ai_ark: 'ai-ark-people-search' },
+  enrichment: { apollo: 'apollo-enrichment', ai_ark: 'ai-ark-enrichment' },
+};
+
+/**
+ * Apply data provider preference to resolve conflicts when both Apollo and AI Ark
+ * skills match with similar confidence. Only applies when both providers are configured.
+ */
+function applyProviderPreference(
+  candidates: SkillMatch[],
+  preference: DataProviderPreference
+): SkillMatch[] {
+  if (preference === 'auto' || candidates.length < 2) return candidates;
+
+  // Find pairs of Apollo/AI Ark skills in candidates
+  const apolloSkills = candidates.filter((c) => c.skillKey.startsWith('apollo-'));
+  const aiArkSkills = candidates.filter((c) => c.skillKey.startsWith('ai-ark-'));
+
+  if (apolloSkills.length === 0 || aiArkSkills.length === 0) return candidates;
+
+  // Apply preference by boosting the preferred provider's confidence
+  const boost = 0.15;
+  return candidates.map((c) => {
+    if (preference === 'always_apollo' && c.skillKey.startsWith('apollo-')) {
+      return { ...c, confidence: Math.min(1, c.confidence + boost) };
+    }
+    if (preference === 'always_ai_ark' && c.skillKey.startsWith('ai-ark-')) {
+      return { ...c, confidence: Math.min(1, c.confidence + boost) };
+    }
+    if (preference === 'hybrid') {
+      // Hybrid: AI Ark for company/firmographic, Apollo for contacts
+      const isCompanySkill = c.skillKey.includes('company') || c.skillKey.includes('similarity') || c.skillKey.includes('semantic');
+      if (isCompanySkill && c.skillKey.startsWith('ai-ark-')) {
+        return { ...c, confidence: Math.min(1, c.confidence + boost) };
+      }
+      if (!isCompanySkill && c.skillKey.startsWith('apollo-')) {
+        return { ...c, confidence: Math.min(1, c.confidence + boost) };
+      }
+    }
+    return c;
+  }).sort((a, b) => b.confidence - a.confidence);
+}
+
 // =============================================================================
 // Matching Functions
 // =============================================================================
@@ -234,6 +283,7 @@ export async function routeToSkill(
     userId?: string;
     orgId?: string;
     currentView?: string;
+    dataProviderPreference?: DataProviderPreference;
   }
 ): Promise<RoutingDecision> {
   const candidates: SkillMatch[] = [];
@@ -323,6 +373,13 @@ export async function routeToSkill(
 
   // Sort all candidates by confidence
   candidates.sort((a, b) => b.confidence - a.confidence);
+
+  // Apply data provider preference (Apollo vs AI Ark) if specified
+  const preference = context?.dataProviderPreference || 'auto';
+  const adjustedCandidates = applyProviderPreference(candidates, preference);
+  // Replace candidates with adjusted order
+  candidates.length = 0;
+  candidates.push(...adjustedCandidates);
 
   // Select best overall match
   const bestMatch = candidates[0];

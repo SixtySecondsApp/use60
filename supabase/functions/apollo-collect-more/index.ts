@@ -360,17 +360,23 @@ serve(async (req) => {
     }
 
     // 7. Paginated Apollo search
-    const MAX_PAGES = 5
-    let currentPage = 1
+    // Skip pages we've likely already fetched — estimate starting page from existing row count
+    const perPage = 100
+    const existingRowCount = table.row_count || 0
+    const startPage = Math.max(1, Math.floor(existingRowCount / perPage) + 1)
+    // Allow enough pages to find desired_count net-new contacts (up to 20 pages = 2000 contacts scanned)
+    const MAX_PAGES = 20
+    let currentPage = startPage
     let allNewContacts: NormalizedContact[] = []
     let totalSearched = 0
     let totalDuplicates = 0
     let hasMore = true
+    let consecutiveEmptyPages = 0
 
-    console.log(`[apollo-collect-more] Searching for ${desired_count} more contacts for table ${table_id}`)
+    console.log(`[apollo-collect-more] Searching for ${desired_count} more contacts for table ${table_id}, starting at page ${startPage} (${existingRowCount} existing rows)`)
 
-    for (let attempt = 0; attempt < MAX_PAGES && hasMore; attempt++) {
-      const searchParamsWithPage = { ...search_params, page: currentPage, per_page: Math.min(desired_count * 2, 100) }
+    for (let attempt = 0; attempt < MAX_PAGES && hasMore && consecutiveEmptyPages < 3; attempt++) {
+      const searchParamsWithPage = { ...search_params, page: currentPage, per_page: perPage }
 
       const apolloResponse = await fetch(`${supabaseUrl}/functions/v1/apollo-search`, {
         method: 'POST',
@@ -411,6 +417,13 @@ serve(async (req) => {
       const netNew = filterDuplicates(pageContacts)
       totalDuplicates += pageContacts.length - netNew.length
       allNewContacts.push(...netNew)
+
+      // Track consecutive pages with zero net-new results — stop if Apollo results are exhausted
+      if (netNew.length === 0) {
+        consecutiveEmptyPages++
+      } else {
+        consecutiveEmptyPages = 0
+      }
 
       // Add to dedup sets for cross-page dedup
       for (const c of netNew) {

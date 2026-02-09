@@ -1,0 +1,183 @@
+{
+  "feature": "copilot-console",
+  "name": "Unified Copilot Console",
+  "description": "Consolidate 4 fragmented copilot admin pages into a single unified console wired to the live autonomous copilot (Claude Haiku 4.5)",
+  "status": "pending",
+  "createdAt": "2026-02-09T12:00:00Z",
+  "consultReport": ".claude/plans/concurrent-frolicking-tome.md",
+
+  "stories": [
+    {
+      "id": "CC-001",
+      "feature": "copilot-console",
+      "title": "Create CopilotConsolePage shell with tab routing",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "description": "Create the main page component at src/pages/platform/CopilotConsolePage.tsx with 4 tabs (Playground, Health, History, Engagement). Register lazy import in lazyPages.tsx, add route in App.tsx wrapped in PlatformAdminRouteGuard. Tab state via useSearchParams for shareable URLs. Lift playgroundQuery state for cross-tab re-run.",
+      "dependencies": {
+        "stories": [],
+        "files": ["src/routes/lazyPages.tsx", "src/App.tsx"],
+        "schema": []
+      },
+      "blocks": ["CC-002", "CC-003", "CC-004", "CC-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Page renders at /platform/copilot-console with 4 tab headers",
+        "Tab state persists in URL search params (?tab=playground)",
+        "Route is protected by PlatformAdminRouteGuard",
+        "BackToPlatform breadcrumb navigates to /platform"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/platform/CopilotConsolePage.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "CC-002",
+      "feature": "copilot-console",
+      "title": "Build PlaygroundTab with useCopilotChat hook",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "description": "Create PlaygroundTab component using the useCopilotChat hook (NOT the legacy InteractivePlayground). Must use persistSession: false to avoid polluting user conversations. Includes: chat input with Cmd+Enter, streaming message display, real-time tool execution trace via ToolCallCard, quick query buttons, completion metrics, clear/stop controls.",
+      "dependencies": {
+        "stories": ["CC-001"],
+        "files": ["src/lib/hooks/useCopilotChat.ts", "src/components/copilot/ToolCallCard.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["CC-003", "CC-004", "CC-005"],
+      "acceptance": [
+        "Sending a message streams response from copilot-autonomous edge function",
+        "Tool executions render in real-time with ToolCallCard showing name, input, status, timing",
+        "Quick query buttons pre-fill and send common queries",
+        "persistSession: false — no messages saved to user's conversation history",
+        "Clear conversation and stop generation buttons work"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/copilot/console/PlaygroundTab.tsx"
+      ]
+    },
+    {
+      "id": "CC-003",
+      "feature": "copilot-console",
+      "title": "Build HealthTab with analytics and quality metrics",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "description": "Create HealthTab combining: 4 metric cards from get_copilot_analytics RPC (executions, success rate, avg latency, tools used), date range selector, reused QualityDashboard component for skill readiness, and recent routing decisions table from copilot_routing_logs.",
+      "dependencies": {
+        "stories": ["CC-001"],
+        "files": ["src/components/copilot/lab/QualityDashboard.tsx"],
+        "schema": ["copilot_executions", "copilot_routing_logs"]
+      },
+      "blocks": [],
+      "parallelWith": ["CC-002", "CC-004", "CC-005"],
+      "acceptance": [
+        "4 metric cards show data from get_copilot_analytics RPC",
+        "Date range selector (7d/30d/90d) filters all metrics",
+        "QualityDashboard renders skill readiness scores and issues",
+        "Routing decisions table shows last 20 entries with confidence color coding"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/copilot/console/HealthTab.tsx"
+      ]
+    },
+    {
+      "id": "CC-004",
+      "feature": "copilot-console",
+      "title": "Build HistoryTab wrapping ExecutionHistoryList",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "description": "Thin wrapper around the existing ExecutionHistoryList component. Pass orgId and onReRun callback that switches to Playground tab with the message pre-filled.",
+      "dependencies": {
+        "stories": ["CC-001"],
+        "files": ["src/components/copilot/lab/ExecutionHistoryList.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["CC-002", "CC-003", "CC-005"],
+      "acceptance": [
+        "Execution history list renders with search, status filter, and pagination",
+        "Clicking Re-run switches to Playground tab with query pre-filled"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/copilot/console/HistoryTab.tsx"
+      ]
+    },
+    {
+      "id": "CC-005",
+      "feature": "copilot-console",
+      "title": "Build EngagementTab with performance metrics",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "description": "Port AgentPerformanceDashboard data logic into tab form. Includes: date range + user filter, 4 metric cards (messages, actions, time saved, confirmations), proactive vs reactive breakdown, outcomes grid, top sequences list, daily activity trend chart. All data from copilot_engagement_events table.",
+      "dependencies": {
+        "stories": ["CC-001"],
+        "files": [],
+        "schema": ["copilot_engagement_events"]
+      },
+      "blocks": [],
+      "parallelWith": ["CC-002", "CC-003", "CC-004"],
+      "acceptance": [
+        "4 metric cards show engagement data with date range filter",
+        "Proactive vs reactive breakdown visualized",
+        "Top sequences ranked by usage count",
+        "Daily activity trend shows 14-day bar chart"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/copilot/console/EngagementTab.tsx"
+      ]
+    },
+    {
+      "id": "CC-006",
+      "feature": "copilot-console",
+      "title": "Update PlatformDashboard navigation entries",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "description": "In PlatformDashboard.tsx, replace the 4 separate copilot entries (copilot-lab, copilot-tests, skills-qa, agent-performance) in the 'AI & Intelligence' section with a single 'Copilot Console' entry pointing to /platform/copilot-console. Keep old routes functional.",
+      "dependencies": {
+        "stories": ["CC-001"],
+        "files": ["src/pages/platform/PlatformDashboard.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "AI & Intelligence section shows single 'Copilot Console' entry",
+        "Old routes (/platform/copilot-lab, etc.) still render their pages",
+        "No broken navigation links"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/pages/platform/PlatformDashboard.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 0,
+    "estimatedMinutes": 115,
+    "parallelGroups": [
+      {
+        "group": ["CC-002", "CC-003", "CC-004", "CC-005"],
+        "after": "CC-001",
+        "reason": "All 4 tabs are independent components with no file overlap",
+        "timeSaved": "50 min"
+      }
+    ],
+    "criticalPath": ["CC-001", "CC-002", "CC-006"],
+    "estimatedWithParallel": "55 min"
+  }
+}

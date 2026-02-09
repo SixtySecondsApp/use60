@@ -9,7 +9,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { crypto } from 'https://deno.land/std@0.190.0/crypto/mod.ts';
 
 const ENCHARGE_WRITE_KEY = Deno.env.get('ENCHARGE_WRITE_KEY');
@@ -195,6 +195,8 @@ function buildMimeMessage(
   message += `To: ${toEmail}\r\n`;
   message += `Subject: ${subject}\r\n`;
   message += `MIME-Version: 1.0\r\n`;
+  message += `List-Unsubscribe: <mailto:unsubscribe@use60.com?subject=unsubscribe>\r\n`;
+  message += `List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n`;
   message += `Content-Type: multipart/alternative; boundary="${boundary}"\r\n`;
   message += `\r\n`;
   

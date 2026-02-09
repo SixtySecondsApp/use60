@@ -1226,7 +1226,7 @@ function OpsDetailPage() {
         if (config?.instantly_subtype === 'push_action') {
           // Resolve campaign_id: push_action column → campaign_config column fallback
           let campaignId = config?.push_config?.campaign_id || config?.campaign_id;
-          let fieldMapping = config?.push_config?.field_mapping || config?.field_mapping;
+          let fieldMapping: Record<string, string> | undefined = config?.push_config?.field_mapping || config?.field_mapping;
 
           if (!campaignId) {
             const campaignConfigCol = columns.find(c =>
@@ -1247,40 +1247,74 @@ function OpsDetailPage() {
             return;
           }
 
-          // Validate + push in async IIFE (cell handler is synchronous)
-          (async () => {
-            // Validate campaign exists before pushing
-            if (table?.organization_id) {
-              const validation = await validateInstantlyCampaign(table.organization_id, campaignId!);
-              if (!validation.valid) {
-                toast.error('Campaign no longer exists. Please select a new campaign.');
-                setEditInstantlyColumn(col);
-                return;
+          // Auto-detect field mapping from columns if not saved in config
+          if (!fieldMapping?.email) {
+            const detected: Record<string, string> = { email: '' };
+            for (const c of columns) {
+              const k = c.key.toLowerCase();
+              const l = c.label.toLowerCase();
+              if (!detected.email && (k === 'email' || k === 'email_address' || k === 'work_email' || l === 'email')) {
+                detected.email = c.key;
+              } else if (!detected.first_name && (k === 'first_name' || k === 'firstname' || l === 'first name')) {
+                detected.first_name = c.key;
+              } else if (!detected.last_name && (k === 'last_name' || k === 'lastname' || l === 'last name')) {
+                detected.last_name = c.key;
+              } else if (!detected.company_name && (k === 'company' || k === 'company_name' || k === 'organization' || l === 'company')) {
+                detected.company_name = c.key;
               }
             }
+            if (!detected.email) {
+              toast.error('No email column found. Add an email column to push leads.');
+              return;
+            }
+            fieldMapping = detected;
+          }
 
-            // Set cell to pending
-            cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
-
-            executeSingleAction.mutate(
-              {
-                columnId: col.id,
-                rowId,
-                actionType: 'push_to_instantly',
-                actionConfig: {
-                  campaign_id: campaignId,
-                  field_mapping: fieldMapping,
-                },
-              },
-              {
-                onSuccess: () => {
-                  cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
-                },
-                onError: () => {
+          // Validate + push in async IIFE (cell handler is synchronous)
+          (async () => {
+            try {
+              // Validate campaign exists before pushing
+              if (table?.organization_id) {
+                const validation = await validateInstantlyCampaign(table.organization_id, campaignId!);
+                if (!validation.valid) {
+                  toast.error('Campaign no longer exists. Please select a new campaign.');
+                  setEditInstantlyColumn(col);
                   cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+                  return;
+                }
+              }
+
+              // Set cell to pending
+              cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+
+              executeSingleAction.mutate(
+                {
+                  columnId: col.id,
+                  rowId,
+                  actionType: 'push_to_instantly',
+                  actionConfig: {
+                    campaign_id: campaignId,
+                    field_mapping: fieldMapping,
+                  },
                 },
-              },
-            );
+                {
+                  onSuccess: (data: any) => {
+                    const count = data?.pushed_count ?? 0;
+                    cellEditMutation.mutate({ rowId, columnId: col.id, value: count > 0 ? 'complete' : 'skipped', cellId: cell?.id });
+                    if (count > 0) {
+                      toast.success('Lead pushed to Instantly');
+                    }
+                  },
+                  onError: (err: Error) => {
+                    cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+                    toast.error(err.message || 'Failed to push lead');
+                  },
+                },
+              );
+            } catch (err: any) {
+              toast.error(err.message || 'Push failed');
+              cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+            }
           })();
           return;
         }

@@ -8,21 +8,15 @@ const corsHeaders = {
 }
 
 interface CreateDynamicTableRequest {
+  source?: 'apollo' | 'ai_ark'
+  action?: 'company_search' | 'people_search'
   query_description: string
-  search_params: {
-    person_titles?: string[]
-    person_locations?: string[]
-    organization_num_employees_ranges?: string[]
-    organization_latest_funding_stage_cd?: string[]
-    q_keywords?: string
-    q_organization_keyword_tags?: string[]
-    per_page?: number
-    page?: number
-  }
+  search_params: Record<string, unknown>
   table_name?: string
   auto_enrich?: {
     email?: boolean
     phone?: boolean
+    linkedin?: boolean
     reveal_personal_emails?: boolean
     reveal_phone_number?: boolean
   }
@@ -55,6 +49,94 @@ interface ApolloSearchResponse {
     per_page: number
     total: number
     has_more: boolean
+  }
+}
+
+// AI Ark normalized types (matches ai-ark-search edge function output)
+interface NormalizedAiArkCompany {
+  ai_ark_id: string
+  company_name: string
+  domain: string | null
+  industry: string | null
+  employee_count: number | null
+  employee_range: string | null
+  location: string | null
+  founded_year: number | null
+  description: string | null
+  logo_url: string | null
+  linkedin_url: string | null
+  website: string | null
+  technologies: string[] | null
+}
+
+interface NormalizedAiArkContact {
+  ai_ark_id: string
+  first_name: string
+  last_name: string
+  full_name: string
+  title: string | null
+  seniority: string | null
+  linkedin_url: string | null
+  location: string | null
+  industry: string | null
+  current_company: string | null
+  current_company_domain: string | null
+  photo_url: string | null
+}
+
+// Standard columns for AI Ark company-sourced ops tables
+const AI_ARK_COMPANY_COLUMNS = [
+  { key: 'company_name', label: 'Company', column_type: 'company', position: 0, width: 200 },
+  { key: 'domain', label: 'Domain', column_type: 'url', position: 1, width: 180 },
+  { key: 'industry', label: 'Industry', column_type: 'text', position: 2, width: 160 },
+  { key: 'employee_count', label: 'Employees', column_type: 'number', position: 3, width: 110 },
+  { key: 'location', label: 'Location', column_type: 'text', position: 4, width: 160 },
+  { key: 'description', label: 'Description', column_type: 'text', position: 5, width: 250 },
+  { key: 'founded_year', label: 'Founded', column_type: 'number', position: 6, width: 100 },
+  { key: 'technologies', label: 'Tech Stack', column_type: 'text', position: 7, width: 200 },
+  { key: 'linkedin_url', label: 'LinkedIn', column_type: 'linkedin', position: 8, width: 160 },
+  { key: 'website', label: 'Website', column_type: 'url', position: 9, width: 180 },
+] as const
+
+// Standard columns for AI Ark people-sourced ops tables
+const AI_ARK_PEOPLE_COLUMNS = [
+  { key: 'full_name', label: 'Name', column_type: 'person', position: 0, width: 180 },
+  { key: 'title', label: 'Title', column_type: 'text', position: 1, width: 200 },
+  { key: 'current_company', label: 'Company', column_type: 'company', position: 2, width: 180 },
+  { key: 'linkedin_url', label: 'LinkedIn', column_type: 'linkedin', position: 3, width: 160 },
+  { key: 'seniority', label: 'Seniority', column_type: 'text', position: 4, width: 120 },
+  { key: 'industry', label: 'Industry', column_type: 'text', position: 5, width: 140 },
+  { key: 'location', label: 'Location', column_type: 'text', position: 6, width: 160 },
+  { key: 'current_company_domain', label: 'Company Domain', column_type: 'url', position: 7, width: 160 },
+] as const
+
+function getAiArkCompanyCellValue(company: NormalizedAiArkCompany, key: string): string | null {
+  switch (key) {
+    case 'company_name': return company.company_name || null
+    case 'domain': return company.domain
+    case 'industry': return company.industry
+    case 'employee_count': return company.employee_count != null ? String(company.employee_count) : null
+    case 'location': return company.location
+    case 'description': return company.description
+    case 'founded_year': return company.founded_year != null ? String(company.founded_year) : null
+    case 'technologies': return company.technologies?.join(', ') || null
+    case 'linkedin_url': return company.linkedin_url
+    case 'website': return company.website
+    default: return null
+  }
+}
+
+function getAiArkContactCellValue(contact: NormalizedAiArkContact, key: string): string | null {
+  switch (key) {
+    case 'full_name': return contact.full_name || null
+    case 'title': return contact.title
+    case 'current_company': return contact.current_company
+    case 'linkedin_url': return contact.linkedin_url
+    case 'seniority': return contact.seniority
+    case 'industry': return contact.industry
+    case 'location': return contact.location
+    case 'current_company_domain': return contact.current_company_domain
+    default: return null
   }
 }
 
@@ -245,7 +327,228 @@ serve(async (req) => {
       )
     }
 
-    const { query_description, search_params, table_name: requestedTableName, auto_enrich } = body
+    const { source = 'apollo', action, query_description, search_params, table_name: requestedTableName, auto_enrich } = body
+
+    // ---------------------------------------------------------------
+    // AI Ark branch — separate flow for AI Ark data source
+    // ---------------------------------------------------------------
+    if (source === 'ai_ark') {
+      const searchAction = action || 'company_search'
+      const isCompanySearch = searchAction === 'company_search'
+      const aiArkColumns = isCompanySearch ? AI_ARK_COMPANY_COLUMNS : AI_ARK_PEOPLE_COLUMNS
+
+      // Call ai-ark-search edge function
+      const aiArkResponse = await fetch(`${supabaseUrl}/functions/v1/ai-ark-search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+          apikey: supabaseAnonKey,
+        },
+        body: JSON.stringify({ action: searchAction, ...search_params, preview: false }),
+      })
+
+      if (!aiArkResponse.ok) {
+        const errorBody = await aiArkResponse.text()
+        console.error('[copilot-dynamic-table] AI Ark search failed:', aiArkResponse.status, errorBody)
+        try {
+          const parsed = JSON.parse(errorBody)
+          return new Response(
+            JSON.stringify({ error: parsed.error || 'AI Ark search failed', code: parsed.code }),
+            { status: aiArkResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        } catch {
+          return new Response(
+            JSON.stringify({ error: 'AI Ark search failed' }),
+            { status: aiArkResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
+      const aiArkData = await aiArkResponse.json()
+      const results = isCompanySearch
+        ? (aiArkData.companies || []) as NormalizedAiArkCompany[]
+        : (aiArkData.contacts || []) as NormalizedAiArkContact[]
+
+      if (results.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'No results found. Try broadening your search criteria.', code: 'NO_RESULTS' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Generate table name
+      const tableName = requestedTableName || truncateName(query_description || 'AI Ark Search')
+
+      // Create table
+      const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
+      const { data: newTable, error: tableError } = await serviceClient
+        .from('dynamic_tables')
+        .insert({
+          organization_id: orgId,
+          created_by: user.id,
+          name: tableName,
+          description: query_description,
+          source_type: 'ai_ark',
+          source_query: search_params,
+        })
+        .select('id, name')
+        .single()
+
+      if (tableError || !newTable) {
+        console.error('[copilot-dynamic-table] Failed to create AI Ark table:', tableError?.message)
+        if (tableError?.code === '23505') {
+          return new Response(
+            JSON.stringify({ error: `A table named "${tableName}" already exists.`, code: 'DUPLICATE_TABLE_NAME' }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        return new Response(
+          JSON.stringify({ error: 'Failed to create ops table' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const tableId = newTable.id
+
+      // Insert columns
+      const colInserts = aiArkColumns.map((col) => ({
+        table_id: tableId,
+        key: col.key,
+        label: col.label,
+        column_type: col.column_type,
+        position: col.position,
+        width: col.width,
+        is_enrichment: false,
+        is_visible: true,
+      }))
+
+      const { data: columns, error: colErr } = await serviceClient
+        .from('dynamic_table_columns')
+        .insert(colInserts)
+        .select('id, key')
+
+      if (colErr || !columns) {
+        await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
+        return new Response(
+          JSON.stringify({ error: 'Failed to create table columns' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const colKeyToId: Record<string, string> = {}
+      for (const col of columns) colKeyToId[col.key] = col.id
+
+      // Insert rows
+      const rowInserts = results.map((item: NormalizedAiArkCompany | NormalizedAiArkContact, index: number) => ({
+        table_id: tableId,
+        row_index: index,
+        source_id: isCompanySearch ? (item as NormalizedAiArkCompany).ai_ark_id : (item as NormalizedAiArkContact).ai_ark_id,
+        source_data: item as unknown as Record<string, unknown>,
+      }))
+
+      const { data: rows, error: rowErr } = await serviceClient
+        .from('dynamic_table_rows')
+        .insert(rowInserts)
+        .select('id, row_index')
+
+      if (rowErr || !rows) {
+        await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
+        return new Response(
+          JSON.stringify({ error: 'Failed to create table rows' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Insert cells
+      const cellInserts: Array<{ row_id: string; column_id: string; value: string | null; source: string; status: string }> = []
+      const sortedRows = [...rows].sort((a, b) => a.row_index - b.row_index)
+
+      for (let i = 0; i < sortedRows.length; i++) {
+        const row = sortedRows[i]
+        const item = results[i]
+
+        for (const col of aiArkColumns) {
+          const columnId = colKeyToId[col.key]
+          if (!columnId) continue
+          const value = isCompanySearch
+            ? getAiArkCompanyCellValue(item as NormalizedAiArkCompany, col.key)
+            : getAiArkContactCellValue(item as NormalizedAiArkContact, col.key)
+          cellInserts.push({ row_id: row.id, column_id: columnId, value, source: 'ai_ark', status: 'none' })
+        }
+      }
+
+      if (cellInserts.length > 0) {
+        const { error: cellErr } = await serviceClient.from('dynamic_table_cells').insert(cellInserts)
+        if (cellErr) {
+          await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
+          return new Response(
+            JSON.stringify({ error: 'Failed to populate table data' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
+      console.log(`[copilot-dynamic-table] AI Ark: Created table ${tableId} with ${rows.length} rows, ${cellInserts.length} cells`)
+
+      // Auto-enrich via ai-ark-enrich if requested
+      let enrichedCount = 0
+      if (auto_enrich?.email || auto_enrich?.phone || auto_enrich?.linkedin) {
+        for (const key of ['email', 'phone', 'linkedin_url'] as const) {
+          const shouldEnrich = key === 'email' ? auto_enrich.email : key === 'phone' ? auto_enrich.phone : auto_enrich.linkedin
+          if (!shouldEnrich || !colKeyToId[key]) continue
+
+          try {
+            const enrichResp = await fetch(`${supabaseUrl}/functions/v1/ai-ark-enrich`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: authHeader, apikey: supabaseAnonKey },
+              body: JSON.stringify({ action: 'bulk_enrich', table_id: tableId, column_id: colKeyToId[key] }),
+            })
+            if (enrichResp.ok) {
+              const result = await enrichResp.json()
+              enrichedCount += result.enriched || 0
+            }
+          } catch (e) {
+            console.warn(`[copilot-dynamic-table] AI Ark ${key} enrichment error:`, e)
+          }
+        }
+      }
+
+      // Build preview
+      const previewItems = results.slice(0, 5)
+      const previewRows = isCompanySearch
+        ? previewItems.map((c) => {
+            const co = c as NormalizedAiArkCompany
+            return { Company: co.company_name, Domain: co.domain || '', Industry: co.industry || '', Employees: co.employee_count != null ? String(co.employee_count) : '', Location: co.location || '' }
+          })
+        : previewItems.map((c) => {
+            const ct = c as NormalizedAiArkContact
+            return { Name: ct.full_name, Title: ct.title || '', Company: ct.company || '', Email: ct.email || '', LinkedIn: ct.linkedin_url || '' }
+          })
+
+      const previewColumns = isCompanySearch
+        ? ['Company', 'Domain', 'Industry', 'Employees', 'Location']
+        : ['Name', 'Title', 'Company', 'Email', 'LinkedIn']
+
+      return new Response(JSON.stringify({
+        table_id: tableId,
+        table_name: newTable.name,
+        row_count: results.length,
+        column_count: aiArkColumns.length,
+        source_type: 'ai_ark',
+        enriched_count: enrichedCount,
+        preview_rows: previewRows,
+        preview_columns: previewColumns,
+        query_description,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // ---------------------------------------------------------------
+    // Apollo flow (default) — existing behavior
+    // ---------------------------------------------------------------
 
     // ---------------------------------------------------------------
     // 4a. Build dedup lookup BEFORE searching (so we can page through dupes)
