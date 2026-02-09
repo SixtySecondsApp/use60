@@ -304,7 +304,7 @@ serve(async (req) => {
       }
 
       // Normalize sequences to match Instantly API v2 step schema before sending.
-      // Ensures every step has required fields: type, delay, variants.
+      // Ensures every step has required fields: type, delay/wait, variants.
       // Handles callers that use legacy/alternate field names.
       function normalizeSequences(sequences: any[]): any[] {
         if (!Array.isArray(sequences)) return sequences
@@ -316,10 +316,11 @@ serve(async (req) => {
               // Ensure type
               if (!step.type) step.type = 'email'
 
-              // Ensure delay (step 1 = 0, others default to 2)
-              if (step.delay == null) {
-                step.delay = idx === 0 ? 0 : (step.wait_days || 2)
-              }
+              // Resolve delay value — accept delay, wait, or wait_days (in days)
+              const delayDays = step.delay ?? step.wait ?? step.wait_days ?? (idx === 0 ? 0 : 2)
+              // Send both 'delay' and 'wait' to cover Instantly API v2 variations
+              step.delay = delayDays
+              step.wait = delayDays
               delete step.wait_days
 
               // Ensure variants array — move top-level subject/body into variants if needed
@@ -348,6 +349,9 @@ serve(async (req) => {
         campaignBody.sequences = normalizeSequences(body.sequences)
       }
 
+      console.log(`[instantly-admin] Creating campaign with ${campaignBody.sequences?.[0]?.steps?.length ?? 0} steps:`,
+        JSON.stringify(campaignBody.sequences?.[0]?.steps?.map((s: any) => ({ type: s.type, delay: s.delay, wait: s.wait })) ?? []))
+
       // Attempt create — if Instantly returns a validation error, log and retry once
       // with additional auto-fixes inferred from the error message
       let data: any
@@ -370,7 +374,9 @@ serve(async (req) => {
             for (let i = 0; i < seq.steps.length; i++) {
               const step = seq.steps[i]
               step.type = step.type || 'email'
-              if (step.delay == null) step.delay = i === 0 ? 0 : 2
+              const d = i === 0 ? 0 : 2
+              if (step.delay == null) step.delay = d
+              if (step.wait == null) step.wait = d
               if (!Array.isArray(step.variants) || step.variants.length === 0) {
                 step.variants = [{ subject: '', body: '' }]
               }
