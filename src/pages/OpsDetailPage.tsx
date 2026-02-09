@@ -176,6 +176,7 @@ function OpsDetailPage() {
   const [sessionMessages, setSessionMessages] = useState<any[]>([]);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotPush, setShowHubSpotPush] = useState(false);
+  const [isPushingToInstantly, setIsPushingToInstantly] = useState(false);
   const [editEnrichmentColumn, setEditEnrichmentColumn] = useState<OpsTableColumn | null>(null);
   const [editFormulaColumn, setEditFormulaColumn] = useState<OpsTableColumn | null>(null);
   const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
@@ -2914,30 +2915,37 @@ function OpsDetailPage() {
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
           startEnrichment({ columnId: enrichCols[0].id, rowIds: Array.from(selectedRows) });
         }}
+        isPushingToInstantly={isPushingToInstantly}
         onPushToInstantly={async () => {
-          // Find campaign_id from the campaign_config or push_action column
-          const instantlyCol = columns.find(c =>
-            c.column_type === 'instantly' &&
-            ((c.integration_config as any)?.instantly_subtype === 'campaign_config' ||
-             (c.integration_config as any)?.instantly_subtype === 'push_action')
-          );
-          const cfg = instantlyCol?.integration_config as any;
-          const campaignId = cfg?.campaign_id || cfg?.push_config?.campaign_id;
-          if (!campaignId) {
-            toast.error('No campaign linked. Open Instantly settings to link a campaign first.');
-            return;
-          }
-          // Validate campaign exists before pushing
-          if (table?.organization_id) {
-            const validation = await validateInstantlyCampaign(table.organization_id, campaignId);
-            if (!validation.valid) {
-              toast.error('Campaign no longer exists in Instantly. Please select a new campaign.');
-              if (instantlyCol) setEditInstantlyColumn(instantlyCol);
+          let toastId: string | number | undefined;
+          try {
+            // Find campaign_id from the campaign_config or push_action column
+            const instantlyCol = columns.find(c =>
+              c.column_type === 'instantly' &&
+              ((c.integration_config as any)?.instantly_subtype === 'campaign_config' ||
+               (c.integration_config as any)?.instantly_subtype === 'push_action')
+            );
+            const cfg = instantlyCol?.integration_config as any;
+            const campaignId = cfg?.campaign_id || cfg?.push_config?.campaign_id;
+            if (!campaignId) {
+              toast.error('No campaign linked. Open Instantly settings to link a campaign first.');
               return;
             }
-          }
-          const toastId = toast.loading(`Pushing ${selectedRows.size} leads to Instantly...`);
-          try {
+
+            setIsPushingToInstantly(true);
+
+            // Validate campaign exists before pushing
+            if (table?.organization_id) {
+              const validation = await validateInstantlyCampaign(table.organization_id, campaignId);
+              if (!validation.valid) {
+                toast.error(validation.error || 'Campaign no longer exists in Instantly. Please select a new campaign.');
+                if (instantlyCol) setEditInstantlyColumn(instantlyCol);
+                return;
+              }
+            }
+
+            toastId = toast.loading(`Pushing ${selectedRows.size} leads to Instantly...`);
+
             const { data, error } = await supabase.functions.invoke('push-to-instantly', {
               body: {
                 table_id: tableId,
@@ -2946,15 +2954,29 @@ function OpsDetailPage() {
                 field_mapping: cfg?.field_mapping,
               },
             });
+
             if (error) throw error;
             if (data?.error) throw new Error(data.error);
+
+            const parts: string[] = [];
+            if (data?.pushed_count) parts.push(`${data.pushed_count} pushed`);
+            if (data?.skipped_count) parts.push(`${data.skipped_count} skipped (no email)`);
+            if (data?.error_count) parts.push(`${data.error_count} failed`);
+
             toast.success(
-              `Pushed ${data.pushed_count} leads${data.skipped_count ? `, ${data.skipped_count} skipped (no email)` : ''}`,
+              parts.length > 0 ? `Instantly: ${parts.join(', ')}` : 'Push complete',
               { id: toastId },
             );
             queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
           } catch (err: any) {
-            toast.error(err.message || 'Push to Instantly failed', { id: toastId });
+            const msg = err?.message || 'Push to Instantly failed';
+            if (toastId) {
+              toast.error(msg, { id: toastId });
+            } else {
+              toast.error(msg);
+            }
+          } finally {
+            setIsPushingToInstantly(false);
           }
         }}
         onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
