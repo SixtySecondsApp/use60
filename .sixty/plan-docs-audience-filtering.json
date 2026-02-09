@@ -1,0 +1,125 @@
+{
+  "project": {
+    "name": "Docs Audience Filtering",
+    "description": "Make docs relevant depending on internal vs customer view, add customer-facing documentation",
+    "createdAt": "2026-02-08T00:00:00Z",
+    "consultReport": "consult/docs-audience-filtering.md"
+  },
+  "features": [
+    {
+      "id": "infrastructure",
+      "name": "Audience Filtering Infrastructure",
+      "status": "complete",
+      "priority": 1
+    },
+    {
+      "id": "content-tagging",
+      "name": "Tag Existing Articles",
+      "status": "complete",
+      "priority": 2
+    },
+    {
+      "id": "customer-content",
+      "name": "Customer-Facing Articles",
+      "status": "complete",
+      "priority": 3
+    },
+    {
+      "id": "polish",
+      "name": "Polish & Integration",
+      "status": "complete",
+      "priority": 4
+    }
+  ],
+  "stories": [
+    {
+      "id": "DOCS-201",
+      "feature": "infrastructure",
+      "title": "Add target_audience filter to DocsPage.tsx",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [] },
+      "files": ["src/pages/DocsPage.tsx"]
+    },
+    {
+      "id": "DOCS-202",
+      "feature": "infrastructure",
+      "title": "Add audience toggle UI to DocsAdminPage.tsx",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": [] },
+      "parallelWith": ["DOCS-201"],
+      "files": ["src/pages/platform/DocsAdminPage.tsx"]
+    },
+    {
+      "id": "DOCS-203",
+      "feature": "content-tagging",
+      "title": "Tag all existing articles with audience metadata",
+      "type": "migration",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["DOCS-201"] },
+      "files": ["supabase/migrations/20260208300000_tag_docs_audience.sql"]
+    },
+    {
+      "id": "DOCS-204",
+      "feature": "customer-content",
+      "title": "Write customer Getting Started article",
+      "type": "content",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["DOCS-203"] },
+      "parallelWith": ["DOCS-205", "DOCS-206"],
+      "files": ["supabase/migrations/20260208300001_seed_customer_docs.sql"]
+    },
+    {
+      "id": "DOCS-205",
+      "feature": "customer-content",
+      "title": "Write customer Meeting Intelligence + Team Analytics docs",
+      "type": "content",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["DOCS-203"] },
+      "parallelWith": ["DOCS-204", "DOCS-206"],
+      "files": ["supabase/migrations/20260208300001_seed_customer_docs.sql"]
+    },
+    {
+      "id": "DOCS-206",
+      "feature": "customer-content",
+      "title": "Write customer Dashboard + Settings docs",
+      "type": "content",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["DOCS-203"] },
+      "parallelWith": ["DOCS-204", "DOCS-205"],
+      "files": ["supabase/migrations/20260208300001_seed_customer_docs.sql"]
+    },
+    {
+      "id": "DOCS-207",
+      "feature": "polish",
+      "title": "Add HelpPanel to external-facing pages",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["DOCS-204"] },
+      "files": ["src/pages/Dashboard.tsx", "src/pages/MeetingIntelligence.tsx", "src/pages/insights/TeamAnalytics.tsx"]
+    },
+    {
+      "id": "DOCS-208",
+      "feature": "polish",
+      "title": "Update CATEGORY_ORDER for external users",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["DOCS-201"] },
+      "files": ["src/pages/DocsPage.tsx"]
+    }
+  ],
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 8,
+    "estimatedMinutes": 90
+  }
+}

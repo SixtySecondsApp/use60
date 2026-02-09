@@ -1,0 +1,954 @@
+{
+  "project": {
+    "name": "Copilot Agent Team Improvements",
+    "description": "Comprehensive copilot improvements identified by 4-agent analysis team: Output Formatting, UX/UI & Loading, Skills Enhancement, and Skeptic Critique. Targets autonomous mode parity, skill routing reliability, and UX polish.",
+    "createdAt": "2026-02-08T12:00:00Z",
+    "source": "4-agent-team-analysis",
+    "agents": [
+      "Agent 1: Output Formatting Specialist",
+      "Agent 2: UX/UI & Loading Specialist",
+      "Agent 3: Skills Enhancement Specialist",
+      "Agent 4: Skeptic & Quality Critic"
+    ],
+    "currentScore": 4.5,
+    "targetScore": 8.5
+  },
+  "features": [
+    {
+      "id": "autonomous-parity",
+      "name": "Autonomous Mode Data & Response Parity",
+      "status": "complete",
+      "priority": "critical",
+      "description": "Wire autonomous mode to real CRM data and structured responses. Currently the default mode asks Claude to hallucinate data.",
+      "agentSource": [
+        "Agent 1",
+        "Agent 4"
+      ],
+      "createdAt": "2026-02-08T12:00:00Z"
+    },
+    {
+      "id": "skill-routing",
+      "name": "Skill Routing & Trigger Fix",
+      "status": "complete",
+      "priority": "critical",
+      "description": "Rewrite all 31 skill triggers from event names to natural language V2 format. Tiers 1 & 2 of routing are currently non-functional.",
+      "agentSource": [
+        "Agent 3"
+      ],
+      "createdAt": "2026-02-08T12:00:00Z"
+    },
+    {
+      "id": "ux-essentials",
+      "name": "UX Essential Fixes",
+      "status": "complete",
+      "priority": "high",
+      "description": "Retry button, copy button, scroll-to-bottom, unified input, keyboard shortcuts.",
+      "agentSource": [
+        "Agent 2"
+      ],
+      "createdAt": "2026-02-08T12:00:00Z"
+    },
+    {
+      "id": "formatting-consistency",
+      "name": "Output Formatting Consistency",
+      "status": "complete",
+      "priority": "high",
+      "description": "Centralize formatting utilities, standardize components, fix action contract.",
+      "agentSource": [
+        "Agent 1"
+      ],
+      "createdAt": "2026-02-08T12:00:00Z"
+    },
+    {
+      "id": "skills-expansion",
+      "name": "Skills Coverage Expansion",
+      "status": "complete",
+      "priority": "medium",
+      "description": "Build missing skills (lead research, competitive intel, qualification, win/loss) and sequences.",
+      "agentSource": [
+        "Agent 3"
+      ],
+      "createdAt": "2026-02-08T12:00:00Z"
+    },
+    {
+      "id": "code-quality",
+      "name": "Code Quality & Tech Debt",
+      "status": "complete",
+      "priority": "medium",
+      "description": "Split 14k-line edge function, remove dead code, fix memory service bug, clean bundle.",
+      "agentSource": [
+        "Agent 4"
+      ],
+      "createdAt": "2026-02-08T12:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "AUTO-001",
+      "feature": "autonomous-parity",
+      "title": "Port executeAction adapter from api-copilot to copilot-autonomous",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/api-copilot/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "AUTO-002",
+        "AUTO-003",
+        "AUTO-004"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "copilot-autonomous can call executeAction to query real deals, contacts, meetings, tasks",
+        "All 4 tools (list_skills, get_skill, execute_action, resolve_entity) available in autonomous mode",
+        "Returns real CRM data instead of Claude hallucinations",
+        "Existing api-copilot behavior unaffected"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "supabase/functions/_shared/executeActionAdapter.ts"
+      ],
+      "agentSource": "Agent 4",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "AUTO-002",
+      "feature": "autonomous-parity",
+      "title": "Fix platform_skills to organization_skills reading in autonomous executor",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "AUTO-001"
+        ],
+        "files": [
+          "src/lib/copilot/agent/autonomousExecutor.ts"
+        ],
+        "schema": [
+          "organization_skills"
+        ]
+      },
+      "blocks": [
+        "AUTO-004"
+      ],
+      "parallelWith": [
+        "AUTO-003"
+      ],
+      "acceptance": [
+        "autonomousExecutor.ts reads from organization_skills via get_organization_skills_for_agent RPC",
+        "copilotRoutingService.ts reads from organization_skills",
+        "Org-specific variables (company name, brand tone) are resolved",
+        "${variable} placeholders no longer appear in skill content"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/copilot/agent/autonomousExecutor.ts",
+        "src/lib/services/copilotRoutingService.ts"
+      ],
+      "agentSource": "Agent 3, Agent 4",
+      "completedAt": "2026-02-08T12:14:42.339Z"
+    },
+    {
+      "id": "AUTO-003",
+      "feature": "autonomous-parity",
+      "title": "Extract shared detectAndStructureResponse module",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "AUTO-001"
+        ],
+        "files": [
+          "supabase/functions/api-copilot/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "AUTO-004"
+      ],
+      "parallelWith": [
+        "AUTO-002"
+      ],
+      "acceptance": [
+        "detectAndStructureResponse() extracted to supabase/functions/_shared/structuredResponseDetector.ts",
+        "api-copilot imports from shared module (no behavior change)",
+        "Module is importable by copilot-autonomous",
+        "All 48+ response type mappings preserved"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/structuredResponseDetector.ts",
+        "supabase/functions/api-copilot/index.ts"
+      ],
+      "agentSource": "Agent 1",
+      "startedAt": "2026-02-08T12:07:56.484Z",
+      "completedAt": "2026-02-08T12:32:28.860Z"
+    },
+    {
+      "id": "AUTO-004",
+      "feature": "autonomous-parity",
+      "title": "Wire structured responses into autonomous SSE stream",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": [
+          "AUTO-002",
+          "AUTO-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "AUTO-005"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "copilot-autonomous emits structured_response SSE event after agentic loop",
+        "Tool executions are mapped to structured response types via shared detector",
+        "Frontend receives structuredResponse on message objects",
+        "Rich response components render for autonomous mode messages"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "src/lib/hooks/useCopilotChat.ts",
+        "src/lib/contexts/CopilotContext.tsx"
+      ],
+      "agentSource": "Agent 1, Agent 4",
+      "completedAt": "2026-02-08T13:04:23.680Z"
+    },
+    {
+      "id": "AUTO-005",
+      "feature": "autonomous-parity",
+      "title": "End-to-end test: top 5 copilot workflows with real data",
+      "type": "testing",
+      "status": "complete",
+      "completedAt": "2026-02-08T13:14:00Z",
+      "priority": 5,
+      "dependencies": {
+        "stories": [
+          "AUTO-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Meeting prep workflow returns real meeting data with structured response panel",
+        "Pipeline overview returns real deal data with PipelineResponse component",
+        "Post-meeting follow-up generates email from real transcript",
+        "Daily brief shows real stale deals, upcoming meetings, tasks",
+        "Email draft uses real contact context"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/__tests__/copilot-autonomous-e2e.test.ts"
+      ],
+      "agentSource": "Agent 4"
+    },
+    {
+      "id": "ROUTE-001",
+      "feature": "skill-routing",
+      "title": "Rewrite all 19 atomic skill triggers to V2 natural language format",
+      "type": "skills",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "ROUTE-003"
+      ],
+      "parallelWith": [
+        "ROUTE-002"
+      ],
+      "acceptance": [
+        "All 19 atomic SKILL.md files use V2 trigger format with pattern, intent, confidence, examples",
+        "Each skill has 3-5 natural language trigger patterns",
+        "Each skill has 5-10 keywords for fallback matching",
+        "Descriptions rewritten for embedding discoverability",
+        "npm run validate-skills passes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "skills/atomic/*/SKILL.md"
+      ],
+      "agentSource": "Agent 3",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "ROUTE-002",
+      "feature": "skill-routing",
+      "title": "Rewrite all 12 sequence triggers to V2 natural language format",
+      "type": "skills",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "ROUTE-003"
+      ],
+      "parallelWith": [
+        "ROUTE-001"
+      ],
+      "acceptance": [
+        "All 12 sequence SKILL.md files use V2 trigger format",
+        "Sequence triggers have higher confidence (0.85-0.95) than atomic skills",
+        "Each sequence has 3-5 natural language trigger patterns with examples",
+        "npm run validate-skills passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/sequences/*/SKILL.md"
+      ],
+      "agentSource": "Agent 3",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "ROUTE-003",
+      "feature": "skill-routing",
+      "title": "Sync skills and verify routing end-to-end",
+      "type": "testing",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": {
+        "stories": [
+          "ROUTE-001",
+          "ROUTE-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "npm run sync-skills completes without errors",
+        "Routing test: 'prep for my meeting' -> seq-meeting-prep (confidence > 0.7)",
+        "Routing test: 'what deals need attention' -> seq-pipeline-focus-tasks (confidence > 0.7)",
+        "Routing test: 'catch me up' -> seq-catch-me-up (confidence > 0.7)",
+        "No overlapping trigger conflicts between similar skills"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/__tests__/copilotRoutingService.test.ts"
+      ],
+      "agentSource": "Agent 3",
+      "completedAt": "2026-02-08T12:14:42.339Z"
+    },
+    {
+      "id": "ROUTE-004",
+      "feature": "skill-routing",
+      "title": "Remove duplicate deal-slippage-detector skill",
+      "type": "cleanup",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "ROUTE-001",
+        "ROUTE-002"
+      ],
+      "acceptance": [
+        "skills/atomic/deal-slippage-detector/ directory removed",
+        "seq-deal-slippage-guardrails still references deal-slippage-diagnosis correctly",
+        "npm run validate-skills passes",
+        "No broken references in routing service"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "skills/atomic/deal-slippage-detector/SKILL.md"
+      ],
+      "agentSource": "Agent 3",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "UX-001",
+      "feature": "ux-essentials",
+      "title": "Add retry button on error states in ChatMessage",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/copilot/ChatMessage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "UX-002",
+        "UX-003",
+        "UX-004"
+      ],
+      "acceptance": [
+        "Error messages show a 'Retry' button below the error text",
+        "Clicking retry re-sends the original user query",
+        "Original user query is stored in error message state",
+        "Button uses consistent styling with app design system"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/copilot/ChatMessage.tsx",
+        "src/lib/contexts/CopilotContext.tsx"
+      ],
+      "agentSource": "Agent 2",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "UX-002",
+      "feature": "ux-essentials",
+      "title": "Add copy button to assistant messages",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/copilot/ChatMessage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "UX-001",
+        "UX-003",
+        "UX-004"
+      ],
+      "acceptance": [
+        "Hover over assistant message shows copy icon button at top-right",
+        "Clicking copies message content to clipboard",
+        "Toast confirmation shown on copy",
+        "Works for both plain text and structured response content"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/copilot/ChatMessage.tsx"
+      ],
+      "agentSource": "Agent 2",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "UX-003",
+      "feature": "ux-essentials",
+      "title": "Add scroll-to-bottom button in chat",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 12,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/assistant/AssistantShell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "UX-001",
+        "UX-002",
+        "UX-004"
+      ],
+      "acceptance": [
+        "When user scrolls up 200px+ from bottom, floating button appears",
+        "Button shows 'Scroll to bottom' with down arrow icon",
+        "Clicking smoothly scrolls to latest message",
+        "Button disappears when at bottom",
+        "Remove duplicate auto-scroll from Copilot.tsx"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/assistant/AssistantShell.tsx",
+        "src/components/Copilot.tsx"
+      ],
+      "agentSource": "Agent 2",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "UX-004",
+      "feature": "ux-essentials",
+      "title": "Unify chat input component across empty and active states",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 13,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/copilot/CopilotEmpty.tsx",
+          "src/components/assistant/AssistantShell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "UX-001",
+        "UX-002",
+        "UX-003"
+      ],
+      "acceptance": [
+        "Single ChatInput component used in both empty and active conversation states",
+        "Input stays in fixed bottom position during state transition",
+        "No visual jump or style change when conversation starts",
+        "Unused standalone ChatInput.tsx removed if redundant"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/copilot/CopilotEmpty.tsx",
+        "src/components/assistant/AssistantShell.tsx",
+        "src/components/copilot/ChatInput.tsx"
+      ],
+      "agentSource": "Agent 2",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "UX-005",
+      "feature": "ux-essentials",
+      "title": "Add keyboard shortcuts and long-operation reassurance",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 14,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/assistant/AssistantShell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "/ key focuses input when not already in an input field",
+        "Escape key cancels running request",
+        "After 10s loading: 'This is taking longer than usual...' message appears",
+        "After 20s loading: 'Still working on it...' with animation change"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/assistant/AssistantShell.tsx",
+        "src/components/copilot/ToolCallIndicator.tsx"
+      ],
+      "agentSource": "Agent 2",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "FMT-001",
+      "feature": "formatting-consistency",
+      "title": "Create shared formatting utilities (currency, date, time, colors)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 15,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FMT-002",
+        "FMT-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "src/lib/utils/formatters.ts created with formatCurrency, formatDate, formatTime, formatRelativeDate",
+        "Currency respects org-level preference (not hardcoded GBP vs USD)",
+        "Date format uses consistent locale",
+        "STATUS_COLORS semantic color map defined"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/utils/formatters.ts",
+        "src/components/copilot/responses/shared/colors.ts"
+      ],
+      "agentSource": "Agent 1",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "FMT-002",
+      "feature": "formatting-consistency",
+      "title": "Create shared MetricCard and SectionHeader components",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 16,
+      "dependencies": {
+        "stories": [
+          "FMT-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FMT-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Shared MetricCard component with variant, size, icon props",
+        "Shared SectionHeader component with collapsible support",
+        "Components follow existing DailyBriefResponse Section pattern",
+        "Exported from src/components/copilot/responses/shared/"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/copilot/responses/shared/MetricCard.tsx",
+        "src/components/copilot/responses/shared/SectionHeader.tsx"
+      ],
+      "agentSource": "Agent 1",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "FMT-003",
+      "feature": "formatting-consistency",
+      "title": "Migrate response components to shared utilities and fix onActionClick contract",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 17,
+      "dependencies": {
+        "stories": [
+          "FMT-001",
+          "FMT-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "All response components import from shared formatters.ts",
+        "All response components use shared MetricCard",
+        "onActionClick uses single CopilotAction interface across all components",
+        "MeetingBriefingResponse fixed (currently passes (string, object) instead of CopilotAction)",
+        "DealHealthResponse has clickable deal cards",
+        "Empty states added to PipelineResponse, DealHealthResponse, TaskResponse"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/copilot/types.ts",
+        "src/components/copilot/responses/PipelineResponse.tsx",
+        "src/components/copilot/responses/DealHealthResponse.tsx",
+        "src/components/copilot/responses/MeetingBriefingResponse.tsx",
+        "src/components/copilot/responses/TaskResponse.tsx",
+        "src/components/copilot/responses/ActionSummaryResponse.tsx",
+        "src/components/copilot/responses/OpsTableResponse.tsx"
+      ],
+      "agentSource": "Agent 1",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "SKILL-001",
+      "feature": "skills-expansion",
+      "title": "Build lead-research and company-analysis atomic skills",
+      "type": "skills",
+      "status": "complete",
+      "priority": 18,
+      "dependencies": {
+        "stories": [
+          "ROUTE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SKILL-003"
+      ],
+      "parallelWith": [
+        "SKILL-002"
+      ],
+      "acceptance": [
+        "skills/atomic/lead-research/SKILL.md created with V2 triggers",
+        "skills/atomic/company-analysis/SKILL.md created with V2 triggers",
+        "Both use Gemini with Google Search grounding (already configured in skillsRuntime.ts)",
+        "Input/output schemas properly defined",
+        "npm run validate-skills passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/lead-research/SKILL.md",
+        "skills/atomic/company-analysis/SKILL.md"
+      ],
+      "agentSource": "Agent 3",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "SKILL-002",
+      "feature": "skills-expansion",
+      "title": "Build competitor-intel and lead-qualification atomic skills",
+      "type": "skills",
+      "status": "complete",
+      "priority": 19,
+      "dependencies": {
+        "stories": [
+          "ROUTE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SKILL-003"
+      ],
+      "parallelWith": [
+        "SKILL-001"
+      ],
+      "acceptance": [
+        "skills/atomic/competitor-intel/SKILL.md created with V2 triggers",
+        "skills/atomic/lead-qualification/SKILL.md created with V2 triggers and ICP scoring",
+        "Both have proper input/output schemas",
+        "npm run validate-skills passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/competitor-intel/SKILL.md",
+        "skills/atomic/lead-qualification/SKILL.md"
+      ],
+      "agentSource": "Agent 3",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "SKILL-003",
+      "feature": "skills-expansion",
+      "title": "Build seq-inbound-qualification and seq-stalled-deal-revival sequences",
+      "type": "skills",
+      "status": "complete",
+      "priority": 20,
+      "dependencies": {
+        "stories": [
+          "SKILL-001",
+          "SKILL-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "skills/sequences/seq-inbound-qualification/SKILL.md created",
+        "skills/sequences/seq-stalled-deal-revival/SKILL.md created",
+        "Both reference atomic skills correctly in workflow steps",
+        "Both use V2 trigger format with high confidence (0.85+)",
+        "npm run sync-skills completes without errors"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/sequences/seq-inbound-qualification/SKILL.md",
+        "skills/sequences/seq-stalled-deal-revival/SKILL.md"
+      ],
+      "agentSource": "Agent 3",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "DEBT-001",
+      "feature": "code-quality",
+      "title": "Fix recordAccess bug in copilotMemoryService",
+      "type": "bug",
+      "status": "complete",
+      "priority": 21,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/lib/services/copilotMemoryService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "DEBT-002",
+        "DEBT-003"
+      ],
+      "acceptance": [
+        "recordAccess method correctly calls RPC and awaits result before using as column value",
+        "access_count field incremented properly (not set to Promise object)",
+        "Matches the correct pattern used in recordAccessBatch"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/services/copilotMemoryService.ts"
+      ],
+      "agentSource": "Agent 4",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "DEBT-002",
+      "feature": "code-quality",
+      "title": "Remove dead email action handler code from Copilot.tsx",
+      "type": "cleanup",
+      "status": "complete",
+      "priority": 22,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/Copilot.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "DEBT-001",
+        "DEBT-003"
+      ],
+      "acceptance": [
+        "Unreachable handleActionClick email code removed from Copilot.tsx (~300 lines)",
+        "Duplicate auto-scroll logic removed",
+        "AssistantShell.tsx remains the sole action handler",
+        "No functional regression"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Copilot.tsx"
+      ],
+      "agentSource": "Agent 2, Agent 4",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    },
+    {
+      "id": "DEBT-003",
+      "feature": "code-quality",
+      "title": "Add input schemas to all 19 atomic skills",
+      "type": "skills",
+      "status": "complete",
+      "priority": 23,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "DEBT-001",
+        "DEBT-002"
+      ],
+      "acceptance": [
+        "All 19 atomic skills have structured SkillIOSchema inputs and outputs",
+        "Input schemas include name, type, description, required fields",
+        "Autonomous executor can generate meaningful Claude tool definitions from schemas",
+        "npm run validate-skills passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/*/SKILL.md"
+      ],
+      "agentSource": "Agent 3",
+      "completedAt": "2026-02-08T12:07:56.484Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 23,
+    "completedStories": 20,
+    "sprints": [
+      {
+        "name": "Sprint 1: Make It Real",
+        "weeks": "1-2",
+        "stories": [
+          "AUTO-001",
+          "AUTO-002",
+          "AUTO-003",
+          "AUTO-004",
+          "AUTO-005"
+        ],
+        "parallel": [
+          [
+            "AUTO-002",
+            "AUTO-003"
+          ]
+        ],
+        "focus": "Wire autonomous mode to real data and structured responses"
+      },
+      {
+        "name": "Sprint 2: Make It Findable",
+        "weeks": "3",
+        "stories": [
+          "ROUTE-001",
+          "ROUTE-002",
+          "ROUTE-003",
+          "ROUTE-004"
+        ],
+        "parallel": [
+          [
+            "ROUTE-001",
+            "ROUTE-002",
+            "ROUTE-004"
+          ]
+        ],
+        "focus": "Fix skill routing so natural language queries find the right skills"
+      },
+      {
+        "name": "Sprint 3: Make It Usable",
+        "weeks": "4",
+        "stories": [
+          "UX-001",
+          "UX-002",
+          "UX-003",
+          "UX-004",
+          "UX-005"
+        ],
+        "parallel": [
+          [
+            "UX-001",
+            "UX-002",
+            "UX-003",
+            "UX-004"
+          ]
+        ],
+        "focus": "Essential UX fixes: retry, copy, scroll, unified input"
+      },
+      {
+        "name": "Sprint 4: Make It Consistent",
+        "weeks": "5",
+        "stories": [
+          "FMT-001",
+          "FMT-002",
+          "FMT-003"
+        ],
+        "parallel": [],
+        "focus": "Standardize formatting, components, and action contracts"
+      },
+      {
+        "name": "Sprint 5: Make It Powerful",
+        "weeks": "6",
+        "stories": [
+          "SKILL-001",
+          "SKILL-002",
+          "SKILL-003"
+        ],
+        "parallel": [
+          [
+            "SKILL-001",
+            "SKILL-002"
+          ]
+        ],
+        "focus": "Build missing high-value skills and sequences"
+      },
+      {
+        "name": "Sprint 6: Make It Clean",
+        "weeks": "7",
+        "stories": [
+          "DEBT-001",
+          "DEBT-002",
+          "DEBT-003"
+        ],
+        "parallel": [
+          [
+            "DEBT-001",
+            "DEBT-002",
+            "DEBT-003"
+          ]
+        ],
+        "focus": "Fix bugs, remove dead code, add input schemas"
+      }
+    ],
+    "lastUpdated": "2026-02-08T12:14:42.339Z"
+  }
+}
