@@ -4,57 +4,28 @@
  */
 
 import React, { useState } from 'react';
-import { AlertCircle, AlertTriangle, Calendar, Mail } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Calendar, Inbox, Mail } from 'lucide-react';
 import { ActionButtons } from '../ActionButtons';
 import { DealDetailsView } from './DealDetailsView';
 import { StatsFirstView } from './StatsFirstView';
-import type { PipelineResponse as PipelineResponseData, Deal } from '../types';
+import { MetricCard, SectionHeader, getStatusColors } from './shared';
+import { formatCurrency, formatDate } from '@/lib/utils/formatters';
+import type { PipelineResponse as PipelineResponseData, Deal, QuickActionResponse } from '../types';
 
 interface PipelineResponseProps {
   data: PipelineResponseData;
-  onActionClick?: (action: any) => void;
+  onActionClick?: (action: QuickActionResponse) => void;
 }
 
-const formatCurrency = (value: number): string => {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(value);
+const URGENCY_STATUS_MAP: Record<string, string> = {
+  critical: 'critical',
+  high: 'warning',
+  medium: 'info',
+  low: 'neutral',
 };
 
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  });
-};
-
-const MetricCard: React.FC<{ label: string; value: string | number; variant?: 'danger' | 'warning' | 'success' | 'default' }> = ({
-  label,
-  value,
-  variant = 'default'
-}) => {
-  const variantColors = {
-    danger: 'text-red-400',
-    warning: 'text-amber-400',
-    success: 'text-emerald-400',
-    default: 'text-gray-100'
-  };
-
-  return (
-    <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-800/40 rounded-lg p-3">
-      <div className="text-xs text-gray-500 mb-1">{label}</div>
-      <div className={`text-lg font-semibold ${variantColors[variant]}`}>{value}</div>
-    </div>
-  );
-};
-
-const DealCard: React.FC<{ 
-  deal: Deal; 
+const DealCard: React.FC<{
+  deal: Deal;
   urgency: 'critical' | 'high' | 'medium' | 'low';
   onDealClick?: (dealId: string) => void;
 }> = ({
@@ -63,12 +34,7 @@ const DealCard: React.FC<{
   onDealClick
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const urgencyColors = {
-    critical: 'border-l-red-500 bg-red-500/5',
-    high: 'border-l-amber-500 bg-amber-500/5',
-    medium: 'border-l-blue-500 bg-blue-500/5',
-    low: 'border-l-gray-500 bg-gray-500/5'
-  };
+  const colors = getStatusColors(URGENCY_STATUS_MAP[urgency] || 'neutral');
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -87,7 +53,7 @@ const DealCard: React.FC<{
   return (
     <div 
       onClick={handleClick}
-      className={`bg-gray-900/80 backdrop-blur-sm border border-gray-800/50 rounded-lg p-4 border-l-4 ${urgencyColors[urgency]} cursor-pointer hover:bg-gray-900/90 hover:border-gray-700/50 transition-all group`}
+      className={`bg-gray-900/80 backdrop-blur-sm border border-gray-800/50 rounded-lg p-4 border-l-4 ${colors.bg} cursor-pointer hover:bg-gray-900/90 hover:border-gray-700/50 transition-all group`}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
@@ -124,9 +90,9 @@ const DealCard: React.FC<{
             <div className="flex items-center justify-between">
               <span>Health Score:</span>
               <span className={`font-semibold ${
-                deal.healthScore >= 70 ? 'text-emerald-400' :
-                deal.healthScore >= 50 ? 'text-amber-400' :
-                'text-red-400'
+                deal.healthScore >= 70 ? getStatusColors('healthy').text :
+                deal.healthScore >= 50 ? getStatusColors('at risk').text :
+                getStatusColors('critical').text
               }`}>
                 {deal.healthScore}
               </span>
@@ -215,6 +181,17 @@ export const PipelineResponse: React.FC<PipelineResponseProps> = React.memo(({ d
     );
   }
 
+  // Empty state when no deals available
+  const hasDeals = data.data.criticalDeals.length > 0 || data.data.highPriorityDeals.length > 0 || (data.data.healthyDeals?.length ?? 0) > 0;
+  if (!hasDeals) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <Inbox className="w-8 h-8 text-gray-500 mb-2" />
+        <p className="text-sm text-gray-400">No pipeline deals to display</p>
+      </div>
+    );
+  }
+
   // Show stats-first view if enabled and user hasn't selected a filter yet
   if (data.data.showStatsFirst && !showAllResults) {
     const stats = [
@@ -250,22 +227,22 @@ export const PipelineResponse: React.FC<PipelineResponseProps> = React.memo(({ d
 
       {/* Metrics Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard 
-          label="Total Value" 
-          value={formatCurrency(data.data.metrics.totalValue)} 
+        <MetricCard
+          label="Total Value"
+          value={formatCurrency(data.data.metrics.totalValue)}
         />
-        <MetricCard 
-          label="At Risk" 
+        <MetricCard
+          label="At Risk"
           value={data.data.metrics.dealsAtRisk}
-          variant="danger"
+          variant="critical"
         />
-        <MetricCard 
-          label="Closing This Week" 
+        <MetricCard
+          label="Closing This Week"
           value={data.data.metrics.closingThisWeek}
           variant="warning"
         />
-        <MetricCard 
-          label="Avg Health" 
+        <MetricCard
+          label="Avg Health"
           value={data.data.metrics.avgHealthScore}
           variant="success"
         />
@@ -273,32 +250,42 @@ export const PipelineResponse: React.FC<PipelineResponseProps> = React.memo(({ d
 
       {/* Critical Deals */}
       {data.data.criticalDeals.length > 0 && (!selectedFilter || selectedFilter === 'critical' || selectedFilter === 'all') && (
-        <div id="filter-critical" className="space-y-3">
-          <h4 className="text-sm font-semibold text-red-400 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
-            Critical - Immediate Action Needed
-          </h4>
-          {data.data.criticalDeals.map(deal => (
-            <DealCard key={deal.id} deal={deal} urgency="critical" onDealClick={handleDealClick} />
-          ))}
+        <div id="filter-critical">
+          <SectionHeader
+            title="Critical - Immediate Action Needed"
+            icon={AlertCircle}
+            iconColor={getStatusColors('critical').icon}
+            count={data.data.criticalDeals.length}
+          >
+            <div className="space-y-3">
+              {data.data.criticalDeals.map(deal => (
+                <DealCard key={deal.id} deal={deal} urgency="critical" onDealClick={handleDealClick} />
+              ))}
+            </div>
+          </SectionHeader>
         </div>
       )}
 
       {/* High Priority Deals */}
       {data.data.highPriorityDeals.length > 0 && (!selectedFilter || selectedFilter === 'high-priority' || selectedFilter === 'all') && (
-        <div id="filter-high-priority" className="space-y-3">
-          <h4 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            High Priority
-          </h4>
-          {data.data.highPriorityDeals.slice(0, selectedFilter === 'all' ? undefined : 5).map(deal => (
-            <DealCard key={deal.id} deal={deal} urgency="high" onDealClick={handleDealClick} />
-          ))}
-          {!selectedFilter && data.data.highPriorityDeals.length > 5 && (
-            <p className="text-xs text-gray-500">
-              +{data.data.highPriorityDeals.length - 5} more deals
-            </p>
-          )}
+        <div id="filter-high-priority">
+          <SectionHeader
+            title="High Priority"
+            icon={AlertTriangle}
+            iconColor={getStatusColors('warning').icon}
+            count={data.data.highPriorityDeals.length}
+          >
+            <div className="space-y-3">
+              {data.data.highPriorityDeals.slice(0, selectedFilter === 'all' ? undefined : 5).map(deal => (
+                <DealCard key={deal.id} deal={deal} urgency="high" onDealClick={handleDealClick} />
+              ))}
+              {!selectedFilter && data.data.highPriorityDeals.length > 5 && (
+                <p className="text-xs text-gray-500">
+                  +{data.data.highPriorityDeals.length - 5} more deals
+                </p>
+              )}
+            </div>
+          </SectionHeader>
         </div>
       )}
 

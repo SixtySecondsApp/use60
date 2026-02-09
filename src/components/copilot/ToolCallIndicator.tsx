@@ -5,7 +5,7 @@
  * US-002: Enhanced with delightful animations, duration estimates, and staggered reveals
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Loader2,
@@ -345,6 +345,38 @@ export function ToolCallIndicator({
     };
   }, [toolCall.steps]);
 
+  // ---------------------------------------------------------------------------
+  // UX-005: Track elapsed time for long-operation reassurance messages
+  // ---------------------------------------------------------------------------
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const isInProgress = !isComplete && !isError;
+
+  useEffect(() => {
+    if (!isInProgress) {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    // Start counting from when the component mounts (tool call begins)
+    const startTime = toolCall.startTime || Date.now();
+    const initialElapsed = Math.floor((Date.now() - startTime) / 1000);
+    setElapsedSeconds(initialElapsed);
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setElapsedSeconds(Math.floor((now - startTime) / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isInProgress, toolCall.startTime]);
+
+  const reassuranceMessage = useMemo(() => {
+    if (!isInProgress) return null;
+    if (elapsedSeconds >= 20) return 'Still working on it...';
+    if (elapsedSeconds >= 10) return 'This is taking longer than usual...';
+    return null;
+  }, [isInProgress, elapsedSeconds]);
+
   // Compact mode for multiple tool calls
   if (compact) {
     return (
@@ -585,6 +617,27 @@ export function ToolCallIndicator({
             )}
           </div>
         )}
+
+        {/* UX-005: Long-operation reassurance message */}
+        <AnimatePresence>
+          {reassuranceMessage && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="relative z-10 mt-3"
+            >
+              <motion.p
+                animate={elapsedSeconds >= 20 ? { opacity: [0.5, 1, 0.5] } : {}}
+                transition={elapsedSeconds >= 20 ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+                className="text-xs text-gray-500 dark:text-gray-500 italic"
+              >
+                {reassuranceMessage}
+              </motion.p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Streaming Preview */}
         {preview && preview.length > 0 && (

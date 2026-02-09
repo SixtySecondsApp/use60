@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, CheckSquare, PhoneCall, Users, FileText, PoundSterling, Map, Sparkles, Send } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, CheckSquare, PhoneCall, Users, FileText, PoundSterling, Map, Sparkles, Send } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { ChatMessage } from '@/components/copilot/ChatMessage';
 import { CopilotEmpty } from '@/components/copilot/CopilotEmpty';
@@ -18,15 +19,83 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   const { messages, isLoading, sendMessage, cancelRequest } = useCopilot();
   const [inputValue, setInputValue] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
   const emit = useEventEmitter();
 
   const isEmpty = messages.length === 0 && !isLoading;
 
+  // ---------------------------------------------------------------------------
+  // UX-003: Scroll-to-bottom button
+  // ---------------------------------------------------------------------------
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      setShowScrollButton(distanceFromBottom > 200);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [isEmpty]);
+
+  // Auto-scroll to bottom on new messages (only if user is near bottom)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      // Fallback for when container isn't mounted yet (e.g., first message)
+      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    // Auto-scroll only if user is near bottom (within 300px)
+    if (distanceFromBottom < 300) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, isLoading]);
 
+  const scrollToBottom = useCallback(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // UX-005: Keyboard shortcuts
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // "/" focuses the input (only when no other input/textarea is focused)
+      if (
+        e.key === '/' &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA' &&
+        !document.activeElement?.getAttribute('contenteditable')
+      ) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+
+      // Escape cancels the current request (if loading)
+      if (e.key === 'Escape' && isLoading) {
+        e.preventDefault();
+        cancelRequest();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isLoading, cancelRequest]);
+
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
   const handleSend = () => {
     if (!inputValue.trim() || isLoading) return;
     sendMessage(inputValue);
@@ -34,8 +103,8 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   };
 
   const handleActionClick = async (action: any) => {
-    const actionName = typeof action === 'string' ? action : action?.action || action?.type;
-    const payload = typeof action === 'object' ? (action?.data ?? action) : undefined;
+    const actionName = typeof action === 'string' ? action : action?.callback || action?.action || action?.type;
+    const payload = typeof action === 'object' ? (action?.params ?? action?.data ?? action) : undefined;
 
     if (!actionName) return;
 
@@ -59,7 +128,6 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
     }
 
     if (actionName === 'open_task') {
-      // We don't have a task detail route standardized; default to tasks list.
       navigate('/tasks');
       return;
     }
@@ -114,7 +182,6 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       return;
     }
 
-    // Meeting navigation isn’t standardized; best-effort to meetings list with context.
     if (actionName === 'open_meeting' && payload?.meetingId) {
       navigate(`/meetings?meeting=${encodeURIComponent(payload.meetingId)}`);
       return;
@@ -131,7 +198,6 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
         return;
       }
       if (t === 'task') {
-        // We don't have a task record page path standardized; fall back to tasks list.
         navigate('/tasks');
         return;
       }
@@ -139,7 +205,6 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
         navigate(`/meetings?meeting=${encodeURIComponent(payload.id)}`);
         return;
       }
-      // Fallback to CRM hub
       navigate('/crm');
       return;
     }
@@ -163,47 +228,20 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       });
       return;
     }
-    
+
     // Send a new message to copilot (for interactive follow-up actions)
     if (actionName === 'send_message' && payload?.prompt) {
       sendMessage(String(payload.prompt));
       return;
     }
 
-    // Email actions - most are handled in-component (EmailResponse)
-    // Only handle actions that need shell-level access
-    
-    // change_email_tone is handled directly in EmailResponse component via API
-    // Do NOT call sendMessage - just return to prevent bubbling
-    if (actionName === 'change_email_tone') {
-      // Handled in EmailResponse component
-      return;
-    }
-
-    // shorten is handled in EmailResponse component
-    if (actionName === 'shorten') {
-      return;
-    }
-
-    // add_calendar_link is handled in EmailResponse component
-    if (actionName === 'add_calendar_link') {
-      return;
-    }
-
-    // copy_email is handled in EmailResponse component
-    if (actionName === 'copy_email') {
-      return;
-    }
-
-    // send_email is handled in EmailResponse component
-    if (actionName === 'send_email') {
-      return;
-    }
-
-    // edit_in_gmail is handled in EmailResponse component
-    if (actionName === 'edit_in_gmail') {
-      return;
-    }
+    // Email actions - handled in-component (EmailResponse)
+    if (actionName === 'change_email_tone') return;
+    if (actionName === 'shorten') return;
+    if (actionName === 'add_calendar_link') return;
+    if (actionName === 'copy_email') return;
+    if (actionName === 'send_email') return;
+    if (actionName === 'edit_in_gmail') return;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -239,11 +277,58 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   const showInlineWelcome = mode === 'overlay' && isEmpty;
   const showFullWelcome = mode === 'page' && isEmpty;
   // In overlay mode, always show input (even when empty)
-  const showInput = mode === 'overlay' || !isEmpty;
+  // In page mode, show input always (UX-004: consistent input between empty and active states)
+  const showInput = true;
+
+  // ---------------------------------------------------------------------------
+  // UX-004: Shared input renderer for both empty and active states
+  // ---------------------------------------------------------------------------
+  const renderInput = () => (
+    <div className="flex-shrink-0 px-5 py-4 border-t border-gray-800/50 bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex items-end gap-3 bg-gray-800/60 border border-gray-700/40 rounded-xl px-4 py-3 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
+        <textarea
+          ref={inputRef}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask me to create, find, or prep anything..."
+          rows={1}
+          data-testid="copilot-input"
+          className="flex-1 bg-transparent resize-none text-sm text-gray-100 placeholder-gray-500 focus:outline-none max-h-32"
+          style={{ minHeight: '24px' }}
+        />
+
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!inputValue.trim() || isLoading}
+          className={cn(
+            'p-2 rounded-lg transition-all',
+            inputValue.trim() && !isLoading
+              ? 'bg-violet-500 text-white hover:bg-violet-600'
+              : 'text-gray-600 cursor-not-allowed',
+          )}
+          aria-label="Send"
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
+
+      {isLoading && (
+        <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
+          Working...{' '}
+          <button className="underline hover:text-gray-300 transition-colors" onClick={cancelRequest}>
+            Cancel
+          </button>
+          <span className="text-gray-600">(Esc)</span>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className={cn('flex flex-col min-h-0', shellClass)}>
-      {/* Full-page welcome (page mode only) */}
+      {/* Full-page welcome (page mode only) -- UX-004: no input here, shared input below */}
       {showFullWelcome && (
         <CopilotEmpty onPromptClick={(prompt) => sendMessage(prompt)} />
       )}
@@ -286,11 +371,29 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
 
       {/* Messages area (has messages) */}
       {!isEmpty && (
-        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+        <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 relative">
           {messages.map((m) => (
             <ChatMessage key={m.id} message={m} onActionClick={handleActionClick} />
           ))}
           <div ref={endRef} />
+
+          {/* UX-003: Scroll-to-bottom floating button */}
+          <AnimatePresence>
+            {showScrollButton && (
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ duration: 0.2 }}
+                onClick={scrollToBottom}
+                className="sticky bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-gray-800/90 border border-gray-700/60 text-sm text-gray-300 hover:bg-gray-700/90 hover:text-white shadow-lg backdrop-blur-sm transition-colors"
+                aria-label="Scroll to bottom"
+              >
+                <ArrowDown className="w-4 h-4" />
+                New messages
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
@@ -323,44 +426,8 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
         </div>
       )}
 
-      {/* Input area */}
-      {showInput && (
-        <div className="flex-shrink-0 px-5 py-4 border-t border-gray-800/50 bg-gray-900/80 backdrop-blur-sm">
-          <div className="flex items-end gap-3 bg-gray-800/60 border border-gray-700/40 rounded-xl px-4 py-3 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
-            <textarea
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask me to create, find, or prep anything..."
-              rows={1}
-              className="flex-1 bg-transparent resize-none text-sm text-gray-100 placeholder-gray-500 focus:outline-none max-h-32"
-              style={{ minHeight: '24px' }}
-            />
-
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!inputValue.trim() || isLoading}
-              className={cn(
-                'p-2 rounded-lg transition-all',
-                inputValue.trim() && !isLoading
-                  ? 'bg-violet-500 text-white hover:bg-violet-600'
-                  : 'text-gray-600 cursor-not-allowed',
-              )}
-              aria-label="Send"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
-
-          {isLoading && (
-            <div className="mt-2 text-xs text-gray-500">
-              Working... <button className="underline" onClick={cancelRequest}>Cancel</button>
-            </div>
-          )}
-        </div>
-      )}
+      {/* UX-004: Unified input area -- always visible, identical styling in both empty and active states */}
+      {showInput && renderInput()}
     </div>
   );
 }
-

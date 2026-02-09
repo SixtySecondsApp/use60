@@ -1,11 +1,12 @@
 import React from 'react';
-import type { ActionSummaryResponse as ActionSummaryResponseType } from '../types';
+import type { ActionSummaryResponse as ActionSummaryResponseType, QuickActionResponse } from '../types';
 import { CheckCircle2, Briefcase, Users, CheckSquare, Activity, ArrowRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MetricCard } from './shared';
 
 interface ActionSummaryResponseProps {
   data: ActionSummaryResponseType;
-  onActionClick?: (action: any) => void;
+  onActionClick?: (action: QuickActionResponse) => void;
 }
 
 export const ActionSummaryResponse: React.FC<ActionSummaryResponseProps> = ({ data, onActionClick }) => {
@@ -56,11 +57,8 @@ export const ActionSummaryResponse: React.FC<ActionSummaryResponseProps> = ({ da
     }
   };
 
-  const handleActionClick = (action: any) => {
-    // Always use onActionClick contract - never direct window.location
-    if (onActionClick) {
-      onActionClick(action);
-    }
+  const handleActionClick = (action: QuickActionResponse) => {
+    onActionClick?.(action);
   };
 
   return (
@@ -86,49 +84,19 @@ export const ActionSummaryResponse: React.FC<ActionSummaryResponseProps> = ({ da
       {(metrics.dealsUpdated > 0 || metrics.clientsUpdated > 0 || metrics.contactsUpdated > 0 || metrics.tasksCreated > 0 || metrics.activitiesCreated > 0) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {metrics.dealsUpdated > 0 && (
-            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Briefcase className="w-4 h-4 text-blue-400" />
-                <span className="text-xs text-gray-400">Deals</span>
-              </div>
-              <div className="text-xl font-bold text-white">{metrics.dealsUpdated}</div>
-            </div>
+            <MetricCard label="Deals" value={metrics.dealsUpdated} variant="info" icon={Briefcase} />
           )}
           {metrics.clientsUpdated > 0 && (
-            <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Users className="w-4 h-4 text-green-400" />
-                <span className="text-xs text-gray-400">Clients</span>
-              </div>
-              <div className="text-xl font-bold text-white">{metrics.clientsUpdated}</div>
-            </div>
+            <MetricCard label="Clients" value={metrics.clientsUpdated} variant="success" icon={Users} />
           )}
           {metrics.contactsUpdated > 0 && (
-            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Users className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs text-gray-400">Contacts</span>
-              </div>
-              <div className="text-xl font-bold text-white">{metrics.contactsUpdated}</div>
-            </div>
+            <MetricCard label="Contacts" value={metrics.contactsUpdated} variant="info" icon={Users} />
           )}
           {metrics.tasksCreated > 0 && (
-            <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <CheckSquare className="w-4 h-4 text-purple-400" />
-                <span className="text-xs text-gray-400">Tasks</span>
-              </div>
-              <div className="text-xl font-bold text-white">{metrics.tasksCreated}</div>
-            </div>
+            <MetricCard label="Tasks" value={metrics.tasksCreated} variant="info" icon={CheckSquare} />
           )}
           {metrics.activitiesCreated > 0 && (
-            <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Activity className="w-4 h-4 text-orange-400" />
-                <span className="text-xs text-gray-400">Activities</span>
-              </div>
-              <div className="text-xl font-bold text-white">{metrics.activitiesCreated}</div>
-            </div>
+            <MetricCard label="Activities" value={metrics.activitiesCreated} variant="warning" icon={Activity} />
           )}
         </div>
       )}
