@@ -4,6 +4,7 @@ import { X, Sparkles, Newspaper, Cpu, Swords, AlertTriangle, AtSign, Plus, Trash
 import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 import { HubSpotPropertyPicker } from './HubSpotPropertyPicker';
 import { ApolloPropertyPicker } from './ApolloPropertyPicker';
+import { LinkedInPropertyPicker } from './LinkedInPropertyPicker';
 import { OpenRouterModelPicker } from './OpenRouterModelPicker';
 import { ButtonColumnConfigPanel } from './ButtonColumnConfigPanel';
 import { InstantlyColumnWizard } from './InstantlyColumnWizard';
@@ -162,6 +163,7 @@ const BASE_COLUMN_TYPES = [
 
 const HUBSPOT_COLUMN_TYPE = { value: 'hubspot_property', label: 'HubSpot Property' };
 const APOLLO_COLUMN_TYPE = { value: 'apollo_property', label: 'Apollo Property' };
+const LINKEDIN_COLUMN_TYPE = { value: 'linkedin_property', label: 'LinkedIn Property' };
 const INSTANTLY_COLUMN_TYPE = { value: 'instantly', label: 'Instantly Campaign' };
 
 const INTEGRATION_TYPES = [
@@ -206,6 +208,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     const types = [...BASE_COLUMN_TYPES];
     if (isHubSpotTable) types.push(HUBSPOT_COLUMN_TYPE);
     types.push(APOLLO_COLUMN_TYPE);
+    types.push(LINKEDIN_COLUMN_TYPE);
     types.push(INSTANTLY_COLUMN_TYPE);
     return types;
   }, [isHubSpotTable]);
@@ -227,6 +230,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
   const [apolloRevealEmails, setApolloRevealEmails] = useState(false);
   const [apolloRevealPhone, setApolloRevealPhone] = useState(false);
   const [apolloAutoRunRows, setApolloAutoRunRows] = useState<string>('none');
+  const [linkedinPropertyName, setLinkedinPropertyName] = useState('');
+  const [linkedinPropertyColumnType, setLinkedinPropertyColumnType] = useState('text');
+  const [linkedinAutoRunRows, setLinkedinAutoRunRows] = useState<string>('none');
   const [enrichmentModel, setEnrichmentModel] = useState('google/gemini-3-flash-preview');
   const [buttonConfig, setButtonConfig] = useState<ButtonConfig>({
     label: '', color: '#8b5cf6', actions: [],
@@ -256,6 +262,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
   const isIntegration = columnType === 'integration';
   const isHubSpotProperty = columnType === 'hubspot_property';
   const isApolloProperty = columnType === 'apollo_property';
+  const isLinkedInProperty = columnType === 'linkedin_property';
   const isButton = columnType === 'button';
   const isInstantly = columnType === 'instantly';
   const key = toSnakeCase(label);
@@ -267,6 +274,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     && (!isIntegration || (integrationType === 'apify_actor' ? apifyActorId.trim().length > 0 : integrationSourceColumn.length > 0))
     && (!isHubSpotProperty || hubspotPropertyName.length > 0)
     && (!isApolloProperty || apolloPropertyName.length > 0)
+    && (!isLinkedInProperty || linkedinPropertyName.length > 0)
     && (!isButton || (buttonConfig.label.trim().length > 0 && buttonConfig.actions.length > 0))
     && !isInstantly; // Instantly uses its own wizard flow, not the standard Add button
 
@@ -309,6 +317,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     setApolloRevealEmails(false);
     setApolloRevealPhone(false);
     setApolloAutoRunRows('none');
+    setLinkedinPropertyName('');
+    setLinkedinPropertyColumnType('text');
+    setLinkedinAutoRunRows('none');
     setEnrichmentModel('google/gemini-3-flash-preview');
     setButtonConfig({ label: '', color: '#8b5cf6', actions: [] });
     setMentionOpen(false);
@@ -349,11 +360,15 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     const parsedApolloAutoRun = apolloAutoRunRows === 'all' ? 'all' as const
       : apolloAutoRunRows === 'none' ? undefined
       : Number(apolloAutoRunRows);
+    const parsedLinkedInAutoRun = linkedinAutoRunRows === 'all' ? 'all' as const
+      : linkedinAutoRunRows === 'none' ? undefined
+      : Number(linkedinAutoRunRows);
     onAdd({
-      key: isApolloProperty ? apolloPropertyName : key,
-      label: isApolloProperty ? label.trim() || apolloPropertyName : label.trim(),
+      key: isApolloProperty ? apolloPropertyName : isLinkedInProperty ? linkedinPropertyName : key,
+      label: isApolloProperty ? label.trim() || apolloPropertyName : isLinkedInProperty ? label.trim() || linkedinPropertyName : label.trim(),
       columnType: isHubSpotProperty ? hubspotPropertyColumnType
         : isApolloProperty ? apolloPropertyColumnType
+        : isLinkedInProperty ? 'linkedin_property'
         : columnType,
       isEnrichment,
       ...(isEnrichment ? {
@@ -381,6 +396,10 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
           reveal_personal_emails: apolloRevealEmails,
           reveal_phone_number: apolloRevealPhone,
         },
+      } : {}),
+      ...(isLinkedInProperty ? {
+        apolloPropertyName: linkedinPropertyName,
+        autoRunRows: parsedLinkedInAutoRun,
       } : {}),
     });
     onClose();
@@ -1023,6 +1042,95 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
                           reveal_personal_emails: apolloRevealEmails,
                           reveal_phone_number: apolloRevealPhone,
                         },
+                      });
+                      onClose();
+                    }
+                  }}
+                  excludeProperties={existingColumns.map((c) => c.key)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* LinkedIn Property Section */}
+          {isLinkedInProperty && (
+            <div className="space-y-4">
+              {/* Run controls */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Run enrichment on add
+                </label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[
+                    { value: 'none', label: "Don't run" },
+                    { value: '10', label: '10 rows' },
+                    { value: '50', label: '50 rows' },
+                    { value: '100', label: '100 rows' },
+                    { value: 'all', label: 'All rows' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setLinkedinAutoRunRows(opt.value)}
+                      className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                        linkedinAutoRunRows === opt.value
+                          ? 'border-blue-500 bg-blue-500/15 text-blue-300'
+                          : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  How many rows to enrich via LinkedIn when the column is added
+                </p>
+              </div>
+
+              {/* Property picker */}
+              <div className="space-y-3">
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Select LinkedIn Properties
+                </label>
+                <p className="text-xs text-gray-500 -mt-2">
+                  Select multiple properties to add them all at once. Requires a LinkedIn URL column in the table.
+                </p>
+                <LinkedInPropertyPicker
+                  multiSelect={true}
+                  onSelect={(property) => {
+                    setLinkedinPropertyName(property.name);
+                    setLinkedinPropertyColumnType(property.columnType);
+                    if (!label.trim()) {
+                      setLabel(property.label);
+                    }
+                  }}
+                  onSelectMultiple={(properties) => {
+                    if (onAddMultiple && properties.length > 0) {
+                      const parsedRun = linkedinAutoRunRows === 'all' ? 'all' as const
+                        : linkedinAutoRunRows === 'none' ? undefined
+                        : Number(linkedinAutoRunRows);
+                      const columns = properties.map((p) => ({
+                        key: p.name,
+                        label: p.label,
+                        columnType: 'linkedin_property',
+                        isEnrichment: false,
+                        apolloPropertyName: p.name,
+                        autoRunRows: parsedRun,
+                      }));
+                      onAddMultiple(columns);
+                      onClose();
+                    } else if (properties.length === 1) {
+                      const p = properties[0];
+                      const parsedRun = linkedinAutoRunRows === 'all' ? 'all' as const
+                        : linkedinAutoRunRows === 'none' ? undefined
+                        : Number(linkedinAutoRunRows);
+                      onAdd({
+                        key: p.name,
+                        label: p.label,
+                        columnType: 'linkedin_property',
+                        isEnrichment: false,
+                        apolloPropertyName: p.name,
+                        autoRunRows: parsedRun,
                       });
                       onClose();
                     }

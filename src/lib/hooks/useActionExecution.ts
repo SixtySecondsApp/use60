@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase/clientV2';
+import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import type { ButtonConfig, ButtonAction } from '@/lib/services/opsTableService';
 
@@ -40,7 +40,7 @@ export function useActionExecution(tableId: string | undefined) {
         }
         case 'push_to_instantly': {
           const { data, error } = await supabase.functions.invoke('push-to-instantly', {
-            body: { table_id: tableId, row_ids: [rowId], ...(actionConfig ?? {}) },
+            body: { table_id: tableId, row_ids: [rowId], ...(actionConfig ?? {}), _auth_token: await getSupabaseAuthToken() },
           });
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
@@ -148,6 +148,7 @@ async function executeSingleButtonAction(
           row_ids: [ctx.rowId],
           campaign_id: action.config.campaign_id as string,
           field_mapping: action.config.field_mapping as Record<string, string> | undefined,
+          _auth_token: await getSupabaseAuthToken(),
         },
       });
       if (error) throw error;

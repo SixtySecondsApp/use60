@@ -68,17 +68,7 @@ serve(async (req) => {
       return errorResponse('Server misconfigured', 500)
     }
 
-    // Auth: validate user JWT
-    const userToken = req.headers.get('Authorization')?.replace('Bearer ', '') || ''
-    if (!userToken) return errorResponse('Unauthorized', 401)
-
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${userToken}` } },
-    })
-    const { data: { user } } = await userClient.auth.getUser()
-    if (!user) return errorResponse('Unauthorized', 401)
-
-    // Parse body
+    // Parse body first so we can read _auth_token fallback
     let body: any = {}
     try {
       const rawBody = await req.text()
@@ -86,6 +76,19 @@ serve(async (req) => {
     } catch (e: any) {
       return errorResponse(`Invalid JSON body: ${e.message}`)
     }
+
+    // Auth: validate user JWT — prefer header, fall back to _auth_token in body
+    let userToken = req.headers.get('Authorization')?.replace('Bearer ', '') || ''
+    if (!userToken && body._auth_token) {
+      userToken = body._auth_token
+    }
+    if (!userToken) return errorResponse('Unauthorized', 401)
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${userToken}` } },
+    })
+    const { data: { user } } = await userClient.auth.getUser()
+    if (!user) return errorResponse('Unauthorized', 401)
 
     const action: Action | null = typeof body.action === 'string' ? (body.action as Action) : null
     const orgId: string | null = typeof body.org_id === 'string' ? body.org_id : null

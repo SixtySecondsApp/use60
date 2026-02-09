@@ -28,7 +28,7 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/clientV2';
+import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { OpsTableService } from '@/lib/services/opsTableService';
 import { OpsTable } from '@/components/ops/OpsTable';
 import { AddColumnModal } from '@/components/ops/AddColumnModal';
@@ -54,6 +54,7 @@ import { ApolloCollectMoreModal } from '@/components/ops/ApolloCollectMoreModal'
 import type { ApolloSearchParams } from '@/lib/services/apolloSearchService';
 import { useEnrichment } from '@/lib/hooks/useEnrichment';
 import { useApolloEnrichment } from '@/lib/hooks/useApolloEnrichment';
+import { useLinkedInEnrichment } from '@/lib/hooks/useLinkedInEnrichment';
 import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { useIntegrationPolling } from '@/lib/hooks/useIntegrationStatus';
 import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
@@ -333,6 +334,7 @@ function OpsDetailPage() {
   // ---- Enrichment hook ----
   const { startEnrichment, startSingleRowEnrichment, isEnriching } = useEnrichment(tableId ?? '');
   const { startApolloEnrichment, singleRowApolloEnrichment, reEnrichApollo, startApolloOrgEnrichment, isEnrichingApollo, isEnrichingApolloOrg } = useApolloEnrichment(tableId ?? '');
+  const { startLinkedInEnrichment, singleRowLinkedInEnrichment, reEnrichLinkedIn } = useLinkedInEnrichment(tableId ?? '');
 
   // ---- HubSpot sync hook ----
   const { sync: syncHubSpot, isSyncing: isHubSpotSyncing } = useHubSpotSync(tableId);
@@ -358,9 +360,10 @@ function OpsDetailPage() {
   const handleEnrichAll = useCallback(() => {
     const apolloPropCols = columns.filter(c => c.column_type === 'apollo_property');
     const apolloOrgCols = columns.filter(c => c.column_type === 'apollo_org_property');
+    const linkedinPropCols = columns.filter(c => c.column_type === 'linkedin_property');
     const aiEnrichCols = columns.filter(c => c.is_enrichment);
 
-    const totalCount = apolloPropCols.length + apolloOrgCols.length + aiEnrichCols.length;
+    const totalCount = apolloPropCols.length + apolloOrgCols.length + linkedinPropCols.length + aiEnrichCols.length;
     if (totalCount === 0) {
       toast.info('No enrichable columns found in this table');
       return;
@@ -370,16 +373,20 @@ function OpsDetailPage() {
 
     // Fire Apollo enrichments first (synchronous/fast)
     for (const col of apolloPropCols) {
-      startApolloEnrichment({ columnId: col.id });
+      startApolloEnrichment({ columnId: col.id, columnKey: col.key, skipCompleted: true });
     }
     for (const col of apolloOrgCols) {
-      startApolloOrgEnrichment({ columnId: col.id });
+      startApolloOrgEnrichment({ columnId: col.id, columnKey: col.key, skipCompleted: true });
+    }
+    // Fire LinkedIn enrichments
+    for (const col of linkedinPropCols) {
+      startLinkedInEnrichment({ columnId: col.id, columnKey: col.key, skipCompleted: true });
     }
     // Then AI enrichments (async with auto-chaining)
     for (const col of aiEnrichCols) {
       startEnrichment({ columnId: col.id });
     }
-  }, [columns, startApolloEnrichment, startApolloOrgEnrichment, startEnrichment]);
+  }, [columns, startApolloEnrichment, startApolloOrgEnrichment, startLinkedInEnrichment, startEnrichment]);
 
   // Auto-create system views when a table has zero views
   useEffect(() => {
@@ -521,8 +528,8 @@ function OpsDetailPage() {
         }
       }
 
-      // Auto-trigger Apollo enrichment if requested
-      if (apolloProp && runRows != null) {
+      // Auto-trigger Apollo enrichment if requested (exclude LinkedIn property columns)
+      if (apolloProp && runRows != null && column.column_type !== 'linkedin_property') {
         const allRowIds = tableData?.rows?.map((r) => r.id);
         let rowIdsToEnrich: string[] | undefined;
 
@@ -534,18 +541,39 @@ function OpsDetailPage() {
           if (column.column_type === 'apollo_org_property') {
             startApolloOrgEnrichment({
               columnId: column.id,
+              columnKey: column.key,
               rowIds: rowIdsToEnrich,
               maxRows: typeof runRows === 'number' ? runRows : undefined,
             });
           } else {
             startApolloEnrichment({
               columnId: column.id,
+              columnKey: column.key,
               rowIds: rowIdsToEnrich,
               maxRows: typeof runRows === 'number' ? runRows : undefined,
               revealPersonalEmails: apolloEnrichConfig?.reveal_personal_emails,
               revealPhoneNumber: apolloEnrichConfig?.reveal_phone_number,
             });
           }
+        }
+      }
+
+      // Auto-trigger LinkedIn enrichment if requested
+      if (column.column_type === 'linkedin_property' && apolloProp && runRows != null) {
+        const allRowIds = tableData?.rows?.map((r) => r.id);
+        let rowIdsToEnrich: string[] | undefined;
+
+        if (typeof runRows === 'number' && allRowIds) {
+          rowIdsToEnrich = allRowIds.slice(0, runRows);
+        }
+
+        if (allRowIds && allRowIds.length > 0) {
+          startLinkedInEnrichment({
+            columnId: column.id,
+            columnKey: column.key,
+            rowIds: rowIdsToEnrich,
+            maxRows: typeof runRows === 'number' ? runRows : undefined,
+          });
         }
       }
 
@@ -1271,6 +1299,9 @@ function OpsDetailPage() {
           }
 
           // Validate + push in async IIFE (cell handler is synchronous)
+          // Set cell to pending immediately so button shows spinner
+          cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+
           (async () => {
             try {
               // Validate campaign exists before pushing
@@ -1283,9 +1314,6 @@ function OpsDetailPage() {
                   return;
                 }
               }
-
-              // Set cell to pending
-              cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
 
               executeSingleAction.mutate(
                 {
@@ -1377,11 +1405,13 @@ function OpsDetailPage() {
         singleRowApolloEnrichment({ columnId, rowId });
       } else if (col?.column_type === 'apollo_org_property') {
         startApolloOrgEnrichment({ columnId, rowIds: [rowId], maxRows: 1 });
+      } else if (col?.column_type === 'linkedin_property') {
+        singleRowLinkedInEnrichment({ columnId, rowId });
       } else {
         startSingleRowEnrichment({ columnId, rowId });
       }
     },
-    [columns, startSingleRowEnrichment, singleRowApolloEnrichment, startApolloOrgEnrichment],
+    [columns, startSingleRowEnrichment, singleRowApolloEnrichment, startApolloOrgEnrichment, singleRowLinkedInEnrichment],
   );
 
   const handleStartEditName = useCallback(() => {
@@ -2597,9 +2627,11 @@ function OpsDetailPage() {
           onEnrichRemaining={activeColumn.is_enrichment ? () => {
             startEnrichment({ columnId: activeColumn.id, skipCompleted: true });
           } : activeColumn.column_type === 'apollo_property' ? () => {
-            startApolloEnrichment({ columnId: activeColumn.id, skipCompleted: true });
+            startApolloEnrichment({ columnId: activeColumn.id, columnKey: activeColumn.key, skipCompleted: true });
           } : activeColumn.column_type === 'apollo_org_property' ? () => {
-            startApolloOrgEnrichment({ columnId: activeColumn.id, skipCompleted: true });
+            startApolloOrgEnrichment({ columnId: activeColumn.id, columnKey: activeColumn.key, skipCompleted: true });
+          } : activeColumn.column_type === 'linkedin_property' ? () => {
+            startLinkedInEnrichment({ columnId: activeColumn.id, columnKey: activeColumn.key, skipCompleted: true });
           } : undefined}
           onReEnrich={activeColumn.is_enrichment ? () => {
             startEnrichment({ columnId: activeColumn.id });
@@ -2607,6 +2639,8 @@ function OpsDetailPage() {
             reEnrichApollo({ columnId: activeColumn.id });
           } : activeColumn.column_type === 'apollo_org_property' ? () => {
             startApolloOrgEnrichment({ columnId: activeColumn.id });
+          } : activeColumn.column_type === 'linkedin_property' ? () => {
+            reEnrichLinkedIn({ columnId: activeColumn.id });
           } : undefined}
           onEditFormula={activeColumn.column_type === 'formula' ? () => {
             setEditFormulaColumn(activeColumn);
@@ -3018,6 +3052,7 @@ function OpsDetailPage() {
                 campaign_id: campaignId,
                 row_ids: Array.from(selectedRows),
                 field_mapping: pushMapping,
+                _auth_token: await getSupabaseAuthToken(),
               },
             });
 

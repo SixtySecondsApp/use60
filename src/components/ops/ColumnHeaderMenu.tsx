@@ -306,6 +306,28 @@ export function ColumnHeaderMenu({
         />
       )}
 
+      {/* LinkedIn property actions */}
+      {column.column_type === 'linkedin_property' && onEnrichRemaining && (
+        <MenuItem
+          icon={<Sparkles className="h-4 w-4" />}
+          label="Enrich remaining"
+          onClick={() => {
+            onEnrichRemaining();
+            onClose();
+          }}
+        />
+      )}
+      {column.column_type === 'linkedin_property' && onReEnrich && (
+        <MenuItem
+          icon={<RotateCcw className="h-4 w-4" />}
+          label="Re-enrich all rows"
+          onClick={() => {
+            onReEnrich();
+            onClose();
+          }}
+        />
+      )}
+
       {/* Edit Instantly settings */}
       {column.column_type === 'instantly' && onEditInstantly && (
         <MenuItem

@@ -604,6 +604,82 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     );
   }
 
+  // LinkedIn property column — uses LinkedIn-themed enrichment rendering
+  if (columnType === 'linkedin_property') {
+    if (isEditing) {
+      return renderInput();
+    }
+
+    if (cell.status === 'pending') {
+      return (
+        <div className="w-full h-full flex items-center cursor-text" onClick={startEditing}>
+          <span className="text-xs text-sky-300 italic flex items-center gap-1.5">
+            <Loader2 className="w-3 h-3 animate-spin text-sky-400" />
+            Enriching...
+          </span>
+        </div>
+      );
+    }
+
+    if (cell.status === 'failed') {
+      return (
+        <div className="w-full h-full flex items-center group/linkedin-fail cursor-text" onClick={startEditing}>
+          <span className="text-xs text-red-400 flex items-center gap-1.5">
+            <AlertCircle className="w-3 h-3" />
+            Failed
+          </span>
+          {onEnrichRow && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+              className="ml-auto opacity-0 group-hover/linkedin-fail:opacity-100 transition-opacity p-0.5 rounded hover:bg-sky-500/20"
+              title="Retry enrichment"
+            >
+              <Linkedin className="w-3.5 h-3.5 text-sky-400" />
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    if (cell.status === 'complete' && cell.value != null) {
+      return (
+        <div className="w-full h-full flex items-center cursor-text group/linkedin" onClick={startEditing}>
+          <span className="truncate text-sm text-gray-200" title={cell.value}>
+            {cell.value}
+          </span>
+          {onEnrichRow && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+              className="ml-auto opacity-0 group-hover/linkedin:opacity-100 transition-opacity p-0.5 rounded hover:bg-sky-500/20 shrink-0"
+              title="Re-enrich this row"
+            >
+              <Linkedin className="w-3.5 h-3.5 text-sky-400" />
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // No data yet — show LinkedIn icon to enrich
+    return (
+      <div className="w-full h-full flex items-center cursor-text group/linkedin-await" onClick={startEditing}>
+        <span className="text-gray-600 text-xs italic">Not enriched</span>
+        {onEnrichRow && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+            className="ml-auto opacity-0 group-hover/linkedin-await:opacity-100 transition-opacity p-0.5 rounded hover:bg-sky-500/20"
+            title="Enrich this row"
+          >
+            <Linkedin className="w-3.5 h-3.5 text-sky-400" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // Apollo property column — uses Zap icon like enrichment columns
   if (columnType === 'apollo_property' || columnType === 'apollo_org_property') {
     if (isEditing) {
@@ -957,9 +1033,10 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
 
     // Push action — button to push row to Instantly
     if (subtype === 'push_action') {
-      const isRunning = cell.status === 'pending';
-      const isDone = cell.status === 'complete';
-      const isFailed = cell.status === 'failed';
+      const cellVal = cell.value?.toLowerCase();
+      const isRunning = cellVal === 'pending';
+      const isDone = cellVal === 'complete';
+      const isFailed = cellVal === 'failed';
       return (
         <div className="w-full h-full flex items-center justify-center">
           <button

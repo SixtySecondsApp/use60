@@ -1,9 +1,9 @@
 /**
- * useApolloEnrichment Hook
+ * useLinkedInEnrichment Hook
  *
- * Manages Apollo enrichment operations for Ops table columns.
- * Calls the apollo-enrich edge function with optimistic UI updates.
- * Follows the same pattern as useEnrichment.ts.
+ * Manages LinkedIn enrichment operations for Ops table columns.
+ * Calls the apify-linkedin-enrich edge function with optimistic UI updates.
+ * Mirrors the useApolloEnrichment pattern exactly.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -14,24 +14,21 @@ import { toast } from 'sonner';
 // Types
 // ============================================================================
 
-interface ApolloEnrichParams {
+interface LinkedInEnrichParams {
   columnId: string;
   columnKey?: string;
   rowIds?: string[];
   maxRows?: number;
-  revealPersonalEmails?: boolean;
-  revealPhoneNumber?: boolean;
   forceRefresh?: boolean;
   skipCompleted?: boolean;
 }
 
-interface ApolloEnrichResult {
+interface LinkedInEnrichResult {
   processed: number;
   enriched: number;
   cached_hits: number;
   failed: number;
   skipped: number;
-  credits_estimated: number;
 }
 
 // ============================================================================
@@ -46,7 +43,7 @@ const QUERY_KEYS = {
 // Hook
 // ============================================================================
 
-export function useApolloEnrichment(tableId: string) {
+export function useLinkedInEnrichment(tableId: string) {
   const queryClient = useQueryClient();
 
   // --------------------------------------------------------------------------
@@ -79,7 +76,6 @@ export function useApolloEnrichment(tableId: string) {
             if ((cell as { column_id?: string }).column_id === columnId) {
               found = true;
               const currentStatus = (cell as { status?: string }).status;
-              // When skipCompleted, don't touch cells that are already complete
               if (skipCompleted && currentStatus === 'complete') continue;
               updatedCells[key] = {
                 ...(cell as object),
@@ -111,33 +107,41 @@ export function useApolloEnrichment(tableId: string) {
   };
 
   // --------------------------------------------------------------------------
-  // Invoke Apollo Enrichment
+  // Invoke LinkedIn Enrichment
   // --------------------------------------------------------------------------
 
-  const invokeApolloEnrich = async (params: ApolloEnrichParams): Promise<ApolloEnrichResult> => {
-    const { data, error } = await supabase.functions.invoke('apollo-enrich', {
+  const invokeLinkedInEnrich = async (params: LinkedInEnrichParams): Promise<LinkedInEnrichResult> => {
+    // Explicitly get session token — the custom fetch in clientV2 sometimes
+    // doesn't inject the auth header for newly deployed functions
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase.functions.invoke('apify-linkedin-enrich', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
       body: {
         table_id: tableId,
         column_id: params.columnId,
         row_ids: params.rowIds,
         max_rows: params.maxRows,
-        reveal_personal_emails: params.revealPersonalEmails ?? false,
-        reveal_phone_number: params.revealPhoneNumber ?? false,
         force_refresh: params.forceRefresh ?? false,
         skip_completed: params.skipCompleted ?? false,
+        _auth_token: token,
       },
     });
 
     if (error) throw error;
-    return data as ApolloEnrichResult;
+    return data as LinkedInEnrichResult;
   };
 
   // --------------------------------------------------------------------------
-  // Start Apollo Enrichment Mutation (bulk)
+  // Start LinkedIn Enrichment Mutation (bulk)
   // --------------------------------------------------------------------------
 
-  const startApolloEnrichmentMutation = useMutation({
-    mutationFn: invokeApolloEnrich,
+  const startLinkedInEnrichmentMutation = useMutation({
+    mutationFn: invokeLinkedInEnrich,
     onMutate: async ({ columnId, columnKey, rowIds, skipCompleted }) => {
       return await optimisticPendingUpdate(columnId, rowIds, skipCompleted, columnKey);
     },
@@ -145,7 +149,7 @@ export function useApolloEnrichment(tableId: string) {
       if (context?.previousData && context?.queryKey) {
         queryClient.setQueryData(context.queryKey, context.previousData);
       }
-      toast.error(`Apollo enrichment failed: ${error.message}`);
+      toast.error(`LinkedIn enrichment failed: ${error.message}`);
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
@@ -154,7 +158,7 @@ export function useApolloEnrichment(tableId: string) {
       if (result.cached_hits > 0) parts.push(`${result.cached_hits} from cache`);
       if (result.failed > 0) parts.push(`${result.failed} failed`);
       if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
-      toast.success(`Apollo enrichment: ${parts.join(', ')}`);
+      toast.success(`LinkedIn enrichment: ${parts.join(', ')}`);
     },
   });
 
@@ -163,18 +167,14 @@ export function useApolloEnrichment(tableId: string) {
   // --------------------------------------------------------------------------
 
   const singleRowMutation = useMutation({
-    mutationFn: async ({ columnId, rowId, revealPersonalEmails, revealPhoneNumber }: {
+    mutationFn: async ({ columnId, rowId }: {
       columnId: string;
       rowId: string;
-      revealPersonalEmails?: boolean;
-      revealPhoneNumber?: boolean;
     }) => {
-      return invokeApolloEnrich({
+      return invokeLinkedInEnrich({
         columnId,
         rowIds: [rowId],
         maxRows: 1,
-        revealPersonalEmails,
-        revealPhoneNumber,
       });
     },
     onMutate: async ({ columnId, rowId }) => {
@@ -184,7 +184,7 @@ export function useApolloEnrichment(tableId: string) {
       if (context?.previousData && context?.queryKey) {
         queryClient.setQueryData(context.queryKey, context.previousData);
       }
-      toast.error(`Apollo enrichment failed: ${error.message}`);
+      toast.error(`LinkedIn enrichment failed: ${error.message}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
@@ -197,7 +197,7 @@ export function useApolloEnrichment(tableId: string) {
 
   const reEnrichMutation = useMutation({
     mutationFn: async ({ columnId, rowIds }: { columnId: string; rowIds?: string[] }) => {
-      return invokeApolloEnrich({ columnId, rowIds, forceRefresh: true });
+      return invokeLinkedInEnrich({ columnId, rowIds, forceRefresh: true });
     },
     onMutate: async ({ columnId, rowIds }) => {
       return await optimisticPendingUpdate(columnId, rowIds);
@@ -210,59 +210,7 @@ export function useApolloEnrichment(tableId: string) {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
-      toast.success(`Re-enriched ${result.enriched} rows from Apollo`);
-    },
-  });
-
-  // --------------------------------------------------------------------------
-  // Invoke Apollo Organization Enrichment
-  // --------------------------------------------------------------------------
-
-  const invokeApolloOrgEnrich = async (params: {
-    columnId: string;
-    rowIds?: string[];
-    maxRows?: number;
-    forceRefresh?: boolean;
-    skipCompleted?: boolean;
-  }): Promise<ApolloEnrichResult> => {
-    const { data, error } = await supabase.functions.invoke('apollo-org-enrich', {
-      body: {
-        table_id: tableId,
-        column_id: params.columnId,
-        row_ids: params.rowIds,
-        max_rows: params.maxRows,
-        force_refresh: params.forceRefresh ?? false,
-        skip_completed: params.skipCompleted ?? false,
-      },
-    });
-
-    if (error) throw error;
-    return data as ApolloEnrichResult;
-  };
-
-  // --------------------------------------------------------------------------
-  // Start Org Enrichment Mutation
-  // --------------------------------------------------------------------------
-
-  const startOrgEnrichmentMutation = useMutation({
-    mutationFn: invokeApolloOrgEnrich,
-    onMutate: async ({ columnId, columnKey, rowIds, skipCompleted }) => {
-      return await optimisticPendingUpdate(columnId, rowIds, skipCompleted, columnKey);
-    },
-    onError: (error: Error, _vars, context) => {
-      if (context?.previousData && context?.queryKey) {
-        queryClient.setQueryData(context.queryKey, context.previousData);
-      }
-      toast.error(`Apollo org enrichment failed: ${error.message}`);
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tableData(tableId) });
-      const parts = [];
-      if (result.enriched > 0) parts.push(`${result.enriched} enriched`);
-      if (result.cached_hits > 0) parts.push(`${result.cached_hits} from cache`);
-      if (result.failed > 0) parts.push(`${result.failed} failed`);
-      if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
-      toast.success(`Apollo org enrichment: ${parts.join(', ')}`);
+      toast.success(`Re-enriched ${result.enriched} rows from LinkedIn`);
     },
   });
 
@@ -271,18 +219,15 @@ export function useApolloEnrichment(tableId: string) {
   // --------------------------------------------------------------------------
 
   return {
-    startApolloEnrichment: startApolloEnrichmentMutation.mutate,
-    startApolloEnrichmentAsync: startApolloEnrichmentMutation.mutateAsync,
-    isEnrichingApollo: startApolloEnrichmentMutation.isPending,
+    startLinkedInEnrichment: startLinkedInEnrichmentMutation.mutate,
+    startLinkedInEnrichmentAsync: startLinkedInEnrichmentMutation.mutateAsync,
+    isEnrichingLinkedIn: startLinkedInEnrichmentMutation.isPending,
 
-    singleRowApolloEnrichment: singleRowMutation.mutate,
+    singleRowLinkedInEnrichment: singleRowMutation.mutate,
 
-    reEnrichApollo: reEnrichMutation.mutate,
-    isReEnriching: reEnrichMutation.isPending,
-
-    startApolloOrgEnrichment: startOrgEnrichmentMutation.mutate,
-    isEnrichingApolloOrg: startOrgEnrichmentMutation.isPending,
+    reEnrichLinkedIn: reEnrichMutation.mutate,
+    isReEnrichingLinkedIn: reEnrichMutation.isPending,
   };
 }
 
-export default useApolloEnrichment;
+export default useLinkedInEnrichment;

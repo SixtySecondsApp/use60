@@ -5,13 +5,17 @@ import { toast } from 'sonner'
 import { apifyService, ApifyConnectResult } from '@/lib/services/apifyService'
 
 export function useApifyIntegration() {
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, loading: authLoading } = useAuth()
   const activeOrgId = useOrgStore((s) => s.activeOrgId)
+  const orgLoading = useOrgStore((s) => s.isLoading)
   const [isConnected, setIsConnected] = useState(false)
   const [loading, setLoading] = useState(true)
   const [apifyUser, setApifyUser] = useState<ApifyConnectResult['user'] | null>(null)
 
   const refreshStatus = useCallback(async () => {
+    // Auth or org still initializing — stay in loading state
+    if (authLoading || orgLoading) return
+
     if (!isAuthenticated || !user || !activeOrgId) {
       setIsConnected(false)
       setApifyUser(null)
@@ -31,7 +35,7 @@ export function useApifyIntegration() {
     } finally {
       setLoading(false)
     }
-  }, [activeOrgId, isAuthenticated, user])
+  }, [activeOrgId, isAuthenticated, user, authLoading, orgLoading])
 
   useEffect(() => {
     refreshStatus()

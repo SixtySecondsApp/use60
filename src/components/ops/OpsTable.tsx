@@ -180,7 +180,7 @@ function SortableColumnHeader({
         relative flex items-center gap-1 px-2 border-r border-gray-800 shrink-0 select-none
         ${col.is_enrichment ? 'bg-violet-500/5' : ''}
         ${col.hubspot_property_name ? 'bg-orange-500/30' : ''}
-        ${col.apollo_property_name ? 'bg-blue-500/20' : ''}
+        ${col.column_type === 'linkedin_property' ? 'bg-sky-500/20' : col.apollo_property_name ? 'bg-blue-500/20' : ''}
         group cursor-pointer hover:bg-gray-800/40 transition-colors
       `}
       style={style}
@@ -490,7 +490,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
 
   const renderColumnIcon = (col: Column) => {
     // Integration column: show integration logo (HubSpot, Apollo, Instantly, etc.)
-    const integrationId = col.hubspot_property_name ? 'hubspot' : col.apollo_property_name ? 'apollo' : col.integration_type;
+    const integrationId = col.hubspot_property_name ? 'hubspot' : col.column_type === 'linkedin_property' ? 'linkedin' : col.apollo_property_name ? 'apollo' : col.integration_type;
     if (integrationId) {
       // Extract base integration name from types like "apollo_enrich" -> "apollo"
       const baseName = integrationId.split('_')[0];
@@ -706,7 +706,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           flex items-center px-2 border-r border-gray-800/50 shrink-0 overflow-hidden
                           ${col.is_enrichment ? 'bg-violet-500/[0.03]' : ''}
                           ${col.hubspot_property_name ? 'bg-orange-500/10' : ''}
-                          ${col.apollo_property_name ? 'bg-blue-500/[0.07]' : ''}
+                          ${col.column_type === 'linkedin_property' ? 'bg-sky-500/[0.07]' : col.apollo_property_name ? 'bg-blue-500/[0.07]' : ''}
                         `}
                         style={{ width: cellWidth, minWidth: cellWidth, ...fmtStyle }}
                       >
@@ -723,12 +723,12 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           photoUrl={photoUrl}
                           companyDomain={companyDomain}
                           companyLinkedinUrl={companyLinkedinUrl}
-                          onEdit={((col.is_enrichment && col.column_type !== 'apollo_property' && col.column_type !== 'apollo_org_property') || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
+                          onEdit={((col.is_enrichment && col.column_type !== 'apollo_property' && col.column_type !== 'apollo_org_property' && col.column_type !== 'linkedin_property') || col.column_type === 'formula') ? undefined : handleCellEdit(row.id, col.key)}
                           dropdownOptions={col.dropdown_options}
                           formulaExpression={col.formula_expression}
                           columnLabel={col.label}
                           metadata={cellData.metadata}
-                          onEnrichRow={(col.is_enrichment || col.column_type === 'apollo_property' || col.column_type === 'apollo_org_property') ? () => onEnrichRow?.(row.id, col.id) : undefined}
+                          onEnrichRow={(col.is_enrichment || col.column_type === 'apollo_property' || col.column_type === 'apollo_org_property' || col.column_type === 'linkedin_property') ? () => onEnrichRow?.(row.id, col.id) : undefined}
                           buttonConfig={(col.column_type === 'button' || col.column_type === 'action') ? col.action_config as any : undefined}
                           rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly') ? Object.fromEntries(
                             Object.entries(row.cells).map(([k, v]) => [k, v.value ?? ''])

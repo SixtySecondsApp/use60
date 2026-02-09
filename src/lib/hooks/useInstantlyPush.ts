@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase/clientV2'
+import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2'
 import { toast } from 'sonner'
 import type { InstantlyPushResult } from '@/lib/types/instantly'
 
@@ -13,7 +13,7 @@ export async function validateInstantlyCampaign(
 ): Promise<{ valid: true; campaign: any } | { valid: false; error: string }> {
   try {
     const { data, error } = await supabase.functions.invoke('instantly-admin', {
-      body: { action: 'get_campaign', org_id: orgId, campaign_id: campaignId },
+      body: { action: 'get_campaign', org_id: orgId, campaign_id: campaignId, _auth_token: await getSupabaseAuthToken() },
     })
     if (error || !data?.success) {
       return { valid: false, error: data?.error || error?.message || 'Campaign not found' }
@@ -37,7 +37,7 @@ export function useInstantlyPush(tableId: string | undefined) {
   const pushMutation = useMutation({
     mutationFn: async (params: PushParams) => {
       const { data, error } = await supabase.functions.invoke('push-to-instantly', {
-        body: params,
+        body: { ...params, _auth_token: await getSupabaseAuthToken() },
       })
 
       if (error) throw new Error(error.message || 'Failed to push to Instantly')
