@@ -160,6 +160,34 @@ export class AIProviderService {
     try {
       // Ensure we have a user ID for tracking and tools
       const effectiveUserId = userId || 'ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459'; // Fallback to dev user ID
+
+      // Check credit balance before making AI call
+      try {
+        const { data: membership } = await supabase
+          .from('organization_memberships')
+          .select('org_id')
+          .eq('user_id', effectiveUserId)
+          .limit(1)
+          .maybeSingle();
+
+        if (membership?.org_id) {
+          const { data: balance } = await supabase
+            .from('org_credit_balance')
+            .select('balance_credits')
+            .eq('org_id', membership.org_id)
+            .maybeSingle();
+
+          // Only block if balance row exists and is <= 0
+          if (balance && (balance.balance_credits ?? 0) <= 0) {
+            throw new Error('INSUFFICIENT_CREDITS');
+          }
+        }
+      } catch (creditErr) {
+        // Re-throw INSUFFICIENT_CREDITS, swallow everything else (fail open)
+        if (creditErr instanceof Error && creditErr.message === 'INSUFFICIENT_CREDITS') {
+          throw creditErr;
+        }
+      }
       // Interpolate variables in prompts
       const systemPrompt = interpolateVariables(config.systemPrompt, variables);
       const userPrompt = interpolateVariables(config.userPrompt, variables);

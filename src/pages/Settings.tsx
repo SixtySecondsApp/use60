@@ -45,6 +45,7 @@ import {
   Briefcase,
   Zap,
   Eye,
+  Wallet,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -241,6 +242,14 @@ export default function Settings() {
       requiresOrgAdmin: false,
     },
     {
+      id: 'credits',
+      label: 'Credits & AI',
+      icon: Wallet,
+      description: 'View AI credit balance, usage trends, and purchase history',
+      path: '/settings/credits',
+      requiresOrgAdmin: true,
+    },
+    {
       id: 'billing',
       label: 'Billing',
       icon: CreditCard,
@@ -306,7 +315,7 @@ export default function Settings() {
       ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
-      ['organization-management', 'billing'].includes(s.id)
+      ['organization-management', 'credits', 'billing'].includes(s.id)
     );
 
     const cats = [

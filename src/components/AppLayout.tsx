@@ -65,6 +65,8 @@ import logger from '@/lib/utils/logger';
 import { useEventListener } from '@/lib/communication/EventBus';
 import { useTaskNotifications } from '@/lib/hooks/useTaskNotifications';
 import { SmartSearch } from '@/components/SmartSearch';
+import { CreditWidget } from '@/components/credits/CreditWidget';
+import { LowBalanceBanner } from '@/components/credits/LowBalanceBanner';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { useNavigate } from 'react-router-dom';
 import { CommandCenter } from '@/components/command-center';
@@ -335,6 +337,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Trial Banner - shown when organization is in trial period */}
       <TrialBanner />
 
+      {/* Low Credit Balance Banner - shown when AI credits are low or exhausted */}
+      <LowBalanceBanner />
+
       {/* Integration Reconnect Banner - shown when user has integration alerts or needs reconnection */}
       <IntegrationReconnectBanner
         additionalTopOffset={integrationBannerTopOffset}
@@ -342,6 +347,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         hasImpersonationBannerAbove={isImpersonating}
         isSidebarCollapsed={isCollapsed}
       />
+
+      {/* Low Credit Balance Banner */}
+      <LowBalanceBanner />
 
       {/* Main app content */}
       <div className="flex">
@@ -709,6 +717,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <NotificationBell />
             </>
           )}
+          {activeOrgId && <CreditWidget />}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-800/50 transition-colors">

@@ -74,6 +74,31 @@ export async function logAICostEvent(
         console.warn('[CostTracking] Error logging cost event:', insertError);
       }
     }
+
+    // Deduct credits from org balance
+    try {
+      if (orgId && estimatedCost > 0) {
+        const { error: deductError } = await supabaseClient.rpc('deduct_credits', {
+          p_org_id: orgId,
+          p_amount: estimatedCost,
+          p_description: `AI usage: ${feature || 'unknown'}`,
+          p_feature_key: feature || null,
+          p_cost_event_id: null, // We don't have the cost event ID from the insert
+        });
+
+        if (deductError) {
+          // Silently fail if credit tables don't exist yet (backward compat during rollout)
+          if (!deductError.message.includes('relation') && !deductError.message.includes('does not exist') && !deductError.message.includes('function')) {
+            console.warn('[CostTracking] Credit deduction error:', deductError);
+          }
+        }
+      }
+    } catch (err) {
+      // Silently fail if credit system isn't set up yet
+      if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
+        console.warn('[CostTracking] Credit deduction exception:', err);
+      }
+    }
   } catch (err) {
     // Silently fail if cost tracking isn't set up yet
     if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
@@ -162,6 +187,62 @@ export async function checkAgentBudget(
   } catch (err) {
     console.warn('[CostTracking] Budget check exception:', err);
     return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitUsd };
+  }
+}
+
+// =============================================================================
+// Credit Balance Check
+// =============================================================================
+
+export interface CreditCheckResult {
+  allowed: boolean;
+  balance: number;
+  message?: string;
+}
+
+/**
+ * Check if an org has sufficient AI credits.
+ * Returns allowed=true if credits available OR if credit system isn't set up (backward compat).
+ */
+export async function checkCreditBalance(
+  supabaseClient: any,
+  orgId: string
+): Promise<CreditCheckResult> {
+  try {
+    const { data, error } = await supabaseClient
+      .from('org_credit_balance')
+      .select('balance_credits')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (error) {
+      // If table doesn't exist, allow (backward compat)
+      if (error.message.includes('relation') || error.message.includes('does not exist')) {
+        return { allowed: true, balance: 0 };
+      }
+      console.warn('[CostTracking] Credit check error:', error);
+      return { allowed: true, balance: 0 };
+    }
+
+    // No balance row = org hasn't been migrated to credit system yet -> allow
+    if (!data) {
+      return { allowed: true, balance: 0 };
+    }
+
+    const balance = data.balance_credits || 0;
+
+    if (balance <= 0) {
+      return {
+        allowed: false,
+        balance,
+        message: 'Your organization has run out of AI credits. Please top up to continue.',
+      };
+    }
+
+    return { allowed: true, balance };
+  } catch (err) {
+    console.warn('[CostTracking] Credit check exception:', err);
+    return { allowed: true, balance: 0 };
   }
 }
 

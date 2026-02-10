@@ -133,6 +133,10 @@ async function processStripeEvent(
         await handleInvoiceFinalized(supabase, event.data.object);
         break;
 
+      case "charge.refunded":
+        await handleChargeRefunded(supabase, event.data.object);
+        break;
+
       default:
         console.log(`Unhandled event type: ${eventType}`);
         return {
@@ -215,6 +219,50 @@ async function handleCheckoutCompleted(
   const metadata = extractMetadata(session);
   const orgId = metadata.org_id;
   const planId = metadata.plan_id;
+
+  // Handle credit purchase fulfillment (one-time payment, not subscription)
+  if ((session as any).mode === 'payment' && metadata.type === 'credit_purchase') {
+    const creditAmount = parseFloat(metadata.credit_amount ?? '0');
+    const userId = metadata.user_id;
+    const sessionId = (session as any).id;
+
+    if (!orgId || !creditAmount || isNaN(creditAmount)) {
+      console.error('[Webhook] Invalid credit purchase metadata:', metadata);
+      // Don't throw — acknowledge webhook to prevent Stripe retries
+      return;
+    }
+
+    // Idempotency: check if we already processed this session
+    const { data: existingTxn } = await supabase
+      .from('credit_transactions')
+      .select('id')
+      .eq('stripe_session_id', sessionId)
+      .maybeSingle();
+
+    if (existingTxn) {
+      console.log(`[Webhook] Credit purchase already processed for session ${sessionId}`);
+      return;
+    }
+
+    // Add credits via RPC
+    const { data: newBalance, error: creditError } = await supabase
+      .rpc('add_credits', {
+        p_org_id: orgId,
+        p_amount: creditAmount,
+        p_type: 'purchase',
+        p_description: `Credit pack purchase — $${creditAmount}`,
+        p_stripe_session_id: sessionId,
+        p_created_by: userId || null,
+      });
+
+    if (creditError) {
+      console.error('[Webhook] Error adding credits:', creditError);
+    } else {
+      console.log(`[Webhook] Added ${creditAmount} credits to org ${orgId}. New balance: ${newBalance}`);
+    }
+
+    return;
+  }
 
   if (!orgId) {
     console.warn("Checkout session missing org_id in metadata");
@@ -647,6 +695,51 @@ async function handleInvoiceFinalized(
       : undefined,
     subscription_id: existingSub.id,
   });
+}
+
+// ============================================================================
+// CHARGE REFUNDED (credit purchase reversal)
+// ============================================================================
+async function handleChargeRefunded(
+  supabase: SupabaseClient,
+  charge: unknown
+): Promise<void> {
+  const chargeObj = charge as any;
+  const metadata = chargeObj?.metadata ?? {};
+
+  // Only handle credit purchase refunds
+  if (metadata.type !== 'credit_purchase') {
+    console.log('[Webhook] Charge refund is not a credit purchase, skipping credit reversal');
+    return;
+  }
+
+  const orgId = metadata.org_id;
+  if (!orgId) {
+    console.warn('[Webhook] Credit refund charge missing org_id in metadata');
+    return;
+  }
+
+  // Refund amount is in cents — convert to dollars
+  const refundAmount = (chargeObj.amount_refunded ?? 0) / 100;
+
+  if (refundAmount <= 0) {
+    console.warn('[Webhook] Refund amount is zero or negative, skipping');
+    return;
+  }
+
+  const { error: deductError } = await supabase.rpc('deduct_credits', {
+    p_org_id: orgId,
+    p_amount: refundAmount,
+    p_description: 'Refund — credit purchase reversed',
+    p_feature_key: null,
+    p_cost_event_id: null,
+  });
+
+  if (deductError) {
+    console.error('[Webhook] Error deducting credits on refund:', deductError);
+  } else {
+    console.log(`[Webhook] Deducted ${refundAmount} credits from org ${orgId} due to refund`);
+  }
 }
 
 // ============================================================================

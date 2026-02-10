@@ -33,7 +33,7 @@ import {
   rateLimitMiddleware,
   RATE_LIMIT_CONFIGS,
 } from '../_shared/rateLimiter.ts';
-import { logAICostEvent, checkAgentBudget } from '../_shared/costTracking.ts';
+import { logAICostEvent, checkAgentBudget, checkCreditBalance } from '../_shared/costTracking.ts';
 import { executeAction } from '../_shared/copilot_adapters/executeAction.ts';
 import type { ExecuteActionName } from '../_shared/copilot_adapters/types.ts';
 import { resolveEntity } from '../_shared/resolveEntityAdapter.ts';
@@ -447,9 +447,19 @@ async function handleCompactionIfNeeded(
     const toSummarize = messages.slice(0, splitIndex);
     const toKeep = messages.slice(splitIndex);
 
-    // Generate summary
+    // Generate summary — format multi-agent messages with agent attribution
     const conversationText = toSummarize
-      .map((m: { role: string; content: string }) => `[${m.role}]: ${m.content}`)
+      .map((m: { role: string; content: string; metadata?: Record<string, unknown> | null }) => {
+        const meta = m.metadata as Record<string, unknown> | null;
+        if (m.role === 'assistant' && meta?.is_multi_agent && Array.isArray(meta.agent_responses)) {
+          // Include agent attribution so summaries/memories capture which specialist said what
+          const agentSections = (meta.agent_responses as Array<{ agent: string; displayName: string; responseText: string }>)
+            .map((ar) => `  [${ar.displayName}]: ${ar.responseText}`)
+            .join('\n');
+          return `[assistant (multi-agent: ${(meta.agents_used as string[])?.join(', ') || 'multiple'})]:\n${agentSections}\n[synthesized]: ${m.content}`;
+        }
+        return `[${m.role}]: ${m.content}`;
+      })
       .join('\n\n');
 
     const summaryResponse = await anthropic.messages.create({
@@ -1031,7 +1041,7 @@ Combine these into a single, well-structured response. Use headings for each sec
     await sendSSE(writer, encoder, 'message_complete', { content: finalResponse });
   }
 
-  // Send done event with agent metadata
+  // Send done event with agent metadata (includes per-agent responses for persistence)
   const allToolsUsed = results.flatMap((r) => r.toolsUsed);
   const totalInputTokens = results.reduce((sum, r) => sum + r.inputTokens, 0);
   const totalOutputTokens = results.reduce((sum, r) => sum + r.outputTokens, 0);
@@ -1041,6 +1051,14 @@ Combine these into a single, well-structured response. Use headings for each sec
     iterations: results.reduce((sum, r) => sum + r.iterations, 0),
     agents_used: results.map((r) => r.agentName),
     total_tokens: totalInputTokens + totalOutputTokens,
+    is_multi_agent: results.length > 1 || strategy !== 'single',
+    agent_responses: results.map((r) => ({
+      agent: r.agentName,
+      displayName: getAgentDisplayInfo(r.agentName).displayName,
+      responseText: r.responseText.slice(0, 2000),
+      toolsUsed: r.toolsUsed,
+    })),
+    strategy,
   });
 
   // Log completion for parent execution
@@ -1160,90 +1178,133 @@ serve(async (req: Request) => {
     const claudeTools = FOUR_TOOL_DEFINITIONS;
 
     // =========================================================================
-    // Multi-Agent Orchestration Check
+    // Multi-Agent Orchestration
     // =========================================================================
-    // If org has agent team config, try multi-agent delegation.
-    // Falls back to single-agent if no config or classification fails.
+    // All orgs get multi-agent classification by default (loadAgentTeamConfig
+    // returns a default config when no DB row exists).
+    // Single-domain messages still route to a single specialist via the
+    // keyword pre-filter — no extra API call for clear intents.
+    // Fallback to the original single-agent path happens when:
+    //   - force_single_agent context flag is set (demo comparison page)
+    //   - Budget is exceeded
+    //   - Classification returns null
+    //   - Non-streaming request (testing only)
 
     const resolvedOrgForConfig = organizationId
       ? organizationId
       : await resolveOrgId(supabase, userId, null).catch(() => null);
 
-    let agentTeamConfig: AgentTeamConfig | null = null;
+    // Check credit balance before proceeding
     if (resolvedOrgForConfig) {
-      agentTeamConfig = await loadAgentTeamConfig(supabase, resolvedOrgForConfig);
+      const creditCheck = await checkCreditBalance(supabase, resolvedOrgForConfig);
+      if (!creditCheck.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: 'insufficient_credits',
+            message: creditCheck.message || 'Your organization has run out of AI credits. Please top up to continue.',
+            balance: creditCheck.balance,
+          }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    // Allow demo page to force single-agent path for comparison
-    if (context?.force_single_agent) {
-      agentTeamConfig = null;
+    // Resolve planner/driver models from org config
+    let plannerModel = MODEL; // default
+    let driverModel = MODEL; // default
+
+    if (resolvedOrgForConfig) {
+      try {
+        const { data: plannerConfig } = await supabase.rpc('get_model_for_feature', {
+          p_feature_key: 'copilot_autonomous',
+          p_org_id: resolvedOrgForConfig,
+          p_role: 'planner',
+        });
+        if (plannerConfig?.[0]?.model_identifier) {
+          plannerModel = plannerConfig[0].model_identifier;
+        }
+
+        const { data: driverConfig } = await supabase.rpc('get_model_for_feature', {
+          p_feature_key: 'copilot_autonomous',
+          p_org_id: resolvedOrgForConfig,
+          p_role: 'driver',
+        });
+        if (driverConfig?.[0]?.model_identifier) {
+          driverModel = driverConfig[0].model_identifier;
+        }
+      } catch (err) {
+        console.warn('[CopilotAutonomous] Model resolution error, using defaults:', err);
+      }
     }
 
-    if (agentTeamConfig && stream) {
+    // force_single_agent is a demo-only context flag used by the side-by-side
+    // comparison page. Normal copilot requests always attempt classification.
+    const forceSingleAgent = !!context?.force_single_agent;
+
+    if (resolvedOrgForConfig && stream && !forceSingleAgent) {
+      const agentTeamConfig = await loadAgentTeamConfig(supabase, resolvedOrgForConfig);
+
       // Check budget before multi-agent delegation
       const budgetCheck = await checkAgentBudget(
         supabase,
-        resolvedOrgForConfig!,
+        resolvedOrgForConfig,
         agentTeamConfig.budget_limit_daily_usd
       );
 
       if (!budgetCheck.allowed) {
         console.log(`[copilot-autonomous] Budget exceeded: $${budgetCheck.todaySpend.toFixed(2)}/$${budgetCheck.budgetLimit.toFixed(2)}, falling back to single-agent`);
-        // Fall through to single-agent path
-        agentTeamConfig = null;
+        // Fall through to single-agent path below
+      } else {
+        // Attempt multi-agent classification
+        const classification = await classifyIntent(message, agentTeamConfig, anthropic);
+
+        if (classification && classification.agents.length > 0) {
+          console.log(`[copilot-autonomous] Multi-agent: ${classification.agents.join(',')} via ${classification.strategy}`);
+
+          const { readable, writer, encoder } = createSSEStream();
+
+          (async () => {
+            // Start parent execution log
+            const executionId = await logExecutionStart(supabase, organizationId, userId, message);
+
+            // Log routing decision
+            if (executionId) {
+              await logRoutingDecision(supabase, executionId, classification);
+            }
+
+            try {
+              await handleMultiAgentRequest(
+                message,
+                agentTeamConfig,
+                classification,
+                anthropic,
+                supabase,
+                userId!,
+                resolvedOrgForConfig,
+                writer,
+                encoder,
+                executionId
+              );
+            } catch (err) {
+              const errorMsg = err instanceof Error ? err.message : String(err);
+              console.error('[copilot-autonomous] Multi-agent error, falling back:', errorMsg);
+              await sendSSE(writer, encoder, 'error', { message: `Multi-agent error: ${errorMsg}` });
+            } finally {
+              await writer.close();
+            }
+          })();
+
+          return new Response(readable, {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              Connection: 'keep-alive',
+            },
+          });
+        }
+        // Classification returned null — fall through to single-agent
       }
-
-      // Attempt multi-agent classification
-      const classification = agentTeamConfig
-        ? await classifyIntent(message, agentTeamConfig, anthropic)
-        : null;
-
-      if (classification && classification.agents.length > 0) {
-        console.log(`[copilot-autonomous] Multi-agent: ${classification.agents.join(',')} via ${classification.strategy}`);
-
-        const { readable, writer, encoder } = createSSEStream();
-
-        (async () => {
-          // Start parent execution log
-          const executionId = await logExecutionStart(supabase, organizationId, userId, message);
-
-          // Log routing decision
-          if (executionId) {
-            await logRoutingDecision(supabase, executionId, classification);
-          }
-
-          try {
-            await handleMultiAgentRequest(
-              message,
-              agentTeamConfig!,
-              classification,
-              anthropic,
-              supabase,
-              userId!,
-              resolvedOrgForConfig!,
-              writer,
-              encoder,
-              executionId
-            );
-          } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : String(err);
-            console.error('[copilot-autonomous] Multi-agent error, falling back:', errorMsg);
-            await sendSSE(writer, encoder, 'error', { message: `Multi-agent error: ${errorMsg}` });
-          } finally {
-            await writer.close();
-          }
-        })();
-
-        return new Response(readable, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-          },
-        });
-      }
-      // Classification returned null — fall through to single-agent
     }
 
     // =========================================================================
@@ -1283,9 +1344,12 @@ serve(async (req: Request) => {
           while (iterations < MAX_ITERATIONS) {
             iterations++;
 
+            // Use planner model for first iteration (tool selection), driver for subsequent
+            const iterationModel = iterations === 1 ? plannerModel : driverModel;
+
             // Use streaming API for real-time token delivery
             const stream = anthropic.messages.stream({
-              model: MODEL,
+              model: iterationModel,
               max_tokens: MAX_TOKENS,
               system: systemPrompt,
               tools: claudeTools,
@@ -1624,8 +1688,11 @@ serve(async (req: Request) => {
       while (iterations < MAX_ITERATIONS) {
         iterations++;
 
+        // Use planner model for first iteration (tool selection), driver for subsequent
+        const iterationModel = iterations === 1 ? plannerModel : driverModel;
+
         const response = await anthropic.messages.create({
-          model: MODEL,
+          model: iterationModel,
           max_tokens: MAX_TOKENS,
           system: systemPrompt,
           tools: claudeTools,

@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { normalizeCompanyName, calculateStringSimilarity } from '../_shared/companyMatching.ts'
+import { checkCreditBalance } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -314,6 +315,19 @@ serve(async (req) => {
     }
 
     const orgId = membership.org_id
+
+    // Check credit balance before proceeding
+    const creditCheck = await checkCreditBalance(userClient, orgId);
+    if (!creditCheck.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: 'insufficient_credits',
+          message: creditCheck.message || 'Your organization has run out of AI credits. Please top up to continue.',
+          balance: creditCheck.balance,
+        }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // ---------------------------------------------------------------
     // 3. Parse request body

@@ -91,6 +91,7 @@ import {
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
   LogoSettings, SlackSettings, JustCallSettings, HubSpotSettings, BullhornSettings, InstantlySettings, SmartListeningSettings,
+  CreditPurchaseSuccess, CreditsSettingsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
   OrgBilling,
   // Insights
@@ -547,6 +548,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/organization" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/branding" element={<Navigate to="/settings" replace />} />
                 <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><OrgBilling /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/credits" element={<AppLayout><CreditsSettingsPage /></AppLayout>} />
+                <Route path="/settings/credits/success" element={<AppLayout><CreditPurchaseSuccess /></AppLayout>} />
                 {/* Slack Settings - visible only when Slack is connected (enforced inside page) */}
                 <Route path="/settings/integrations/slack" element={<AppLayout><SlackSettings /></AppLayout>} />
                 {/* JustCall Settings - visible only when JustCall is connected (enforced inside page) */}

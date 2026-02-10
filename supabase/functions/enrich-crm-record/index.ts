@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { captureException } from '../_shared/sentryEdge.ts';
+import { checkCreditBalance } from '../_shared/costTracking.ts';
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -502,6 +503,33 @@ serve(async (req) => {
         JSON.stringify({ success: false, error: "Unauthorized" }),
         { status: 401, headers: JSON_HEADERS }
       );
+    }
+
+    // Check credit balance before proceeding
+    try {
+      const { data: membership } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (membership?.org_id) {
+        const creditCheck = await checkCreditBalance(supabase, membership.org_id);
+        if (!creditCheck.allowed) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'insufficient_credits',
+              message: creditCheck.message || 'Your organization has run out of AI credits. Please top up to continue.',
+              balance: creditCheck.balance,
+            }),
+            { status: 402, headers: JSON_HEADERS }
+          );
+        }
+      }
+    } catch (e) {
+      // fail open: enrichment should still work if credit check fails
     }
 
     // Parse request body

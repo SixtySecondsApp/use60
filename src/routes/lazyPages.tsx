@@ -175,6 +175,8 @@ export const HubSpotSettings = lazyWithRetry(() => import('@/pages/settings/HubS
 export const BullhornSettings = lazyWithRetry(() => import('@/pages/settings/BullhornSettings'));
 export const InstantlySettings = lazyWithRetry(() => import('@/pages/settings/InstantlySettings'));
 export const SmartListeningSettings = lazyWithRetry(() => import('@/pages/settings/SmartListeningSettings'));
+export const CreditPurchaseSuccess = lazyWithRetry(() => import('@/pages/settings/CreditPurchaseSuccess'));
+export const CreditsSettingsPage = lazyWithRetry(() => import('@/pages/settings/CreditsSettingsPage'));
 // Integration settings pages (dedicated settings for each integration)
 export const GoogleWorkspaceIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/GoogleWorkspaceIntegrationPage'));
 export const FathomIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/FathomIntegrationPage'));

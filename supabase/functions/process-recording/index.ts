@@ -19,6 +19,7 @@ import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-
 import { S3Client, PutObjectCommand, HeadObjectCommand } from 'npm:@aws-sdk/client-s3@3';
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import { legacyCorsHeaders as corsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { checkCreditBalance } from '../_shared/costTracking.ts';
 import {
   createMeetingBaaSClient,
   extractDomain,
@@ -939,28 +940,45 @@ async function processRecording(
     // Uses the same analysis pipeline as Fathom recordings for consistency
     console.log('[ProcessRecording] Step 4.5: Running enhanced AI analysis...');
     let enhancedAnalysis: TranscriptAnalysis | null = null;
-    try {
-      enhancedAnalysis = await analyzeTranscriptWithClaude(
-        transcript.text,
-        {
-          id: recordingId,
-          title: recording.meeting_title || 'Meeting',
-          meeting_start: recording.meeting_start_time || new Date().toISOString(),
-          owner_email: null, // Will be populated from user if needed
-        },
-        supabase,
-        recording.user_id,
-        recording.org_id
-      );
-      console.log('[ProcessRecording] Enhanced AI analysis complete:', {
-        sentiment: enhancedAnalysis.sentiment.score,
-        talkTimeRep: enhancedAnalysis.talkTime.repPct,
-        coachRating: enhancedAnalysis.coaching.rating,
-        actionItems: enhancedAnalysis.actionItems.length,
-      });
-    } catch (aiError) {
-      console.warn('[ProcessRecording] Enhanced AI analysis failed (non-fatal):', aiError);
-      // Continue with basic analysis only
+
+    // Check credit balance before AI analysis
+    let creditsAvailable = true;
+    if (recording.org_id) {
+      try {
+        const creditCheck = await checkCreditBalance(supabase, recording.org_id);
+        if (!creditCheck.allowed) {
+          console.warn('[ProcessRecording] Skipping AI analysis: insufficient credits for org', recording.org_id);
+          creditsAvailable = false;
+        }
+      } catch (e) {
+        // fail open: continue with AI analysis if credit check fails
+      }
+    }
+
+    if (creditsAvailable) {
+      try {
+        enhancedAnalysis = await analyzeTranscriptWithClaude(
+          transcript.text,
+          {
+            id: recordingId,
+            title: recording.meeting_title || 'Meeting',
+            meeting_start: recording.meeting_start_time || new Date().toISOString(),
+            owner_email: null, // Will be populated from user if needed
+          },
+          supabase,
+          recording.user_id,
+          recording.org_id
+        );
+        console.log('[ProcessRecording] Enhanced AI analysis complete:', {
+          sentiment: enhancedAnalysis.sentiment.score,
+          talkTimeRep: enhancedAnalysis.talkTime.repPct,
+          coachRating: enhancedAnalysis.coaching.rating,
+          actionItems: enhancedAnalysis.actionItems.length,
+        });
+      } catch (aiError) {
+        console.warn('[ProcessRecording] Enhanced AI analysis failed (non-fatal):', aiError);
+        // Continue with basic analysis only
+      }
     }
 
     // Step 5: Check for HITL needs
