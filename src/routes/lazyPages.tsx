@@ -43,6 +43,8 @@ export const NotetakerVideoQuality = lazyWithRetry(() => import('@/pages/platfor
 export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionCentre'));
 export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
+export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
+export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
