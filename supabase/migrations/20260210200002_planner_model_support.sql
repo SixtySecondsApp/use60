@@ -7,6 +7,78 @@
 -- This is ADDITIVE ONLY — no existing columns are renamed or removed.
 
 -- ============================================================================
+-- 0. Ensure org_ai_config table exists (prerequisite)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS org_ai_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  feature_key TEXT NOT NULL REFERENCES ai_feature_config(feature_key) ON DELETE CASCADE,
+  model_id UUID REFERENCES ai_models(id) ON DELETE SET NULL,
+  is_enabled BOOLEAN DEFAULT true,
+  custom_temperature DECIMAL(3, 2),
+  custom_max_tokens INTEGER,
+  notes TEXT,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(org_id, feature_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_ai_config_org_id ON org_ai_config(org_id);
+CREATE INDEX IF NOT EXISTS idx_org_ai_config_feature_key ON org_ai_config(feature_key);
+
+CREATE OR REPLACE FUNCTION update_org_ai_config_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_org_ai_config_updated_at ON org_ai_config;
+CREATE TRIGGER trigger_org_ai_config_updated_at
+  BEFORE UPDATE ON org_ai_config
+  FOR EACH ROW
+  EXECUTE FUNCTION update_org_ai_config_updated_at();
+
+ALTER TABLE org_ai_config ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Org members can read their org_ai_config" ON org_ai_config;
+CREATE POLICY "Org members can read their org_ai_config"
+  ON org_ai_config FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM organization_memberships om
+      WHERE om.org_id = org_ai_config.org_id
+      AND om.user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Org admins can manage their org_ai_config" ON org_ai_config;
+CREATE POLICY "Org admins can manage their org_ai_config"
+  ON org_ai_config FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM organization_memberships om
+      WHERE om.org_id = org_ai_config.org_id
+      AND om.user_id = auth.uid()
+      AND om.role IN ('admin', 'owner')
+    )
+  );
+
+DROP POLICY IF EXISTS "Platform admins can manage all org_ai_config" ON org_ai_config;
+CREATE POLICY "Platform admins can manage all org_ai_config"
+  ON org_ai_config FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.is_admin = true
+    )
+  );
+
+-- ============================================================================
 -- 1. ALTER ai_feature_config — add planner_model_id
 -- ============================================================================
 
@@ -205,5 +277,5 @@ END $$;
 -- 6. Update function comments
 -- ============================================================================
 
-COMMENT ON FUNCTION get_model_for_feature IS 'Returns the appropriate model for a feature by role (driver or planner), considering org overrides and fallbacks';
+COMMENT ON FUNCTION get_model_for_feature(TEXT, UUID, TEXT) IS 'Returns the appropriate model for a feature by role (driver or planner), considering org overrides and fallbacks';
 COMMENT ON FUNCTION get_org_effective_ai_config IS 'Returns effective AI config for an org, merging global defaults with org overrides, including planner models';

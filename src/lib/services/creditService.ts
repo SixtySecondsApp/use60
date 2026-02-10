@@ -56,12 +56,53 @@ export interface CreditPurchaseResult {
  * Get the full credit balance snapshot for an org (used by the widget).
  */
 export async function getBalance(orgId: string): Promise<CreditBalance> {
+  // Try edge function first (provides full data: burn rate, usage, transactions)
   const { data, error } = await supabase.functions.invoke('get-credit-balance', {
     body: { org_id: orgId },
   });
 
-  if (error) {
-    console.error('[CreditService] Error fetching balance:', error);
+  if (!error && data) {
+    return {
+      balance: data?.balance ?? 0,
+      dailyBurnRate: data?.daily_burn_rate ?? 0,
+      projectedDaysRemaining: data?.projected_days_remaining ?? 0,
+      usageByFeature: (data?.usage_by_feature ?? []).map((f: any) => ({
+        featureKey: f.feature_key,
+        featureName: f.feature_name,
+        totalCost: f.total_cost,
+        callCount: f.call_count,
+      })),
+      recentTransactions: (data?.recent_transactions ?? []).map((t: any) => ({
+        id: t.id ?? '',
+        type: t.type,
+        amount: t.amount,
+        balanceAfter: t.balance_after ?? 0,
+        description: t.description,
+        featureKey: t.feature_key,
+        createdAt: t.created_at,
+      })),
+      lastPurchaseDate: data?.last_purchase_date ?? null,
+    };
+  }
+
+  // Fallback: read balance directly from table (when edge function fails)
+  console.warn('[CreditService] Edge function failed, falling back to direct table read:', error);
+  try {
+    const { data: row } = await supabase
+      .from('org_credit_balance')
+      .select('balance_credits')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    return {
+      balance: row?.balance_credits ?? 0,
+      dailyBurnRate: 0,
+      projectedDaysRemaining: -1, // no usage data available from fallback
+      usageByFeature: [],
+      recentTransactions: [],
+      lastPurchaseDate: null,
+    };
+  } catch {
     return {
       balance: 0,
       dailyBurnRate: 0,
@@ -71,28 +112,6 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
       lastPurchaseDate: null,
     };
   }
-
-  return {
-    balance: data?.balance ?? 0,
-    dailyBurnRate: data?.daily_burn_rate ?? 0,
-    projectedDaysRemaining: data?.projected_days_remaining ?? 0,
-    usageByFeature: (data?.usage_by_feature ?? []).map((f: any) => ({
-      featureKey: f.feature_key,
-      featureName: f.feature_name,
-      totalCost: f.total_cost,
-      callCount: f.call_count,
-    })),
-    recentTransactions: (data?.recent_transactions ?? []).map((t: any) => ({
-      id: t.id ?? '',
-      type: t.type,
-      amount: t.amount,
-      balanceAfter: t.balance_after ?? 0,
-      description: t.description,
-      featureKey: t.feature_key,
-      createdAt: t.created_at,
-    })),
-    lastPurchaseDate: data?.last_purchase_date ?? null,
-  };
 }
 
 // ============================================================================

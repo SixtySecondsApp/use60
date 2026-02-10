@@ -45,6 +45,7 @@ export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/Ag
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
+export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));

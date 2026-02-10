@@ -121,11 +121,11 @@ serve(async (req: Request) => {
     );
     const dailyBurnRate = totalCostLast7Days / 7;
 
-    // 5. Projected days remaining
+    // 5. Projected days remaining (-1 signals "no usage data")
     const projectedDaysRemaining =
       dailyBurnRate > 0
-        ? Math.min(Math.floor(balance / dailyBurnRate), 999)
-        : 999;
+        ? Math.floor(balance / dailyBurnRate)
+        : -1;
 
     // 6. Usage by feature (last 30 days)
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();

@@ -17,8 +17,9 @@ import { getUsageBreakdown, grantCredits, type FeatureUsage } from '@/lib/servic
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 import { UsageChart } from '@/components/credits/UsageChart';
+import { CreditEstimator } from '@/components/credits/CreditEstimator';
 import { TransactionLog } from '@/components/credits/TransactionLog';
-import { ModelConfigPanel } from '@/components/credits/ModelConfigPanel';
+import { SimpleModelTierSelector } from '@/components/credits/SimpleModelTierSelector';
 import {
   Loader2,
   TrendingDown,
@@ -42,6 +43,7 @@ import { useUser } from '@/lib/hooks/useUser';
 
 function getStatusColor(balance: number, projectedDays: number) {
   if (balance <= 0) return 'text-red-500';
+  if (projectedDays < 0) return 'text-emerald-500'; // no usage data yet
   if (projectedDays < 7) return 'text-red-500';
   if (projectedDays <= 14) return 'text-amber-500';
   return 'text-emerald-500';
@@ -49,6 +51,7 @@ function getStatusColor(balance: number, projectedDays: number) {
 
 function getStatusBg(balance: number, projectedDays: number) {
   if (balance <= 0) return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+  if (projectedDays < 0) return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'; // no usage data yet
   if (projectedDays < 7) return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
   if (projectedDays <= 14) return 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800';
   return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800';
@@ -123,6 +126,12 @@ export default function CreditsSettingsPage() {
       toast.success(`Granted ${amount} credits. New balance: ${newBalance.toFixed(2)}`);
       setGrantAmount('');
       setGrantReason('');
+      // Optimistically update the cached balance immediately
+      queryClient.setQueryData(creditKeys.balance(orgId), (old: any) => ({
+        ...(old || { dailyBurnRate: 0, projectedDaysRemaining: -1, usageByFeature: [], recentTransactions: [], lastPurchaseDate: null }),
+        balance: newBalance,
+      }));
+      // Also invalidate to get a full refresh in background
       queryClient.invalidateQueries({ queryKey: creditKeys.balance(orgId) });
     } catch (err: any) {
       toast.error(err.message || 'Failed to grant credits');
@@ -222,16 +231,31 @@ export default function CreditsSettingsPage() {
                   'text-3xl font-bold tabular-nums',
                   getStatusColor(balance.balance, balance.projectedDaysRemaining)
                 )}>
-                  {balance.projectedDaysRemaining === Infinity
+                  {balance.projectedDaysRemaining < 0 || balance.projectedDaysRemaining === Infinity
                     ? '--'
                     : `${Math.round(balance.projectedDaysRemaining)}d`}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  at current usage
+                  {balance.projectedDaysRemaining < 0
+                    ? 'no usage yet'
+                    : 'at current usage'}
                 </p>
               </div>
             </div>
           ) : null}
+        </div>
+
+        {/* ================================================================
+            Section 1b: Credit Estimator
+        ================================================================ */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-[#37bd7e]" />
+            What Can Your Credits Do?
+          </h2>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+            <CreditEstimator />
+          </div>
         </div>
 
         {/* ================================================================
@@ -379,7 +403,7 @@ export default function CreditsSettingsPage() {
             <Brain className="w-5 h-5 text-[#37bd7e]" />
             AI Model Configuration
           </h2>
-          <ModelConfigPanel />
+          <SimpleModelTierSelector />
         </div>
       </div>
 

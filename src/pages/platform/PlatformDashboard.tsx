@@ -47,6 +47,7 @@ import {
   Bot,
   Search,
   X,
+  Cpu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -184,6 +185,14 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: Sparkles,
       href: '/platform/ai/settings',
       color: 'text-pink-600 bg-pink-100 dark:bg-pink-900/30',
+    },
+    {
+      id: 'ai-models',
+      title: 'AI Model Config',
+      description: 'Granular per-feature AI model assignment (driver/planner)',
+      icon: Cpu,
+      href: '/platform/ai/models',
+      color: 'text-violet-600 bg-violet-100 dark:bg-violet-900/30',
     },
     {
       id: 'ai-prompts',

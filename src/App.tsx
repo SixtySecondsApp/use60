@@ -73,7 +73,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo,
+  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -387,6 +387,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/waitlist-slack-settings" element={<PlatformAdminRouteGuard><AppLayout><WaitlistSlackSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - AI Configuration */}
                 <Route path="/platform/ai/settings" element={<PlatformAdminRouteGuard><AppLayout><AIProviderSettings /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/ai/models" element={<PlatformAdminRouteGuard><AppLayout><AIModelAdmin /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/ai/prompts" element={<PlatformAdminRouteGuard><AppLayout><AdminPromptSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Skills Admin - category-based routing */}
                 <Route path="/platform/skills" element={<PlatformAdminRouteGuard><AppLayout><SkillsAdmin /></AppLayout></PlatformAdminRouteGuard>} />

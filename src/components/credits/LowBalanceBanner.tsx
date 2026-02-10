@@ -27,9 +27,10 @@ export function LowBalanceBanner() {
 
   const { balance, projectedDaysRemaining } = data;
 
-  // Only show for genuinely low balance
+  // Only show for genuinely low balance (not when there's no usage data)
   const isZero = balance <= 0;
-  const isLow = balance > 0 && (projectedDaysRemaining < 7 || balance < 5);
+  const hasUsageData = projectedDaysRemaining >= 0;
+  const isLow = balance > 0 && hasUsageData && (projectedDaysRemaining < 7 || balance < 5);
 
   if (!isZero && !isLow) return null;
 

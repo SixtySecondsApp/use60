@@ -21,6 +21,7 @@ import { CreditWidgetDropdown } from './CreditWidgetDropdown';
 
 function getBalanceColor(balance: number, projectedDays: number) {
   if (balance <= 0) return 'text-red-500 animate-pulse';
+  if (projectedDays < 0) return 'text-emerald-500'; // no usage data yet
   if (projectedDays < 7) return 'text-red-500';
   if (projectedDays <= 14) return 'text-amber-500';
   return 'text-emerald-500';
@@ -28,6 +29,7 @@ function getBalanceColor(balance: number, projectedDays: number) {
 
 function getDotColor(balance: number, projectedDays: number) {
   if (balance <= 0) return 'bg-red-500 animate-pulse';
+  if (projectedDays < 0) return 'bg-emerald-500'; // no usage data yet
   if (projectedDays < 7) return 'bg-red-500';
   if (projectedDays <= 14) return 'bg-amber-500';
   return 'bg-emerald-500';

@@ -41,6 +41,7 @@ import { LowBalanceBanner } from '@/components/credits/LowBalanceBanner';
 import { UsageChart } from '@/components/credits/UsageChart';
 import { TransactionLog } from '@/components/credits/TransactionLog';
 import { ModelConfigPanel } from '@/components/credits/ModelConfigPanel';
+import { SimpleModelTierSelector } from '@/components/credits/SimpleModelTierSelector';
 import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 import { useCreditBalance } from '@/lib/hooks/useCreditBalance';
 import { useRequireCredits } from '@/lib/hooks/useRequireCredits';
@@ -207,7 +208,7 @@ export default function CreditSystemDemo() {
             <div className="rounded-lg border p-3">
               <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-0.5">Projected Days</p>
               <p className="text-xl font-bold tabular-nums text-gray-900 dark:text-white">
-                {isLoading ? '...' : balance?.projectedDaysRemaining === Infinity ? '--' : `${Math.round(balance?.projectedDaysRemaining ?? 0)}d`}
+                {isLoading ? '...' : (balance?.projectedDaysRemaining ?? 0) < 0 ? 'No usage' : `${Math.round(balance?.projectedDaysRemaining ?? 0)}d`}
               </p>
             </div>
             <div className="rounded-lg border p-3">
@@ -351,12 +352,27 @@ export default function CreditSystemDemo() {
             </div>
           </CollapsibleSection>
 
-          {/* Model Config */}
-          <CollapsibleSection title="ModelConfigPanel (Planner/Driver)">
+          {/* Simple Tier Selector (User-facing) */}
+          <CollapsibleSection title="SimpleModelTierSelector (User-Facing)">
             <div className="space-y-3">
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Per-feature model selector for planner (reasoning/routing) and driver (execution) models.
-                Quick presets: Economy, Balanced, Maximum Intelligence. Admin-only editing with save/discard.
+                Simplified Low/Medium/High intelligence tier selector per category.
+                This is what end users see in Settings &gt; Credits &amp; AI.
+              </p>
+              <SimpleModelTierSelector />
+              <p className="text-[10px] text-gray-400">
+                File: <code>src/components/credits/SimpleModelTierSelector.tsx</code>
+              </p>
+            </div>
+          </CollapsibleSection>
+
+          {/* Granular Model Config (Platform Admin) */}
+          <CollapsibleSection title="ModelConfigPanel (Platform Admin)">
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Granular per-feature model selector for planner (reasoning/routing) and driver (execution) models.
+                Quick presets: Economy, Balanced, Maximum Intelligence. Lives at{' '}
+                <code>/platform/ai/models</code> for platform admins.
               </p>
               <ModelConfigPanel />
               <p className="text-[10px] text-gray-400">

@@ -27,6 +27,7 @@ interface CreditWidgetDropdownProps {
 
 function getBalanceDotClass(balance: number, projectedDays: number) {
   if (balance <= 0) return 'bg-red-500 animate-pulse';
+  if (projectedDays < 0) return 'bg-emerald-500'; // no usage data yet
   if (projectedDays < 7) return 'bg-red-500';
   if (projectedDays <= 14) return 'bg-amber-500';
   return 'bg-emerald-500';
@@ -105,9 +106,15 @@ export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
           </span>
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400">
-          ~<span className="font-medium text-gray-700 dark:text-gray-200">
-            {projectedDaysRemaining > 365 ? '365+' : projectedDaysRemaining}
-          </span> days remaining
+          {projectedDaysRemaining < 0 ? (
+            <span className="font-medium text-gray-500 dark:text-gray-400">no usage yet</span>
+          ) : (
+            <>
+              ~<span className="font-medium text-gray-700 dark:text-gray-200">
+                {projectedDaysRemaining > 365 ? '365+' : projectedDaysRemaining}
+              </span> days remaining
+            </>
+          )}
         </div>
       </div>
 
