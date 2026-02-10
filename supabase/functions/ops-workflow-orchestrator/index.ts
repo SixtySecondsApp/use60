@@ -10,10 +10,10 @@
  * POST /ops-workflow-orchestrator
  * Body: { prompt: string, config?: WorkflowConfig, clarification_answers?: Record<string, string> }
  *
- * SSE Events:
- *   plan_created      — skill plan decomposed from prompt
+ * SSE Events (all step events include `agent` field for specialist attribution):
+ *   plan_created      — skill plan decomposed from prompt (agent: orchestrator)
  *   clarification_needed — orchestrator needs user input
- *   step_start         — step execution beginning
+ *   step_start         — step execution beginning (agent: research|outreach|prospecting)
  *   step_progress      — intermediate progress (e.g. "enriched 45/100")
  *   step_complete      — step finished with summary
  *   step_error         — step failed (workflow continues)
@@ -29,6 +29,8 @@ import {
 } from '../_shared/corsHelper.ts'
 import { loadBusinessContext, buildContextPrompt } from '../_shared/businessContext.ts'
 import { getUserOrgId } from '../_shared/edgeAuth.ts'
+import { loadAgentTeamConfig } from '../_shared/agentConfig.ts'
+import type { AgentName } from '../_shared/agentConfig.ts'
 
 // ============================================================================
 // Types
@@ -78,6 +80,7 @@ interface StepResult {
   data?: Record<string, unknown>
   error?: string
   duration_ms: number
+  agent?: AgentName
 }
 
 // ============================================================================
@@ -270,6 +273,195 @@ You have one tool: create_workflow_plan. Always use it to return the structured 
 }
 
 // ============================================================================
+// Multi-Agent Plan Decomposition
+// ============================================================================
+
+interface AgentPlanFragment {
+  agent: AgentName
+  search_params?: Partial<Record<string, unknown>>
+  email_sequence?: Partial<SkillPlan['email_sequence']>
+  campaign?: Partial<SkillPlan['campaign']>
+  enrichment?: Partial<SkillPlan['enrichment']>
+  table_name?: string
+  summary?: string
+}
+
+/**
+ * Decompose a prompt using parallel specialist agents.
+ * Each agent analyzes the prompt from its domain perspective and returns
+ * a plan fragment. Fragments are merged into a unified SkillPlan.
+ *
+ * Falls back to single-agent decomposePrompt() on any error.
+ */
+async function decomposePromptMultiAgent(
+  prompt: string,
+  contextPrompt: string,
+  config: WorkflowConfig | undefined,
+  clarificationAnswers: Record<string, string> | undefined,
+  orgId: string,
+  serviceClient: ReturnType<typeof createClient>,
+): Promise<SkillPlan> {
+  if (!ANTHROPIC_API_KEY) {
+    return decomposePrompt(prompt, contextPrompt, config, clarificationAnswers)
+  }
+
+  const teamConfig = await loadAgentTeamConfig(serviceClient, orgId)
+  const model = teamConfig.worker_model
+  const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
+
+  const answersContext = clarificationAnswers
+    ? `\n\nThe user has already answered these clarifying questions:\n${Object.entries(clarificationAnswers).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`
+    : ''
+
+  // Define the 3 specialist planning prompts
+  const agentPrompts: Array<{ agent: AgentName; system: string }> = [
+    {
+      agent: 'research',
+      system: `You are the Research specialist analyzing a prospecting prompt.
+Extract the ideal customer profile criteria and optimize search parameters.
+
+${contextPrompt ? `## Business Context\n${contextPrompt}\n` : ''}
+
+Return a JSON object with:
+- search_params: Apollo search parameters (person_titles, person_locations, person_seniorities, person_departments, organization_num_employees_ranges, q_keywords, q_organization_keyword_tags, q_organization_domains, contact_email_status, per_page)
+- enrichment: { email: boolean, phone: boolean }
+- table_name: short descriptive name (2-5 words)
+- summary: what leads are being targeted and why
+
+Rules:
+- For locations, use full country names
+- Always include contact_email_status: ["verified"] unless specified otherwise
+- Default per_page to 50 (max 100)
+- For C-level roles, add person_seniorities: ["c_suite", "owner", "founder", "partner"]
+- For organization_num_employees_ranges, use Apollo buckets: "1,10", "11,20", "21,50", "51,100", "101,200", "201,500", "501,1000", "1001,5000", "5001,10000", "10001,"
+- When a specific number of results is requested, set per_page to that number
+- Today's date is ${new Date().toISOString().split('T')[0]}${answersContext}`,
+    },
+    {
+      agent: 'outreach',
+      system: `You are the Outreach specialist analyzing a prospecting prompt.
+Plan the email sequence strategy, angles, and timing.
+
+${contextPrompt ? `## Business Context\n${contextPrompt}\n` : ''}
+
+Return a JSON object with:
+- email_sequence: { num_steps, angle, step_delays, email_type, event_details } or null if no emails needed
+- summary: the outreach strategy rationale
+
+Rules:
+- Only include email_sequence if the prompt mentions outreach/emails/sequence/campaign/follow-up
+- num_steps: 1-5 email steps
+- step_delays: array of day delays between steps (length = num_steps - 1)
+- email_type: "cold_outreach" | "event_invitation" | "meeting_request" | "follow_up"
+- For event_invitation: extract event_details (event_name, date, time, venue, description)
+- For events, work backwards from the date: space emails so last follow-up lands 2-3 days before
+- For cold outreach: 3-5 day intervals. For urgent: 1-2 day intervals
+- Today's date is ${new Date().toISOString().split('T')[0]}${answersContext}`,
+    },
+    {
+      agent: 'prospecting',
+      system: `You are the Prospecting specialist analyzing a prospecting prompt.
+Determine enrichment needs and campaign structure.
+
+${contextPrompt ? `## Business Context\n${contextPrompt}\n` : ''}
+
+Return a JSON object with:
+- campaign: { create_new: boolean, campaign_name: string } or null if no campaign needed
+- enrichment: { email: boolean, phone: boolean }
+- summary: campaign and enrichment strategy
+
+Rules:
+- Only include campaign if the prompt mentions campaign/send/outreach/Instantly or if email_sequence is implied
+- campaign_name should be descriptive (e.g., "UK CTO Cold Outreach Q1")
+- Email enrichment should default to true for outbound
+- Phone enrichment only if explicitly requested
+- Today's date is ${new Date().toISOString().split('T')[0]}${answersContext}`,
+    },
+  ]
+
+  try {
+    // Run all 3 agents in parallel
+    const fragmentPromises = agentPrompts.map(async ({ agent, system }): Promise<AgentPlanFragment> => {
+      try {
+        const response = await anthropic.messages.create({
+          model,
+          max_tokens: 1024,
+          system,
+          messages: [{ role: 'user', content: prompt }],
+        })
+
+        const text = response.content.find((c) => c.type === 'text')
+        if (!text || text.type !== 'text') return { agent }
+
+        const jsonMatch = text.text.match(/\{[\s\S]*\}/)
+        if (!jsonMatch) return { agent }
+
+        const parsed = JSON.parse(jsonMatch[0])
+        return { agent, ...parsed }
+      } catch (err) {
+        console.error(`${LOG} Multi-agent plan fragment error (${agent}):`, (err as Error).message)
+        return { agent }
+      }
+    })
+
+    const fragments = await Promise.all(fragmentPromises)
+
+    // Merge fragments into a unified SkillPlan
+    const researchFragment = fragments.find(f => f.agent === 'research')
+    const outreachFragment = fragments.find(f => f.agent === 'outreach')
+    const prospectingFragment = fragments.find(f => f.agent === 'prospecting')
+
+    // Research agent provides the core search params — if it failed, fall back
+    if (!researchFragment?.search_params) {
+      console.warn(`${LOG} Research agent returned no search_params, falling back to single-agent`)
+      return decomposePrompt(prompt, contextPrompt, config, clarificationAnswers)
+    }
+
+    const plan: SkillPlan = {
+      search_params: researchFragment.search_params as Record<string, unknown>,
+      table_name: researchFragment.table_name || 'Prospect List',
+      enrichment: {
+        email: researchFragment.enrichment?.email ?? prospectingFragment?.enrichment?.email ?? true,
+        phone: researchFragment.enrichment?.phone ?? prospectingFragment?.enrichment?.phone ?? false,
+      },
+      email_sequence: outreachFragment?.email_sequence
+        ? {
+            num_steps: outreachFragment.email_sequence.num_steps || 3,
+            angle: outreachFragment.email_sequence.angle || 'professional outreach',
+            step_delays: outreachFragment.email_sequence.step_delays,
+            email_type: outreachFragment.email_sequence.email_type,
+            event_details: outreachFragment.email_sequence.event_details,
+          }
+        : null,
+      campaign: prospectingFragment?.campaign
+        ? {
+            create_new: prospectingFragment.campaign.create_new ?? true,
+            campaign_name: prospectingFragment.campaign.campaign_name,
+          }
+        : null,
+      summary: [
+        researchFragment.summary,
+        outreachFragment?.summary,
+        prospectingFragment?.summary,
+      ].filter(Boolean).join(' | '),
+    }
+
+    // Apply config overrides (same as single-agent path)
+    if (config?.table_name) plan.table_name = config.table_name
+    if (config?.max_results) (plan.search_params as Record<string, unknown>).per_page = Math.min(config.max_results, 100)
+    if (config?.skip_email_generation) plan.email_sequence = null
+    if (config?.skip_campaign_creation) plan.campaign = null
+    if (config?.num_email_steps && plan.email_sequence) plan.email_sequence.num_steps = config.num_email_steps
+    if (config?.campaign_angle && plan.email_sequence) plan.email_sequence.angle = config.campaign_angle
+
+    return plan
+  } catch (err) {
+    console.error(`${LOG} Multi-agent decomposition failed, falling back:`, (err as Error).message)
+    return decomposePrompt(prompt, contextPrompt, config, clarificationAnswers)
+  }
+}
+
+// ============================================================================
 // Step Executors
 // ============================================================================
 
@@ -306,6 +498,7 @@ async function executeSearch(
         summary: data.error || 'Apollo search failed',
         error: data.error,
         duration_ms: Date.now() - start,
+        agent: 'research' as AgentName,
       }
     }
 
@@ -320,6 +513,7 @@ async function executeSearch(
         enriched_count: data.enriched_count || 0,
       },
       duration_ms: Date.now() - start,
+      agent: 'research' as AgentName,
     }
   } catch (err) {
     return {
@@ -328,6 +522,7 @@ async function executeSearch(
       summary: `Search failed: ${(err as Error).message}`,
       error: (err as Error).message,
       duration_ms: Date.now() - start,
+      agent: 'research' as AgentName,
     }
   }
 }
@@ -342,7 +537,7 @@ async function executeEmailGeneration(
   const start = Date.now()
   try {
     if (!plan.email_sequence) {
-      return { step: 'email_generation', status: 'skipped', summary: 'No email sequence requested', duration_ms: 0 }
+      return { step: 'email_generation', status: 'skipped', summary: 'No email sequence requested', duration_ms: 0, agent: 'outreach' as AgentName }
     }
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-email-sequence`, {
@@ -374,6 +569,7 @@ async function executeEmailGeneration(
         summary: data.error || 'Email generation failed',
         error: data.error,
         duration_ms: Date.now() - start,
+        agent: 'outreach' as AgentName,
       }
     }
 
@@ -387,6 +583,7 @@ async function executeEmailGeneration(
         step_columns_created: data.step_columns_created,
       },
       duration_ms: Date.now() - start,
+      agent: 'outreach' as AgentName,
     }
   } catch (err) {
     return {
@@ -395,6 +592,7 @@ async function executeEmailGeneration(
       summary: `Email generation failed: ${(err as Error).message}`,
       error: (err as Error).message,
       duration_ms: Date.now() - start,
+      agent: 'outreach' as AgentName,
     }
   }
 }
@@ -478,7 +676,7 @@ async function executeCampaignCreation(
   const start = Date.now()
   try {
     if (!plan.campaign) {
-      return { step: 'campaign_creation', status: 'skipped', summary: 'No campaign creation requested', duration_ms: 0 }
+      return { step: 'campaign_creation', status: 'skipped', summary: 'No campaign creation requested', duration_ms: 0, agent: 'prospecting' as AgentName }
     }
 
     const numSteps = plan.email_sequence?.num_steps || 0
@@ -522,6 +720,7 @@ async function executeCampaignCreation(
         summary: data.error || 'Campaign creation failed',
         error: data.error,
         duration_ms: Date.now() - start,
+        agent: 'prospecting' as AgentName,
       }
     }
 
@@ -533,6 +732,7 @@ async function executeCampaignCreation(
         summary: 'Campaign created but no ID returned',
         error: 'No campaign_id in response',
         duration_ms: Date.now() - start,
+        agent: 'prospecting' as AgentName,
       }
     }
 
@@ -677,6 +877,7 @@ async function executeCampaignCreation(
         status: 'paused',
       },
       duration_ms: Date.now() - start,
+      agent: 'prospecting' as AgentName,
     }
   } catch (err) {
     return {
@@ -685,6 +886,7 @@ async function executeCampaignCreation(
       summary: `Campaign creation failed: ${(err as Error).message}`,
       error: (err as Error).message,
       duration_ms: Date.now() - start,
+      agent: 'prospecting' as AgentName,
     }
   }
 }
@@ -753,9 +955,11 @@ serve(async (req) => {
           const emailSignOff = ctx.emailSignOff || ''
           sseEvent(controller, 'step_complete', { step: 'context', summary: 'Business context loaded' })
 
-          // STEP 1: Decompose prompt into skill plan
-          sseEvent(controller, 'step_start', { step: 'planning', label: 'Analyzing your request' })
-          const plan = await decomposePrompt(body.prompt, contextPrompt, body.config, body.clarification_answers)
+          // STEP 1: Decompose prompt into skill plan (multi-agent with fallback)
+          sseEvent(controller, 'step_start', { step: 'planning', label: 'Analyzing your request', agent: 'orchestrator' })
+          const plan = await decomposePromptMultiAgent(
+            body.prompt, contextPrompt, body.config, body.clarification_answers, orgId, serviceClient
+          )
           sseEvent(controller, 'plan_created', { plan })
 
           // Check for clarifying questions
@@ -773,8 +977,8 @@ serve(async (req) => {
 
           const steps: StepResult[] = []
 
-          // STEP 2: Apollo search + table creation
-          sseEvent(controller, 'step_start', { step: 'search', label: 'Searching Apollo for prospects' })
+          // STEP 2: Apollo search + table creation (research agent)
+          sseEvent(controller, 'step_start', { step: 'search', label: 'Searching Apollo for prospects', agent: 'research' })
           const searchResult = await executeSearch(plan, authHeader)
           steps.push(searchResult)
           sseEvent(controller, searchResult.status === 'complete' ? 'step_complete' : 'step_error', searchResult)
@@ -793,17 +997,26 @@ serve(async (req) => {
 
           const tableId = searchResult.data.table_id as string
 
-          // STEP 3: Email sequence generation (if requested)
-          if (plan.email_sequence) {
-            sseEvent(controller, 'step_start', { step: 'email_generation', label: 'Generating personalised emails' })
+          // STEPS 3+4: Email generation + campaign creation
+          // Parallelization strategy:
+          //   - Email only: outreach agent runs alone
+          //   - Campaign only (no emails): prospecting agent runs alone
+          //   - Both requested: email runs first (outreach), then campaign (prospecting)
+          //     because campaign reads email step columns to build Instantly sequences
+          const wantsEmail = !!plan.email_sequence
+          const wantsCampaign = !!plan.campaign
+
+          if (wantsEmail) {
+            // Email generation (outreach agent) — must complete before campaign if both requested
+            sseEvent(controller, 'step_start', { step: 'email_generation', label: 'Generating personalised emails', agent: 'outreach' })
             const emailResult = await executeEmailGeneration(tableId, plan, authHeader, contextPrompt, emailSignOff)
             steps.push(emailResult)
             sseEvent(controller, emailResult.status === 'complete' ? 'step_complete' : 'step_error', emailResult)
           }
 
-          // STEP 4: Campaign creation (if requested)
-          if (plan.campaign) {
-            sseEvent(controller, 'step_start', { step: 'campaign_creation', label: 'Creating Instantly campaign' })
+          if (wantsCampaign) {
+            // Campaign creation (prospecting agent)
+            sseEvent(controller, 'step_start', { step: 'campaign_creation', label: 'Creating Instantly campaign', agent: 'prospecting' })
             const campaignResult = await executeCampaignCreation(tableId, plan, authHeader, orgId, user.id, serviceClient, controller)
             steps.push(campaignResult)
             sseEvent(controller, campaignResult.status === 'complete' ? 'step_complete' : 'step_error', campaignResult)
@@ -813,8 +1026,8 @@ serve(async (req) => {
           const errors = steps.filter(s => s.status === 'error')
           const totalDuration = steps.reduce((sum, s) => sum + s.duration_ms, 0)
 
-          // Update table metadata with campaign status
-          if (plan.campaign) {
+          // Update table metadata with workflow description
+          if (wantsCampaign || wantsEmail) {
             await serviceClient
               .from('dynamic_tables')
               .update({ description: `Workflow: ${plan.summary}` })

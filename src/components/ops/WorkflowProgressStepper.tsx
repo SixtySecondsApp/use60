@@ -2,11 +2,12 @@
  * WorkflowProgressStepper
  *
  * Displays real-time step-by-step progress for the NL workflow orchestrator.
- * Shows: plan summary, step statuses with spinners, clarifying questions,
- * elapsed time, and final result with navigation.
+ * Shows: plan summary, step statuses with spinners, agent indicators,
+ * parallel step layout, clarifying questions, elapsed time, and final
+ * result with completion summary.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   CheckCircle2,
   Circle,
@@ -22,6 +23,11 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
+  BarChart3,
+  Database,
+  Calendar,
+  Target,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -64,6 +70,41 @@ function getStepIcon(stepName: string) {
   return STEP_ICONS[stepName] || Circle;
 }
 
+// ---------------------------------------------------------------------------
+// Agent display metadata (mirrors agentDefinitions.ts on the backend)
+// ---------------------------------------------------------------------------
+
+const AGENT_ICON_MAP: Record<string, React.ElementType> = {
+  pipeline: BarChart3,
+  outreach: Mail,
+  research: Search,
+  crm_ops: Database,
+  meetings: Calendar,
+  prospecting: Target,
+};
+
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  pipeline: 'Pipeline',
+  outreach: 'Outreach',
+  research: 'Research',
+  crm_ops: 'CRM Ops',
+  meetings: 'Meetings',
+  prospecting: 'Prospecting',
+};
+
+const AGENT_COLOR_CLASSES: Record<string, { text: string; bg: string; border: string }> = {
+  pipeline:    { text: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/30' },
+  outreach:    { text: 'text-purple-400',  bg: 'bg-purple-500/10',  border: 'border-purple-500/30' },
+  research:    { text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
+  crm_ops:     { text: 'text-orange-400',  bg: 'bg-orange-500/10',  border: 'border-orange-500/30' },
+  meetings:    { text: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/30' },
+  prospecting: { text: 'text-rose-400',    bg: 'bg-rose-500/10',    border: 'border-rose-500/30' },
+};
+
+function getAgentColors(agent: string) {
+  return AGENT_COLOR_CLASSES[agent] || { text: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/30' };
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const seconds = Math.floor(ms / 1000);
@@ -71,6 +112,38 @@ function formatDuration(ms: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${minutes}m ${remainingSeconds}s`;
+}
+
+/**
+ * Group consecutive "running" steps into parallel groups.
+ * Steps that are running at the same time are displayed side-by-side.
+ */
+function groupStepsForLayout(steps: WorkflowStep[]): Array<WorkflowStep | WorkflowStep[]> {
+  const groups: Array<WorkflowStep | WorkflowStep[]> = [];
+  let parallelBatch: WorkflowStep[] = [];
+
+  for (const step of steps) {
+    if (step.status === 'running') {
+      parallelBatch.push(step);
+    } else {
+      // Flush any running batch first
+      if (parallelBatch.length > 1) {
+        groups.push([...parallelBatch]);
+      } else if (parallelBatch.length === 1) {
+        groups.push(parallelBatch[0]);
+      }
+      parallelBatch = [];
+      groups.push(step);
+    }
+  }
+  // Flush remaining
+  if (parallelBatch.length > 1) {
+    groups.push([...parallelBatch]);
+  } else if (parallelBatch.length === 1) {
+    groups.push(parallelBatch[0]);
+  }
+
+  return groups;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,65 +263,8 @@ export function WorkflowProgressStepper({
             </div>
           )}
 
-          {/* Step list */}
-          <div className="space-y-1">
-            {steps.map((step, idx) => {
-              const StepIcon = getStepIcon(step.step);
-              return (
-                <div key={step.step} className="flex items-start gap-2.5 py-1.5">
-                  {/* Status icon */}
-                  <div className="mt-0.5 shrink-0">
-                    {step.status === 'running' ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
-                    ) : step.status === 'complete' ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
-                    ) : step.status === 'error' ? (
-                      <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
-                    ) : step.status === 'skipped' ? (
-                      <SkipForward className="h-3.5 w-3.5 text-zinc-500" />
-                    ) : (
-                      <Circle className="h-3.5 w-3.5 text-zinc-600" />
-                    )}
-                  </div>
-
-                  {/* Step content */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <StepIcon className="h-3 w-3 text-zinc-500" />
-                      <span
-                        className={`text-xs font-medium ${
-                          step.status === 'running'
-                            ? 'text-blue-300'
-                            : step.status === 'complete'
-                            ? 'text-zinc-300'
-                            : step.status === 'error'
-                            ? 'text-red-300'
-                            : 'text-zinc-500'
-                        }`}
-                      >
-                        {step.label || step.step.replace(/_/g, ' ')}
-                      </span>
-                      {step.duration_ms != null && step.status !== 'running' && (
-                        <span className="text-[10px] text-zinc-600 font-mono">
-                          {formatDuration(step.duration_ms)}
-                        </span>
-                      )}
-                    </div>
-                    {/* Summary or progress */}
-                    {step.progress && step.status === 'running' && (
-                      <p className="mt-0.5 text-[11px] text-blue-400/70">{step.progress}</p>
-                    )}
-                    {step.summary && step.status !== 'running' && (
-                      <p className="mt-0.5 text-[11px] text-zinc-500">{step.summary}</p>
-                    )}
-                    {step.error && (
-                      <p className="mt-0.5 text-[11px] text-red-400/80">{step.error}</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          {/* Step list (with parallel grouping) */}
+          <StepList steps={steps} />
 
           {/* Clarifying Questions */}
           {clarifyingQuestions && clarifyingQuestions.length > 0 && (
@@ -258,52 +274,216 @@ export function WorkflowProgressStepper({
             />
           )}
 
-          {/* Result */}
+          {/* Result + Completion Summary */}
           {isComplete && result && (
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-2">
-                {result.status === 'complete' && (
-                  <Badge
-                    variant="outline"
-                    className="border-green-500/30 text-green-400 text-[10px]"
-                  >
-                    Success
-                  </Badge>
-                )}
-                {result.status === 'partial' && (
-                  <Badge
-                    variant="outline"
-                    className="border-amber-500/30 text-amber-400 text-[10px]"
-                  >
-                    Partial
-                  </Badge>
-                )}
-                {result.status === 'error' && (
-                  <Badge
-                    variant="outline"
-                    className="border-red-500/30 text-red-400 text-[10px]"
-                  >
-                    Failed
-                  </Badge>
-                )}
-                {result.table_name && (
-                  <span className="text-xs text-zinc-400">
-                    Table: "{result.table_name}"
-                  </span>
-                )}
-              </div>
-              {result.table_id && onNavigateToTable && result.table_id !== '' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1.5 border-zinc-700 text-zinc-300 hover:border-blue-500/30 hover:text-blue-300 text-xs"
-                  onClick={() => onNavigateToTable(result.table_id!)}
-                >
-                  Open Table
-                  <ArrowRight className="h-3 w-3" />
-                </Button>
-              )}
+            <CompletionSummary
+              result={result}
+              steps={steps}
+              onNavigateToTable={onNavigateToTable}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StepList — renders steps with parallel grouping
+// ---------------------------------------------------------------------------
+
+function StepList({ steps }: { steps: WorkflowStep[] }) {
+  const grouped = useMemo(() => groupStepsForLayout(steps), [steps]);
+
+  return (
+    <div className="space-y-1">
+      {grouped.map((item, idx) => {
+        if (Array.isArray(item)) {
+          // Parallel group — render side-by-side
+          return (
+            <div key={`parallel-${idx}`} className="flex gap-2">
+              {item.map((step) => (
+                <div key={step.step} className="flex-1 min-w-0">
+                  <StepCard step={step} compact />
+                </div>
+              ))}
             </div>
+          );
+        }
+        return <StepCard key={item.step} step={item} />;
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StepCard — single step with optional agent badge
+// ---------------------------------------------------------------------------
+
+function StepCard({ step, compact }: { step: WorkflowStep; compact?: boolean }) {
+  const StepIcon = getStepIcon(step.step);
+  const agentColors = step.agent ? getAgentColors(step.agent) : null;
+  const AgentIcon = step.agent ? AGENT_ICON_MAP[step.agent] : null;
+  const agentName = step.agent ? (AGENT_DISPLAY_NAMES[step.agent] || step.agent) : null;
+
+  return (
+    <div className={`flex items-start gap-2.5 py-1.5 ${compact ? 'rounded-lg border border-zinc-800 px-2' : ''}`}>
+      {/* Status icon */}
+      <div className="mt-0.5 shrink-0">
+        {step.status === 'running' ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
+        ) : step.status === 'complete' ? (
+          <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+        ) : step.status === 'error' ? (
+          <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+        ) : step.status === 'skipped' ? (
+          <SkipForward className="h-3.5 w-3.5 text-zinc-500" />
+        ) : (
+          <Circle className="h-3.5 w-3.5 text-zinc-600" />
+        )}
+      </div>
+
+      {/* Step content */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <StepIcon className="h-3 w-3 text-zinc-500" />
+          <span
+            className={`text-xs font-medium ${
+              step.status === 'running'
+                ? 'text-blue-300'
+                : step.status === 'complete'
+                ? 'text-zinc-300'
+                : step.status === 'error'
+                ? 'text-red-300'
+                : 'text-zinc-500'
+            }`}
+          >
+            {step.label || step.step.replace(/_/g, ' ')}
+          </span>
+
+          {/* Agent badge */}
+          {agentColors && AgentIcon && agentName && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${agentColors.text} ${agentColors.bg} ${agentColors.border}`}
+            >
+              <AgentIcon className="h-2.5 w-2.5" />
+              {agentName}
+            </span>
+          )}
+
+          {step.duration_ms != null && step.status !== 'running' && (
+            <span className="text-[10px] text-zinc-600 font-mono">
+              {formatDuration(step.duration_ms)}
+            </span>
+          )}
+        </div>
+        {/* Summary or progress */}
+        {step.progress && step.status === 'running' && (
+          <p className="mt-0.5 text-[11px] text-blue-400/70">{step.progress}</p>
+        )}
+        {step.summary && step.status !== 'running' && (
+          <p className="mt-0.5 text-[11px] text-zinc-500">{step.summary}</p>
+        )}
+        {step.error && (
+          <p className="mt-0.5 text-[11px] text-red-400/80">{step.error}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CompletionSummary — result + agents used + time saved
+// ---------------------------------------------------------------------------
+
+function CompletionSummary({
+  result,
+  steps,
+  onNavigateToTable,
+}: {
+  result: WorkflowResult;
+  steps: WorkflowStep[];
+  onNavigateToTable?: (tableId: string) => void;
+}) {
+  // Collect unique agents used across all steps
+  const agentsUsed = useMemo(() => {
+    const seen = new Set<string>();
+    for (const step of steps) {
+      if (step.agent) seen.add(step.agent);
+    }
+    return Array.from(seen);
+  }, [steps]);
+
+  // Calculate time saved: sum of individual durations (sequential) vs total elapsed (parallel)
+  const timeSaved = useMemo(() => {
+    const sequentialMs = steps.reduce((sum, s) => sum + (s.duration_ms || 0), 0);
+    const parallelMs = result.duration_ms || sequentialMs;
+    const saved = sequentialMs - parallelMs;
+    return saved > 1000 ? saved : 0; // Only show if meaningful (>1s)
+  }, [steps, result.duration_ms]);
+
+  return (
+    <div className="space-y-2 pt-1">
+      {/* Status row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {result.status === 'complete' && (
+            <Badge variant="outline" className="border-green-500/30 text-green-400 text-[10px]">
+              Success
+            </Badge>
+          )}
+          {result.status === 'partial' && (
+            <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]">
+              Partial
+            </Badge>
+          )}
+          {result.status === 'error' && (
+            <Badge variant="outline" className="border-red-500/30 text-red-400 text-[10px]">
+              Failed
+            </Badge>
+          )}
+          {result.table_name && (
+            <span className="text-xs text-zinc-400">
+              Table: &quot;{result.table_name}&quot;
+            </span>
+          )}
+        </div>
+        {result.table_id && onNavigateToTable && result.table_id !== '' && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 border-zinc-700 text-zinc-300 hover:border-blue-500/30 hover:text-blue-300 text-xs"
+            onClick={() => onNavigateToTable(result.table_id!)}
+          >
+            Open Table
+            <ArrowRight className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+
+      {/* Agent summary row */}
+      {agentsUsed.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Users className="h-3 w-3 text-zinc-500" />
+          <span className="text-[10px] text-zinc-500">Agents:</span>
+          {agentsUsed.map((agent) => {
+            const colors = getAgentColors(agent);
+            const Icon = AGENT_ICON_MAP[agent];
+            const name = AGENT_DISPLAY_NAMES[agent] || agent;
+            return (
+              <span
+                key={agent}
+                className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${colors.text} ${colors.bg} ${colors.border}`}
+              >
+                {Icon && <Icon className="h-2.5 w-2.5" />}
+                {name}
+              </span>
+            );
+          })}
+          {timeSaved > 0 && (
+            <span className="text-[10px] text-emerald-400/80 ml-1">
+              ~{formatDuration(timeSaved)} saved via parallel execution
+            </span>
           )}
         </div>
       )}

@@ -141,6 +141,7 @@ async function executeSpecialistToolCall(
         kind: input.kind ? String(input.kind) : undefined,
         category: input.category ? String(input.category) : undefined,
         enabled_only: input.enabled_only !== false,
+        agent_name: config.name,
       });
 
     case 'get_skill': {

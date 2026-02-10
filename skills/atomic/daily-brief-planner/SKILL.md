@@ -11,6 +11,9 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - pipeline
+    - meetings
   triggers:
     - pattern: "daily briefing"
       intent: "daily_brief"

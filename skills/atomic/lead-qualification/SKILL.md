@@ -11,6 +11,9 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - research
+    - prospecting
   triggers:
     - pattern: "qualify this lead"
       intent: "lead_qualification"

@@ -10,6 +10,8 @@ metadata:
   category: writing
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - outreach
   triggers:
     - pattern: "draft a reply"
       intent: "reply_drafting"

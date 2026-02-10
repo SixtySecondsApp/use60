@@ -87,11 +87,12 @@ export async function resolveOrgId(
 export async function handleListSkills(
   client: SupabaseClient,
   orgId: string,
-  args?: { kind?: string; category?: string; enabled_only?: boolean }
+  args?: { kind?: string; category?: string; enabled_only?: boolean; agent_name?: string }
 ): Promise<ListSkillsResult> {
   const category = args?.category ? String(args.category) : null;
   const enabledOnly = args?.enabled_only !== false;
   const kind = args?.kind ? String(args.kind) : 'all';
+  const agentName = args?.agent_name ? String(args.agent_name) : null;
 
   if (enabledOnly) {
     const { data: skills, error } = await client.rpc('get_organization_skills_for_agent', {
@@ -108,6 +109,14 @@ export async function handleListSkills(
         if (kind === 'sequence') return s.category === 'agent-sequence';
         if (kind === 'skill') return s.category !== 'agent-sequence';
         return true;
+      })
+      .filter((s: Record<string, unknown>) => {
+        if (!agentName) return true;
+        const fm = (s.frontmatter || {}) as Record<string, unknown>;
+        const affinity = fm.agent_affinity as string[] | undefined;
+        // Skills with no agent_affinity are universal (available to all agents)
+        if (!affinity || !Array.isArray(affinity) || affinity.length === 0) return true;
+        return affinity.includes(agentName);
       });
 
     return {
@@ -166,6 +175,12 @@ export async function handleListSkills(
       if (kind === 'sequence') return s.category === 'agent-sequence';
       if (kind === 'skill') return s.category !== 'agent-sequence';
       return true;
+    })
+    .filter((s) => {
+      if (!agentName) return true;
+      const affinity = s.frontmatter?.agent_affinity as string[] | undefined;
+      if (!affinity || !Array.isArray(affinity) || affinity.length === 0) return true;
+      return affinity.includes(agentName);
     });
 
   return {

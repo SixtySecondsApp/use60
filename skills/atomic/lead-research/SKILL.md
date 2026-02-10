@@ -11,6 +11,9 @@ metadata:
   category: enrichment
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - research
+    - prospecting
   triggers:
     - pattern: "research this lead"
       intent: "lead_research"

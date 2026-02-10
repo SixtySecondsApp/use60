@@ -11,6 +11,9 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - outreach
+    - meetings
   triggers:
     - pattern: "follow up from the event"
       intent: "event_followup"

@@ -11,6 +11,8 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - outreach
   triggers:
     - pattern: "which emails need replies"
       intent: "email_triage"

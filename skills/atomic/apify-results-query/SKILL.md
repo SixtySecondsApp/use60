@@ -12,6 +12,8 @@ metadata:
   category: enrichment
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - prospecting
 
   triggers:
     - pattern: "apify results"

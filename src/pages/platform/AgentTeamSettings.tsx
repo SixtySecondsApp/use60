@@ -2,7 +2,8 @@
  * Agent Team Settings
  *
  * Platform admin page for managing multi-agent sales team configuration,
- * schedules, and triggers.
+ * schedules, and triggers. Wired to live agent-scheduler and agent-trigger
+ * edge functions for "Run Now" and "Test" actions.
  */
 
 import { useState, useEffect } from 'react';
@@ -19,7 +20,7 @@ import {
   Settings,
   Plus,
   Trash2,
-  Pencil,
+  Play,
   Database,
   Calendar,
   Target,
@@ -31,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -48,6 +50,7 @@ import {
 } from '@/components/ui/table';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
   getAgentTeamConfig,
@@ -56,26 +59,28 @@ import {
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  runScheduleNow,
   getTriggers,
   createTrigger,
   updateTrigger,
   deleteTrigger,
+  testTrigger,
   type AgentTeamConfig,
   type AgentSchedule,
   type AgentTrigger,
 } from '@/lib/services/agentTeamService';
 
 // =============================================================================
-// Constants
+// Constants — agent names match backend agentDefinitions registry
 // =============================================================================
 
 const AGENTS = [
-  { name: 'pipeline_manager', displayName: 'Pipeline Manager', icon: BarChart3, color: 'text-blue-500' },
-  { name: 'outreach_agent', displayName: 'Outreach & Follow-up', icon: Mail, color: 'text-purple-500' },
-  { name: 'research_agent', displayName: 'Research & Enrichment', icon: Search, color: 'text-emerald-500' },
-  { name: 'crm_ops_agent', displayName: 'CRM Operations', icon: Database, color: 'text-orange-500' },
-  { name: 'meetings_agent', displayName: 'Meeting Intelligence', icon: Calendar, color: 'text-amber-500' },
-  { name: 'prospecting_agent', displayName: 'Prospecting', icon: Target, color: 'text-rose-500' },
+  { name: 'pipeline', displayName: 'Pipeline Manager', icon: BarChart3, color: 'text-blue-500' },
+  { name: 'outreach', displayName: 'Outreach & Follow-up', icon: Mail, color: 'text-purple-500' },
+  { name: 'research', displayName: 'Research & Enrichment', icon: Search, color: 'text-emerald-500' },
+  { name: 'crm_ops', displayName: 'CRM Operations', icon: Database, color: 'text-orange-500' },
+  { name: 'meetings', displayName: 'Meeting Intelligence', icon: Calendar, color: 'text-amber-500' },
+  { name: 'prospecting', displayName: 'Prospecting', icon: Target, color: 'text-rose-500' },
 ];
 
 const MODEL_TIERS = [
@@ -97,13 +102,52 @@ const MODEL_TIERS = [
 ];
 
 const EVENT_TYPES = [
-  'deal_stage_changed',
   'deal_created',
+  'deal_stage_changed',
   'deal_stalled',
   'meeting_completed',
+  'contact_created',
   'task_overdue',
   'email_received',
-  'contact_created',
+];
+
+const DELIVERY_CHANNELS = [
+  { value: 'in_app', label: 'In-App Notification' },
+  { value: 'slack', label: 'Slack' },
+];
+
+/** Pre-built schedule templates matching SCHEDULE_TEMPLATES in agent-scheduler edge function */
+const SCHEDULE_TEMPLATES = [
+  {
+    key: 'morning_pipeline_brief',
+    label: 'Morning Pipeline Brief',
+    description: 'Pipeline agent at 9am EST weekdays',
+    agent_name: 'pipeline',
+    cron_expression: '0 14 * * 1-5',
+    prompt_template:
+      'Give me a concise morning pipeline brief: top deals closing this week, any at-risk deals needing attention, and key follow-ups due today. Format as a quick-scan summary I can read in 2 minutes.',
+    delivery_channel: 'in_app',
+  },
+  {
+    key: 'afternoon_followup_check',
+    label: 'Afternoon Follow-up Check',
+    description: 'Outreach agent at 2pm EST weekdays',
+    agent_name: 'outreach',
+    cron_expression: '0 19 * * 1-5',
+    prompt_template:
+      'Check for contacts needing follow-up (no contact in 7+ days with active deals). Draft brief follow-up suggestions for the top 3 most urgent.',
+    delivery_channel: 'in_app',
+  },
+  {
+    key: 'weekly_pipeline_review',
+    label: 'Weekly Pipeline Review',
+    description: 'Pipeline agent on Monday 9am EST',
+    agent_name: 'pipeline',
+    cron_expression: '0 14 * * 1',
+    prompt_template:
+      'Prepare a weekly pipeline review: pipeline summary with week-over-week changes, forecast update, deals that moved stages, stale deals (14+ days no activity), and recommended actions for the week ahead.',
+    delivery_channel: 'in_app',
+  },
 ];
 
 // =============================================================================
@@ -114,6 +158,7 @@ export default function AgentTeamSettings() {
   const navigate = useNavigate();
   const { isPlatformAdmin } = useUserPermissions();
   const { activeOrgId } = useOrg();
+  const { userId } = useAuth();
 
   const [isLoading, setIsLoading] = useState(true);
   const [config, setConfig] = useState<AgentTeamConfig | null>(null);
@@ -123,12 +168,17 @@ export default function AgentTeamSettings() {
   // Form state for new schedule
   const [newScheduleAgent, setNewScheduleAgent] = useState('');
   const [newScheduleCron, setNewScheduleCron] = useState('');
-  const [newScheduleAction, setNewScheduleAction] = useState('');
+  const [newSchedulePrompt, setNewSchedulePrompt] = useState('');
+  const [newScheduleChannel, setNewScheduleChannel] = useState('in_app');
 
   // Form state for new trigger
   const [newTriggerAgent, setNewTriggerAgent] = useState('');
   const [newTriggerEvent, setNewTriggerEvent] = useState('');
-  const [newTriggerAction, setNewTriggerAction] = useState('');
+  const [newTriggerPrompt, setNewTriggerPrompt] = useState('');
+
+  // Running/testing state
+  const [runningScheduleId, setRunningScheduleId] = useState<string | null>(null);
+  const [testingTriggerId, setTestingTriggerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isPlatformAdmin && activeOrgId) {
@@ -192,8 +242,38 @@ export default function AgentTeamSettings() {
   // Schedule handlers
   // =============================================================================
 
+  const handleAddTemplate = async (templateKey: string) => {
+    if (!activeOrgId) return;
+    const template = SCHEDULE_TEMPLATES.find((t) => t.key === templateKey);
+    if (!template) return;
+
+    // Check if template already exists
+    const alreadyExists = schedules.some(
+      (s) => s.agent_name === template.agent_name && s.cron_expression === template.cron_expression
+    );
+    if (alreadyExists) {
+      toast.error('This schedule template is already added');
+      return;
+    }
+
+    try {
+      const created = await createSchedule({
+        organization_id: activeOrgId,
+        agent_name: template.agent_name,
+        cron_expression: template.cron_expression,
+        prompt_template: template.prompt_template,
+        delivery_channel: template.delivery_channel,
+      });
+      setSchedules((prev) => [created, ...prev]);
+      toast.success(`Added "${template.label}" schedule`);
+    } catch (error) {
+      console.error('Error creating schedule from template:', error);
+      toast.error('Failed to add schedule template');
+    }
+  };
+
   const handleCreateSchedule = async () => {
-    if (!activeOrgId || !newScheduleAgent || !newScheduleCron || !newScheduleAction) {
+    if (!activeOrgId || !newScheduleAgent || !newScheduleCron || !newSchedulePrompt) {
       toast.error('Please fill in all schedule fields');
       return;
     }
@@ -202,12 +282,14 @@ export default function AgentTeamSettings() {
         organization_id: activeOrgId,
         agent_name: newScheduleAgent,
         cron_expression: newScheduleCron,
-        action: newScheduleAction,
+        prompt_template: newSchedulePrompt,
+        delivery_channel: newScheduleChannel,
       });
       setSchedules((prev) => [created, ...prev]);
       setNewScheduleAgent('');
       setNewScheduleCron('');
-      setNewScheduleAction('');
+      setNewSchedulePrompt('');
+      setNewScheduleChannel('in_app');
       toast.success('Schedule created');
     } catch (error) {
       console.error('Error creating schedule:', error);
@@ -237,12 +319,40 @@ export default function AgentTeamSettings() {
     }
   };
 
+  const handleRunScheduleNow = async (id: string) => {
+    try {
+      setRunningScheduleId(id);
+      const result = await runScheduleNow(id);
+
+      if (result.success && result.results?.length > 0) {
+        const firstResult = result.results[0];
+        if (firstResult.success) {
+          toast.success(`Schedule executed successfully (${firstResult.durationMs}ms)`);
+          // Refresh to update last_run_at
+          if (activeOrgId) {
+            const updated = await getSchedules(activeOrgId);
+            setSchedules(updated);
+          }
+        } else {
+          toast.error(`Schedule failed: ${firstResult.error}`);
+        }
+      } else {
+        toast.error(result.error || 'Schedule execution failed');
+      }
+    } catch (error: any) {
+      console.error('Error running schedule:', error);
+      toast.error(error.message || 'Failed to run schedule');
+    } finally {
+      setRunningScheduleId(null);
+    }
+  };
+
   // =============================================================================
   // Trigger handlers
   // =============================================================================
 
   const handleCreateTrigger = async () => {
-    if (!activeOrgId || !newTriggerAgent || !newTriggerEvent || !newTriggerAction) {
+    if (!activeOrgId || !newTriggerAgent || !newTriggerEvent || !newTriggerPrompt) {
       toast.error('Please fill in all trigger fields');
       return;
     }
@@ -250,13 +360,13 @@ export default function AgentTeamSettings() {
       const created = await createTrigger({
         organization_id: activeOrgId,
         agent_name: newTriggerAgent,
-        event_type: newTriggerEvent,
-        action: newTriggerAction,
+        trigger_event: newTriggerEvent,
+        prompt_template: newTriggerPrompt,
       });
       setTriggers((prev) => [created, ...prev]);
       setNewTriggerAgent('');
       setNewTriggerEvent('');
-      setNewTriggerAction('');
+      setNewTriggerPrompt('');
       toast.success('Trigger created');
     } catch (error) {
       console.error('Error creating trigger:', error);
@@ -283,6 +393,30 @@ export default function AgentTeamSettings() {
     } catch (error) {
       console.error('Error deleting trigger:', error);
       toast.error('Failed to delete trigger');
+    }
+  };
+
+  const handleTestTrigger = async (id: string) => {
+    if (!activeOrgId || !userId) return;
+    try {
+      setTestingTriggerId(id);
+      const result = await testTrigger(id, activeOrgId, userId);
+
+      if (result.success && result.results?.length > 0) {
+        const firstResult = result.results[0];
+        if (firstResult.success) {
+          toast.success(`Trigger test passed (${firstResult.durationMs}ms)`);
+        } else {
+          toast.error(`Trigger test failed: ${firstResult.error}`);
+        }
+      } else {
+        toast.error(result.error || 'Trigger test failed');
+      }
+    } catch (error: any) {
+      console.error('Error testing trigger:', error);
+      toast.error(error.message || 'Failed to test trigger');
+    } finally {
+      setTestingTriggerId(null);
     }
   };
 
@@ -421,45 +555,93 @@ export default function AgentTeamSettings() {
               <CardHeader>
                 <CardTitle>Agent Schedules</CardTitle>
                 <CardDescription>
-                  Configure recurring agent jobs using cron expressions.
+                  Configure recurring agent jobs using cron expressions. Use "Run Now" to execute a schedule immediately.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Quick Add Templates */}
+                <div>
+                  <p className="text-sm font-medium mb-2">Quick Add</p>
+                  <div className="flex flex-wrap gap-2">
+                    {SCHEDULE_TEMPLATES.map((template) => {
+                      const agentInfo = AGENTS.find((a) => a.name === template.agent_name);
+                      const Icon = agentInfo?.icon || Clock;
+                      const alreadyAdded = schedules.some(
+                        (s) => s.agent_name === template.agent_name && s.cron_expression === template.cron_expression
+                      );
+                      return (
+                        <Button
+                          key={template.key}
+                          variant="outline"
+                          size="sm"
+                          disabled={alreadyAdded}
+                          onClick={() => handleAddTemplate(template.key)}
+                          className="gap-2"
+                        >
+                          <Icon className={cn('h-3.5 w-3.5', agentInfo?.color)} />
+                          <span>{template.label}</span>
+                          {alreadyAdded && (
+                            <Badge variant="secondary" className="text-[10px] ml-1">Added</Badge>
+                          )}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Add Schedule Form */}
-                <div className="flex items-end gap-3 p-4 bg-muted/50 rounded-lg">
-                  <div className="flex-1 space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Agent</label>
-                    <Select value={newScheduleAgent} onValueChange={setNewScheduleAgent}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select agent" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {AGENTS.map((a) => (
-                          <SelectItem key={a.name} value={a.name}>{a.displayName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1 space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Agent</label>
+                      <Select value={newScheduleAgent} onValueChange={setNewScheduleAgent}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select agent" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AGENTS.map((a) => (
+                            <SelectItem key={a.name} value={a.name}>{a.displayName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Cron Expression</label>
+                      <Input
+                        placeholder="0 9 * * 1-5"
+                        value={newScheduleCron}
+                        onChange={(e) => setNewScheduleCron(e.target.value)}
+                      />
+                    </div>
+                    <div className="w-48 space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Delivery</label>
+                      <Select value={newScheduleChannel} onValueChange={setNewScheduleChannel}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DELIVERY_CHANNELS.map((ch) => (
+                            <SelectItem key={ch.value} value={ch.value}>{ch.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Cron Expression</label>
-                    <Input
-                      placeholder="0 9 * * 1-5"
-                      value={newScheduleCron}
-                      onChange={(e) => setNewScheduleCron(e.target.value)}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Prompt Template</label>
+                    <Textarea
+                      placeholder="Give me a morning pipeline brief with top deals closing this week..."
+                      value={newSchedulePrompt}
+                      onChange={(e) => setNewSchedulePrompt(e.target.value)}
+                      rows={2}
                     />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Action</label>
-                    <Input
-                      placeholder="daily_pipeline_review"
-                      value={newScheduleAction}
-                      onChange={(e) => setNewScheduleAction(e.target.value)}
-                    />
+                  <div className="flex justify-end">
+                    <Button onClick={handleCreateSchedule}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Schedule
+                    </Button>
                   </div>
-                  <Button onClick={handleCreateSchedule}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
                 </div>
 
                 {/* Schedules Table */}
@@ -468,16 +650,18 @@ export default function AgentTeamSettings() {
                     <TableRow>
                       <TableHead>Agent</TableHead>
                       <TableHead>Cron</TableHead>
-                      <TableHead>Action</TableHead>
+                      <TableHead className="max-w-[200px]">Prompt</TableHead>
+                      <TableHead>Delivery</TableHead>
                       <TableHead>Last Run</TableHead>
                       <TableHead className="text-center">Active</TableHead>
-                      <TableHead className="w-[80px]"></TableHead>
+                      <TableHead className="w-[120px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {schedules.length > 0 ? (
                       schedules.map((schedule) => {
                         const agentInfo = AGENTS.find((a) => a.name === schedule.agent_name);
+                        const isRunning = runningScheduleId === schedule.id;
                         return (
                           <TableRow key={schedule.id}>
                             <TableCell>
@@ -489,7 +673,16 @@ export default function AgentTeamSettings() {
                             <TableCell>
                               <code className="text-xs bg-muted px-2 py-1 rounded">{schedule.cron_expression}</code>
                             </TableCell>
-                            <TableCell>{schedule.action}</TableCell>
+                            <TableCell className="max-w-[200px]">
+                              <p className="text-sm text-muted-foreground truncate" title={schedule.prompt_template}>
+                                {schedule.prompt_template}
+                              </p>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">
+                                {schedule.delivery_channel || 'in_app'}
+                              </Badge>
+                            </TableCell>
                             <TableCell className="text-muted-foreground text-sm">
                               {schedule.last_run_at
                                 ? new Date(schedule.last_run_at).toLocaleString()
@@ -502,20 +695,35 @@ export default function AgentTeamSettings() {
                               />
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteSchedule(schedule.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRunScheduleNow(schedule.id)}
+                                  disabled={isRunning}
+                                  title="Run now"
+                                >
+                                  {isRunning ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Play className="h-4 w-4 text-emerald-500" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteSchedule(schedule.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
                       })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           No schedules configured. Add one above.
                         </TableCell>
                       </TableRow>
@@ -532,52 +740,57 @@ export default function AgentTeamSettings() {
               <CardHeader>
                 <CardTitle>Agent Triggers</CardTitle>
                 <CardDescription>
-                  Configure event-driven agent actions that fire when specific CRM events occur.
+                  Configure event-driven agent actions that fire when specific CRM events occur. Use "Test" to run a trigger with sample data.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Add Trigger Form */}
-                <div className="flex items-end gap-3 p-4 bg-muted/50 rounded-lg">
-                  <div className="flex-1 space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Agent</label>
-                    <Select value={newTriggerAgent} onValueChange={setNewTriggerAgent}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select agent" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {AGENTS.map((a) => (
-                          <SelectItem key={a.name} value={a.name}>{a.displayName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1 space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Agent</label>
+                      <Select value={newTriggerAgent} onValueChange={setNewTriggerAgent}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select agent" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AGENTS.map((a) => (
+                            <SelectItem key={a.name} value={a.name}>{a.displayName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Event Type</label>
+                      <Select value={newTriggerEvent} onValueChange={setNewTriggerEvent}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select event" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {EVENT_TYPES.map((et) => (
+                            <SelectItem key={et} value={et}>
+                              {et.replace(/_/g, ' ')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Event Type</label>
-                    <Select value={newTriggerEvent} onValueChange={setNewTriggerEvent}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select event" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EVENT_TYPES.map((et) => (
-                          <SelectItem key={et} value={et}>
-                            {et.replace(/_/g, ' ')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Action</label>
-                    <Input
-                      placeholder="notify_team"
-                      value={newTriggerAction}
-                      onChange={(e) => setNewTriggerAction(e.target.value)}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Prompt Template</label>
+                    <Textarea
+                      placeholder="A new deal was just created. Research the associated company and primary contact..."
+                      value={newTriggerPrompt}
+                      onChange={(e) => setNewTriggerPrompt(e.target.value)}
+                      rows={2}
                     />
                   </div>
-                  <Button onClick={handleCreateTrigger}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
+                  <div className="flex justify-end">
+                    <Button onClick={handleCreateTrigger}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Trigger
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Triggers Table */}
@@ -586,15 +799,16 @@ export default function AgentTeamSettings() {
                     <TableRow>
                       <TableHead>Agent</TableHead>
                       <TableHead>Event Type</TableHead>
-                      <TableHead>Action</TableHead>
+                      <TableHead className="max-w-[250px]">Prompt</TableHead>
                       <TableHead className="text-center">Active</TableHead>
-                      <TableHead className="w-[80px]"></TableHead>
+                      <TableHead className="w-[120px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {triggers.length > 0 ? (
                       triggers.map((trigger) => {
                         const agentInfo = AGENTS.find((a) => a.name === trigger.agent_name);
+                        const isTesting = testingTriggerId === trigger.id;
                         return (
                           <TableRow key={trigger.id}>
                             <TableCell>
@@ -604,9 +818,13 @@ export default function AgentTeamSettings() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">{trigger.event_type.replace(/_/g, ' ')}</Badge>
+                              <Badge variant="outline">{trigger.trigger_event.replace(/_/g, ' ')}</Badge>
                             </TableCell>
-                            <TableCell>{trigger.action}</TableCell>
+                            <TableCell className="max-w-[250px]">
+                              <p className="text-sm text-muted-foreground truncate" title={trigger.prompt_template}>
+                                {trigger.prompt_template}
+                              </p>
+                            </TableCell>
                             <TableCell className="text-center">
                               <Switch
                                 checked={trigger.is_active}
@@ -614,13 +832,28 @@ export default function AgentTeamSettings() {
                               />
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteTrigger(trigger.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleTestTrigger(trigger.id)}
+                                  disabled={isTesting}
+                                  title="Test trigger"
+                                >
+                                  {isTesting ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Play className="h-4 w-4 text-blue-500" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteTrigger(trigger.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );

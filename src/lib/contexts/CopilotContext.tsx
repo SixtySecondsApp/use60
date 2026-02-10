@@ -1461,9 +1461,13 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
           serverError: /500|502|503|internal server|bad gateway|service unavailable/i,
           skillError: /skill not found|skill.*disabled|not enabled/i,
           confirmationRequired: /confirmation required|needs_confirmation/i,
+          insufficientCredits: /insufficient.credits|402|run out of.*credits/i,
         };
 
         const getErrorMessage = (): string => {
+          if (errorCategories.insufficientCredits.test(rawMessage)) {
+            return 'Your organization has run out of AI credits. Please visit Settings > Credits to top up.';
+          }
           if (import.meta.env.DEV && errorCategories.cors.test(rawMessage)) {
             return 'Copilot is currently unreachable from the browser (CORS / Edge Function preflight). A deploy/config fix is required.';
           }

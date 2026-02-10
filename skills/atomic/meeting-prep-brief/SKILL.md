@@ -11,6 +11,8 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - meetings
   triggers:
     - pattern: "brief me for my meeting"
       intent: "meeting_brief"

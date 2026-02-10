@@ -11,6 +11,9 @@ metadata:
   category: enrichment
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - research
+    - pipeline
   triggers:
     - pattern: "analyze this company"
       intent: "company_analysis"

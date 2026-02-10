@@ -11,6 +11,8 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - pipeline
   triggers:
     - pattern: "which deals should I work on"
       intent: "pipeline_focus"

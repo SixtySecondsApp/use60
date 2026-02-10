@@ -11,6 +11,8 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - pipeline
   triggers:
     - pattern: "what should I focus on today"
       intent: "daily_focus"

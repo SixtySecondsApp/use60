@@ -106,6 +106,11 @@ outputs:
 execution_mode: "sync"
 timeout_ms: 30000
 
+# === AGENT AFFINITY (multi-agent routing) ===
+agent_affinity:
+  - "pipeline"
+  - "research"
+
 # === METADATA ===
 tags:
   - "deals"
@@ -226,6 +231,10 @@ outputs:
 execution_mode: "async"  # Sequences often need async for HITL
 timeout_ms: 300000       # 5 minutes for full workflow
 
+# === AGENT AFFINITY (multi-agent routing) ===
+agent_affinity:
+  - "pipeline"
+
 # === METADATA ===
 tags:
   - "deals"
@@ -246,6 +255,7 @@ tags:
 | Execution | Usually sync | Often async (HITL) |
 | workflow_description | Not needed | Describes flow |
 | linked_skills | Not used | Lists orchestrated skills |
+| agent_affinity | Optional, limits to specific agents | Optional, same behavior |
 
 ---
 
@@ -291,6 +301,94 @@ description: |
   Use when: User asks about deal status, risks, or forecasting.
   Output: Structured health score with risk flags.
 ```
+
+---
+
+## Agent Affinity (Multi-Agent Routing)
+
+The `agent_affinity` field controls which specialist agents can use a skill. When the multi-agent orchestrator delegates a task to a specialist (e.g. `pipeline`, `outreach`), that agent's `list_skills` call filters to only skills matching its name.
+
+### Field Spec
+
+```yaml
+metadata:
+  agent_affinity:
+    - "pipeline"
+    - "meetings"
+```
+
+- **Type**: `string[]` (array of `AgentName` values)
+- **Required**: No. Skills without `agent_affinity` are available to **all** agents.
+- **Valid values**: `pipeline`, `outreach`, `research`, `crm_ops`, `meetings`, `prospecting`
+- **Location**: Inside the `metadata` block, alongside `category`, `triggers`, etc.
+
+### Behavior
+
+| `agent_affinity` value | Which agents see the skill |
+|------------------------|---------------------------|
+| Not set / empty `[]` | All agents (universal skill) |
+| `["pipeline"]` | Only the pipeline agent |
+| `["research", "prospecting"]` | Research and prospecting agents |
+
+### Examples
+
+**Single-agent skill** -- only the meetings agent uses this:
+```yaml
+metadata:
+  agent_affinity:
+    - "meetings"
+```
+
+**Multi-agent skill** -- shared between outreach and meetings:
+```yaml
+metadata:
+  agent_affinity:
+    - "outreach"
+    - "meetings"
+```
+
+**Universal skill** -- available to all agents (omit the field):
+```yaml
+metadata:
+  # No agent_affinity -- all agents can use this skill
+  category: output-format
+```
+
+### Full Mapping Reference
+
+| Skill | agent_affinity |
+|-------|---------------|
+| meeting-prep-brief | `[meetings]` |
+| meeting-digest-truth-extractor | `[meetings]` |
+| meeting-command-center-plan | `[meetings]` |
+| post-meeting-followup-drafter | `[outreach, meetings]` |
+| post-meeting-followup-pack-builder | `[outreach, meetings]` |
+| followup-triage | `[outreach]` |
+| followup-reply-drafter | `[outreach]` |
+| event-followup-analyzer | `[outreach, meetings]` |
+| deal-map-builder | `[pipeline]` |
+| deal-next-best-actions | `[pipeline]` |
+| deal-rescue-plan | `[pipeline]` |
+| deal-slippage-diagnosis | `[pipeline]` |
+| pipeline-focus-task-planner | `[pipeline]` |
+| company-analysis | `[research, pipeline]` |
+| competitor-intel | `[research]` |
+| lead-qualification | `[research, prospecting]` |
+| lead-research | `[research, prospecting]` |
+| daily-brief-planner | `[pipeline, meetings]` |
+| daily-focus-planner | `[pipeline]` |
+| objection-to-playbook | `[outreach, pipeline]` |
+| output-format-selector | `[]` (all agents) |
+| search-documentation | `[]` (all agents) |
+| ai-ark-company-search | `[research, prospecting]` |
+| ai-ark-people-search | `[research, prospecting]` |
+| ai-ark-reverse-lookup | `[research]` |
+| ai-ark-similarity-search | `[prospecting]` |
+| ai-ark-semantic-search | `[research, prospecting]` |
+| ai-ark-enrichment | `[research]` |
+| apify-actor-browse | `[prospecting]` |
+| apify-results-query | `[prospecting]` |
+| apify-run-trigger | `[prospecting]` |
 
 ---
 

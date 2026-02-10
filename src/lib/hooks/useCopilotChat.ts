@@ -212,6 +212,9 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
 
         if (!response.ok) {
           const errorData = await response.json();
+          if (response.status === 402 || errorData.error === 'insufficient_credits') {
+            throw new Error('INSUFFICIENT_CREDITS');
+          }
           throw new Error(errorData.error || 'Request failed');
         }
 
@@ -415,6 +418,15 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                       if (toolCallsMeta) metadata.tool_calls = toolCallsMeta;
                       if (receivedStructuredResponse) metadata.structuredResponse = receivedStructuredResponse;
 
+                      // Include multi-agent attribution so compaction/memory extraction
+                      // can understand which specialists contributed to the response
+                      if (data.is_multi_agent) {
+                        metadata.is_multi_agent = true;
+                        metadata.agents_used = data.agents_used;
+                        metadata.agent_responses = data.agent_responses;
+                        metadata.strategy = data.strategy;
+                      }
+
                       sessionServiceRef.current.addMessage({
                         conversation_id: conversationId,
                         role: 'assistant',
@@ -447,8 +459,13 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
           );
         } else {
           const errorMsg = err instanceof Error ? err.message : String(err);
-          setError(errorMsg);
-          options.onError?.(errorMsg);
+          const isInsufficientCredits = errorMsg === 'INSUFFICIENT_CREDITS';
+          const displayMsg = isInsufficientCredits
+            ? 'Your organization has run out of AI credits. Please top up to continue using the copilot.'
+            : errorMsg;
+
+          setError(displayMsg);
+          options.onError?.(displayMsg);
 
           // Update message with error
           setMessages((prev) =>
@@ -456,7 +473,9 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
               m.id === assistantMessageId
                 ? {
                     ...m,
-                    content: `Sorry, an error occurred: ${errorMsg}`,
+                    content: isInsufficientCredits
+                      ? 'Your organization has run out of AI credits. Please visit Settings > Credits to top up.'
+                      : `Sorry, an error occurred: ${errorMsg}`,
                     isStreaming: false,
                   }
                 : m

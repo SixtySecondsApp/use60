@@ -2,7 +2,7 @@
  * Agent Team Configuration Loader
  *
  * Loads org-specific multi-agent team config from agent_team_config table.
- * Returns null when no config exists, signaling single-agent fallback.
+ * Returns default config when no row exists — multi-agent is always-on.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
@@ -46,23 +46,47 @@ export interface SpecialistResult {
 }
 
 // =============================================================================
+// Default Config (always-on for all orgs)
+// =============================================================================
+
+const ALL_AGENTS: AgentName[] = ['pipeline', 'outreach', 'research', 'crm_ops', 'meetings', 'prospecting'];
+
+/**
+ * Returns the default agent team config used when no DB row exists.
+ * Economy tier: all 6 agents enabled, Haiku model, $50/day budget.
+ */
+export function getDefaultConfig(orgId: string): AgentTeamConfig {
+  const now = new Date().toISOString();
+  return {
+    id: 'default',
+    organization_id: orgId,
+    orchestrator_model: 'claude-haiku-4-5-20251001',
+    worker_model: 'claude-haiku-4-5-20251001',
+    enabled_agents: [...ALL_AGENTS],
+    budget_limit_daily_usd: 50,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+// =============================================================================
 // Config Loader
 // =============================================================================
 
 /**
  * Load agent team config for an organization.
- * Returns null if no config exists (single-agent fallback).
+ * Returns default config when no DB row exists — multi-agent is always-on.
  * Caches the result for the lifetime of this request.
  */
-const configCache = new Map<string, AgentTeamConfig | null>();
+const configCache = new Map<string, AgentTeamConfig>();
 
 export async function loadAgentTeamConfig(
   client: SupabaseClient,
   orgId: string
-): Promise<AgentTeamConfig | null> {
+): Promise<AgentTeamConfig> {
   // Return cached result if available
   if (configCache.has(orgId)) {
-    return configCache.get(orgId) ?? null;
+    return configCache.get(orgId)!;
   }
 
   try {
@@ -73,23 +97,27 @@ export async function loadAgentTeamConfig(
       .maybeSingle();
 
     if (error) {
-      // Table may not exist yet — graceful degradation
+      // Table may not exist yet — use defaults
       if (error.message.includes('relation') || error.message.includes('does not exist')) {
-        configCache.set(orgId, null);
-        return null;
+        const defaultConfig = getDefaultConfig(orgId);
+        configCache.set(orgId, defaultConfig);
+        return defaultConfig;
       }
       console.error('[agentConfig] Error loading config:', error);
-      configCache.set(orgId, null);
-      return null;
+      const defaultConfig = getDefaultConfig(orgId);
+      configCache.set(orgId, defaultConfig);
+      return defaultConfig;
     }
 
-    const config = data as AgentTeamConfig | null;
+    // Use DB config if found, otherwise default
+    const config = (data as AgentTeamConfig | null) ?? getDefaultConfig(orgId);
     configCache.set(orgId, config);
     return config;
   } catch (err) {
     console.error('[agentConfig] Exception:', err);
-    configCache.set(orgId, null);
-    return null;
+    const defaultConfig = getDefaultConfig(orgId);
+    configCache.set(orgId, defaultConfig);
+    return defaultConfig;
   }
 }
 

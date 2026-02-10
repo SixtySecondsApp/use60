@@ -1,0 +1,483 @@
+{
+  "project": {
+    "name": "Multi-Agent Sales Team",
+    "description": "Transform single-agent copilot into orchestrator + 3 specialist agents (Pipeline, Outreach, Research) with background automation and configurable model tiers",
+    "createdAt": "2026-02-09T00:00:00Z",
+    "prd": ".claude/plans/moonlit-forging-cerf.md"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "ai": "anthropic-claude"
+  },
+  "features": [
+    {
+      "id": "schema",
+      "name": "Agent Teams Database Schema",
+      "status": "pending",
+      "priority": 1,
+      "description": "Create tables for agent team config, routing log, schedules, and triggers. Extend copilot_executions with agent tracking columns."
+    },
+    {
+      "id": "orchestrator",
+      "name": "Orchestrator + Intent Classification",
+      "status": "pending",
+      "priority": 2,
+      "description": "Add intent classifier and orchestrator logic to copilot-autonomous. Load org config, classify intent, delegate to specialists, merge results."
+    },
+    {
+      "id": "specialist",
+      "name": "Specialist Agent Runner",
+      "status": "pending",
+      "priority": 3,
+      "description": "Shared specialist runner function with scoped tools, action whitelisting, and per-agent system prompts."
+    },
+    {
+      "id": "agents",
+      "name": "Specialist Agent Definitions",
+      "status": "pending",
+      "priority": 4,
+      "description": "Pipeline Manager, Outreach & Follow-up, and Research & Enrichment agent definitions with system prompts and tool scoping."
+    },
+    {
+      "id": "streaming",
+      "name": "Multi-Agent SSE Streaming",
+      "status": "pending",
+      "priority": 5,
+      "description": "Enhanced SSE events for agent_start, agent_done, synthesis. Frontend parsing and agent status indicators."
+    },
+    {
+      "id": "automation",
+      "name": "Background Automation",
+      "status": "pending",
+      "priority": 6,
+      "description": "Scheduled agent runs (cron) and event-triggered agents. Pre-built schedules for morning brief, follow-up check, pipeline review."
+    },
+    {
+      "id": "ui",
+      "name": "Agent Team Configuration UI",
+      "status": "pending",
+      "priority": 7,
+      "description": "Admin settings page for model tier, enabled agents, schedules, triggers. Automation dashboard with run history."
+    },
+    {
+      "id": "observability",
+      "name": "Cost Tracking & Observability",
+      "status": "pending",
+      "priority": 8,
+      "description": "Per-agent cost tracking, budget enforcement, routing decision logs, agent performance dashboard."
+    }
+  ],
+  "stories": [
+    {
+      "id": "TEAM-001",
+      "feature": "schema",
+      "title": "Create agent_team_config table with RLS",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations"] },
+      "blocks": ["TEAM-004", "TEAM-005", "TEAM-018"],
+      "parallelWith": ["TEAM-002", "TEAM-003"],
+      "acceptance": [
+        "agent_team_config table created with orchestrator_model, worker_model, enabled_agents, budget_limit_daily_usd columns",
+        "UNIQUE constraint on organization_id",
+        "RLS: org members can read, admins can write",
+        "Migration runs without errors on staging"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/XXXXXX_agent_teams_config.sql"
+      ]
+    },
+    {
+      "id": "TEAM-002",
+      "feature": "schema",
+      "title": "Create agent_routing_log table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["copilot_executions"] },
+      "blocks": ["TEAM-007"],
+      "parallelWith": ["TEAM-001", "TEAM-003"],
+      "acceptance": [
+        "agent_routing_log table created with execution_id FK, intent_classification JSONB, agents_selected, delegation_strategy",
+        "RLS matching copilot_executions policies",
+        "Migration runs without errors"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/XXXXXX_agent_routing_log.sql"
+      ]
+    },
+    {
+      "id": "TEAM-003",
+      "feature": "schema",
+      "title": "Add agent tracking columns to copilot_executions",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["copilot_executions"] },
+      "blocks": ["TEAM-007"],
+      "parallelWith": ["TEAM-001", "TEAM-002"],
+      "acceptance": [
+        "agent_name TEXT column added (nullable, backward compatible)",
+        "parent_execution_id UUID column added with self-reference FK",
+        "delegation_reason TEXT column added",
+        "Existing copilot_executions queries unaffected"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/XXXXXX_copilot_executions_agent_columns.sql"
+      ]
+    },
+    {
+      "id": "TEAM-004",
+      "feature": "orchestrator",
+      "title": "Create agentConfig.ts — org config loader",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["TEAM-001"], "files": [], "schema": ["agent_team_config"] },
+      "blocks": ["TEAM-005", "TEAM-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "loadAgentTeamConfig(client, orgId) returns config or null",
+        "Null return means single-agent fallback (no multi-agent)",
+        "Caches config per request (no repeated DB queries)",
+        "Returns typed AgentTeamConfig interface"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/agentConfig.ts"
+      ]
+    },
+    {
+      "id": "TEAM-005",
+      "feature": "orchestrator",
+      "title": "Create agentClassifier.ts — intent classification",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["TEAM-004"], "files": [], "schema": [] },
+      "blocks": ["TEAM-007"],
+      "parallelWith": ["TEAM-006"],
+      "acceptance": [
+        "AGENT_DOMAINS constant with actions, skills, keywords per agent",
+        "classifyIntent() returns { agents[], strategy, reasoning, confidence }",
+        "Uses fast Claude call (~200 max_tokens) with orchestrator model",
+        "Fallback: if classification fails, return null (single-agent path)",
+        "Keyword pre-filter reduces unnecessary Claude calls for obvious intents"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/agentClassifier.ts"
+      ]
+    },
+    {
+      "id": "TEAM-006",
+      "feature": "specialist",
+      "title": "Create agentSpecialist.ts — shared specialist runner",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["TEAM-004"], "files": ["supabase/functions/copilot-autonomous/index.ts"], "schema": [] },
+      "blocks": ["TEAM-008", "TEAM-009", "TEAM-010", "TEAM-007"],
+      "parallelWith": ["TEAM-005"],
+      "acceptance": [
+        "runSpecialist() accepts agent name, config (model, tools, allowedActions), context, and deps",
+        "Reuses existing executeToolCall() with action whitelist enforcement",
+        "Standard agentic loop with configurable maxIterations",
+        "Returns SpecialistResult with response text, tools used, token counts",
+        "Streams SSE events if streamWriter provided",
+        "Logs execution to copilot_executions with agent_name"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/agentSpecialist.ts"
+      ]
+    },
+    {
+      "id": "TEAM-007",
+      "feature": "orchestrator",
+      "title": "Integrate orchestrator into copilot-autonomous",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["TEAM-005", "TEAM-006", "TEAM-002", "TEAM-003"], "files": [], "schema": [] },
+      "blocks": ["TEAM-011", "TEAM-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "Load agent_team_config at request start",
+        "If config exists: classify intent -> delegate to specialist(s) -> merge -> stream",
+        "If no config: existing single-agent behavior unchanged",
+        "Single-agent delegation: stream response through directly",
+        "Parallel delegation: Promise.all + orchestrator synthesis pass",
+        "Sequential delegation: chain outputs as context",
+        "Log routing decision to agent_routing_log",
+        "All existing tests still pass"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    {
+      "id": "TEAM-008",
+      "feature": "agents",
+      "title": "Define Pipeline Manager agent — system prompt and tool scope",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["TEAM-006"], "files": [], "schema": [] },
+      "blocks": ["TEAM-011"],
+      "parallelWith": ["TEAM-009", "TEAM-010"],
+      "acceptance": [
+        "PIPELINE_AGENT_CONFIG defined with system prompt, allowed actions, skill categories",
+        "Allowed actions: get_deal, get_pipeline_summary, get_pipeline_deals, get_pipeline_forecast, get_contacts_needing_attention, get_company_status, update_crm, create_task, list_tasks",
+        "System prompt emphasizes analytical/data-driven personality, revenue prioritization",
+        "Skill categories: sales-ai"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/agentDefinitions.ts"
+      ]
+    },
+    {
+      "id": "TEAM-009",
+      "feature": "agents",
+      "title": "Define Outreach & Follow-up agent — system prompt and tool scope",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["TEAM-006"], "files": [], "schema": [] },
+      "blocks": ["TEAM-011"],
+      "parallelWith": ["TEAM-008", "TEAM-010"],
+      "acceptance": [
+        "OUTREACH_AGENT_CONFIG defined with system prompt, allowed actions, skill categories",
+        "Allowed actions: search_emails, draft_email, send_notification, create_task, create_activity, get_contact, get_meetings",
+        "System prompt emphasizes empathetic writing, tone matching, relationship-aware communication",
+        "Skill categories: writing"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/agentDefinitions.ts"
+      ]
+    },
+    {
+      "id": "TEAM-010",
+      "feature": "agents",
+      "title": "Define Research & Enrichment agent — system prompt and tool scope",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["TEAM-006"], "files": [], "schema": [] },
+      "blocks": ["TEAM-011"],
+      "parallelWith": ["TEAM-008", "TEAM-009"],
+      "acceptance": [
+        "RESEARCH_AGENT_CONFIG defined with system prompt, allowed actions, skill categories",
+        "Allowed actions: enrich_contact, enrich_company, get_lead, get_contact, get_company_status",
+        "System prompt emphasizes thorough research, cross-referencing sources, ICP fit signals",
+        "Skill categories: enrichment"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/agentDefinitions.ts"
+      ]
+    },
+    {
+      "id": "TEAM-011",
+      "feature": "streaming",
+      "title": "Add multi-agent SSE event types to copilot-autonomous",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["TEAM-007", "TEAM-008", "TEAM-009", "TEAM-010"], "files": [], "schema": [] },
+      "blocks": ["TEAM-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "New SSE events: agent_start (agent name + reason), agent_done, synthesis",
+        "agent_start includes agent display name and brief reason",
+        "synthesis event contains orchestrator's merged response",
+        "done event includes agents_used array and total token count",
+        "Single-agent mode sends agent_start/agent_done wrapping existing events"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "supabase/functions/_shared/agentSpecialist.ts"
+      ]
+    },
+    {
+      "id": "TEAM-012",
+      "feature": "streaming",
+      "title": "Parse multi-agent SSE events in useCopilotChat",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["TEAM-011"], "files": [], "schema": [] },
+      "blocks": ["TEAM-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "useCopilotChat.ts handles agent_start, agent_done, synthesis SSE events",
+        "New state: activeAgents (which agents are currently working)",
+        "Existing message, tool_start, tool_result, done events still work",
+        "No visual regressions when multi-agent is OFF"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts"
+      ]
+    },
+    {
+      "id": "TEAM-013",
+      "feature": "streaming",
+      "title": "Add AgentWorkingIndicator component to copilot chat",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["TEAM-012"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "AgentWorkingIndicator shows Lucide icon + agent name + activity description",
+        "Pipeline Agent: BarChart3 icon, Outreach Agent: Mail icon, Research Agent: Search icon",
+        "Animated indicator (pulse/spinner) while agent is active",
+        "Hides when agent completes",
+        "Renders in copilot chat above the response area"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/copilot/AgentWorkingIndicator.tsx",
+        "src/lib/contexts/CopilotContext.tsx"
+      ]
+    },
+    {
+      "id": "TEAM-014",
+      "feature": "automation",
+      "title": "Create agent_schedules and agent_triggers tables",
+      "type": "schema",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["TEAM-001"], "files": [], "schema": ["agent_team_config"] },
+      "blocks": ["TEAM-015", "TEAM-016"],
+      "parallelWith": [],
+      "acceptance": [
+        "agent_schedules table with cron_expression, agent_name, prompt_template, delivery_channel, is_active",
+        "agent_triggers table with trigger_event, agent_name, prompt_template, is_active",
+        "RLS: org members read, admins write",
+        "Migration runs without errors"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/XXXXXX_agent_automation.sql"
+      ]
+    },
+    {
+      "id": "TEAM-015",
+      "feature": "automation",
+      "title": "Create agent-scheduler edge function for cron-triggered runs",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["TEAM-014", "TEAM-006"], "files": [], "schema": ["agent_schedules"] },
+      "blocks": ["TEAM-017"],
+      "parallelWith": ["TEAM-016"],
+      "acceptance": [
+        "Edge function queries active schedules matching current cron window",
+        "Runs specialist agent with schedule's prompt_template on behalf of user",
+        "Delivers result via configured channel (Slack, email, in_app)",
+        "Updates last_run_at on schedule",
+        "Pre-built schedules: morning pipeline brief, follow-up check, weekly review, stale deal alert"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/agent-scheduler/index.ts"
+      ]
+    },
+    {
+      "id": "TEAM-016",
+      "feature": "automation",
+      "title": "Create agent-trigger edge function for event-triggered runs",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["TEAM-014", "TEAM-006"], "files": [], "schema": ["agent_triggers"] },
+      "blocks": ["TEAM-017"],
+      "parallelWith": ["TEAM-015"],
+      "acceptance": [
+        "Edge function receives event payload (deal_created, meeting_ended, contact_imported, deal_stage_changed)",
+        "Queries active triggers for the event type",
+        "Runs specialist agent with trigger's prompt_template and event context",
+        "Delivers result via configured channel",
+        "Pre-built triggers: deal_created -> research, meeting_ended -> outreach"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/agent-trigger/index.ts"
+      ]
+    },
+    {
+      "id": "TEAM-017",
+      "feature": "ui",
+      "title": "Create Agent Team admin settings page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["TEAM-015", "TEAM-016"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["TEAM-018"],
+      "acceptance": [
+        "Admin page at /platform/settings/agent-team",
+        "Model tier selector: Economy (all Haiku), Balanced (Sonnet + Haiku), Premium (Opus + Sonnet)",
+        "Cost estimate per tier displayed",
+        "Toggle agents on/off (pipeline, outreach, research)",
+        "Schedule management (add/edit/disable cron schedules)",
+        "Trigger management (add/edit/disable event triggers)",
+        "Uses existing admin layout and Sixty design system"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/platform/AgentTeamSettings.tsx",
+        "src/lib/services/agentTeamService.ts"
+      ]
+    },
+    {
+      "id": "TEAM-018",
+      "feature": "observability",
+      "title": "Add per-agent cost tracking and budget enforcement",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["TEAM-001", "TEAM-007"], "files": [], "schema": ["agent_team_config"] },
+      "blocks": [],
+      "parallelWith": ["TEAM-017"],
+      "acceptance": [
+        "logAICostEvent() extended with agent_name and parent_execution_id params",
+        "Budget check before each specialist call queries today's total spend",
+        "Friendly limit message returned if budget exceeded",
+        "Per-agent token usage visible in copilot_executions queries"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/costTracking.ts",
+        "supabase/functions/_shared/agentSpecialist.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 18,
+    "completedStories": 0,
+    "currentFeature": null,
+    "parallelGroups": [
+      ["TEAM-001", "TEAM-002", "TEAM-003"],
+      ["TEAM-005", "TEAM-006"],
+      ["TEAM-008", "TEAM-009", "TEAM-010"],
+      ["TEAM-015", "TEAM-016"],
+      ["TEAM-017", "TEAM-018"]
+    ],
+    "lastUpdated": "2026-02-09T00:00:00Z"
+  }
+}

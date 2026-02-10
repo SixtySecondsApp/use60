@@ -11,6 +11,9 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - outreach
+    - pipeline
   triggers:
     - pattern: "how do I handle this objection"
       intent: "objection_handling"

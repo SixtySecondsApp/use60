@@ -32,6 +32,15 @@ const VALID_CATEGORIES = [
   'agent-sequence',
 ];
 
+const VALID_AGENT_NAMES = [
+  'pipeline',
+  'outreach',
+  'research',
+  'crm_ops',
+  'meetings',
+  'prospecting',
+];
+
 const TOKEN_BUDGET = 5000;
 
 function findSkillFiles(rootDir: string): string[] {
@@ -114,7 +123,23 @@ async function main() {
         warns.push('Sequence missing workflow/sequence_steps in metadata');
       }
 
-      // 5. Content not empty
+      // 5. agent_affinity validation
+      const agentAffinity = fm.agent_affinity;
+      if (agentAffinity !== undefined) {
+        if (!Array.isArray(agentAffinity)) {
+          issues.push('agent_affinity must be an array of agent names');
+        } else {
+          for (const agent of agentAffinity) {
+            if (!VALID_AGENT_NAMES.includes(String(agent))) {
+              issues.push(
+                `Invalid agent_affinity value "${agent}". Valid: ${VALID_AGENT_NAMES.join(', ')}`
+              );
+            }
+          }
+        }
+      }
+
+      // 6. Content not empty
       if (!record.content_template || record.content_template.length < 10) {
         warns.push('Content template is very short or empty');
       }

@@ -23,6 +23,7 @@ export interface WorkflowStep {
   error?: string;
   duration_ms?: number;
   progress?: string;
+  agent?: string;
 }
 
 export interface ClarifyingQuestion {
@@ -196,6 +197,7 @@ export function useWorkflowOrchestrator() {
             step: data.step,
             label: data.label,
             status: 'running',
+            agent: data.agent,
           },
         ]);
         break;
@@ -220,6 +222,7 @@ export function useWorkflowOrchestrator() {
                   summary: data.summary,
                   data: data.data,
                   duration_ms: data.duration_ms,
+                  agent: data.agent || s.agent,
                 }
               : s
           )
@@ -236,6 +239,7 @@ export function useWorkflowOrchestrator() {
                   summary: data.summary,
                   error: data.error,
                   duration_ms: data.duration_ms,
+                  agent: data.agent || s.agent,
                 }
               : s
           )

@@ -11,6 +11,9 @@ metadata:
   category: writing
   skill_type: atomic
   is_active: true
+  agent_affinity:
+    - outreach
+    - meetings
   triggers:
     - pattern: "follow-up pack for the meeting"
       intent: "followup_pack"
