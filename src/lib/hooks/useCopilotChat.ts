@@ -33,6 +33,15 @@ export interface ToolCall {
   completedAt?: Date;
 }
 
+export interface ActiveAgent {
+  name: string;
+  displayName: string;
+  icon: string;
+  color: string;
+  reason: string;
+  status: 'working' | 'done';
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -85,6 +94,8 @@ export interface UseCopilotChatReturn {
   conversationId: string | null;
   /** Whether session is loading */
   isLoadingSession: boolean;
+  /** Active specialist agents during multi-agent execution */
+  activeAgents: ActiveAgent[];
 }
 
 // =============================================================================
@@ -105,6 +116,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(persistSession);
+  const [activeAgents, setActiveAgents] = useState<ActiveAgent[]>([]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
@@ -138,6 +150,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
       setMessages((prev) => [...prev, userMessage]);
       setIsThinking(true);
       setError(null);
+      setActiveAgents([]);
 
       // Persist user message to database (non-blocking)
       if (persistSession && conversationId && sessionServiceRef.current) {
@@ -327,6 +340,48 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                     );
                     break;
 
+                  case 'agent_start':
+                    // A specialist agent has started working
+                    setActiveAgents((prev) => {
+                      // Avoid duplicates
+                      if (prev.some((a) => a.name === data.agent)) return prev;
+                      return [
+                        ...prev,
+                        {
+                          name: data.agent,
+                          displayName: data.displayName,
+                          icon: data.icon,
+                          color: data.color,
+                          reason: data.reason,
+                          status: 'working',
+                        },
+                      ];
+                    });
+                    break;
+
+                  case 'agent_done':
+                    // A specialist agent has finished
+                    setActiveAgents((prev) =>
+                      prev.map((a) =>
+                        a.name === data.agent
+                          ? { ...a, status: 'done' as const }
+                          : a
+                      )
+                    );
+                    break;
+
+                  case 'synthesis':
+                    // Synthesis content from multi-agent orchestrator
+                    accumulatedContent += data.content || '';
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, content: accumulatedContent }
+                          : m
+                      )
+                    );
+                    break;
+
                   case 'done':
                     setMessages((prev) =>
                       prev.map((m) =>
@@ -335,6 +390,12 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                           : m
                       )
                     );
+                    // Track agents used in multi-agent mode
+                    if (data.agents_used) {
+                      setActiveAgents((prev) =>
+                        prev.map((a) => ({ ...a, status: 'done' as const }))
+                      );
+                    }
                     options.onComplete?.(accumulatedContent, data.toolsUsed || []);
 
                     // Persist assistant message after streaming completes
@@ -511,6 +572,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     stopGeneration,
     conversationId,
     isLoadingSession,
+    activeAgents,
   };
 }
 

@@ -41,6 +41,7 @@ import { FirefliesConfigModal } from '@/components/integrations/FirefliesConfigM
 import { ApolloConfigModal } from '@/components/integrations/ApolloConfigModal';
 import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
+import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
 
 // Hooks and stores
 import { useGoogleIntegration } from '@/lib/stores/integrationStore';
@@ -54,6 +55,7 @@ import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
 import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
 import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
+import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
 import { getIntegrationDomain, getLogoS3Url, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { useUser } from '@/lib/hooks/useUser';
 import { IntegrationVoteState, useIntegrationUpvotes } from '@/lib/hooks/useIntegrationUpvotes';
@@ -488,6 +490,21 @@ const builtIntegrations: IntegrationConfig[] = [
     fallbackIcon: <Mail className="w-6 h-6 text-gray-600 dark:text-gray-400" />,
     isBuilt: true,
   },
+  {
+    id: 'apify',
+    name: 'Apify',
+    description: 'Run any web scraping actor from the Apify marketplace.',
+    permissions: [
+      { title: 'Run actors', description: 'Execute any Apify actor with custom inputs.' },
+      { title: 'Store results', description: 'Raw results stored and available for mapping.' },
+      { title: 'Track runs', description: 'Monitor run status, costs, and record counts.' },
+    ],
+    brandColor: 'emerald',
+    iconBgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+    iconBorderColor: 'border-emerald-100 dark:border-emerald-800/40',
+    fallbackIcon: <Bot className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />,
+    isBuilt: true,
+  },
 ];
 
 // =====================================================
@@ -758,6 +775,11 @@ export default function Integrations() {
     loading: instantlyLoading,
   } = useInstantlyIntegration();
 
+  const {
+    isConnected: apifyConnected,
+    loading: apifyLoading,
+  } = useApifyIntegration();
+
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
   const [activeConfigModal, setActiveConfigModal] = useState<string | null>(null);
@@ -839,6 +861,8 @@ export default function Integrations() {
         return aiArkConnected ? 'active' : 'inactive';
       case 'instantly':
         return instantlyConnected ? 'active' : 'inactive';
+      case 'apify':
+        return apifyConnected ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
@@ -887,6 +911,10 @@ export default function Integrations() {
       }
       if (integrationId === 'instantly') {
         setActiveConfigModal('instantly');
+        return;
+      }
+      if (integrationId === 'apify') {
+        setActiveConfigModal('apify');
         return;
       }
       // 60 Notetaker goes straight to config modal (handles its own enable flow)
@@ -967,8 +995,9 @@ export default function Integrations() {
       apollo: apolloLoading,
       'ai-ark': aiArkLoading,
       instantly: instantlyLoading,
+      apify: apifyLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, instantlyLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, instantlyLoading, apifyLoading]
   );
 
   // Preload cached S3 logo URLs on page load to prevent any visible swap/flicker.
@@ -1157,6 +1186,10 @@ export default function Integrations() {
       />
       <InstantlyConfigModal
         open={activeConfigModal === 'instantly'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <ApifyConfigModal
+        open={activeConfigModal === 'apify'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>

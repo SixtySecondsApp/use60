@@ -33,7 +33,7 @@ import {
   rateLimitMiddleware,
   RATE_LIMIT_CONFIGS,
 } from '../_shared/rateLimiter.ts';
-import { logAICostEvent } from '../_shared/costTracking.ts';
+import { logAICostEvent, checkAgentBudget } from '../_shared/costTracking.ts';
 import { executeAction } from '../_shared/copilot_adapters/executeAction.ts';
 import type { ExecuteActionName } from '../_shared/copilot_adapters/types.ts';
 import { resolveEntity } from '../_shared/resolveEntityAdapter.ts';
@@ -47,6 +47,11 @@ import {
   type StructuredResponse,
   type ToolExecutionDetail,
 } from '../_shared/structuredResponseDetector.ts';
+// Multi-agent orchestration imports
+import { loadAgentTeamConfig, type AgentTeamConfig, type IntentClassification } from '../_shared/agentConfig.ts';
+import { classifyIntent } from '../_shared/agentClassifier.ts';
+import { runSpecialist, type StreamWriter } from '../_shared/agentSpecialist.ts';
+import { getSpecialistConfig, getAgentDisplayInfo } from '../_shared/agentDefinitions.ts';
 
 // =============================================================================
 // Configuration
@@ -532,13 +537,47 @@ Return [] if no meaningful memories.`,
 }
 
 // =============================================================================
+// Apify Integration Check
+// =============================================================================
+
+interface ApifyConnectionInfo {
+  connected: boolean;
+  hasToken: boolean;
+}
+
+async function checkApifyConnection(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string | null
+): Promise<ApifyConnectionInfo> {
+  if (!orgId) return { connected: false, hasToken: false };
+
+  try {
+    const { data, error } = await supabase
+      .from('integration_credentials')
+      .select('id, credentials')
+      .eq('organization_id', orgId)
+      .eq('provider', 'apify')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error || !data) return { connected: false, hasToken: false };
+
+    const hasToken = !!(data.credentials as Record<string, unknown>)?.api_token;
+    return { connected: true, hasToken };
+  } catch {
+    return { connected: false, hasToken: false };
+  }
+}
+
+// =============================================================================
 // System Prompt
 // =============================================================================
 
 function buildSystemPrompt(
   organizationId?: string,
   context?: Record<string, unknown>,
-  memoryContext?: string
+  memoryContext?: string,
+  apifyConnection?: ApifyConnectionInfo
 ): string {
   return `You are an AI sales assistant for a platform called Sixty. You help sales professionals manage their pipeline, prepare for meetings, track contacts, and execute sales workflows.
 
@@ -591,6 +630,17 @@ ${memoryContext ? MEMORY_SYSTEM_ADDITION : ''}
 - Confirm before any CRM updates or notifications (execute_action write actions require params.confirm=true)
 - If a tool returns an error, explain what happened and suggest alternatives
 - Present data in a helpful, actionable way for sales professionals
+${apifyConnection?.connected ? `
+## Apify Web Scraping (Connected)
+
+This organization has Apify connected. You can help with web scraping workflows:
+- **Browse actors**: Use list_skills to find apify-actor-browse, then get_skill to learn how to search the marketplace
+- **Run scrapers**: Use the apify-run-trigger skill to configure and start actor runs
+- **Query results**: Use the apify-results-query skill to filter and explore scraped data
+- **Full pipeline**: Use the seq-apify-scrape-flow sequence for end-to-end scraping workflows
+
+When the user asks about scraping, web data extraction, or Apify — use these skills via execute_action with run_skill or run_sequence.
+` : ''}
 `;
 }
 
@@ -797,6 +847,223 @@ function sendSSE(
 }
 
 // =============================================================================
+// Multi-Agent Orchestration
+// =============================================================================
+
+async function logRoutingDecision(
+  supabase: ReturnType<typeof createClient>,
+  executionId: string,
+  classification: IntentClassification
+): Promise<void> {
+  try {
+    await supabase.from('agent_routing_log').insert({
+      execution_id: executionId,
+      intent_classification: classification,
+      agents_selected: classification.agents,
+      delegation_strategy: classification.strategy,
+      reasoning: classification.reasoning,
+      confidence: classification.confidence,
+    });
+  } catch (err) {
+    // Non-fatal — table may not exist
+    console.warn('[orchestrator] Failed to log routing decision:', err);
+  }
+}
+
+async function handleMultiAgentRequest(
+  message: string,
+  config: AgentTeamConfig,
+  classification: IntentClassification,
+  anthropic: Anthropic,
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  orgId: string,
+  writer: WritableStreamDefaultWriter,
+  encoder: TextEncoder,
+  executionId: string | null
+): Promise<void> {
+  const streamWriter: StreamWriter = {
+    sendSSE: (event, data) => sendSSE(writer, encoder, event, data),
+  };
+
+  const { agents, strategy } = classification;
+  const results: Array<{ agentName: string; responseText: string; toolsUsed: string[]; inputTokens: number; outputTokens: number }> = [];
+
+  if (strategy === 'single' || agents.length === 1) {
+    // Single agent delegation
+    const agentName = agents[0];
+    const agentConfig = getSpecialistConfig(agentName, config.worker_model);
+    const info = getAgentDisplayInfo(agentName);
+
+    await sendSSE(writer, encoder, 'agent_start', {
+      agent: agentName,
+      displayName: info.displayName,
+      icon: info.icon,
+      color: info.color,
+      reason: classification.reasoning,
+    });
+
+    const result = await runSpecialist(
+      agentConfig,
+      message,
+      '', // No prior context for single agent
+      { anthropic, supabase, userId, orgId },
+      streamWriter,
+      executionId || undefined
+    );
+
+    results.push(result);
+
+    await sendSSE(writer, encoder, 'agent_done', {
+      agent: agentName,
+      displayName: info.displayName,
+    });
+
+    // Stream the agent's response as tokens
+    for (const char of result.responseText) {
+      await sendSSE(writer, encoder, 'token', { text: char });
+    }
+    await sendSSE(writer, encoder, 'message_complete', { content: result.responseText });
+
+  } else if (strategy === 'parallel') {
+    // Parallel delegation — run all agents simultaneously
+    for (const agentName of agents) {
+      const info = getAgentDisplayInfo(agentName);
+      await sendSSE(writer, encoder, 'agent_start', {
+        agent: agentName,
+        displayName: info.displayName,
+        icon: info.icon,
+        color: info.color,
+        reason: classification.reasoning,
+      });
+    }
+
+    const parallelResults = await Promise.all(
+      agents.map((agentName) => {
+        const agentConfig = getSpecialistConfig(agentName, config.worker_model);
+        return runSpecialist(
+          agentConfig,
+          message,
+          '',
+          { anthropic, supabase, userId, orgId },
+          undefined, // Don't stream individual tool events in parallel
+          executionId || undefined
+        );
+      })
+    );
+
+    for (const result of parallelResults) {
+      const info = getAgentDisplayInfo(result.agentName);
+      await sendSSE(writer, encoder, 'agent_done', {
+        agent: result.agentName,
+        displayName: info.displayName,
+      });
+      results.push(result);
+    }
+
+    // Synthesize responses from all agents
+    const synthesisPrompt = `You are synthesizing responses from multiple specialist agents into one coherent reply for a sales professional.
+
+${parallelResults.map((r) => {
+  const info = getAgentDisplayInfo(r.agentName);
+  return `## ${info.displayName}\n${r.responseText}`;
+}).join('\n\n')}
+
+Combine these into a single, well-structured response. Use headings for each section. Be concise but complete.`;
+
+    const synthesisResponse = await anthropic.messages.create({
+      model: config.orchestrator_model,
+      max_tokens: 4096,
+      system: 'You synthesize specialist agent responses into coherent, actionable advice for sales professionals.',
+      messages: [{ role: 'user', content: synthesisPrompt }],
+    });
+
+    const synthText = synthesisResponse.content.find((c) => c.type === 'text');
+    const synthesized = synthText?.type === 'text' ? synthText.text : '';
+
+    await sendSSE(writer, encoder, 'synthesis', { content: synthesized });
+
+    for (const char of synthesized) {
+      await sendSSE(writer, encoder, 'token', { text: char });
+    }
+    await sendSSE(writer, encoder, 'message_complete', { content: synthesized });
+
+  } else if (strategy === 'sequential') {
+    // Sequential delegation — chain agent outputs
+    let accumulatedContext = '';
+
+    for (let i = 0; i < agents.length; i++) {
+      const agentName = agents[i];
+      const agentConfig = getSpecialistConfig(agentName, config.worker_model);
+      const info = getAgentDisplayInfo(agentName);
+
+      await sendSSE(writer, encoder, 'agent_start', {
+        agent: agentName,
+        displayName: info.displayName,
+        icon: info.icon,
+        color: info.color,
+        reason: i === 0 ? classification.reasoning : `Following up on previous agent's output`,
+      });
+
+      const result = await runSpecialist(
+        agentConfig,
+        message,
+        accumulatedContext,
+        { anthropic, supabase, userId, orgId },
+        streamWriter,
+        executionId || undefined
+      );
+
+      results.push(result);
+      accumulatedContext += `\n\n## ${info.displayName} Output\n${result.responseText}`;
+
+      await sendSSE(writer, encoder, 'agent_done', {
+        agent: agentName,
+        displayName: info.displayName,
+      });
+    }
+
+    // Stream the final agent's response
+    const finalResponse = results[results.length - 1]?.responseText || '';
+    for (const char of finalResponse) {
+      await sendSSE(writer, encoder, 'token', { text: char });
+    }
+    await sendSSE(writer, encoder, 'message_complete', { content: finalResponse });
+  }
+
+  // Send done event with agent metadata
+  const allToolsUsed = results.flatMap((r) => r.toolsUsed);
+  const totalInputTokens = results.reduce((sum, r) => sum + r.inputTokens, 0);
+  const totalOutputTokens = results.reduce((sum, r) => sum + r.outputTokens, 0);
+
+  await sendSSE(writer, encoder, 'done', {
+    toolsUsed: [...new Set(allToolsUsed)],
+    iterations: results.reduce((sum, r) => sum + r.iterations, 0),
+    agents_used: results.map((r) => r.agentName),
+    total_tokens: totalInputTokens + totalOutputTokens,
+  });
+
+  // Log completion for parent execution
+  if (executionId) {
+    const finalText = results.map((r) => r.responseText).join('\n\n');
+    await logExecutionComplete(
+      supabase,
+      executionId,
+      {
+        startTime: Date.now(),
+        totalInputTokens,
+        totalOutputTokens,
+        toolCallIds: [],
+      },
+      true,
+      finalText.slice(0, 5000),
+      [...new Set(allToolsUsed)],
+      results.reduce((sum, r) => sum + r.iterations, 0)
+    );
+  }
+}
+
+// =============================================================================
 // Main Handler
 // =============================================================================
 
@@ -880,11 +1147,108 @@ serve(async (req: Request) => {
       console.error('[copilot-autonomous] Background compaction error:', err)
     );
 
+    // Check if org has Apify connected (for system prompt injection)
+    const apifyConnection = await checkApifyConnection(supabase, organizationId || null);
+    if (apifyConnection.connected) {
+      console.log('[copilot-autonomous] Apify connected for org:', organizationId);
+    }
+
     // Build system prompt (no longer depends on per-skill tool defs)
-    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext);
+    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection);
 
     // Use the 4-tool architecture (same as api-copilot)
     const claudeTools = FOUR_TOOL_DEFINITIONS;
+
+    // =========================================================================
+    // Multi-Agent Orchestration Check
+    // =========================================================================
+    // If org has agent team config, try multi-agent delegation.
+    // Falls back to single-agent if no config or classification fails.
+
+    const resolvedOrgForConfig = organizationId
+      ? organizationId
+      : await resolveOrgId(supabase, userId, null).catch(() => null);
+
+    let agentTeamConfig: AgentTeamConfig | null = null;
+    if (resolvedOrgForConfig) {
+      agentTeamConfig = await loadAgentTeamConfig(supabase, resolvedOrgForConfig);
+    }
+
+    // Allow demo page to force single-agent path for comparison
+    if (context?.force_single_agent) {
+      agentTeamConfig = null;
+    }
+
+    if (agentTeamConfig && stream) {
+      // Check budget before multi-agent delegation
+      const budgetCheck = await checkAgentBudget(
+        supabase,
+        resolvedOrgForConfig!,
+        agentTeamConfig.budget_limit_daily_usd
+      );
+
+      if (!budgetCheck.allowed) {
+        console.log(`[copilot-autonomous] Budget exceeded: $${budgetCheck.todaySpend.toFixed(2)}/$${budgetCheck.budgetLimit.toFixed(2)}, falling back to single-agent`);
+        // Fall through to single-agent path
+        agentTeamConfig = null;
+      }
+
+      // Attempt multi-agent classification
+      const classification = agentTeamConfig
+        ? await classifyIntent(message, agentTeamConfig, anthropic)
+        : null;
+
+      if (classification && classification.agents.length > 0) {
+        console.log(`[copilot-autonomous] Multi-agent: ${classification.agents.join(',')} via ${classification.strategy}`);
+
+        const { readable, writer, encoder } = createSSEStream();
+
+        (async () => {
+          // Start parent execution log
+          const executionId = await logExecutionStart(supabase, organizationId, userId, message);
+
+          // Log routing decision
+          if (executionId) {
+            await logRoutingDecision(supabase, executionId, classification);
+          }
+
+          try {
+            await handleMultiAgentRequest(
+              message,
+              agentTeamConfig!,
+              classification,
+              anthropic,
+              supabase,
+              userId!,
+              resolvedOrgForConfig!,
+              writer,
+              encoder,
+              executionId
+            );
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            console.error('[copilot-autonomous] Multi-agent error, falling back:', errorMsg);
+            await sendSSE(writer, encoder, 'error', { message: `Multi-agent error: ${errorMsg}` });
+          } finally {
+            await writer.close();
+          }
+        })();
+
+        return new Response(readable, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
+        });
+      }
+      // Classification returned null — fall through to single-agent
+    }
+
+    // =========================================================================
+    // Single-Agent Path (original behavior — unchanged)
+    // =========================================================================
 
     // Set up streaming response
     if (stream) {

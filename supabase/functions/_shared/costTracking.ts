@@ -103,6 +103,68 @@ export function extractGeminiUsage(response: any): { inputTokens: number; output
   };
 }
 
+// =============================================================================
+// Agent Budget Enforcement
+// =============================================================================
+
+export interface BudgetCheckResult {
+  allowed: boolean;
+  todaySpend: number;
+  budgetLimit: number;
+  message?: string;
+}
+
+/**
+ * Check if an agent call is within the org's daily budget.
+ * Returns { allowed: true } if under budget or if tracking isn't set up.
+ */
+export async function checkAgentBudget(
+  supabaseClient: any,
+  orgId: string,
+  budgetLimitUsd: number
+): Promise<BudgetCheckResult> {
+  try {
+    // Query today's total AI cost for this org
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabaseClient
+      .from('ai_cost_events')
+      .select('estimated_cost')
+      .eq('org_id', orgId)
+      .gte('created_at', todayStart.toISOString());
+
+    if (error) {
+      // If table doesn't exist, allow the call
+      if (error.message.includes('relation') || error.message.includes('does not exist')) {
+        return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitUsd };
+      }
+      console.warn('[CostTracking] Budget check error:', error);
+      return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitUsd };
+    }
+
+    const todaySpend = (data || []).reduce(
+      (sum: number, row: { estimated_cost: number | null }) =>
+        sum + (row.estimated_cost || 0),
+      0
+    );
+
+    if (todaySpend >= budgetLimitUsd) {
+      return {
+        allowed: false,
+        todaySpend,
+        budgetLimit: budgetLimitUsd,
+        message: `Daily AI budget limit reached ($${todaySpend.toFixed(2)} of $${budgetLimitUsd.toFixed(2)}). Multi-agent mode will resume tomorrow. You can still use single-agent mode.`,
+      };
+    }
+
+    return { allowed: true, todaySpend, budgetLimit: budgetLimitUsd };
+  } catch (err) {
+    console.warn('[CostTracking] Budget check exception:', err);
+    return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitUsd };
+  }
+}
+
 
 
 

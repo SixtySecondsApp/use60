@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/clientV2';
+import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { validateInstantlyCampaign } from '@/lib/hooks/useInstantlyPush';
 
 // ---------------------------------------------------------------------------
@@ -170,6 +170,7 @@ export function CampaignApprovalBanner({ tableId, orgId, onCampaignInvalid }: Ca
           row_ids: rowIds,
           campaign_id: campaign.campaign_id,
           field_mapping: campaign.field_mapping || undefined,
+          _auth_token: await getSupabaseAuthToken(),
         },
       });
       if (error) throw new Error(error.message || 'Push failed');

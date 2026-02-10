@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 
 interface ApolloEnrichParams {
   columnId: string;
+  columnKey?: string;
   rowIds?: string[];
   maxRows?: number;
   revealPersonalEmails?: boolean;
@@ -52,7 +53,7 @@ export function useApolloEnrichment(tableId: string) {
   // Optimistic Cache Update Helper
   // --------------------------------------------------------------------------
 
-  const optimisticPendingUpdate = async (columnId: string, rowIds?: string[], skipCompleted?: boolean) => {
+  const optimisticPendingUpdate = async (columnId: string, rowIds?: string[], skipCompleted?: boolean, columnKey?: string) => {
     const filter = { queryKey: QUERY_KEYS.tableData(tableId) };
     await queryClient.cancelQueries(filter);
 
@@ -73,8 +74,10 @@ export function useApolloEnrichment(tableId: string) {
           if (rowIds && !rowIds.includes(row.id)) return row;
 
           const updatedCells = { ...row.cells };
+          let found = false;
           for (const [key, cell] of Object.entries(updatedCells)) {
             if ((cell as { column_id?: string }).column_id === columnId) {
+              found = true;
               const currentStatus = (cell as { status?: string }).status;
               // When skipCompleted, don't touch cells that are already complete
               if (skipCompleted && currentStatus === 'complete') continue;
@@ -87,6 +90,17 @@ export function useApolloEnrichment(tableId: string) {
                 metadata: null,
               };
             }
+          }
+          // For new columns where no cells exist yet, create a pending cell
+          if (!found && columnKey) {
+            updatedCells[columnKey] = {
+              column_id: columnId,
+              value: null,
+              confidence: null,
+              status: 'pending',
+              error_message: null,
+              metadata: null,
+            };
           }
           return { ...row, cells: updatedCells };
         }),
@@ -124,8 +138,8 @@ export function useApolloEnrichment(tableId: string) {
 
   const startApolloEnrichmentMutation = useMutation({
     mutationFn: invokeApolloEnrich,
-    onMutate: async ({ columnId, rowIds, skipCompleted }) => {
-      return await optimisticPendingUpdate(columnId, rowIds, skipCompleted);
+    onMutate: async ({ columnId, columnKey, rowIds, skipCompleted }) => {
+      return await optimisticPendingUpdate(columnId, rowIds, skipCompleted, columnKey);
     },
     onError: (error: Error, _vars, context) => {
       if (context?.previousData && context?.queryKey) {
@@ -232,8 +246,8 @@ export function useApolloEnrichment(tableId: string) {
 
   const startOrgEnrichmentMutation = useMutation({
     mutationFn: invokeApolloOrgEnrich,
-    onMutate: async ({ columnId, rowIds, skipCompleted }) => {
-      return await optimisticPendingUpdate(columnId, rowIds, skipCompleted);
+    onMutate: async ({ columnId, columnKey, rowIds, skipCompleted }) => {
+      return await optimisticPendingUpdate(columnId, rowIds, skipCompleted, columnKey);
     },
     onError: (error: Error, _vars, context) => {
       if (context?.previousData && context?.queryKey) {

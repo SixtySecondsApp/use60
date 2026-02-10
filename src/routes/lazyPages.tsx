@@ -41,6 +41,8 @@ export const CopilotConsolePage = lazyWithRetry(() => import('@/pages/platform/C
 export const NotetakerBranding = lazyWithRetry(() => import('@/pages/platform/NotetakerBranding'));
 export const NotetakerVideoQuality = lazyWithRetry(() => import('@/pages/platform/NotetakerVideoQuality'));
 export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionCentre'));
+export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
+export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
@@ -140,6 +142,7 @@ export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
+export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
 export const DocsPage = lazyWithRetry(() => import('@/pages/DocsPage'));
 
 // ============================================================

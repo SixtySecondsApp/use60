@@ -18,8 +18,6 @@ serve(async (req) => {
 
   if (req.method === 'OPTIONS') return handleCorsPreflightRequest(req)
 
-  console.log(`[push-to-instantly] ${req.method} request from ${req.headers.get('origin') || 'unknown'}`)
-
   const startTime = Date.now()
 
   try {
@@ -30,22 +28,36 @@ serve(async (req) => {
       return jsonResponse({ success: false, error: 'Server misconfigured' }, 500)
     }
 
-    // Auth
-    const userToken = req.headers.get('Authorization')?.replace('Bearer ', '') || ''
-    if (!userToken) return jsonResponse({ success: false, error: 'Unauthorized' })
-
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${userToken}` } },
-    })
-    const { data: { user } } = await userClient.auth.getUser()
-    if (!user) return jsonResponse({ success: false, error: 'Unauthorized' })
-
+    // Parse body first so we can read _auth_token fallback
     let body: any
     try {
       body = await req.json()
     } catch {
       return jsonResponse({ success: false, error: 'Invalid or missing request body' })
     }
+
+    // Auth — prefer Authorization header, fall back to _auth_token in body
+    const authHeader = req.headers.get('Authorization') || ''
+    let userToken = authHeader.replace('Bearer ', '')
+    if (!userToken && body._auth_token) {
+      userToken = body._auth_token
+    }
+    if (!userToken) {
+      return jsonResponse({ success: false, error: 'Unauthorized: no token provided' })
+    }
+    if (userToken === anonKey) {
+      return jsonResponse({ success: false, error: 'Unauthorized: anon key sent instead of user token' })
+    }
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${userToken}` } },
+    })
+    const { data: { user }, error: userError } = await userClient.auth.getUser()
+    if (!user) {
+      console.error('[push-to-instantly] auth.getUser() failed:', userError?.message)
+      return jsonResponse({ success: false, error: `Unauthorized: ${userError?.message || 'getUser returned null'}` })
+    }
+
     const { table_id, campaign_id, row_ids, field_mapping } = body
 
     if (!table_id || !campaign_id) {

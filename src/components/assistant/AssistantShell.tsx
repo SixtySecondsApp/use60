@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { ChatMessage } from '@/components/copilot/ChatMessage';
 import { CopilotEmpty } from '@/components/copilot/CopilotEmpty';
+import { AgentWorkingIndicator } from '@/components/copilot/AgentWorkingIndicator';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useEventEmitter } from '@/lib/communication/EventBus';
@@ -16,7 +17,7 @@ interface AssistantShellProps {
 }
 
 export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
-  const { messages, isLoading, sendMessage, cancelRequest } = useCopilot();
+  const { messages, isLoading, sendMessage, cancelRequest, autonomousMode } = useCopilot();
   const [inputValue, setInputValue] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -375,6 +376,9 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
           {messages.map((m) => (
             <ChatMessage key={m.id} message={m} onActionClick={handleActionClick} />
           ))}
+          {autonomousMode.activeAgents.length > 0 && (
+            <AgentWorkingIndicator agents={autonomousMode.activeAgents} />
+          )}
           <div ref={endRef} />
 
           {/* UX-003: Scroll-to-bottom floating button */}
