@@ -227,17 +227,21 @@ export async function fetchSummaryFromFathom(
     }
 
     if (response.status === 404) {
-      // Summary not yet available
+      console.log(`ℹ️  Fathom summary not yet available for recording ${recordingId} (404)`)
       return null
     }
 
     if (!response.ok) {
       const errorText = await response.text()
+      console.error(`⚠️  Fathom summary API error for recording ${recordingId}: HTTP ${response.status} - ${errorText.substring(0, 200)}`)
       throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`)
     }
 
-    return await response.json()
+    const data = await response.json()
+    console.log(`ℹ️  Fathom summary response keys for recording ${recordingId}:`, Object.keys(data || {}))
+    return data
   } catch (error) {
+    console.error(`⚠️  fetchSummaryFromFathom error for recording ${recordingId}:`, error instanceof Error ? error.message : String(error))
     return null
   }
 }

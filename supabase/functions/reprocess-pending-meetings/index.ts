@@ -647,10 +647,20 @@ serve(async (req) => {
             const summaryData = await fetchSummaryFromFathom(accessToken, meeting.fathom_recording_id)
 
             if (summaryData?.summary) {
+              // Fathom returns { summary: { template_name, markdown_formatted } } or { summary: "string" }
+              let summaryValue: string
+              if (typeof summaryData.summary === 'string') {
+                summaryValue = summaryData.summary
+              } else if (summaryData.summary.markdown_formatted) {
+                summaryValue = JSON.stringify(summaryData.summary)
+              } else {
+                summaryValue = String(summaryData.summary)
+              }
+
               await adminClient
                 .from('meetings')
                 .update({
-                  summary: summaryData.summary,
+                  summary: summaryValue,
                   summary_status: 'complete',
                   sentiment_score: summaryData.sentiment_score,
                   coach_summary: summaryData.coach_summary,

@@ -11,6 +11,40 @@ import { fetchTranscriptFromFathom, fetchTranscriptStructuredFromFathom, fetchSu
 import { analyzeTranscriptWithClaude, deduplicateActionItems, type TranscriptAnalysis } from '../aiAnalysis.ts'
 
 /**
+ * Extract storable summary text from Fathom API response.
+ * Fathom may return:
+ *   - { summary: "plain text" }
+ *   - { summary: { template_name, markdown_formatted } }
+ *   - { template_name, markdown_formatted } (summary IS the root object)
+ * Returns JSON string for objects (frontend parses), plain string for text, or null.
+ */
+function extractSummaryText(data: any): string | null {
+  if (!data) return null
+  // Case 1: data.summary exists
+  if (data.summary) {
+    if (typeof data.summary === 'string') return data.summary
+    if (data.summary.markdown_formatted) return JSON.stringify(data.summary)
+  }
+  // Case 2: data itself has markdown_formatted (no summary wrapper)
+  if (data.markdown_formatted) return JSON.stringify(data)
+  // Case 3: data itself is a non-empty string
+  if (typeof data === 'string' && data.length > 0) return data
+  return null
+}
+
+/**
+ * Extract human-readable summary text for AI condensation.
+ */
+function extractReadableSummary(data: any): string | null {
+  if (!data) return null
+  if (data.summary?.markdown_formatted) return data.summary.markdown_formatted
+  if (typeof data.summary === 'string') return data.summary
+  if (data.markdown_formatted) return data.markdown_formatted
+  if (typeof data === 'string') return data
+  return null
+}
+
+/**
  * Condense a meeting summary into one-liners via edge function
  * Non-blocking, fire-and-forget operation
  */
@@ -168,6 +202,35 @@ export async function autoFetchTranscriptAndAnalyze(
       }
 
       if (hasAIAnalysis && existingActionItems && existingActionItems.length > 0) {
+        // Still fetch summary if missing before returning
+        if (!meeting.summary) {
+          const recordingId = call.recording_id || call.id || meeting.fathom_recording_id
+          if (recordingId) {
+            console.log(`📋 Meeting ${meeting.id} has transcript+AI but no summary — fetching from Fathom (recording: ${recordingId})`)
+            try {
+              const summaryData = await fetchSummaryFromFathom(integration.access_token, String(recordingId))
+              console.log(`📋 Summary API response for meeting ${meeting.id}:`, JSON.stringify(summaryData)?.substring(0, 500))
+              const summaryText = extractSummaryText(summaryData)
+              if (summaryText) {
+                await supabase
+                  .from('meetings')
+                  .update({ summary: summaryText })
+                  .eq('id', meeting.id)
+                console.log(`✅ Summary fetched and stored for meeting ${meeting.id} (${summaryText.length} chars)`)
+
+                const readableSummary = extractReadableSummary(summaryData)
+                if (readableSummary) {
+                  condenseMeetingSummary(supabase, meeting.id, readableSummary, meeting.title || 'Meeting')
+                    .catch(() => undefined)
+                }
+              } else {
+                console.log(`ℹ️  Summary response had no extractable text for meeting ${meeting.id}`)
+              }
+            } catch (err) {
+              console.warn(`⚠️  Failed to fetch summary for meeting ${meeting.id}:`, err instanceof Error ? err.message : String(err))
+            }
+          }
+        }
         console.log(`✅ Meeting ${meeting.id} already has AI analysis and action items - skipping`)
         return
       }
@@ -230,11 +293,15 @@ export async function autoFetchTranscriptAndAnalyze(
       let summaryData: any = null
       try {
         summaryData = await fetchSummaryFromFathom(accessToken, String(recordingId))
-        if (summaryData) {
-          console.log(`✅ Successfully fetched enhanced summary for meeting ${meeting.id}`)
-        }
+        console.log(`📋 Summary API response for meeting ${meeting.id} (new transcript path):`, JSON.stringify(summaryData)?.substring(0, 500))
       } catch (error) {
         console.error(`⚠️  Failed to fetch enhanced summary for meeting ${meeting.id}:`, error instanceof Error ? error.message : String(error))
+      }
+
+      // Extract summary text using shared helper
+      const summaryText = extractSummaryText(summaryData)
+      if (summaryText) {
+        console.log(`✅ Summary extracted for meeting ${meeting.id} (${summaryText.length} chars)`)
       }
 
       // Store transcript immediately
@@ -242,7 +309,7 @@ export async function autoFetchTranscriptAndAnalyze(
         .from('meetings')
         .update({
           transcript_text: transcript,
-          summary: summaryData?.summary || meeting.summary,
+          ...(summaryText ? { summary: summaryText } : {}),
         })
         .eq('id', meeting.id)
 
@@ -250,10 +317,10 @@ export async function autoFetchTranscriptAndAnalyze(
       console.log(`🔍 Queueing meeting ${meeting.id} for AI search indexing`)
       await queueMeetingForIndexing(supabase, meeting.id, meeting.owner_user_id || userId)
 
-      // Condense summary (non-blocking)
-      const finalSummary = summaryData?.summary || meeting.summary
-      if (finalSummary && finalSummary.length > 0) {
-        condenseMeetingSummary(supabase, meeting.id, finalSummary, meeting.title || 'Meeting')
+      // Condense summary (non-blocking) — use readable text for AI condensation
+      const readableSummary = extractReadableSummary(summaryData) || meeting.summary
+      if (readableSummary && typeof readableSummary === 'string' && readableSummary.length > 0) {
+        condenseMeetingSummary(supabase, meeting.id, readableSummary, meeting.title || 'Meeting')
           .catch(() => undefined)
       }
     } else {
@@ -261,8 +328,36 @@ export async function autoFetchTranscriptAndAnalyze(
       console.log(`🔍 Queueing existing transcript meeting ${meeting.id} for AI search indexing`)
       await queueMeetingForIndexing(supabase, meeting.id, meeting.owner_user_id || userId)
 
-      // Condense existing summary if not already done
-      if (meeting.summary && !meeting.summary_oneliner) {
+      // Fetch summary if missing (transcript exists but summary was not available at first sync)
+      if (!meeting.summary) {
+        const recordingId = call.recording_id || call.id || meeting.fathom_recording_id
+        if (recordingId) {
+          console.log(`📋 Meeting ${meeting.id} has transcript but no summary (else path) — fetching from Fathom (recording: ${recordingId})`)
+          try {
+            const summaryData = await fetchSummaryFromFathom(integration.access_token, String(recordingId))
+            console.log(`📋 Summary API response for meeting ${meeting.id} (else path):`, JSON.stringify(summaryData)?.substring(0, 500))
+            const summaryText = extractSummaryText(summaryData)
+            if (summaryText) {
+              await supabase
+                .from('meetings')
+                .update({ summary: summaryText })
+                .eq('id', meeting.id)
+              console.log(`✅ Summary fetched and stored for meeting ${meeting.id} (${summaryText.length} chars)`)
+
+              const readableSummary = extractReadableSummary(summaryData)
+              if (readableSummary) {
+                condenseMeetingSummary(supabase, meeting.id, readableSummary, meeting.title || 'Meeting')
+                  .catch(() => undefined)
+              }
+            } else {
+              console.log(`ℹ️  Summary response had no extractable text for meeting ${meeting.id}`)
+            }
+          } catch (err) {
+            console.warn(`⚠️  Failed to fetch summary for meeting ${meeting.id}:`, err instanceof Error ? err.message : String(err))
+          }
+        }
+      } else if (!meeting.summary_oneliner) {
+        // Condense existing summary if not already done
         condenseMeetingSummary(supabase, meeting.id, meeting.summary, meeting.title || 'Meeting')
           .catch(() => undefined)
       }
@@ -336,6 +431,27 @@ export async function autoFetchTranscriptAndAnalyze(
     const storedCount = await storeAIActionItems(supabase, meeting.id, analysis.actionItems, existingActionItems)
     if (storedCount > 0) {
       console.log(`✅ Stored ${storedCount} AI-generated action items for meeting ${meeting.id}`)
+    }
+
+    // Generate fallback summary from AI analysis if Fathom didn't provide one
+    const { data: currentMeeting } = await supabase
+      .from('meetings')
+      .select('summary')
+      .eq('id', meeting.id)
+      .single()
+
+    if (!currentMeeting?.summary && analysis.coaching?.summary) {
+      console.log(`📝 Generating fallback summary from AI analysis for meeting ${meeting.id}`)
+      const fallbackSummary = analysis.coaching.summary
+      await supabase
+        .from('meetings')
+        .update({ summary: fallbackSummary })
+        .eq('id', meeting.id)
+      console.log(`✅ Fallback summary stored for meeting ${meeting.id} (${fallbackSummary.length} chars)`)
+
+      // Condense the fallback summary
+      condenseMeetingSummary(supabase, meeting.id, fallbackSummary, meeting.title || 'Meeting')
+        .catch(() => undefined)
     }
 
   } catch (error) {

@@ -233,16 +233,25 @@ async function processRetryJob(
       console.error(`⚠️  Failed to fetch enhanced summary for meeting ${job.meeting_id}:`, error instanceof Error ? error.message : String(error))
     }
 
+    // Extract summary text — Fathom returns { summary: { template_name, markdown_formatted } }
+    let summaryValue: string | null = null
+    if (summaryData?.summary) {
+      if (typeof summaryData.summary === 'string') {
+        summaryValue = summaryData.summary
+      } else if (summaryData.summary.markdown_formatted) {
+        summaryValue = JSON.stringify(summaryData.summary)
+      }
+    }
+
     // Store transcript in meeting and update status to 'complete'
     const { error: updateError } = await supabase
       .from('meetings')
       .update({
         transcript_text: transcript,
-        summary: summaryData?.summary || meeting.summary,
+        ...(summaryValue ? { summary: summaryValue, summary_status: 'complete' } : {}),
         transcript_fetch_attempts: job.attempt_count + 1,
         last_transcript_fetch_at: new Date().toISOString(),
         transcript_status: 'complete',
-        summary_status: summaryData?.summary ? 'complete' : 'pending',
       })
       .eq('id', job.meeting_id)
 
