@@ -10,10 +10,10 @@
  */
 
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useCreditBalance, creditKeys } from '@/lib/hooks/useCreditBalance';
-import { getUsageBreakdown, type FeatureUsage } from '@/lib/services/creditService';
+import { getUsageBreakdown, grantCredits, type FeatureUsage } from '@/lib/services/creditService';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 import { UsageChart } from '@/components/credits/UsageChart';
@@ -28,9 +28,13 @@ import {
   BarChart3,
   AlertCircle,
   Brain,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { isUserAdmin } from '@/lib/utils/adminUtils';
+import { useUser } from '@/lib/hooks/useUser';
 
 // ============================================================================
 // Balance color helpers (matching CreditWidget)
@@ -97,6 +101,35 @@ export default function CreditsSettingsPage() {
   const orgId = useOrgId();
   const { data: balance, isLoading: balanceLoading } = useCreditBalance();
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const { userData } = useUser();
+  const isAdmin = userData ? isUserAdmin(userData) : false;
+  const queryClient = useQueryClient();
+
+  // Admin grant credits state
+  const [grantAmount, setGrantAmount] = useState('');
+  const [grantReason, setGrantReason] = useState('');
+  const [isGranting, setIsGranting] = useState(false);
+
+  const handleGrantCredits = async () => {
+    if (!orgId) return;
+    const amount = parseFloat(grantAmount);
+    if (!amount || amount <= 0 || amount > 10000) {
+      toast.error('Enter a valid amount between 1 and 10,000');
+      return;
+    }
+    setIsGranting(true);
+    try {
+      const newBalance = await grantCredits(orgId, amount, grantReason);
+      toast.success(`Granted ${amount} credits. New balance: ${newBalance.toFixed(2)}`);
+      setGrantAmount('');
+      setGrantReason('');
+      queryClient.invalidateQueries({ queryKey: creditKeys.balance(orgId) });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to grant credits');
+    } finally {
+      setIsGranting(false);
+    }
+  };
 
   // Feature usage breakdown
   const { data: featureUsage, isLoading: featureLoading } = useQuery<FeatureUsage[]>({
@@ -222,6 +255,64 @@ export default function CreditsSettingsPage() {
             ))}
           </div>
         </div>
+
+        {/* ================================================================
+            Section 2b: Admin Grant Credits (no payment required)
+        ================================================================ */}
+        {isAdmin && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-[#37bd7e]" />
+              Admin: Grant Credits
+            </h2>
+            <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Add credits directly to this organization without payment. These will appear as a "bonus" in the transaction log.
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex-1 min-w-[120px] max-w-[200px]">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    Amount
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10000"
+                    step="1"
+                    placeholder="100"
+                    value={grantAmount}
+                    onChange={(e) => setGrantAmount(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#37bd7e]/50"
+                  />
+                </div>
+                <div className="flex-[2] min-w-[200px]">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    Reason (optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Trial bonus, testing, comp credits"
+                    value={grantReason}
+                    onChange={(e) => setGrantReason(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#37bd7e]/50"
+                  />
+                </div>
+                <Button
+                  onClick={handleGrantCredits}
+                  disabled={isGranting || !grantAmount}
+                  className="bg-[#37bd7e] hover:bg-[#2da76c] text-white"
+                >
+                  {isGranting ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                  ) : (
+                    <Plus className="w-4 h-4 mr-1.5" />
+                  )}
+                  Grant Credits
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ================================================================
             Section 3: Usage Chart (30 days)

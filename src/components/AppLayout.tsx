@@ -337,9 +337,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Trial Banner - shown when organization is in trial period */}
       <TrialBanner />
 
-      {/* Low Credit Balance Banner - shown when AI credits are low or exhausted */}
-      <LowBalanceBanner />
-
       {/* Integration Reconnect Banner - shown when user has integration alerts or needs reconnection */}
       <IntegrationReconnectBanner
         additionalTopOffset={integrationBannerTopOffset}
@@ -347,9 +344,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         hasImpersonationBannerAbove={isImpersonating}
         isSidebarCollapsed={isCollapsed}
       />
-
-      {/* Low Credit Balance Banner */}
-      <LowBalanceBanner />
 
       {/* Main app content */}
       <div className="flex">
@@ -1115,6 +1109,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         'ml-0'
       )}
       >
+        {/* Low Credit Balance Banner — inside main so it renders below the fixed top bar */}
+        <LowBalanceBanner />
+
         {children}
         <QuickAdd isOpen={isQuickAddOpen} onClose={() => setIsQuickAddOpen(false)} />
         <CommandCenter isOpen={isCommandCenterOpen} onClose={() => setIsCommandCenterOpen(false)} />

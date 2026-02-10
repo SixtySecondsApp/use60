@@ -176,6 +176,33 @@ export async function purchaseCredits(
 }
 
 // ============================================================================
+// Admin Grant Credits (no payment)
+// ============================================================================
+
+/**
+ * Admin-only: Grant credits to an org without payment.
+ * Uses the add_credits PL/pgSQL function with type 'bonus'.
+ */
+export async function grantCredits(
+  orgId: string,
+  amount: number,
+  reason: string
+): Promise<number> {
+  const { data, error } = await supabase.rpc('add_credits', {
+    p_org_id: orgId,
+    p_amount: amount,
+    p_type: 'bonus',
+    p_description: reason || 'Admin credit grant',
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to grant credits');
+  }
+
+  return data as number; // new balance
+}
+
+// ============================================================================
 // Usage Breakdown
 // ============================================================================
 
