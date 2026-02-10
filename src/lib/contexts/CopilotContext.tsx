@@ -35,7 +35,7 @@ import { toast } from 'sonner';
 import { useAutonomousAgent } from '@/lib/copilot/agent/useAutonomousAgent';
 import { useActionItemsStore, createActionItemFromStep, type ActionItemType } from '@/lib/stores/actionItemsStore';
 import { getStepDurationEstimate } from '@/lib/utils/toolUtils';
-import { useCopilotChat, type ToolCall as AutonomousToolCall } from '@/lib/hooks/useCopilotChat';
+import { useCopilotChat, type ToolCall as AutonomousToolCall, type ActiveAgent } from '@/lib/hooks/useCopilotChat';
 
 // =============================================================================
 // Agent Mode Types
@@ -119,6 +119,7 @@ interface CopilotContextValue {
     isStreaming: boolean;
     currentTool: AutonomousToolCall | null;
     toolsUsed: string[];
+    activeAgents: ActiveAgent[];
   };
   /** Raw autonomous copilot messages — used by useToolResultContext to extract tool results */
   autonomousMessages: import('@/lib/hooks/useCopilotChat').ChatMessage[];
@@ -386,6 +387,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     isStreaming: autonomousCopilot.isStreaming,
     currentTool: autonomousCopilot.currentTool,
     toolsUsed: autonomousCopilot.toolsUsed,
+    activeAgents: autonomousCopilot.activeAgents,
   };
 
   // =============================================================================

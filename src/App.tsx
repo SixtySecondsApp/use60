@@ -73,7 +73,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage,
+  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -408,6 +408,9 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/copilot-lab" element={<PlatformAdminRouteGuard><AppLayout><CopilotLabPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Agent Performance Dashboard - Observability and analytics */}
                 <Route path="/platform/agent-performance" element={<PlatformAdminRouteGuard><AppLayout><AgentPerformanceDashboard /></AppLayout></PlatformAdminRouteGuard>} />
+
+                <Route path="/platform/agent-teams" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamSettings /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/multi-agent-demo" element={<PlatformAdminRouteGuard><AppLayout><MultiAgentDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Documentation CMS Admin */}
                 <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}
