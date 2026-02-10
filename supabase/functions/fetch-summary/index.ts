@@ -163,11 +163,19 @@ serve(async (req) => {
       )
     }
 
+    // Extract summary text — Fathom returns { summary: { template_name, markdown_formatted } }
+    let summaryValue: string | null = null
+    if (typeof summaryData.summary === 'string') {
+      summaryValue = summaryData.summary
+    } else if (summaryData.summary?.markdown_formatted) {
+      summaryValue = JSON.stringify(summaryData.summary)
+    }
+
     // Update meeting with enhanced summary data
     const { error: updateError } = await supabase
       .from('meetings')
       .update({
-        summary: summaryData.summary || meeting.summary, // Keep existing if new one not available
+        summary: summaryValue || meeting.summary, // Keep existing if new one not available
         sentiment_score: summaryData.sentiment || null,
         coach_summary: summaryData.coach_summary || null,
         talk_time_rep_pct: summaryData.talk_time_rep_pct || null,
