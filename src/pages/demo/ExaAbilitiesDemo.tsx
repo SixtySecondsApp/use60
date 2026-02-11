@@ -95,6 +95,7 @@ export default function ExaAbilitiesDemo() {
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DemoResponse | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const resultMap = useMemo(() => {
     const map = new Map<EndpointCase, EndpointResult>();
@@ -113,6 +114,7 @@ export default function ExaAbilitiesDemo() {
 
   const runDemo = async () => {
     setLoading(true);
+    setLastError(null);
     try {
       const { data, error } = await supabase.functions.invoke('exa-abilities-demo', {
         body: {
@@ -128,7 +130,9 @@ export default function ExaAbilitiesDemo() {
       toast.success('Exa ability probe completed');
     } catch (err) {
       console.error('[ExaAbilitiesDemo] run failed', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to run Exa ability probe');
+      const message = err instanceof Error ? err.message : 'Failed to run Exa ability probe';
+      setLastError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -180,6 +184,35 @@ export default function ExaAbilitiesDemo() {
           </Button>
         </CardContent>
       </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>How to use this demo</CardTitle>
+          <CardDescription>
+            This page is designed to guide implementation decisions for Exa-powered Ops tables.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+          <p><strong>Step 1:</strong> Run with Websets create disabled to validate low-risk endpoint health.</p>
+          <p><strong>Step 2:</strong> Review "Endpoint Results" for status, latency, and sample payload shape.</p>
+          <p><strong>Step 3:</strong> Open "Ops Feature Readiness" to see what can ship immediately.</p>
+          <p><strong>Step 4:</strong> Enable Websets create only when you are ready to test async run creation and credit usage.</p>
+        </CardContent>
+      </Card>
+
+      {lastError && (
+        <Card className="mb-6 border-red-300 dark:border-red-800">
+          <CardHeader>
+            <CardTitle className="text-red-700 dark:text-red-300">Request failed</CardTitle>
+            <CardDescription>{lastError}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+            <p><strong>Likely cause:</strong> Edge Function preflight blocked before your JWT is evaluated.</p>
+            <p><strong>Verify:</strong> `exa-abilities-demo` has `verify_jwt = false` in Supabase config and the function is deployed to the same project your app uses.</p>
+            <p><strong>Then:</strong> Re-run this probe; function code still validates user auth internally via `supabase.auth.getUser()`.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {result && (
         <>
