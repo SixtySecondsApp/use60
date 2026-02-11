@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { Helmet } from 'react-helmet-async';
 import {
   Crosshair,
   Plus,
   History,
+  BarChart3,
   Sparkles,
 } from 'lucide-react';
 import { useOrg } from '@/lib/contexts/OrgContext';
@@ -29,7 +31,6 @@ import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
 import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { toApolloSearchParams } from '@/lib/utils/icpToSearchParams';
 import type { ICPProfile, ICPCriteria } from '@/lib/types/prospecting';
-import type { ApolloSearchParams } from '@/lib/services/apolloSearchService';
 
 // ---------------------------------------------------------------------------
 // Loading Skeleton
@@ -225,10 +226,17 @@ function ProspectingPage() {
 
   // ----- Loading -----
   if (profilesLoading || !activeOrg) {
-    return <PageSkeleton />;
+    return (
+      <>
+        <Helmet><title>Prospecting | 60</title></Helmet>
+        <PageSkeleton />
+      </>
+    );
   }
 
   return (
+    <>
+    <Helmet><title>Prospecting | 60</title></Helmet>
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="mb-2 flex items-center justify-between">
@@ -437,6 +445,7 @@ function ProspectingPage() {
         onLoadParams={handleLoadHistoryParams}
       />
     </div>
+    </>
   );
 }
 
