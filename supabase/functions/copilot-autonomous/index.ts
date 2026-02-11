@@ -62,7 +62,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const MODEL = 'claude-haiku-4-5';
-const MAX_ITERATIONS = 10;
+const MAX_ITERATIONS = 15;
 const MAX_TOKENS = 4096;
 
 // =============================================================================
@@ -80,7 +80,7 @@ interface RequestBody {
 // 4-Tool Architecture (matches api-copilot)
 // =============================================================================
 
-const FOUR_TOOL_DEFINITIONS: Anthropic.Tool[] = [
+const FIVE_TOOL_DEFINITIONS: Anthropic.Tool[] = [
   // 1. resolve_entity - MUST BE FIRST for first-name-only references
   {
     name: 'resolve_entity',
@@ -195,6 +195,25 @@ ACTION PARAMETERS:
 - run_skill: { skill_key, skill_context? } - Execute an AI skill
 - run_sequence: { sequence_key, sequence_context?, is_simulation? } - Execute a multi-step sequence
 
+## Ops Tables
+- list_ops_tables: { limit?, source_type? } - List ops tables in the org
+- get_ops_table: { table_id } - Get table details with columns
+- create_ops_table: { name, description?, columns? } - Create a new ops table (requires confirm=true)
+- delete_ops_table: { table_id } - Delete an ops table (requires confirm=true)
+- add_ops_column: { table_id, name, column_type, config? } - Add column to ops table
+- get_ops_table_data: { table_id, limit?, offset? } - Get table rows and cell data
+- add_ops_rows: { table_id, rows } - Add rows to ops table (requires confirm=true)
+- update_ops_cell: { row_id, column_id, value } - Update a cell value
+- ai_query_ops_table: { table_id, query } - Ask AI questions about table data
+- ai_transform_ops_column: { table_id, column_id, prompt, row_ids? } - AI-transform column values (requires confirm=true)
+- get_enrichment_status: { table_id, column_id? } - Get enrichment job status
+- create_ops_rule: { table_id, name, trigger_type, condition, action_type, action_config } - Create automation rule (requires confirm=true)
+- list_ops_rules: { table_id } - List automation rules for a table
+- sync_ops_hubspot: { table_id, list_id?, field_mapping? } - Sync table with HubSpot (requires confirm=true)
+- sync_ops_attio: { table_id, list_id?, field_mapping? } - Sync table with Attio (requires confirm=true)
+- push_ops_to_instantly: { table_id, campaign_id?, row_ids? } - Push rows to Instantly campaign (requires confirm=true)
+- get_ops_insights: { table_id, insight_type? } - Get AI-generated table insights
+
 Write actions require params.confirm=true.`,
     input_schema: {
       type: 'object' as const,
@@ -228,6 +247,23 @@ Write actions require params.confirm=true.`,
             'create_task',
             'list_tasks',
             'create_activity',
+            'list_ops_tables',
+            'get_ops_table',
+            'create_ops_table',
+            'delete_ops_table',
+            'add_ops_column',
+            'get_ops_table_data',
+            'add_ops_rows',
+            'update_ops_cell',
+            'ai_query_ops_table',
+            'ai_transform_ops_column',
+            'get_enrichment_status',
+            'create_ops_rule',
+            'list_ops_rules',
+            'sync_ops_hubspot',
+            'sync_ops_attio',
+            'push_ops_to_instantly',
+            'get_ops_insights',
           ],
           description: 'The action to execute',
         },
@@ -237,6 +273,33 @@ Write actions require params.confirm=true.`,
         },
       },
       required: ['action'],
+    },
+  },
+  // 5. gemini_research - Web research with Gemini 3 Flash + Google Search grounding
+  {
+    name: 'gemini_research',
+    description: `Execute web research using Gemini 3 Flash with Google Search grounding. Use this for finding current, accurate information from the web (company data, funding, news, leadership, etc.).
+
+WHEN TO USE:
+- Researching company information (funding, leadership, products, competitors)
+- Finding recent news, announcements, or milestones
+- Gathering market intelligence or industry data
+- Any query that requires current web search
+
+The tool returns structured data with sources.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The research query. Be specific about what information you need (e.g., "Research Stripe company: leadership team with names, titles, and backgrounds" or "Find Anthropic funding history: rounds, amounts, dates, investors")',
+        },
+        response_schema: {
+          type: 'object',
+          description: 'Optional JSON schema for the expected response structure. Helps ensure consistent data format.',
+        },
+      },
+      required: ['query'],
     },
   },
 ];
@@ -287,6 +350,35 @@ async function executeToolCall(
         return { success: false, data: null, error: 'action is required for execute_action' };
       }
       return await executeAction(client, userId, resolvedOrgId, action, params);
+    }
+
+    case 'gemini_research': {
+      const query = input.query ? String(input.query) : '';
+      const responseSchema = input.response_schema || undefined;
+
+      if (!query) {
+        return { success: false, error: 'query is required for gemini_research' };
+      }
+
+      try {
+        // Call gemini-research edge function
+        const { data, error } = await client.functions.invoke('gemini-research', {
+          body: { query, responseSchema }
+        });
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        return {
+          success: true,
+          data: data.result,
+          sources: data.sources,
+          metadata: data.metadata
+        };
+      } catch (error: any) {
+        return { success: false, error: error.message || 'gemini_research failed' };
+      }
     }
 
     default:
@@ -605,6 +697,23 @@ function buildSystemPrompt(
 3. **If task involves a skill or multi-step workflow** -> Use list_skills to discover, get_skill to retrieve, then follow the skill instructions
 4. Use execute_action to gather data or perform tasks
 
+## Multi-Step Workflows
+
+When the user's request involves MULTIPLE steps (e.g., "find leads AND create email sequences AND push to campaign"), break it down and execute step by step:
+
+1. **Identify all steps** in the request before starting
+2. **Execute sequentially** — complete each step before the next, using outputs from earlier steps
+3. **Thread results** — pass table IDs, lead counts, and other data between steps
+4. **Report progress** — briefly mention what you're doing at each step
+
+### Example: "Find 20 Directors in Bristol and create a 2-stage invite sequence for our event"
+→ Step 1: execute_action("search_leads_create_table", {person_titles: ["Director"], person_locations: ["Bristol, United Kingdom"], per_page: 20})
+→ Step 2: execute_action("run_skill", {skill_key: "sales-sequence", skill_context: {sequence_type: "event_invitation", ...event details from user message...}})
+→ Step 3: execute_action("push_ops_to_instantly", {table_id: "<from step 1>", campaign_config: {name: "...", emails: [<from step 2>]}})
+→ Step 4: Present summary with lead count, email previews, and campaign status
+
+Don't stop after completing just one step — complete the FULL workflow the user requested.
+
 ## Common Patterns
 
 ### Contact/Person Lookup
@@ -625,6 +734,16 @@ function buildSystemPrompt(
 ### Follow-up Management
 - Use execute_action with get_contacts_needing_attention { days_since_contact: 14 }
 - Use execute_action with list_tasks { status: "pending" }
+
+### Ops Tables
+- Use execute_action with list_ops_tables {} to see all tables
+- Use execute_action with get_ops_table { table_id } for table details + columns
+- Use execute_action with get_ops_table_data { table_id } to view rows and cells
+- Use execute_action with create_ops_table { name, columns: [...] } to create a new table
+- Use execute_action with ai_query_ops_table { table_id, query } to ask AI about table data
+- Use execute_action with ai_transform_ops_column { table_id, column_id, prompt } to transform column values
+- Use execute_action with sync_ops_hubspot { table_id } to sync with HubSpot
+- Use execute_action with push_ops_to_instantly { table_id } to push to Instantly campaigns
 
 ## Organization Context
 
@@ -999,7 +1118,7 @@ Combine these into a single, well-structured response. Use headings for each sec
     await sendSSE(writer, encoder, 'message_complete', { content: synthesized });
 
   } else if (strategy === 'sequential') {
-    // Sequential delegation — chain agent outputs
+    // Sequential delegation — chain agent outputs, then synthesize
     let accumulatedContext = '';
 
     for (let i = 0; i < agents.length; i++) {
@@ -1012,7 +1131,7 @@ Combine these into a single, well-structured response. Use headings for each sec
         displayName: info.displayName,
         icon: info.icon,
         color: info.color,
-        reason: i === 0 ? classification.reasoning : `Following up on previous agent's output`,
+        reason: i === 0 ? classification.reasoning : `Building on ${getAgentDisplayInfo(agents[i - 1]).displayName}'s output`,
       });
 
       const result = await runSpecialist(
@@ -1031,14 +1150,46 @@ Combine these into a single, well-structured response. Use headings for each sec
         agent: agentName,
         displayName: info.displayName,
       });
+
+      // Send progress update between agents
+      if (i < agents.length - 1) {
+        const progressSummary = result.responseText.slice(0, 200);
+        await sendSSE(writer, encoder, 'agent_progress', {
+          agent: agentName,
+          displayName: info.displayName,
+          summary: progressSummary,
+          step: i + 1,
+          totalSteps: agents.length,
+        });
+      }
     }
 
-    // Stream the final agent's response
-    const finalResponse = results[results.length - 1]?.responseText || '';
-    for (const char of finalResponse) {
+    // Synthesize all agent outputs into one coherent response
+    const synthesisPrompt = `You are synthesizing responses from specialist agents that ran SEQUENTIALLY (each building on the previous agent's work) for a sales professional.
+
+${results.map((r, idx) => {
+  const info = getAgentDisplayInfo(r.agentName);
+  return `## Step ${idx + 1}: ${info.displayName}\n${r.responseText}`;
+}).join('\n\n')}
+
+Combine these into a single, well-structured response that tells a coherent story of what was accomplished across all steps. Present results, key data, and next actions clearly.`;
+
+    const synthesisResponse = await anthropic.messages.create({
+      model: config.orchestrator_model,
+      max_tokens: 4096,
+      system: 'You synthesize sequential agent workflow results into coherent, actionable summaries for sales professionals. Present the combined results as one unified narrative.',
+      messages: [{ role: 'user', content: synthesisPrompt }],
+    });
+
+    const synthText = synthesisResponse.content.find((c) => c.type === 'text');
+    const synthesized = synthText?.type === 'text' ? synthText.text : '';
+
+    await sendSSE(writer, encoder, 'synthesis', { content: synthesized });
+
+    for (const char of synthesized) {
       await sendSSE(writer, encoder, 'token', { text: char });
     }
-    await sendSSE(writer, encoder, 'message_complete', { content: finalResponse });
+    await sendSSE(writer, encoder, 'message_complete', { content: synthesized });
   }
 
   // Send done event with agent metadata (includes per-agent responses for persistence)
@@ -1175,7 +1326,7 @@ serve(async (req: Request) => {
     const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection);
 
     // Use the 4-tool architecture (same as api-copilot)
-    const claudeTools = FOUR_TOOL_DEFINITIONS;
+    const claudeTools = FIVE_TOOL_DEFINITIONS;
 
     // =========================================================================
     // Multi-Agent Orchestration

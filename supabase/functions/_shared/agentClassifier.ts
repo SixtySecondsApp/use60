@@ -122,6 +122,13 @@ export const AGENT_DOMAINS: AgentDomain[] = [
       'search_leads_create_table', 'enrich_table_column',
       'enrich_contact', 'enrich_company', 'get_lead',
       'get_contact', 'get_company_status',
+      // Ops table actions
+      'list_ops_tables', 'get_ops_table', 'create_ops_table', 'delete_ops_table',
+      'add_ops_column', 'get_ops_table_data', 'add_ops_rows', 'update_ops_cell',
+      'ai_query_ops_table', 'ai_transform_ops_column', 'get_enrichment_status',
+      'create_ops_rule', 'list_ops_rules',
+      'sync_ops_hubspot', 'sync_ops_attio', 'push_ops_to_instantly',
+      'get_ops_insights',
     ],
     skillCategories: ['enrichment'],
     keywords: [
@@ -131,9 +138,61 @@ export const AGENT_DOMAINS: AgentDomain[] = [
       'scrape', 'apify', 'apollo', 'ai ark',
       'outbound list', 'target accounts', 'target list',
       'new leads', 'find new', 'source leads',
+      // Ops table keywords
+      'ops table', 'ops tables', 'dynamic table', 'dynamic tables',
+      'table data', 'enrich table', 'enrichment status',
+      'transform column', 'ai query', 'table insights',
+      'ops rule', 'automation rule', 'sync hubspot table',
+      'sync attio table', 'push to instantly',
     ],
   },
 ];
+
+// =============================================================================
+// Sequential Intent Detection (regex-based, pre-keyword)
+// =============================================================================
+
+function detectSequentialIntent(message: string): IntentClassification | null {
+  const lower = message.toLowerCase();
+
+  // Prospecting -> Outreach patterns
+  const prospectToOutreach = [
+    /find\s+(?:me\s+)?\d*\s*(?:leads?|people|directors?|contacts?|prospects?|managers?|vps?|ctos?|ceos?|founders?).*(?:and|then)\s+(?:create|write|draft|send|invite|email|sequence|campaign|outreach|message)/i,
+    /(?:search|build|get)\s+(?:a\s+)?(?:list|leads?|prospects?).*(?:and|then)\s+(?:create|write|draft|send|invite|email)/i,
+    /find\s+(?:me\s+)?\d*\s*\w+.*(?:create|write|draft)\s+(?:a\s+)?(?:\d+[\s-]?stage\s+)?(?:sequence|email|campaign|outreach|invitation)/i,
+    /(?:prospect|find\s+leads?).*(?:invite|email|outreach|campaign|sequence)/i,
+  ];
+
+  for (const pattern of prospectToOutreach) {
+    if (pattern.test(lower)) {
+      return {
+        agents: ['prospecting', 'outreach'] as AgentName[],
+        strategy: 'sequential' as DelegationStrategy,
+        reasoning: 'Multi-step: find leads then create outreach',
+        confidence: 0.9,
+      };
+    }
+  }
+
+  // Research -> Outreach patterns
+  const researchToOutreach = [
+    /research\s+(?:this|the|that)?\s*(?:company|contact|lead|person|account).*(?:and|then)\s+(?:draft|write|send|email|create)/i,
+    /(?:look\s+up|enrich)\s+.*(?:and|then)\s+(?:draft|write|send|email)/i,
+  ];
+
+  for (const pattern of researchToOutreach) {
+    if (pattern.test(lower)) {
+      return {
+        agents: ['research', 'outreach'] as AgentName[],
+        strategy: 'sequential' as DelegationStrategy,
+        reasoning: 'Multi-step: research then outreach',
+        confidence: 0.85,
+      };
+    }
+  }
+
+  return null;
+}
 
 // =============================================================================
 // Keyword Pre-Filter
@@ -181,7 +240,7 @@ const CLASSIFICATION_PROMPT = `You are an intent classifier for a sales AI with 
 3. **research** — Research & Enrichment: contact/company research, enrichment, lead qualification
 4. **crm_ops** — CRM Operations: updating records, logging activities, creating tasks, data hygiene
 5. **meetings** — Meeting Intelligence: meeting prep, calendar analysis, time breakdowns, scheduling
-6. **prospecting** — Prospecting: finding new leads, building lists, lookalike search, outbound list building
+6. **prospecting** — Prospecting: finding new leads, building lists, lookalike search, outbound list building, ops tables (CRUD, AI query, enrichment, rules, integrations sync)
 
 Classify the user's message. Respond with ONLY a JSON object:
 {
@@ -192,9 +251,14 @@ Classify the user's message. Respond with ONLY a JSON object:
 }
 
 Rules:
-- Most messages need only ONE agent (strategy: "single")
-- Use "parallel" when 2+ agents can work independently (e.g., "research this company and draft an email")
-- Use "sequential" when one agent's output feeds another (e.g., "find the deal, then write a follow-up")
+- Choose the minimum number of agents needed.
+- Use "sequential" when one agent's output feeds another:
+  * "find leads and create email sequences" → ["prospecting", "outreach"], sequential
+  * "research this company and draft a follow-up" → ["research", "outreach"], sequential
+  * "find prospects and push to Instantly campaign" → ["prospecting", "outreach"], sequential
+- Use "parallel" when 2+ agents can work independently:
+  * "check my pipeline and prep for tomorrow's meeting" → ["pipeline", "meetings"], parallel
+  * "research this company and list my pending tasks" → ["research", "crm_ops"], parallel
 - Only include agents that are truly needed
 - High confidence (0.8+) for clear intent, lower for ambiguous
 - **pipeline** = analysis/insights about deals; **crm_ops** = writing/updating CRM data
@@ -270,6 +334,14 @@ export async function classifyIntent(
   ) as AgentName[];
 
   if (enabledAgents.length === 0) return null;
+
+  // Step 0: Sequential intent detection (fast regex, skips keyword + Claude)
+  const seqResult = detectSequentialIntent(message);
+  if (seqResult) {
+    // Only return if all required agents are enabled
+    const allEnabled = seqResult.agents.every((a) => enabledAgents.includes(a));
+    if (allEnabled) return seqResult;
+  }
 
   // Step 1: Keyword pre-filter
   const keywordMatches = keywordPreFilter(message);

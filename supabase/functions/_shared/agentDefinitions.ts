@@ -107,7 +107,15 @@ You own all external communication: emails, follow-ups, meeting preparation, and
 - Draft emails in proper format with subject line
 - Explain your tone and strategy choices briefly
 - Suggest send timing when relevant
-- Flag if a follow-up task should be created`,
+- Flag if a follow-up task should be created
+
+## Cross-Domain Capabilities
+
+When working as part of a sequential workflow:
+- You can read prospect data from ops tables via get_ops_table_data
+- You can push leads to Instantly campaigns via push_ops_to_instantly
+- You can invoke skills (run_skill) and sequences (run_sequence) for email generation
+- Reference the previous agent's findings when drafting outreach`,
 
   allowedActions: [
     'search_emails',
@@ -117,10 +125,14 @@ You own all external communication: emails, follow-ups, meeting preparation, and
     'create_activity',
     'get_contact',
     'get_meetings',
+    'run_skill',
+    'run_sequence',
+    'get_ops_table_data',
+    'push_ops_to_instantly',
   ],
 
-  skillCategories: ['writing'],
-  maxIterations: 6,
+  skillCategories: ['writing', 'agent-sequence'],
+  maxIterations: 10,
 };
 
 // =============================================================================
@@ -288,7 +300,19 @@ You own outbound lead generation: finding new prospects, building targeted lists
 - Include qualification signals (company size, funding, tech stack)
 - Highlight the top 3-5 "best fit" leads with reasoning
 - Note which leads need additional enrichment
-- Suggest follow-up prospecting actions`,
+- Suggest follow-up prospecting actions
+
+## End-to-End Capabilities
+
+You can handle complete prospecting-to-outreach workflows:
+
+1. **Find leads**: search_leads_create_table, add_ops_rows
+2. **Enrich data**: enrich_table_column, ai_transform_ops_column
+3. **Generate emails**: run_skill with skill_key "sales-sequence" for email sequences
+4. **Push to campaign**: push_ops_to_instantly to create Instantly campaigns
+5. **Sync CRM**: sync_ops_hubspot, sync_ops_attio
+
+When the user asks for an end-to-end flow (e.g., "find Directors in Bristol and create invite emails"), execute ALL steps sequentially — don't stop after finding leads.`,
 
   allowedActions: [
     'search_leads_create_table',
@@ -298,10 +322,32 @@ You own outbound lead generation: finding new prospects, building targeted lists
     'get_lead',
     'get_contact',
     'get_company_status',
+    // Ops table actions
+    'list_ops_tables',
+    'get_ops_table',
+    'create_ops_table',
+    'delete_ops_table',
+    'add_ops_column',
+    'get_ops_table_data',
+    'add_ops_rows',
+    'update_ops_cell',
+    'ai_query_ops_table',
+    'ai_transform_ops_column',
+    'get_enrichment_status',
+    'create_ops_rule',
+    'list_ops_rules',
+    'sync_ops_hubspot',
+    'sync_ops_attio',
+    'push_ops_to_instantly',
+    'get_ops_insights',
+    'draft_email',
+    'run_skill',
+    'run_sequence',
+    'send_notification',
   ],
 
-  skillCategories: ['enrichment'],
-  maxIterations: 8,
+  skillCategories: ['enrichment', 'writing', 'agent-sequence'],
+  maxIterations: 12,
 };
 
 // =============================================================================
