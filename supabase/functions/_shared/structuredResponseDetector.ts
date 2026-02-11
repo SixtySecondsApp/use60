@@ -5597,6 +5597,300 @@ export async function structureSalesCoachResponse(
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Pipeline Outreach Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Enriches pipeline outreach drafts with last meeting context per contact.
+ * For each draft, resolves the contact by email or name, then fetches their
+ * most recent meeting with pending action items.
+ */
+async function enrichPipelineOutreachDrafts(
+  structured: StructuredResponse,
+  client: any,
+  userId: string,
+): Promise<StructuredResponse> {
+  try {
+    const data = structured.data as any
+    const drafts = data?.email_drafts
+    if (!Array.isArray(drafts) || drafts.length === 0) return structured
+
+    for (const draft of drafts) {
+      try {
+        let contactId = draft.contactId
+
+        // Resolve contact if we don't have a contactId
+        if (!contactId && draft.to) {
+          const { data: contact } = await client
+            .from('contacts')
+            .select('id')
+            .eq('email', draft.to)
+            .eq('owner_id', userId)
+            .maybeSingle()
+          contactId = contact?.id
+        }
+        if (!contactId && draft.contactName) {
+          const { data: contact } = await client
+            .from('contacts')
+            .select('id')
+            .ilike('full_name', draft.contactName)
+            .eq('owner_id', userId)
+            .maybeSingle()
+          contactId = contact?.id
+        }
+
+        if (!contactId) continue
+
+        // Backfill contactId on the draft if we resolved it
+        if (!draft.contactId) draft.contactId = contactId
+
+        // Fetch most recent meeting for this contact
+        let meeting = null
+
+        // Try primary_contact_id first
+        const { data: primaryMeeting } = await client
+          .from('meetings')
+          .select('id, title, summary, meeting_start, meeting_action_items(id, title, completed)')
+          .eq('primary_contact_id', contactId)
+          .eq('owner_user_id', userId)
+          .order('meeting_start', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (primaryMeeting) {
+          meeting = primaryMeeting
+        } else {
+          // Check meeting_contacts junction
+          const { data: junctionRow } = await client
+            .from('meeting_contacts')
+            .select('meeting_id')
+            .eq('contact_id', contactId)
+            .limit(1)
+            .maybeSingle()
+
+          if (junctionRow?.meeting_id) {
+            const { data: junctionMeeting } = await client
+              .from('meetings')
+              .select('id, title, summary, meeting_start, meeting_action_items(id, title, completed)')
+              .eq('id', junctionRow.meeting_id)
+              .eq('owner_user_id', userId)
+              .maybeSingle()
+            meeting = junctionMeeting
+          }
+        }
+
+        if (meeting) {
+          const pendingItems = (Array.isArray(meeting.meeting_action_items) ? meeting.meeting_action_items : [])
+            .filter((item: any) => !item.completed)
+            .map((item: any) => ({ id: item.id, title: item.title }))
+
+          draft.meetingContext = {
+            meetingId: meeting.id,
+            meetingTitle: meeting.title,
+            meetingDate: meeting.meeting_start,
+            meetingSummary: meeting.summary ? meeting.summary.slice(0, 500) : null,
+            pendingActionItems: pendingItems,
+          }
+        }
+      } catch (draftErr) {
+        // Log but don't fail the whole response for one draft
+        console.warn('[PIPELINE-OUTREACH] Failed to enrich draft:', draft.contactName, draftErr)
+      }
+    }
+
+    return structured
+  } catch (err) {
+    console.warn('[PIPELINE-OUTREACH] Enrichment failed, returning unenriched:', err)
+    return structured
+  }
+}
+
+/**
+ * Detects whether the AI response contains pipeline health data + multiple
+ * email drafts — the "pipeline outreach" combo.
+ */
+function detectPipelineOutreachContent(messageLower: string, aiContent: string): boolean {
+  const contentLower = aiContent.toLowerCase()
+
+  // Must have pipeline / deal health indicators
+  const hasPipelineContext =
+    contentLower.includes('pipeline health') ||
+    contentLower.includes('pipeline summary') ||
+    contentLower.includes('pipeline overview') ||
+    contentLower.includes('stale deal') ||
+    contentLower.includes('deals needing attention') ||
+    contentLower.includes('at-risk deal') ||
+    contentLower.includes('deals at risk') ||
+    (contentLower.includes('pipeline') && contentLower.includes('health score'))
+
+  // Must have multiple email drafts (look for 2+ "Subject:" lines)
+  const subjectMatches = aiContent.match(/\bsubject\s*:/gi) || []
+  const hasMultipleEmails = subjectMatches.length >= 2
+
+  // Or user explicitly asked for pipeline + emails/outreach/follow-up
+  const userAskedPipelineOutreach =
+    (messageLower.includes('pipeline') || messageLower.includes('stale') || messageLower.includes('at risk') || messageLower.includes('at-risk')) &&
+    (messageLower.includes('email') || messageLower.includes('outreach') || messageLower.includes('follow up') || messageLower.includes('follow-up') || messageLower.includes('followup'))
+
+  return (hasPipelineContext && hasMultipleEmails) || (userAskedPipelineOutreach && hasMultipleEmails)
+}
+
+/**
+ * Parses pipeline health summary + email drafts from AI markdown content
+ * into a structured pipeline_outreach response.
+ */
+function parsePipelineOutreachFromContent(aiContent: string): StructuredResponse | null {
+  try {
+    // ---- Extract pipeline summary metrics ----
+    const staleMatch = aiContent.match(/(\d+)\s*(?:stale|inactive|dormant)\s*deal/i)
+    const totalDealsMatch = aiContent.match(/(\d+)\s*(?:total|active)?\s*deal/i)
+    const healthScoreMatch = aiContent.match(/health\s*score[:\s]*(\d+)/i)
+    const zeroInteractionMatch = aiContent.match(/(\d+)\s*(?:deal|contact)s?\s*(?:with\s*)?(?:no|zero)\s*(?:interaction|contact|activity)/i)
+
+    const staleCount = staleMatch ? parseInt(staleMatch[1], 10) : 0
+    const totalDeals = totalDealsMatch ? parseInt(totalDealsMatch[1], 10) : staleCount
+    const healthScore = healthScoreMatch ? parseInt(healthScoreMatch[1], 10) : undefined
+    const zeroInteractionCount = zeroInteractionMatch ? parseInt(zeroInteractionMatch[1], 10) : undefined
+
+    // Determine risk level from content or infer from stale ratio
+    let riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'medium'
+    const contentLower = aiContent.toLowerCase()
+    if (contentLower.includes('critical') || contentLower.includes('urgent')) riskLevel = 'critical'
+    else if (contentLower.includes('high risk') || contentLower.includes('high-risk')) riskLevel = 'high'
+    else if (contentLower.includes('low risk') || contentLower.includes('healthy')) riskLevel = 'low'
+    else if (totalDeals > 0 && staleCount / totalDeals > 0.5) riskLevel = 'high'
+
+    // ---- Extract email drafts ----
+    // Split on "Subject:" boundaries to find individual drafts
+    const emailBlocks = aiContent.split(/(?=(?:^|\n)(?:#{1,4}\s*)?(?:\d+[\.\)]\s*)?(?:Email|Draft|Follow[- ]?up)?[^:\n]*?\bSubject\s*:)/i)
+
+    const emailDrafts: Array<{
+      contactName: string
+      company?: string
+      to?: string
+      subject: string
+      body: string
+      urgency: 'high' | 'medium' | 'low'
+      strategyNotes?: string
+      lastInteraction?: string
+      daysSinceContact?: number
+    }> = []
+
+    for (const block of emailBlocks) {
+      const subjectMatch = block.match(/\bSubject\s*:\s*(.+?)(?:\n|$)/i)
+      if (!subjectMatch) continue
+
+      const subject = subjectMatch[1].trim().replace(/^\*+|\*+$/g, '')
+
+      // Extract "To:" if present
+      const toMatch = block.match(/\bTo\s*:\s*(.+?)(?:\n|$)/i)
+      const to = toMatch ? toMatch[1].trim().replace(/^\*+|\*+$/g, '') : undefined
+
+      // Extract contact name — look for name patterns
+      const nameFromTo = to?.replace(/<[^>]+>/g, '').trim()
+      const nameFromHeader = block.match(/(?:for|to|contact|name)\s*:\s*\**([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\**/i)
+      const contactName = nameFromTo || nameFromHeader?.[1] || 'Contact'
+
+      // Extract company
+      const companyMatch = block.match(/(?:company|organization|org)\s*:\s*\**(.+?)\**(?:\n|$)/i)
+      const company = companyMatch ? companyMatch[1].trim() : undefined
+
+      // Extract body — everything after "Body:" or between subject and next section
+      let body = ''
+      const bodyMatch = block.match(/\bBody\s*:\s*([\s\S]*?)(?=\n(?:---|\*\*|#{1,4}\s|Strategy|Note|Urgency|Last|Days)|$)/i)
+      if (bodyMatch) {
+        body = bodyMatch[1].trim()
+      } else {
+        // Fallback: take content after Subject line, skip metadata lines
+        const afterSubject = block.substring(block.indexOf(subjectMatch[0]) + subjectMatch[0].length)
+        const lines = afterSubject.split('\n')
+        const bodyLines: string[] = []
+        let foundContent = false
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) { if (foundContent) bodyLines.push(''); continue }
+          if (/^(To|From|CC|BCC|Company|Organization|Urgency|Priority|Strategy|Note|Last|Days)\s*:/i.test(trimmed)) continue
+          if (/^(#{1,4}\s|---|\*\*\*)/.test(trimmed)) break
+          foundContent = true
+          bodyLines.push(trimmed)
+        }
+        body = bodyLines.join('\n').trim()
+      }
+
+      if (!body && !subject) continue
+
+      // Extract urgency
+      let urgency: 'high' | 'medium' | 'low' = 'medium'
+      const urgencyMatch = block.match(/(?:urgency|priority)\s*:\s*\**(\w+)\**/i)
+      if (urgencyMatch) {
+        const u = urgencyMatch[1].toLowerCase()
+        if (u === 'high' || u === 'urgent' || u === 'critical') urgency = 'high'
+        else if (u === 'low') urgency = 'low'
+      }
+
+      // Extract strategy notes
+      const strategyMatch = block.match(/(?:strategy|approach|note)\s*:\s*(.+?)(?:\n|$)/i)
+      const strategyNotes = strategyMatch ? strategyMatch[1].trim().replace(/^\*+|\*+$/g, '') : undefined
+
+      // Extract last interaction / days since contact
+      const lastInteractionMatch = block.match(/(?:last (?:interaction|contact|activity))\s*:\s*(.+?)(?:\n|$)/i)
+      const lastInteraction = lastInteractionMatch ? lastInteractionMatch[1].trim() : undefined
+
+      const daysMatch = block.match(/(\d+)\s*days?\s*(?:since|ago|without)/i)
+      const daysSinceContact = daysMatch ? parseInt(daysMatch[1], 10) : undefined
+
+      emailDrafts.push({
+        contactName,
+        company,
+        to,
+        subject,
+        body,
+        urgency,
+        strategyNotes,
+        lastInteraction,
+        daysSinceContact,
+      })
+    }
+
+    // Need at least 2 drafts to qualify as pipeline outreach
+    if (emailDrafts.length < 2) return null
+
+    const draftCount = emailDrafts.length
+    return {
+      type: 'pipeline_outreach',
+      summary: `Here's your pipeline health summary with ${draftCount} follow-up email${draftCount !== 1 ? 's' : ''} ready to review.`,
+      data: {
+        pipeline_summary: {
+          stale_count: staleCount,
+          total_deals: totalDeals,
+          risk_level: riskLevel,
+          health_score: healthScore,
+          zero_interaction_count: zeroInteractionCount,
+        },
+        email_drafts: emailDrafts,
+      },
+      actions: [
+        {
+          id: 'queue-all',
+          label: 'Add All to Action Centre',
+          type: 'secondary',
+          callback: 'queue_all_emails',
+          params: { count: draftCount },
+        },
+      ],
+      metadata: {
+        timeGenerated: new Date().toISOString(),
+        dataSource: ['pipeline', 'email', 'crm'],
+      },
+    }
+  } catch (err) {
+    console.error('[PIPELINE-OUTREACH] Error parsing content:', err)
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point: detectAndStructureResponse
 // ---------------------------------------------------------------------------
 
@@ -6240,6 +6534,20 @@ export async function detectAndStructureResponse(
       if (actionSummary) {
         return actionSummary
       }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pipeline outreach detection (batch emails from pipeline health review)
+  // Must fire BEFORE single-email detection to capture multi-draft responses
+  // ---------------------------------------------------------------------------
+  const isPipelineOutreachContent = detectPipelineOutreachContent(messageLower, aiContent)
+  if (isPipelineOutreachContent) {
+    console.log('[PIPELINE-OUTREACH] Detected pipeline health + email drafts in response')
+    let structured = parsePipelineOutreachFromContent(aiContent)
+    if (structured) {
+      structured = await enrichPipelineOutreachDrafts(structured, client, userId)
+      return structured
     }
   }
 

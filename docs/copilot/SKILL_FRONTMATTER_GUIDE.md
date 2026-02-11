@@ -304,6 +304,102 @@ description: |
 
 ---
 
+## Context Profiles (Organization Context Injection)
+
+The `context_profile` field controls which organization context variables are injected into the compiled skill as an auto-generated `## Organization Context` block. This enables skills to reference real org data (company name, products, ICP, competitors, etc.) without hardcoding `${variable}` placeholders throughout the skill body.
+
+### Field Spec
+
+```yaml
+metadata:
+  context_profile: sales  # sales | research | communication | full
+```
+
+- **Type**: `string` (one of: `sales`, `research`, `communication`, `full`)
+- **Required**: No. Defaults to `full` if not specified.
+- **Location**: Inside the `metadata` block, alongside `category`, `triggers`, etc.
+
+### Profile Definitions
+
+| Profile | Variables Included | Best For |
+|---------|-------------------|----------|
+| `sales` | company_name, company_bio, products, value_propositions, competitors, icp, ideal_customer_profile, brand_voice, case_studies, customer_logos, pain_points | Deal management, pipeline, qualification, proposals |
+| `research` | company_name, company_bio, products, competitors, industry, target_market, tech_stack, pain_points, employee_count, company_size | Company intelligence, lead research, competitive analysis |
+| `communication` | company_name, brand_voice, products, case_studies, customer_logos, value_propositions | Email drafting, follow-ups, outreach, tone-sensitive content |
+| `full` | ALL keys from organization_context | Meeting prep, daily planning, search, broad context needs |
+
+### How It Works
+
+During compilation (`compile-organization-skills`), the system:
+
+1. Reads `context_profile` from the skill's frontmatter metadata
+2. Fetches the organization's context variables from `organization_context`
+3. Filters variables to only those in the selected profile
+4. Generates a `## Organization Context (Auto-Generated)` markdown block
+5. Prepends this block to the skill's compiled content
+
+The skill body can then reference "the Organization Context above" instead of needing explicit `${variable}` placeholders for every field.
+
+### When Context Changes
+
+When an organization updates their context (products, ICP, brand voice, etc.), a database trigger marks all their skills for recompilation. A periodic cron job processes the queue, regenerating context blocks with fresh data.
+
+### Example
+
+A skill with `context_profile: sales` for "Acme Corp" would get this block prepended:
+
+```markdown
+## Organization Context (Auto-Generated)
+
+**Company**: Acme Corp
+**Industry**: Enterprise SaaS
+**Products**: Widget Pro (AI-powered analytics), DataSync (ETL pipeline)
+**Value Propositions**: 10x faster data processing, No-code setup, SOC2 compliant
+**Competitors**: Fivetran, Airbyte, Stitch Data
+**ICP**: VP/Director of Data Engineering at Series B+ SaaS companies
+**Pain Points**: Complex ETL pipelines, Data freshness issues, Engineering bottleneck
+**Brand Voice**: Confident partner — direct, technical but approachable
+**Case Studies**: DataCo (3x pipeline speed), TechFlow (saved $200k/yr)
+
+> This context is auto-generated from your organization settings.
+```
+
+### Inline Variables
+
+Only `${company_name}` should be used inline in skill bodies — for titles, competitive framing, and email signatures. All other org data comes from the context block and should be referenced as "the Organization Context above" or "your organization's [products/ICP/etc.]".
+
+### Profile Assignment Reference
+
+| Skill | context_profile |
+|-------|----------------|
+| deal-map-builder | `sales` |
+| deal-next-best-actions | `sales` |
+| deal-rescue-plan | `sales` |
+| deal-slippage-diagnosis | `sales` |
+| pipeline-focus-task-planner | `sales` |
+| objection-to-playbook | `sales` |
+| lead-qualification | `sales` |
+| proposal-generator | `sales` |
+| company-analysis | `research` |
+| company-research | `research` |
+| competitor-intel | `research` |
+| lead-research | `research` |
+| sales-enrich | `research` |
+| followup-reply-drafter | `communication` |
+| followup-triage | `communication` |
+| event-followup-analyzer | `communication` |
+| sales-sequence | `communication` |
+| meeting-command-center-plan | `full` |
+| meeting-digest-truth-extractor | `full` |
+| meeting-prep-brief | `full` |
+| post-meeting-followup-drafter | `full` |
+| post-meeting-followup-pack-builder | `full` |
+| daily-brief-planner | `full` |
+| daily-focus-planner | `full` |
+| search-documentation | `full` |
+
+---
+
 ## Agent Affinity (Multi-Agent Routing)
 
 The `agent_affinity` field controls which specialist agents can use a skill. When the multi-agent orchestrator delegates a task to a specialist (e.g. `pipeline`, `outreach`), that agent's `list_skills` call filters to only skills matching its name.

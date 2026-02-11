@@ -86,6 +86,7 @@ export function parseSkillContent(content: string, sourcePath: string): ParsedSk
     'workflow', 'linked_skills',
     'execution_mode', 'timeout_ms', 'retry_count',
     'tags', 'author', 'agent_affinity',
+    'context_profile',
   ] as const;
 
   for (const field of copyFields) {

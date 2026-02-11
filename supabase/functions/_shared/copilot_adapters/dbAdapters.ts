@@ -1612,11 +1612,82 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           return daysB - daysA;
         });
 
+        // ---- Enrich with last meeting context per contact ----
+        const limitedContacts = contactList.slice(0, limit);
+        const contactIds = limitedContacts.map((c: any) => c.id).filter(Boolean);
+
+        if (contactIds.length > 0) {
+          // Fetch last meeting where contact is primary
+          const { data: primaryMeetings } = await client
+            .from('meetings')
+            .select('id, title, summary, meeting_start, primary_contact_id, meeting_action_items(id, title, completed)')
+            .in('primary_contact_id', contactIds)
+            .eq('owner_user_id', userId)
+            .order('meeting_start', { ascending: false });
+
+          // Build contactId -> most recent meeting map from primary meetings
+          const meetingMap: Record<string, any> = {};
+          for (const m of (primaryMeetings || [])) {
+            if (m.primary_contact_id && !meetingMap[m.primary_contact_id]) {
+              meetingMap[m.primary_contact_id] = m;
+            }
+          }
+
+          // Also check meeting_contacts junction for non-primary attendees
+          const missingIds = contactIds.filter((id: string) => !meetingMap[id]);
+          if (missingIds.length > 0) {
+            const { data: junctionRows } = await client
+              .from('meeting_contacts')
+              .select('contact_id, meeting_id')
+              .in('contact_id', missingIds);
+
+            if (junctionRows && junctionRows.length > 0) {
+              const meetingIds = [...new Set(junctionRows.map((r: any) => r.meeting_id))];
+              const { data: junctionMeetings } = await client
+                .from('meetings')
+                .select('id, title, summary, meeting_start, meeting_action_items(id, title, completed)')
+                .in('id', meetingIds)
+                .eq('owner_user_id', userId)
+                .order('meeting_start', { ascending: false });
+
+              // Map junction meetings by meeting ID for lookup
+              const junctionMeetingMap: Record<string, any> = {};
+              for (const m of (junctionMeetings || [])) {
+                junctionMeetingMap[m.id] = m;
+              }
+
+              // For each missing contact, find their most recent meeting
+              for (const row of junctionRows) {
+                if (!meetingMap[row.contact_id] && junctionMeetingMap[row.meeting_id]) {
+                  meetingMap[row.contact_id] = junctionMeetingMap[row.meeting_id];
+                }
+              }
+            }
+          }
+
+          // Merge meeting context into contacts
+          for (const contact of limitedContacts) {
+            const meeting = meetingMap[contact.id];
+            if (meeting) {
+              const pendingItems = (Array.isArray(meeting.meeting_action_items) ? meeting.meeting_action_items : [])
+                .filter((item: any) => !item.completed)
+                .map((item: any) => ({ id: item.id, title: item.title }));
+              contact.last_meeting = {
+                id: meeting.id,
+                title: meeting.title,
+                summary: meeting.summary ? meeting.summary.slice(0, 500) : null,
+                date: meeting.meeting_start,
+                pending_action_items: pendingItems,
+              };
+            }
+          }
+        }
+
         return ok({
           filter,
           days_threshold: daysSinceContact,
-          count: contactList.slice(0, limit).length,
-          contacts: contactList.slice(0, limit),
+          count: limitedContacts.length,
+          contacts: limitedContacts,
         }, this.source);
       } catch (e) {
         const msg = formatAdapterError(e);

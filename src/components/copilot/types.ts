@@ -162,7 +162,8 @@ export type CopilotResponseType =
   | 'followup_zero_inbox'
   | 'deal_slippage_guardrails'
   | 'daily_brief'
-  | 'dynamic_table';
+  | 'dynamic_table'
+  | 'pipeline_outreach';
 
 export interface CopilotResponse {
   type: CopilotResponseType;
@@ -439,6 +440,48 @@ export interface DailyBriefTask {
   status?: string;
   linkedDealId?: string;
   linkedContactId?: string;
+}
+
+// Pipeline Outreach Response (batch email drafts from pipeline health review)
+export interface PipelineOutreachResponse extends CopilotResponse {
+  type: 'pipeline_outreach';
+  data: PipelineOutreachResponseData;
+}
+
+export interface PipelineOutreachResponseData {
+  pipeline_summary: PipelineOutreachSummary;
+  email_drafts: PipelineEmailDraft[];
+}
+
+export interface PipelineOutreachSummary {
+  stale_count: number;
+  total_deals: number;
+  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  health_score?: number;
+  zero_interaction_count?: number;
+}
+
+export interface PipelineEmailMeetingContext {
+  meetingId: string;
+  meetingTitle: string;
+  meetingDate: string;
+  meetingSummary?: string | null;
+  pendingActionItems: Array<{ id: string; title: string }>;
+}
+
+export interface PipelineEmailDraft {
+  contactId?: string;
+  contactName: string;
+  company?: string;
+  to?: string;
+  subject: string;
+  body: string;
+  urgency: 'high' | 'medium' | 'low';
+  strategyNotes?: string;
+  lastInteraction?: string;
+  daysSinceContact?: number;
+  dealId?: string;
+  meetingContext?: PipelineEmailMeetingContext;
 }
 
 // Pipeline Response

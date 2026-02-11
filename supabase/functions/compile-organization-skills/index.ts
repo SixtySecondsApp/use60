@@ -56,6 +56,149 @@ interface CompilationResult {
 }
 
 // ============================================================================
+// Context Profiles — controls which org variables each skill receives
+// ============================================================================
+
+const CONTEXT_PROFILES: Record<string, string[]> = {
+  sales: [
+    'company_name', 'company_bio', 'products', 'value_propositions',
+    'competitors', 'icp', 'ideal_customer_profile', 'brand_voice',
+    'case_studies', 'customer_logos', 'pain_points',
+  ],
+  research: [
+    'company_name', 'company_bio', 'products', 'competitors',
+    'industry', 'target_market', 'tech_stack', 'pain_points',
+    'employee_count', 'company_size',
+  ],
+  communication: [
+    'company_name', 'brand_voice', 'products', 'case_studies',
+    'customer_logos', 'value_propositions',
+  ],
+  // 'full' is handled specially — includes ALL keys
+};
+
+/**
+ * Format a context value for display in the Organization Context block.
+ * Arrays become comma-separated lists, objects become key: value lines,
+ * primitives become strings.
+ */
+function formatContextValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    // Array of objects: format each as "name (detail)" or just the string
+    const formatted = value.map(item => {
+      if (typeof item === 'object' && item !== null) {
+        const obj = item as Record<string, unknown>;
+        // Common patterns: {name, description}, {name, domain}, {name, pricing_tier}
+        if (obj.name) {
+          const details = Object.entries(obj)
+            .filter(([k]) => k !== 'name')
+            .map(([, v]) => v)
+            .filter(Boolean);
+          return details.length > 0 ? `${obj.name} (${details.join(', ')})` : String(obj.name);
+        }
+        return JSON.stringify(item);
+      }
+      return String(item);
+    });
+    return formatted.join(', ');
+  }
+
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const entries = Object.entries(obj).filter(([, v]) => v != null && v !== '');
+    if (entries.length === 0) return null;
+    // For small objects, inline; for larger ones, multi-line
+    if (entries.length <= 3) {
+      return entries.map(([k, v]) => `${k}: ${v}`).join(', ');
+    }
+    return entries.map(([k, v]) => `${k}: ${v}`).join('; ');
+  }
+
+  const str = String(value).trim();
+  return str.length > 0 ? str : null;
+}
+
+/**
+ * Pretty-print a context key for display.
+ * e.g. "company_name" → "Company Name", "icp" → "ICP", "tech_stack" → "Tech Stack"
+ */
+function formatContextKey(key: string): string {
+  const acronyms = ['icp', 'crm', 'api', 'url', 'seo'];
+  if (acronyms.includes(key.toLowerCase())) return key.toUpperCase();
+  return key
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/**
+ * Generate the Organization Context markdown block for a skill.
+ *
+ * @param context  Full organization context object
+ * @param profile  Profile name: 'sales' | 'research' | 'communication' | 'full'
+ * @returns        Markdown string to prepend to compiled skill content
+ */
+function generateContextBlock(
+  context: OrganizationContext,
+  profile: string
+): string {
+  if (!context || Object.keys(context).length === 0) return '';
+
+  // Determine which keys to include
+  const allowedKeys = profile === 'full'
+    ? Object.keys(context)
+    : (CONTEXT_PROFILES[profile] || Object.keys(context));
+
+  const lines: string[] = ['## Organization Context (Auto-Generated)', ''];
+
+  for (const key of allowedKeys) {
+    const value = context[key];
+    const formatted = formatContextValue(value);
+    if (formatted) {
+      lines.push(`**${formatContextKey(key)}**: ${formatted}`);
+    }
+  }
+
+  // If no values were added, skip the block entirely
+  if (lines.length <= 2) return '';
+
+  lines.push('');
+  lines.push('> This context is auto-generated from your organization settings. Update at Settings > Organization.');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+/**
+ * Compute a simple hash of the context used for a skill compilation.
+ * Used to detect when org context changes require recompilation.
+ */
+function computeContextHash(context: OrganizationContext, profile: string): string {
+  const allowedKeys = profile === 'full'
+    ? Object.keys(context).sort()
+    : (CONTEXT_PROFILES[profile] || Object.keys(context)).sort();
+
+  const filtered: Record<string, unknown> = {};
+  for (const key of allowedKeys) {
+    if (context[key] !== undefined) {
+      filtered[key] = context[key];
+    }
+  }
+
+  // Simple string hash (djb2)
+  const str = JSON.stringify(filtered);
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(36);
+}
+
+// ============================================================================
 // Skill Compiler (server-side implementation)
 // ============================================================================
 
@@ -224,8 +367,18 @@ function compileSkillDocument(
   frontmatter: Record<string, unknown>,
   contentTemplate: string,
   context: OrganizationContext
-): CompilationResult {
-  const contentResult = compileTemplate(contentTemplate, context);
+): CompilationResult & { contextHash?: string } {
+  // Determine context profile from frontmatter metadata
+  const metadata = frontmatter.metadata as Record<string, unknown> | undefined;
+  const contextProfile = (metadata?.context_profile as string) ?? 'full';
+
+  // Generate the Organization Context block and prepend to content
+  const contextBlock = generateContextBlock(context, contextProfile);
+  const enrichedTemplate = contextBlock
+    ? contextBlock + '\n' + contentTemplate
+    : contentTemplate;
+
+  const contentResult = compileTemplate(enrichedTemplate, context);
 
   const compiledFrontmatter: Record<string, unknown> = {};
   const frontmatterMissing: string[] = [];
@@ -255,12 +408,16 @@ function compileSkillDocument(
 
   const allMissing = [...new Set([...contentResult.missingVariables, ...frontmatterMissing])];
 
+  // Compute context hash for staleness detection
+  const contextHash = computeContextHash(context, contextProfile);
+
   return {
     success: allMissing.length === 0,
     content: contentResult.content,
     frontmatter: compiledFrontmatter,
     missingVariables: allMissing,
     warnings: contentResult.warnings,
+    contextHash,
   };
 }
 

@@ -122,19 +122,6 @@ async function main() {
         continue;
       }
 
-      // Check if hash unchanged
-      const { data: existing } = await supabase
-        .from('platform_skills')
-        .select('source_hash')
-        .eq('skill_key', record.skill_key)
-        .maybeSingle();
-
-      if (existing?.source_hash === record.source_hash) {
-        console.log(`  ⏭ ${record.skill_key} (unchanged)`);
-        stats.skipped++;
-        continue;
-      }
-
       // Upsert
       const { error: upsertError } = await supabase
         .from('platform_skills')
@@ -145,9 +132,6 @@ async function main() {
             frontmatter: record.frontmatter,
             content_template: record.content_template,
             is_active: record.is_active,
-            source_format: record.source_format,
-            source_path: record.source_path,
-            source_hash: record.source_hash,
           },
           { onConflict: 'skill_key' }
         );

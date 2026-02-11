@@ -41,6 +41,11 @@ import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { useCopilotChat } from '@/lib/hooks/useCopilotChat';
 import type { ActiveAgent, ToolCall } from '@/lib/hooks/useCopilotChat';
 import { AgentWorkingIndicator } from '@/components/copilot/AgentWorkingIndicator';
+import { CopilotResponse } from '@/components/copilot/CopilotResponse';
+import { PipelineOutreachResponse } from '@/components/copilot/responses/PipelineOutreachResponse';
+import type { CopilotResponse as CopilotResponseType, PipelineOutreachResponse as PipelineOutreachResponseType } from '@/components/copilot/types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // =============================================================================
@@ -512,11 +517,33 @@ function LiveChatPanel({
           </div>
         )}
 
-        {/* Response content */}
-        {lastAssistant && lastAssistant.content && (
+        {/* Response content — structured panel if available, otherwise raw text */}
+        {lastAssistant && lastAssistant.structuredResponse && (
+          <div className="rounded-xl rounded-tl-sm overflow-hidden">
+            <CopilotResponse
+              response={lastAssistant.structuredResponse as CopilotResponseType}
+              onActionClick={(action) => {
+                console.log('[DEMO] Action clicked:', action);
+              }}
+            />
+          </div>
+        )}
+        {lastAssistant && lastAssistant.content && !lastAssistant.structuredResponse && (
           <div className="bg-muted/20 rounded-xl rounded-tl-sm px-4 py-3 space-y-2">
-            <div className="prose prose-sm prose-invert max-w-none text-sm whitespace-pre-wrap break-words">
-              {lastAssistant.content}
+            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-li:my-0.5 prose-table:text-xs prose-a:text-blue-400 prose-a:underline prose-hr:my-3 prose-strong:text-white">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ node, ...props }) => (
+                    <a {...props} target="_blank" rel="noopener noreferrer" />
+                  ),
+                  input: ({ node, ...props }) => (
+                    <input {...props} disabled className="mr-1.5 accent-primary" />
+                  ),
+                }}
+              >
+                {lastAssistant.content}
+              </ReactMarkdown>
             </div>
             {lastAssistant.isStreaming && (
               <span className="inline-block w-1.5 h-4 bg-primary/60 animate-pulse rounded-sm" />
@@ -535,6 +562,137 @@ function LiveChatPanel({
     </div>
   );
 }
+
+// =============================================================================
+// Mock data for Pipeline Outreach preview
+// =============================================================================
+
+const MOCK_PIPELINE_OUTREACH: PipelineOutreachResponseType = {
+  type: 'pipeline_outreach',
+  summary: "Here's your pipeline health summary with 4 follow-up emails ready to review.",
+  data: {
+    pipeline_summary: {
+      stale_count: 5,
+      total_deals: 18,
+      risk_level: 'high',
+      health_score: 42,
+      zero_interaction_count: 3,
+    },
+    email_drafts: [
+      {
+        contactId: 'c-001',
+        contactName: 'Sarah Chen',
+        company: 'Meridian Technologies',
+        to: 'sarah.chen@meridiantech.com',
+        subject: 'Quick follow-up on our integration discussion',
+        body: `Hi Sarah,
+
+I wanted to circle back on our conversation about the data integration project. It's been a couple of weeks and I'd love to hear how the internal review went.
+
+We've also recently shipped a new API connector that could simplify the migration path we discussed. Happy to walk you through it if that would be helpful.
+
+Would you have 15 minutes this week for a quick call?
+
+Best regards`,
+        urgency: 'high',
+        strategyNotes: 'Decision-maker went silent after technical demo. Re-engage with new feature as hook.',
+        daysSinceContact: 18,
+        dealId: 'd-001',
+        meetingContext: {
+          meetingId: 'm-101',
+          meetingTitle: 'Technical Integration Review — Meridian',
+          meetingDate: '2026-01-23T14:00:00Z',
+          meetingSummary: 'Walked through the API integration architecture. Sarah had concerns about data migration timeline and asked for a phased rollout plan. Team agreed to evaluate the new connector option.',
+          pendingActionItems: [
+            { id: 'ai-201', title: 'Send phased rollout proposal' },
+            { id: 'ai-202', title: 'Schedule follow-up with engineering lead' },
+            { id: 'ai-203', title: 'Share API connector documentation' },
+          ],
+        },
+      },
+      {
+        contactId: 'c-002',
+        contactName: 'Marcus Rodriguez',
+        company: 'Apex Financial Group',
+        to: 'mrodriguez@apexfin.com',
+        subject: 'Pricing proposal follow-up — Apex x use60',
+        body: `Hi Marcus,
+
+I hope you've had a chance to review the pricing proposal I sent over. I know budget cycles can be complex, so I wanted to check in and see if there are any questions from your team.
+
+I'm also happy to set up a call with our solutions team to address any technical concerns before your next review meeting.
+
+Looking forward to hearing from you.
+
+Cheers`,
+        urgency: 'high',
+        strategyNotes: 'Proposal sent 3 weeks ago, no response. May need to loop in their VP of Ops.',
+        lastInteraction: '2026-01-20',
+        daysSinceContact: 21,
+        dealId: 'd-002',
+      },
+      {
+        contactId: 'c-003',
+        contactName: 'Lisa Park',
+        company: 'CloudBridge Solutions',
+        to: 'lisa.park@cloudbridge.io',
+        subject: 'Case study you might find valuable',
+        body: `Hi Lisa,
+
+I came across a case study from one of our customers in the SaaS infrastructure space that reminded me of the challenges you mentioned during our last call.
+
+They saw a 40% reduction in pipeline review time after implementing our workflow automation. I thought it might be helpful as you evaluate options for Q2.
+
+Happy to discuss — let me know if you'd like to set up some time.
+
+Best`,
+        urgency: 'medium',
+        strategyNotes: 'Warm lead, showed interest but needs internal buy-in. Share social proof.',
+        daysSinceContact: 12,
+        dealId: 'd-003',
+      },
+      {
+        contactId: 'c-004',
+        contactName: 'James Whitfield',
+        company: 'Orion Dynamics',
+        to: 'j.whitfield@oriondyn.com',
+        subject: 'Checking in — pilot program update',
+        body: `Hi James,
+
+Just wanted to touch base on the pilot program we kicked off last month. I noticed the team hasn't logged in for a few days and wanted to make sure everything is running smoothly.
+
+If there are any blockers or if the team needs additional training, I'm happy to arrange a session.
+
+Let me know how things are going!
+
+Best regards`,
+        urgency: 'medium',
+        strategyNotes: 'Pilot engagement dropping. Proactive check-in to prevent churn risk.',
+        daysSinceContact: 8,
+        dealId: 'd-004',
+        meetingContext: {
+          meetingId: 'm-104',
+          meetingTitle: 'Orion Dynamics — Pilot Kickoff',
+          meetingDate: '2026-01-31T10:00:00Z',
+          meetingSummary: 'Launched pilot with 5-user cohort. James mentioned onboarding was smooth but wanted custom reporting dashboards before expanding to full team.',
+          pendingActionItems: [
+            { id: 'ai-301', title: 'Deliver custom dashboard mockups' },
+            { id: 'ai-302', title: 'Check in on pilot usage metrics after 2 weeks' },
+          ],
+        },
+      },
+    ],
+  },
+  actions: [
+    {
+      id: 'queue-all',
+      label: 'Add All to Action Centre',
+      type: 'secondary',
+      callback: 'queue_all_emails',
+      params: { count: 4 },
+    },
+  ],
+};
 
 // =============================================================================
 // Main Page
@@ -635,6 +793,36 @@ export default function AgentTeamsLiveDemoPage() {
           </Button>
         </div>
       </div>
+
+      {/* Pipeline Outreach Response Preview */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Mail className="h-4 w-4" />
+                Pipeline Outreach Response
+                <Badge className="text-[10px] font-normal bg-blue-500/10 text-blue-500 border-blue-500/30">
+                  New
+                </Badge>
+              </CardTitle>
+              <CardDescription className="mt-1">
+                When the copilot reviews pipeline health, stale deals get interactive email cards — edit in place, send via Gmail, or queue to Action Centre.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-xl border border-border/50 bg-gray-950/60 p-4">
+            <PipelineOutreachResponse
+              data={MOCK_PIPELINE_OUTREACH}
+              onActionClick={(action) => {
+                console.log('[DEMO] Action clicked:', action);
+              }}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Scenario Selection */}
       <Card>
@@ -788,6 +976,7 @@ export default function AgentTeamsLiveDemoPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

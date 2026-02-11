@@ -59,6 +59,90 @@ interface OrganizationContext {
 }
 
 // ============================================================================
+// Context Profiles — controls which org variables each skill receives
+// ============================================================================
+
+const CONTEXT_PROFILES: Record<string, string[]> = {
+  sales: [
+    'company_name', 'company_bio', 'products', 'value_propositions',
+    'competitors', 'icp', 'ideal_customer_profile', 'brand_voice',
+    'case_studies', 'customer_logos', 'pain_points',
+  ],
+  research: [
+    'company_name', 'company_bio', 'products', 'competitors',
+    'industry', 'target_market', 'tech_stack', 'pain_points',
+    'employee_count', 'company_size',
+  ],
+  communication: [
+    'company_name', 'brand_voice', 'products', 'case_studies',
+    'customer_logos', 'value_propositions',
+  ],
+};
+
+function formatContextValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    return value.map(item => {
+      if (typeof item === 'object' && item !== null) {
+        const obj = item as Record<string, unknown>;
+        if (obj.name) {
+          const details = Object.entries(obj).filter(([k]) => k !== 'name').map(([, v]) => v).filter(Boolean);
+          return details.length > 0 ? `${obj.name} (${details.join(', ')})` : String(obj.name);
+        }
+        return JSON.stringify(item);
+      }
+      return String(item);
+    }).join(', ');
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v != null && v !== '');
+    if (entries.length === 0) return null;
+    return entries.length <= 3
+      ? entries.map(([k, v]) => `${k}: ${v}`).join(', ')
+      : entries.map(([k, v]) => `${k}: ${v}`).join('; ');
+  }
+  const str = String(value).trim();
+  return str.length > 0 ? str : null;
+}
+
+function formatContextKey(key: string): string {
+  const acronyms = ['icp', 'crm', 'api', 'url', 'seo'];
+  if (acronyms.includes(key.toLowerCase())) return key.toUpperCase();
+  return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+}
+
+function generateContextBlock(context: OrganizationContext, profile: string): string {
+  if (!context || Object.keys(context).length === 0) return '';
+  const allowedKeys = profile === 'full'
+    ? Object.keys(context)
+    : (CONTEXT_PROFILES[profile] || Object.keys(context));
+  const lines: string[] = ['## Organization Context (Auto-Generated)', ''];
+  for (const key of allowedKeys) {
+    const formatted = formatContextValue(context[key]);
+    if (formatted) lines.push(`**${formatContextKey(key)}**: ${formatted}`);
+  }
+  if (lines.length <= 2) return '';
+  lines.push('', '> This context is auto-generated from your organization settings. Update at Settings > Organization.', '');
+  return lines.join('\n');
+}
+
+function computeContextHash(context: OrganizationContext, profile: string): string {
+  const allowedKeys = (profile === 'full' ? Object.keys(context) : (CONTEXT_PROFILES[profile] || Object.keys(context))).sort();
+  const filtered: Record<string, unknown> = {};
+  for (const key of allowedKeys) {
+    if (context[key] !== undefined) filtered[key] = context[key];
+  }
+  const str = JSON.stringify(filtered);
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+// ============================================================================
 // Skill Compiler (same as compile-organization-skills)
 // ============================================================================
 
@@ -217,8 +301,14 @@ function compileSkillDocument(
   contentTemplate: string,
   context: OrganizationContext,
   userOverrides?: Record<string, unknown>
-): { frontmatter: Record<string, unknown>; content: string } {
-  const contentResult = compileTemplate(contentTemplate, context);
+): { frontmatter: Record<string, unknown>; content: string; contextHash: string } {
+  // Determine context profile and inject Organization Context block
+  const metadata = frontmatter.metadata as Record<string, unknown> | undefined;
+  const contextProfile = (metadata?.context_profile as string) ?? 'full';
+  const contextBlock = generateContextBlock(context, contextProfile);
+  const enrichedTemplate = contextBlock ? contextBlock + '\n' + contentTemplate : contentTemplate;
+
+  const contentResult = compileTemplate(enrichedTemplate, context);
 
   const compiledFrontmatter: Record<string, unknown> = {};
 
@@ -254,9 +344,12 @@ function compileSkillDocument(
     }
   }
 
+  const contextHash = computeContextHash(context, contextProfile);
+
   return {
     frontmatter: compiledFrontmatter,
     content: contentResult.content,
+    contextHash,
   };
 }
 
@@ -765,6 +858,13 @@ async function refreshPending(
             error: errMsg,
           });
         } else {
+          // Clear the recompile flag and update context hash
+          await supabase
+            .from('organization_skills')
+            .update({ needs_recompile: false, context_hash: compiled.contextHash })
+            .eq('organization_id', orgSkill.organization_id)
+            .eq('skill_id', platformSkill.skill_key);
+
           processed++;
           details?.push({
             organization_id: orgSkill.organization_id,
@@ -801,8 +901,8 @@ async function refreshPending(
 // Get Refresh Status
 // ============================================================================
 
-async function getRefreshStatus(supabase: any): Promise<RefreshResult> {
-  // Get count of skills needing recompilation
+async function getRefreshStatus(supabase: any): Promise<RefreshResult & { status_details?: Record<string, number> }> {
+  // Get count of skills needing recompilation (includes both version-stale and context-change)
   const { data: pendingSkills, error: pendingError } = await supabase
     .rpc('get_skills_needing_recompile');
 
@@ -814,32 +914,21 @@ async function getRefreshStatus(supabase: any): Promise<RefreshResult> {
     };
   }
 
-  // Get count of queue items if the queue table exists
-  let queueCount = 0;
-  try {
-    const { count, error: queueError } = await supabase
-      .from('platform_skills_refresh_queue')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
-
-    if (!queueError && count !== null) {
-      queueCount = count;
-    }
-  } catch {
-    // Queue table may not exist yet
-  }
+  // Get count of context-change pending specifically
+  const { count: contextChangePending, error: contextError } = await supabase
+    .from('organization_skills')
+    .select('id', { count: 'exact', head: true })
+    .eq('needs_recompile', true)
+    .eq('is_active', true);
 
   return {
     success: true,
-    processed: pendingSkills?.length || 0,
+    processed: 0,
     errors: [],
-    details: [
-      {
-        organization_id: 'summary',
-        skill_key: 'pending_recompile',
-        status: 'success',
-        error: undefined,
-      },
-    ],
+    status_details: {
+      total_pending: pendingSkills?.length || 0,
+      context_change_pending: (!contextError && contextChangePending) ? contextChangePending : 0,
+      version_stale: (pendingSkills?.length || 0) - ((!contextError && contextChangePending) ? contextChangePending : 0),
+    },
   };
 }

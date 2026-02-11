@@ -46,6 +46,7 @@ import { DailyFocusPlanResponse } from './responses/DailyFocusPlanResponse';
 import { FollowupZeroInboxResponse } from './responses/FollowupZeroInboxResponse';
 import { DealSlippageGuardrailsResponse } from './responses/DealSlippageGuardrailsResponse';
 import { DailyBriefResponse } from './responses/DailyBriefResponse';
+import { PipelineOutreachResponse } from './responses/PipelineOutreachResponse';
 import { MeetingCountResponse } from './responses/MeetingCountResponse';
 import { MeetingBriefingResponse } from './responses/MeetingBriefingResponse';
 import { MeetingListResponse } from './responses/MeetingListResponse';
@@ -95,6 +96,7 @@ import type {
   FollowupZeroInboxResponse as FollowupZeroInboxResponseType,
   DealSlippageGuardrailsResponse as DealSlippageGuardrailsResponseType,
   DailyBriefResponse as DailyBriefResponseType,
+  PipelineOutreachResponse as PipelineOutreachResponseType,
   MeetingCountResponseData,
   MeetingBriefingResponseData,
   MeetingListResponseData,
@@ -250,6 +252,9 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'dynamic_table':
       return <OpsTableResponse data={(response as any).data as OpsTableResponseData} onActionClick={onActionClick} />;
+
+    case 'pipeline_outreach':
+      return <PipelineOutreachResponse data={response as PipelineOutreachResponseType} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown
