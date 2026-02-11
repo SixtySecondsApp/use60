@@ -1,0 +1,373 @@
+{
+  "feature": "client-fact-profiles",
+  "title": "Client Fact Profiles — Research, Verify & Share",
+  "description": "Research-backed business profiles that can be edited, shared externally for client sign-off, and used as the verified source of truth for building accurate ICP profiles and prospect lists. Supports both client org research (understand who we're building for) and target company verification (confirm prospects match the ICP).",
+  "createdAt": "2026-02-11T20:00:00Z",
+  "consultReport": ".sixty/consult/client-fact-profiles.md",
+  "branch": "feature/client-fact-profiles",
+  "accessModel": "multi-tenant-internal-only",
+  "stories": [
+    {
+      "id": "FACT-001",
+      "title": "Create client_fact_profiles table with share columns and RLS",
+      "type": "schema",
+      "phase": 1,
+      "estimate": "25min",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "client_fact_profiles table with: id, organization_id, created_by, company_name, company_domain, company_logo_url, profile_type (client_org|target_company), research_data (JSONB), research_sources (JSONB), research_status (pending|researching|complete|failed), approval_status (draft|pending_review|approved|changes_requested|archived), approval_feedback (TEXT), approved_by (TEXT), approved_at, share_token (UUID DEFAULT gen_random_uuid()), is_public (BOOLEAN DEFAULT false), share_password_hash (TEXT), share_views (INTEGER DEFAULT 0), last_viewed_at, share_expires_at, linked_icp_profile_ids (UUID[]), version (INTEGER DEFAULT 1), created_at, updated_at",
+        "UNIQUE constraint on share_token",
+        "Index on organization_id, company_domain, approval_status",
+        "RLS: org members can SELECT/INSERT/UPDATE their org's profiles; public SELECT via share_token when is_public=true (for external sharing)",
+        "updated_at trigger",
+        "Share RLS policy: allow anonymous SELECT when is_public=true AND (share_expires_at IS NULL OR share_expires_at > now())"
+      ],
+      "files": [
+        "supabase/migrations/20260211400000_client_fact_profiles.sql"
+      ]
+    },
+    {
+      "id": "FACT-002",
+      "title": "Add /fact-profiles route, nav entry, and page shell",
+      "type": "frontend",
+      "phase": 1,
+      "estimate": "20min",
+      "dependencies": [],
+      "parallel_with": ["FACT-001"],
+      "acceptance_criteria": [
+        "Lazy-loaded FactProfilesPage in lazyPages.tsx",
+        "Route at /fact-profiles wrapped in InternalRouteGuard + AppLayout",
+        "Nav entry in routeConfig.ts with FileSearch icon from lucide-react, placed near Prospecting",
+        "Page shell with header, grid layout for profile cards",
+        "Empty state: 'No fact profiles yet. Research a client or target company to get started.'",
+        "Two tabs: 'Client Orgs' and 'Target Companies' filtering by profile_type"
+      ],
+      "files": [
+        "src/pages/FactProfilesPage.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "FACT-003",
+      "title": "Build Fact Profile service, types, and React Query hooks",
+      "type": "service",
+      "phase": 2,
+      "estimate": "30min",
+      "dependencies": ["FACT-001"],
+      "acceptance_criteria": [
+        "TypeScript types: FactProfile, FactProfileResearchData (with all sections: company_overview, market_position, products_services, team_leadership, financials, technology, ideal_customer_indicators, recent_activity), ResearchSource",
+        "factProfileService.ts: createProfile, getProfile, listProfiles, updateProfile, deleteProfile, updateResearchData, updateApprovalStatus, getPublicProfile(shareToken)",
+        "useFactProfiles hook: useQuery for list, useMutation for CRUD, optimistic delete",
+        "usePublicFactProfile hook: fetches by share_token without auth",
+        "Toast feedback on all mutations"
+      ],
+      "files": [
+        "src/lib/types/factProfile.ts",
+        "src/lib/services/factProfileService.ts",
+        "src/lib/hooks/useFactProfiles.ts"
+      ]
+    },
+    {
+      "id": "FACT-004",
+      "title": "Create research-fact-profile edge function",
+      "type": "backend",
+      "phase": 2,
+      "estimate": "40min",
+      "dependencies": ["FACT-001"],
+      "parallel_with": ["FACT-003"],
+      "acceptance_criteria": [
+        "New edge function: supabase/functions/research-fact-profile/index.ts",
+        "Actions: 'research' (start research from domain), 'status' (poll progress), 'retry'",
+        "Auth: JWT validation + org membership check",
+        "Research pipeline: (1) scrape company website via fetch, (2) call company-research skill pattern via Gemini to analyze scraped data + web search results, (3) structure results into research_data JSONB format",
+        "Updates client_fact_profiles record: research_status transitions pending→researching→complete/failed",
+        "Populates all 8 sections of research_data: company_overview, market_position, products_services, team_leadership, financials, technology, ideal_customer_indicators, recent_activity",
+        "Stores source URLs and confidence scores in research_sources",
+        "Uses getCorsHeaders(req) from corsHelper.ts",
+        "Credit tracking: deducts credits with feature_key 'fact_profile_research'"
+      ],
+      "files": [
+        "supabase/functions/research-fact-profile/index.ts"
+      ]
+    },
+    {
+      "id": "FACT-005",
+      "title": "Build Fact Profile Card grid with status badges and actions",
+      "type": "frontend",
+      "phase": 3,
+      "estimate": "25min",
+      "dependencies": ["FACT-003"],
+      "acceptance_criteria": [
+        "Card grid showing fact profiles for the org",
+        "Each card: company logo (from domain via useCompanyLogo), company name, profile type badge, research status, approval status, section completeness (e.g. '6/8 sections filled'), last updated date, share status icon",
+        "Actions: View, Edit, Research, Share, Delete (with confirmation)",
+        "Filter tabs: All, Draft, Pending Review, Approved, Archived",
+        "Search by company name or domain",
+        "Skeleton loading state"
+      ],
+      "files": [
+        "src/components/fact-profiles/FactProfileCard.tsx",
+        "src/components/fact-profiles/FactProfileGrid.tsx"
+      ]
+    },
+    {
+      "id": "FACT-006",
+      "title": "Build Fact Profile Editor with 8 editable sections",
+      "type": "frontend",
+      "phase": 3,
+      "estimate": "45min",
+      "dependencies": ["FACT-003"],
+      "parallel_with": ["FACT-005"],
+      "acceptance_criteria": [
+        "Full-page editor for a fact profile (route: /fact-profiles/:id/edit)",
+        "Header: company logo, name, domain, profile type, research + approval status badges",
+        "8 collapsible sections matching research_data structure: Company Overview, Market Position, Products & Services, Team & Leadership, Financials, Technology, Ideal Customer Indicators, Recent Activity",
+        "Each section: editable fields (text inputs, tag inputs for arrays, number inputs), source attribution (URL + confidence badge), last researched timestamp",
+        "Inline editing with auto-save (debounced 1s) via updateResearchData mutation",
+        "Section completeness indicators (filled vs empty fields)",
+        "Action bar: 'Run Research' (re-research), 'Send for Review' (change status to pending_review), 'Back to List'",
+        "Design system compliant: rounded-xl cards, brand colors, proper text hierarchy"
+      ],
+      "files": [
+        "src/components/fact-profiles/FactProfileEditor.tsx",
+        "src/components/fact-profiles/FactProfileSection.tsx",
+        "src/pages/FactProfileEditPage.tsx"
+      ]
+    },
+    {
+      "id": "FACT-007",
+      "title": "Build Fact Profile View — beautiful read-only display",
+      "type": "frontend",
+      "phase": 4,
+      "estimate": "35min",
+      "dependencies": ["FACT-006"],
+      "acceptance_criteria": [
+        "Read-only view of a fact profile (route: /fact-profiles/:id)",
+        "Hero header: large company logo, name, tagline, industry badge, website link",
+        "Organized sections with icons: Building2 for overview, TrendingUp for market, Package for products, Users for team, DollarSign for financials, Cpu for tech, Target for ideal customer, Newspaper for recent activity",
+        "Each data point shows source confidence: green (high), yellow (medium), gray (low/no source)",
+        "Competitors shown as linked cards, key people as mini-profiles, tech stack as icon badges",
+        "Approval banner at top: shows status, feedback from client if changes requested",
+        "Print-friendly: @media print styles hide nav, expand all sections",
+        "Share button in header (triggers share dialog)",
+        "Action: 'Edit Profile', 'Create ICP from This' (links to prospecting)"
+      ],
+      "files": [
+        "src/components/fact-profiles/FactProfileView.tsx",
+        "src/pages/FactProfileViewPage.tsx"
+      ]
+    },
+    {
+      "id": "FACT-008",
+      "title": "Build Research Trigger UI with progress tracking",
+      "type": "frontend",
+      "phase": 4,
+      "estimate": "25min",
+      "dependencies": ["FACT-004", "FACT-006"],
+      "parallel_with": ["FACT-007"],
+      "acceptance_criteria": [
+        "New Profile dialog: enter company name + domain (or just domain), select profile type (client_org or target_company)",
+        "Research progress overlay: shows stages (Scraping website → Analyzing data → Building sections → Complete) with progress bar",
+        "Polls research-fact-profile status endpoint every 3 seconds",
+        "On complete: auto-navigates to editor with populated data",
+        "On fail: shows error with retry button",
+        "Can also trigger re-research from existing profile (updates data, increments version)",
+        "Credit estimate shown before starting research"
+      ],
+      "files": [
+        "src/components/fact-profiles/NewFactProfileDialog.tsx",
+        "src/components/fact-profiles/ResearchProgress.tsx"
+      ]
+    },
+    {
+      "id": "FACT-009",
+      "title": "Add share token generation and sharing dialog",
+      "type": "fullstack",
+      "phase": 5,
+      "estimate": "30min",
+      "dependencies": ["FACT-007"],
+      "acceptance_criteria": [
+        "Share dialog: toggle public sharing on/off, optional password, optional expiry date",
+        "Copy share link button (copies /share/fact-profile/:token URL)",
+        "View count display",
+        "New edge function: supabase/functions/fact-profile-share/index.ts — toggles is_public, sets/clears password hash, returns share URL",
+        "Password uses SHA-256 hashing (same pattern as verify-proposal-password)",
+        "Share URL format: {app_url}/share/fact-profile/{share_token}",
+        "QR code generation for the share link (optional, use qrcode library if already installed)"
+      ],
+      "files": [
+        "src/components/fact-profiles/ShareFactProfileDialog.tsx",
+        "supabase/functions/fact-profile-share/index.ts"
+      ]
+    },
+    {
+      "id": "FACT-010",
+      "title": "Build Public Fact Profile page with approval buttons",
+      "type": "frontend",
+      "phase": 5,
+      "estimate": "35min",
+      "dependencies": ["FACT-009"],
+      "parallel_with": [],
+      "acceptance_criteria": [
+        "Public route: /share/fact-profile/:token (no auth required)",
+        "Password gate: if share has password, show password input first (verify via edge function)",
+        "Expiry check: if share_expires_at passed, show 'This link has expired' message",
+        "Reuses FactProfileView layout but with branded header (your org logo + 'Shared by [org name]')",
+        "Approval section at bottom: 'Is this information accurate?' with Approve button and 'Request Changes' button",
+        "Request Changes shows textarea for feedback",
+        "Approve/reject calls edge function that updates approval_status + stores feedback + sets approved_by name",
+        "After action: confirmation message 'Thank you for your review'",
+        "Tracks share_views and last_viewed_at on each load",
+        "Mobile responsive"
+      ],
+      "files": [
+        "src/pages/public/PublicFactProfile.tsx",
+        "supabase/functions/fact-profile-approve/index.ts"
+      ]
+    },
+    {
+      "id": "FACT-011",
+      "title": "Link Fact Profiles to ICP Profiles — 'Create ICP from Facts'",
+      "type": "frontend",
+      "phase": 6,
+      "estimate": "30min",
+      "dependencies": ["FACT-007"],
+      "acceptance_criteria": [
+        "'Create ICP from This' button on FactProfileView",
+        "Auto-populates ICP criteria from fact profile's ideal_customer_indicators section: target_industries → industries, target_company_sizes → employee_ranges, target_roles → seniority_levels + departments + title_keywords",
+        "Also pulls from market_position.industry and technology.tech_stack for additional context",
+        "Opens ICPProfileForm pre-filled with extracted criteria",
+        "Saves linked_icp_profile_ids on fact profile after ICP is created",
+        "On Prospecting page: show linked fact profile badge on ICP cards that were created from a fact profile",
+        "Utility function: factProfileToICPCriteria(researchData) → Partial<ICPCriteria>"
+      ],
+      "files": [
+        "src/lib/utils/factProfileToICP.ts",
+        "src/components/fact-profiles/CreateICPFromFactsButton.tsx"
+      ]
+    },
+    {
+      "id": "FACT-012",
+      "title": "Add ICP accuracy check — compare search results against fact profile",
+      "type": "frontend",
+      "phase": 6,
+      "estimate": "30min",
+      "dependencies": ["FACT-011"],
+      "parallel_with": [],
+      "acceptance_criteria": [
+        "New component on Prospecting page: 'Accuracy Check' panel (shown when selected ICP has a linked fact profile)",
+        "Compares ICP criteria against fact profile research data: industry match, company size match, role/seniority alignment, technology overlap, geography alignment",
+        "Visual score: overall alignment percentage with breakdown per dimension",
+        "Suggestions: 'Your ICP targets SaaS but fact profile shows client serves Healthcare — verify this is intentional'",
+        "After search results come back: cross-reference result company data against fact profile's competitors list and market position",
+        "Badge on ICP card: 'Verified against Fact Profile' (green) or 'Needs Review' (yellow) when criteria diverge from facts"
+      ],
+      "files": [
+        "src/components/prospecting/ICPAccuracyCheck.tsx",
+        "src/lib/utils/icpFactProfileAlignment.ts"
+      ]
+    },
+    {
+      "id": "FACT-013",
+      "title": "Add PDF export for fact profiles",
+      "type": "frontend",
+      "phase": 7,
+      "estimate": "25min",
+      "dependencies": ["FACT-007"],
+      "acceptance_criteria": [
+        "Export button on FactProfileView: 'Download PDF'",
+        "Uses html-to-pdf approach (html2canvas + jspdf, or react-pdf if better fit)",
+        "PDF includes: company header with logo, all 8 sections, source attributions, approval status, generation date",
+        "Branded footer: 'Generated by [org name] via 60'",
+        "Clean layout optimized for A4/Letter",
+        "Loading state while PDF generates"
+      ],
+      "files": [
+        "src/components/fact-profiles/ExportFactProfilePDF.tsx"
+      ]
+    }
+  ],
+  "parallel_opportunities": [
+    {
+      "group": ["FACT-001", "FACT-002"],
+      "reason": "Schema and frontend shell have no dependencies",
+      "time_saved": "20min"
+    },
+    {
+      "group": ["FACT-003", "FACT-004"],
+      "reason": "Service layer and edge function are independent",
+      "time_saved": "30min"
+    },
+    {
+      "group": ["FACT-005", "FACT-006"],
+      "reason": "Card grid and editor are independent UI components",
+      "time_saved": "25min"
+    },
+    {
+      "group": ["FACT-007", "FACT-008"],
+      "reason": "View page and research trigger are independent",
+      "time_saved": "25min"
+    }
+  ],
+  "total_estimate": {
+    "optimistic": "5 hours",
+    "realistic": "7 hours",
+    "pessimistic": "10 hours",
+    "with_parallel": "5-7 hours"
+  },
+  "critical_path": [
+    "FACT-001 → FACT-003 → FACT-006 → FACT-007 → FACT-009 → FACT-010",
+    "FACT-001 → FACT-004 → FACT-008",
+    "FACT-007 → FACT-011 → FACT-012"
+  ],
+  "new_files": [
+    "supabase/migrations/20260211400000_client_fact_profiles.sql",
+    "supabase/functions/research-fact-profile/index.ts",
+    "supabase/functions/fact-profile-share/index.ts",
+    "supabase/functions/fact-profile-approve/index.ts",
+    "src/pages/FactProfilesPage.tsx",
+    "src/pages/FactProfileEditPage.tsx",
+    "src/pages/FactProfileViewPage.tsx",
+    "src/pages/public/PublicFactProfile.tsx",
+    "src/lib/types/factProfile.ts",
+    "src/lib/services/factProfileService.ts",
+    "src/lib/hooks/useFactProfiles.ts",
+    "src/lib/utils/factProfileToICP.ts",
+    "src/lib/utils/icpFactProfileAlignment.ts",
+    "src/components/fact-profiles/FactProfileCard.tsx",
+    "src/components/fact-profiles/FactProfileGrid.tsx",
+    "src/components/fact-profiles/FactProfileEditor.tsx",
+    "src/components/fact-profiles/FactProfileSection.tsx",
+    "src/components/fact-profiles/FactProfileView.tsx",
+    "src/components/fact-profiles/NewFactProfileDialog.tsx",
+    "src/components/fact-profiles/ResearchProgress.tsx",
+    "src/components/fact-profiles/ShareFactProfileDialog.tsx",
+    "src/components/fact-profiles/CreateICPFromFactsButton.tsx",
+    "src/components/fact-profiles/ExportFactProfilePDF.tsx",
+    "src/components/prospecting/ICPAccuracyCheck.tsx"
+  ],
+  "modified_files": [
+    "src/routes/lazyPages.tsx",
+    "src/App.tsx",
+    "src/components/prospecting/ICPProfileCard.tsx"
+  ],
+  "risk_mitigations": [
+    {
+      "risk": "Research quality varies by company — some domains have limited web presence",
+      "mitigation": "FACT-004 includes fallback: if scraping yields sparse data, skip to web search results. Section completeness indicators in FACT-006 make gaps visible. Users can manually fill gaps."
+    },
+    {
+      "risk": "External share security — public profile could leak sensitive business intel",
+      "mitigation": "FACT-009 includes optional password protection and expiry dates. Share RLS policy checks is_public + expiry. Share views are tracked for audit."
+    },
+    {
+      "risk": "Approval from external party — no auth means anyone with the link can approve",
+      "mitigation": "FACT-010 records approver name (free text), tracks IP/timestamp. Optional password provides identity verification. Team can review approval in internal view."
+    },
+    {
+      "risk": "PDF export adds a new dependency",
+      "mitigation": "FACT-013 is the last story and isolated. Uses lightweight html2canvas approach, not a heavy PDF library. Can be deferred if not needed immediately."
+    }
+  ]
+}

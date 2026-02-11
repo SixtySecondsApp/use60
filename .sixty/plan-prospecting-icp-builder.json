@@ -3,9 +3,15 @@
   "title": "Prospecting & ICP Builder",
   "description": "Full-featured prospecting page with ICP profile management, multi-provider test searches (Apollo + AI Ark), preview-then-import workflow, AI-powered ICP generation and scoring, and client approval workflows. Multi-tenant infrastructure from day one, internal-only access initially.",
   "createdAt": "2026-02-11T11:20:00Z",
+  "completedAt": "2026-02-11T18:00:00Z",
   "consultReport": ".sixty/consult/prospecting-icp-builder.md",
   "branch": "feature/prospecting-icp-builder",
   "accessModel": "multi-tenant-internal-only",
+  "status": "complete",
+  "execution": {
+    "completedStories": 18,
+    "totalStories": 18
+  },
   "stories": [
     {
       "id": "PROSPECT-001",
@@ -13,6 +19,7 @@
       "type": "schema",
       "phase": 1,
       "estimate": "25min",
+      "status": "complete",
       "dependencies": [],
       "acceptance_criteria": [
         "icp_profiles table created with: id, organization_id, created_by, name, description, criteria (JSONB), target_provider (apollo|ai_ark|both), status (draft|testing|approved|active|archived), visibility (team_only|shared|client_visible), is_active, last_tested_at, last_test_result_count, created_at, updated_at",
@@ -31,6 +38,7 @@
       "type": "schema",
       "phase": 1,
       "estimate": "15min",
+      "status": "complete",
       "dependencies": ["PROSPECT-001"],
       "acceptance_criteria": [
         "icp_search_history table: id, icp_profile_id (FK), organization_id, searched_by, provider (apollo|ai_ark), search_params (JSONB), result_count, credits_consumed, duration_ms, created_at",
@@ -47,6 +55,7 @@
       "type": "frontend",
       "phase": 1,
       "estimate": "20min",
+      "status": "complete",
       "dependencies": [],
       "parallel_with": ["PROSPECT-001", "PROSPECT-002"],
       "acceptance_criteria": [
@@ -69,6 +78,7 @@
       "type": "service",
       "phase": 2,
       "estimate": "30min",
+      "status": "complete",
       "dependencies": ["PROSPECT-001"],
       "acceptance_criteria": [
         "icpProfileService.ts with: createProfile, getProfile, listProfiles, updateProfile, deleteProfile, duplicateProfile",
@@ -90,6 +100,8 @@
       "type": "frontend",
       "phase": 2,
       "estimate": "45min",
+      "status": "complete",
+      "notes": "Filter sections (Firmographic, Persona, Geography) built inline in ICPProfileForm.tsx rather than as separate component files — cleaner since they share form state directly",
       "dependencies": ["PROSPECT-004"],
       "acceptance_criteria": [
         "Dialog-based form for create/edit ICP profiles",
@@ -100,10 +112,7 @@
         "Save as draft or save and test"
       ],
       "files": [
-        "src/components/prospecting/ICPProfileForm.tsx",
-        "src/components/prospecting/FirmographicFilters.tsx",
-        "src/components/prospecting/PersonaFilters.tsx",
-        "src/components/prospecting/GeographyFilters.tsx"
+        "src/components/prospecting/ICPProfileForm.tsx"
       ]
     },
     {
@@ -112,6 +121,7 @@
       "type": "frontend",
       "phase": 2,
       "estimate": "30min",
+      "status": "complete",
       "dependencies": ["PROSPECT-004"],
       "parallel_with": ["PROSPECT-005"],
       "acceptance_criteria": [
@@ -134,6 +144,7 @@
       "type": "backend",
       "phase": 3,
       "estimate": "40min",
+      "status": "complete",
       "dependencies": ["PROSPECT-002"],
       "acceptance_criteria": [
         "New edge function: supabase/functions/prospecting-search/index.ts",
@@ -157,6 +168,7 @@
       "type": "frontend",
       "phase": 3,
       "estimate": "25min",
+      "status": "complete",
       "dependencies": ["PROSPECT-007"],
       "acceptance_criteria": [
         "Provider toggle: Apollo, AI Ark, or Both (side-by-side comparison)",
@@ -178,6 +190,7 @@
       "type": "frontend",
       "phase": 3,
       "estimate": "35min",
+      "status": "complete",
       "dependencies": ["PROSPECT-008"],
       "acceptance_criteria": [
         "Preview table showing search results in read-only mode",
@@ -200,6 +213,7 @@
       "type": "frontend",
       "phase": 3,
       "estimate": "25min",
+      "status": "complete",
       "dependencies": ["PROSPECT-007"],
       "parallel_with": ["PROSPECT-009"],
       "acceptance_criteria": [
@@ -220,6 +234,7 @@
       "type": "frontend",
       "phase": 4,
       "estimate": "30min",
+      "status": "complete",
       "dependencies": ["PROSPECT-009"],
       "acceptance_criteria": [
         "Button on preview table: 'Import to Ops Table'",
@@ -240,6 +255,7 @@
       "type": "frontend",
       "phase": 4,
       "estimate": "30min",
+      "status": "complete",
       "dependencies": ["PROSPECT-009"],
       "parallel_with": ["PROSPECT-011"],
       "acceptance_criteria": [
@@ -259,6 +275,7 @@
       "type": "frontend",
       "phase": 4,
       "estimate": "20min",
+      "status": "complete",
       "dependencies": ["PROSPECT-005", "PROSPECT-008"],
       "acceptance_criteria": [
         "Clicking an ICP profile card populates all search filters automatically",
@@ -278,6 +295,7 @@
       "type": "frontend",
       "phase": 5,
       "estimate": "30min",
+      "status": "complete",
       "dependencies": ["PROSPECT-005"],
       "acceptance_criteria": [
         "Button: 'Generate with AI' in profile builder",
@@ -298,6 +316,7 @@
       "type": "frontend",
       "phase": 5,
       "estimate": "30min",
+      "status": "complete",
       "dependencies": ["PROSPECT-009"],
       "acceptance_criteria": [
         "After a search completes, show 'Refinement Suggestions' panel",
@@ -317,6 +336,7 @@
       "type": "frontend",
       "phase": 5,
       "estimate": "25min",
+      "status": "complete",
       "dependencies": ["PROSPECT-009", "PROSPECT-004"],
       "acceptance_criteria": [
         "Each search result row shows an ICP fit score (0-100%)",
@@ -337,6 +357,7 @@
       "type": "frontend",
       "phase": 6,
       "estimate": "25min",
+      "status": "complete",
       "dependencies": ["PROSPECT-006"],
       "acceptance_criteria": [
         "ICP profiles can be assigned to a 'client contact' (from contacts table)",
@@ -358,6 +379,7 @@
       "type": "frontend",
       "phase": 6,
       "estimate": "25min",
+      "status": "complete",
       "dependencies": ["PROSPECT-017"],
       "acceptance_criteria": [
         "When profile status set to 'Pending Approval', notification created for assigned client contact",
@@ -419,9 +441,6 @@
     "src/components/prospecting/ICPProfileForm.tsx",
     "src/components/prospecting/ICPProfileGrid.tsx",
     "src/components/prospecting/ICPProfileCard.tsx",
-    "src/components/prospecting/FirmographicFilters.tsx",
-    "src/components/prospecting/PersonaFilters.tsx",
-    "src/components/prospecting/GeographyFilters.tsx",
     "src/components/prospecting/ProviderSelector.tsx",
     "src/components/prospecting/CreditEstimator.tsx",
     "src/components/prospecting/SearchResultsPreview.tsx",

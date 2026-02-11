@@ -1,0 +1,395 @@
+{
+  "feature": "ops-copilot-integration",
+  "title": "Full Ops ↔ Copilot Integration",
+  "description": "Connect the entire Ops feature to the Copilot system by adding 17 new execute_action sub-actions, 10 new skills, and updated structured response components.",
+  "consultReport": ".sixty/consult/ops-copilot-integration.md",
+  "createdAt": "2026-02-11T22:00:00Z",
+  "stories": [
+    {
+      "id": "OPS-CPT-001",
+      "title": "Add Ops table CRUD action types and handlers",
+      "type": "backend",
+      "description": "Add list_ops_tables, get_ops_table, create_ops_table, delete_ops_table to ExecuteActionName type and implement handlers in executeAction.ts. Each handler uses user-scoped client with org_id filtering.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "acceptance_criteria": [
+        "list_ops_tables returns tables for the user's org with name, row_count, source_type, created_at",
+        "get_ops_table returns table details including columns array and enrichment stats",
+        "create_ops_table creates a new table with optional initial columns",
+        "delete_ops_table deletes table (requires params.confirm=true)",
+        "All handlers use user-scoped client (not service role)",
+        "All handlers validate orgId is present"
+      ],
+      "estimate": "30min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-002",
+      "title": "Add Ops column and row action handlers",
+      "type": "backend",
+      "description": "Add add_ops_column, get_ops_table_data, add_ops_rows, update_ops_cell to ExecuteActionName and implement handlers. Column handler supports all 20+ column types. Data handler supports filtering, sorting, pagination.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "acceptance_criteria": [
+        "add_ops_column creates column with type, name, position, config",
+        "get_ops_table_data returns rows with cell values, supports limit/offset/filter params",
+        "add_ops_rows inserts rows with cell values in batch",
+        "update_ops_cell updates a single cell by row_id + column_id",
+        "Column types validated against known set",
+        "Data queries use explicit column selection (not select('*'))"
+      ],
+      "estimate": "35min",
+      "dependencies": ["OPS-CPT-001"]
+    },
+    {
+      "id": "OPS-CPT-003",
+      "title": "Add Ops AI feature action handlers",
+      "type": "backend",
+      "description": "Add ai_query_ops_table, ai_transform_ops_column, get_enrichment_status to ExecuteActionName and implement handlers. AI query/transform call existing edge functions via fetch. Enrichment status queries enrichment_jobs table directly.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "acceptance_criteria": [
+        "ai_query_ops_table calls ops-table-ai-query edge function and returns matched rows",
+        "ai_transform_ops_column calls ops-table-transform-column edge function and returns preview",
+        "get_enrichment_status returns job progress (total_rows, processed_rows, failed_rows, status)",
+        "AI actions pass user auth token to edge function calls",
+        "Enrichment status supports table_id param to get all jobs for a table"
+      ],
+      "estimate": "30min",
+      "dependencies": ["OPS-CPT-001"]
+    },
+    {
+      "id": "OPS-CPT-004",
+      "title": "Add Ops rules and automation action handlers",
+      "type": "backend",
+      "description": "Add create_ops_rule, list_ops_rules to ExecuteActionName and implement handlers. Rules support trigger types: cell_updated, enrichment_complete, row_created. Action types: update_cell, run_enrichment, push_to_hubspot, add_tag, notify.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "acceptance_criteria": [
+        "create_ops_rule creates rule with trigger_type, condition, action_type, action_config",
+        "list_ops_rules returns rules for a table with execution counts",
+        "Validates trigger_type and action_type against allowed enums",
+        "Sets created_by to current user",
+        "Returns rule ID on creation for follow-up actions"
+      ],
+      "estimate": "20min",
+      "dependencies": ["OPS-CPT-001"]
+    },
+    {
+      "id": "OPS-CPT-005",
+      "title": "Add Ops integration sync action handlers",
+      "type": "backend",
+      "description": "Add sync_ops_hubspot, sync_ops_attio, push_ops_to_instantly to ExecuteActionName and implement handlers. Each calls the respective edge function (sync-hubspot-ops-table, sync-attio-ops-table, push-to-instantly) with user auth.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "acceptance_criteria": [
+        "sync_ops_hubspot calls sync-hubspot-ops-table with table_id and direction (push/pull)",
+        "sync_ops_attio calls sync-attio-ops-table with table_id",
+        "push_ops_to_instantly calls push-to-instantly with table_id and campaign config",
+        "All sync actions check integration_credentials exist before calling",
+        "Returns sync job status/result",
+        "Handles missing integration credentials with clear error message"
+      ],
+      "estimate": "30min",
+      "dependencies": ["OPS-CPT-001"]
+    },
+    {
+      "id": "OPS-CPT-006",
+      "title": "Add Ops insights action handler",
+      "type": "backend",
+      "description": "Add get_ops_insights to ExecuteActionName and implement handler that calls ops-table-insights-engine edge function.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "acceptance_criteria": [
+        "get_ops_insights calls ops-table-insights-engine with table_id",
+        "Returns insights array with type, data, generated_at",
+        "Falls back to cached insights from ops_table_insights table if edge function fails",
+        "Passes user auth token to edge function"
+      ],
+      "estimate": "15min",
+      "dependencies": ["OPS-CPT-001"]
+    },
+    {
+      "id": "OPS-CPT-007",
+      "title": "Update agent classifier and definitions for Ops actions",
+      "type": "backend",
+      "description": "Add all 17 new Ops actions to the Prospecting agent's allowedActions in agentDefinitions.ts and update agentClassifier.ts to route ops-related intents to the Prospecting agent.",
+      "files": [
+        "supabase/functions/_shared/agentDefinitions.ts",
+        "supabase/functions/_shared/agentClassifier.ts"
+      ],
+      "acceptance_criteria": [
+        "All 17 new actions added to Prospecting agent allowedActions",
+        "Agent classifier routes 'ops table', 'enrichment', 'sync hubspot' intents to Prospecting",
+        "Classification keywords updated to include ops-related terms",
+        "No regressions to existing agent routing"
+      ],
+      "estimate": "15min",
+      "dependencies": ["OPS-CPT-001", "OPS-CPT-002", "OPS-CPT-003", "OPS-CPT-004", "OPS-CPT-005", "OPS-CPT-006"]
+    },
+    {
+      "id": "OPS-CPT-008",
+      "title": "Add structured response detection for Ops actions",
+      "type": "backend",
+      "description": "Update structuredResponseDetector.ts to detect and format structured responses for new Ops actions: table lists, table data previews, enrichment status, insights, sync results.",
+      "files": [
+        "supabase/functions/_shared/structuredResponseDetector.ts"
+      ],
+      "acceptance_criteria": [
+        "list_ops_tables → ops_table_list response with table cards and open actions",
+        "get_ops_table → ops_table_detail response with column list and stats",
+        "get_enrichment_status → ops_enrichment_status response with progress bar data",
+        "get_ops_insights → ops_insights response with insight cards",
+        "sync actions → ops_sync_result response with sync summary",
+        "All response types include appropriate callback actions (open_dynamic_table, add_enrichment)"
+      ],
+      "estimate": "30min",
+      "dependencies": ["OPS-CPT-007"]
+    },
+    {
+      "id": "OPS-CPT-009",
+      "title": "Create ops-table-manager skill",
+      "type": "skill",
+      "description": "Create skills/atomic/ops-table-manager/SKILL.md — teaches copilot how to create, list, view, and manage ops tables. Includes triggers for 'create table', 'list my tables', 'show table details'.",
+      "files": [
+        "skills/atomic/ops-table-manager/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "SKILL.md has valid V3 frontmatter with triggers, inputs, outputs",
+        "Description optimized for embedding similarity search",
+        "Keywords include: ops, table, create, list, manage, columns, prospecting",
+        "Trigger patterns cover common user phrasings",
+        "Content instructs copilot to use list_ops_tables, get_ops_table, create_ops_table, delete_ops_table, add_ops_column",
+        "Includes examples of how to create tables with different column configurations"
+      ],
+      "estimate": "20min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-010",
+      "title": "Create ops-data-manager skill",
+      "type": "skill",
+      "description": "Create skills/atomic/ops-data-manager/SKILL.md — teaches copilot how to view table data, add rows, update cells. Includes triggers for 'show my table data', 'add leads to table', 'update cell'.",
+      "files": [
+        "skills/atomic/ops-data-manager/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 frontmatter with triggers, inputs, outputs",
+        "Covers get_ops_table_data, add_ops_rows, update_ops_cell actions",
+        "Content explains pagination and filtering parameters",
+        "Includes guidance on presenting table data in readable format"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-011",
+      "title": "Create ops-enrichment-manager skill",
+      "type": "skill",
+      "description": "Create skills/atomic/ops-enrichment-manager/SKILL.md — teaches copilot how to configure enrichment, start jobs, and check status. Covers the full enrichment lifecycle.",
+      "files": [
+        "skills/atomic/ops-enrichment-manager/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 frontmatter with enrichment-related triggers",
+        "Covers enrich_table_column and get_enrichment_status actions",
+        "Content explains enrichment configuration (prompt, model selection)",
+        "Includes status checking workflow with progress reporting",
+        "Triggers: 'enrich column', 'check enrichment', 'enrichment status', 'how is my enrichment'"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-012",
+      "title": "Create ops-ai-analyst skill",
+      "type": "skill",
+      "description": "Create skills/atomic/ops-ai-analyst/SKILL.md — teaches copilot how to run natural language queries on table data and get AI insights.",
+      "files": [
+        "skills/atomic/ops-ai-analyst/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 frontmatter with query/analysis triggers",
+        "Covers ai_query_ops_table and get_ops_insights actions",
+        "Content explains how to formulate effective queries",
+        "Triggers: 'query my table', 'find leads where', 'analyze table', 'show insights'"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-013",
+      "title": "Create ops-ai-transform skill",
+      "type": "skill",
+      "description": "Create skills/atomic/ops-ai-transform/SKILL.md — teaches copilot how to use AI to bulk-transform column values.",
+      "files": [
+        "skills/atomic/ops-ai-transform/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 frontmatter with transform triggers",
+        "Covers ai_transform_ops_column action",
+        "Content explains transform prompt best practices",
+        "Triggers: 'transform column', 'generate values', 'fill in column', 'AI populate'"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-014",
+      "title": "Create ops-integration-sync skill",
+      "type": "skill",
+      "description": "Create skills/atomic/ops-integration-sync/SKILL.md — teaches copilot how to sync ops tables with HubSpot, Attio, and Instantly.",
+      "files": [
+        "skills/atomic/ops-integration-sync/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 frontmatter with integration sync triggers",
+        "Covers sync_ops_hubspot, sync_ops_attio, push_ops_to_instantly actions",
+        "Content explains sync directions (push vs pull) and prerequisites",
+        "Includes guidance on checking integration credentials first",
+        "Triggers: 'sync with hubspot', 'push to attio', 'send to instantly', 'sync table'"
+      ],
+      "estimate": "20min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-015",
+      "title": "Create ops-automation-builder skill",
+      "type": "skill",
+      "description": "Create skills/atomic/ops-automation-builder/SKILL.md — teaches copilot how to create and manage automation rules on ops tables.",
+      "files": [
+        "skills/atomic/ops-automation-builder/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 frontmatter with automation triggers",
+        "Covers create_ops_rule and list_ops_rules actions",
+        "Content explains available trigger types and action types",
+        "Includes examples of common rule patterns",
+        "Triggers: 'create rule', 'automate', 'when cell changes', 'set up automation'"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-016",
+      "title": "Create seq-ops-prospect-pipeline sequence",
+      "type": "skill",
+      "description": "Create skills/sequences/seq-ops-prospect-pipeline/SKILL.md — full prospecting workflow: Apollo search → create table → enrichment → push to Instantly.",
+      "files": [
+        "skills/sequences/seq-ops-prospect-pipeline/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 sequence frontmatter with workflow array",
+        "Workflow: search_leads_create_table → add_ops_column (enrichment) → enrich_table_column → push_ops_to_instantly",
+        "Each step has input_mapping from previous outputs",
+        "on_failure: stop for critical steps",
+        "Triggers: 'prospect pipeline', 'find and enrich leads', 'build prospect list and email'"
+      ],
+      "estimate": "20min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-017",
+      "title": "Create seq-ops-hubspot-enrich-sync sequence",
+      "type": "skill",
+      "description": "Create skills/sequences/seq-ops-hubspot-enrich-sync/SKILL.md — import from HubSpot, enrich with AI, sync back.",
+      "files": [
+        "skills/sequences/seq-ops-hubspot-enrich-sync/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 sequence frontmatter with workflow array",
+        "Workflow: sync_ops_hubspot (pull) → enrich_table_column → sync_ops_hubspot (push)",
+        "Triggers: 'enrich hubspot contacts', 'hubspot enrich and sync'"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-018",
+      "title": "Create seq-ops-table-from-scratch sequence",
+      "type": "skill",
+      "description": "Create skills/sequences/seq-ops-table-from-scratch/SKILL.md — build a complete table from a description.",
+      "files": [
+        "skills/sequences/seq-ops-table-from-scratch/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 sequence frontmatter with workflow array",
+        "Workflow: create_ops_table → add_ops_column (multiple) → ai_transform_ops_column → enrich_table_column",
+        "Triggers: 'build me a table for', 'create a prospecting table from scratch'"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "OPS-CPT-019",
+      "title": "Add frontend response components and UI actions",
+      "type": "frontend",
+      "description": "Register new structured response types in CopilotResponse.tsx. Add OpsTableListResponse and OpsEnrichmentStatusResponse components. Update AssistantShell.tsx with new UI action handlers.",
+      "files": [
+        "src/components/copilot/CopilotResponse.tsx",
+        "src/components/copilot/types.ts",
+        "src/components/copilot/responses/OpsTableListResponse.tsx",
+        "src/components/copilot/responses/OpsEnrichmentStatusResponse.tsx",
+        "src/components/assistant/AssistantShell.tsx"
+      ],
+      "acceptance_criteria": [
+        "ops_table_list type renders table cards with open/enrich actions",
+        "ops_enrichment_status type renders progress bar with percentage",
+        "ops_table_detail type renders column list and stats",
+        "New UI actions registered: open_ops_rule_builder, open_ops_ai_query",
+        "All components follow existing response component patterns",
+        "Dark mode compatible"
+      ],
+      "estimate": "40min",
+      "dependencies": ["OPS-CPT-008"]
+    },
+    {
+      "id": "OPS-CPT-020",
+      "title": "Deploy edge functions and sync skills to staging",
+      "type": "deployment",
+      "description": "Deploy updated edge functions to staging. Run sync-skills to compile new skills to organization_skills. Test end-to-end via copilot chat.",
+      "files": [],
+      "acceptance_criteria": [
+        "All modified edge functions deployed to staging with --no-verify-jwt",
+        "npm run sync-skills succeeds with new skills",
+        "New skills visible in organization_skills for test org",
+        "Copilot can list ops tables via chat",
+        "Copilot can create a table via chat",
+        "Copilot can check enrichment status via chat",
+        "Copilot can sync with HubSpot via chat",
+        "Structured response panels render correctly"
+      ],
+      "estimate": "45min",
+      "dependencies": ["OPS-CPT-007", "OPS-CPT-008", "OPS-CPT-009", "OPS-CPT-010", "OPS-CPT-011", "OPS-CPT-012", "OPS-CPT-013", "OPS-CPT-014", "OPS-CPT-015", "OPS-CPT-016", "OPS-CPT-017", "OPS-CPT-018", "OPS-CPT-019"]
+    }
+  ],
+  "parallel_opportunities": [
+    {
+      "group": ["OPS-CPT-002", "OPS-CPT-003", "OPS-CPT-004", "OPS-CPT-005", "OPS-CPT-006"],
+      "reason": "All depend only on OPS-CPT-001 (type definitions). Independent handler implementations.",
+      "time_saved": "90min"
+    },
+    {
+      "group": ["OPS-CPT-009", "OPS-CPT-010", "OPS-CPT-011", "OPS-CPT-012", "OPS-CPT-013", "OPS-CPT-014", "OPS-CPT-015", "OPS-CPT-016", "OPS-CPT-017", "OPS-CPT-018"],
+      "reason": "All skill files are independent — no file overlap. Can be written in parallel with backend work.",
+      "time_saved": "120min"
+    }
+  ],
+  "total_estimate": {
+    "sequential": "6-7 hours",
+    "with_parallelism": "3-4 hours",
+    "stories": 20
+  }
+}

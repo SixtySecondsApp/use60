@@ -89,7 +89,12 @@ npm run dev              # Start landing (port 5173)
 | **Staging** | `caerqjzvuerejfrdtygb` | `staging` | `npm run dev:staging` |
 | **Development** | `wbgmnyekgqklggilgqag` | `development` | `npm run dev` |
 
-**Edge Function Gotchas**: All edge functions require JWT auth. Use `esm.sh` with pinned versions for imports. Always use explicit column selection (not `select('*')`). New functions must import `getCorsHeaders(req)` from `_shared/corsHelper.ts` for origin-validated CORS.
+**Edge Function Gotchas**:
+- Default to JWT-protected functions.
+- For public/demo/webhook endpoints, disable JWT verification explicitly with `verify_jwt = false` (or deploy with `--no-verify-jwt`) and enforce your own validation/rate limits in function code.
+- Use `esm.sh` with pinned versions for imports.
+- Always use explicit column selection (not `select('*')`).
+- New functions must import `getCorsHeaders(req)` from `_shared/corsHelper.ts` for origin-validated CORS.
 
 ## Copilot System (Transition In Progress)
 

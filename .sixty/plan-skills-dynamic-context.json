@@ -1,31 +1,39 @@
 {
   "feature": {
     "id": "skills-dynamic-context",
-    "name": "Dynamic Context Injection + Auto-Recompile for Skills",
+    "name": "Dynamic Context, Tool Awareness & Shared References for Skills",
     "status": "pending",
     "prd": ".claude/skills_improve.md",
     "createdAt": "2026-02-11T00:00:00Z",
-    "summary": "Thread org variables through all skills via auto-generated Organization Context blocks, add context profiles to frontmatter, and auto-recompile skills when org context changes."
+    "summary": "Thread org variables + available tools through all skills via shared reference documents that get dynamically inlined at compile time. When a new tool or variable is added, update one doc and recompile — all skills get it automatically."
   },
 
   "architecture": {
-    "approach": "Instead of hardcoding ${variable} references across every skill body, inject a dynamic '## Organization Context' markdown block at compile time. The block is generated from all available organization_context data, filtered by a context_profile declared in each skill's frontmatter. A DB trigger on organization_context marks org skills for recompile, and a pg_cron job periodically processes the queue.",
+    "approach": "Create a _platform-references meta-skill holding shared docs (available-tools.md, org-variables.md, capabilities.md). Skills include them with @_platform-references/doc-name syntax. The compiler resolves @skill-key/doc-title references by fetching from skill_documents and inlining content. Combined with context_profile for org variable injection and auto-recompile on context changes.",
 
     "components": [
+      "_platform-references meta-skill with shared tool/variable docs",
+      "@reference resolution in compile-organization-skills",
+      "Reference doc loading in agentSkillExecutor + autonomousExecutor",
       "context_profile frontmatter field + parser update",
       "Context block generator in compile-organization-skills",
       "DB migration: needs_recompile column + trigger + cron",
       "refresh-organization-skills update for context-change detection",
-      "Skill body updates (25 user-facing skills in 5 batches)",
+      "Skill body updates (all skills get @references + context_profile)",
+      ".claude/skills/ auto-sync in sync-skills.ts",
       "Sync + verify"
     ],
 
     "keyDecisions": [
-      "Context profiles (sales/research/communication/full) control which variables each skill receives — not every skill needs every variable",
+      "Shared docs live in a _platform-references meta-skill — not a new table, leverages existing skill_documents",
+      "@skill-key/doc-title syntax resolved at compile time — inlined into compiled_content before variable substitution",
+      "Skills include only what they need: @_platform-references/capabilities.md maps requires_capabilities to specific execute_action tools",
+      "Context profiles (sales/research/communication/full) control which org variables each skill receives",
       "The context block is injected ABOVE the skill body during compilation, so the AI reads it as background context",
-      "Only ${company_name} is used inline in skill bodies (for titles, competitive framing, email signatures) — everything else comes from the context block",
-      "needs_recompile boolean column (simpler than hash-based detection) — trigger sets it, cron clears it after recompile",
-      "Integration skills (ai-ark-*, apify-*, output-format-selector) do NOT get context profiles — they don't need org context"
+      "Only ${company_name} is used inline in skill bodies — everything else comes from context block or shared refs",
+      "needs_recompile boolean column — trigger sets it on context change, cron clears it after recompile",
+      "Adding a new tool = update available-tools.md + recompile = all skills see it instantly",
+      "Integration skills (ai-ark-*, apify-*) get their own capability-specific tool refs, not the full catalog"
     ]
   },
 
@@ -361,17 +369,240 @@
     },
 
     {
-      "id": "SCTX-011",
+      "id": "SCTX-012",
       "feature": "skills-dynamic-context",
-      "title": "Run sync-skills, verify compilation, and deploy edge functions",
-      "type": "verification",
+      "title": "Create _platform-references meta-skill with shared tool/variable docs",
+      "type": "content",
+      "status": "pending",
+      "priority": 3,
+
+      "description": "Create the `_platform-references` meta-skill directory and shared reference documents:\n\n**Directory**: `skills/atomic/_platform-references/`\n- `SKILL.md` — Minimal meta-skill (category: system, is_active: true, no triggers, description: 'Shared reference documents for tool catalogs, org variables, and capability mappings')\n\n**Reference Docs**:\n\n1. `references/available-tools.md` — Complete tool catalog (source: copilot_adapters/types.ts)\n   - 52 execute_action sub-actions grouped by domain:\n     - CRM Data (8): get_contact, get_lead, get_deal, get_pipeline_summary, get_pipeline_deals, get_pipeline_forecast, get_contacts_needing_attention, get_company_status\n     - Meetings (6): get_meetings, get_booking_stats, get_meeting_count, get_next_meeting, get_meetings_for_period, get_time_breakdown\n     - Email (2): search_emails, draft_email\n     - CRM Updates (2): update_crm, send_notification\n     - Enrichment (2): enrich_contact, enrich_company\n     - Skills (3): invoke_skill, run_skill, run_sequence\n     - Tasks (2): create_task, list_tasks\n     - Activities (1): create_activity\n     - Lead Tables (2): search_leads_create_table, enrich_table_column\n     - Ops Tables CRUD (4): list_ops_tables, get_ops_table, create_ops_table, delete_ops_table\n     - Ops Data (4): add_ops_column, get_ops_table_data, add_ops_rows, update_ops_cell\n     - Ops AI (3): ai_query_ops_table, ai_transform_ops_column, get_enrichment_status\n     - Ops Rules (2): create_ops_rule, list_ops_rules\n     - Ops Integrations (3): sync_ops_hubspot, sync_ops_attio, push_ops_to_instantly\n     - Ops Insights (1): get_ops_insights\n   - Plus: gemini_research tool, resolve_entity tool\n   - For each action: name, key parameters, return shape, requires_confirmation (yes/no)\n\n2. `references/org-variables.md` — Complete variable catalog (source: platformSkillService.ts)\n   - 30 variables in 7 groups:\n     - Company Identity (6): company_name, domain, tagline, description, industry, employee_count\n     - Products (3): products, main_product, value_propositions\n     - Market Intel (4): competitors, primary_competitor, target_market, icp_summary\n     - Additional Intel (5): tech_stack, key_people, pain_points, buying_signals, customer_logos\n     - Brand Voice (6): brand_tone, words_to_avoid, key_phrases, writing_style_name, writing_style_tone, writing_style_examples\n     - ICP (4): icp_company_profile, icp_buyer_persona, qualification_criteria, disqualification_criteria\n     - Copilot (2): copilot_personality, copilot_greeting\n   - ${variable} placeholder syntax, pipe modifiers (|upper, |lower, |join, |count, |first)\n   - Context profile table: which profiles include which variables\n\n3. `references/capabilities.md` — Capability-to-tool mapping\n   - Maps `requires_capabilities` frontmatter values to specific execute_action sub-actions:\n     - crm → get_contact, get_lead, get_deal, get_pipeline_summary, get_pipeline_deals, get_pipeline_forecast, get_contacts_needing_attention, get_company_status, update_crm\n     - email → search_emails, draft_email\n     - calendar → get_meetings, get_next_meeting, get_meetings_for_period, get_booking_stats, get_meeting_count, get_time_breakdown\n     - tasks → create_task, list_tasks\n     - enrichment → enrich_contact, enrich_company\n     - notifications → send_notification\n     - ops_tables → list_ops_tables, get_ops_table, create_ops_table, delete_ops_table, add_ops_column, get_ops_table_data, add_ops_rows, update_ops_cell, ai_query_ops_table, ai_transform_ops_column\n     - skills → invoke_skill, run_skill, run_sequence",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/_shared/copilot_adapters/types.ts", "src/lib/services/platformSkillService.ts"],
+        "schema": []
+      },
+      "blocks": ["SCTX-013", "SCTX-016"],
+      "parallelWith": ["SCTX-001", "SCTX-003"],
+
+      "acceptance": [
+        "_platform-references/SKILL.md exists with valid frontmatter (category: system, is_active: true)",
+        "available-tools.md documents all 52 execute_action sub-actions with parameters and return types",
+        "org-variables.md documents all 30 context variables with types and context profile membership",
+        "capabilities.md maps all 8 capability values to their specific tool actions",
+        "npm run validate-skills passes for _platform-references"
+      ],
+
+      "estimatedMinutes": 30,
+      "files": [
+        "skills/atomic/_platform-references/SKILL.md",
+        "skills/atomic/_platform-references/references/available-tools.md",
+        "skills/atomic/_platform-references/references/org-variables.md",
+        "skills/atomic/_platform-references/references/capabilities.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-013",
+      "feature": "skills-dynamic-context",
+      "title": "Add @reference resolution to compile-organization-skills compiler",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Add a `resolveReferences()` step to the compilation pipeline in `compile-organization-skills/index.ts`.\n\nCurrent pipeline (in compileSkillDocument, line ~366):\n1. Extract context_profile from frontmatter\n2. generateContextBlock(context, profile)\n3. Prepend context block to content\n4. compileTemplate() — ${variable} substitution\n5. Return compiled result\n\nNew pipeline:\n1. Extract context_profile from frontmatter\n2. generateContextBlock(context, profile)\n3. Prepend context block to content\n4. **resolveReferences(content, supabase)** — NEW\n5. compileTemplate() — ${variable} substitution\n6. Return compiled result\n\n`resolveReferences()` implementation:\n```typescript\nasync function resolveReferences(content: string, supabase: SupabaseClient): Promise<string> {\n  const refPattern = /@([a-z0-9_-]+)\\/([a-z0-9_.-]+)/g;\n  const matches = [...content.matchAll(refPattern)];\n  if (matches.length === 0) return content;\n\n  // Batch fetch: collect unique skill keys\n  const skillKeys = [...new Set(matches.map(m => m[1]))];\n  const { data: skills } = await supabase\n    .from('platform_skills')\n    .select('id, skill_key')\n    .in('skill_key', skillKeys);\n\n  if (!skills?.length) return content;\n  const skillMap = new Map(skills.map(s => [s.skill_key, s.id]));\n\n  // Batch fetch: collect all doc titles\n  for (const [fullMatch, skillKey, docTitleRaw] of matches) {\n    const title = docTitleRaw.replace(/\\.md$/, '');\n    const skillId = skillMap.get(skillKey);\n    if (!skillId) continue;\n\n    const { data: doc } = await supabase\n      .from('skill_documents')\n      .select('content')\n      .eq('skill_id', skillId)\n      .eq('title', title)\n      .maybeSingle();\n\n    if (doc?.content) {\n      content = content.replace(fullMatch, doc.content);\n    }\n  }\n  return content;\n}\n```\n\nNote: resolveReferences runs BEFORE compileTemplate so that inlined reference content can itself contain ${variables} that get substituted.\n\nThe supabase client is available in the compilation context — pass it through from the handler.",
+
+      "dependencies": {
+        "stories": ["SCTX-012", "SCTX-002"],
+        "files": ["supabase/functions/compile-organization-skills/index.ts"],
+        "schema": ["platform_skills", "skill_documents"]
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-014", "SCTX-015"],
+
+      "acceptance": [
+        "@skill-key/doc-title patterns in skill bodies are resolved to actual document content",
+        "Missing references are silently skipped (no errors)",
+        "Resolved content can itself contain ${variables} that get substituted",
+        "Batch fetching minimizes DB round-trips",
+        "Skills without @references compile exactly as before (no regression)"
+      ],
+
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/compile-organization-skills/index.ts"
+      ]
+    },
+
+    {
+      "id": "SCTX-014",
+      "feature": "skills-dynamic-context",
+      "title": "Add reference document loading to agentSkillExecutor",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+
+      "description": "In `supabase/functions/_shared/agentSkillExecutor.ts`, after loading the skill content from organization_skills, also load skill-specific reference documents and append them.\n\nThe shared `@_platform-references/` docs are already inlined at compile time by the compiler (SCTX-013). But skill-specific references (like `scoring-frameworks.md` for lead-qualification) should also be available at execution time.\n\nAfter loading skill content:\n```typescript\n// Load skill-specific reference docs\nconst { data: refs } = await supabase\n  .from('skill_documents')\n  .select('title, content')\n  .eq('skill_id', skillId)\n  .eq('doc_type', 'reference');\n\nif (refs?.length) {\n  skillContent += '\\n\\n---\\n## Reference Documents\\n';\n  for (const ref of refs) {\n    skillContent += `\\n### ${ref.title}\\n${ref.content}\\n`;\n  }\n}\n```\n\nNote: This is for runtime execution, not compilation. The executor already has the supabase client and skill_id available.",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/_shared/agentSkillExecutor.ts"],
+        "schema": ["skill_documents"]
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-013", "SCTX-015"],
+
+      "acceptance": [
+        "Skill execution includes skill-specific reference docs appended to content",
+        "Reference docs are formatted with ### headers for each document",
+        "Skills without reference docs execute exactly as before",
+        "No duplicate loading of @_platform-references docs (those are already compiled in)"
+      ],
+
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/agentSkillExecutor.ts"
+      ]
+    },
+
+    {
+      "id": "SCTX-015",
+      "feature": "skills-dynamic-context",
+      "title": "Add reference document loading to autonomousExecutor",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+
+      "description": "In `src/lib/copilot/agent/autonomousExecutor.ts`, when loading skill content for execution (in the skillToTool or skill execution path), also fetch and append skill-specific reference documents.\n\nSame pattern as SCTX-014 but client-side. The autonomousExecutor already queries organization_skills — extend to also query skill_documents for the skill's platform_skill_id.\n\nUses the supabase client from the service locator.",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/copilot/agent/autonomousExecutor.ts"],
+        "schema": ["skill_documents"]
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-013", "SCTX-014"],
+
+      "acceptance": [
+        "Autonomous skill execution includes skill-specific reference docs",
+        "Skills without reference docs execute exactly as before",
+        "Reference loading doesn't break the skillToTool() conversion"
+      ],
+
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ]
+    },
+
+    {
+      "id": "SCTX-016",
+      "feature": "skills-dynamic-context",
+      "title": "Add @_platform-references includes to all skill bodies",
+      "type": "content",
       "status": "pending",
       "priority": 7,
 
-      "description": "Final verification:\n1. Run `npm run validate-skills` — all 35 skills must pass\n2. Run `npm run sync-skills:dry` — preview what would change\n3. Run `npm run sync-skills` — sync to development DB\n4. Manually trigger compile-organization-skills for a test org to verify context block generation\n5. Deploy updated edge functions to staging:\n   - compile-organization-skills\n   - refresh-organization-skills\n6. Run migration on staging\n7. Verify a compiled skill in organization_skills has the Organization Context block\n8. Verify updating org context triggers needs_recompile = true",
+      "description": "For each of the ~56 skills, add the appropriate `@_platform-references/` include lines to their SKILL.md body.\n\nRules:\n- ALL skills get `@_platform-references/org-variables.md` (org context awareness)\n- Skills with `requires_capabilities` in frontmatter get `@_platform-references/capabilities.md` (maps their capabilities to specific tools)\n- Skills that call tools directly (deal-*, meeting-*, pipeline-*, task-*, email-related) also get `@_platform-references/available-tools.md`\n- Pure prompt template skills (no tool calls) only get org-variables\n- Integration skills (ai-ark-*, apify-*) get capabilities.md only (their tools are API-specific, not execute_action)\n- Meta skills (_platform-references, output-format-selector) get nothing\n\nPlacement: Add a section near the top of the skill body, after any ## Role/Context section:\n```markdown\n## Available Context & Tools\n@_platform-references/org-variables.md\n@_platform-references/capabilities.md\n```\n\nThis is a bulk content update across all skill files. Group by batch for efficiency.",
 
       "dependencies": {
-        "stories": ["SCTX-002", "SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010"],
+        "stories": ["SCTX-012", "SCTX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-013", "SCTX-014", "SCTX-015"],
+
+      "acceptance": [
+        "All skills with requires_capabilities include @_platform-references/capabilities.md",
+        "All skills include @_platform-references/org-variables.md",
+        "Include lines are placed consistently near the top of skill bodies",
+        "Meta/system skills are excluded from includes",
+        "npm run validate-skills passes for all skills"
+      ],
+
+      "estimatedMinutes": 30,
+      "files": [
+        "skills/atomic/*/SKILL.md",
+        "skills/sequences/*/SKILL.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-017",
+      "feature": "skills-dynamic-context",
+      "title": "Add .claude/skills auto-sync to sync-skills.ts",
+      "type": "tooling",
+      "status": "pending",
+      "priority": 6,
+
+      "description": "Add a `syncClaudeSkills()` function at the end of main() in `scripts/sync-skills.ts`.\n\nFor each `skills/atomic/*/SKILL.md`, mirror to `.claude/skills/*/SKILL.md`. Also mirror `references/` subdirectories.\n\nSkip `_platform-references` (not a Claude Code skill — it's a system meta-skill).\n\nThis keeps `.claude/skills/` (Claude Code's skill directory) in sync with `skills/atomic/` (the source of truth for the platform).\n\nCurrently 19 atomic skills are missing from `.claude/skills/`.",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["scripts/sync-skills.ts"],
+        "schema": []
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-012", "SCTX-013"],
+
+      "acceptance": [
+        "Running sync-skills mirrors all atomic skills to .claude/skills/",
+        "_platform-references is excluded from .claude/skills/ mirror",
+        "references/ subdirectories are also mirrored",
+        "Existing .claude/skills/ content is overwritten with source of truth from skills/atomic/"
+      ],
+
+      "estimatedMinutes": 15,
+      "files": [
+        "scripts/sync-skills.ts"
+      ]
+    },
+
+    {
+      "id": "SCTX-018",
+      "feature": "skills-dynamic-context",
+      "title": "Add inputs/outputs frontmatter to skills missing them",
+      "type": "content",
+      "status": "pending",
+      "priority": 7,
+
+      "description": "For each skill missing `inputs` or `outputs` in frontmatter, add structured declarations based on what the skill body expects and returns.\n\nPriority: skills used by `autonomousExecutor.ts` which reads `inputs` to build Claude tool schemas via `skillToTool()`.\n\n~20 skills missing inputs, ~34 missing outputs. Focus on the most-used skills first:\n- deal-next-best-actions: inputs (deal_id or deal_name), outputs (action_plan)\n- meeting-prep-brief: inputs (meeting_id or contact_name), outputs (brief)\n- lead-qualification: inputs (contact_id or lead_info), outputs (score, recommendation)\n- company-research: inputs (company_name or domain), outputs (report)\n- daily-brief-planner: inputs (date?), outputs (brief)\n- followup-reply-drafter: inputs (thread_id or email_context), outputs (draft_email)\n\nFormat per SKILL_FRONTMATTER_GUIDE.md:\n```yaml\ninputs:\n  - name: deal_id\n    type: string\n    required: false\n    description: The deal ID to analyze\noutputs:\n  - name: action_plan\n    type: object\n    description: Ranked list of next best actions\n```",
+
+      "dependencies": {
+        "stories": ["SCTX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-016", "SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010"],
+
+      "acceptance": [
+        "Top 20 most-used skills have inputs defined in frontmatter",
+        "Top 20 most-used skills have outputs defined in frontmatter",
+        "Input types match what autonomousExecutor.ts expects for skillToTool()",
+        "npm run validate-skills passes"
+      ],
+
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/*/SKILL.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-011",
+      "feature": "skills-dynamic-context",
+      "title": "Full sync, compile, deploy, and verify end-to-end",
+      "type": "verification",
+      "status": "pending",
+      "priority": 10,
+
+      "description": "Final verification of the complete dynamic context + shared references system:\n\n1. Run `npm run validate-skills` — all skills must pass (including _platform-references)\n2. Run `npm run sync-skills:dry` — preview changes\n3. Run `npm run sync-skills` — sync all skills + reference docs to staging DB\n4. Deploy updated edge functions to staging:\n   - `compile-organization-skills` (has @reference resolution)\n   - `refresh-organization-skills` (has context-change handling)\n   - `copilot-autonomous` (shares agentSkillExecutor with ref loading)\n   - `api-copilot` (shares agentSkillExecutor with ref loading)\n5. Run migration on staging (needs_recompile column + trigger + cron)\n6. Trigger recompilation for a test org\n7. Verify compiled skill in organization_skills:\n   - Has '## Organization Context' block with real org data\n   - Has inlined content from @_platform-references/ (tool catalog, variables)\n   - No unresolved @references remain\n8. Verify skill execution:\n   - Skill-specific reference docs load at runtime\n   - Compiled tool catalog is present in skill content\n9. Verify context change triggers needs_recompile = true\n10. Run `npm run sync-skills` on production DB\n11. Deploy to production",
+
+      "dependencies": {
+        "stories": ["SCTX-002", "SCTX-005", "SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010", "SCTX-013", "SCTX-014", "SCTX-015", "SCTX-016", "SCTX-017", "SCTX-018"],
         "files": [],
         "schema": []
       },
@@ -379,49 +610,66 @@
       "parallelWith": [],
 
       "acceptance": [
-        "validate-skills passes for all 35 skills",
-        "sync-skills completes without errors",
-        "Test compilation produces Organization Context block with real org data",
-        "Edge functions deploy to staging successfully",
-        "Context change triggers needs_recompile flag"
+        "validate-skills passes for all skills including _platform-references",
+        "sync-skills completes without errors on both staging and production",
+        "Compiled skills contain inlined tool catalog from @_platform-references/available-tools.md",
+        "Compiled skills contain inlined variable docs from @_platform-references/org-variables.md",
+        "Organization Context block appears in compiled skills with real org data",
+        "Edge functions deploy to staging and production successfully",
+        "Context change triggers needs_recompile flag",
+        "Skill execution loads skill-specific reference docs at runtime",
+        ".claude/skills/ is in sync with skills/atomic/"
       ],
 
-      "estimatedMinutes": 20,
+      "estimatedMinutes": 30,
       "files": []
     }
   ],
 
   "execution": {
-    "totalStories": 11,
-    "estimatedMinutes": 215,
-    "estimatedHours": "3.5-4",
+    "totalStories": 18,
+    "estimatedMinutes": 360,
+    "estimatedHours": "5.5-6.5",
 
     "parallelGroups": [
       {
-        "name": "Foundation (parallel)",
-        "stories": ["SCTX-001", "SCTX-003"],
-        "description": "Frontmatter spec + DB migration can proceed in parallel"
+        "name": "Foundation (3-way parallel)",
+        "stories": ["SCTX-001", "SCTX-003", "SCTX-012"],
+        "description": "Frontmatter spec + DB migration + shared reference docs can all proceed in parallel"
       },
       {
-        "name": "Pipeline Updates (sequential)",
-        "stories": ["SCTX-002", "SCTX-004", "SCTX-005"],
-        "description": "Context block generator, then refresh update, then cron. Sequential because each builds on the previous."
+        "name": "Compiler & Refresh Pipeline (sequential)",
+        "stories": ["SCTX-002", "SCTX-004", "SCTX-005", "SCTX-013"],
+        "description": "Context block generator → refresh update → cron → @reference resolution. Sequential because each builds on previous."
       },
       {
-        "name": "Skill Updates (5-way parallel)",
-        "stories": ["SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010"],
-        "description": "All 5 skill batches can run in parallel once SCTX-001 is done. 25 skills total."
+        "name": "Executor Updates (2-way parallel)",
+        "stories": ["SCTX-014", "SCTX-015"],
+        "description": "agentSkillExecutor + autonomousExecutor reference loading. Independent of each other, can parallel with SCTX-013."
       },
       {
-        "name": "Verification",
+        "name": "Skill Content Updates (7-way parallel)",
+        "stories": ["SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010", "SCTX-016", "SCTX-018"],
+        "description": "All skill batch updates (context profiles, @references, inputs/outputs) can run in parallel once SCTX-001 + SCTX-012 are done."
+      },
+      {
+        "name": "Tooling",
+        "stories": ["SCTX-017"],
+        "description": ".claude/skills auto-sync. Independent, can run anytime."
+      },
+      {
+        "name": "Final Verification",
         "stories": ["SCTX-011"],
-        "description": "Final sync, validate, deploy, and verify. Runs last."
+        "description": "Full sync, compile, deploy, and verify. Runs last after all other stories complete."
       }
     ],
 
-    "criticalPath": "SCTX-001 → SCTX-002 → SCTX-011",
-    "skillsAffected": 25,
-    "skillsUnaffected": "ai-ark-company-search, ai-ark-enrichment, ai-ark-people-search, ai-ark-reverse-lookup, ai-ark-semantic-search, ai-ark-similarity-search, apify-actor-browse, apify-results-query, apify-run-trigger, output-format-selector"
+    "criticalPath": "SCTX-012 → SCTX-013 → SCTX-011 (shared refs through compiler to verification)",
+    "secondaryCriticalPath": "SCTX-001 → SCTX-002 → SCTX-013 → SCTX-011 (context profiles through compiler to verification)",
+    "skillsAffected": "All ~56 skills (shared reference includes + context profiles)",
+    "newFiles": 4,
+    "modifiedEdgeFunctions": 3,
+    "modifiedScripts": 1
   },
 
   "contextProfiles": {
@@ -445,5 +693,17 @@
       "variables": "ALL keys from organization_context",
       "skills": ["meeting-command-center-plan", "meeting-digest-truth-extractor", "meeting-prep-brief", "post-meeting-followup-drafter", "post-meeting-followup-pack-builder", "daily-brief-planner", "daily-focus-planner", "search-documentation"]
     }
+  },
+
+  "sharedReferences": {
+    "metaSkill": "_platform-references",
+    "docs": {
+      "available-tools.md": "Complete catalog of 52 execute_action sub-actions + gemini_research + resolve_entity",
+      "org-variables.md": "All 30 organization context variables with types, profiles, and ${} syntax",
+      "capabilities.md": "Maps requires_capabilities values to specific execute_action sub-actions"
+    },
+    "resolutionSyntax": "@skill-key/doc-title (e.g., @_platform-references/available-tools.md)",
+    "resolvedAt": "compile-time by compile-organization-skills",
+    "updateWorkflow": "Edit shared doc → run sync-skills → trigger recompile → all skills updated"
   }
 }

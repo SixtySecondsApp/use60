@@ -1,0 +1,155 @@
+{
+  "feature": "copilot-multi-step-power",
+  "title": "Make Copilot Handle Complex Multi-Step Queries",
+  "description": "Unlock the existing multi-agent sequential/parallel infrastructure so the copilot can dynamically compose workflows for complex queries like 'find 20 Directors in Bristol and create a 2-stage email sequence and push to Instantly' without needing a pre-built sequence for every combination.",
+  "consultReport": ".sixty/consult/ops-copilot-integration.md",
+  "createdAt": "2026-02-11T23:00:00Z",
+  "stories": [
+    {
+      "id": "MSTEP-001",
+      "title": "Expand Prospecting agent actions and skill categories",
+      "type": "backend",
+      "description": "Give the Prospecting agent access to cross-domain actions (draft_email, run_skill, run_sequence, send_notification) and skill categories (writing, agent-sequence) so it can handle end-to-end prospecting workflows. Raise maxIterations from 8 to 12. Update system prompt to describe end-to-end flow capabilities.",
+      "files": [
+        "supabase/functions/_shared/agentDefinitions.ts"
+      ],
+      "acceptance_criteria": [
+        "Prospecting allowedActions includes draft_email, run_skill, run_sequence, send_notification",
+        "Prospecting skillCategories includes writing and agent-sequence alongside enrichment",
+        "Prospecting maxIterations is 12",
+        "Prospecting system prompt has 'End-to-End Capabilities' section describing the full pipeline (search -> enrich -> email -> campaign)"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "MSTEP-002",
+      "title": "Expand Outreach agent actions for chained workflows",
+      "type": "backend",
+      "description": "Give the Outreach agent access to run_skill, run_sequence, get_ops_table_data, and push_ops_to_instantly so it can be the second agent in a sequential chain that reads leads and pushes campaigns. Raise maxIterations from 6 to 10. Add agent-sequence to skillCategories.",
+      "files": [
+        "supabase/functions/_shared/agentDefinitions.ts"
+      ],
+      "acceptance_criteria": [
+        "Outreach allowedActions includes run_skill, run_sequence, get_ops_table_data, push_ops_to_instantly",
+        "Outreach skillCategories includes agent-sequence alongside writing",
+        "Outreach maxIterations is 10",
+        "Outreach system prompt mentions it can read prospect data from ops tables and push to campaigns"
+      ],
+      "estimate": "10min",
+      "dependencies": []
+    },
+    {
+      "id": "MSTEP-003",
+      "title": "Add sequential intent detection to classifier",
+      "type": "backend",
+      "description": "Add a detectSequentialIntent() function that fires BEFORE keyword pre-filter. Uses regex patterns to detect 'find leads AND create sequences', 'research AND draft email', 'prospect AND invite/email/outreach/campaign' conjunctions. Returns multi-agent classification with sequential strategy when detected.",
+      "files": [
+        "supabase/functions/_shared/agentClassifier.ts"
+      ],
+      "acceptance_criteria": [
+        "detectSequentialIntent() function detects prospect->outreach patterns (find leads and create sequence/email/campaign)",
+        "detectSequentialIntent() function detects research->outreach patterns (research company and draft email)",
+        "Function is called before keywordPreFilter in the main classifyIntent flow",
+        "When detected, returns {agents: ['prospecting', 'outreach'], strategy: 'sequential', confidence: 0.9}",
+        "Simple single-agent queries still route correctly (no false positives)"
+      ],
+      "estimate": "20min",
+      "dependencies": []
+    },
+    {
+      "id": "MSTEP-004",
+      "title": "Update classification prompt to encourage multi-agent routing",
+      "type": "backend",
+      "description": "Update CLASSIFICATION_PROMPT to remove single-agent bias ('Most messages need only ONE agent') and add explicit examples of sequential and parallel routing. Add prospecting+outreach and research+outreach as common sequential patterns.",
+      "files": [
+        "supabase/functions/_shared/agentClassifier.ts"
+      ],
+      "acceptance_criteria": [
+        "Removed 'Most messages need only ONE agent' from CLASSIFICATION_PROMPT",
+        "Added 3+ examples of sequential routing with explanation",
+        "Added 2+ examples of parallel routing with explanation",
+        "Classification prompt still correctly routes simple single-agent queries"
+      ],
+      "estimate": "10min",
+      "dependencies": []
+    },
+    {
+      "id": "MSTEP-005",
+      "title": "Add multi-step planning guidance to single-agent system prompt",
+      "type": "backend",
+      "description": "Add a 'Multi-Step Workflows' section to buildSystemPrompt() that instructs Claude to decompose complex requests into sequential steps, thread results between steps, and report progress. Include a concrete example showing search_leads -> run_skill(sales-sequence) -> push_ops_to_instantly flow.",
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "acceptance_criteria": [
+        "System prompt has '## Multi-Step Workflows' section after 'How To Work'",
+        "Section instructs Claude to identify steps, execute sequentially, thread results, and report progress",
+        "Section includes concrete example of find leads -> generate emails -> push to campaign flow",
+        "Existing system prompt structure is preserved"
+      ],
+      "estimate": "10min",
+      "dependencies": []
+    },
+    {
+      "id": "MSTEP-006",
+      "title": "Improve sequential multi-agent synthesis",
+      "type": "backend",
+      "description": "Currently sequential strategy only streams the last agent's response text. Change to synthesize ALL agent outputs (like parallel strategy already does) using a sequential-aware synthesis prompt. Stream brief status updates after each agent completes.",
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "acceptance_criteria": [
+        "Sequential strategy sends SSE status event after each agent completes (with brief summary)",
+        "After all agents complete, runs synthesis step combining all results into coherent narrative",
+        "Synthesis prompt is sequential-aware (mentions agents ran in order, each building on previous)",
+        "Final synthesized response is streamed to user as tokens",
+        "done event includes all agent metadata (like parallel already does)"
+      ],
+      "estimate": "25min",
+      "dependencies": ["MSTEP-003"]
+    },
+    {
+      "id": "MSTEP-007",
+      "title": "Raise MAX_ITERATIONS for single-agent path",
+      "type": "backend",
+      "description": "Increase MAX_ITERATIONS from 10 to 15 in copilot-autonomous/index.ts to give complex multi-step queries enough headroom. A complex flow (plan + search + skill + push + present) needs 7+ iterations minimum; 15 provides comfortable margin.",
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "acceptance_criteria": [
+        "MAX_ITERATIONS constant changed from 10 to 15",
+        "No other behavioral changes"
+      ],
+      "estimate": "2min",
+      "dependencies": []
+    },
+    {
+      "id": "MSTEP-008",
+      "title": "Deploy to staging and test end-to-end",
+      "type": "deployment",
+      "description": "Deploy copilot-autonomous edge function and shared dependencies to staging. Run npm run sync-skills to push all new skills. Test complex multi-step queries and verify both single-agent and multi-agent paths work correctly.",
+      "files": [],
+      "acceptance_criteria": [
+        "copilot-autonomous deployed to staging with --no-verify-jwt",
+        "Skills synced via npm run sync-skills",
+        "Complex query 'find 20 Directors in Bristol and create 2-stage invite sequence' produces full results",
+        "Simple queries (show pipeline, draft email) still route to single agents correctly",
+        "Multi-agent sequential routing works (prospecting -> outreach chain)"
+      ],
+      "estimate": "15min",
+      "dependencies": ["MSTEP-001", "MSTEP-002", "MSTEP-003", "MSTEP-004", "MSTEP-005", "MSTEP-006", "MSTEP-007"]
+    }
+  ],
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 8,
+    "estimatedTime": "1.5-2 hours",
+    "parallelGroups": [
+      {
+        "stories": ["MSTEP-001", "MSTEP-002", "MSTEP-003", "MSTEP-004", "MSTEP-005", "MSTEP-007"],
+        "reason": "All modify different files or different sections, no file conflicts"
+      }
+    ]
+  }
+}

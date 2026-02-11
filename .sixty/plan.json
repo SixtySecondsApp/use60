@@ -47,6 +47,26 @@
       "status": "pending",
       "priority": 5,
       "description": "Pattern matching improvements, mobile polish, HITL integration"
+    },
+    {
+      "id": "exa-ops-websets-integration",
+      "name": "Exa Ops Websets Integration",
+      "status": "pending",
+      "priority": 6,
+      "description": "Make Exa Websets a core ops capability with preview-first workflows, copilot actions, dynamic table materialization, webhooks, and monitor-driven refresh.",
+      "consultReport": ".sixty/consult/exa-ops-websets-integration.md",
+      "planFile": ".sixty/plan-exa-ops-websets-integration.json",
+      "createdAt": "2026-02-11T23:30:00Z"
+    }
+  ],
+  "additionalPlans": [
+    {
+      "featureId": "exa-ops-websets-integration",
+      "title": "Exa Websets as a Core Ops Capability",
+      "path": ".sixty/plan-exa-ops-websets-integration.json",
+      "stories": 14,
+      "estimateWithParallelism": "8-10 hours",
+      "status": "ready"
     }
   ],
   "stories": [
@@ -448,9 +468,9 @@
     }
   ],
   "execution": {
-    "totalStories": 17,
+    "totalStories": 31,
     "completedStories": 17,
-    "currentFeature": "integration",
-    "lastUpdated": "2026-01-24T14:30:00Z"
+    "currentFeature": "exa-ops-websets-integration",
+    "lastUpdated": "2026-02-11T23:30:00Z"
   }
 }

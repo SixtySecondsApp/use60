@@ -230,7 +230,14 @@ const CONFIRMABLE = [
 
 ## Session Log
 
-*No sessions recorded yet. Run `60/run` to begin execution.*
+### 2026-02-11 23:30 — EXA plan generated 🧭
+**Feature**: Exa Ops Websets Integration
+**Artifacts**:
+- `.sixty/consult/exa-ops-websets-integration.md`
+- `.sixty/plan-exa-ops-websets-integration.json`
+**Notes**:
+- Added to `.sixty/plan.json` as the next ready feature plan.
+- MVP path is defined in stories `EXA-OPS-001` through `EXA-OPS-010`.
 
 ---
 
