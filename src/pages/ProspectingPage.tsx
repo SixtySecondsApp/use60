@@ -280,20 +280,17 @@ function ProspectingPage() {
           {/* Dashboard stats (auto-hides when no profiles) */}
           <ProspectingDashboard orgId={orgId} />
 
-          {/* AI Generator (collapsible) */}
-          {showAIGenerator && (
-            <div className="rounded-xl border border-brand-violet/20 dark:border-brand-violet/20 bg-brand-violet/5 dark:bg-brand-violet/5 p-4 backdrop-blur-sm">
-              <AIProfileGenerator
-                orgId={orgId}
-                onProfileCreated={handleProfileSaved}
-                onEditAndSave={handleAIEditAndSave}
-              />
-            </div>
-          )}
-
           {!hasProfiles ? (
-            /* Empty state with AI generator */
-            <div className="space-y-6">
+            /* Empty state — show AI generator OR empty card, not both */
+            showAIGenerator ? (
+              <div className="rounded-xl border border-brand-violet/20 dark:border-brand-violet/20 bg-brand-violet/5 dark:bg-brand-violet/5 p-4 backdrop-blur-sm">
+                <AIProfileGenerator
+                  orgId={orgId}
+                  onProfileCreated={handleProfileSaved}
+                  onEditAndSave={handleAIEditAndSave}
+                />
+              </div>
+            ) : (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 px-6 py-20 text-center shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none backdrop-blur-sm">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/10 dark:bg-brand-blue/10">
                   <Crosshair className="h-7 w-7 text-brand-blue dark:text-blue-400" />
@@ -314,19 +311,20 @@ function ProspectingPage() {
                   </Button>
                 </div>
               </div>
-
-              {/* AI Generator below empty state */}
-              {showAIGenerator && (
-                <div className="rounded-xl border border-brand-violet/20 dark:border-brand-violet/20 bg-brand-violet/5 dark:bg-brand-violet/5 p-4 backdrop-blur-sm">
-                  <AIProfileGenerator
-                    orgId={orgId}
-                    onProfileCreated={handleProfileSaved}
-                    onEditAndSave={handleAIEditAndSave}
-                  />
-                </div>
-              )}
-            </div>
+            )
           ) : (
+            <>
+            {/* AI Generator (collapsible, shown via header AI Suggest button) */}
+            {showAIGenerator && (
+              <div className="rounded-xl border border-brand-violet/20 dark:border-brand-violet/20 bg-brand-violet/5 dark:bg-brand-violet/5 p-4 backdrop-blur-sm">
+                <AIProfileGenerator
+                  orgId={orgId}
+                  onProfileCreated={handleProfileSaved}
+                  onEditAndSave={handleAIEditAndSave}
+                />
+              </div>
+            )}
+
             <div className="grid grid-cols-12 gap-6">
               {/* Left sidebar -- ICP profiles grid */}
               <div className="col-span-12 lg:col-span-4 xl:col-span-3">
@@ -401,6 +399,7 @@ function ProspectingPage() {
                 )}
               </div>
             </div>
+            </>
           )}
         </div>
       </div>
