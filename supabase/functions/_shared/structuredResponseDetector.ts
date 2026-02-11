@@ -6353,6 +6353,312 @@ export async function detectAndStructureResponse(
         },
       };
     }
+
+    // Ops table list
+    const listOpsExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'list_ops_tables')
+      .slice(-1)[0] as any;
+
+    if (listOpsExec?.result?.data?.tables) {
+      const tables = listOpsExec.result.data.tables;
+      return {
+        type: 'ops_table_list',
+        summary: `Found ${tables.length} ops table${tables.length !== 1 ? 's' : ''}.`,
+        data: {
+          tables: tables.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            description: t.description,
+            source_type: t.source_type,
+            row_count: t.row_count,
+            updated_at: t.updated_at,
+          })),
+          count: tables.length,
+        },
+        actions: tables.slice(0, 3).map((t: any) => ({
+          id: `open-table-${t.id}`,
+          label: t.name || 'Open Table',
+          type: 'secondary',
+          callback: 'open_dynamic_table',
+          params: { table_id: t.id },
+        })),
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['dynamic_tables'],
+        },
+      };
+    }
+
+    // Ops table detail (get_ops_table)
+    const getOpsExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'get_ops_table')
+      .slice(-1)[0] as any;
+
+    if (getOpsExec?.result?.data) {
+      const tbl = getOpsExec.result.data;
+      return {
+        type: 'ops_table_detail',
+        summary: `Table "${tbl.name}" has ${tbl.columns?.length || 0} columns and ${tbl.row_count || 0} rows.`,
+        data: {
+          table_id: tbl.id,
+          table_name: tbl.name,
+          description: tbl.description,
+          source_type: tbl.source_type,
+          row_count: tbl.row_count,
+          columns: tbl.columns || [],
+        },
+        actions: [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'primary',
+            callback: 'open_dynamic_table',
+            params: { table_id: tbl.id },
+          },
+          {
+            id: 'add-enrichment',
+            label: 'Add Enrichment',
+            type: 'secondary',
+            callback: 'add_enrichment',
+            params: { table_id: tbl.id },
+          },
+        ],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['dynamic_tables'],
+        },
+      };
+    }
+
+    // Ops table data (get_ops_table_data)
+    const tableDataExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'get_ops_table_data')
+      .slice(-1)[0] as any;
+
+    if (tableDataExec?.result?.data) {
+      const td = tableDataExec.result.data;
+      return {
+        type: 'ops_table_data',
+        summary: `Showing ${td.row_count || 0} rows from "${td.table_name}".`,
+        data: {
+          table_name: td.table_name,
+          columns: td.columns || [],
+          rows: td.rows || [],
+          row_count: td.row_count,
+          offset: td.offset,
+          limit: td.limit,
+        },
+        actions: [
+          {
+            id: 'open-table',
+            label: 'Open Full Table',
+            type: 'primary',
+            callback: 'open_dynamic_table',
+            params: { table_id: tableDataExec.args?.params?.table_id },
+          },
+        ],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['dynamic_tables'],
+        },
+      };
+    }
+
+    // Ops table creation result
+    const createOpsExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'create_ops_table')
+      .slice(-1)[0] as any;
+
+    if (createOpsExec?.result?.data?.table_id) {
+      const cr = createOpsExec.result.data;
+      return {
+        type: 'ops_table_created',
+        summary: cr.message || `Created ops table "${cr.name}".`,
+        data: {
+          table_id: cr.table_id,
+          table_name: cr.name,
+          column_count: cr.column_count,
+        },
+        actions: [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'primary',
+            callback: 'open_dynamic_table',
+            params: { table_id: cr.table_id },
+          },
+        ],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['dynamic_tables'],
+        },
+      };
+    }
+
+    // Enrichment status
+    const enrichStatusExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'get_enrichment_status')
+      .slice(-1)[0] as any;
+
+    if (enrichStatusExec?.result?.data?.jobs) {
+      const jobs = enrichStatusExec.result.data.jobs;
+      const activeJobs = jobs.filter((j: any) => j.status === 'running' || j.status === 'pending');
+      return {
+        type: 'ops_enrichment_status',
+        summary: `${jobs.length} enrichment job${jobs.length !== 1 ? 's' : ''} found${activeJobs.length > 0 ? ` (${activeJobs.length} active)` : ''}.`,
+        data: {
+          jobs,
+          count: jobs.length,
+          active_count: activeJobs.length,
+        },
+        actions: enrichStatusExec.args?.params?.table_id ? [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'primary',
+            callback: 'open_dynamic_table',
+            params: { table_id: enrichStatusExec.args.params.table_id },
+          },
+        ] : [],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['enrichment_jobs'],
+        },
+      };
+    }
+
+    // Ops insights
+    const insightsExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'get_ops_insights')
+      .slice(-1)[0] as any;
+
+    if (insightsExec?.result?.data) {
+      const insData = insightsExec.result.data;
+      const insights = insData.insights || [];
+      return {
+        type: 'ops_insights',
+        summary: `${insights.length} insight${insights.length !== 1 ? 's' : ''} generated${insData.cached ? ' (cached)' : ''}.`,
+        data: {
+          insights,
+          count: insights.length,
+          cached: insData.cached || false,
+        },
+        actions: insightsExec.args?.params?.table_id ? [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'secondary',
+            callback: 'open_dynamic_table',
+            params: { table_id: insightsExec.args.params.table_id },
+          },
+        ] : [],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['ops_table_insights'],
+        },
+      };
+    }
+
+    // Ops sync results (hubspot, attio, instantly)
+    const syncExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success &&
+        ['sync_ops_hubspot', 'sync_ops_attio', 'push_ops_to_instantly'].includes(e?.args?.action))
+      .slice(-1)[0] as any;
+
+    if (syncExec?.result?.data) {
+      const syncAction = syncExec.args.action;
+      const providerMap: Record<string, string> = {
+        sync_ops_hubspot: 'HubSpot',
+        sync_ops_attio: 'Attio',
+        push_ops_to_instantly: 'Instantly',
+      };
+      const provider = providerMap[syncAction] || 'Integration';
+      return {
+        type: 'ops_sync_result',
+        summary: `${provider} sync completed successfully.`,
+        data: {
+          provider,
+          action: syncAction,
+          result: syncExec.result.data,
+        },
+        actions: syncExec.args?.params?.table_id ? [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'primary',
+            callback: 'open_dynamic_table',
+            params: { table_id: syncExec.args.params.table_id },
+          },
+        ] : [],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['dynamic_tables', syncAction],
+        },
+      };
+    }
+
+    // Ops rules list
+    const rulesExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'list_ops_rules')
+      .slice(-1)[0] as any;
+
+    if (rulesExec?.result?.data?.rules) {
+      const rules = rulesExec.result.data.rules;
+      return {
+        type: 'ops_rules_list',
+        summary: `${rules.length} automation rule${rules.length !== 1 ? 's' : ''} found.`,
+        data: {
+          rules: rules.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            trigger_type: r.trigger_type,
+            action_type: r.action_type,
+            is_enabled: r.is_enabled,
+            consecutive_failures: r.consecutive_failures,
+          })),
+          count: rules.length,
+        },
+        actions: rulesExec.args?.params?.table_id ? [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'secondary',
+            callback: 'open_dynamic_table',
+            params: { table_id: rulesExec.args.params.table_id },
+          },
+        ] : [],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['ops_rules'],
+        },
+      };
+    }
+
+    // AI query result
+    const aiQueryExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'ai_query_ops_table')
+      .slice(-1)[0] as any;
+
+    if (aiQueryExec?.result?.data) {
+      return {
+        type: 'ops_ai_query_result',
+        summary: 'AI analysis of table data completed.',
+        data: aiQueryExec.result.data,
+        actions: aiQueryExec.args?.params?.table_id ? [
+          {
+            id: 'open-table',
+            label: 'Open Table',
+            type: 'secondary',
+            callback: 'open_dynamic_table',
+            params: { table_id: aiQueryExec.args.params.table_id },
+          },
+        ] : [],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['ops_table_ai_query'],
+        },
+      };
+    }
   }
 
   // ---------------------------------------------------------------------------

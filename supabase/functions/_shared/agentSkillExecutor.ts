@@ -4,6 +4,7 @@ import { getCorsHeaders } from './corsHelper.ts';
 type SupabaseClient = ReturnType<typeof createClient>;
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+const BRAVE_SEARCH_API_KEY = Deno.env.get('BRAVE_SEARCH_API_KEY');
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
 
@@ -178,6 +179,71 @@ async function executeFromPromptRuntime(
   }
 }
 
+/**
+ * Execute a web search using Brave Search API
+ */
+async function executeWebSearch(query: string, count: number = 10): Promise<any> {
+  if (!BRAVE_SEARCH_API_KEY) {
+    throw new Error('BRAVE_SEARCH_API_KEY not configured');
+  }
+
+  const url = new URL('https://api.search.brave.com/res/v1/web/search');
+  url.searchParams.set('q', query);
+  url.searchParams.set('count', String(Math.min(count, 20))); // Max 20 results
+  url.searchParams.set('text_decorations', 'false');
+  url.searchParams.set('search_lang', 'en');
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      'Accept': 'application/json',
+      'X-Subscription-Token': BRAVE_SEARCH_API_KEY,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Brave Search API error (${response.status}): ${await response.text()}`);
+  }
+
+  const data = await response.json();
+
+  // Format results for Claude
+  const results = (data.web?.results || []).map((r: any) => ({
+    title: r.title,
+    url: r.url,
+    description: r.description,
+    age: r.age,
+  }));
+
+  return {
+    query,
+    results,
+    total_results: results.length,
+  };
+}
+
+/**
+ * Web search tool definition for Claude
+ */
+const WEB_SEARCH_TOOL = {
+  name: 'web_search',
+  description: 'Search the web for information. Use this to find current information about companies, people, products, news, and other topics. Returns up to 10 relevant web pages with titles, URLs, and descriptions.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'The search query. Be specific and include relevant keywords.',
+      },
+      count: {
+        type: 'number',
+        description: 'Number of results to return (1-10). Default is 10.',
+        default: 10,
+      },
+    },
+    required: ['query'],
+  },
+};
+
 export async function executeAgentSkillWithContract(
   supabase: SupabaseClient,
   params: {
@@ -204,6 +270,7 @@ export async function executeAgentSkillWithContract(
         compiled_frontmatter,
         compiled_content,
         platform_skill_version,
+        platform_skill_id,
         platform_skills:platform_skill_id(category, frontmatter, content_template, version, is_active)
       `
       )
@@ -260,9 +327,27 @@ export async function executeAgentSkillWithContract(
 
     const frontmatter =
       (row.compiled_frontmatter || row.platform_skills?.frontmatter || {}) as Record<string, unknown>;
-    const content = String(
+    let skillContent = String(
       row.compiled_content || row.platform_skills?.content_template || ''
     );
+
+    // -------------------------------------------------------------------------
+    // 1b) Load skill-specific reference documents from skill_documents
+    // -------------------------------------------------------------------------
+    if (row.platform_skill_id) {
+      const { data: refs } = await supabase
+        .from('skill_documents')
+        .select('title, content')
+        .eq('skill_id', row.platform_skill_id)
+        .eq('doc_type', 'reference');
+
+      if (refs?.length) {
+        skillContent += '\n\n---\n## Reference Documents\n';
+        for (const ref of refs) {
+          skillContent += `\n### ${ref.title}\n${ref.content}\n`;
+        }
+      }
+    }
 
     // -------------------------------------------------------------------------
     // 2) Deterministic test skills (no external AI dependency)
@@ -329,34 +414,116 @@ Return ONLY valid JSON.`;
       skill_key: params.skillKey,
       dry_run: params.dryRun === true,
       frontmatter,
-      skill_document: content,
+      skill_document: skillContent,
       context: params.context,
     };
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
+    // Check if skill requires web_search capability
+    const requiresWebSearch = frontmatter.requires_capabilities?.includes?.('web_search');
+
+    // Build conversation messages
+    const messages: any[] = [
+      { role: 'user', content: JSON.stringify(userPayload) },
+    ];
+
+    let finalResponse: any = null;
+    let totalTokensUsed = 0;
+    const MAX_TOOL_ITERATIONS = 10; // Prevent infinite loops
+
+    // Tool use loop: Claude may request multiple searches
+    for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+      // Build API request body
+      const apiBody: any = {
+        model: requiresWebSearch ? 'claude-sonnet-4-5-20250929' : DEFAULT_MODEL,
         max_tokens: 8192,
         temperature: 0.3,
         system: systemPrompt,
-        messages: [{ role: 'user', content: JSON.stringify(userPayload) }],
-      }),
-    });
+        messages,
+      };
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      throw new Error(`Claude API error (${response.status}): ${errText}`);
+      // Add web_search tool if required
+      if (requiresWebSearch) {
+        apiBody.tools = [WEB_SEARCH_TOOL];
+      }
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': ANTHROPIC_VERSION,
+        },
+        body: JSON.stringify(apiBody),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Claude API error (${response.status}): ${errText}`);
+      }
+
+      const json = await response.json();
+      totalTokensUsed += (json?.usage?.input_tokens || 0) + (json?.usage?.output_tokens || 0);
+
+      // Add assistant's response to messages
+      messages.push({
+        role: 'assistant',
+        content: json.content,
+      });
+
+      // Check stop reason
+      if (json.stop_reason === 'end_turn') {
+        // Claude finished - extract text response
+        finalResponse = json;
+        break;
+      } else if (json.stop_reason === 'tool_use') {
+        // Claude wants to use a tool
+        const toolUses = json.content.filter((c: any) => c.type === 'tool_use');
+
+        // Execute all requested tool calls
+        const toolResults = [];
+        for (const toolUse of toolUses) {
+          if (toolUse.name === 'web_search') {
+            try {
+              const searchResult = await executeWebSearch(
+                toolUse.input.query,
+                toolUse.input.count || 10
+              );
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: toolUse.id,
+                content: JSON.stringify(searchResult),
+              });
+            } catch (error: any) {
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: toolUse.id,
+                is_error: true,
+                content: error.message,
+              });
+            }
+          }
+        }
+
+        // Add tool results to conversation
+        messages.push({
+          role: 'user',
+          content: toolResults,
+        });
+
+        // Continue loop to get Claude's next response
+      } else {
+        // Unexpected stop reason
+        throw new Error(`Unexpected stop_reason: ${json.stop_reason}`);
+      }
     }
 
-    const json = await response.json();
-    const contentText = json?.content?.[0]?.text ? String(json.content[0].text) : '';
-    const usage = json?.usage ? json.usage : null;
+    if (!finalResponse) {
+      throw new Error('Max tool iterations reached without completion');
+    }
+
+    // Extract text content from final response
+    const contentText = finalResponse?.content?.find((c: any) => c.type === 'text')?.text || '';
+    const usage = { input_tokens: totalTokensUsed, output_tokens: 0 };
 
     let parsed: any;
     try {

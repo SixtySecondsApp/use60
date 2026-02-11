@@ -49,7 +49,30 @@ export type ExecuteActionName =
   | 'list_tasks'
   | 'create_activity'
   | 'search_leads_create_table'
-  | 'enrich_table_column';
+  | 'enrich_table_column'
+  // Ops table CRUD
+  | 'list_ops_tables'
+  | 'get_ops_table'
+  | 'create_ops_table'
+  | 'delete_ops_table'
+  // Ops column/row
+  | 'add_ops_column'
+  | 'get_ops_table_data'
+  | 'add_ops_rows'
+  | 'update_ops_cell'
+  // Ops AI features
+  | 'ai_query_ops_table'
+  | 'ai_transform_ops_column'
+  | 'get_enrichment_status'
+  // Ops rules
+  | 'create_ops_rule'
+  | 'list_ops_rules'
+  // Ops integration sync
+  | 'sync_ops_hubspot'
+  | 'sync_ops_attio'
+  | 'push_ops_to_instantly'
+  // Ops insights
+  | 'get_ops_insights';
 
 /**
  * Parameters for run_sequence action - executes a multi-step agent sequence
@@ -122,6 +145,157 @@ export interface CreateActivityParams {
   contact_id?: string;
   deal_id?: string;
   company_id?: string;
+}
+
+/**
+ * Parameters for list_ops_tables action
+ */
+export interface ListOpsTablesParams {
+  limit?: number;
+  source_type?: string;
+}
+
+/**
+ * Parameters for get_ops_table action
+ */
+export interface GetOpsTableParams {
+  table_id: string;
+}
+
+/**
+ * Parameters for create_ops_table action
+ */
+export interface CreateOpsTableParams {
+  name: string;
+  description?: string;
+  columns?: Array<{
+    name: string;
+    column_type: string;
+    config?: Record<string, unknown>;
+  }>;
+}
+
+/**
+ * Parameters for delete_ops_table action
+ */
+export interface DeleteOpsTableParams {
+  table_id: string;
+}
+
+/**
+ * Parameters for add_ops_column action
+ */
+export interface AddOpsColumnParams {
+  table_id: string;
+  name: string;
+  column_type: string;
+  config?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for get_ops_table_data action
+ */
+export interface GetOpsTableDataParams {
+  table_id: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Parameters for add_ops_rows action
+ */
+export interface AddOpsRowsParams {
+  table_id: string;
+  rows: Array<Record<string, unknown>>;
+}
+
+/**
+ * Parameters for update_ops_cell action
+ */
+export interface UpdateOpsCellParams {
+  row_id: string;
+  column_id: string;
+  value: unknown;
+}
+
+/**
+ * Parameters for ai_query_ops_table action
+ */
+export interface AiQueryOpsTableParams {
+  table_id: string;
+  query: string;
+}
+
+/**
+ * Parameters for ai_transform_ops_column action
+ */
+export interface AiTransformOpsColumnParams {
+  table_id: string;
+  column_id: string;
+  prompt: string;
+  row_ids?: string[];
+}
+
+/**
+ * Parameters for get_enrichment_status action
+ */
+export interface GetEnrichmentStatusParams {
+  table_id: string;
+  column_id?: string;
+}
+
+/**
+ * Parameters for create_ops_rule action
+ */
+export interface CreateOpsRuleParams {
+  table_id: string;
+  name: string;
+  trigger_type: string;
+  condition: Record<string, unknown>;
+  action_type: string;
+  action_config: Record<string, unknown>;
+}
+
+/**
+ * Parameters for list_ops_rules action
+ */
+export interface ListOpsRulesParams {
+  table_id: string;
+}
+
+/**
+ * Parameters for sync_ops_hubspot action
+ */
+export interface SyncOpsHubspotParams {
+  table_id: string;
+  list_id?: string;
+  field_mapping?: Record<string, string>;
+}
+
+/**
+ * Parameters for sync_ops_attio action
+ */
+export interface SyncOpsAttioParams {
+  table_id: string;
+  list_id?: string;
+  field_mapping?: Record<string, string>;
+}
+
+/**
+ * Parameters for push_ops_to_instantly action
+ */
+export interface PushOpsToInstantlyParams {
+  table_id: string;
+  campaign_id?: string;
+  row_ids?: string[];
+}
+
+/**
+ * Parameters for get_ops_insights action
+ */
+export interface GetOpsInsightsParams {
+  table_id: string;
+  insight_type?: string;
 }
 
 export interface ExecuteActionRequest {

@@ -923,6 +923,1016 @@ export async function executeAction(
       }
     }
 
+    // =========================================================================
+    // Ops Table CRUD
+    // =========================================================================
+
+    case 'list_ops_tables': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to list ops tables' };
+      }
+
+      const limit = Math.min(Number(params.limit) || 50, 100);
+      let query = client
+        .from('dynamic_tables')
+        .select('id, name, description, source_type, row_count, created_at, updated_at')
+        .eq('organization_id', orgId)
+        .order('updated_at', { ascending: false })
+        .limit(limit);
+
+      if (params.source_type) {
+        query = query.eq('source_type', String(params.source_type));
+      }
+
+      const { data: tables, error: tablesError } = await query;
+
+      if (tablesError) {
+        return { success: false, data: null, error: `Failed to list ops tables: ${tablesError.message}` };
+      }
+
+      return {
+        success: true,
+        data: { tables: tables || [], count: tables?.length || 0 },
+        source: 'list_ops_tables',
+      };
+    }
+
+    case 'get_ops_table': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to get ops table' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for get_ops_table' };
+      }
+
+      const { data: table, error: tableError } = await client
+        .from('dynamic_tables')
+        .select('id, name, description, source_type, source_query, row_count, created_at, updated_at')
+        .eq('id', tableId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (tableError) {
+        return { success: false, data: null, error: `Failed to get ops table: ${tableError.message}` };
+      }
+
+      if (!table) {
+        return { success: false, data: null, error: `Ops table not found: ${tableId}` };
+      }
+
+      // Fetch columns for the table
+      const { data: columns } = await client
+        .from('dynamic_table_columns')
+        .select('id, name, column_type, position, config')
+        .eq('table_id', tableId)
+        .order('position', { ascending: true });
+
+      return {
+        success: true,
+        data: { ...table, columns: columns || [] },
+        source: 'get_ops_table',
+      };
+    }
+
+    case 'create_ops_table': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to create ops table' };
+      }
+
+      const tableName = params.name ? String(params.name) : '';
+      if (!tableName) {
+        return { success: false, data: null, error: 'name is required for create_ops_table' };
+      }
+
+      const tablePreview = {
+        name: tableName,
+        description: params.description ? String(params.description) : null,
+        columns: Array.isArray(params.columns) ? params.columns : [],
+      };
+
+      // Require confirmation for write operations
+      if (!ctx.confirm) {
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to create ops table',
+          needs_confirmation: true,
+          preview: tablePreview,
+          source: 'create_ops_table',
+        };
+      }
+
+      const { data: newTable, error: createError } = await client
+        .from('dynamic_tables')
+        .insert({
+          organization_id: orgId,
+          created_by: userId,
+          name: tableName,
+          description: tablePreview.description,
+          source_type: 'manual',
+          row_count: 0,
+        })
+        .select('id, name, description, source_type, row_count, created_at')
+        .single();
+
+      if (createError) {
+        return { success: false, data: null, error: `Failed to create ops table: ${createError.message}` };
+      }
+
+      // Create columns if provided
+      const columnsToCreate = tablePreview.columns as Array<{ name: string; column_type: string; config?: Record<string, unknown> }>;
+      if (columnsToCreate.length > 0) {
+        const columnRows = columnsToCreate.map((col, idx) => ({
+          table_id: newTable.id,
+          name: col.name,
+          column_type: col.column_type || 'text',
+          position: idx,
+          config: col.config || {},
+        }));
+
+        const { error: colError } = await client
+          .from('dynamic_table_columns')
+          .insert(columnRows);
+
+        if (colError) {
+          console.error('[create_ops_table] Failed to create columns:', colError.message);
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          table_id: newTable.id,
+          name: newTable.name,
+          description: newTable.description,
+          column_count: columnsToCreate.length,
+          message: `Ops table "${tableName}" created successfully`,
+        },
+        source: 'create_ops_table',
+      };
+    }
+
+    case 'delete_ops_table': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to delete ops table' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for delete_ops_table' };
+      }
+
+      // Require confirmation for destructive operations
+      if (!ctx.confirm) {
+        // Fetch table name for preview
+        const { data: tableInfo } = await client
+          .from('dynamic_tables')
+          .select('id, name, row_count')
+          .eq('id', tableId)
+          .eq('organization_id', orgId)
+          .maybeSingle();
+
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to delete ops table',
+          needs_confirmation: true,
+          preview: tableInfo || { table_id: tableId },
+          source: 'delete_ops_table',
+        };
+      }
+
+      const { error: deleteError } = await client
+        .from('dynamic_tables')
+        .delete()
+        .eq('id', tableId)
+        .eq('organization_id', orgId);
+
+      if (deleteError) {
+        return { success: false, data: null, error: `Failed to delete ops table: ${deleteError.message}` };
+      }
+
+      return {
+        success: true,
+        data: { table_id: tableId, message: 'Ops table deleted successfully' },
+        source: 'delete_ops_table',
+      };
+    }
+
+    // =========================================================================
+    // Ops Column & Row Operations
+    // =========================================================================
+
+    case 'add_ops_column': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to add ops column' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      const colName = params.name ? String(params.name) : '';
+      const colType = params.column_type ? String(params.column_type) : 'text';
+
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for add_ops_column' };
+      }
+      if (!colName) {
+        return { success: false, data: null, error: 'name is required for add_ops_column' };
+      }
+
+      // Verify table belongs to org
+      const { data: tbl } = await client
+        .from('dynamic_tables')
+        .select('id')
+        .eq('id', tableId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (!tbl) {
+        return { success: false, data: null, error: `Ops table not found: ${tableId}` };
+      }
+
+      // Get max position for ordering
+      const { data: maxCol } = await client
+        .from('dynamic_table_columns')
+        .select('position')
+        .eq('table_id', tableId)
+        .order('position', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const nextPosition = (maxCol?.position ?? -1) + 1;
+
+      const { data: newCol, error: colError } = await client
+        .from('dynamic_table_columns')
+        .insert({
+          table_id: tableId,
+          name: colName,
+          column_type: colType,
+          position: nextPosition,
+          config: (params.config as Record<string, unknown>) || {},
+        })
+        .select('id, name, column_type, position')
+        .single();
+
+      if (colError) {
+        return { success: false, data: null, error: `Failed to add column: ${colError.message}` };
+      }
+
+      return {
+        success: true,
+        data: { column: newCol, message: `Column "${colName}" added successfully` },
+        source: 'add_ops_column',
+      };
+    }
+
+    case 'get_ops_table_data': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to get ops table data' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for get_ops_table_data' };
+      }
+
+      // Verify table belongs to org
+      const { data: tbl } = await client
+        .from('dynamic_tables')
+        .select('id, name')
+        .eq('id', tableId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (!tbl) {
+        return { success: false, data: null, error: `Ops table not found: ${tableId}` };
+      }
+
+      // Fetch columns
+      const { data: columns } = await client
+        .from('dynamic_table_columns')
+        .select('id, name, column_type, position')
+        .eq('table_id', tableId)
+        .order('position', { ascending: true });
+
+      // Fetch rows with pagination
+      const limit = Math.min(Number(params.limit) || 50, 200);
+      const offset = Number(params.offset) || 0;
+
+      const { data: rows, error: rowsError } = await client
+        .from('dynamic_table_rows')
+        .select('id, position, created_at, updated_at')
+        .eq('table_id', tableId)
+        .order('position', { ascending: true })
+        .range(offset, offset + limit - 1);
+
+      if (rowsError) {
+        return { success: false, data: null, error: `Failed to fetch rows: ${rowsError.message}` };
+      }
+
+      // Fetch cells for those rows
+      const rowIds = (rows || []).map((r: any) => r.id);
+      let cells: any[] = [];
+      if (rowIds.length > 0) {
+        const { data: cellData } = await client
+          .from('dynamic_table_cells')
+          .select('id, row_id, column_id, value, confidence, status')
+          .in('row_id', rowIds);
+        cells = cellData || [];
+      }
+
+      // Group cells by row
+      const cellsByRow: Record<string, any[]> = {};
+      for (const cell of cells) {
+        if (!cellsByRow[cell.row_id]) cellsByRow[cell.row_id] = [];
+        cellsByRow[cell.row_id].push(cell);
+      }
+
+      const enrichedRows = (rows || []).map((row: any) => ({
+        ...row,
+        cells: cellsByRow[row.id] || [],
+      }));
+
+      return {
+        success: true,
+        data: {
+          table_name: tbl.name,
+          columns: columns || [],
+          rows: enrichedRows,
+          row_count: enrichedRows.length,
+          offset,
+          limit,
+        },
+        source: 'get_ops_table_data',
+      };
+    }
+
+    case 'add_ops_rows': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to add ops rows' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for add_ops_rows' };
+      }
+
+      const rowsData = Array.isArray(params.rows) ? params.rows : [];
+      if (rowsData.length === 0) {
+        return { success: false, data: null, error: 'rows array is required and must not be empty' };
+      }
+
+      // Require confirmation for write operations
+      if (!ctx.confirm) {
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to add rows',
+          needs_confirmation: true,
+          preview: { table_id: tableId, row_count: rowsData.length },
+          source: 'add_ops_rows',
+        };
+      }
+
+      // Verify table belongs to org
+      const { data: tbl } = await client
+        .from('dynamic_tables')
+        .select('id')
+        .eq('id', tableId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (!tbl) {
+        return { success: false, data: null, error: `Ops table not found: ${tableId}` };
+      }
+
+      // Get columns for mapping
+      const { data: columns } = await client
+        .from('dynamic_table_columns')
+        .select('id, name')
+        .eq('table_id', tableId);
+
+      const colByName: Record<string, string> = {};
+      for (const col of columns || []) {
+        colByName[col.name] = col.id;
+      }
+
+      // Get max position
+      const { data: maxRow } = await client
+        .from('dynamic_table_rows')
+        .select('position')
+        .eq('table_id', tableId)
+        .order('position', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let nextPos = (maxRow?.position ?? -1) + 1;
+
+      // Insert rows and cells
+      const insertedRowIds: string[] = [];
+      for (const rowData of rowsData) {
+        const { data: newRow, error: rowErr } = await client
+          .from('dynamic_table_rows')
+          .insert({ table_id: tableId, position: nextPos++ })
+          .select('id')
+          .single();
+
+        if (rowErr || !newRow) continue;
+        insertedRowIds.push(newRow.id);
+
+        // Insert cells for each column value
+        const cellInserts: Array<{ row_id: string; column_id: string; value: unknown }> = [];
+        for (const [key, val] of Object.entries(rowData as Record<string, unknown>)) {
+          const colId = colByName[key];
+          if (colId) {
+            cellInserts.push({ row_id: newRow.id, column_id: colId, value: val });
+          }
+        }
+
+        if (cellInserts.length > 0) {
+          await client.from('dynamic_table_cells').insert(cellInserts);
+        }
+      }
+
+      // Update row count
+      await client
+        .from('dynamic_tables')
+        .update({ row_count: nextPos })
+        .eq('id', tableId);
+
+      return {
+        success: true,
+        data: {
+          table_id: tableId,
+          rows_added: insertedRowIds.length,
+          row_ids: insertedRowIds,
+          message: `${insertedRowIds.length} row(s) added successfully`,
+        },
+        source: 'add_ops_rows',
+      };
+    }
+
+    case 'update_ops_cell': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to update ops cell' };
+      }
+
+      const rowId = params.row_id ? String(params.row_id) : '';
+      const columnId = params.column_id ? String(params.column_id) : '';
+
+      if (!rowId || !columnId) {
+        return { success: false, data: null, error: 'row_id and column_id are required for update_ops_cell' };
+      }
+
+      // Verify the row belongs to a table in the user's org
+      const { data: row } = await client
+        .from('dynamic_table_rows')
+        .select('id, table_id, dynamic_tables!inner(organization_id)')
+        .eq('id', rowId)
+        .maybeSingle();
+
+      if (!row || (row as any).dynamic_tables?.organization_id !== orgId) {
+        return { success: false, data: null, error: `Row not found or not in your organization` };
+      }
+
+      // Upsert the cell (leverages UNIQUE(row_id, column_id) constraint)
+      const { data: cell, error: cellError } = await client
+        .from('dynamic_table_cells')
+        .upsert(
+          { row_id: rowId, column_id: columnId, value: params.value },
+          { onConflict: 'row_id,column_id' }
+        )
+        .select('id, row_id, column_id, value')
+        .single();
+
+      if (cellError) {
+        return { success: false, data: null, error: `Failed to update cell: ${cellError.message}` };
+      }
+
+      return {
+        success: true,
+        data: { cell, message: 'Cell updated successfully' },
+        source: 'update_ops_cell',
+      };
+    }
+
+    // =========================================================================
+    // Ops AI Features
+    // =========================================================================
+
+    case 'ai_query_ops_table': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required for AI query' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      const queryText = params.query ? String(params.query) : '';
+
+      if (!tableId || !queryText) {
+        return { success: false, data: null, error: 'table_id and query are required for ai_query_ops_table' };
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-ai-query`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+          },
+          body: JSON.stringify({
+            table_id: tableId,
+            query: queryText,
+            organization_id: orgId,
+            user_id: userId,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `AI query failed: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'ai_query_ops_table' };
+      } catch (e: any) {
+        return { success: false, data: null, error: e?.message || 'Failed to execute AI query' };
+      }
+    }
+
+    case 'ai_transform_ops_column': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required for AI transform' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      const columnId = params.column_id ? String(params.column_id) : '';
+      const prompt = params.prompt ? String(params.prompt) : '';
+
+      if (!tableId || !columnId || !prompt) {
+        return { success: false, data: null, error: 'table_id, column_id, and prompt are required for ai_transform_ops_column' };
+      }
+
+      // Require confirmation for write operations
+      if (!ctx.confirm) {
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to transform column with AI',
+          needs_confirmation: true,
+          preview: { table_id: tableId, column_id: columnId, prompt },
+          source: 'ai_transform_ops_column',
+        };
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-transform-column`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+          },
+          body: JSON.stringify({
+            table_id: tableId,
+            column_id: columnId,
+            prompt,
+            row_ids: Array.isArray(params.row_ids) ? params.row_ids : undefined,
+            organization_id: orgId,
+            user_id: userId,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `AI transform failed: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'ai_transform_ops_column' };
+      } catch (e: any) {
+        return { success: false, data: null, error: e?.message || 'Failed to transform column' };
+      }
+    }
+
+    case 'get_enrichment_status': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to get enrichment status' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for get_enrichment_status' };
+      }
+
+      // Verify table belongs to org
+      const { data: tbl } = await client
+        .from('dynamic_tables')
+        .select('id')
+        .eq('id', tableId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (!tbl) {
+        return { success: false, data: null, error: `Ops table not found: ${tableId}` };
+      }
+
+      let query = client
+        .from('enrichment_jobs')
+        .select('id, column_id, status, total_rows, processed_rows, failed_rows, started_at, last_processed_row_index')
+        .eq('table_id', tableId)
+        .order('started_at', { ascending: false });
+
+      if (params.column_id) {
+        query = query.eq('column_id', String(params.column_id));
+      }
+
+      const { data: jobs, error: jobsError } = await query.limit(20);
+
+      if (jobsError) {
+        return { success: false, data: null, error: `Failed to get enrichment status: ${jobsError.message}` };
+      }
+
+      return {
+        success: true,
+        data: { jobs: jobs || [], count: jobs?.length || 0 },
+        source: 'get_enrichment_status',
+      };
+    }
+
+    // =========================================================================
+    // Ops Rules & Automation
+    // =========================================================================
+
+    case 'create_ops_rule': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to create ops rule' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      const ruleName = params.name ? String(params.name) : '';
+      const triggerType = params.trigger_type ? String(params.trigger_type) : '';
+      const actionType = params.action_type ? String(params.action_type) : '';
+
+      if (!tableId || !ruleName || !triggerType || !actionType) {
+        return { success: false, data: null, error: 'table_id, name, trigger_type, and action_type are required for create_ops_rule' };
+      }
+
+      const rulePreview = {
+        table_id: tableId,
+        name: ruleName,
+        trigger_type: triggerType,
+        condition: (params.condition as Record<string, unknown>) || {},
+        action_type: actionType,
+        action_config: (params.action_config as Record<string, unknown>) || {},
+      };
+
+      // Require confirmation for write operations
+      if (!ctx.confirm) {
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to create ops rule',
+          needs_confirmation: true,
+          preview: rulePreview,
+          source: 'create_ops_rule',
+        };
+      }
+
+      // Verify table belongs to org
+      const { data: tbl } = await client
+        .from('dynamic_tables')
+        .select('id')
+        .eq('id', tableId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (!tbl) {
+        return { success: false, data: null, error: `Ops table not found: ${tableId}` };
+      }
+
+      const { data: newRule, error: ruleError } = await client
+        .from('ops_rules')
+        .insert({
+          table_id: tableId,
+          name: ruleName,
+          trigger_type: triggerType,
+          condition: rulePreview.condition,
+          action_type: actionType,
+          action_config: rulePreview.action_config,
+          is_enabled: true,
+          created_by: userId,
+        })
+        .select('id, name, trigger_type, action_type, is_enabled, created_at')
+        .single();
+
+      if (ruleError) {
+        return { success: false, data: null, error: `Failed to create rule: ${ruleError.message}` };
+      }
+
+      return {
+        success: true,
+        data: { rule: newRule, message: `Rule "${ruleName}" created successfully` },
+        source: 'create_ops_rule',
+      };
+    }
+
+    case 'list_ops_rules': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to list ops rules' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for list_ops_rules' };
+      }
+
+      // Verify table belongs to org
+      const { data: tbl } = await client
+        .from('dynamic_tables')
+        .select('id')
+        .eq('id', tableId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (!tbl) {
+        return { success: false, data: null, error: `Ops table not found: ${tableId}` };
+      }
+
+      const { data: rules, error: rulesError } = await client
+        .from('ops_rules')
+        .select('id, name, trigger_type, condition, action_type, action_config, is_enabled, consecutive_failures, created_at, updated_at')
+        .eq('table_id', tableId)
+        .order('created_at', { ascending: false });
+
+      if (rulesError) {
+        return { success: false, data: null, error: `Failed to list rules: ${rulesError.message}` };
+      }
+
+      return {
+        success: true,
+        data: { rules: rules || [], count: rules?.length || 0 },
+        source: 'list_ops_rules',
+      };
+    }
+
+    // =========================================================================
+    // Ops Integration Sync
+    // =========================================================================
+
+    case 'sync_ops_hubspot': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required for HubSpot sync' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for sync_ops_hubspot' };
+      }
+
+      // Require confirmation for sync operations
+      if (!ctx.confirm) {
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to sync with HubSpot',
+          needs_confirmation: true,
+          preview: {
+            table_id: tableId,
+            list_id: params.list_id || null,
+            field_mapping: params.field_mapping || null,
+          },
+          source: 'sync_ops_hubspot',
+        };
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/sync-hubspot-ops-table`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+          },
+          body: JSON.stringify({
+            table_id: tableId,
+            list_id: params.list_id ? String(params.list_id) : undefined,
+            field_mapping: params.field_mapping || undefined,
+            organization_id: orgId,
+            user_id: userId,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `HubSpot sync failed: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'sync_ops_hubspot' };
+      } catch (e: any) {
+        return { success: false, data: null, error: e?.message || 'Failed to sync with HubSpot' };
+      }
+    }
+
+    case 'sync_ops_attio': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required for Attio sync' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for sync_ops_attio' };
+      }
+
+      // Require confirmation for sync operations
+      if (!ctx.confirm) {
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to sync with Attio',
+          needs_confirmation: true,
+          preview: {
+            table_id: tableId,
+            list_id: params.list_id || null,
+            field_mapping: params.field_mapping || null,
+          },
+          source: 'sync_ops_attio',
+        };
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/sync-attio-ops-table`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+          },
+          body: JSON.stringify({
+            table_id: tableId,
+            list_id: params.list_id ? String(params.list_id) : undefined,
+            field_mapping: params.field_mapping || undefined,
+            organization_id: orgId,
+            user_id: userId,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Attio sync failed: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'sync_ops_attio' };
+      } catch (e: any) {
+        return { success: false, data: null, error: e?.message || 'Failed to sync with Attio' };
+      }
+    }
+
+    case 'push_ops_to_instantly': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to push to Instantly' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for push_ops_to_instantly' };
+      }
+
+      // Require confirmation for push operations
+      if (!ctx.confirm) {
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to push to Instantly',
+          needs_confirmation: true,
+          preview: {
+            table_id: tableId,
+            campaign_id: params.campaign_id || null,
+            row_count: Array.isArray(params.row_ids) ? params.row_ids.length : 'all',
+          },
+          source: 'push_ops_to_instantly',
+        };
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/push-to-instantly`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+          },
+          body: JSON.stringify({
+            table_id: tableId,
+            campaign_id: params.campaign_id ? String(params.campaign_id) : undefined,
+            row_ids: Array.isArray(params.row_ids) ? params.row_ids : undefined,
+            organization_id: orgId,
+            user_id: userId,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Push to Instantly failed: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'push_ops_to_instantly' };
+      } catch (e: any) {
+        return { success: false, data: null, error: e?.message || 'Failed to push to Instantly' };
+      }
+    }
+
+    // =========================================================================
+    // Ops Insights
+    // =========================================================================
+
+    case 'get_ops_insights': {
+      if (!orgId) {
+        return { success: false, data: null, error: 'Organization context required to get ops insights' };
+      }
+
+      const tableId = params.table_id ? String(params.table_id) : '';
+      if (!tableId) {
+        return { success: false, data: null, error: 'table_id is required for get_ops_insights' };
+      }
+
+      // Verify table belongs to org
+      const { data: tbl } = await client
+        .from('dynamic_tables')
+        .select('id')
+        .eq('id', tableId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (!tbl) {
+        return { success: false, data: null, error: `Ops table not found: ${tableId}` };
+      }
+
+      // Try to get fresh insights from edge function
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-insights-engine`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+          },
+          body: JSON.stringify({
+            table_id: tableId,
+            insight_type: params.insight_type ? String(params.insight_type) : undefined,
+            organization_id: orgId,
+            user_id: userId,
+          }),
+        });
+
+        if (resp.ok) {
+          const result = await resp.json();
+          return { success: true, data: result, source: 'get_ops_insights' };
+        }
+      } catch {
+        // Fall through to cached insights
+      }
+
+      // Fallback: return cached insights from the table
+      let insightsQuery = client
+        .from('ops_table_insights')
+        .select('id, insight_type, data, generated_at')
+        .eq('table_id', tableId)
+        .order('generated_at', { ascending: false });
+
+      if (params.insight_type) {
+        insightsQuery = insightsQuery.eq('insight_type', String(params.insight_type));
+      }
+
+      const { data: insights, error: insightsError } = await insightsQuery.limit(20);
+
+      if (insightsError) {
+        return { success: false, data: null, error: `Failed to get insights: ${insightsError.message}` };
+      }
+
+      return {
+        success: true,
+        data: { insights: insights || [], count: insights?.length || 0, cached: true },
+        source: 'get_ops_insights',
+      };
+    }
+
     default:
       return { success: false, data: null, error: `Unknown action: ${String(action)}` };
   }
