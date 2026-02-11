@@ -245,6 +245,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       displayGroup?: number;
       subItems?: Array<{ icon: typeof Activity; label: string; href: string }>;
       isDivider?: boolean;
+      isExternal?: boolean;
     };
 
     // Map route configs to menu item format
@@ -255,6 +256,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       badge: config.badge,
       displayGroup: config.displayGroup,
       subItems: undefined, // Route config doesn't have subItems, they can be added if needed
+      isExternal: config.isExternal,
     });
 
     // Combine main and tools items for the menu, then add dividers between display groups
@@ -444,25 +446,42 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       );
                     }
 
+                    const mobileClasses = cn(
+                      'w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] sm:min-h-[64px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]',
+                      !item.isExternal && (location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
+                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
+                        : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
+                    );
+
+                    const mobileIconClasses = cn(
+                      'w-6 h-6 sm:w-7 sm:h-7 flex-shrink-0',
+                      !item.isExternal && (location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
+                        ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
+                    );
+
                     return (
                       <div key={item.href + item.label}>
-                        <Link
-                          to={item.href}
-                          onClick={() => toggleMobileMenu()}
-                          className={cn(
-                            'w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] sm:min-h-[64px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]',
-                            location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
-                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
-                              : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
-                          )}
-                        >
-                          <item.icon className={cn(
-                            'w-6 h-6 sm:w-7 sm:h-7 flex-shrink-0',
-                            location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
-                              ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
-                          )} />
-                          <span>{item.label}</span>
-                        </Link>
+                        {item.isExternal ? (
+                          <a
+                            href={item.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => toggleMobileMenu()}
+                            className={mobileClasses}
+                          >
+                            <item.icon className={mobileIconClasses} />
+                            <span>{item.label}</span>
+                          </a>
+                        ) : (
+                          <Link
+                            to={item.href}
+                            onClick={() => toggleMobileMenu()}
+                            className={mobileClasses}
+                          >
+                            <item.icon className={mobileIconClasses} />
+                            <span>{item.label}</span>
+                          </Link>
+                        )}
 
                         {item.subItems && (
                           <div className="ml-10 sm:ml-12 mt-1 space-y-1">
@@ -767,47 +786,66 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   );
                 }
 
-                return (
-                  <div key={item.href + item.label}>
-                    <Link
-                      to={item.href}
+                const navLinkClasses = cn(
+                  'flex items-center transition-colors text-sm font-medium',
+                  isCollapsed
+                    ? 'w-12 h-12 mx-auto rounded-xl justify-center'
+                    : 'w-full gap-3 px-2 py-2.5 rounded-xl',
+                  !item.isExternal && (location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
+                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
+                    : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
+                );
+
+                const navLinkContent = (
+                  <>
+                    <motion.div
+                      animate={{
+                        x: isCollapsed ? 0 : 0,
+                        scale: isCollapsed ? 1.1 : 1
+                      }}
                       className={cn(
-                        'flex items-center transition-colors text-sm font-medium',
-                        isCollapsed
-                          ? 'w-12 h-12 mx-auto rounded-xl justify-center'
-                          : 'w-full gap-3 px-2 py-2.5 rounded-xl',
-                        location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
-                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
-                          : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
+                        'relative z-10 flex items-center justify-center',
+                        isCollapsed ? 'w-full h-full' : 'min-w-[20px]',
+                        !item.isExternal && (location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
+                          ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
                       )}
                     >
-                      <motion.div
-                        animate={{
-                          x: isCollapsed ? 0 : 0,
-                          scale: isCollapsed ? 1.1 : 1
-                        }}
-                        className={cn(
-                          'relative z-10 flex items-center justify-center',
-                          isCollapsed ? 'w-full h-full' : 'min-w-[20px]',
-                          location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href))
-                            ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
-                        )}
+                      <item.icon className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4')} />
+                    </motion.div>
+                    <AnimatePresence>
+                      {!isCollapsed && (
+                        <motion.span
+                          initial={{ opacity: 0, width: 0 }}
+                          animate={{ opacity: 1, width: 'auto' }}
+                          exit={{ opacity: 0, width: 0 }}
+                          className="overflow-hidden whitespace-nowrap"
+                        >
+                          {item.label}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </>
+                );
+
+                return (
+                  <div key={item.href + item.label}>
+                    {item.isExternal ? (
+                      <a
+                        href={item.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={navLinkClasses}
                       >
-                        <item.icon className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4')} />
-                      </motion.div>
-                      <AnimatePresence>
-                        {!isCollapsed && (
-                          <motion.span
-                            initial={{ opacity: 0, width: 0 }}
-                            animate={{ opacity: 1, width: 'auto' }}
-                            exit={{ opacity: 0, width: 0 }}
-                            className="overflow-hidden whitespace-nowrap"
-                          >
-                            {item.label}
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
-                    </Link>
+                        {navLinkContent}
+                      </a>
+                    ) : (
+                      <Link
+                        to={item.href}
+                        className={navLinkClasses}
+                      >
+                        {navLinkContent}
+                      </Link>
+                    )}
 
                     {item.subItems && !isCollapsed && (
                       <div className="ml-8 mt-1 space-y-1">

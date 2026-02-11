@@ -31,6 +31,7 @@ import {
   HeartPulse,
   Bot,
   Inbox,
+  ExternalLink,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -69,6 +70,8 @@ export interface RouteConfig {
   badge?: string;
   /** Display group for visual grouping in sidebar (1-5) */
   displayGroup?: number;
+  /** Whether this is an external link (opens in new tab) */
+  isExternal?: boolean;
 }
 
 // =====================================================
@@ -136,6 +139,18 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     navSection: 'main',
     order: 4,
     displayGroup: 1,
+  },
+  {
+    path: 'https://meeting-analytics-staging.use60.com/',
+    access: 'any',
+    label: 'Meeting Analytics (New)',
+    icon: ExternalLink,
+    showInNav: true,
+    navSection: 'main',
+    order: 5,
+    displayGroup: 1,
+    badge: 'New',
+    isExternal: true,
   },
 
   // ========== Internal-Only Main Routes ==========
