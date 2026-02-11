@@ -2,9 +2,10 @@
   "feature": {
     "id": "skills-dynamic-context",
     "name": "Dynamic Context, Tool Awareness & Shared References for Skills",
-    "status": "pending",
+    "status": "complete",
     "prd": ".claude/skills_improve.md",
     "createdAt": "2026-02-11T00:00:00Z",
+    "completedAt": "2026-02-11T23:05:00Z",
     "summary": "Thread org variables + available tools through all skills via shared reference documents that get dynamically inlined at compile time. When a new tool or variable is added, update one doc and recompile — all skills get it automatically."
   },
 
