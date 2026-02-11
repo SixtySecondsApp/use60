@@ -1,0 +1,792 @@
+{
+  "feature": "attio-integration",
+  "name": "Full Attio CRM Integration",
+  "description": "Production-grade Attio CRM integration at full HubSpot parity. OAuth2 connection, bidirectional sync of Companies/People/Deals/Tasks/Notes, real-time webhooks, import/export to Ops tables, settings UI, copilot adapter, and comprehensive test suite. Attio API base: https://api.attio.com/v2, OAuth: https://app.attio.com/authorize, 100 reads/s + 25 writes/s rate limits.",
+  "consultReport": ".sixty/consult/attio-integration.md",
+  "createdAt": "2026-02-11T09:30:00Z",
+  "status": "pending",
+  "attioApiReference": {
+    "baseUrl": "https://api.attio.com/v2",
+    "authorizationUrl": "https://app.attio.com/authorize",
+    "tokenUrl": "https://app.attio.com/oauth/token",
+    "rateLimits": { "reads": "100/s", "writes": "25/s" },
+    "scopes": [
+      "record_permission:read-write",
+      "object_configuration:read",
+      "list_configuration:read",
+      "list_entry:read-write",
+      "note:read-write",
+      "task:read-write",
+      "webhook:read-write",
+      "user_management:read"
+    ],
+    "keyEndpoints": {
+      "queryRecords": "POST /v2/objects/{object}/records/query",
+      "createRecord": "POST /v2/objects/{object}/records",
+      "assertRecord": "PUT /v2/objects/{object}/records",
+      "deleteRecord": "DELETE /v2/objects/{object}/records/{record_id}",
+      "getLists": "GET /v2/lists",
+      "createListEntry": "POST /v2/lists/{list}/entries",
+      "queryListEntries": "POST /v2/lists/{list}/entries/query",
+      "getNotes": "GET /v2/notes",
+      "createNote": "POST /v2/notes",
+      "getTasks": "GET /v2/tasks",
+      "createWebhook": "POST /v2/webhooks",
+      "listWebhooks": "GET /v2/webhooks"
+    },
+    "webhookEvents": [
+      "record.created", "record.updated", "record.deleted", "record.merged",
+      "list-entry.created", "list-entry.updated", "list-entry.deleted",
+      "note.created", "note.updated", "note.deleted",
+      "task.created", "task.updated", "task.deleted"
+    ],
+    "dataModelNotes": [
+      "Values are always arrays (multi-value support)",
+      "Assert pattern uses PUT with matching_attribute query param for upsert",
+      "Deal pipelines are Lists with status attributes — stages are entry values",
+      "Pagination: limit (max 500) + offset",
+      "Filtering: $and/$or/$not with $eq/$contains/$gt/$lt operators"
+    ]
+  },
+  "stories": [
+    {
+      "id": "ATTIO-001",
+      "feature": "attio-integration",
+      "title": "Create Attio database schema and migrations",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "description": "Create all Attio-related database tables mirroring the HubSpot pattern. Tables: attio_org_integrations (connection status, workspace_id, webhook_secret, last_sync), attio_org_credentials (access_token, refresh_token, token_expires_at — org-scoped with onConflict: 'org_id'), attio_oauth_states (CSRF protection with 10-min TTL), attio_settings (JSONB config for object mapping, sync direction, field mappings), attio_sync_queue (priority, dedup_key, retry tracking, max 10 attempts), attio_sync_history (snapshot for revert capability). Add 'attio' to dynamic_tables source_type enum. Add 'attio_property' to column_type CHECK constraint + attio_property_name TEXT column. All tables need RLS policies: org members can read, org admins can write, service role always has access. Credentials table is service-role-only (no user access to raw tokens).",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["dynamic_table_columns", "dynamic_table_rows", "organizations", "organization_memberships"]
+      },
+      "blocks": ["ATTIO-002", "ATTIO-003", "ATTIO-004", "ATTIO-005", "ATTIO-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration runs without errors on dev/staging Supabase",
+        "All 6 tables created with correct columns and constraints",
+        "'attio' accepted as valid source_type enum value",
+        "'attio_property' accepted as valid column_type, attio_property_name column exists",
+        "RLS policies enforce org-scoped access (members read, admins write)",
+        "Credentials table accessible only via service role"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260211100000_attio_integration_schema.sql"
+      ]
+    },
+    {
+      "id": "ATTIO-002",
+      "feature": "attio-integration",
+      "title": "Build attio-oauth-initiate edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Create edge function that initiates the Attio OAuth2 authorization code flow. Pattern: validate user JWT via anonClient.auth.getUser(), check org admin/owner role via organization_memberships, verify not already connected, generate cryptographically random state token, store in attio_oauth_states with 10-min TTL and org_id/user_id/redirect_path, build authorization URL: https://app.attio.com/authorize?response_type=code&client_id={ATTIO_CLIENT_ID}&redirect_uri={callback_url}&state={state}. Return the URL to frontend. Use getCorsHeaders(req) from corsHelper.ts. Env vars: ATTIO_CLIENT_ID, ATTIO_CLIENT_SECRET (Supabase secrets).",
+      "dependencies": {
+        "stories": ["ATTIO-001"],
+        "files": ["supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["attio_oauth_states", "attio_org_integrations", "organization_memberships"]
+      },
+      "blocks": ["ATTIO-016"],
+      "parallelWith": ["ATTIO-003", "ATTIO-005"],
+      "acceptance": [
+        "Returns valid Attio authorization URL with correct client_id and redirect_uri",
+        "Stores CSRF state in attio_oauth_states with 10-min TTL",
+        "Rejects non-admin/non-owner users with 403",
+        "Returns 400 if org already connected",
+        "Uses getCorsHeaders(req) for origin-validated CORS",
+        "Handles OPTIONS preflight correctly"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/attio-oauth-initiate/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-003",
+      "feature": "attio-integration",
+      "title": "Build attio-oauth-callback edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "description": "Create edge function handling the OAuth2 callback from Attio. This is a public GET endpoint (no JWT required — user is redirecting from Attio). Extract code + state from query params, look up state in attio_oauth_states (validate CSRF, check TTL not expired, one-time use — delete after validation). Exchange code for tokens: POST https://app.attio.com/oauth/token with grant_type=authorization_code, code, redirect_uri, client_id, client_secret (Content-Type: application/x-www-form-urlencoded). Store access_token and refresh_token in attio_org_credentials (upsert on org_id). Fetch workspace info via GET /v2/workspaces to store workspace_id. Mark org connected in attio_org_integrations. Redirect to frontend with status=success query param. On error, redirect with status=error&message=...",
+      "dependencies": {
+        "stories": ["ATTIO-001"],
+        "files": ["supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["attio_oauth_states", "attio_org_credentials", "attio_org_integrations"]
+      },
+      "blocks": ["ATTIO-016"],
+      "parallelWith": ["ATTIO-002", "ATTIO-005"],
+      "acceptance": [
+        "Exchanges authorization code for access/refresh tokens successfully",
+        "Validates CSRF state (rejects invalid/expired/reused states)",
+        "Stores credentials in attio_org_credentials via service role",
+        "Fetches and stores Attio workspace_id",
+        "Marks integration as connected in attio_org_integrations",
+        "Redirects to frontend with appropriate status query params",
+        "Handles token exchange errors gracefully with redirect to error page"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/attio-oauth-callback/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-004",
+      "feature": "attio-integration",
+      "title": "Build attio-disconnect edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "description": "Create edge function to disconnect the Attio integration. Validates user JWT, checks org admin/owner role. Marks attio_org_integrations.is_active = false. Deletes or nullifies attio_org_credentials tokens. Deletes any registered webhooks via DELETE /v2/webhooks/{webhook_id}. Clears attio_settings. Returns success response. Uses getCorsHeaders(req).",
+      "dependencies": {
+        "stories": ["ATTIO-001"],
+        "files": ["supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["attio_org_integrations", "attio_org_credentials"]
+      },
+      "blocks": ["ATTIO-016"],
+      "parallelWith": ["ATTIO-002", "ATTIO-003"],
+      "acceptance": [
+        "Deactivates integration in attio_org_integrations",
+        "Clears stored OAuth tokens from attio_org_credentials",
+        "Removes registered Attio webhooks",
+        "Only accessible by org admin/owner",
+        "Returns success with connection status"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/attio-disconnect/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-005",
+      "feature": "attio-integration",
+      "title": "Build shared Attio API client with rate limiting and value adapter",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "description": "Create _shared/attio.ts mirroring the HubSpot client pattern. Class AttioClient with: constructor(accessToken), request<T>(method, path, query?, body?, retries?) with rate limiting (10ms min delay — Attio allows 100 reads/s, 25 writes/s; differentiate by method), exponential backoff retry (up to 30s, retry on 429 and 5xx), Retry-After header parsing, typed AttioError exception. CRITICAL: build a value adapter layer since Attio wraps all values in arrays. Helper methods: toAttioValues(flatObj) converts {name: 'Acme'} to {name: [{value: 'Acme'}]}, fromAttioValues(record) flattens Attio's nested array values back to simple key-value. Helper for query building: buildFilter(conditions) generates $and/$or filter objects. Export types: AttioRecord, AttioListEntry, AttioFilter, AttioSort.",
+      "dependencies": {
+        "stories": ["ATTIO-001"],
+        "files": ["supabase/functions/_shared/hubspot.ts"],
+        "schema": []
+      },
+      "blocks": ["ATTIO-006", "ATTIO-008", "ATTIO-009", "ATTIO-010", "ATTIO-011", "ATTIO-012", "ATTIO-013", "ATTIO-014", "ATTIO-021"],
+      "parallelWith": ["ATTIO-002", "ATTIO-003"],
+      "acceptance": [
+        "AttioClient class with typed request method supporting GET/POST/PUT/PATCH/DELETE",
+        "Rate limiting: 10ms min between reads, 40ms min between writes",
+        "Exponential backoff retry on 429 and 5xx (up to 3 retries, 30s max wait)",
+        "Retry-After header parsed and honored",
+        "toAttioValues() correctly wraps flat objects into Attio array format",
+        "fromAttioValues() correctly flattens nested Attio records to simple key-value",
+        "buildFilter() generates valid $and/$or/$eq filter objects",
+        "AttioError class with status, message, retryAfterMs properties"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/attio.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-006",
+      "feature": "attio-integration",
+      "title": "Build attio-admin edge function (status, config, CRUD for all object types)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "description": "Create the primary Attio admin endpoint (mirrors hubspot-admin pattern). Action router handling: 'status' — return connection state + workspace info + last sync timestamp. 'get_objects' — GET /v2/objects to list available objects and their attributes. 'get_attributes' — GET /v2/objects/{object}/attributes for a specific object. 'get_lists' — GET /v2/lists to list all lists (deal pipelines are lists). 'get_records' — POST /v2/objects/{object}/records/query with filter/sort/limit/offset. 'create_record' — POST /v2/objects/{object}/records. 'update_record' — PATCH /v2/objects/{object}/records/{record_id}. 'delete_record' — DELETE /v2/objects/{object}/records/{record_id}. 'assert_record' — PUT /v2/objects/{object}/records with matching_attribute (upsert). 'get_notes' — GET /v2/notes with optional parent_object + parent_record_id filter. 'create_note' — POST /v2/notes. 'get_tasks' — GET /v2/tasks. 'create_task' — POST /v2/tasks. 'get_settings' — read attio_settings for org. 'save_settings' — upsert attio_settings. 'trigger_sync' — queue a sync job to attio_sync_queue. Include auto token refresh: check token_expires_at with 5-min buffer, refresh if needed via POST https://app.attio.com/oauth/token with grant_type=refresh_token. Use getCorsHeaders(req).",
+      "dependencies": {
+        "stories": ["ATTIO-001", "ATTIO-005"],
+        "files": ["supabase/functions/_shared/attio.ts", "supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["attio_org_integrations", "attio_org_credentials", "attio_settings", "attio_sync_queue"]
+      },
+      "blocks": ["ATTIO-008", "ATTIO-009", "ATTIO-016", "ATTIO-017", "ATTIO-018", "ATTIO-019", "ATTIO-022"],
+      "parallelWith": [],
+      "acceptance": [
+        "All 15+ actions route correctly based on body.action field",
+        "Auto-refreshes expired tokens before API calls (5-min buffer)",
+        "Returns workspace info and connection status for 'status' action",
+        "CRUD operations work for companies, people, and deals objects",
+        "Assert (upsert) works with matching_attribute for deduplication",
+        "Lists all available Attio objects and their attributes",
+        "Settings CRUD reads/writes from attio_settings table",
+        "Enforces org admin/owner role for all actions",
+        "Error responses include meaningful messages from Attio API"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "supabase/functions/attio-admin/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-007",
+      "feature": "attio-integration",
+      "title": "Build attio-token-refresh edge function + Vercel cron job",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "description": "Create edge function for batch token refresh (background cron). Query all attio_org_credentials where token_expires_at is within 10 minutes of now. For each, POST https://app.attio.com/oauth/token with grant_type=refresh_token, refresh_token, client_id, client_secret. Update stored tokens. Log results. Also create Vercel cron API route at api/cron/attio-token-refresh.ts that calls this edge function for both prod + staging environments (mirror hubspot-token-refresh.ts pattern). Note: Attio token refresh may not be documented — implement refresh-on-401 as fallback in attio-admin.",
+      "dependencies": {
+        "stories": ["ATTIO-001", "ATTIO-005"],
+        "files": ["api/cron/hubspot-token-refresh.ts"],
+        "schema": ["attio_org_credentials"]
+      },
+      "blocks": ["ATTIO-021"],
+      "parallelWith": ["ATTIO-006"],
+      "acceptance": [
+        "Refreshes all tokens expiring within 10 minutes",
+        "Updates attio_org_credentials with new tokens",
+        "Vercel cron route calls edge function for prod + staging",
+        "Handles refresh failure gracefully (logs error, continues with other orgs)",
+        "Returns summary of refreshed/failed/skipped counts"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/attio-token-refresh/index.ts",
+        "api/cron/attio-token-refresh.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-008",
+      "feature": "attio-integration",
+      "title": "Build import-from-attio edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "description": "Create edge function to import Attio records into a new Ops table. Supports two import modes: (1) Import from List — POST /v2/lists/{list}/entries/query to get list entries, resolve parent records. (2) Import by Filter — POST /v2/objects/{object}/records/query with user-defined filters. Creates dynamic_tables row with source_type='attio', creates columns from selected Attio attributes (column_type='attio_property', attio_property_name set), creates rows from records with attio_record_id stored, creates cells from attribute values. Uses table name deduplication pattern from import-from-hubspot. Paginate with limit/offset (max 500 per page). Store full Attio record in source_data.attio for future column creation.",
+      "dependencies": {
+        "stories": ["ATTIO-005", "ATTIO-006"],
+        "files": ["supabase/functions/import-from-hubspot/index.ts", "supabase/functions/_shared/attio.ts"],
+        "schema": ["dynamic_tables", "dynamic_table_columns", "dynamic_table_rows", "dynamic_table_cells"]
+      },
+      "blocks": ["ATTIO-018"],
+      "parallelWith": ["ATTIO-009"],
+      "acceptance": [
+        "Creates new Ops table from Attio list entries or filtered records",
+        "Columns match selected Attio attributes with attio_property type",
+        "Rows store attio_record_id for future sync",
+        "Cells populated with flattened Attio values",
+        "Full Attio record cached in source_data.attio",
+        "Paginates through all results (not limited to first page)",
+        "Table name deduplication if name already exists"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/import-from-attio/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-009",
+      "feature": "attio-integration",
+      "title": "Build sync-attio-ops-table edge function (incremental sync with diff tracking)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "description": "Create edge function for incremental sync of an Attio-sourced Ops table. Fetch current records from Attio via POST /v2/objects/{object}/records/query, compare with local rows by attio_record_id. Diff tracking: identify new records (create rows + cells), updated records (update cells, track changed fields), removed records (soft delete with attio_removed_at timestamp). Create attio_sync_history entry with snapshot of all changes for revert capability. Log to integration_sync_logs. Support chunked processing (500 rows at a time). Use Promise.all for parallel row updates within chunks.",
+      "dependencies": {
+        "stories": ["ATTIO-005", "ATTIO-006"],
+        "files": ["supabase/functions/sync-hubspot-ops-table/index.ts", "supabase/functions/_shared/attio.ts"],
+        "schema": ["dynamic_tables", "dynamic_table_rows", "dynamic_table_cells", "attio_sync_history", "integration_sync_logs"]
+      },
+      "blocks": ["ATTIO-015", "ATTIO-020"],
+      "parallelWith": ["ATTIO-008"],
+      "acceptance": [
+        "Fetches all records from Attio for the source object with pagination",
+        "Creates new rows for records not yet in local table",
+        "Updates cells for records that changed since last sync",
+        "Soft-deletes rows for records removed from Attio (attio_removed_at)",
+        "Stores sync snapshot in attio_sync_history for revert",
+        "Logs operation to integration_sync_logs with entity counts",
+        "Handles >1000 records without timeout (chunked processing)"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/sync-attio-ops-table/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-010",
+      "feature": "attio-integration",
+      "title": "Build populate-attio-column edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "description": "Create edge function to populate cells for an attio_property column. When a user adds a new Attio column to an existing table, this reads the cached source_data.attio from each row and extracts the requested field (attio_property_name). Batch creates cells in chunks of 100 rows. If source_data.attio is missing for a row, marks cell as 'pending' for future enrichment.",
+      "dependencies": {
+        "stories": ["ATTIO-005"],
+        "files": ["supabase/functions/populate-hubspot-column/index.ts"],
+        "schema": ["dynamic_table_columns", "dynamic_table_rows", "dynamic_table_cells"]
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-008", "ATTIO-009"],
+      "acceptance": [
+        "Reads attio_property_name from column definition",
+        "Extracts value from source_data.attio using nested path resolution",
+        "Batch creates cells in chunks of 100",
+        "Marks cells as 'pending' when source_data is missing",
+        "Reports completion stats (populated/pending/failed)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/populate-attio-column/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-011",
+      "feature": "attio-integration",
+      "title": "Build push-to-attio edge function (batch assert records)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "description": "Create edge function to push Ops table rows to Attio as records. Uses Attio's assert (upsert) pattern: PUT /v2/objects/{object}/records with matching_attribute query param (typically 'email' for people, 'domains' for companies). Supports field mapping from Ops columns to Attio attributes. Duplicate strategy options: update (assert), skip (check first), create (always new). Processes in batches of 50 (Attio has 25 writes/s limit). Optionally adds records to an Attio list via POST /v2/lists/{list}/entries. Tracks push status per cell via attio_last_pushed_at to prevent sync loops.",
+      "dependencies": {
+        "stories": ["ATTIO-005"],
+        "files": ["supabase/functions/push-to-hubspot/index.ts", "supabase/functions/_shared/attio.ts"],
+        "schema": ["dynamic_table_rows", "dynamic_table_cells"]
+      },
+      "blocks": ["ATTIO-019"],
+      "parallelWith": ["ATTIO-008", "ATTIO-009"],
+      "acceptance": [
+        "Asserts (upserts) records to Attio with matching_attribute deduplication",
+        "Maps Ops table columns to Attio attributes via field mapping config",
+        "Supports update/skip/create duplicate strategies",
+        "Processes in batches respecting write rate limits",
+        "Optionally adds records to specified Attio list",
+        "Sets attio_last_pushed_at to prevent sync loops",
+        "Reports success/failed/skipped counts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/push-to-attio/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-012",
+      "feature": "attio-integration",
+      "title": "Build push-cell-to-attio edge function (bidirectional write-back)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+      "description": "Create fire-and-forget edge function for bidirectional cell write-back. When a user edits a cell in an Attio-sourced Ops table, this pushes the change back to Attio. Reads attio_record_id from the row, maps column's attio_property_name to Attio attribute, calls PATCH /v2/objects/{object}/records/{record_id} with the new value (converted via toAttioValues). Includes loop prevention: checks attio_last_pushed_at vs cell.updated_at to avoid infinite sync cycles.",
+      "dependencies": {
+        "stories": ["ATTIO-005"],
+        "files": ["supabase/functions/push-cell-to-hubspot/index.ts", "supabase/functions/_shared/attio.ts"],
+        "schema": ["dynamic_table_rows", "dynamic_table_cells"]
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-011"],
+      "acceptance": [
+        "Pushes single cell edit to correct Attio record and attribute",
+        "Converts value using toAttioValues() before sending",
+        "Prevents sync loops via attio_last_pushed_at timestamp check",
+        "Fire-and-forget: doesn't block UI on failure",
+        "Logs push result to integration_sync_logs"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/push-cell-to-attio/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-013",
+      "feature": "attio-integration",
+      "title": "Build attio-list-ops edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 13,
+      "description": "Create edge function for Attio list operations. Actions: 'get_lists' — GET /v2/lists. 'get_list_entries' — POST /v2/lists/{list}/entries/query with optional filter. 'add_to_list' — POST /v2/lists/{list}/entries with parent_record_id + parent_object + entry_values. 'remove_from_list' — DELETE /v2/lists/{list}/entries/{entry_id}. This enables managing Attio lists from Ops table selections (mirroring hubspot-list-ops).",
+      "dependencies": {
+        "stories": ["ATTIO-005"],
+        "files": ["supabase/functions/hubspot-list-ops/index.ts", "supabase/functions/_shared/attio.ts"],
+        "schema": ["attio_org_credentials"]
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-011", "ATTIO-012"],
+      "acceptance": [
+        "Lists all Attio lists with their metadata",
+        "Queries list entries with optional filtering",
+        "Adds records to lists with entry_values support",
+        "Removes entries from lists",
+        "Enforces org admin/owner role"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/attio-list-ops/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-014",
+      "feature": "attio-integration",
+      "title": "Build attio-webhook edge function (receive events, verify, queue)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 14,
+      "description": "Create edge function to receive Attio webhook events. Attio sends POST with JSON payload containing event_type and data. Since Attio webhook security mechanism isn't well-documented, implement shared-secret verification: on webhook creation (in attio-admin or attio-disconnect), generate a random secret, store in attio_org_integrations.webhook_secret, append as query param to target_url (e.g. ?secret=xxx). On receive, validate the secret matches. Parse event types: record.created/updated/deleted, list-entry.created/updated/deleted, note.created, task.created. Queue relevant events to attio_sync_queue for background processing. Log to integration_sync_logs with direction='inbound'.",
+      "dependencies": {
+        "stories": ["ATTIO-001", "ATTIO-005"],
+        "files": ["supabase/functions/hubspot-webhook/index.ts", "supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["attio_org_integrations", "attio_sync_queue", "integration_sync_logs"]
+      },
+      "blocks": ["ATTIO-015"],
+      "parallelWith": ["ATTIO-011"],
+      "acceptance": [
+        "Receives and parses Attio webhook POST payloads",
+        "Validates shared secret from query param against stored webhook_secret",
+        "Queues record change events to attio_sync_queue",
+        "Handles all 12+ Attio webhook event types",
+        "Logs inbound webhook events to integration_sync_logs",
+        "Returns 200 quickly (processes async via queue)",
+        "Rejects requests with invalid/missing secret with 401"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/attio-webhook/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-015",
+      "feature": "attio-integration",
+      "title": "Build attio-process-queue edge function + Vercel cron job",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "description": "Create worker edge function that processes jobs from attio_sync_queue. Picks up pending jobs ordered by priority + created_at, processes in batches (default 25 per run). Job types: 'sync_record' — fetch single record from Attio, update local row/cells. 'sync_table' — full incremental sync (delegates to sync-attio-ops-table). 'webhook_event' — process queued webhook event. Implements deduplication via dedup_key, retry tracking (increment attempts, mark failed after max 10), exponential backoff. Logs each operation to integration_sync_logs. Create Vercel cron at api/cron/attio-process-queue.ts (mirrors hubspot-process-queue.ts).",
+      "dependencies": {
+        "stories": ["ATTIO-009", "ATTIO-014"],
+        "files": ["supabase/functions/hubspot-process-queue/index.ts"],
+        "schema": ["attio_sync_queue", "integration_sync_logs"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Processes up to 25 queued jobs per invocation",
+        "Handles sync_record, sync_table, and webhook_event job types",
+        "Deduplicates jobs by dedup_key",
+        "Retries failed jobs with exponential backoff (max 10 attempts)",
+        "Marks permanently failed jobs as 'failed' with error_message",
+        "Logs all operations to integration_sync_logs",
+        "Vercel cron route works for both prod + staging"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/attio-process-queue/index.ts",
+        "api/cron/attio-process-queue.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-016",
+      "feature": "attio-integration",
+      "title": "Build AttioSettings page (connection, pipeline mapping, field mapping, sync controls)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "description": "Create settings page at src/pages/settings/AttioSettings.tsx mirroring HubSpotSettings.tsx. Sections: (1) Connection Status — connected/disconnected indicator, workspace name, connect/disconnect buttons. (2) Object Mapping — configure which Attio objects map to local entities (people→contacts, companies→companies, deals→deals). (3) Pipeline/List Mapping — map Attio lists to local deal pipelines, map list entry statuses to deal stages. (4) Field Mapping Editor — two-column UI for mapping Attio attributes to local fields, with auto-map suggestions. (5) Sync Direction — select inbound/outbound/bidirectional per object. (6) Sync Controls — trigger manual sync, view last sync timestamp, queue status. All data via useAttioIntegration hook calling attio-admin edge function.",
+      "dependencies": {
+        "stories": ["ATTIO-002", "ATTIO-003", "ATTIO-006"],
+        "files": ["src/pages/settings/HubSpotSettings.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-017"],
+      "acceptance": [
+        "Shows connection status with workspace name when connected",
+        "Connect button initiates OAuth flow via attio-oauth-initiate",
+        "Disconnect button calls attio-disconnect with confirmation",
+        "Object mapping configurable for people/companies/deals",
+        "Pipeline/list mapping with stage-to-stage UI",
+        "Field mapping editor with Attio attributes on left, local fields on right",
+        "Sync direction toggle per object type",
+        "Manual sync trigger with last sync timestamp display",
+        "Settings persist via attio_settings table"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/pages/settings/AttioSettings.tsx"
+      ]
+    },
+    {
+      "id": "ATTIO-017",
+      "feature": "attio-integration",
+      "title": "Build AttioConfigModal component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 17,
+      "description": "Create configuration modal at src/components/integrations/AttioConfigModal.tsx using the reusable ConfigureModal wrapper. Shows: connection status card (workspace name, connected user, connection date), enabled features badges (contacts sync, deals sync, webhooks), quick action buttons (trigger sync, view sync logs, open Attio settings). Uses useAttioIntegration hook for state. Follows FathomConfigModal.tsx pattern with ConfigureModal wrapper.",
+      "dependencies": {
+        "stories": ["ATTIO-006"],
+        "files": ["src/components/integrations/ConfigureModal.tsx", "src/components/integrations/FathomConfigModal.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-016"],
+      "acceptance": [
+        "Uses ConfigureModal wrapper with Attio logo and connection info",
+        "Shows workspace name and connected status",
+        "Enabled features displayed as badges",
+        "Quick sync trigger button with loading state",
+        "Link to full AttioSettings page",
+        "Disconnect option in danger zone section"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/integrations/AttioConfigModal.tsx"
+      ]
+    },
+    {
+      "id": "ATTIO-018",
+      "feature": "attio-integration",
+      "title": "Build AttioImportWizard component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 18,
+      "description": "Create 2-step import wizard at src/components/ops/AttioImportWizard.tsx (mirrors HubSpotImportWizard.tsx). Step 1: Select Source — choose between 'Import from List' (dropdown of Attio lists) or 'Import by Filter' (object selector + filter builder). For list mode, show list name + entry count. For filter mode, allow selecting object (people/companies/deals) and applying filters. Step 2: Preview & Import — show preview of first 10 records, let user select which attributes to import as columns, set table name, click Import. Calls import-from-attio edge function. Shows progress toast.",
+      "dependencies": {
+        "stories": ["ATTIO-006", "ATTIO-008"],
+        "files": ["src/components/ops/HubSpotImportWizard.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-019"],
+      "acceptance": [
+        "Two-step wizard with source selection and preview/import",
+        "List mode shows available Attio lists with entry counts",
+        "Filter mode allows object selection and basic filtering",
+        "Preview shows first 10 records with selectable attributes",
+        "Import creates new Ops table with selected columns",
+        "Progress indication during import",
+        "Error handling with toast feedback"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/ops/AttioImportWizard.tsx"
+      ]
+    },
+    {
+      "id": "ATTIO-019",
+      "feature": "attio-integration",
+      "title": "Build AttioPushModal component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 19,
+      "description": "Create push modal at src/components/ops/AttioPushModal.tsx (mirrors HubSpotPushModal.tsx). Shows: target object selector (people/companies/deals), auto-mapped field mapping (with manual override), duplicate strategy selector (update/skip/create), optional list to add records to (dropdown of Attio lists with option to create new), matching attribute selector for dedup (email for people, domain for companies). Calls push-to-attio edge function. Shows results summary (created/updated/skipped/failed).",
+      "dependencies": {
+        "stories": ["ATTIO-006", "ATTIO-011"],
+        "files": ["src/components/ops/HubSpotPushModal.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-018"],
+      "acceptance": [
+        "Object selector for target (people/companies/deals)",
+        "Auto-mapped field mapping with manual overrides",
+        "Duplicate strategy: update, skip, or create new",
+        "Optional list selection with create-new option",
+        "Matching attribute selector for deduplication",
+        "Results summary with counts after push completes",
+        "Loading state and error handling"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/AttioPushModal.tsx"
+      ]
+    },
+    {
+      "id": "ATTIO-020",
+      "feature": "attio-integration",
+      "title": "Build AttioSyncHistory component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 20,
+      "description": "Create sync history component at src/components/ops/AttioSyncHistory.tsx (mirrors HubSpotSyncHistory.tsx). Shows: list of past syncs from attio_sync_history with timestamp, direction, entity counts (new/updated/removed/returned). Revert button per sync that calls a revert-attio-sync edge function (or reuses a generic revert pattern). Stats summary at top (total synced, last sync, sync frequency).",
+      "dependencies": {
+        "stories": ["ATTIO-009"],
+        "files": ["src/components/ops/HubSpotSyncHistory.tsx"],
+        "schema": ["attio_sync_history"]
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-018", "ATTIO-019"],
+      "acceptance": [
+        "Lists past syncs with timestamps and entity counts",
+        "Shows new/updated/removed/returned counts per sync",
+        "Revert button restores previous state from snapshot",
+        "Stats summary with total records synced and frequency",
+        "Empty state when no syncs have occurred"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/ops/AttioSyncHistory.tsx",
+        "supabase/functions/revert-attio-sync/index.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-021",
+      "feature": "attio-integration",
+      "title": "Build Attio copilot adapter",
+      "type": "backend",
+      "status": "complete",
+      "priority": 21,
+      "description": "Create copilot adapter at supabase/functions/_shared/copilot_adapters/attioAdapters.ts mirroring hubspotAdapters.ts. Functions: getAttioContacts(orgId, limit?) — query people records with name/email/company, getAttioCompanies(orgId, limit?) — query company records with name/domain/industry, getAttioDeals(orgId, limit?) — query deal records with name/stage/value. Each function: gets valid access token (with auto-refresh using 2-min buffer), creates AttioClient, queries records, flattens values using fromAttioValues(). Read-only operations only. Export as CRM adapter interface compatible with copilot's data resolution.",
+      "dependencies": {
+        "stories": ["ATTIO-005", "ATTIO-007"],
+        "files": ["supabase/functions/_shared/copilot_adapters/hubspotAdapters.ts", "supabase/functions/_shared/attio.ts"],
+        "schema": ["attio_org_credentials"]
+      },
+      "blocks": [],
+      "parallelWith": ["ATTIO-022"],
+      "acceptance": [
+        "getAttioContacts returns flattened people records with name/email/company",
+        "getAttioCompanies returns flattened company records with name/domain/industry",
+        "getAttioDeals returns flattened deal records with name/stage/value",
+        "Auto-refreshes tokens with 2-min expiry buffer",
+        "Compatible with copilot CRM adapter interface",
+        "Read-only — no write operations"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/attioAdapters.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-022",
+      "feature": "attio-integration",
+      "title": "Build useAttioIntegration, useAttioSync, and useAttioWriteBack hooks",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 22,
+      "description": "Create three React hooks mirroring the HubSpot hook trio. (1) useAttioIntegration(enabled?) — main hook: refreshStatus(), connectAttio() (opens OAuth popup), disconnect(), getObjects(), getAttributes(), getLists(), getRecords(), getSettings(), saveSettings(), triggerSync(), enqueue(). Uses supabase.functions.invoke('attio-admin'). (2) useAttioSync(tableId) — sync mutation: sync() calls sync-attio-ops-table, success toast, query invalidation. (3) useAttioWriteBack(tableId) — fire-and-forget: writeBack(rowId, columnId, value) calls push-cell-to-attio.",
+      "dependencies": {
+        "stories": ["ATTIO-006"],
+        "files": ["src/lib/hooks/useHubSpotIntegration.ts", "src/lib/hooks/useHubSpotSync.ts", "src/lib/hooks/useHubSpotWriteBack.ts"],
+        "schema": []
+      },
+      "blocks": ["ATTIO-016", "ATTIO-017", "ATTIO-018", "ATTIO-019"],
+      "parallelWith": ["ATTIO-021"],
+      "acceptance": [
+        "useAttioIntegration provides full integration management API",
+        "connectAttio opens OAuth popup and handles redirect",
+        "disconnect calls attio-disconnect with confirmation",
+        "All admin actions proxy through supabase.functions.invoke('attio-admin')",
+        "useAttioSync provides sync() mutation with toast feedback",
+        "useAttioWriteBack provides fire-and-forget writeBack()",
+        "All hooks use activeOrgId from useOrgStore"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useAttioIntegration.ts",
+        "src/lib/hooks/useAttioSync.ts",
+        "src/lib/hooks/useAttioWriteBack.ts"
+      ]
+    },
+    {
+      "id": "ATTIO-023",
+      "feature": "attio-integration",
+      "title": "Build Attio integration test suite and unit tests",
+      "type": "test",
+      "status": "pending",
+      "priority": 23,
+      "description": "Create comprehensive test suite. (1) Integration test suite at src/lib/integrationTesting/suites/attioTests.ts — test categories: auth (connection status, OAuth flow validation), connectivity (API reachability, token validity), sync (import, incremental sync, diff tracking), records (CRUD for people/companies/deals), webhooks (event parsing, queue insertion), data (field mapping, value conversion). (2) Unit tests at tests/unit/attio/ — attioClient.test.ts (rate limiting, retry, value adapter), syncHandlers.test.ts (diff tracking, soft deletes), webhookValidation.test.ts (secret verification). Mirror structure from tests/unit/hubspot/.",
+      "dependencies": {
+        "stories": ["ATTIO-005", "ATTIO-006", "ATTIO-009", "ATTIO-014"],
+        "files": ["src/lib/integrationTesting/suites/hubspotTests.ts", "tests/unit/hubspot/"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Integration test suite covers auth, connectivity, sync, records, webhooks, data",
+        "Unit tests for AttioClient rate limiting and retry logic",
+        "Unit tests for value adapter (toAttioValues/fromAttioValues)",
+        "Unit tests for sync diff tracking and soft deletes",
+        "Unit tests for webhook secret verification",
+        "All tests pass in CI"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/lib/integrationTesting/suites/attioTests.ts",
+        "tests/unit/attio/attioClient.test.ts",
+        "tests/unit/attio/syncHandlers.test.ts",
+        "tests/unit/attio/webhookValidation.test.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 23,
+    "completedStories": 13,
+    "currentFeature": "attio-integration",
+    "phases": [
+      {
+        "name": "Phase 1: Foundation — Database + OAuth",
+        "stories": ["ATTIO-001", "ATTIO-002", "ATTIO-003", "ATTIO-004"],
+        "estimatedDays": 3,
+        "parallel": [["ATTIO-002", "ATTIO-003", "ATTIO-004"]]
+      },
+      {
+        "name": "Phase 2: API Client + Admin",
+        "stories": ["ATTIO-005", "ATTIO-006", "ATTIO-007"],
+        "estimatedDays": 3,
+        "parallel": [["ATTIO-006", "ATTIO-007"]]
+      },
+      {
+        "name": "Phase 3: Data Sync — Import",
+        "stories": ["ATTIO-008", "ATTIO-009", "ATTIO-010"],
+        "estimatedDays": 3,
+        "parallel": [["ATTIO-008", "ATTIO-009", "ATTIO-010"]]
+      },
+      {
+        "name": "Phase 4: Data Sync — Export",
+        "stories": ["ATTIO-011", "ATTIO-012", "ATTIO-013"],
+        "estimatedDays": 2,
+        "parallel": [["ATTIO-011", "ATTIO-012", "ATTIO-013"]]
+      },
+      {
+        "name": "Phase 5: Webhooks",
+        "stories": ["ATTIO-014", "ATTIO-015"],
+        "estimatedDays": 2
+      },
+      {
+        "name": "Phase 6: Frontend — Settings",
+        "stories": ["ATTIO-016", "ATTIO-017"],
+        "estimatedDays": 2,
+        "parallel": [["ATTIO-016", "ATTIO-017"]]
+      },
+      {
+        "name": "Phase 7: Frontend — Ops Table",
+        "stories": ["ATTIO-018", "ATTIO-019", "ATTIO-020"],
+        "estimatedDays": 2,
+        "parallel": [["ATTIO-018", "ATTIO-019", "ATTIO-020"]]
+      },
+      {
+        "name": "Phase 8: Copilot + Hooks",
+        "stories": ["ATTIO-021", "ATTIO-022"],
+        "estimatedDays": 1,
+        "parallel": [["ATTIO-021", "ATTIO-022"]]
+      },
+      {
+        "name": "Phase 9: Testing",
+        "stories": ["ATTIO-023"],
+        "estimatedDays": 1
+      }
+    ],
+    "mvpStories": ["ATTIO-001", "ATTIO-002", "ATTIO-003", "ATTIO-004", "ATTIO-005", "ATTIO-006", "ATTIO-008", "ATTIO-016", "ATTIO-017", "ATTIO-018", "ATTIO-022"],
+    "mvpEstimatedDays": 7,
+    "fullEstimatedDays": 16,
+    "lastUpdated": "2026-02-11T09:30:00Z"
+  },
+  "oauthSetupGuide": {
+    "steps": [
+      "Go to https://app.attio.com → Settings → Developers",
+      "Create a new app",
+      "Configure OAuth redirect URIs:",
+      "  Staging: https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/attio-oauth-callback",
+      "  Production: https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/attio-oauth-callback",
+      "  Development: https://wbgmnyekgqklggilgqag.supabase.co/functions/v1/attio-oauth-callback",
+      "Set scopes: record_permission:read-write, object_configuration:read, list_configuration:read, list_entry:read-write, note:read-write, task:read-write, webhook:read-write, user_management:read",
+      "Save client_id and client_secret",
+      "Set as Supabase secrets: npx supabase secrets set ATTIO_CLIENT_ID=xxx ATTIO_CLIENT_SECRET=xxx --project-ref <ref>"
+    ]
+  }
+}

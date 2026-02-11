@@ -1,0 +1,441 @@
+{
+  "project": {
+    "name": "use60 - Sales Intelligence Platform",
+    "createdAt": "2026-02-11T00:00:00Z"
+  },
+  "features": [
+    {
+      "id": "enrich",
+      "name": "Company Research Skill Integration",
+      "status": "pending",
+      "description": "Replace website scraping enrichment with company-research skill for 89% data completeness vs 42% baseline",
+      "prd": null,
+      "consultReport": null,
+      "createdAt": "2026-02-11T00:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "ENRICH-001",
+      "feature": "enrich",
+      "title": "Add feature flag configuration",
+      "type": "configuration",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["ENRICH-004"],
+      "parallelWith": ["ENRICH-002", "ENRICH-006"],
+      "acceptance": [
+        "FEATURE_ENHANCED_RESEARCH environment variable documented",
+        ".env.development includes FEATURE_ENHANCED_RESEARCH=true",
+        "Edge function deployment instructions updated for staging/prod",
+        "Rollback procedure documented"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        ".env.development",
+        "supabase/functions/deep-enrich-organization/README.md"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-002",
+      "feature": "enrich",
+      "title": "Update EnrichmentData TypeScript interface",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/deep-enrich-organization/index.ts"],
+        "schema": []
+      },
+      "blocks": ["ENRICH-003", "ENRICH-005"],
+      "parallelWith": ["ENRICH-001", "ENRICH-006"],
+      "acceptance": [
+        "EnrichmentData interface includes 15+ new optional fields",
+        "All new fields properly typed (founded_year, headquarters, funding_status, etc.)",
+        "Backward compatible with existing code",
+        "TypeScript compilation passes",
+        "JSDoc comments added for new fields"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/deep-enrich-organization/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-003",
+      "feature": "enrich",
+      "title": "Create executeCompanyResearchSkill() function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["ENRICH-002"],
+        "files": ["supabase/functions/deep-enrich-organization/index.ts"],
+        "schema": []
+      },
+      "blocks": ["ENRICH-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Function calls company-research skill via RPC or edge function",
+        "Skill output transformed to EnrichmentData format",
+        "12+ output sections mapped to enrichment fields correctly",
+        "Error handling for skill execution failures",
+        "Logging added for debugging skill responses"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/deep-enrich-organization/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-004",
+      "feature": "enrich",
+      "title": "Update runEnrichmentPipeline() with feature flag routing",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["ENRICH-001", "ENRICH-003"],
+        "files": ["supabase/functions/deep-enrich-organization/index.ts"],
+        "schema": []
+      },
+      "blocks": ["ENRICH-007"],
+      "parallelWith": ["ENRICH-005"],
+      "acceptance": [
+        "Feature flag read from environment (FEATURE_ENHANCED_RESEARCH)",
+        "Conditional routing: skill path vs legacy scraping path",
+        "enrichment_source field set correctly ('skill_research' vs 'website')",
+        "Raw skill output saved to raw_scraped_data for audit",
+        "Legacy path unchanged and functional"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/deep-enrich-organization/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-005",
+      "feature": "enrich",
+      "title": "Expand organization context mapping",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["ENRICH-002"],
+        "files": ["supabase/functions/deep-enrich-organization/index.ts"],
+        "schema": ["organization_context"]
+      },
+      "blocks": ["ENRICH-007"],
+      "parallelWith": ["ENRICH-004"],
+      "acceptance": [
+        "15+ new context variables added to saveOrganizationContext()",
+        "All new variables properly typed (string, array, object)",
+        "Backward compatible with existing variables",
+        "Null/undefined checks for optional fields",
+        "Context variables persisted to organization_context table"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/deep-enrich-organization/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-006",
+      "feature": "enrich",
+      "title": "Add optional database schema columns",
+      "type": "migration",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["organization_enrichment"]
+      },
+      "blocks": [],
+      "parallelWith": ["ENRICH-001", "ENRICH-002"],
+      "acceptance": [
+        "Migration adds new columns to organization_enrichment table",
+        "All columns nullable (optional enhancement)",
+        "Migration runs without errors on dev/staging/prod",
+        "Rollback migration tested",
+        "Note: OPTIONAL - can skip if using existing JSONB columns"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/[timestamp]_enrichment_optional_columns.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-007",
+      "feature": "enrich",
+      "title": "Create local development test setup",
+      "type": "testing",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["ENRICH-004", "ENRICH-005"],
+        "files": [".env.development"],
+        "schema": []
+      },
+      "blocks": ["ENRICH-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Feature flag enabled in .env.development",
+        "Edge function deployed to development environment",
+        "Test organization created for validation",
+        "Manual test instructions documented"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        ".env.development",
+        "docs/testing/enrichment-skill-testing.md"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-008",
+      "feature": "enrich",
+      "title": "Create validation test script",
+      "type": "testing",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["ENRICH-007"],
+        "files": [],
+        "schema": ["organization_enrichment", "organization_context"]
+      },
+      "blocks": ["ENRICH-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "Script validates field population rate (target: 89%)",
+        "Script validates new context variables presence",
+        "Script validates enrichment_source field",
+        "Test cases for 5 diverse companies (startup, mid-size, enterprise, unknown, redirect)",
+        "Validation checklist automated"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "scripts/validate-enrichment.ts",
+        "scripts/test-enrichment-cases.json"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-009",
+      "feature": "enrich",
+      "title": "Deploy to staging and configure environment",
+      "type": "deployment",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["ENRICH-008"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["ENRICH-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function deployed to staging with --no-verify-jwt",
+        "FEATURE_ENHANCED_RESEARCH=true set in staging secrets",
+        "A/B test configuration documented (25% rollout)",
+        "Rollback procedure tested"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "docs/deployment/enrichment-staging-deployment.md"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ENRICH-010",
+      "feature": "enrich",
+      "title": "Create monitoring and metrics queries",
+      "type": "documentation",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["ENRICH-009"],
+        "files": [],
+        "schema": ["organization_enrichment", "organization_context"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Completion rate by enrichment source query",
+        "Context variable population rate query",
+        "New variables population query",
+        "Success criteria dashboard (89% completion, <5% error, <60s time)",
+        "Monitoring queries documented in SQL file"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "docs/monitoring/enrichment-metrics.sql",
+        "docs/monitoring/enrichment-success-criteria.md"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 0,
+    "currentFeature": "enrich",
+    "lastUpdated": "2026-02-11T00:00:00Z",
+    "estimatedSequentialMinutes": 195,
+    "estimatedParallelMinutes": 150
+  },
+  "parallelGroups": [
+    {
+      "group": 1,
+      "stories": ["ENRICH-001", "ENRICH-002", "ENRICH-006"],
+      "estimatedMinutes": 15,
+      "description": "Initial setup - all independent"
+    },
+    {
+      "group": 2,
+      "stories": ["ENRICH-003"],
+      "estimatedMinutes": 30,
+      "description": "Skill execution function"
+    },
+    {
+      "group": 3,
+      "stories": ["ENRICH-004", "ENRICH-005"],
+      "estimatedMinutes": 25,
+      "description": "Pipeline routing and context mapping"
+    },
+    {
+      "group": 4,
+      "stories": ["ENRICH-007"],
+      "estimatedMinutes": 15,
+      "description": "Test setup"
+    },
+    {
+      "group": 5,
+      "stories": ["ENRICH-008"],
+      "estimatedMinutes": 25,
+      "description": "Validation script"
+    },
+    {
+      "group": 6,
+      "stories": ["ENRICH-009"],
+      "estimatedMinutes": 20,
+      "description": "Staging deployment"
+    },
+    {
+      "group": 7,
+      "stories": ["ENRICH-010"],
+      "estimatedMinutes": 20,
+      "description": "Monitoring setup"
+    }
+  ],
+  "risks": [
+    {
+      "risk": "Skill execution fails for obscure companies",
+      "impact": "Medium",
+      "probability": "Medium",
+      "mitigation": "Graceful fallback to legacy scraping if skill returns no data"
+    },
+    {
+      "risk": "API rate limits (Crunchbase, G2)",
+      "impact": "Medium",
+      "probability": "Low",
+      "mitigation": "Implement retry logic, cache results for 24h"
+    },
+    {
+      "risk": "Skill response too large for edge function limits",
+      "impact": "High",
+      "probability": "Low",
+      "mitigation": "Monitor response sizes, consider caching"
+    },
+    {
+      "risk": "Breaking change in skill output format",
+      "impact": "High",
+      "probability": "Low",
+      "mitigation": "Version skill output schema, validate against expected structure"
+    }
+  ],
+  "rolloutStrategy": {
+    "phase1": {
+      "name": "Development",
+      "duration": "Current",
+      "scope": "5-10 test companies",
+      "flag": "FEATURE_ENHANCED_RESEARCH=true in dev only"
+    },
+    "phase2": {
+      "name": "Staging Pilot",
+      "duration": "Week 1",
+      "scope": "25% of new signups (A/B test)",
+      "flag": "Random sampling in staging"
+    },
+    "phase3": {
+      "name": "Staging Full",
+      "duration": "Week 2",
+      "scope": "100% of staging signups",
+      "flag": "FEATURE_ENHANCED_RESEARCH=true in staging"
+    },
+    "phase4": {
+      "name": "Production Rollout",
+      "duration": "Week 3",
+      "scope": "10% → 50% → 100% canary",
+      "flag": "Gradual rollout with monitoring"
+    }
+  },
+  "successCriteria": {
+    "fieldCompletion": "89% (vs 42% baseline)",
+    "errorRate": "<5%",
+    "completionTime": "<60 seconds (vs 120s baseline)",
+    "newVariables": "15+ context variables populated",
+    "skillCompilationErrors": "No increase from baseline"
+  }
+}

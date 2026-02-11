@@ -1,0 +1,449 @@
+{
+  "feature": {
+    "id": "skills-dynamic-context",
+    "name": "Dynamic Context Injection + Auto-Recompile for Skills",
+    "status": "pending",
+    "prd": ".claude/skills_improve.md",
+    "createdAt": "2026-02-11T00:00:00Z",
+    "summary": "Thread org variables through all skills via auto-generated Organization Context blocks, add context profiles to frontmatter, and auto-recompile skills when org context changes."
+  },
+
+  "architecture": {
+    "approach": "Instead of hardcoding ${variable} references across every skill body, inject a dynamic '## Organization Context' markdown block at compile time. The block is generated from all available organization_context data, filtered by a context_profile declared in each skill's frontmatter. A DB trigger on organization_context marks org skills for recompile, and a pg_cron job periodically processes the queue.",
+
+    "components": [
+      "context_profile frontmatter field + parser update",
+      "Context block generator in compile-organization-skills",
+      "DB migration: needs_recompile column + trigger + cron",
+      "refresh-organization-skills update for context-change detection",
+      "Skill body updates (25 user-facing skills in 5 batches)",
+      "Sync + verify"
+    ],
+
+    "keyDecisions": [
+      "Context profiles (sales/research/communication/full) control which variables each skill receives — not every skill needs every variable",
+      "The context block is injected ABOVE the skill body during compilation, so the AI reads it as background context",
+      "Only ${company_name} is used inline in skill bodies (for titles, competitive framing, email signatures) — everything else comes from the context block",
+      "needs_recompile boolean column (simpler than hash-based detection) — trigger sets it, cron clears it after recompile",
+      "Integration skills (ai-ark-*, apify-*, output-format-selector) do NOT get context profiles — they don't need org context"
+    ]
+  },
+
+  "stories": [
+    {
+      "id": "SCTX-001",
+      "feature": "skills-dynamic-context",
+      "title": "Add context_profile to skill frontmatter spec and parser",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+
+      "description": "Add a `context_profile` field to the skill frontmatter metadata spec. Update the skillParser.ts to extract and pass it through to platform_skills.frontmatter. Update the SKILL_FRONTMATTER_GUIDE.md with the new field spec. Valid profiles: 'sales', 'research', 'communication', 'full'. Default: 'full' if not specified.",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["scripts/lib/skillParser.ts"],
+        "schema": ["platform_skills"]
+      },
+      "blocks": ["SCTX-002", "SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010"],
+      "parallelWith": ["SCTX-003", "SCTX-004"],
+
+      "acceptance": [
+        "skillParser.ts extracts context_profile from metadata and includes it in frontmatter JSONB",
+        "SKILL_FRONTMATTER_GUIDE.md documents the new field with valid values and default behavior",
+        "sync-skills dry run succeeds with no errors"
+      ],
+
+      "estimatedMinutes": 15,
+      "files": [
+        "scripts/lib/skillParser.ts",
+        "docs/copilot/SKILL_FRONTMATTER_GUIDE.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-002",
+      "feature": "skills-dynamic-context",
+      "title": "Build context block generator and inject into compilation pipeline",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "In compile-organization-skills/index.ts:\n\n1. Define CONTEXT_PROFILES map:\n   - sales: company_name, company_bio, products, value_propositions, competitors, icp, ideal_customer_profile, brand_voice, case_studies, customer_logos, pain_points\n   - research: company_name, company_bio, products, competitors, industry, target_market, tech_stack, pain_points, employee_count, company_size\n   - communication: company_name, brand_voice, products, case_studies, customer_logos, value_propositions\n   - full: ALL keys from organization_context\n\n2. Create generateContextBlock(context, profile) function:\n   - Takes org context object + profile name\n   - Returns markdown string: '## Organization Context (Auto-Generated)\\n\\n**Company**: ...\\n**Products**: ...' etc.\n   - Format arrays as comma-separated lists, objects as sub-bullets\n   - Skip null/undefined/empty values\n   - Add disclaimer: '> This context is auto-generated from your organization settings. Update at Settings > Organization.'\n\n3. Modify compileSkillDocument() to:\n   - Read context_profile from frontmatter.metadata.context_profile (default: 'full')\n   - Generate context block\n   - Prepend to compiled content before variable interpolation\n\n4. Store context_hash (MD5 of JSON.stringify(context)) in organization_skills via updated save RPC.",
+
+      "dependencies": {
+        "stories": ["SCTX-001"],
+        "files": ["supabase/functions/compile-organization-skills/index.ts"],
+        "schema": ["organization_skills", "organization_context"]
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "generateContextBlock produces well-formatted markdown for each profile type",
+        "Compiled skills include '## Organization Context' section with real org data",
+        "Empty/null context values are omitted (no 'undefined' in output)",
+        "Profile 'full' includes all available context keys",
+        "Preview action shows the context block without saving"
+      ],
+
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/compile-organization-skills/index.ts"
+      ]
+    },
+
+    {
+      "id": "SCTX-003",
+      "feature": "skills-dynamic-context",
+      "title": "DB migration: needs_recompile column + context change trigger",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+
+      "description": "Create a Supabase migration that:\n\n1. Adds `needs_recompile boolean DEFAULT false` column to `organization_skills` table\n2. Adds `context_hash text` column to `organization_skills` table (stores hash of org context at compile time)\n3. Creates trigger function `mark_org_skills_for_recompile()` that sets `needs_recompile = true` for all active org skills when organization_context changes\n4. Creates trigger `trg_org_context_changed` on `organization_context` table (AFTER INSERT OR UPDATE OR DELETE) that calls the function\n5. Updates `get_skills_needing_recompile` RPC to also return rows where `needs_recompile = true`",
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["organization_skills", "organization_context"]
+      },
+      "blocks": ["SCTX-004", "SCTX-005"],
+      "parallelWith": ["SCTX-001"],
+
+      "acceptance": [
+        "Migration runs without errors on development DB",
+        "Updating a row in organization_context sets needs_recompile=true for all org skills",
+        "Inserting a new org context row sets needs_recompile=true",
+        "Deleting an org context row sets needs_recompile=true",
+        "get_skills_needing_recompile returns both version-stale AND needs_recompile=true rows"
+      ],
+
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260211_skills_auto_recompile.sql"
+      ]
+    },
+
+    {
+      "id": "SCTX-004",
+      "feature": "skills-dynamic-context",
+      "title": "Update refresh-organization-skills to handle context-change recompilation",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Update refresh-organization-skills/index.ts to:\n\n1. In the `refresh_pending` action, also process skills where `needs_recompile = true` (already handled by updated RPC from SCTX-003)\n2. After successful recompilation, set `needs_recompile = false` and update `context_hash`\n3. Add a new action `refresh_context_changed` that specifically processes context-change recompilations (separate from version-stale)\n4. Update the `status` action to report context-change pending count separately\n5. Ensure the compile call includes context block generation (uses same pipeline as compile-organization-skills)",
+
+      "dependencies": {
+        "stories": ["SCTX-003"],
+        "files": ["supabase/functions/refresh-organization-skills/index.ts"],
+        "schema": ["organization_skills"]
+      },
+      "blocks": ["SCTX-005"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "refresh_pending processes both version-stale and context-change skills",
+        "After recompile, needs_recompile is reset to false",
+        "status action reports context_change_pending count",
+        "Recompiled skills include the Organization Context block"
+      ],
+
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/refresh-organization-skills/index.ts"
+      ]
+    },
+
+    {
+      "id": "SCTX-005",
+      "feature": "skills-dynamic-context",
+      "title": "Add pg_cron job for periodic skill recompilation",
+      "type": "schema",
+      "status": "pending",
+      "priority": 5,
+
+      "description": "Create a migration that adds a pg_cron job to periodically invoke refresh-organization-skills with action=refresh_pending. Run every 5 minutes. Follow the existing pattern from auto-join-scheduler cron. The cron calls the edge function via pg_net http_post (or use the existing cron-to-edge-function pattern in the codebase). Include an enable/disable mechanism.",
+
+      "dependencies": {
+        "stories": ["SCTX-003", "SCTX-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "pg_cron job is created and scheduled every 5 minutes",
+        "Job invokes refresh-organization-skills edge function with action=refresh_pending",
+        "Job can be disabled via cron.unschedule or a config flag",
+        "Migration includes rollback (DROP cron job)"
+      ],
+
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260211_skills_recompile_cron.sql"
+      ]
+    },
+
+    {
+      "id": "SCTX-006",
+      "feature": "skills-dynamic-context",
+      "title": "Update Deal Management skills with context_profile and body references",
+      "type": "content",
+      "status": "pending",
+      "priority": 6,
+
+      "description": "Update 4 Deal Management skills:\n- deal-map-builder\n- deal-next-best-actions\n- deal-rescue-plan\n- deal-slippage-diagnosis\n\nFor each skill:\n1. Add `context_profile: sales` to metadata in frontmatter\n2. Replace generic 'your company/product' language with 'your organization' or reference 'the Organization Context above'\n3. Add ${company_name} inline ONLY where the company name must appear literally (competitive framing, titles)\n4. Update required_context to include 'company_name' if not already present\n5. Do NOT add hardcoded variable references for products, ICP, etc. — those come from the context block",
+
+      "dependencies": {
+        "stories": ["SCTX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010"],
+
+      "acceptance": [
+        "All 4 skills have context_profile: sales in metadata",
+        "No hardcoded generic 'your company' language remains — replaced with context-aware references",
+        "${company_name} used inline only where necessary",
+        "Skills validate with npm run validate-skills"
+      ],
+
+      "estimatedMinutes": 20,
+      "files": [
+        "skills/atomic/deal-map-builder/SKILL.md",
+        "skills/atomic/deal-next-best-actions/SKILL.md",
+        "skills/atomic/deal-rescue-plan/SKILL.md",
+        "skills/atomic/deal-slippage-diagnosis/SKILL.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-007",
+      "feature": "skills-dynamic-context",
+      "title": "Update Meeting Intelligence skills with context_profile and body references",
+      "type": "content",
+      "status": "pending",
+      "priority": 6,
+
+      "description": "Update 5 Meeting Intelligence skills:\n- meeting-command-center-plan\n- meeting-digest-truth-extractor\n- meeting-prep-brief\n- post-meeting-followup-drafter\n- post-meeting-followup-pack-builder\n\nFor each skill:\n1. Add `context_profile: full` to metadata (meetings need broad context for prep)\n2. Replace generic language with references to 'the Organization Context above'\n3. Add ${company_name} inline where needed\n4. Ensure meeting prep skills reference products, competitors, case studies from context block for talking points",
+
+      "dependencies": {
+        "stories": ["SCTX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-006", "SCTX-008", "SCTX-009", "SCTX-010"],
+
+      "acceptance": [
+        "All 5 skills have context_profile: full in metadata",
+        "Meeting prep skills reference org products/competitors/case studies via context block",
+        "Skills validate with npm run validate-skills"
+      ],
+
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/meeting-command-center-plan/SKILL.md",
+        "skills/atomic/meeting-digest-truth-extractor/SKILL.md",
+        "skills/atomic/meeting-prep-brief/SKILL.md",
+        "skills/atomic/post-meeting-followup-drafter/SKILL.md",
+        "skills/atomic/post-meeting-followup-pack-builder/SKILL.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-008",
+      "feature": "skills-dynamic-context",
+      "title": "Update Follow-up & Communication skills with context_profile and body references",
+      "type": "content",
+      "status": "pending",
+      "priority": 6,
+
+      "description": "Update 3 Follow-up & Communication skills:\n- followup-reply-drafter\n- followup-triage\n- event-followup-analyzer\n\nFor each skill:\n1. Add `context_profile: communication` to metadata\n2. Replace generic tone/voice references with 'Use the brand voice and tone from Organization Context'\n3. Add ${company_name} inline for email signatures and competitive framing\n4. Reference case studies and value props from context block for follow-up content",
+
+      "dependencies": {
+        "stories": ["SCTX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-006", "SCTX-007", "SCTX-009", "SCTX-010"],
+
+      "acceptance": [
+        "All 3 skills have context_profile: communication in metadata",
+        "Brand voice references point to context block, not hardcoded values",
+        "Skills validate with npm run validate-skills"
+      ],
+
+      "estimatedMinutes": 15,
+      "files": [
+        "skills/atomic/followup-reply-drafter/SKILL.md",
+        "skills/atomic/followup-triage/SKILL.md",
+        "skills/atomic/event-followup-analyzer/SKILL.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-009",
+      "feature": "skills-dynamic-context",
+      "title": "Update Lead, Research & Enrichment skills with context_profile and body references",
+      "type": "content",
+      "status": "pending",
+      "priority": 6,
+
+      "description": "Update 6 Lead/Research/Enrichment skills:\n- lead-qualification\n- lead-research\n- company-analysis\n- company-research\n- competitor-intel\n- sales-enrich\n\nFor each skill:\n1. Add `context_profile: research` to metadata (except lead-qualification which gets 'sales')\n2. Replace 'your ICP/product/company' with references to Organization Context\n3. lead-qualification: reference ICP criteria from context block for scoring calibration\n4. competitor-intel: reference org products and value props from context block for battlecard generation\n5. Add ${company_name} inline for competitive positioning and ICP fit assessment",
+
+      "dependencies": {
+        "stories": ["SCTX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-006", "SCTX-007", "SCTX-008", "SCTX-010"],
+
+      "acceptance": [
+        "All 6 skills have appropriate context_profile in metadata",
+        "lead-qualification references ICP criteria from context block",
+        "competitor-intel references products and value props from context block",
+        "Skills validate with npm run validate-skills"
+      ],
+
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/lead-qualification/SKILL.md",
+        "skills/atomic/lead-research/SKILL.md",
+        "skills/atomic/company-analysis/SKILL.md",
+        "skills/atomic/company-research/SKILL.md",
+        "skills/atomic/competitor-intel/SKILL.md",
+        "skills/atomic/sales-enrich/SKILL.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-010",
+      "feature": "skills-dynamic-context",
+      "title": "Update Planning, Utility & Outreach skills with context_profile and body references",
+      "type": "content",
+      "status": "pending",
+      "priority": 6,
+
+      "description": "Update 6 Planning/Utility/Outreach skills:\n- daily-brief-planner\n- daily-focus-planner\n- pipeline-focus-task-planner\n- objection-to-playbook\n- sales-sequence\n- proposal-generator\n- search-documentation\n\nFor each skill:\n1. Add appropriate context_profile:\n   - daily-brief-planner, daily-focus-planner: 'full'\n   - pipeline-focus-task-planner: 'sales'\n   - objection-to-playbook: 'sales'\n   - sales-sequence: 'communication'\n   - proposal-generator: 'sales'\n   - search-documentation: 'full'\n2. sales-sequence: Reference brand voice and products from context block for tone calibration\n3. objection-to-playbook: Reference competitors and value props from context block\n4. proposal-generator: Reference products, case studies, and value props from context block",
+
+      "dependencies": {
+        "stories": ["SCTX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SCTX-011"],
+      "parallelWith": ["SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009"],
+
+      "acceptance": [
+        "All 7 skills have appropriate context_profile in metadata",
+        "sales-sequence references brand voice from context block",
+        "objection-to-playbook references competitors from context block",
+        "Skills validate with npm run validate-skills"
+      ],
+
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/daily-brief-planner/SKILL.md",
+        "skills/atomic/daily-focus-planner/SKILL.md",
+        "skills/atomic/pipeline-focus-task-planner/SKILL.md",
+        "skills/atomic/objection-to-playbook/SKILL.md",
+        "skills/atomic/sales-sequence/SKILL.md",
+        "skills/atomic/proposal-generator/SKILL.md",
+        "skills/atomic/search-documentation/SKILL.md"
+      ]
+    },
+
+    {
+      "id": "SCTX-011",
+      "feature": "skills-dynamic-context",
+      "title": "Run sync-skills, verify compilation, and deploy edge functions",
+      "type": "verification",
+      "status": "pending",
+      "priority": 7,
+
+      "description": "Final verification:\n1. Run `npm run validate-skills` — all 35 skills must pass\n2. Run `npm run sync-skills:dry` — preview what would change\n3. Run `npm run sync-skills` — sync to development DB\n4. Manually trigger compile-organization-skills for a test org to verify context block generation\n5. Deploy updated edge functions to staging:\n   - compile-organization-skills\n   - refresh-organization-skills\n6. Run migration on staging\n7. Verify a compiled skill in organization_skills has the Organization Context block\n8. Verify updating org context triggers needs_recompile = true",
+
+      "dependencies": {
+        "stories": ["SCTX-002", "SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "validate-skills passes for all 35 skills",
+        "sync-skills completes without errors",
+        "Test compilation produces Organization Context block with real org data",
+        "Edge functions deploy to staging successfully",
+        "Context change triggers needs_recompile flag"
+      ],
+
+      "estimatedMinutes": 20,
+      "files": []
+    }
+  ],
+
+  "execution": {
+    "totalStories": 11,
+    "estimatedMinutes": 215,
+    "estimatedHours": "3.5-4",
+
+    "parallelGroups": [
+      {
+        "name": "Foundation (parallel)",
+        "stories": ["SCTX-001", "SCTX-003"],
+        "description": "Frontmatter spec + DB migration can proceed in parallel"
+      },
+      {
+        "name": "Pipeline Updates (sequential)",
+        "stories": ["SCTX-002", "SCTX-004", "SCTX-005"],
+        "description": "Context block generator, then refresh update, then cron. Sequential because each builds on the previous."
+      },
+      {
+        "name": "Skill Updates (5-way parallel)",
+        "stories": ["SCTX-006", "SCTX-007", "SCTX-008", "SCTX-009", "SCTX-010"],
+        "description": "All 5 skill batches can run in parallel once SCTX-001 is done. 25 skills total."
+      },
+      {
+        "name": "Verification",
+        "stories": ["SCTX-011"],
+        "description": "Final sync, validate, deploy, and verify. Runs last."
+      }
+    ],
+
+    "criticalPath": "SCTX-001 → SCTX-002 → SCTX-011",
+    "skillsAffected": 25,
+    "skillsUnaffected": "ai-ark-company-search, ai-ark-enrichment, ai-ark-people-search, ai-ark-reverse-lookup, ai-ark-semantic-search, ai-ark-similarity-search, apify-actor-browse, apify-results-query, apify-run-trigger, output-format-selector"
+  },
+
+  "contextProfiles": {
+    "sales": {
+      "description": "Deal management, pipeline, qualification, proposals",
+      "variables": ["company_name", "company_bio", "products", "value_propositions", "competitors", "icp", "ideal_customer_profile", "brand_voice", "case_studies", "customer_logos", "pain_points"],
+      "skills": ["deal-map-builder", "deal-next-best-actions", "deal-rescue-plan", "deal-slippage-diagnosis", "pipeline-focus-task-planner", "objection-to-playbook", "lead-qualification", "proposal-generator"]
+    },
+    "research": {
+      "description": "Company intelligence, lead research, competitive analysis",
+      "variables": ["company_name", "company_bio", "products", "competitors", "industry", "target_market", "tech_stack", "pain_points", "employee_count", "company_size"],
+      "skills": ["company-analysis", "company-research", "competitor-intel", "lead-research", "sales-enrich"]
+    },
+    "communication": {
+      "description": "Email drafting, follow-ups, outreach, tone-sensitive content",
+      "variables": ["company_name", "brand_voice", "products", "case_studies", "customer_logos", "value_propositions"],
+      "skills": ["followup-reply-drafter", "followup-triage", "event-followup-analyzer", "sales-sequence"]
+    },
+    "full": {
+      "description": "All available context — meeting prep, daily planning, search",
+      "variables": "ALL keys from organization_context",
+      "skills": ["meeting-command-center-plan", "meeting-digest-truth-extractor", "meeting-prep-brief", "post-meeting-followup-drafter", "post-meeting-followup-pack-builder", "daily-brief-planner", "daily-focus-planner", "search-documentation"]
+    }
+  }
+}
