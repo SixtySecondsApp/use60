@@ -123,7 +123,7 @@ export function ImportToOpsDialog({
           <button
             type="button"
             onClick={() => navigate(`/ops/${result.table_id}`)}
-            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium"
+            className="inline-flex items-center gap-1 text-brand-blue hover:text-brand-blue/80 dark:text-blue-400 font-medium"
           >
             Open
             <ExternalLink className="h-3 w-3" />
@@ -179,7 +179,7 @@ export function ImportToOpsDialog({
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="table-name"
-              className="text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="text-sm font-medium text-[#1E293B] dark:text-gray-300"
             >
               Table Name
             </label>
@@ -197,10 +197,10 @@ export function ImportToOpsDialog({
           </div>
 
           {/* Import summary */}
-          <div className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
+          <div className="flex flex-col gap-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 dark:border-gray-700/50 dark:bg-gray-900/50">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-300">Rows to import</span>
-              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <span className="text-sm text-[#64748B] dark:text-gray-300">Rows to import</span>
+              <span className="text-sm font-semibold text-[#1E293B] dark:text-gray-100">
                 {rowCount.toLocaleString()}
                 {isSubset && (
                   <span className="ml-1 text-xs font-normal text-gray-500 dark:text-gray-400">
@@ -211,7 +211,7 @@ export function ImportToOpsDialog({
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-300">Source</span>
+              <span className="text-sm text-[#64748B] dark:text-gray-300">Source</span>
               <div className="flex items-center gap-1.5">
                 <Badge variant="default">{providerLabel(provider)}</Badge>
                 {action && (
@@ -225,7 +225,7 @@ export function ImportToOpsDialog({
 
           {/* Importing progress */}
           {isImporting && (
-            <div className="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
+            <div className="flex items-center gap-2 rounded-xl bg-brand-blue/5 px-3 py-2 text-sm text-brand-blue dark:bg-blue-950/30 dark:text-blue-400">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Creating table and importing rows...</span>
             </div>

@@ -21,7 +21,7 @@ function CriteriaSection({ label, items, icon }: { label: string; items: string[
   if (!items || items.length === 0) return null;
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-[#64748B] dark:text-gray-400">
         {icon}
         {label}
       </div>
@@ -59,7 +59,7 @@ export function ApprovalView({ profile, onApprove, onReject }: ApprovalViewProps
     <div className="space-y-6">
       {/* Status Banner */}
       {isPendingApproval && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3">
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3">
           <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
             Awaiting Approval
@@ -68,13 +68,13 @@ export function ApprovalView({ profile, onApprove, onReject }: ApprovalViewProps
       )}
 
       {isApproved && (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3">
-          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+        <div className="flex items-center gap-2 rounded-xl border border-brand-teal/20 dark:border-brand-teal/30 bg-brand-teal/5 dark:bg-brand-teal/10 px-4 py-3">
+          <CheckCircle className="h-4 w-4 text-brand-teal dark:text-emerald-400" />
+          <span className="text-sm font-medium text-brand-teal dark:text-emerald-300">
             Approved
           </span>
           {profile.updated_at && (
-            <span className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+            <span className="text-xs opacity-70">
               {new Date(profile.updated_at).toLocaleDateString()}
             </span>
           )}
@@ -83,23 +83,23 @@ export function ApprovalView({ profile, onApprove, onReject }: ApprovalViewProps
 
       {/* Profile Summary */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{profile.name}</h3>
+        <h3 className="text-lg font-semibold text-[#1E293B] dark:text-gray-100">{profile.name}</h3>
         {profile.description && (
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{profile.description}</p>
+          <p className="mt-1 text-sm text-[#64748B] dark:text-gray-400">{profile.description}</p>
         )}
       </div>
 
       {/* Target Provider */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Provider:</span>
+        <span className="text-xs font-medium text-[#64748B] dark:text-gray-400">Provider:</span>
         <Badge variant="outline" className="text-xs">
           {profile.target_provider === 'apollo' ? 'Apollo' : profile.target_provider === 'ai_ark' ? 'AI Ark' : 'Apollo + AI Ark'}
         </Badge>
       </div>
 
       {/* Criteria Breakdown */}
-      <div className="space-y-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-4">
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Targeting Criteria</h4>
+      <div className="space-y-4 rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-[#F8FAFC] dark:bg-gray-900/50 p-4">
+        <h4 className="text-sm font-semibold text-[#1E293B] dark:text-gray-100">Targeting Criteria</h4>
 
         <CriteriaSection
           label="Industries"
@@ -143,7 +143,7 @@ export function ApprovalView({ profile, onApprove, onReject }: ApprovalViewProps
 
         {c.employee_ranges?.length ? (
           <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-[#64748B] dark:text-gray-400">
               <Users className="h-3 w-3" />
               Employee Count
             </div>
@@ -168,17 +168,17 @@ export function ApprovalView({ profile, onApprove, onReject }: ApprovalViewProps
 
       {/* Last Test Results */}
       {profile.last_tested_at && (
-        <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-4">
-          <h4 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+        <div className="rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-[#F8FAFC] dark:bg-gray-900/50 p-4">
+          <h4 className="mb-2 text-sm font-semibold text-[#1E293B] dark:text-gray-100">
             Last Test Results
           </h4>
           <div className="flex items-center gap-4 text-sm">
-            <div className="text-gray-600 dark:text-gray-400">
+            <div className="text-[#64748B] dark:text-gray-400">
               <Clock className="mr-1 inline h-3.5 w-3.5" />
               {new Date(profile.last_tested_at).toLocaleDateString()}
             </div>
             {profile.last_test_result_count != null && (
-              <div className="font-semibold text-gray-900 dark:text-gray-100">
+              <div className="font-semibold text-[#1E293B] dark:text-gray-100">
                 {profile.last_test_result_count.toLocaleString()} results
               </div>
             )}
@@ -188,10 +188,10 @@ export function ApprovalView({ profile, onApprove, onReject }: ApprovalViewProps
 
       {/* Approval Actions */}
       {isPendingApproval && (
-        <div className="flex items-center gap-3 border-t border-gray-200 dark:border-gray-800 pt-4">
+        <div className="flex items-center gap-3 border-t border-[#E2E8F0] dark:border-gray-700/50 pt-4">
           <Button
             onClick={() => onApprove(profile)}
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+            className="gap-2 bg-brand-teal hover:bg-brand-teal/90"
           >
             <CheckCircle className="h-4 w-4" />
             Approve

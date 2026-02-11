@@ -114,13 +114,13 @@ export function SearchResultsPreview({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="text-base font-semibold text-[#1E293B] dark:text-gray-100">
             Search Results
           </h3>
 
           {result && (
             <>
-              <span className="text-sm text-gray-500 dark:text-gray-400">
+              <span className="text-sm text-[#64748B] dark:text-gray-400">
                 Showing {result.results.length.toLocaleString()} of{' '}
                 {result.total_results.toLocaleString()} results
               </span>
@@ -175,7 +175,7 @@ export function SearchResultsPreview({
             {result && (
               <div className="flex items-center gap-2">
                 <Badge variant="default">{providerLabel(result.provider)}</Badge>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-xs text-[#64748B] dark:text-gray-400">
                   {result.total_results.toLocaleString()} results
                 </span>
               </div>
@@ -202,7 +202,7 @@ export function SearchResultsPreview({
             {secondResult && (
               <div className="flex items-center gap-2">
                 <Badge variant="default">{providerLabel(secondResult.provider)}</Badge>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-xs text-[#64748B] dark:text-gray-400">
                   {secondResult.total_results.toLocaleString()} results
                 </span>
               </div>

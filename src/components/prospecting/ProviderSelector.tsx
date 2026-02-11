@@ -48,7 +48,7 @@ export function ProviderSelector({ selected, onChange, disabled }: ProviderSelec
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      <label className="text-sm font-medium text-[#1E293B] dark:text-gray-300">
         Search Provider
       </label>
       <div className="flex gap-2">
@@ -64,10 +64,10 @@ export function ProviderSelector({ selected, onChange, disabled }: ProviderSelec
               disabled={isDisabled}
               onClick={() => onChange(provider.value)}
               className={cn(
-                'flex flex-1 flex-col items-start gap-1 rounded-lg border p-3 text-left transition-all',
+                'flex flex-1 flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all',
                 isSelected
-                  ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/30'
-                  : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-gray-600',
+                  ? 'border-brand-blue bg-brand-blue/5 dark:border-brand-blue/60 dark:bg-brand-blue/10'
+                  : 'border-[#E2E8F0] bg-white hover:border-gray-300 dark:border-gray-700/50 dark:bg-gray-900/80 dark:hover:border-gray-600',
                 isDisabled && 'cursor-not-allowed opacity-50'
               )}
             >
@@ -76,8 +76,8 @@ export function ProviderSelector({ selected, onChange, disabled }: ProviderSelec
                   className={cn(
                     'text-sm font-medium',
                     isSelected
-                      ? 'text-blue-700 dark:text-blue-300'
-                      : 'text-gray-900 dark:text-gray-100'
+                      ? 'text-brand-blue dark:text-blue-300'
+                      : 'text-[#1E293B] dark:text-gray-100'
                   )}
                 >
                   {provider.label}
@@ -88,7 +88,7 @@ export function ProviderSelector({ selected, onChange, disabled }: ProviderSelec
                   partial={status.partial}
                 />
               </div>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
+              <span className="text-xs text-[#64748B] dark:text-gray-400">
                 {provider.description}
               </span>
             </button>
@@ -116,15 +116,15 @@ function StatusIcon({
   partial: boolean
 }) {
   if (loading) {
-    return <Loader2 className="h-4 w-4 animate-spin text-gray-400 dark:text-gray-500" />
+    return <Loader2 className="h-4 w-4 animate-spin text-[#94A3B8] dark:text-gray-500" />
   }
   if (connected) {
-    return <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
+    return <CheckCircle2 className="h-4 w-4 text-brand-teal dark:text-emerald-400" />
   }
   if (partial) {
     return <CheckCircle2 className="h-4 w-4 text-amber-500 dark:text-amber-400" />
   }
-  return <XCircle className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+  return <XCircle className="h-4 w-4 text-[#94A3B8] dark:text-gray-500" />
 }
 
 function ProviderWarnings({
@@ -150,7 +150,7 @@ function ProviderWarnings({
   if (warnings.length === 0) return null
 
   return (
-    <div className="flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+    <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
       <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
       <span>
         {warnings.join(' and ')} not configured.{' '}

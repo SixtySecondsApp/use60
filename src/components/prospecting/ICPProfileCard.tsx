@@ -54,7 +54,7 @@ function ProviderLabel({ provider }: { provider: ICPTargetProvider }) {
     both: 'Apollo + AI Ark',
   };
   return (
-    <span className="text-xs text-gray-500 dark:text-gray-400">{labels[provider]}</span>
+    <span className="text-xs text-[#64748B] dark:text-gray-400">{labels[provider]}</span>
   );
 }
 
@@ -86,7 +86,7 @@ function FilterSummary({ profile }: { profile: ICPProfile }) {
   if (parts.length === 0) return null;
 
   return (
-    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+    <p className="text-xs text-[#64748B] dark:text-gray-400 truncate">
       {parts.join(' \u00B7 ')}
     </p>
   );
@@ -127,25 +127,25 @@ export function ICPProfileCard({
     <>
       <div
         onClick={() => onSelect(profile)}
-        className={`group relative cursor-pointer overflow-hidden rounded-lg border p-5 transition-all duration-200 hover:shadow-md
+        className={`group relative cursor-pointer overflow-hidden rounded-xl border p-5 transition-all duration-200 hover:shadow-md backdrop-blur-sm
           ${isSelected
-            ? 'border-primary ring-2 ring-primary bg-white dark:bg-gray-800/60'
-            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 hover:border-gray-300 dark:hover:border-gray-600'
+            ? 'border-brand-blue ring-2 ring-brand-blue/30 bg-white dark:bg-gray-900/80'
+            : 'border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 hover:border-gray-300 dark:hover:border-gray-600 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none'
           }`}
       >
         {/* Status banners */}
         {profile.status === 'pending_approval' && (
-          <div className="mb-3 flex items-center gap-1.5 rounded-md border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+          <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
             <AlertCircle className="h-3 w-3" />
             Awaiting Approval
           </div>
         )}
         {(profile.status === 'approved' || profile.status === 'active') && (
-          <div className="mb-3 flex items-center gap-1.5 rounded-md border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+          <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-brand-teal/20 dark:border-brand-teal/30 bg-brand-teal/5 dark:bg-brand-teal/10 px-2.5 py-1.5 text-xs font-medium text-brand-teal dark:text-emerald-300">
             <CheckCircle className="h-3 w-3" />
             Approved
             {profile.updated_at && (
-              <span className="text-emerald-600/70 dark:text-emerald-400/70">
+              <span className="opacity-70">
                 {new Date(profile.updated_at).toLocaleDateString()}
               </span>
             )}
@@ -155,7 +155,7 @@ export function ICPProfileCard({
         {/* Header: name + actions */}
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+            <h3 className="truncate text-sm font-semibold text-[#1E293B] dark:text-gray-100">
               {profile.name}
             </h3>
           </div>
@@ -204,7 +204,7 @@ export function ICPProfileCard({
 
         {/* Description */}
         {profile.description && (
-          <p className="mb-3 line-clamp-2 text-xs text-gray-600 dark:text-gray-400">
+          <p className="mb-3 line-clamp-2 text-xs text-[#64748B] dark:text-gray-400">
             {profile.description}
           </p>
         )}
@@ -212,27 +212,27 @@ export function ICPProfileCard({
         {/* Provider + Filter summary */}
         <div className="mb-3 flex items-center gap-2">
           <ProviderLabel provider={profile.target_provider} />
-          <span className="text-gray-500 dark:text-gray-400">|</span>
+          <span className="text-[#64748B] dark:text-gray-500">|</span>
           <FilterSummary profile={profile} />
         </div>
 
         {/* Footer: last tested + test button */}
         <div className="flex items-center justify-between">
           {profile.last_tested_at ? (
-            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-1.5 text-xs text-[#64748B] dark:text-gray-400">
               <Clock className="h-3 w-3" />
               <span>
                 Tested {formatDistanceToNow(new Date(profile.last_tested_at), { addSuffix: true })}
               </span>
               {profile.last_test_result_count != null && (
                 <>
-                  <span className="text-gray-500 dark:text-gray-400">&middot;</span>
+                  <span className="text-[#64748B] dark:text-gray-500">&middot;</span>
                   <span>{profile.last_test_result_count.toLocaleString()} results</span>
                 </>
               )}
             </div>
           ) : (
-            <span className="text-xs text-gray-500 dark:text-gray-400">Not tested yet</span>
+            <span className="text-xs text-[#64748B] dark:text-gray-400">Not tested yet</span>
           )}
 
           <button
@@ -240,7 +240,7 @@ export function ICPProfileCard({
               e.stopPropagation();
               onTest(profile);
             }}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-50 dark:hover:bg-blue-500/10"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-blue dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-brand-blue/10 dark:hover:bg-blue-500/10"
           >
             <Play className="h-3 w-3" />
             Test

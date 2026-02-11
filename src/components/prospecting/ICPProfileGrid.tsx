@@ -32,7 +32,7 @@ function GridSkeleton() {
       {[1, 2, 3, 4, 5, 6].map((i) => (
         <div
           key={i}
-          className="h-40 animate-pulse rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/40"
+          className="h-40 animate-pulse rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80"
         />
       ))}
     </div>
@@ -45,14 +45,14 @@ function GridSkeleton() {
 
 function EmptyState({ onCreateProfile }: { onCreateProfile: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 px-6 py-16 text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800">
-        <Crosshair className="h-7 w-7 text-gray-500 dark:text-gray-500" />
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 px-6 py-16 text-center shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none backdrop-blur-sm">
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/10 dark:bg-brand-blue/10">
+        <Crosshair className="h-7 w-7 text-brand-blue dark:text-blue-400" />
       </div>
-      <h3 className="mb-1 text-lg font-medium text-gray-900 dark:text-white">
+      <h3 className="mb-1 text-lg font-semibold text-[#1E293B] dark:text-white">
         Create your first ICP profile
       </h3>
-      <p className="mb-6 max-w-sm text-sm text-gray-600 dark:text-gray-400">
+      <p className="mb-6 max-w-sm text-sm text-[#64748B] dark:text-gray-400">
         Define your ideal customer profile to start prospecting across data providers.
       </p>
       <Button onClick={onCreateProfile} className="gap-2">
@@ -128,13 +128,13 @@ export function ICPProfileGrid({
       {/* Toolbar: Search + Create Button */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B] dark:text-gray-500" />
           <input
             type="text"
             placeholder="Search profiles..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900/60 py-2 pl-10 pr-4 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-500 transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 py-2 pl-10 pr-4 text-sm text-[#1E293B] dark:text-gray-100 placeholder-[#94A3B8] dark:placeholder-gray-500 transition-colors focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue backdrop-blur-sm"
           />
         </div>
 
@@ -157,13 +157,13 @@ export function ICPProfileGrid({
               onClick={() => setStatusFilter(tab.value)}
               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors
                 ${statusFilter === tab.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  ? 'bg-[#37bd7e]/10 text-[#1E293B] dark:text-white'
+                  : 'text-[#64748B] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/50'
                 }`}
             >
               {tab.label}
               {count > 0 && (
-                <span className={`ml-1.5 ${statusFilter === tab.value ? 'text-primary-foreground/80' : 'text-gray-400 dark:text-gray-500'}`}>
+                <span className={`ml-1.5 ${statusFilter === tab.value ? 'text-[#37bd7e]' : 'text-[#94A3B8] dark:text-gray-500'}`}>
                   {count}
                 </span>
               )}
@@ -189,9 +189,9 @@ export function ICPProfileGrid({
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-gray-200 dark:border-gray-800 px-6 py-12 text-center">
-          <Search className="mb-2 h-6 w-6 text-gray-400 dark:text-gray-500" />
-          <p className="text-sm text-gray-500 dark:text-gray-500">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 px-6 py-12 text-center backdrop-blur-sm">
+          <Search className="mb-2 h-6 w-6 text-[#94A3B8] dark:text-gray-500" />
+          <p className="text-sm text-[#64748B] dark:text-gray-400">
             No profiles match your filters
           </p>
         </div>

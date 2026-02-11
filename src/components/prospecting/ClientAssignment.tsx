@@ -98,15 +98,15 @@ export function ClientAssignment({
   if (currentAssigneeId && currentAssigneeName) {
     return (
       <div className="flex items-center gap-2 text-sm">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-medium">
+        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue dark:text-blue-400 text-xs font-medium">
           {currentAssigneeName.charAt(0).toUpperCase()}
         </div>
-        <span className="text-gray-700 dark:text-gray-300 truncate max-w-[120px]">
+        <span className="text-[#1E293B] dark:text-gray-300 truncate max-w-[120px]">
           {currentAssigneeName}
         </span>
         <button
           onClick={handleUnassign}
-          className="rounded p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+          className="rounded p-0.5 text-[#94A3B8] hover:text-[#64748B] dark:hover:text-gray-200 transition-colors"
           title="Remove assignment"
         >
           <X className="h-3.5 w-3.5" />
@@ -121,24 +121,24 @@ export function ClientAssignment({
         variant="ghost"
         size="sm"
         onClick={() => setIsOpen(!isOpen)}
-        className="gap-1.5 text-xs text-gray-500 dark:text-gray-400 h-7 px-2"
+        className="gap-1.5 text-xs text-[#64748B] dark:text-gray-400 h-7 px-2"
       >
         <UserPlus className="h-3.5 w-3.5" />
         Assign Client
       </Button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900 shadow-lg backdrop-blur-sm">
           <div className="p-2">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#94A3B8]" />
               <input
                 ref={inputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search contacts..."
-                className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-1.5 pl-8 pr-3 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-500 focus:border-primary focus:outline-none"
+                className="w-full rounded-lg border border-[#E2E8F0] dark:border-gray-700/50 bg-[#F8FAFC] dark:bg-gray-800/80 py-1.5 pl-8 pr-3 text-xs text-[#1E293B] dark:text-gray-100 placeholder-[#94A3B8] dark:placeholder-gray-500 focus:border-brand-blue focus:outline-none"
               />
             </div>
           </div>
@@ -146,18 +146,18 @@ export function ClientAssignment({
           <div className="max-h-48 overflow-y-auto border-t border-gray-100 dark:border-gray-800">
             {isLoading && (
               <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                <Loader2 className="h-4 w-4 animate-spin text-[#94A3B8]" />
               </div>
             )}
 
             {!isLoading && searchQuery.length < 2 && (
-              <p className="px-3 py-3 text-xs text-gray-500 dark:text-gray-500 text-center">
+              <p className="px-3 py-3 text-xs text-[#64748B] dark:text-gray-500 text-center">
                 Type at least 2 characters to search
               </p>
             )}
 
             {!isLoading && searchQuery.length >= 2 && contacts.length === 0 && (
-              <p className="px-3 py-3 text-xs text-gray-500 dark:text-gray-500 text-center">
+              <p className="px-3 py-3 text-xs text-[#64748B] dark:text-gray-500 text-center">
                 No contacts found
               </p>
             )}
@@ -166,17 +166,17 @@ export function ClientAssignment({
               <button
                 key={contact.id}
                 onClick={() => handleAssign(contact)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
               >
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-medium">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-[#64748B] dark:text-gray-300 text-xs font-medium">
                   {contact.full_name?.charAt(0)?.toUpperCase() ?? '?'}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-gray-900 dark:text-gray-100">
+                  <p className="truncate font-medium text-[#1E293B] dark:text-gray-100">
                     {contact.full_name}
                   </p>
                   {contact.email && (
-                    <p className="truncate text-gray-500 dark:text-gray-500">
+                    <p className="truncate text-[#64748B] dark:text-gray-500">
                       {contact.email}
                     </p>
                   )}

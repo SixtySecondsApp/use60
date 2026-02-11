@@ -123,7 +123,7 @@ function renderDomain(value: unknown): React.ReactNode {
       href={`https://${domain}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+      className="text-brand-blue hover:text-brand-blue/80 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
     >
       {domain}
     </a>
@@ -137,7 +137,7 @@ function renderLinkedIn(value: unknown): React.ReactNode {
       href={String(value)}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+      className="inline-flex items-center gap-1 text-brand-blue hover:text-brand-blue/80 dark:text-blue-400 dark:hover:text-blue-300"
       title="Open LinkedIn profile"
     >
       <ExternalLink className="h-3.5 w-3.5" />
@@ -189,7 +189,7 @@ function renderTags(value: unknown): React.ReactNode {
       {tags.map((tag: string, i: number) => (
         <span
           key={i}
-          className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+          className="inline-block rounded-md bg-[#F8FAFC] px-1.5 py-0.5 text-xs text-[#64748B] dark:bg-gray-800/50 dark:text-gray-300"
         >
           {tag}
         </span>
@@ -308,14 +308,14 @@ export function ResultsTable({
     <div className="flex flex-col gap-3">
       {/* ICP aggregate stats banner */}
       {aggregateStats && aggregateStats.totalScored > 0 && (
-        <div className="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
-          <Target className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+        <div className="flex items-center gap-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#64748B] dark:border-gray-700/50 dark:bg-gray-900/50 dark:text-gray-400">
+          <Target className="h-4 w-4 text-[#94A3B8] dark:text-gray-500" />
           <span>
-            Average fit: <strong className="text-gray-900 dark:text-gray-100">{aggregateStats.average}%</strong>
+            Average fit: <strong className="text-[#1E293B] dark:text-gray-100">{aggregateStats.average}%</strong>
           </span>
-          <span className="text-gray-300 dark:text-gray-600">|</span>
+          <span className="text-[#E2E8F0] dark:text-gray-600">|</span>
           <span>
-            High fit (80%+): <strong className="text-emerald-600 dark:text-emerald-400">{aggregateStats.highFitCount}</strong> contacts
+            High fit (80%+): <strong className="text-brand-teal dark:text-emerald-400">{aggregateStats.highFitCount}</strong> contacts
           </span>
         </div>
       )}
@@ -495,10 +495,10 @@ function LoadingSkeleton({ columns, hasICP }: { columns: ColumnDef[]; hasICP?: b
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-500 dark:text-gray-400">
-      <Search className="h-10 w-10 text-gray-300 dark:text-gray-600" />
-      <p className="text-sm font-medium">No results found</p>
-      <p className="text-xs text-gray-400 dark:text-gray-500">
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#64748B] dark:text-gray-400">
+      <Search className="h-10 w-10 text-[#E2E8F0] dark:text-gray-600" />
+      <p className="text-sm font-medium text-[#1E293B] dark:text-gray-100">No results found</p>
+      <p className="text-xs text-[#94A3B8] dark:text-gray-500">
         Try broadening your search criteria.
       </p>
     </div>

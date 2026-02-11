@@ -3,11 +3,9 @@ import {
   Crosshair,
   FlaskConical,
   CheckCircle2,
-  BarChart3,
   Zap,
 } from 'lucide-react';
 import { useICPProfiles } from '@/lib/hooks/useICPProfilesCRUD';
-import type { ICPStatus } from '@/lib/types/prospecting';
 
 // ---------------------------------------------------------------------------
 // Stat Card
@@ -18,18 +16,19 @@ interface StatCardProps {
   label: string;
   value: string | number;
   sublabel?: string;
+  color: string;
 }
 
-function StatCard({ icon, label, value, sublabel }: StatCardProps) {
+function StatCard({ icon, label, value, sublabel, color }: StatCardProps) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 p-4">
+    <div className={`rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none backdrop-blur-sm transition-all hover:border-${color}-500/30 dark:hover:border-${color}-500/20`}>
       <div className="flex items-center gap-2 mb-2">
         {icon}
-        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</span>
+        <span className="text-xs font-medium text-[#64748B] dark:text-gray-400">{label}</span>
       </div>
-      <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{value}</p>
+      <p className="text-2xl font-bold text-[#1E293B] dark:text-gray-100">{value}</p>
       {sublabel && (
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-500">{sublabel}</p>
+        <p className="mt-0.5 text-xs text-[#64748B] dark:text-gray-500">{sublabel}</p>
       )}
     </div>
   );
@@ -80,31 +79,30 @@ export function ProspectingDashboard({ orgId }: ProspectingDashboardProps) {
   if (stats.total === 0) return null;
 
   return (
-    <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
       <StatCard
-        icon={<Crosshair className="h-4 w-4 text-blue-500" />}
+        icon={<Crosshair className="h-4 w-4 text-brand-blue" />}
         label="Total Profiles"
         value={stats.total}
+        color="blue"
       />
       <StatCard
-        icon={<div className="h-2.5 w-2.5 rounded-full bg-gray-400" />}
-        label="Draft"
-        value={stats.draft}
-      />
-      <StatCard
-        icon={<FlaskConical className="h-4 w-4 text-blue-400" />}
+        icon={<FlaskConical className="h-4 w-4 text-brand-violet" />}
         label="Testing"
         value={stats.testing}
+        color="violet"
       />
       <StatCard
-        icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+        icon={<CheckCircle2 className="h-4 w-4 text-brand-teal" />}
         label="Approved / Active"
         value={stats.approved}
+        color="teal"
       />
       <StatCard
         icon={<Zap className="h-4 w-4 text-amber-500" />}
         label="Tested This Week"
         value={stats.testedThisWeek}
+        color="amber"
       />
     </div>
   );

@@ -252,7 +252,7 @@ export function AddToExistingTableDialog({
           <button
             type="button"
             onClick={() => navigate(`/ops/${selectedTableId}`)}
-            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium"
+            className="inline-flex items-center gap-1 text-brand-blue hover:text-brand-blue/80 dark:text-blue-400 font-medium"
           >
             Open
             <ExternalLink className="h-3 w-3" />
@@ -286,7 +286,7 @@ export function AddToExistingTableDialog({
         <div className="flex flex-col gap-4 py-2">
           {/* Table selector */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label className="text-sm font-medium text-[#1E293B] dark:text-gray-300">
               Target Table
             </label>
             {tablesLoading ? (
@@ -312,7 +312,7 @@ export function AddToExistingTableDialog({
                     <SelectItem key={table.id} value={table.id}>
                       <span className="flex items-center gap-2">
                         {table.name}
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-[#94A3B8]">
                           ({table.row_count} rows)
                         </span>
                       </span>
@@ -326,17 +326,17 @@ export function AddToExistingTableDialog({
           {/* Column mapping preview */}
           {selectedTableId && !columnsLoading && columnMappings.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-[#1E293B] dark:text-gray-300">
                 Column Mapping
-                <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                <span className="ml-2 text-xs font-normal text-[#64748B] dark:text-gray-400">
                   {mappedCount} matched, {unmappedCount} skipped
                 </span>
               </label>
-              <div className="max-h-40 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-700">
+              <div className="max-h-40 overflow-y-auto rounded-md border border-[#E2E8F0] dark:border-gray-700/50">
                 {columnMappings.map((mapping) => (
                   <div
                     key={mapping.sourceKey}
-                    className="flex items-center gap-2 border-b border-gray-100 px-3 py-1.5 text-sm last:border-b-0 dark:border-gray-800"
+                    className="flex items-center gap-2 border-b border-[#E2E8F0]/50 px-3 py-1.5 text-sm last:border-b-0 dark:border-gray-800"
                   >
                     <span className="flex-1 truncate text-gray-700 dark:text-gray-300">
                       {mapping.sourceLabel}
@@ -367,7 +367,7 @@ export function AddToExistingTableDialog({
           {/* Dedup options */}
           {selectedTableId && (
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-[#1E293B] dark:text-gray-300">
                 Duplicate Handling
               </label>
               <RadioGroup
@@ -377,19 +377,19 @@ export function AddToExistingTableDialog({
               >
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="skip" id="dedup-skip" />
-                  <label htmlFor="dedup-skip" className="text-sm text-gray-700 dark:text-gray-300">
+                  <label htmlFor="dedup-skip" className="text-sm text-[#1E293B] dark:text-gray-300">
                     Skip existing (match by email)
                   </label>
                 </div>
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="merge" id="dedup-merge" />
-                  <label htmlFor="dedup-merge" className="text-sm text-gray-700 dark:text-gray-300">
+                  <label htmlFor="dedup-merge" className="text-sm text-[#1E293B] dark:text-gray-300">
                     Merge (update existing rows)
                   </label>
                 </div>
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="create_all" id="dedup-all" />
-                  <label htmlFor="dedup-all" className="text-sm text-gray-700 dark:text-gray-300">
+                  <label htmlFor="dedup-all" className="text-sm text-[#1E293B] dark:text-gray-300">
                     Create all (allow duplicates)
                   </label>
                 </div>
@@ -399,7 +399,7 @@ export function AddToExistingTableDialog({
 
           {/* Progress */}
           {isAdding && (
-            <div className="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
+            <div className="flex items-center gap-2 rounded-xl bg-brand-blue/5 px-3 py-2 text-sm text-brand-blue dark:bg-blue-950/30 dark:text-blue-400">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Adding rows to table...</span>
             </div>

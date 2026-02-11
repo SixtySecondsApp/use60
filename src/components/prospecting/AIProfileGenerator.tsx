@@ -203,12 +203,12 @@ export function AIProfileGenerator({ onProfileCreated, onEditAndSave, orgId }: A
   if (!hasGenerated && !isGenerating) {
     return (
       <div className="text-center py-8 space-y-4">
-        <div className="mx-auto w-12 h-12 rounded-full bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center">
-          <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+        <div className="mx-auto w-12 h-12 rounded-full bg-brand-violet/10 dark:bg-brand-violet/10 flex items-center justify-center">
+          <Sparkles className="h-6 w-6 text-brand-violet dark:text-purple-400" />
         </div>
         <div>
-          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">AI Profile Generator</h3>
-          <p className="text-xs text-slate-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">
+          <h3 className="text-sm font-medium text-[#1E293B] dark:text-gray-100">AI Profile Generator</h3>
+          <p className="text-xs text-[#64748B] dark:text-gray-400 mt-1 max-w-sm mx-auto">
             Automatically generate ICP profiles based on your organization context, past searches, and enrichment data.
           </p>
         </div>
@@ -225,8 +225,8 @@ export function AIProfileGenerator({ onProfileCreated, onEditAndSave, orgId }: A
       {/* Header with regenerate */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">AI Suggestions</span>
+          <Sparkles className="h-4 w-4 text-brand-violet dark:text-purple-400" />
+          <span className="text-sm font-medium text-[#1E293B] dark:text-gray-100">AI Suggestions</span>
           {profiles.length > 0 && (
             <Badge variant="secondary" className="text-xs">{visibleProfiles.length} profiles</Badge>
           )}
@@ -245,18 +245,18 @@ export function AIProfileGenerator({ onProfileCreated, onEditAndSave, orgId }: A
 
       {/* Loading state */}
       {isGenerating && (
-        <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 p-6 text-center space-y-3">
-          <Loader2 className="h-6 w-6 animate-spin mx-auto text-purple-600 dark:text-purple-400" />
+        <div className="rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 p-6 text-center space-y-3 bg-white dark:bg-gray-900/80 backdrop-blur-sm">
+          <Loader2 className="h-6 w-6 animate-spin mx-auto text-brand-violet dark:text-purple-400" />
           <div>
-            <p className="text-sm text-gray-900 dark:text-gray-100">Analyzing your organization context...</p>
-            <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">Generating targeted ICP profiles</p>
+            <p className="text-sm text-[#1E293B] dark:text-gray-100">Analyzing your organization context...</p>
+            <p className="text-xs text-[#64748B] dark:text-gray-400 mt-1">Generating targeted ICP profiles</p>
           </div>
         </div>
       )}
 
       {/* Error state */}
       {error && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5 p-4 flex items-start gap-3">
+        <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5 p-4 flex items-start gap-3">
           <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
           <div>
             <p className="text-sm text-amber-800 dark:text-amber-300">{error}</p>
@@ -286,18 +286,18 @@ export function AIProfileGenerator({ onProfileCreated, onEditAndSave, orgId }: A
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -100 }}
               transition={{ delay: idx * 0.05 }}
-              className="rounded-lg border border-gray-200 dark:border-gray-700/50 p-4 space-y-3"
+              className="rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 p-4 space-y-3 backdrop-blur-sm"
             >
               {/* Name + description */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{profile.name}</h4>
-                  <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">{profile.description}</p>
+                  <h4 className="text-sm font-medium text-[#1E293B] dark:text-gray-100">{profile.name}</h4>
+                  <p className="text-xs text-[#64748B] dark:text-gray-400 mt-0.5">{profile.description}</p>
                 </div>
                 {!isSaved && (
                   <button
                     onClick={() => handleDismiss(profile.id)}
-                    className="text-slate-400 hover:text-slate-500 dark:text-gray-500 dark:hover:text-gray-400 shrink-0"
+                    className="text-[#94A3B8] hover:text-[#64748B] dark:text-gray-500 dark:hover:text-gray-400 shrink-0"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -306,7 +306,7 @@ export function AIProfileGenerator({ onProfileCreated, onEditAndSave, orgId }: A
 
               {/* Rationale */}
               {profile.rationale && (
-                <p className="text-xs text-slate-400 dark:text-gray-500 italic">{profile.rationale}</p>
+                <p className="text-xs text-[#94A3B8] dark:text-gray-500 italic">{profile.rationale}</p>
               )}
 
               {/* Filter preview */}
@@ -361,7 +361,7 @@ export function AIProfileGenerator({ onProfileCreated, onEditAndSave, orgId }: A
       {/* All dismissed message */}
       {hasGenerated && !isGenerating && visibleProfiles.length === 0 && profiles.length > 0 && (
         <div className="text-center py-4">
-          <p className="text-xs text-slate-400 dark:text-gray-500">All suggestions dismissed.</p>
+          <p className="text-xs text-[#94A3B8] dark:text-gray-500">All suggestions dismissed.</p>
           <Button variant="ghost" size="sm" onClick={() => setDismissedIds(new Set())} className="mt-1 text-xs">
             Show again
           </Button>
