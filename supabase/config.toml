@@ -258,3 +258,8 @@ verify_jwt = false
 # Uses service role key internally, handles auth manually
 [functions.deep-enrich-organization]
 verify_jwt = false
+
+# Exa abilities demo - called directly from browser (CORS preflight must pass)
+# Auth is enforced manually inside the function via supabase.auth.getUser()
+[functions.exa-abilities-demo]
+verify_jwt = false
