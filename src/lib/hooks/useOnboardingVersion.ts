@@ -5,14 +5,14 @@
  * Reads from and writes to the app_settings table.
  *
  * Key: 'onboarding_version'
- * Values: 'v1' (legacy) | 'v2' (skills-based)
+ * Values: 'v1' (legacy) | 'v2' (skills-based) | 'v3' (enhanced enrichment + agent teams)
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 
-export type OnboardingVersion = 'v1' | 'v2';
+export type OnboardingVersion = 'v1' | 'v2' | 'v3';
 
 interface UseOnboardingVersionResult {
   version: OnboardingVersion;
@@ -47,7 +47,7 @@ export function useOnboardingVersion(): UseOnboardingVersionResult {
 
       if (data?.value) {
         const parsedValue = data.value as OnboardingVersion;
-        if (parsedValue === 'v1' || parsedValue === 'v2') {
+        if (parsedValue === 'v1' || parsedValue === 'v2' || parsedValue === 'v3') {
           setVersion(parsedValue);
         } else {
           // Invalid value in database, use default
@@ -144,7 +144,7 @@ export function useOnboardingVersionReadOnly(): {
 
         if (!error && data?.value) {
           const parsedValue = data.value as OnboardingVersion;
-          if (parsedValue === 'v1' || parsedValue === 'v2') {
+          if (parsedValue === 'v1' || parsedValue === 'v2' || parsedValue === 'v3') {
             setVersion(parsedValue);
           }
         }

@@ -162,7 +162,7 @@ ALTER TABLE public.dynamic_table_columns
     'status', 'person', 'company', 'linkedin', 'date',
     'dropdown', 'tags', 'phone', 'checkbox', 'formula',
     'integration', 'action', 'hubspot_property', 'attio_property'
-  ));
+  )) NOT VALID;
 
 ALTER TABLE public.dynamic_table_columns
   ADD COLUMN IF NOT EXISTS attio_property_name TEXT DEFAULT NULL;

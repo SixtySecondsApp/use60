@@ -11,32 +11,66 @@ import { getCorsHeaders } from '../_shared/corsHelper.ts';
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  if (req.method !== 'POST') {
+    return json(
+      {
+        error: 'Method not allowed. Use POST.',
+        expected: {
+          method: 'POST',
+          body: { mode: 'legacy|enhanced', domain: 'example.com' },
+          auth: 'Bearer user JWT required',
+        },
+      },
+      405
+    );
+  }
+
   try {
+    const authHeader = req.headers.get('Authorization');
+
+    // Demo mode: make auth optional for testing
+    let userId = 'demo-user-' + Date.now();
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
     );
 
-    // Get user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      throw new Error('Unauthorized');
+    // Try to get user if auth present
+    if (authHeader) {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (user) {
+        userId = user.id;
+        console.log('[demo] Authenticated user:', userId);
+      } else {
+        console.warn('[demo] Auth failed, using demo mode:', userError?.message);
+      }
+    } else {
+      console.log('[demo] No auth, running in demo mode');
     }
 
-    const { mode, domain } = await req.json();
+    const body = await req.json().catch(() => null);
+    const mode = body?.mode;
+    const domain = typeof body?.domain === 'string' ? body.domain.trim() : '';
 
     if (!mode || !domain) {
-      throw new Error('Missing required parameters: mode, domain');
+      return json({ error: 'Missing required parameters: mode, domain' }, 400);
     }
 
     let result: any;
     let stats: any;
+    let warning: string | null = null;
 
     if (mode === 'legacy') {
       // ===== LEGACY MODE: Website Scraping =====
@@ -45,27 +79,25 @@ serve(async (req) => {
 
     } else if (mode === 'enhanced') {
       // ===== ENHANCED MODE: Agent Teams =====
-      result = await runEnhancedEnrichment(supabase, domain, user.id);
+      try {
+        result = await runEnhancedEnrichment(supabase, domain, userId, authHeader || '');
+      } catch (enhancedError: any) {
+        // Keep the demo page working even if downstream orchestration fails.
+        console.error('[demo-enrichment-comparison] Enhanced mode fallback:', enhancedError);
+        warning = `Enhanced pipeline unavailable, returned fallback demo data: ${enhancedError?.message || 'unknown error'}`;
+        result = generateDomainAwareMockData(domain, extractCompanyName(domain));
+      }
       stats = calculateStats(result);
 
     } else {
-      throw new Error(`Invalid mode: ${mode}`);
+      return json({ error: `Invalid mode: ${mode}` }, 400);
     }
 
-    return new Response(
-      JSON.stringify({ result, stats }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return json({ result, stats, warning });
 
   } catch (error: any) {
     console.error('[demo-enrichment-comparison] Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+    return json({ error: error.message || 'Internal server error' }, 500);
   }
 });
 
@@ -122,7 +154,8 @@ async function runLegacyEnrichment(domain: string): Promise<any> {
 async function runEnhancedEnrichment(
   supabase: any,
   domain: string,
-  userId: string
+  userId: string,
+  authHeader: string
 ): Promise<any> {
   console.log(`[Enhanced] Starting Agent Teams enrichment for ${domain}`);
 
@@ -130,58 +163,114 @@ async function runEnhancedEnrichment(
   const teamName = `enrich-${domain.replace(/\./g, '-')}-${Date.now()}`;
 
   try {
-    // Spawn 5 research agents in parallel
-    const agents = [
-      {
-        name: 'company-overview',
-        prompt: `Research ${domain} and provide structured JSON with: company_name, tagline, description, industry, employee_count, headquarters, founded_year, company_type. Use web search to find this information from the company website, LinkedIn, and Crunchbase. Return ONLY valid JSON, no markdown formatting.`
-      },
-      {
-        name: 'funding-research',
-        prompt: `Research ${domain} on Crunchbase and provide structured JSON with: funding_status, funding_rounds (array with round, amount, date, investors), investors, valuation. Use web search to find recent funding announcements. Return ONLY valid JSON, no markdown formatting.`
-      },
-      {
-        name: 'reviews-research',
-        prompt: `Research ${domain} on G2, Capterra, and TrustPilot. Provide structured JSON with: review_ratings (array with platform, rating, count, summary), awards. Use web search to find review platforms. Return ONLY valid JSON, no markdown formatting.`
-      },
-      {
-        name: 'leadership-research',
-        prompt: `Research ${domain} leadership team on LinkedIn. Provide structured JSON with: key_people (array with name, title, background). Focus on founders, C-suite executives. Use web search to find executive bios. Return ONLY valid JSON, no markdown formatting.`
-      },
-      {
-        name: 'market-research',
-        prompt: `Research ${domain} market position. Provide structured JSON with: competitors (array with name, domain), differentiators (array), market_trends (array), recent_news (array with date, event, source_url), buying_signals_detected (array with type, detail, relevance), company_milestones (array with year, milestone), products (array with name, description), value_propositions (array), target_market, customer_types (array), key_features (array). Use web search to find press releases, news articles, and market analysis. Return ONLY valid JSON, no markdown formatting.`
-      }
-    ];
+    // Use single coordinated agent with gemini_research tool
+    console.log(`[Enhanced] Starting coordinated agent with gemini_research tool`);
 
-    // Call agents in parallel using copilot-autonomous
-    const agentPromises = agents.map(async (agent) => {
-      console.log(`[Enhanced] Spawning ${agent.name} agent`);
-
-      const { data, error } = await supabase.functions.invoke('copilot-autonomous', {
-        body: {
-          message: agent.prompt,
-          conversation_id: `demo-${agent.name}-${Date.now()}`,
-          user_id: userId
+    // Create a fresh client with auth for function-to-function calls
+    const authedClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      {
+        global: {
+          headers: { Authorization: authHeader }
         }
-      });
-
-      if (error) {
-        console.error(`[Enhanced] Agent ${agent.name} failed:`, error);
-        return { agent: agent.name, result: null, error: error.message };
       }
+    );
 
-      console.log(`[Enhanced] Agent ${agent.name} completed`);
-      return { agent: agent.name, result: data.message, error: null };
+    const { data, error } = await authedClient.functions.invoke('copilot-autonomous', {
+      body: {
+        message: `You are coordinating company research for the domain "${domain}".
+
+Use the gemini_research tool to gather comprehensive intelligence across 5 research areas:
+
+1. **Company Overview**: Use gemini_research with query: "Research ${domain} company: full name, tagline, detailed description, industry, employee count range, headquarters location, founded year, company type"
+
+2. **Products & Market**: Use gemini_research with query: "Research ${domain} products and market: all products/services with descriptions, value propositions, target market segments, customer types, key features"
+
+3. **Funding & Growth**: Use gemini_research with query: "Research ${domain} funding on Crunchbase: funding status, all funding rounds with round/amount/date/investors, company milestones, recent expansion signals"
+
+4. **Leadership Team**: Use gemini_research with query: "Research ${domain} leadership on LinkedIn: founders and C-suite executives with full names, titles, professional backgrounds"
+
+5. **Competition & Reviews**: Use gemini_research with query: "Research ${domain} competitive landscape: direct competitors with names/domains, differentiators, G2/Capterra/TrustPilot ratings, market trends, recent news"
+
+After gathering research from all 5 areas, aggregate into a single JSON object with ALL fields populated.
+
+Return ONLY valid JSON matching this structure (use null for missing fields, [] for empty arrays):
+{
+  "company_name": "string",
+  "tagline": "string",
+  "description": "string",
+  "industry": "string",
+  "employee_count": "string (e.g., 10-50)",
+  "products": [{"name": "string", "description": "string"}],
+  "value_propositions": ["string"],
+  "competitors": [{"name": "string", "domain": "string"}],
+  "target_market": "string",
+  "customer_types": ["string"],
+  "key_features": ["string"],
+  "key_people": [{"name": "string", "title": "string", "background": "string"}],
+  "founded_year": "string",
+  "headquarters": "string",
+  "company_type": "string",
+  "funding_status": "string",
+  "funding_rounds": [{"round": "string", "amount": "string", "date": "string", "investors": ["string"]}],
+  "review_ratings": [{"platform": "string", "rating": number, "count": number}],
+  "buying_signals_detected": ["string"],
+  "company_milestones": [{"year": "string", "milestone": "string"}],
+  "differentiators": ["string"],
+  "market_trends": ["string"],
+  "recent_news": [{"date": "string", "event": "string"}],
+  "content_samples": [],
+  "pain_points_mentioned": []
+}`,
+        conversation_id: `demo-enrich-${Date.now()}`,
+        user_id: userId,
+        force_single_agent: true
+      }
     });
 
-    // Wait for all agents to complete (runs in parallel)
-    const agentResults = await Promise.all(agentPromises);
+    if (error) {
+      console.error(`[Enhanced] Agent failed:`, error);
+      throw new Error(error.message || 'Agent invocation failed');
+    }
 
-    console.log(`[Enhanced] All agents completed. Aggregating results...`);
+    if (!data) {
+      console.error('[Enhanced] No data returned from agent');
+      throw new Error('No response from agent');
+    }
 
-    // Aggregate results from all agents
-    const enrichedData = aggregateAgentResults(domain, agentResults);
+    console.log(`[Enhanced] Agent completed, response type:`, typeof data);
+    console.log(`[Enhanced] Response keys:`, Object.keys(data));
+
+    // Check response format
+    if (!data.message) {
+      console.error('[Enhanced] data.message is missing. Full data:', JSON.stringify(data).substring(0, 500));
+      throw new Error('Invalid response format from agent');
+    }
+
+    console.log(`[Enhanced] Parsing response...`);
+
+    // Parse JSON response
+    let enrichedData: any;
+    try {
+      const responseText = data.message;
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) ||
+                       responseText.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        console.error('[Enhanced] No JSON found in response:', responseText.substring(0, 500));
+        throw new Error('No JSON structure found in agent response');
+      }
+
+      const jsonStr = jsonMatch[1] || jsonMatch[0];
+      enrichedData = JSON.parse(jsonStr);
+
+      console.log(`[Enhanced] Successfully parsed - Company: ${enrichedData.company_name}`);
+    } catch (parseError) {
+      console.error('[Enhanced] Failed to parse JSON response:', parseError);
+      console.error('[Enhanced] Response:', data.message?.substring(0, 500));
+      throw new Error(`Failed to parse agent response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+    }
 
     return enrichedData;
 
@@ -196,13 +285,93 @@ async function runEnhancedEnrichment(
 // ============================================================================
 
 function aggregateAgentResults(domain: string, agentResults: any[]): any {
-  // For demo purposes, generate realistic mock data based on the domain
-  // In production, this would parse real agent research results
+  // Aggregate real research results from all agents
+  console.log(`[Enhanced] Aggregating ${agentResults.length} agent results`);
 
-  const companyName = extractCompanyName(domain);
-  const mockData = generateDomainAwareMockData(domain, companyName);
+  const aggregated: any = {
+    // Initialize with defaults
+    company_name: extractCompanyName(domain),
+    tagline: null,
+    description: null,
+    industry: null,
+    employee_count: null,
+    products: [],
+    value_propositions: [],
+    competitors: [],
+    target_market: null,
+    customer_types: [],
+    key_features: [],
+    key_people: [],
+    content_samples: [],
+    pain_points_mentioned: [],
+    // Enhanced fields
+    founded_year: null,
+    headquarters: null,
+    company_type: null,
+    funding_status: null,
+    funding_rounds: [],
+    investors: [],
+    valuation: null,
+    review_ratings: [],
+    awards: [],
+    recent_news: [],
+    buying_signals_detected: [],
+    company_milestones: [],
+    differentiators: [],
+    market_trends: [],
+    leadership_backgrounds: []
+  };
 
-  return mockData;
+  // Merge results from each agent
+  for (const agentResult of agentResults) {
+    if (!agentResult.result || agentResult.error) {
+      console.log(`[Enhanced] Skipping ${agentResult.agent} - ${agentResult.error || 'no result'}`);
+      continue;
+    }
+
+    const data = agentResult.result;
+    console.log(`[Enhanced] Merging ${agentResult.agent} data`);
+
+    // Company overview fields
+    if (data.company_name) aggregated.company_name = data.company_name;
+    if (data.tagline) aggregated.tagline = data.tagline;
+    if (data.description) aggregated.description = data.description;
+    if (data.industry) aggregated.industry = data.industry;
+    if (data.employee_count) aggregated.employee_count = data.employee_count;
+    if (data.headquarters) aggregated.headquarters = data.headquarters;
+    if (data.founded_year) aggregated.founded_year = data.founded_year;
+    if (data.company_type) aggregated.company_type = data.company_type;
+
+    // Funding fields
+    if (data.funding_status) aggregated.funding_status = data.funding_status;
+    if (data.funding_rounds) aggregated.funding_rounds = data.funding_rounds;
+    if (data.investors) aggregated.investors = data.investors;
+    if (data.valuation) aggregated.valuation = data.valuation;
+
+    // Review fields
+    if (data.review_ratings) aggregated.review_ratings = data.review_ratings;
+    if (data.awards) aggregated.awards = data.awards;
+
+    // Leadership fields
+    if (data.key_people) aggregated.key_people = data.key_people;
+    if (data.leadership_backgrounds) aggregated.leadership_backgrounds = data.leadership_backgrounds;
+
+    // Market fields
+    if (data.competitors) aggregated.competitors = data.competitors;
+    if (data.differentiators) aggregated.differentiators = data.differentiators;
+    if (data.products) aggregated.products = data.products;
+    if (data.value_propositions) aggregated.value_propositions = data.value_propositions;
+    if (data.target_market) aggregated.target_market = data.target_market;
+    if (data.customer_types) aggregated.customer_types = data.customer_types;
+    if (data.key_features) aggregated.key_features = data.key_features;
+    if (data.recent_news) aggregated.recent_news = data.recent_news;
+    if (data.market_trends) aggregated.market_trends = data.market_trends;
+    if (data.buying_signals_detected) aggregated.buying_signals_detected = data.buying_signals_detected;
+    if (data.company_milestones) aggregated.company_milestones = data.company_milestones;
+  }
+
+  console.log(`[Enhanced] Aggregation complete - Company: ${aggregated.company_name}`);
+  return aggregated;
 }
 
 function generateDomainAwareMockData(domain: string, companyName: string): any {

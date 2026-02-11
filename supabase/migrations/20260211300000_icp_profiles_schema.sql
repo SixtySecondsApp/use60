@@ -92,6 +92,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_icp_profiles_updated_at ON public.icp_profiles;
 CREATE TRIGGER trigger_update_icp_profiles_updated_at
   BEFORE UPDATE ON public.icp_profiles
   FOR EACH ROW
@@ -104,6 +105,7 @@ CREATE TRIGGER trigger_update_icp_profiles_updated_at
 ALTER TABLE public.icp_profiles ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: org members can view profiles in their org
+DROP POLICY IF EXISTS "Org members can view icp_profiles" ON public.icp_profiles;
 CREATE POLICY "Org members can view icp_profiles"
   ON public.icp_profiles
   FOR SELECT
@@ -115,6 +117,7 @@ CREATE POLICY "Org members can view icp_profiles"
   );
 
 -- INSERT: org members can create profiles (with created_by = auth.uid())
+DROP POLICY IF EXISTS "Org members can create icp_profiles" ON public.icp_profiles;
 CREATE POLICY "Org members can create icp_profiles"
   ON public.icp_profiles
   FOR INSERT
@@ -127,6 +130,7 @@ CREATE POLICY "Org members can create icp_profiles"
   );
 
 -- UPDATE: creator or org admins can update
+DROP POLICY IF EXISTS "Creator or admin can update icp_profiles" ON public.icp_profiles;
 CREATE POLICY "Creator or admin can update icp_profiles"
   ON public.icp_profiles
   FOR UPDATE
@@ -140,6 +144,7 @@ CREATE POLICY "Creator or admin can update icp_profiles"
   );
 
 -- DELETE: creator or org admins can delete
+DROP POLICY IF EXISTS "Creator or admin can delete icp_profiles" ON public.icp_profiles;
 CREATE POLICY "Creator or admin can delete icp_profiles"
   ON public.icp_profiles
   FOR DELETE
@@ -153,6 +158,7 @@ CREATE POLICY "Creator or admin can delete icp_profiles"
   );
 
 -- Service role full access
+DROP POLICY IF EXISTS "Service role full access to icp_profiles" ON public.icp_profiles;
 CREATE POLICY "Service role full access to icp_profiles"
   ON public.icp_profiles
   FOR ALL
@@ -165,6 +171,7 @@ CREATE POLICY "Service role full access to icp_profiles"
 ALTER TABLE public.icp_search_history ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: org members can view search history
+DROP POLICY IF EXISTS "Org members can view icp_search_history" ON public.icp_search_history;
 CREATE POLICY "Org members can view icp_search_history"
   ON public.icp_search_history
   FOR SELECT
@@ -176,6 +183,7 @@ CREATE POLICY "Org members can view icp_search_history"
   );
 
 -- INSERT: org members can insert search history
+DROP POLICY IF EXISTS "Org members can insert icp_search_history" ON public.icp_search_history;
 CREATE POLICY "Org members can insert icp_search_history"
   ON public.icp_search_history
   FOR INSERT
@@ -188,6 +196,7 @@ CREATE POLICY "Org members can insert icp_search_history"
   );
 
 -- Service role full access
+DROP POLICY IF EXISTS "Service role full access to icp_search_history" ON public.icp_search_history;
 CREATE POLICY "Service role full access to icp_search_history"
   ON public.icp_search_history
   FOR ALL

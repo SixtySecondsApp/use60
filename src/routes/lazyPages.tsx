@@ -47,6 +47,8 @@ export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platfo
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
 export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
+export const ResearchComparisonDemo = lazyWithRetry(() => import('@/pages/demo/ResearchComparison'));
+export const ExaAbilitiesDemo = lazyWithRetry(() => import('@/pages/demo/ExaAbilitiesDemo'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
@@ -148,6 +150,9 @@ export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
 export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
 export const ProspectingPage = lazyWithRetry(() => import('@/pages/ProspectingPage'));
+export const FactProfilesPage = lazyWithRetry(() => import('@/pages/FactProfilesPage'));
+export const FactProfileViewPage = lazyWithRetry(() => import('@/pages/FactProfileViewPage'));
+export const FactProfileEditPage = lazyWithRetry(() => import('@/pages/FactProfileEditPage'));
 export const DocsPage = lazyWithRetry(() => import('@/pages/DocsPage'));
 
 // ============================================================
@@ -205,6 +210,7 @@ export const ContentTopics = lazyWithRetry(() => import('@/pages/insights/Conten
 // MISC & UTILITY PAGES
 // ============================================================
 export const Integrations = lazyWithRetry(() => import('@/pages/Integrations'));
+export const PublicFactProfile = lazyWithRetry(() => import('@/pages/public/PublicFactProfile'));
 export const GoogleCallback = lazyWithRetry(() => import('@/pages/GoogleCallback'));
 export const Roadmap = lazyWithRetry(() => import('@/pages/Roadmap'));
 export const Releases = lazyWithRetry(() => import('@/pages/Releases'));

@@ -20,6 +20,8 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { loadPrompt, interpolateVariables } from '../_shared/promptLoader.ts';
 import { invalidatePersonaCache } from '../_shared/salesCopilotPersona.ts';
+import { executeGeminiSearch } from '../_shared/geminiSearch.ts';
+import { executeExaSearch } from '../_shared/exaSearch.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -122,6 +124,75 @@ interface EnrichmentData {
 }
 
 /**
+ * Map 19-field research provider format to EnrichmentData interface
+ * @param researchData - Data from Gemini or Exa search
+ * @param domain - Company domain
+ * @returns Mapped EnrichmentData object
+ */
+function mapResearchDataToEnrichment(researchData: any, domain: string): EnrichmentData {
+  return {
+    // Core fields
+    company_name: researchData.company_name || domain.split('.')[0],
+    tagline: '', // Not provided by research providers
+    description: researchData.description || '',
+    industry: researchData.industry || '',
+    employee_count: researchData.employee_count_range || '',
+    products: (researchData.products_services || []).map((p: string) => ({
+      name: p,
+      description: ''
+    })),
+    value_propositions: researchData.competitive_differentiators || [],
+    competitors: (researchData.key_competitors || []).map((c: string) => ({
+      name: c
+    })),
+    target_market: (researchData.customer_segments || []).join(', '),
+    customer_types: researchData.customer_segments || [],
+    key_features: [], // Not directly provided
+    content_samples: [], // Not available from research providers
+    pain_points_mentioned: [], // Not available from research providers
+    case_study_customers: [], // Not available from research providers
+    tech_stack: researchData.tech_stack || [],
+    key_people: (researchData.leadership_team || []).map((l: any) => ({
+      name: l.name,
+      title: l.title
+    })),
+    pricing_model: undefined,
+    key_phrases: undefined,
+
+    // Enhanced research fields
+    founded_year: researchData.founded_year?.toString(),
+    headquarters: researchData.headquarters_location,
+    company_type: undefined,
+    funding_status: researchData.funding_stage,
+    funding_rounds: researchData.funding_total ? [{
+      round: researchData.funding_stage || 'Unknown',
+      amount: researchData.funding_total,
+      date: '',
+      investors: researchData.key_investors || []
+    }] : undefined,
+    investors: researchData.key_investors,
+    valuation: undefined,
+    review_ratings: researchData.glassdoor_rating ? [{
+      platform: 'Glassdoor',
+      rating: researchData.glassdoor_rating,
+      count: 0,
+      summary: ''
+    }] : undefined,
+    awards: undefined,
+    recent_news: (researchData.recent_news || []).map((n: string) => ({
+      date: '',
+      event: n,
+      source_url: ''
+    })),
+    buying_signals_detected: undefined,
+    company_milestones: undefined,
+    differentiators: researchData.competitive_differentiators,
+    market_trends: undefined,
+    leadership_backgrounds: undefined
+  };
+}
+
+/**
  * Manual enrichment data from Q&A flow
  * Used when user doesn't have a website to scrape
  */
@@ -210,6 +281,122 @@ function extractErrorMessage(error: unknown): string {
 const FEATURE_ENHANCED_RESEARCH = Deno.env.get('FEATURE_ENHANCED_RESEARCH') === 'true';
 
 // ============================================================================
+// Agent Team Enrichment (Claude Haiku + Gemini 3 Flash)
+// ============================================================================
+
+/**
+ * Run parallel agent team enrichment using Claude Haiku to orchestrate Gemini 3 Flash research
+ * Each agent focuses on a specific research area and uses the gemini_research tool
+ */
+async function runAgentTeamEnrichment(
+  supabase: any,
+  domain: string,
+  userId: string,
+  enrichmentId: string
+): Promise<{ data: EnrichmentData | null; error: string | null }> {
+  try {
+    console.log(`[Agent Team] Starting enrichment for ${domain}`);
+
+    // Call copilot-autonomous to orchestrate the agent team
+    const { data, error } = await supabase.functions.invoke('copilot-autonomous', {
+      body: {
+        message: `You are coordinating a research team to deeply research the company at domain "${domain}".
+
+Your task is to use the gemini_research tool to gather comprehensive company intelligence across 5 key areas:
+
+1. **Company Overview**: Use gemini_research to find: company_name, tagline, description, industry, employee_count, headquarters, founded_year, company_type
+   Query: "Research ${domain} company overview: name, tagline, detailed description, industry, employee count range, headquarters location, founded year, company type (public/private/startup)"
+
+2. **Products & Market**: Use gemini_research to find: products (array with name, description), value_propositions, target_market, customer_types, key_features
+   Query: "Research ${domain} products and market: all products/services with descriptions, value propositions, target market, customer segments, key features"
+
+3. **Funding & Growth**: Use gemini_research to find: funding_status, funding_rounds (array with round, amount, date, investors), company_milestones, buying_signals_detected
+   Query: "Research ${domain} funding and growth: funding status, all funding rounds with amounts/dates/investors, key company milestones, recent expansions or buying signals"
+
+4. **Leadership & Team**: Use gemini_research to find: key_people (array with name, title, background), leadership_backgrounds
+   Query: "Research ${domain} leadership team: founders and executives with names, titles, professional backgrounds from LinkedIn"
+
+5. **Competition & Reviews**: Use gemini_research to find: competitors (array with name, domain), differentiators, review_ratings (array with platform, rating, count), market_trends
+   Query: "Research ${domain} competitive landscape and reviews: direct competitors, competitive differentiators, review ratings from G2/Capterra/TrustPilot, relevant market trends"
+
+After gathering all research, synthesize it into a complete company profile with all fields populated.
+
+Return ONLY valid JSON matching this exact structure (use null for fields you cannot find):
+{
+  "company_name": "string",
+  "tagline": "string",
+  "description": "string",
+  "industry": "string",
+  "employee_count": "string (e.g., 10-50)",
+  "products": [{"name": "string", "description": "string"}],
+  "value_propositions": ["string"],
+  "competitors": [{"name": "string", "domain": "string"}],
+  "target_market": "string",
+  "customer_types": ["string"],
+  "key_features": ["string"],
+  "key_people": [{"name": "string", "title": "string", "background": "string"}],
+  "founded_year": "string",
+  "headquarters": "string",
+  "company_type": "string",
+  "funding_status": "string",
+  "funding_rounds": [{"round": "string", "amount": "string", "date": "string", "investors": ["string"]}],
+  "review_ratings": [{"platform": "string", "rating": number, "count": number, "summary": "string"}],
+  "buying_signals_detected": ["string"],
+  "company_milestones": [{"year": "string", "milestone": "string"}],
+  "differentiators": ["string"],
+  "market_trends": ["string"],
+  "leadership_backgrounds": ["string"],
+  "content_samples": [],
+  "pain_points_mentioned": []
+}`,
+        conversation_id: `enrich-${enrichmentId}`,
+        user_id: userId,
+        force_single_agent: true // Use single coordinating agent, not multi-agent team classification
+      }
+    });
+
+    if (error) {
+      console.error('[Agent Team] copilot-autonomous error:', error);
+      return { data: null, error: error.message || 'Agent team invocation failed' };
+    }
+
+    if (!data || !data.message) {
+      console.error('[Agent Team] No response from copilot-autonomous');
+      return { data: null, error: 'No response from agent team' };
+    }
+
+    console.log(`[Agent Team] Received response, parsing JSON...`);
+
+    // Parse the JSON response
+    let enrichmentData: EnrichmentData;
+    try {
+      // Extract JSON from markdown code blocks if present
+      const responseText = data.message;
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) ||
+                       responseText.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : responseText;
+      enrichmentData = JSON.parse(jsonStr);
+
+      console.log(`[Agent Team] Successfully parsed enrichment data`);
+      console.log(`[Agent Team] Company: ${enrichmentData.company_name}`);
+      console.log(`[Agent Team] Products: ${enrichmentData.products?.length || 0}`);
+      console.log(`[Agent Team] Key people: ${enrichmentData.key_people?.length || 0}`);
+
+      return { data: enrichmentData, error: null };
+
+    } catch (parseError) {
+      console.error('[Agent Team] Failed to parse JSON response:', parseError);
+      console.error('[Agent Team] Response text:', data.message?.substring(0, 500));
+      return { data: null, error: 'Failed to parse agent team response' };
+    }
+
+  } catch (error: any) {
+    console.error('[Agent Team] Error:', error);
+    return { data: null, error: error.message || 'Unknown error in agent team enrichment' };
+  }
+}
+
+// ============================================================================
 // Main Handler
 // ============================================================================
 
@@ -239,15 +426,25 @@ serve(async (req) => {
     });
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    if (userError || !user) {
-      // CRITICAL FIX (BUG-004): Include userError details in thrown error for better debugging
-      const errorDetails = userError
-        ? `${userError.message || 'Unknown auth error'} (${userError.name || 'AuthError'})`
-        : 'No user found in token';
-      console.error('[deep-enrich-organization] Auth validation failed:', errorDetails, { userError, hasUser: !!user });
-      throw new Error(`Invalid authentication token: ${errorDetails}`);
+    // Allow service role key for testing (bypass user validation)
+    const isServiceRole = token === supabaseServiceKey;
+
+    let user: any = null;
+    if (!isServiceRole) {
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser(token);
+
+      if (userError || !authUser) {
+        // CRITICAL FIX (BUG-004): Include userError details in thrown error for better debugging
+        const errorDetails = userError
+          ? `${userError.message || 'Unknown auth error'} (${userError.name || 'AuthError'})`
+          : 'No user found in token';
+        console.error('[deep-enrich-organization] Auth validation failed:', errorDetails, { userError, hasUser: !!authUser });
+        throw new Error(`Invalid authentication token: ${errorDetails}`);
+      }
+      user = authUser;
+    } else {
+      console.log('[deep-enrich-organization] Service role key detected - bypassing user auth for testing');
     }
 
     const requestBody = await req.json();
@@ -255,13 +452,15 @@ serve(async (req) => {
 
     let response;
 
+    const userId = user?.id || null; // Allow null for service role testing
+
     switch (action) {
       case 'start':
-        response = await startEnrichment(supabase, user.id, organization_id, domain, force);
+        response = await startEnrichment(supabase, userId, organization_id, domain, force);
         break;
 
       case 'manual':
-        response = await startManualEnrichment(supabase, user.id, organization_id, manual_data);
+        response = await startManualEnrichment(supabase, userId, organization_id, manual_data);
         break;
 
       case 'status':
@@ -269,7 +468,7 @@ serve(async (req) => {
         break;
 
       case 'retry':
-        response = await retryEnrichment(supabase, user.id, organization_id);
+        response = await retryEnrichment(supabase, userId, organization_id);
         break;
 
       default:
@@ -390,8 +589,25 @@ async function startEnrichment(
     if (!enrichment_id) throw new Error('Failed to get enrichment ID');
 
     // Run the enrichment pipeline asynchronously
-    runEnrichmentPipeline(supabase, enrichment_id, organizationId, domain).catch(console.error);
+    runEnrichmentPipeline(supabase, enrichment_id, organizationId, domain).catch((error) => {
+      console.error('[startEnrichment] ❌ CRITICAL: Pipeline failed in background:', error);
+      console.error('[startEnrichment] Error type:', error?.constructor?.name);
+      console.error('[startEnrichment] Error message:', error?.message);
+      console.error('[startEnrichment] Error stack:', error?.stack);
 
+      // Update enrichment record with error
+      supabase
+        .from('organization_enrichment')
+        .update({
+          status: 'failed',
+          error_message: error?.message || 'Pipeline execution failed'
+        })
+        .eq('id', enrichment_id)
+        .then(() => console.log('[startEnrichment] Updated enrichment status to failed'))
+        .catch((updateError) => console.error('[startEnrichment] Failed to update error status:', updateError));
+    });
+
+    console.log(`[startEnrichment] ✅ Pipeline started in background for enrichment ${enrichment_id}`);
     return { success: true, enrichment_id };
 
   } catch (error) {
@@ -514,7 +730,7 @@ async function runManualEnrichmentPipeline(
     const skills = await generateSkillConfigsFromManualData(supabase, enrichmentData);
 
     // Save generated skills
-    await supabase
+    const { error: updateError } = await supabase
       .from('organization_enrichment')
       .update({
         generated_skills: skills,
@@ -522,6 +738,13 @@ async function runManualEnrichmentPipeline(
         confidence_score: 0.70, // Lower confidence for manual input
       })
       .eq('id', enrichmentId);
+
+    if (updateError) {
+      console.error('[ManualPipeline] CRITICAL: Failed to update enrichment status to completed:', updateError);
+      throw updateError; // This will trigger the catch block and mark as failed
+    }
+
+    console.log(`[ManualPipeline] Successfully updated enrichment ${enrichmentId} to completed status`);
 
     // Also save skills to organization_skills table
     await saveGeneratedSkills(supabase, organizationId, skills);
@@ -656,9 +879,13 @@ async function runEnrichmentPipeline(
     let enrichmentData: EnrichmentData;
     let enrichmentSource: string;
 
+    console.log(`[Pipeline] FEATURE_ENHANCED_RESEARCH = ${FEATURE_ENHANCED_RESEARCH}`);
+
     if (FEATURE_ENHANCED_RESEARCH) {
       // ===== NEW PATH: Multi-source skill-based research =====
       console.log(`[Pipeline] Using enhanced research (company-research skill) for ${domain}`);
+      console.log(`[Pipeline] Organization ID: ${organizationId}`);
+      console.log(`[Pipeline] Enrichment ID: ${enrichmentId}`);
 
       // Update status
       await supabase
@@ -668,7 +895,9 @@ async function runEnrichmentPipeline(
 
       // Execute company-research skill
       try {
+        console.log(`[Pipeline] Calling executeCompanyResearchSkill...`);
         enrichmentData = await executeCompanyResearchSkill(supabase, domain, organizationId);
+        console.log(`[Pipeline] executeCompanyResearchSkill returned successfully`);
         enrichmentSource = 'skill_research';
 
         // Save raw skill output for audit trail
@@ -684,7 +913,11 @@ async function runEnrichmentPipeline(
 
       } catch (skillError) {
         // Graceful fallback to legacy scraping if skill fails
-        console.warn(`[Pipeline] Enhanced research failed, falling back to legacy scraping:`, skillError);
+        console.error(`[Pipeline] ❌ SKILL EXECUTION FAILED - Enhanced research failed, falling back to legacy scraping`);
+        console.error(`[Pipeline] Error type: ${skillError?.constructor?.name}`);
+        console.error(`[Pipeline] Error message: ${skillError?.message}`);
+        console.error(`[Pipeline] Error stack:`, skillError?.stack);
+        console.error(`[Pipeline] Full error object:`, JSON.stringify(skillError, null, 2));
 
         // Step 1: Scrape website content (fallback)
         const scrapedContent = await scrapeWebsite(domain);
@@ -702,21 +935,143 @@ async function runEnrichmentPipeline(
 
     } else {
       // ===== OLD PATH: Website scraping only (legacy) =====
-      console.log(`[Pipeline] Using legacy scraping for ${domain}`);
+      // NOW WITH RESEARCH PROVIDER SUPPORT (Gemini 3 Flash / Exa)
+      console.log(`[Pipeline] Checking research provider setting for ${domain}`);
 
-      // Step 1: Scrape website content
-      const scrapedContent = await scrapeWebsite(domain);
+      // Check which research provider is enabled
+      const { data: settingData } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'research_provider')
+        .maybeSingle();
 
-      // Update status
-      await supabase
-        .from('organization_enrichment')
-        .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
-        .eq('id', enrichmentId);
+      const provider = settingData?.value ? JSON.parse(settingData.value) : 'disabled';
+      console.log(`[Pipeline] Research provider: ${provider}`);
 
-      // Step 2: Extract structured data (Prompt 1)
-      console.log(`[Pipeline] Extracting structured data`);
-      enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
-      enrichmentSource = 'website';
+      if (provider === 'gemini') {
+        // Use Gemini 3 Flash with Google Search grounding
+        console.log(`[Pipeline] Using Gemini 3 Flash for research...`);
+
+        try {
+          await supabase
+            .from('organization_enrichment')
+            .update({ status: 'researching', enrichment_source: 'gemini_3_flash' })
+            .eq('id', enrichmentId);
+
+          const geminiResults = await executeGeminiSearch(domain);
+
+          if (geminiResults.error || !geminiResults.result) {
+            throw new Error(geminiResults.error || 'Gemini search failed');
+          }
+
+          enrichmentData = mapResearchDataToEnrichment(geminiResults.result, domain);
+          enrichmentSource = 'gemini_3_flash';
+
+          console.log(`[Pipeline] Gemini research successful - ${geminiResults.duration}ms, $${geminiResults.cost.toFixed(6)}`);
+
+        } catch (geminiError) {
+          console.error(`[Pipeline] Gemini failed, falling back to website scraping:`, geminiError);
+
+          // Fallback to website scraping
+          const scrapedContent = await scrapeWebsite(domain);
+          await supabase
+            .from('organization_enrichment')
+            .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
+            .eq('id', enrichmentId);
+
+          enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
+          enrichmentSource = 'website_fallback_from_gemini';
+        }
+
+      } else if (provider === 'exa') {
+        // Use Exa semantic search
+        console.log(`[Pipeline] Using Exa for research...`);
+
+        try {
+          await supabase
+            .from('organization_enrichment')
+            .update({ status: 'researching', enrichment_source: 'exa_semantic_search' })
+            .eq('id', enrichmentId);
+
+          const exaResults = await executeExaSearch(domain);
+
+          if (exaResults.error || !exaResults.result) {
+            throw new Error(exaResults.error || 'Exa search failed');
+          }
+
+          enrichmentData = mapResearchDataToEnrichment(exaResults.result, domain);
+          enrichmentSource = 'exa_semantic_search';
+
+          console.log(`[Pipeline] Exa research successful - ${exaResults.duration}ms, $${exaResults.cost.toFixed(6)}`);
+
+        } catch (exaError) {
+          console.error(`[Pipeline] Exa failed, falling back to website scraping:`, exaError);
+
+          // Fallback to website scraping
+          const scrapedContent = await scrapeWebsite(domain);
+          await supabase
+            .from('organization_enrichment')
+            .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
+            .eq('id', enrichmentId);
+
+          enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
+          enrichmentSource = 'website_fallback_from_exa';
+        }
+
+      } else if (provider === 'agent_team') {
+        // Use Agent Team with Claude Haiku orchestrating Gemini 3 Flash research
+        console.log(`[Pipeline] Using Agent Team (Claude Haiku + Gemini 3 Flash) for research...`);
+
+        try {
+          await supabase
+            .from('organization_enrichment')
+            .update({ status: 'researching', enrichment_source: 'agent_team' })
+            .eq('id', enrichmentId);
+
+          // Spawn agent team via copilot-autonomous
+          const agentTeamResults = await runAgentTeamEnrichment(supabase, domain, userId, enrichmentId);
+
+          if (!agentTeamResults || agentTeamResults.error) {
+            throw new Error(agentTeamResults?.error || 'Agent team enrichment failed');
+          }
+
+          enrichmentData = agentTeamResults.data;
+          enrichmentSource = 'agent_team';
+
+          console.log(`[Pipeline] Agent Team research successful`);
+
+        } catch (agentError) {
+          console.error(`[Pipeline] Agent Team failed, falling back to website scraping:`, agentError);
+
+          // Fallback to website scraping
+          const scrapedContent = await scrapeWebsite(domain);
+          await supabase
+            .from('organization_enrichment')
+            .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
+            .eq('id', enrichmentId);
+
+          enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
+          enrichmentSource = 'website_fallback_from_agent_team';
+        }
+
+      } else {
+        // Default: Website scraping only (disabled or invalid provider)
+        console.log(`[Pipeline] Using legacy scraping for ${domain} (provider: ${provider})`);
+
+        // Step 1: Scrape website content
+        const scrapedContent = await scrapeWebsite(domain);
+
+        // Update status
+        await supabase
+          .from('organization_enrichment')
+          .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
+          .eq('id', enrichmentId);
+
+        // Step 2: Extract structured data (Prompt 1)
+        console.log(`[Pipeline] Extracting structured data`);
+        enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
+        enrichmentSource = 'website';
+      }
     }
 
     // ===== COMMON PATH: Save enrichment data and generate skills =====
@@ -785,7 +1140,7 @@ async function runEnrichmentPipeline(
     }
 
     // Save generated skills with change tracking
-    await supabase
+    const { error: updateError } = await supabase
       .from('organization_enrichment')
       .update({
         generated_skills: skills,
@@ -796,6 +1151,13 @@ async function runEnrichmentPipeline(
         change_summary: changeSummary,
       })
       .eq('id', enrichmentId);
+
+    if (updateError) {
+      console.error('[Pipeline] CRITICAL: Failed to update enrichment status to completed:', updateError);
+      throw updateError; // This will trigger the catch block and mark as failed
+    }
+
+    console.log(`[Pipeline] Successfully updated enrichment ${enrichmentId} to completed status`);
 
     // Also save skills to organization_skills table
     await saveGeneratedSkills(supabase, organizationId, skills);
@@ -1037,18 +1399,160 @@ async function executeCompanyResearchSkill(
   domain: string,
   organizationId: string
 ): Promise<EnrichmentData> {
-  console.log(`[executeCompanyResearchSkill] Generating enhanced research data for ${domain}`);
+  console.log(`[executeCompanyResearchSkill] Researching ${domain} via company-research skill`);
 
   try {
-    // Extract company name from domain
-    const companyName = domain.replace(/\.(com|io|ai|co|net|org)$/, '').replace(/[^a-z0-9]/gi, ' ').trim();
-    const capitalizedName = companyName.charAt(0).toUpperCase() + companyName.slice(1);
+    // Prepare skill input
+    const skillInput = {
+      company_website: domain,
+      // Extract company name from domain (e.g., "conturae.com" → "Conturae")
+      company_name: domain.replace(/\.(com|io|ai|co|net|org)$/, '').replace(/[^a-z0-9]/gi, ' ').trim(),
+    };
 
-    // Generate domain-aware enrichment data
-    // TODO: Replace with real company-research skill execution when ready
-    const enrichmentData = generateDomainAwareEnrichmentData(domain, capitalizedName);
+    // Execute company-research skill directly via executeAgentSkillWithContract
+    // This uses Claude with web_search capability for multi-source research
+    console.log(`[executeCompanyResearchSkill] Importing agentSkillExecutor...`);
+    const { executeAgentSkillWithContract } = await import('../_shared/agentSkillExecutor.ts');
+    console.log(`[executeCompanyResearchSkill] Import successful`);
 
-    console.log(`[executeCompanyResearchSkill] Generated enhanced data with ${Object.keys(enrichmentData).filter(k => enrichmentData[k as keyof EnrichmentData] !== undefined).length} populated fields`);
+    console.log(`[executeCompanyResearchSkill] Calling executeAgentSkillWithContract with:`, {
+      organizationId,
+      userId: null,
+      skillKey: 'company-research',
+      context: skillInput,
+      dryRun: false,
+    });
+
+    const skillResult = await executeAgentSkillWithContract(supabase, {
+      organizationId,
+      userId: null, // System execution, no specific user
+      skillKey: 'company-research',
+      context: skillInput,
+      dryRun: false,
+    });
+
+    console.log(`[executeCompanyResearchSkill] Skill executor returned. Status: ${skillResult.status}`);
+    console.log(`[executeCompanyResearchSkill] Has outputs: ${!!skillResult.outputs}`);
+
+    if (skillResult.status === 'failed' || !skillResult.outputs) {
+      console.error(`[executeCompanyResearchSkill] ❌ Skill execution failed:`, skillResult.error);
+      console.error(`[executeCompanyResearchSkill] Full result:`, JSON.stringify(skillResult, null, 2));
+      throw new Error(`Skill execution failed: ${skillResult.error || 'No outputs returned'}`);
+    }
+
+    const outputs = skillResult.outputs;
+    console.log(`[executeCompanyResearchSkill] Skill execution successful, mapping outputs to enrichment fields`);
+
+    // Map skill outputs to EnrichmentData format
+    // Skill output sections: company_overview, leadership, products, timeline, market_position,
+    // financials, reputation, recent_activity, competitive_landscape, buying_signals
+
+    const enrichmentData: EnrichmentData = {
+      // ===== Core Fields (from company_overview) =====
+      company_name: outputs.company_overview?.name || skillInput.company_name,
+      tagline: outputs.company_overview?.tagline || '',
+      description: outputs.company_overview?.description || '',
+      industry: outputs.company_overview?.industry || '',
+      employee_count: outputs.company_overview?.employees || '',
+
+      // ===== Products (from products array) =====
+      products: (outputs.products || []).map((p: any) => ({
+        name: p.name || '',
+        description: p.description || '',
+        pricing_tier: p.pricing || undefined,
+      })),
+
+      // ===== Value Propositions (from market_position) =====
+      value_propositions: outputs.market_position?.performance_claims || [],
+
+      // ===== Competitors (from competitive_landscape) =====
+      competitors: (outputs.competitive_landscape?.direct_competitors || []).map((c: any) => ({
+        name: typeof c === 'string' ? c : c.name || '',
+        domain: typeof c === 'object' ? c.domain : undefined,
+      })),
+
+      // ===== Target Market (from company_overview) =====
+      target_market: outputs.company_overview?.target_market || '',
+      customer_types: outputs.market_position?.notable_clients || [],
+
+      // ===== Key Features (from competitive_landscape differentiators) =====
+      key_features: outputs.competitive_landscape?.differentiators || [],
+
+      // ===== Content Samples (placeholder - skill doesn't provide) =====
+      content_samples: [],
+
+      // ===== Pain Points (from buying_signals) =====
+      pain_points_mentioned: (outputs.buying_signals || [])
+        .filter((s: any) => s.type === 'pain_point' || s.relevance)
+        .map((s: any) => s.detail || s.relevance || '')
+        .filter(Boolean),
+
+      // ===== Case Studies (from market_position notable_clients) =====
+      case_study_customers: outputs.market_position?.notable_clients || [],
+
+      // ===== Tech Stack (placeholder - skill doesn't provide directly) =====
+      tech_stack: [],
+
+      // ===== Key People (from leadership array) =====
+      key_people: (outputs.leadership || []).map((l: any) => ({
+        name: l.name || '',
+        title: l.role || '',
+      })),
+
+      // ===== Pricing Model (from products) =====
+      pricing_model: outputs.products?.[0]?.pricing || undefined,
+
+      // ===== Key Phrases (placeholder) =====
+      key_phrases: [],
+
+      // ===== Enhanced Research Fields =====
+
+      founded_year: outputs.company_overview?.founded || outputs.timeline?.[0]?.year || undefined,
+
+      headquarters: outputs.company_overview?.headquarters || undefined,
+
+      company_type: outputs.company_overview?.company_type || undefined,
+
+      funding_status: outputs.financials?.funding_status || undefined,
+
+      funding_rounds: outputs.financials?.funding_rounds || undefined,
+
+      investors: outputs.financials?.investors || undefined,
+
+      valuation: outputs.financials?.valuation || undefined,
+
+      review_ratings: outputs.reputation?.review_platforms || undefined,
+
+      awards: outputs.market_position?.awards || undefined,
+
+      recent_news: outputs.recent_activity || undefined,
+
+      buying_signals_detected: outputs.buying_signals || undefined,
+
+      company_milestones: outputs.timeline || undefined,
+
+      differentiators: outputs.competitive_landscape?.differentiators || undefined,
+
+      market_trends: outputs.competitive_landscape?.market_trends || undefined,
+
+      leadership_backgrounds: (outputs.leadership || []).reduce((acc: Record<string, string>, l: any) => {
+        if (l.name && l.background) {
+          acc[l.name] = l.background;
+        }
+        return acc;
+      }, {}),
+    };
+
+    // Log data completeness
+    const populatedFields = Object.entries(enrichmentData).filter(([_, v]) => {
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === 'object' && v !== null) return Object.keys(v).length > 0;
+      return v !== undefined && v !== null && v !== '';
+    }).length;
+    const totalFields = Object.keys(enrichmentData).length;
+    const completeness = Math.round((populatedFields / totalFields) * 100);
+
+    console.log(`[executeCompanyResearchSkill] Data completeness: ${completeness}% (${populatedFields}/${totalFields} fields)`);
 
     return enrichmentData;
 
@@ -1706,10 +2210,16 @@ async function getEnrichmentStatus(
     // Timeout detection: If enrichment has been running for > 5 minutes, mark as failed
     // This prevents infinite polling if the backend gets stuck
     const MAX_ENRICHMENT_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
-    const isActivelyRunning = enrichment.status === 'scraping' || enrichment.status === 'analyzing';
+    const isActivelyRunning =
+      enrichment.status === 'scraping' ||
+      enrichment.status === 'researching' ||
+      enrichment.status === 'analyzing';
 
-    if (isActivelyRunning && enrichment.created_at) {
-      const createdAtTime = new Date(enrichment.created_at).getTime();
+    // Use updated_at for timeout tracking so forced re-runs on existing records
+    // don't immediately fail due to an old created_at timestamp.
+    const runStartTimestamp = enrichment.updated_at || enrichment.created_at;
+    if (isActivelyRunning && runStartTimestamp) {
+      const createdAtTime = new Date(runStartTimestamp).getTime();
       const now = Date.now();
       const elapsed = now - createdAtTime;
 

@@ -35,6 +35,7 @@ import {
   Table2,
   BookOpen,
   Crosshair,
+  FileSearch,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -270,6 +271,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: true,
     navSection: 'tools',
     order: 4,
+    displayGroup: 2,
+    badge: 'New',
+  },
+  {
+    path: '/fact-profiles',
+    access: 'internal',
+    label: 'Fact Profiles',
+    icon: FileSearch,
+    showInNav: true,
+    navSection: 'tools',
+    order: 5,
     displayGroup: 2,
     badge: 'New',
   },

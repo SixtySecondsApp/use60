@@ -113,7 +113,7 @@ export interface EnrichmentData {
   id: string;
   organization_id: string;
   domain: string;
-  status: 'pending' | 'scraping' | 'analyzing' | 'completed' | 'failed';
+  status: 'pending' | 'scraping' | 'researching' | 'analyzing' | 'completed' | 'failed';
   error_message?: string;
   company_name?: string;
   logo_url?: string;

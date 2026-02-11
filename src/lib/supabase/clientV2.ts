@@ -206,33 +206,25 @@ function getSupabaseClient(): TypedSupabaseClient {
           // The Supabase client's internal auth header injection doesn't work with custom fetch
           if (url.includes('/functions/v1/') || url.includes('.functions.supabase.co')) {
             try {
-              // CRITICAL: Always add auth token if not already present
-              // Check if Authorization header is missing OR is just the anon key
+              // CRITICAL: Always prefer latest user JWT for edge-function calls.
+              // Even when Authorization already exists, it may be stale/anon.
               const existingAuth = headers.get('Authorization');
-              const isAnonKey = existingAuth?.includes(supabasePublishableKey);
-
-              if (!existingAuth || isAnonKey) {
-                // Get current session and add auth header if available
-                // Note: We can't use supabaseInstance here as it would be circular,
-                // so we read directly from localStorage
-                const projectRef = supabaseUrl.split('//')[1]?.split('.')[0];
-                const storageKey = `sb-${projectRef}-auth-token`;
-                const storedSession = localStorage.getItem(storageKey);
-
-                if (storedSession) {
-                  const sessionData = JSON.parse(storedSession);
-                  const accessToken = sessionData?.access_token;
-                  if (accessToken) {
-                    headers.set('Authorization', `Bearer ${accessToken}`);
-                    console.log('🔐 Auth token added to Edge Function request:', url.split('/').pop());
-                  } else {
-                    console.warn('⚠️ No access_token found in session data');
-                  }
-                } else {
-                  console.warn('⚠️ No session found in localStorage for key:', storageKey);
-                }
+              const accessToken = await getSupabaseAuthToken();
+              if (accessToken) {
+                headers.set('Authorization', `Bearer ${accessToken}`);
+                console.log('🔐 Fresh auth token set for Edge Function request:', url.split('/').pop());
               } else {
-                console.log('✅ Authorization header already present for:', url.split('/').pop());
+                // Keep existing header if we cannot resolve a fresh token.
+                if (!existingAuth) {
+                  console.warn('⚠️ No active auth token available for Edge Function request');
+                } else {
+                  const isAnonKey = existingAuth.includes(supabasePublishableKey);
+                  if (isAnonKey) {
+                    console.warn('⚠️ Edge Function request is using anon key as Authorization');
+                  } else {
+                    console.log('✅ Reusing existing Authorization header for:', url.split('/').pop());
+                  }
+                }
               }
             } catch (err) {
               console.error('❌ Failed to add auth token to request:', err);
