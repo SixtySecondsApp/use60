@@ -53,6 +53,10 @@ import { MeetingListResponse } from './responses/MeetingListResponse';
 import { TimeBreakdownResponse } from './responses/TimeBreakdownResponse';
 import { OpsTableResponse } from './responses/OpsTableResponse';
 import type { OpsTableResponseData } from './responses/OpsTableResponse';
+import { OpsTableListResponse } from './responses/OpsTableListResponse';
+import type { OpsTableListResponseData } from './responses/OpsTableListResponse';
+import { OpsEnrichmentStatusResponse } from './responses/OpsEnrichmentStatusResponse';
+import type { OpsEnrichmentStatusResponseData } from './responses/OpsEnrichmentStatusResponse';
 import type {
   CopilotResponse as CopilotResponseType,
   PipelineResponse as PipelineResponseType,
@@ -252,6 +256,38 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'dynamic_table':
       return <OpsTableResponse data={(response as any).data as OpsTableResponseData} onActionClick={onActionClick} />;
+
+    case 'ops_table_list':
+      return <OpsTableListResponse data={(response as any).data as OpsTableListResponseData} onActionClick={onActionClick} />;
+
+    case 'ops_table_detail':
+    case 'ops_table_data':
+    case 'ops_table_created':
+      return <OpsTableResponse data={(response as any).data as OpsTableResponseData} onActionClick={onActionClick} />;
+
+    case 'ops_enrichment_status':
+      return <OpsEnrichmentStatusResponse data={(response as any).data as OpsEnrichmentStatusResponseData} onActionClick={onActionClick} />;
+
+    case 'ops_insights':
+    case 'ops_sync_result':
+    case 'ops_rules_list':
+    case 'ops_ai_query_result':
+      // These fall through to default text rendering for now
+      // Rich components can be added incrementally
+      return (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-900 dark:text-gray-300">{response.summary}</p>
+          {(response as any).actions?.map((action: any) => (
+            <button
+              key={action.id}
+              onClick={() => onActionClick?.(action)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/30 transition-colors mr-2"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      );
 
     case 'pipeline_outreach':
       return <PipelineOutreachResponse data={response as PipelineOutreachResponseType} onActionClick={onActionClick} />;

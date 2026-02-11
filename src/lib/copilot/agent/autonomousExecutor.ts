@@ -233,6 +233,10 @@ export class AutonomousExecutor {
       }
     }
 
+    // Load reference documents from skill_documents and append to cached content.
+    // The RPC doesn't return platform_skills.id (UUID), so look up UUIDs first.
+    await this.loadReferenceDocuments(activeSkills.map((s) => s.skill_key));
+
     // Check if org has Apify connected
     await this.checkApifyConnection();
 
@@ -257,6 +261,69 @@ export class AutonomousExecutor {
       this.apifyConnected = !error && !!data;
     } catch {
       this.apifyConnected = false;
+    }
+  }
+
+  /**
+   * Load reference documents from skill_documents and append to cached skill content.
+   * Resolves platform_skills UUIDs from skill_keys, then batch-fetches reference docs.
+   */
+  private async loadReferenceDocuments(skillKeys: string[]): Promise<void> {
+    if (skillKeys.length === 0) return;
+
+    try {
+      // Look up platform_skills UUIDs for the skill keys
+      const { data: platformSkills, error: psError } = await supabase
+        .from('platform_skills')
+        .select('id, skill_key')
+        .in('skill_key', skillKeys)
+        .eq('is_active', true);
+
+      if (psError || !platformSkills?.length) return;
+
+      const skillIds = platformSkills.map((ps) => ps.id);
+
+      // Batch-fetch all reference documents for these skills
+      const { data: refs, error: refsError } = await supabase
+        .from('skill_documents')
+        .select('skill_id, title, content')
+        .in('skill_id', skillIds)
+        .eq('doc_type', 'reference');
+
+      if (refsError || !refs?.length) return;
+
+      // Group refs by skill_id (UUID)
+      const refsBySkillId = new Map<string, Array<{ title: string; content: string }>>();
+      for (const ref of refs) {
+        if (!refsBySkillId.has(ref.skill_id)) {
+          refsBySkillId.set(ref.skill_id, []);
+        }
+        refsBySkillId.get(ref.skill_id)!.push({ title: ref.title, content: ref.content });
+      }
+
+      // Build UUID -> skill_key lookup
+      const uuidToKey = new Map<string, string>();
+      for (const ps of platformSkills) {
+        uuidToKey.set(ps.id, ps.skill_key);
+      }
+
+      // Append reference docs to cached skill content
+      for (const [skillId, skillRefs] of refsBySkillId) {
+        const skillKey = uuidToKey.get(skillId);
+        if (!skillKey) continue;
+
+        const existing = this.skillContentCache.get(skillKey);
+        if (!existing) continue;
+
+        let refSection = '\n\n---\n## Reference Documents\n';
+        for (const ref of skillRefs) {
+          refSection += `\n### ${ref.title}\n${ref.content}\n`;
+        }
+        this.skillContentCache.set(skillKey, existing + refSection);
+      }
+    } catch (err) {
+      // Non-fatal: skills still work without reference docs
+      console.warn('[AutonomousExecutor] Failed to load reference documents:', err);
     }
   }
 
