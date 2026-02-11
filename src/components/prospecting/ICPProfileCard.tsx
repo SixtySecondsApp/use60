@@ -54,7 +54,7 @@ function ProviderLabel({ provider }: { provider: ICPTargetProvider }) {
     both: 'Apollo + AI Ark',
   };
   return (
-    <span className="text-xs text-zinc-500">{labels[provider]}</span>
+    <span className="text-xs text-gray-500 dark:text-gray-400">{labels[provider]}</span>
   );
 }
 
@@ -86,7 +86,7 @@ function FilterSummary({ profile }: { profile: ICPProfile }) {
   if (parts.length === 0) return null;
 
   return (
-    <p className="text-xs text-zinc-500 truncate">
+    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
       {parts.join(' \u00B7 ')}
     </p>
   );
@@ -212,27 +212,27 @@ export function ICPProfileCard({
         {/* Provider + Filter summary */}
         <div className="mb-3 flex items-center gap-2">
           <ProviderLabel provider={profile.target_provider} />
-          <span className="text-zinc-600 dark:text-zinc-500">|</span>
+          <span className="text-gray-500 dark:text-gray-400">|</span>
           <FilterSummary profile={profile} />
         </div>
 
         {/* Footer: last tested + test button */}
         <div className="flex items-center justify-between">
           {profile.last_tested_at ? (
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
               <Clock className="h-3 w-3" />
               <span>
                 Tested {formatDistanceToNow(new Date(profile.last_tested_at), { addSuffix: true })}
               </span>
               {profile.last_test_result_count != null && (
                 <>
-                  <span className="text-zinc-600 dark:text-zinc-500">&middot;</span>
+                  <span className="text-gray-500 dark:text-gray-400">&middot;</span>
                   <span>{profile.last_test_result_count.toLocaleString()} results</span>
                 </>
               )}
             </div>
           ) : (
-            <span className="text-xs text-zinc-500">Not tested yet</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Not tested yet</span>
           )}
 
           <button

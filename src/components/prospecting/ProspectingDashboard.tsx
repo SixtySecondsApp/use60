@@ -22,14 +22,14 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, sublabel }: StatCardProps) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 p-4">
+    <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 p-4">
       <div className="flex items-center gap-2 mb-2">
         {icon}
-        <span className="text-xs font-medium text-gray-500 dark:text-zinc-400">{label}</span>
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</span>
       </div>
-      <p className="text-2xl font-semibold text-gray-900 dark:text-zinc-100">{value}</p>
+      <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{value}</p>
       {sublabel && (
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-zinc-500">{sublabel}</p>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-500">{sublabel}</p>
       )}
     </div>
   );

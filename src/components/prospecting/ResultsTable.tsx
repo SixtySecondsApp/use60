@@ -104,19 +104,19 @@ function getColumns(provider: ProspectingProvider, action?: ProspectingAction): 
 // ---------------------------------------------------------------------------
 
 function renderText(value: unknown): React.ReactNode {
-  if (value == null || value === '') return <span className="text-gray-400 dark:text-gray-600">--</span>
+  if (value == null || value === '') return <span className="text-gray-400 dark:text-gray-500">--</span>
   return <span className="truncate">{String(value)}</span>
 }
 
 function renderNumber(value: unknown): React.ReactNode {
-  if (value == null) return <span className="text-gray-400 dark:text-gray-600">--</span>
+  if (value == null) return <span className="text-gray-400 dark:text-gray-500">--</span>
   const num = typeof value === 'number' ? value : parseInt(String(value), 10)
-  if (isNaN(num)) return <span className="text-gray-400 dark:text-gray-600">--</span>
+  if (isNaN(num)) return <span className="text-gray-400 dark:text-gray-500">--</span>
   return <span>{num.toLocaleString()}</span>
 }
 
 function renderDomain(value: unknown): React.ReactNode {
-  if (!value) return <span className="text-gray-400 dark:text-gray-600">--</span>
+  if (!value) return <span className="text-gray-400 dark:text-gray-500">--</span>
   const domain = String(value)
   return (
     <a
@@ -131,7 +131,7 @@ function renderDomain(value: unknown): React.ReactNode {
 }
 
 function renderLinkedIn(value: unknown): React.ReactNode {
-  if (!value) return <span className="text-gray-400 dark:text-gray-600">--</span>
+  if (!value) return <span className="text-gray-400 dark:text-gray-500">--</span>
   return (
     <a
       href={String(value)}
@@ -148,7 +148,7 @@ function renderLinkedIn(value: unknown): React.ReactNode {
 function EmailCell({ value }: { value: unknown }) {
   const [copied, setCopied] = useState(false)
 
-  if (!value) return <span className="text-gray-400 dark:text-gray-600">--</span>
+  if (!value) return <span className="text-gray-400 dark:text-gray-500">--</span>
 
   const email = String(value)
   const handleCopy = async () => {
@@ -180,7 +180,7 @@ function renderEmail(value: unknown, _row: Record<string, unknown>): React.React
 
 function renderTags(value: unknown): React.ReactNode {
   if (!value || !Array.isArray(value) || value.length === 0) {
-    return <span className="text-gray-400 dark:text-gray-600">--</span>
+    return <span className="text-gray-400 dark:text-gray-500">--</span>
   }
   const tags = value.slice(0, 3)
   const remaining = value.length - 3
@@ -203,7 +203,7 @@ function renderTags(value: unknown): React.ReactNode {
 
 function renderApolloLocation(value: unknown, row: Record<string, unknown>): React.ReactNode {
   const parts = [value, row.state, row.country].filter(Boolean)
-  if (parts.length === 0) return <span className="text-gray-400 dark:text-gray-600">--</span>
+  if (parts.length === 0) return <span className="text-gray-400 dark:text-gray-500">--</span>
   return <span className="truncate">{parts.join(', ')}</span>
 }
 
@@ -398,7 +398,7 @@ export function ResultsTable({
                     {icpScore ? (
                       <ICPFitBadge score={icpScore} size="sm" />
                     ) : (
-                      <span className="text-gray-400 dark:text-gray-600">--</span>
+                      <span className="text-gray-400 dark:text-gray-500">--</span>
                     )}
                   </TableCell>
                 )}

@@ -121,14 +121,14 @@ export function ClientAssignment({
         variant="ghost"
         size="sm"
         onClick={() => setIsOpen(!isOpen)}
-        className="gap-1.5 text-xs text-gray-500 dark:text-zinc-400 h-7 px-2"
+        className="gap-1.5 text-xs text-gray-500 dark:text-gray-400 h-7 px-2"
       >
         <UserPlus className="h-3.5 w-3.5" />
         Assign Client
       </Button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
           <div className="p-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
@@ -138,12 +138,12 @@ export function ClientAssignment({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search contacts..."
-                className="w-full rounded-md border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 py-1.5 pl-8 pr-3 text-xs text-gray-900 dark:text-zinc-100 placeholder-gray-500 dark:placeholder-zinc-500 focus:border-primary focus:outline-none"
+                className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-1.5 pl-8 pr-3 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-500 focus:border-primary focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="max-h-48 overflow-y-auto border-t border-gray-100 dark:border-zinc-800">
+          <div className="max-h-48 overflow-y-auto border-t border-gray-100 dark:border-gray-800">
             {isLoading && (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
@@ -151,13 +151,13 @@ export function ClientAssignment({
             )}
 
             {!isLoading && searchQuery.length < 2 && (
-              <p className="px-3 py-3 text-xs text-gray-500 dark:text-zinc-500 text-center">
+              <p className="px-3 py-3 text-xs text-gray-500 dark:text-gray-500 text-center">
                 Type at least 2 characters to search
               </p>
             )}
 
             {!isLoading && searchQuery.length >= 2 && contacts.length === 0 && (
-              <p className="px-3 py-3 text-xs text-gray-500 dark:text-zinc-500 text-center">
+              <p className="px-3 py-3 text-xs text-gray-500 dark:text-gray-500 text-center">
                 No contacts found
               </p>
             )}
@@ -166,17 +166,17 @@ export function ClientAssignment({
               <button
                 key={contact.id}
                 onClick={() => handleAssign(contact)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300 text-xs font-medium">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-medium">
                   {contact.full_name?.charAt(0)?.toUpperCase() ?? '?'}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-gray-900 dark:text-zinc-100">
+                  <p className="truncate font-medium text-gray-900 dark:text-gray-100">
                     {contact.full_name}
                   </p>
                   {contact.email && (
-                    <p className="truncate text-gray-500 dark:text-zinc-500">
+                    <p className="truncate text-gray-500 dark:text-gray-500">
                       {contact.email}
                     </p>
                   )}

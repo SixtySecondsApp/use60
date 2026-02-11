@@ -117,7 +117,7 @@ export function SearchHistoryPanel({
         <SheetContent side="right" className="!top-16 !h-[calc(100vh-4rem)] w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-[#64748B]" />
+              <History className="h-5 w-5 text-slate-500 dark:text-gray-400" />
               Search History
             </SheetTitle>
             <SheetDescription>
@@ -144,7 +144,7 @@ export function SearchHistoryPanel({
               </Button>
 
               {compareMode && (
-                <span className="text-xs text-[#64748B] dark:text-gray-400">
+                <span className="text-xs text-slate-500 dark:text-gray-400">
                   Select {2 - selectedIds.size} more
                 </span>
               )}
@@ -162,13 +162,13 @@ export function SearchHistoryPanel({
             {/* Loading state */}
             {isLoading && (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin text-[#64748B]" />
+                <Loader2 className="h-5 w-5 animate-spin text-slate-500 dark:text-gray-400" />
               </div>
             )}
 
             {/* Empty state */}
             {!isLoading && (!history || history.length === 0) && (
-              <div className="text-center py-12 text-[#94A3B8] dark:text-gray-500">
+              <div className="text-center py-12 text-slate-400 dark:text-gray-500">
                 <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No search history yet</p>
                 <p className="text-xs mt-1">Run a search to start tracking history.</p>
@@ -186,7 +186,7 @@ export function SearchHistoryPanel({
                       className={`rounded-lg border p-3 transition-colors ${
                         isSelected
                           ? 'border-blue-300 dark:border-blue-500/30 bg-blue-50/50 dark:bg-blue-500/5'
-                          : 'border-[#E2E8F0] dark:border-gray-700/50 hover:border-[#CBD5E1] dark:hover:border-gray-600'
+                          : 'border-gray-200 dark:border-gray-700/50 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -199,7 +199,7 @@ export function SearchHistoryPanel({
                                 checked={isSelected}
                                 onChange={() => toggleSelect(entry.id)}
                                 disabled={!isSelected && selectedIds.size >= 2}
-                                className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-blue-600 focus:ring-blue-500"
+                                className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                               />
                             )}
                             <Badge
@@ -208,13 +208,13 @@ export function SearchHistoryPanel({
                             >
                               {entry.provider.replace('_', ' ')}
                             </Badge>
-                            <span className="text-xs text-[#64748B] dark:text-gray-400">
+                            <span className="text-xs text-slate-500 dark:text-gray-400">
                               {formatRelativeDate(entry.created_at)}
                             </span>
                           </div>
 
                           {/* Stats row */}
-                          <div className="flex items-center gap-3 text-xs text-[#64748B] dark:text-gray-400">
+                          <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-gray-400">
                             <span className="flex items-center gap-1">
                               <Hash className="h-3 w-3" />
                               {entry.result_count ?? 0} results

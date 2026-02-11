@@ -140,14 +140,14 @@ function FormSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#E2E8F0] dark:border-gray-700/50 rounded-lg">
+    <div className="border border-gray-200 dark:border-gray-700/50 rounded-lg">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full px-4 py-3 text-left text-sm font-medium text-[#1E293B] dark:text-gray-100 hover:bg-slate-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
+        className="flex items-center gap-2 w-full px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-slate-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
       >
-        {open ? <ChevronDown className="h-4 w-4 text-[#64748B]" /> : <ChevronRight className="h-4 w-4 text-[#64748B]" />}
-        <Icon className="h-4 w-4 text-[#64748B]" />
+        {open ? <ChevronDown className="h-4 w-4 text-slate-500 dark:text-gray-400" /> : <ChevronRight className="h-4 w-4 text-slate-500 dark:text-gray-400" />}
+        <Icon className="h-4 w-4 text-slate-500 dark:text-gray-400" />
         {title}
       </button>
       {open && <div className="px-4 pb-4 space-y-4">{children}</div>}
@@ -172,7 +172,7 @@ function MultiChipPicker({
 }) {
   return (
     <div className="space-y-2">
-      <Label className="text-sm text-[#64748B] dark:text-gray-400">{label}</Label>
+      <Label className="text-sm text-slate-500 dark:text-gray-400">{label}</Label>
       <div className="flex flex-wrap gap-1.5">
         {options.map((opt) => {
           const isSelected = selected.includes(opt.value);
@@ -184,7 +184,7 @@ function MultiChipPicker({
               className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
                 isSelected
                   ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20'
-                  : 'bg-white dark:bg-gray-800/50 text-[#64748B] dark:text-gray-400 border-[#E2E8F0] dark:border-gray-700/50 hover:border-blue-300 dark:hover:border-blue-500/30'
+                  : 'bg-white dark:bg-gray-800/50 text-slate-500 dark:text-gray-400 border-gray-200 dark:border-gray-700/50 hover:border-blue-300 dark:hover:border-blue-500/30'
               }`}
             >
               {opt.label}
@@ -231,8 +231,8 @@ function TagInput({
 
   return (
     <div className="space-y-2">
-      <Label className="text-sm text-[#64748B] dark:text-gray-400">{label}</Label>
-      <div className="flex flex-wrap gap-1.5 p-2 min-h-[40px] border border-[#E2E8F0] dark:border-gray-700/50 rounded-md bg-white dark:bg-gray-800/50 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2">
+      <Label className="text-sm text-slate-500 dark:text-gray-400">{label}</Label>
+      <div className="flex flex-wrap gap-1.5 p-2 min-h-[40px] border border-gray-200 dark:border-gray-700/50 rounded-md bg-white dark:bg-gray-800/50 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2">
         {tags.map((tag) => (
           <Badge key={tag} variant="default" className="gap-1">
             {tag}
@@ -251,10 +251,10 @@ function TagInput({
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={tags.length === 0 ? placeholder : ''}
-          className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm text-[#1E293B] dark:text-gray-100 placeholder:text-[#94A3B8] dark:placeholder:text-gray-500"
+          className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder:text-slate-400 dark:placeholder:text-gray-500"
         />
       </div>
-      <p className="text-xs text-[#94A3B8] dark:text-gray-500">Press Enter or comma to add</p>
+      <p className="text-xs text-slate-400 dark:text-gray-500">Press Enter or comma to add</p>
     </div>
   );
 }
@@ -275,7 +275,7 @@ function EmployeeRangePicker({
 
   return (
     <div className="space-y-2">
-      <Label className="text-sm text-[#64748B] dark:text-gray-400">Employee Count</Label>
+      <Label className="text-sm text-slate-500 dark:text-gray-400">Employee Count</Label>
       <div className="flex flex-wrap gap-1.5">
         {EMPLOYEE_RANGES.map((range) => {
           const sel = isSelected(range);
@@ -287,7 +287,7 @@ function EmployeeRangePicker({
               className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
                 sel
                   ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20'
-                  : 'bg-white dark:bg-gray-800/50 text-[#64748B] dark:text-gray-400 border-[#E2E8F0] dark:border-gray-700/50 hover:border-blue-300 dark:hover:border-blue-500/30'
+                  : 'bg-white dark:bg-gray-800/50 text-slate-500 dark:text-gray-400 border-gray-200 dark:border-gray-700/50 hover:border-blue-300 dark:hover:border-blue-500/30'
               }`}
             >
               {range.label}
@@ -587,7 +587,7 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
             />
 
             <div className="space-y-2">
-              <Label className="text-sm text-[#64748B] dark:text-gray-400">Revenue Range</Label>
+              <Label className="text-sm text-slate-500 dark:text-gray-400">Revenue Range</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -596,7 +596,7 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
                   placeholder="Min ($)"
                   className="w-full"
                 />
-                <span className="text-[#94A3B8] text-sm">to</span>
+                <span className="text-slate-400 dark:text-gray-500 text-sm">to</span>
                 <Input
                   type="number"
                   value={revenueMax}
@@ -626,7 +626,7 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-sm text-[#64748B] dark:text-gray-400">Title Keywords</Label>
+                <Label className="text-sm text-slate-500 dark:text-gray-400">Title Keywords</Label>
                 <Select value={titleSearchMode} onValueChange={(v) => setTitleSearchMode(v as 'smart' | 'exact' | 'any')}>
                   <SelectTrigger className="h-7 w-24 text-xs">
                     <SelectValue />

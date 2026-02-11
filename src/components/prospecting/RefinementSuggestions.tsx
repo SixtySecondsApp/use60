@@ -78,7 +78,7 @@ function SuggestionCard({
   const config = TYPE_CONFIG[suggestion.type] ?? TYPE_CONFIG.add_filter;
 
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 p-3 transition-colors hover:border-gray-300 dark:hover:border-zinc-700">
+    <div className="flex items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 p-3 transition-colors hover:border-gray-300 dark:hover:border-gray-700">
       <div className="mt-0.5 shrink-0">
         <Badge variant={config.variant} className="gap-1 text-[10px]">
           {config.icon}
@@ -87,9 +87,9 @@ function SuggestionCard({
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-gray-900 dark:text-zinc-100">{suggestion.description}</p>
+        <p className="text-sm text-gray-900 dark:text-gray-100">{suggestion.description}</p>
         {suggestion.estimated_impact && (
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-zinc-500">
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-500">
             Estimated impact: {suggestion.estimated_impact}
           </p>
         )}
@@ -104,7 +104,7 @@ function SuggestionCard({
         </button>
         <button
           onClick={onDismiss}
-          className="rounded-md p-1 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 transition-colors"
+          className="rounded-md p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           title="Dismiss"
         >
           <X className="h-3.5 w-3.5" />
@@ -177,7 +177,7 @@ export function RefinementSuggestions({
       >
         <div className="flex items-center gap-2">
           <Lightbulb className="h-4 w-4 text-amber-500" />
-          <span className="text-sm font-medium text-gray-900 dark:text-zinc-100">
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
             AI Refinement Suggestions
           </span>
           {visibleSuggestions.length > 0 && (
@@ -199,7 +199,7 @@ export function RefinementSuggestions({
           {isPending && (
             <div className="flex items-center justify-center gap-2 py-6">
               <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
-              <span className="text-sm text-gray-500 dark:text-zinc-400">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
                 Analyzing results...
               </span>
             </div>
@@ -207,7 +207,7 @@ export function RefinementSuggestions({
 
           {isIdle && (
             <div className="flex flex-col items-center py-4">
-              <p className="mb-3 text-sm text-gray-500 dark:text-zinc-400">
+              <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
                 Get AI-powered suggestions to improve your search targeting
               </p>
               <Button
@@ -223,7 +223,7 @@ export function RefinementSuggestions({
           )}
 
           {!isPending && !isIdle && visibleSuggestions.length === 0 && (
-            <p className="py-4 text-center text-sm text-gray-500 dark:text-zinc-500">
+            <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-500">
               No suggestions available. Your filters look well-optimized.
             </p>
           )}
