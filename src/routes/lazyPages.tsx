@@ -46,6 +46,7 @@ export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/M
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
+export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
@@ -146,6 +147,7 @@ export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
 export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
+export const ProspectingPage = lazyWithRetry(() => import('@/pages/ProspectingPage'));
 export const DocsPage = lazyWithRetry(() => import('@/pages/DocsPage'));
 
 // ============================================================
@@ -175,6 +177,7 @@ export const LogoSettings = lazyWithRetry(() => import('@/pages/settings/LogoSet
 export const SlackSettings = lazyWithRetry(() => import('@/pages/settings/SlackSettings'));
 export const JustCallSettings = lazyWithRetry(() => import('@/pages/settings/JustCallSettings'));
 export const HubSpotSettings = lazyWithRetry(() => import('@/pages/settings/HubSpotSettings'));
+export const AttioSettings = lazyWithRetry(() => import('@/pages/settings/AttioSettings'));
 export const BullhornSettings = lazyWithRetry(() => import('@/pages/settings/BullhornSettings'));
 export const InstantlySettings = lazyWithRetry(() => import('@/pages/settings/InstantlySettings'));
 export const SmartListeningSettings = lazyWithRetry(() => import('@/pages/settings/SmartListeningSettings'));

@@ -34,6 +34,7 @@ import {
   ExternalLink,
   Table2,
   BookOpen,
+  Crosshair,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -258,6 +259,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: true,
     navSection: 'tools',
     order: 3,
+    displayGroup: 2,
+    badge: 'New',
+  },
+  {
+    path: '/prospecting',
+    access: 'internal',
+    label: 'Prospecting',
+    icon: Crosshair,
+    showInNav: true,
+    navSection: 'tools',
+    order: 4,
     displayGroup: 2,
     badge: 'New',
   },

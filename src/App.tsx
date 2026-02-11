@@ -73,7 +73,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin,
+  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -84,13 +84,13 @@ import {
   MeetingsPage, MeetingIntelligence, MeetingSentimentAnalytics, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   TasksPage, ProjectsHub, GoogleTasksSettings, Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage,
-  OpsPage, OpsDetailPage, ApifyOpsPage, DocsPage,
+  OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, DocsPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, JustCallSettings, HubSpotSettings, BullhornSettings, InstantlySettings, SmartListeningSettings,
+  LogoSettings, SlackSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings,
   CreditPurchaseSuccess, CreditsSettingsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
   OrgBilling,
@@ -415,6 +415,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/multi-agent-demo" element={<PlatformAdminRouteGuard><AppLayout><MultiAgentDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-teams-live" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamsLiveDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/credit-system-demo" element={<PlatformAdminRouteGuard><AppLayout><CreditSystemDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/enrichment-demo" element={<PlatformAdminRouteGuard><AppLayout><EnrichmentComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Documentation CMS Admin */}
                 <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}
@@ -494,6 +495,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/prospecting" element={<InternalRouteGuard><AppLayout><ProspectingPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/docs" element={<AppLayout><DocsPage /></AppLayout>} />
                 <Route path="/tasks/settings" element={<InternalRouteGuard><AppLayout><GoogleTasksSettings /></AppLayout></InternalRouteGuard>} />
                 <Route path="/calendar" element={<ExternalRedirect url="https://calendar.google.com" />} />
@@ -559,6 +561,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/integrations/justcall" element={<AppLayout><JustCallSettings /></AppLayout>} />
                 {/* HubSpot Settings - visible only when HubSpot is connected (enforced inside page) */}
                 <Route path="/settings/integrations/hubspot" element={<AppLayout><HubSpotSettings /></AppLayout>} />
+                {/* Attio Settings - visible only when Attio is connected (enforced inside page) */}
+                <Route path="/settings/integrations/attio" element={<AppLayout><AttioSettings /></AppLayout>} />
                 {/* Bullhorn Settings - visible only when Bullhorn is connected (enforced inside page) */}
                 <Route path="/settings/integrations/bullhorn" element={<AppLayout><BullhornSettings /></AppLayout>} />
                 {/* Instantly Settings */}

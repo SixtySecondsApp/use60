@@ -25,6 +25,7 @@ import { OpsTableService } from '@/lib/services/opsTableService';
 import { formatDistanceToNow } from 'date-fns';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 import { HubSpotImportWizard } from '@/components/ops/HubSpotImportWizard';
+import { AttioImportWizard } from '@/components/ops/AttioImportWizard';
 import { CrossOpImportWizard } from '@/components/ops/CrossOpImportWizard';
 import { ApolloSearchWizard } from '@/components/ops/ApolloSearchWizard';
 import { CreateTableModal } from '@/components/ops/CreateTableModal';
@@ -193,6 +194,7 @@ function OpsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotImport, setShowHubSpotImport] = useState(false);
+  const [showAttioImport, setShowAttioImport] = useState(false);
   const [showApolloSearch, setShowApolloSearch] = useState(false);
   const [showCrossOpImport, setShowCrossOpImport] = useState(false);
   const [showWorkflowPrompt, setShowWorkflowPrompt] = useState(false);
@@ -468,6 +470,7 @@ function OpsPage() {
         onClose={() => setShowCreateModal(false)}
         onSelectCSV={() => setShowCSVImport(true)}
         onSelectHubSpot={() => setShowHubSpotImport(true)}
+        onSelectAttio={() => setShowAttioImport(true)}
         onSelectApollo={() => setShowApolloSearch(true)}
         onSelectOpsTable={() => setShowCrossOpImport(true)}
         onSelectBlank={() => createTableMutation.mutate()}
@@ -488,6 +491,15 @@ function OpsPage() {
         onOpenChange={setShowHubSpotImport}
         onComplete={(tableId) => {
           setShowHubSpotImport(false);
+          navigate(`/ops/${tableId}`);
+        }}
+      />
+
+      <AttioImportWizard
+        open={showAttioImport}
+        onOpenChange={setShowAttioImport}
+        onComplete={(tableId) => {
+          setShowAttioImport(false);
           navigate(`/ops/${tableId}`);
         }}
       />

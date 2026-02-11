@@ -36,6 +36,7 @@ import { SavvyCalConfigModal } from '@/components/integrations/SavvyCalConfigMod
 import { SlackConfigModal } from '@/components/integrations/SlackConfigModal';
 import { JustCallConfigModal } from '@/components/integrations/JustCallConfigModal';
 import { HubSpotConfigModal } from '@/components/integrations/HubSpotConfigModal';
+import { AttioConfigModal } from '@/components/integrations/AttioConfigModal';
 import { NotetakerConfigModal } from '@/components/integrations/NotetakerConfigModal';
 import { FirefliesConfigModal } from '@/components/integrations/FirefliesConfigModal';
 import { ApolloConfigModal } from '@/components/integrations/ApolloConfigModal';
@@ -50,6 +51,7 @@ import { useSlackIntegration } from '@/lib/hooks/useSlackIntegration';
 import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
 import { useSavvyCalIntegration } from '@/lib/hooks/useSavvyCalIntegration';
 import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
+import { useAttioIntegration } from '@/lib/hooks/useAttioIntegration';
 import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
 import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
 import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
@@ -417,6 +419,22 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'attio',
+    name: 'Attio',
+    description: 'Bi-directional CRM sync + AI writeback.',
+    permissions: [
+      { title: 'Read/write records', description: 'Sync people, companies, and deals both ways.' },
+      { title: 'Read/write lists', description: 'Manage list memberships and entries.' },
+      { title: 'Create notes', description: 'Write meeting summaries back to Attio.' },
+      { title: 'Webhooks', description: 'Real-time record change notifications.' },
+    ],
+    brandColor: 'violet',
+    iconBgColor: 'bg-violet-50 dark:bg-violet-900/20',
+    iconBorderColor: 'border-violet-100 dark:border-violet-800/40',
+    fallbackIcon: <Users className="w-6 h-6 text-violet-600 dark:text-violet-400" />,
+    isBuilt: true,
+  },
+  {
     id: '60-notetaker',
     name: '60 Notetaker',
     description: 'Auto-record & transcribe your meetings.',
@@ -555,7 +573,6 @@ const integrationCategories: IntegrationCategory[] = [
       { id: 'bullhorn', name: 'Bullhorn', description: 'Staffing & recruiting CRM.', fallbackIcon: <Users className="w-6 h-6 text-amber-600" /> },
       { id: 'highlevel', name: 'GoHighLevel', description: 'All-in-one agency CRM.', fallbackIcon: <Users className="w-6 h-6 text-blue-600" /> },
       { id: 'copper', name: 'Copper', description: 'Google Workspace CRM.', fallbackIcon: <Users className="w-6 h-6 text-orange-400" /> },
-      { id: 'attio', name: 'Attio', description: 'Next-gen CRM for startups.', fallbackIcon: <Users className="w-6 h-6 text-violet-500" /> },
       { id: 'folk', name: 'Folk', description: 'CRM for relationship builders.', fallbackIcon: <Users className="w-6 h-6 text-pink-500" /> },
     ],
   },
@@ -747,6 +764,8 @@ export default function Integrations() {
 
   const { isConnected: hubspotConnected, loading: hubspotLoading, connectHubSpot } = useHubSpotIntegration(hubspotEnabled);
 
+  const { isConnected: attioConnected, loading: attioLoading, connectAttio } = useAttioIntegration();
+
   const {
     isConnected: notetakerConnected,
     isLoading: notetakerLoading,
@@ -809,6 +828,13 @@ export default function Integrations() {
       const desc = searchParams.get('hubspot_error_description');
       toast.error(`Failed to connect HubSpot: ${desc || hubspotError}`);
       window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('attio_success') === 'true') {
+      toast.success('Attio connected successfully!');
+      window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('attio_error')) {
+      const attioErr = searchParams.get('attio_error');
+      toast.error(`Failed to connect Attio: ${attioErr}`);
+      window.history.replaceState({}, '', '/integrations');
     } else if (fathomStatus === 'connected') {
       toast.success('Fathom connected successfully!', {
         description: 'Your Fathom account has been connected. Starting initial sync...',
@@ -848,6 +874,8 @@ export default function Integrations() {
         return justcallConnected ? 'active' : 'inactive';
       case 'hubspot':
         return hubspotConnected ? 'active' : 'inactive';
+      case 'attio':
+        return attioConnected ? 'active' : 'inactive';
       case '60-notetaker':
         // Show as inactive if org hasn't enabled, or if user needs to set up
         if (!notetakerOrgEnabled) return 'inactive';
@@ -965,6 +993,10 @@ export default function Integrations() {
           break;
         case 'hubspot':
           await connectHubSpot();
+          setActiveConnectModal(null);
+          break;
+        case 'attio':
+          await connectAttio();
           setActiveConnectModal(null);
           break;
         default:
@@ -1166,6 +1198,10 @@ export default function Integrations() {
       />
       <HubSpotConfigModal
         open={hubspotEnabled && activeConfigModal === 'hubspot'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <AttioConfigModal
+        open={activeConfigModal === 'attio'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
       <NotetakerConfigModal

@@ -42,6 +42,8 @@ import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
 import { BulkActionsBar } from '@/components/ops/BulkActionsBar';
 import { HubSpotPushModal, type HubSpotPushConfig } from '@/components/ops/HubSpotPushModal';
+import { AttioPushModal } from '@/components/ops/AttioPushModal';
+import { AttioSyncHistory } from '@/components/ops/AttioSyncHistory';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
 import { ViewSelector } from '@/components/ops/ViewSelector';
 import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
@@ -59,6 +61,7 @@ import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { useIntegrationPolling } from '@/lib/hooks/useIntegrationStatus';
 import { useHubSpotSync } from '@/lib/hooks/useHubSpotSync';
 import { useHubSpotWriteBack } from '@/lib/hooks/useHubSpotWriteBack';
+import { useAttioSync } from '@/lib/hooks/useAttioSync';
 import { validateInstantlyCampaign } from '@/lib/hooks/useInstantlyPush';
 import { HubSpotSyncHistory } from '@/components/ops/HubSpotSyncHistory';
 import { HubSpotSyncSettingsModal } from '@/components/ops/HubSpotSyncSettingsModal';
@@ -177,6 +180,8 @@ function OpsDetailPage() {
   const [sessionMessages, setSessionMessages] = useState<any[]>([]);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [showHubSpotPush, setShowHubSpotPush] = useState(false);
+  const [showAttioPush, setShowAttioPush] = useState(false);
+  const [showAttioSyncHistory, setShowAttioSyncHistory] = useState(false);
   const [isPushingToInstantly, setIsPushingToInstantly] = useState(false);
   const [editEnrichmentColumn, setEditEnrichmentColumn] = useState<OpsTableColumn | null>(null);
   const [editFormulaColumn, setEditFormulaColumn] = useState<OpsTableColumn | null>(null);
@@ -339,6 +344,9 @@ function OpsDetailPage() {
   // ---- HubSpot sync hook ----
   const { sync: syncHubSpot, isSyncing: isHubSpotSyncing } = useHubSpotSync(tableId);
   const { writeBack: pushCellToHubSpot } = useHubSpotWriteBack();
+
+  // ---- Attio sync hook ----
+  const { sync: syncAttio, isSyncing: isAttioSyncing } = useAttioSync(tableId);
 
   // ---- Instantly (moved to column system — hooks removed) ----
 
@@ -2243,6 +2251,30 @@ function OpsDetailPage() {
                 </button>
               </div>
             )}
+            {/* Attio sync buttons (only for attio-sourced tables) */}
+            {table.source_type === 'attio' && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={syncAttio}
+                  disabled={isAttioSyncing}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-3 py-1.5 text-sm font-medium text-violet-300 transition-colors hover:bg-violet-900/40 hover:text-violet-200 disabled:opacity-50"
+                >
+                  {isAttioSyncing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Sync
+                </button>
+                <button
+                  onClick={() => setShowAttioSyncHistory(true)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-violet-700/40 bg-violet-900/20 text-violet-300 transition-colors hover:bg-violet-900/40 hover:text-violet-200"
+                  title="Sync history"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             {table.source_type === 'apollo' && (
               <ApolloSourceControls
                 onEditFilters={() => setShowApolloFilters(true)}
@@ -3081,6 +3113,7 @@ function OpsDetailPage() {
           }
         }}
         onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
+        onPushToAttio={() => setShowAttioPush(true)}
         onReEnrich={() => {
           const enrichCols = columns.filter((c) => c.is_enrichment);
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
@@ -3321,6 +3354,25 @@ function OpsDetailPage() {
         onSave={(config) => createHubSpotListMutation.mutate(config)}
         isSaving={createHubSpotListMutation.isPending}
       />
+
+      {/* Attio Push Modal */}
+      <AttioPushModal
+        open={showAttioPush}
+        onOpenChange={setShowAttioPush}
+        tableId={tableId!}
+        columns={columns.map((c) => ({ id: c.id, name: c.label, key: c.key }))}
+        rows={rows}
+        selectedRowIds={Array.from(selectedRows)}
+      />
+
+      {/* Attio Sync History */}
+      {tableId && (
+        <AttioSyncHistory
+          open={showAttioSyncHistory}
+          onOpenChange={setShowAttioSyncHistory}
+          tableId={tableId}
+        />
+      )}
 
       {/* Instantly integration moved to column system — old modals removed */}
     </div>

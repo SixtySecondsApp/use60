@@ -24,6 +24,7 @@ import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
 import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
 import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
 import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
+import { useAttioIntegration } from '@/lib/hooks/useAttioIntegration';
 import { useBullhornIntegration } from '@/lib/hooks/useBullhornIntegration';
 import { useGoogleIntegration } from '@/lib/stores/integrationStore';
 import {
@@ -78,6 +79,9 @@ export default function Settings() {
 
   const { isConnected: isHubSpotConnected, loading: hubspotLoading } = useHubSpotIntegration();
   const showHubSpotSettings = !hubspotLoading && isHubSpotConnected;
+
+  const { isConnected: isAttioConnected, loading: attioLoading } = useAttioIntegration();
+  const showAttioSettings = !attioLoading && isAttioConnected;
 
   const { isConnected: isBullhornConnected, loading: bullhornLoading } = useBullhornIntegration();
   const showBullhornSettings = !bullhornLoading && isBullhornConnected;
@@ -211,6 +215,14 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'attio',
+      label: 'Attio',
+      icon: Users,
+      description: 'Configure object sync, attribute mapping, and AI notes',
+      path: '/settings/integrations/attio',
+      requiresOrgAdmin: true,
+    },
+    {
       id: 'bullhorn',
       label: 'Bullhorn ATS',
       icon: Briefcase,
@@ -275,6 +287,10 @@ export default function Settings() {
       if (section.id === 'hubspot') {
         return showHubSpotSettings;
       }
+      // Attio settings should only appear when Attio is connected.
+      if (section.id === 'attio') {
+        return showAttioSettings;
+      }
       // Bullhorn settings should only appear when Bullhorn is connected.
       if (section.id === 'bullhorn') {
         return showBullhornSettings;
@@ -301,7 +317,7 @@ export default function Settings() {
       }
       return true;
     });
-  }, [allSettingsSections, permissions, isPlatformAdmin, isSlackConnected, showGoogleSettings, showFathomSettings, showFirefliesSettings, showNotetakerSettings, showJustCallSettings, showHubSpotSettings, showBullhornSettings]);
+  }, [allSettingsSections, permissions, isPlatformAdmin, isSlackConnected, showGoogleSettings, showFathomSettings, showFirefliesSettings, showNotetakerSettings, showJustCallSettings, showHubSpotSettings, showAttioSettings, showBullhornSettings]);
 
   const categories = useMemo(() => {
     const personalSections = settingsSections.filter(s =>

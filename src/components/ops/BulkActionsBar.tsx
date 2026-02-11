@@ -9,6 +9,7 @@ interface BulkActionsBarProps {
   onDelete: () => void;
   onDeselectAll: () => void;
   onPushToHubSpot?: () => void;
+  onPushToAttio?: () => void;
   onReEnrich?: () => void;
   onRetryFailed?: () => void;
   isEnriching?: boolean;
@@ -24,6 +25,7 @@ export function BulkActionsBar({
   onDelete,
   onDeselectAll,
   onPushToHubSpot,
+  onPushToAttio,
   onReEnrich,
   onRetryFailed,
   isEnriching = false,
@@ -94,6 +96,18 @@ export function BulkActionsBar({
             >
               <Upload className="h-4 w-4" />
               HubSpot
+            </button>
+          )}
+
+          {/* Push to Attio Button */}
+          {onPushToAttio && (
+            <button
+              onClick={onPushToAttio}
+              disabled={isEnriching}
+              className="flex items-center gap-2 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Upload className="h-4 w-4" />
+              Attio
             </button>
           )}
 

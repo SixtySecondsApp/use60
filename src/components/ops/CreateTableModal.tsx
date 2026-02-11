@@ -6,6 +6,7 @@ interface CreateTableModalProps {
   onClose: () => void;
   onSelectCSV: () => void;
   onSelectHubSpot: () => void;
+  onSelectAttio: () => void;
   onSelectApollo: () => void;
   onSelectOpsTable: () => void;
   onSelectBlank: () => void;
@@ -51,6 +52,16 @@ const SOURCE_OPTIONS = [
     hoverBorder: 'hover:border-orange-500/60',
   },
   {
+    id: 'attio',
+    title: 'Attio',
+    description: 'Import people, companies, or deals from Attio',
+    icon: Upload,
+    color: 'text-violet-400',
+    bgColor: 'bg-violet-500/10',
+    borderColor: 'border-violet-500/30',
+    hoverBorder: 'hover:border-violet-500/60',
+  },
+  {
     id: 'ops_table',
     title: 'Use Ops Table',
     description: 'Copy or reference data from another table',
@@ -87,6 +98,7 @@ export function CreateTableModal({
   onClose,
   onSelectCSV,
   onSelectHubSpot,
+  onSelectAttio,
   onSelectApollo,
   onSelectOpsTable,
   onSelectBlank,
@@ -105,6 +117,9 @@ export function CreateTableModal({
         break;
       case 'hubspot':
         onSelectHubSpot();
+        break;
+      case 'attio':
+        onSelectAttio();
         break;
       case 'ops_table':
         onSelectOpsTable();
