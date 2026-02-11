@@ -89,6 +89,10 @@ metadata:
     - self-service
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Search Documentation
 
 ## Goal

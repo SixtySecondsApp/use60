@@ -90,6 +90,9 @@ metadata:
     - deal-map-builder
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Deal MAP Builder
 
 This sequence generates a Mutual Action Plan for a deal:

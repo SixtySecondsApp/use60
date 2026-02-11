@@ -83,6 +83,9 @@ metadata:
     - ai-ark
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # AI Ark Semantic Discovery Sequence
 
 ## Overview

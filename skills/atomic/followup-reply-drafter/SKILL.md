@@ -47,7 +47,7 @@ metadata:
   requires_capabilities:
     - email
     - crm
-  requires_context:
+  required_context:
     - threads_needing_response
     - contact_data
     - company_name
@@ -75,6 +75,10 @@ metadata:
       description: "2-3 follow-up task previews with title, description, due date, and priority"
   priority: high
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Follow-Up Reply Drafter
 

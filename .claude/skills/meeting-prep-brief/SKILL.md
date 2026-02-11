@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: full
   agent_affinity:
     - meetings
   triggers:
@@ -47,6 +48,7 @@ metadata:
   required_context:
     - meeting_id
     - event_id
+    - company_name
   inputs:
     - name: meeting_id
       type: string
@@ -91,6 +93,10 @@ metadata:
     - pre-meeting
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Meeting Prep Brief
 
 ## Why Meeting Prep Matters
@@ -118,7 +124,7 @@ Effective meeting prep is not a flat list. It is a layered intelligence model wh
 - Company size: employee count, revenue range (shapes pricing and use-case)
 - Funding and growth stage (seed startup vs. enterprise -- completely different conversations)
 - Recent news: funding round, acquisition, leadership change, product launch, layoffs (within 90 days)
-- Tech stack (especially tools adjacent to or competing with your product)
+- Tech stack (especially tools adjacent to or competing with ${company_name} products listed in Organization Context)
 - Fiscal calendar (Q4 budget push? New fiscal year starting?)
 
 **Where to find it:**
@@ -240,7 +246,7 @@ Talking points should focus on:
 Talking points should focus on:
 - Connecting features to their specific pain points from discovery
 - Addressing concerns raised in previous conversations
-- Competitive differentiation on criteria that matter to them
+- Competitive differentiation on criteria that matter to them (use competitor intel from Organization Context)
 - Technical requirements and integration questions
 - Timeline and next steps after the demo
 
@@ -248,9 +254,9 @@ Talking points should focus on:
 **Goal:** Protect value while moving to close.
 
 Talking points should focus on:
-- ROI recap: Tie back to the metrics and pain identified in discovery
+- ROI recap: Tie back to the metrics and pain identified in discovery, using ${company_name} value propositions from Organization Context
 - Value justification for each line item
-- Concession strategy: What can you offer? What is non-negotiable?
+- Concession strategy: What can ${company_name} offer? What is non-negotiable?
 - Procurement process: Legal, security review, contract redlines
 - Timeline pressure: Why acting now matters (without being pushy)
 
@@ -269,8 +275,8 @@ Talking points should focus on:
 Talking points should focus on:
 - Usage metrics and ROI achieved since implementation
 - Success stories within their organization
-- Gaps or underutilized features (expansion opportunity)
-- Upcoming product roadmap items relevant to them
+- Gaps or underutilized ${company_name} features (expansion opportunity)
+- Upcoming ${company_name} product roadmap items relevant to them
 - Multi-year or expanded pricing
 
 ## Question Design Principles
@@ -319,7 +325,7 @@ For every meeting, identify and prepare for these risk categories:
 - Is there an incumbent? What would it take to displace them?
 - Are they evaluating alternatives? Who and how far along?
 - Has a competitor offered aggressive pricing or terms?
-- **Prep:** Know your 3 strongest differentiators against each likely competitor.
+- **Prep:** Know ${company_name}'s 3 strongest differentiators against each likely competitor (reference competitors and differentiators from Organization Context).
 
 ### Stakeholder Risk
 - Is a new decision-maker joining this call? What do we know about them?
@@ -463,7 +469,7 @@ Default to a balanced brief with discovery-oriented questions and general talkin
 
 ## Guidelines
 
-- Use organization context (company_name, brand_tone, products) to personalize talking points
+- Reference the products, competitors, and case studies from Organization Context to prepare talking points tailored to ${company_name}'s positioning
 - Reference deal stage to suggest appropriate next steps and talking point style
 - Flag any red flags or risks from CRM data prominently -- do not bury them
 - Keep the brief concise but actionable (aim for a single-screen summary)

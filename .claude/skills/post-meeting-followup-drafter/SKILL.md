@@ -11,6 +11,7 @@ metadata:
   category: writing
   skill_type: atomic
   is_active: true
+  context_profile: full
   agent_affinity:
     - outreach
     - meetings
@@ -49,6 +50,7 @@ metadata:
   required_context:
     - meeting_digest
     - meeting_id
+    - company_name
   inputs:
     - name: context
       type: string
@@ -93,6 +95,10 @@ metadata:
     - slack
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Post-Meeting Follow-up Drafter
 
 ## Goal
@@ -135,7 +141,7 @@ If you can only do one thing in the first 60 minutes:
 ## Inputs
 - `meeting_digest`: Output from meeting-digest-truth-extractor (primary content source)
 - `meeting_id`: Meeting identifier for fetching raw data
-- `organization_id`: Current organization context for brand voice and channel routing
+- `organization_id`: Current organization context -- use Organization Context for ${company_name} brand voice, writing style, and words_to_avoid when calibrating email tone
 - (Optional) `tone`: Override tone preference ("professional", "friendly", "executive")
 - (Optional) `recipient_name`: Primary recipient for the follow-up email
 
@@ -320,7 +326,7 @@ All post-meeting follow-up emails go through an approval step before sending. Th
 
 ## Tone Calibration by Meeting Outcome
 
-The meeting outcome should influence the follow-up tone. Detect the outcome from the meeting digest and calibrate accordingly.
+The meeting outcome should influence the follow-up tone. Detect the outcome from the meeting digest and calibrate accordingly. Use the brand voice from Organization Context to match ${company_name}'s communication style -- including tone, formality level, and words_to_avoid.
 
 ### Positive Meeting (deal advancing, buyer enthusiastic)
 - **Tone**: Warm, confident, forward-looking
@@ -353,7 +359,7 @@ Generate 3 subject line options for every follow-up email:
    - Best for: meetings where you promised something specific
    - Strength: the buyer knows immediately this email has value
 
-3. **Action-oriented**: "[Next Action] — [Company] x [Your Company]"
+3. **Action-oriented**: "[Next Action] — [Company] x ${company_name}"
    - Best for: late-stage deal meetings, established relationships
    - Strength: drives the deal narrative forward
 

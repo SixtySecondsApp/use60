@@ -87,6 +87,10 @@ metadata:
     - follow-up
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Event Follow-Up Analyzer
 
 ## Why Post-Event Follow-Up is Critical

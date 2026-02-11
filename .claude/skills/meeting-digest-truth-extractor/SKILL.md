@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: full
   agent_affinity:
     - meetings
   triggers:
@@ -56,6 +57,7 @@ metadata:
   required_context:
     - meeting_id
     - transcript_id
+    - company_name
   inputs:
     - name: meeting_id
       type: string
@@ -103,6 +105,10 @@ metadata:
     - meddicc
     - post-meeting
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Meeting Digest Truth Extractor
 
@@ -267,7 +273,7 @@ Every commitment must have an owner and a deadline. If either is missing, flag i
 ```
 {
   commitment: "Send revised pricing proposal with volume discount options",
-  owner: { name: "Alex Rivera", email: "alex@ourcompany.com", side: "seller" },
+  owner: { name: "Alex Rivera", email: "alex@example.com", side: "seller" },
   accountable: { name: "Alex Rivera" },
   consulted: ["Finance team for discount approval"],
   informed: ["Sarah Chen (prospect) will receive the deliverable"],
@@ -639,6 +645,7 @@ When the same person says contradictory things (e.g., "Budget isn't an issue" ea
 ## Guidelines
 
 - De-duplicate contradictions using the truth hierarchy. Never present both sides of a contradiction as equal.
+- Use Organization Context to identify ${company_name} products, competitors, and terminology when interpreting transcript content and mapping MEDDICC fields.
 - Flag missing information explicitly. A commitment without an owner is not a commitment -- it is a risk.
 - Extract explicit quotes for the "key quotes" section. These are the 3-5 statements a manager would want to see.
 - Be conservative: when uncertain about whether something is a decision or exploration, default to exploration. Over-reporting decisions erodes trust.

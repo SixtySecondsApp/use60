@@ -84,6 +84,9 @@ metadata:
     - event-followup-analyzer
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Event Follow-Up Sequence
 
 This sequence helps sales reps follow up effectively after events, webinars, or trade shows.

@@ -102,6 +102,9 @@ metadata:
     - meeting-command-center-plan
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Next Meeting Command Center
 
 1) Find next meeting

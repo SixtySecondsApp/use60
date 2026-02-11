@@ -136,6 +136,9 @@ metadata:
     - transcript
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Meeting Digest Sequence
 
 This sequence orchestrates post-meeting follow-up:

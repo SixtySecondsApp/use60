@@ -64,6 +64,9 @@ metadata:
     - ai-ark
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # AI Ark Data Refresh Sequence
 
 ## Overview

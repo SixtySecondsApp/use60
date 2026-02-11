@@ -106,6 +106,10 @@ metadata:
     - post-meeting
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Meeting Digest Truth Extractor
 
 ## Why Truth Extraction Matters

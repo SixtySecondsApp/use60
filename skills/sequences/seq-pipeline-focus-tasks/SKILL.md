@@ -91,6 +91,9 @@ metadata:
     - pipeline-focus-task-planner
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Pipeline Focus Tasks
 
 This sequence is designed to be triggered from natural language in Copilot.

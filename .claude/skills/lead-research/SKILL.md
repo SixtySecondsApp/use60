@@ -11,6 +11,7 @@ metadata:
   category: enrichment
   skill_type: atomic
   is_active: true
+  context_profile: research
   agent_affinity:
     - research
     - prospecting
@@ -56,6 +57,7 @@ metadata:
     - "search"
   required_context:
     - lead_name
+    - company_name
   inputs:
     - name: lead_name
       type: string
@@ -91,6 +93,10 @@ metadata:
     - research
     - prospecting
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Lead Research
 
@@ -212,12 +218,12 @@ Not all company news is relevant for sales outreach. Here is how to filter:
 
 ### High-Signal News (always include)
 - **Funding announcement**: New capital = new budget, new hiring, new tool purchases. The 90 days after a funding round is the best window for vendor outreach.
-- **New product launch**: Indicates strategic direction and where they're investing. If your product enables their new product, that's a direct talking point.
+- **New product launch**: Indicates strategic direction and where they're investing. If ${company_name}'s products (from Organization Context) enable their new product, that's a direct talking point.
 - **Leadership change**: New CTO/VP Engineering = new tool stack review. New CEO = strategic pivot. New VP Sales = new process evaluation.
 - **Partnership/acquisition**: Reveals strategic priorities and potential integration needs.
-- **Expansion** (new office, new market, international growth): Signals budget, growth, and potential scaling challenges your product can address.
+- **Expansion** (new office, new market, international growth): Signals budget, growth, and potential scaling challenges that ${company_name}'s solutions can address.
 
-### Medium-Signal News (include if relevant to your product)
+### Medium-Signal News (include if relevant to ${company_name}'s products)
 - **Industry awards or rankings**: Nice for flattery in outreach ("Congrats on the Inc 5000 listing") but not a buying signal.
 - **Conference speaking/sponsoring**: Shows where they invest attention and marketing budget.
 - **New customer wins (theirs)**: Indicates growth and potentially new requirements.
@@ -255,19 +261,19 @@ Job descriptions are the most honest source of tech stack data. Companies list t
 Job postings reveal more about a company's priorities than almost any other public data source. Here is what different hiring patterns signal:
 
 ### Volume Signals
-- **Hiring aggressively (10+ open roles)**: Growth mode. Likely has budget. May be experiencing scaling pain your product can address.
+- **Hiring aggressively (10+ open roles)**: Growth mode. Likely has budget. May be experiencing scaling pain that ${company_name}'s solutions can address.
 - **Minimal hiring (0-2 roles)**: Either stable/profitable or constrained. Check other signals (funding, layoff news) for context.
 - **Hiring spree followed by pause**: Possible pivot, budget tightening, or reorganization. Timing may be wrong.
 
 ### Role Type Signals
-- **Hiring for your product category**: (e.g., hiring a "RevOps Manager" when you sell RevOps tools) -- STRONG buying signal. They're investing in the function your product serves.
+- **Hiring for ${company_name}'s product category**: (e.g., hiring a role related to the solutions described in Organization Context) -- STRONG buying signal. They're investing in the function ${company_name}'s product serves.
 - **Hiring SDRs/AEs**: Building out sales motion. May need sales tools, CRM, enablement.
 - **Hiring engineers**: Building product. May need dev tools, infrastructure, CI/CD.
 - **Hiring a Head of [Function]**: New leader = new strategy, tool review, vendor evaluation. Prime window.
 
 ### Technology Signals
 - Job descriptions that list competitor tools: "Experience with [Competitor] a plus" -- they use your competitor. Competitive displacement opportunity.
-- Job descriptions that list your product: "Experience with [Your Product]" -- they already use you (expansion) or are evaluating you.
+- Job descriptions that list ${company_name}'s product: "Experience with [${company_name}'s product]" -- they already use it (expansion) or are evaluating it.
 
 ## Connection Point Discovery
 
@@ -280,9 +286,9 @@ The #1 goal of lead research is to find connection points that make outreach fee
 - **Mutual connection.** "I noticed you're connected with [Name] -- they've been using our product for [use case]."
 
 ### Tier 2: Contextual Relevance (reference in body)
-- **They spoke at a conference** on a topic related to your product.
+- **They spoke at a conference** on a topic related to ${company_name}'s product area.
 - **They published an article or blog post** touching on your space.
-- **Their company is hiring for a role** in your product's function area.
+- **Their company is hiring for a role** in ${company_name}'s product function area.
 - **They share a professional background** (same company alumni, same university, same industry transition).
 
 ### Tier 3: Light Personalization (use if nothing better)

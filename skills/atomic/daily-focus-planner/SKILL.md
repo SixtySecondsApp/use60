@@ -86,6 +86,10 @@ metadata:
   priority: critical
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Daily Focus Planner
 
 ## Goal

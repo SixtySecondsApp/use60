@@ -82,6 +82,10 @@ metadata:
     - crm
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Meeting Command Center Plan
 
 ## The Command Center Concept

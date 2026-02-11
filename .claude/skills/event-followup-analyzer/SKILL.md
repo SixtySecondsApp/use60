@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: communication
   agent_affinity:
     - outreach
     - meetings
@@ -48,6 +49,7 @@ metadata:
   required_context:
     - contacts
     - event_context
+    - company_name
   inputs:
     - name: event_name
       type: string
@@ -84,6 +86,10 @@ metadata:
     - lead-nurturing
     - follow-up
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Event Follow-Up Analyzer
 
@@ -139,11 +145,11 @@ Signals are ranked by strength of buying intent. Higher-ranked signals indicate 
 
 | Signal | Why It Matters | Weight |
 |--------|---------------|--------|
-| Asked a specific question about your product/service | Shows active evaluation, not passive attendance | 10 |
+| Asked a specific question about ${company_name}'s product/service | Shows active evaluation, not passive attendance | 10 |
 | Requested a demo, meeting, or follow-up during the event | Explicit buying intent -- they asked YOU | 10 |
 | Visited your booth and spent 5+ minutes in conversation | Invested time = invested interest | 9 |
 | Exchanged contact details and asked you to reach out | Gave permission and expressed desire | 9 |
-| Mentioned a specific problem your product solves | Pain is present and top-of-mind | 8 |
+| Mentioned a specific problem ${company_name}'s product solves | Pain is present and top-of-mind | 8 |
 | Referenced budget, timeline, or decision process | They're thinking about buying, not just browsing | 8 |
 
 #### Tier 2: Moderate Engagement Signals (WARM -- follow up within 48 hours)
@@ -154,7 +160,7 @@ Signals are ranked by strength of buying intent. Higher-ranked signals indicate 
 | Stopped by your booth and picked up materials | Low-effort engagement but still intentional | 5 |
 | Connected with you on LinkedIn during/after the event | Social signal of interest | 5 |
 | Mentioned they use a competitor's product | Potential switch opportunity | 5 |
-| Expressed interest in a related topic (not directly your product) | Adjacent interest, needs nurturing | 4 |
+| Expressed interest in a related topic (not directly ${company_name}'s product) | Adjacent interest, needs nurturing | 4 |
 | Their company fits your ICP (industry, size, tech stack) | Good fit even without explicit engagement | 4 |
 
 #### Tier 3: Passive Signals (NURTURE -- follow up within 72 hours)
@@ -188,6 +194,14 @@ Cross-reference event contacts against CRM data. Existing relationships amplify 
 | Contact at target account | 1.5x | New entry point into a strategic account |
 | In CRM but no deal | 1.2x | Existing awareness, event provides re-engagement hook |
 | Not in CRM | 1.0x | Net new lead, standard scoring |
+
+## Organization Context Integration
+
+Use the Organization Context to make follow-ups feel like they come from ${company_name}, not a generic sales tool:
+- **Brand voice**: Match the organization's communication style when drafting emails. A consultative brand sounds different from a direct, challenger-style brand.
+- **Value propositions**: Reference specific ${company_name} value propositions from the Organization Context in bridge statements and CTAs.
+- **Case studies**: When a prospect's industry or challenge maps to an available case study in the Organization Context, use it as the value-add resource in follow-ups.
+- **Differentiators**: Use competitive differentiators from the Organization Context to craft stronger hooks, especially for prospects who mentioned competitor products at the event.
 
 ## Personalization Methodology: The "Event Bridge" Technique
 
@@ -223,7 +237,7 @@ Connect the event interaction to their specific business situation. This require
 **Bridge examples:**
 - "You mentioned your team is evaluating new [category] tools -- that aligns with what we've been seeing across [their industry]"
 - "Given [their company]'s growth to [employee count] employees, the scaling challenges discussed in the [session] must feel very real"
-- "With [their company]'s recent [funding round / product launch / expansion], the timing for [your value prop] seems particularly relevant"
+- "With [their company]'s recent [funding round / product launch / expansion], the timing for ${company_name}'s [value prop from Organization Context] seems particularly relevant"
 
 ### Step 3: Offer Concrete Value
 
@@ -261,7 +275,7 @@ End with a specific, low-friction next step. Not "let me know if you want to cha
 
 #### Phone Follow-Up (HOT leads only)
 - **Timing:** 24-48 hours after the email, or same day for the hottest leads.
-- **Opening:** "Hi [Name], this is [Your Name] from [Company]. We spoke at [Event] about [topic]. I wanted to follow up on our conversation."
+- **Opening:** "Hi [Name], this is [Your Name] from ${company_name}. We spoke at [Event] about [topic]. I wanted to follow up on our conversation."
 - **Duration:** Keep it under 5 minutes unless they want to go deeper. The goal is to schedule a proper meeting, not have the meeting on the phone.
 - **Voicemail:** If no answer, leave a 30-second voicemail referencing the event interaction and follow up with an email referencing the voicemail.
 
@@ -278,7 +292,7 @@ Hi [First Name],
 
 I really enjoyed our conversation at [Event] about [specific topic/challenge they mentioned]. [One sentence showing you listened and remember the detail.]
 
-[Bridge to value: how your product/service addresses what they described.]
+[Bridge to value: how ${company_name}'s product/service addresses what they described. Reference relevant value propositions from the Organization Context.]
 
 I put together [specific deliverable] based on what we discussed. [Would it be helpful to walk through it in a quick 15-minute call? / Would you like me to send it over?]
 
@@ -302,7 +316,7 @@ Great connecting at [Event]! [Reference to specific moment -- session they atten
 
 I've attached [resource: guide, case study, benchmark data] that digs deeper into this topic. [If they find it useful, suggest a natural next step.]
 
-Would a quick 15-minute chat next week be worth your time to discuss how [your company] is helping [similar companies] with this?
+Would a quick 15-minute chat next week be worth your time to discuss how ${company_name} is helping [similar companies] with this?
 
 Best,
 [Your Name]
@@ -317,7 +331,7 @@ Hi [First Name],
 
 I hope you enjoyed [Event Name] as much as I did. [Reference a keynote, popular session, or event theme that they likely attended.]
 
-One thing that stood out was [insight related to their industry or role]. At [your company], we've been working on [brief, relevant capability] to help [target persona] with exactly this challenge.
+One thing that stood out was [insight related to their industry or role]. At ${company_name}, we've been working on [brief, relevant capability] to help [target persona] with exactly this challenge.
 
 I thought you might find this [resource] interesting: [link to content piece, recording, or guide].
 
@@ -438,6 +452,8 @@ Before returning the analysis, verify:
 - [ ] **Phone follow-up is reserved for HOT leads only.** Do not recommend calling WARM or NURTURE leads -- it is too aggressive for their engagement level.
 - [ ] **Batch sequence is provided for NURTURE leads.** These leads should not be forgotten, but they also should not receive the same effort as HOT leads.
 - [ ] **Net-new contacts are flagged for CRM creation.** If a contact from the event is not in CRM, recommend creating a record.
+- [ ] **Email tone aligns with ${company_name} brand voice** from Organization Context.
+- [ ] **Value propositions and case studies** from Organization Context are referenced in bridge statements where they naturally fit the prospect's industry or challenge.
 
 ## Error Handling
 
@@ -494,6 +510,6 @@ Virtual events generate different engagement signals. Adjust the hierarchy:
 - Speed is everything. The single most important variable in event follow-up is speed. Prioritize getting follow-ups out fast over making them perfect.
 - Personalization beats polish. A slightly rough email that references a specific conversation converts better than a perfectly polished generic template.
 - One CTA per email. Decision fatigue is real, especially post-event when prospects are catching up on work.
-- Reference the event, don't rely on it. The event is context, not the value proposition. Your product/service value should stand on its own.
+- Reference the event, don't rely on it. The event is context, not the value proposition. ${company_name}'s product/service value should stand on its own.
 - Track everything in CRM. Every follow-up sent should be logged. Every response should update the contact status. Do not let event leads fall into a tracking black hole.
 - Plan the follow-up sequence before the event ends. The best reps draft their follow-up emails during the event while context is freshest. This skill should enable that speed.

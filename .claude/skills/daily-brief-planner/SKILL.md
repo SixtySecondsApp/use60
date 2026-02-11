@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: full
   agent_affinity:
     - pipeline
     - meetings
@@ -54,6 +55,7 @@ metadata:
     - "rundown"
     - "catch up"
   required_context:
+    - company_name
     - meetings
     - deals
     - contacts
@@ -85,6 +87,10 @@ metadata:
     - daily-briefing
     - productivity
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Daily Brief Planner
 

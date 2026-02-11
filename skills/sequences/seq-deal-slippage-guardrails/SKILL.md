@@ -109,6 +109,9 @@ metadata:
     - deal-slippage-diagnosis
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Deal Slippage Guardrails
 
 This sequence helps reps catch and rescue at-risk deals:

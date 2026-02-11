@@ -75,6 +75,48 @@ function findSkillFiles(rootDir: string): string[] {
   return results.sort();
 }
 
+// ── Sync to .claude/skills/ ─────────────────────────────────────
+function syncClaudeSkills(rootDir: string): number {
+  const skillsDir = path.join(rootDir, 'skills', 'atomic');
+  const claudeDir = path.join(rootDir, '.claude', 'skills');
+
+  let synced = 0;
+
+  for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === '_platform-references') continue;
+
+    const srcDir = path.join(skillsDir, entry.name);
+    const destDir = path.join(claudeDir, entry.name);
+
+    const skillMd = path.join(srcDir, 'SKILL.md');
+    if (fs.existsSync(skillMd)) {
+      fs.mkdirSync(destDir, { recursive: true });
+      fs.copyFileSync(skillMd, path.join(destDir, 'SKILL.md'));
+
+      // Copy references/*.md if exists
+      const refsDir = path.join(srcDir, 'references');
+      if (fs.existsSync(refsDir)) {
+        const destRefsDir = path.join(destDir, 'references');
+        fs.mkdirSync(destRefsDir, { recursive: true });
+
+        for (const refFile of fs.readdirSync(refsDir)) {
+          if (refFile.endsWith('.md')) {
+            fs.copyFileSync(
+              path.join(refsDir, refFile),
+              path.join(destRefsDir, refFile)
+            );
+          }
+        }
+      }
+
+      synced++;
+    }
+  }
+
+  return synced;
+}
+
 // ── Main ────────────────────────────────────────────────────────
 async function main() {
   const rootDir = path.resolve(__dirname, '..');
@@ -120,6 +162,12 @@ async function main() {
         );
         stats.synced++;
         continue;
+      }
+
+      // Debug: log frontmatter before upsert
+      if (record.skill_key === 'company-research') {
+        console.log('  [DEBUG] company-research frontmatter keys:', Object.keys(record.frontmatter));
+        console.log('  [DEBUG] has requires_capabilities:', !!record.frontmatter.requires_capabilities);
       }
 
       // Upsert
@@ -173,6 +221,28 @@ async function main() {
 
       if (!platformSkill) continue;
 
+      // Get or create the "references" folder for this skill
+      let { data: refsFolder } = await supabase
+        .from('skill_folders')
+        .select('id')
+        .eq('skill_id', platformSkill.id)
+        .eq('name', 'references')
+        .maybeSingle();
+
+      if (!refsFolder) {
+        const { data: newFolder } = await supabase
+          .from('skill_folders')
+          .insert({
+            skill_id: platformSkill.id,
+            name: 'references',
+            description: 'Reference documents and supplementary materials',
+            sort_order: 0,
+          })
+          .select('id')
+          .single();
+        refsFolder = newFolder;
+      }
+
       // Read all .md files in references/
       const refFiles = fs.readdirSync(refsDir).filter((f: string) => f.endsWith('.md'));
 
@@ -186,6 +256,7 @@ async function main() {
           .upsert(
             {
               skill_id: platformSkill.id,
+              folder_id: refsFolder?.id ?? null,
               title,
               doc_type: 'reference',
               content: refContent,
@@ -207,6 +278,11 @@ async function main() {
       console.log('  No reference documents found');
     }
   }
+
+  // ── Sync to .claude/skills/ ──────────────────────────────────
+  console.log('\nSyncing to .claude/skills/...');
+  const claudeSynced = syncClaudeSkills(rootDir);
+  console.log(`  ✓ Synced ${claudeSynced} skills to .claude/skills/`);
 
   // ── Compile to organization_skills ────────────────────────────
   if (!dryRun && stats.synced > 0) {

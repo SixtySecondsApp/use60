@@ -110,6 +110,9 @@ metadata:
     - daily-focus-planner
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Daily Focus Plan
 
 This sequence generates today's prioritized action plan:

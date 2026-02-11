@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: full
   agent_affinity:
     - meetings
   triggers:
@@ -47,6 +48,7 @@ metadata:
   required_context:
     - next_meeting
     - brief
+    - company_name
   inputs:
     - name: meeting_id
       type: string
@@ -80,6 +82,10 @@ metadata:
     - crm
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Meeting Command Center Plan
 
 ## The Command Center Concept
@@ -100,7 +106,7 @@ This skill synthesizes meeting context, deal intelligence, and interaction histo
 
 - `next_meeting`: Calendar event object from `execute_action(get_next_meeting)` -- includes title, time, attendees, meeting URL
 - `brief`: Meeting prep brief object from the `meeting-prep-brief` skill (or generated inline)
-- `organization_id`: Current organization context for brand tone and product references
+- `organization_id`: Current organization context -- use Organization Context for ${company_name} brand tone, products, and competitive positioning
 
 If the brief is not provided, the command center should gather sufficient context independently via CRM and calendar data. However, the output will be richer when paired with a full meeting-prep-brief.
 
@@ -256,8 +262,8 @@ Each talking point should follow this structure:
 
 - **S**ituation: Reference their specific context ("You mentioned your team spends 4 hours per week on manual reporting...")
 - **T**ension: Highlight the cost or risk of the status quo ("...which means your SDRs have 4 fewer hours of selling time each week")
-- **A**ction: Present the relevant capability ("Our automated pipeline dashboard eliminates that manual work entirely")
-- **R**esult: Quantify the outcome with proof ("Customers like [similar company] recovered 15% more selling time within the first month")
+- **A**ction: Present the relevant ${company_name} capability from Organization Context ("Our automated pipeline dashboard eliminates that manual work entirely")
+- **R**esult: Quantify the outcome with proof, referencing case studies from Organization Context where available ("Customers like [similar company] recovered 15% more selling time within the first month")
 
 ### Talking Point Prioritization
 
@@ -277,7 +283,7 @@ Not all points are equal. Rank them:
 | Decision Process | "Walk me through what happens after this meeting -- who else needs to weigh in?" |
 | Identify Pain | "The core issue seems to be [pain] -- is that still the top priority?" |
 | Champion | "How can I best equip you to make the case internally?" |
-| Competition | "I know you're also looking at [competitor] -- let me address the key differences" |
+| Competition | "I know you're also looking at [competitor] -- let me address the key differences" (use competitor intel from Organization Context) |
 
 ## Risk Mitigation Planning (Objection Prep)
 
@@ -295,8 +301,8 @@ For every identified risk, prepare a structured response using the ACE framework
 
 | Objection | Acknowledge | Clarify | Explore |
 |-----------|-------------|---------|---------|
-| "Too expensive" | "I hear you -- budget is always a consideration" | "Help me understand -- is it the total cost, the per-seat pricing, or the timing of the spend?" | "Let me walk through the ROI model. Customers at your scale typically see [X] return in [timeframe]" |
-| "We're happy with [competitor]" | "That's great -- [competitor] is a solid tool" | "What would need to change for you to consider an alternative?" | "Most of our customers came from [competitor]. The main reasons they switched were [1, 2, 3]" |
+| "Too expensive" | "I hear you -- budget is always a consideration" | "Help me understand -- is it the total cost, the per-seat pricing, or the timing of the spend?" | "Let me walk through the ROI model. Customers at your scale typically see [X] return in [timeframe]" (use pricing and value props from Organization Context) |
+| "We're happy with [competitor]" | "That's great -- [competitor] is a solid tool" | "What would need to change for you to consider an alternative?" | "Most of our customers came from [competitor]. The main reasons they switched were [1, 2, 3]" (use competitive differentiators from Organization Context) |
 | "Not a priority right now" | "I understand -- timing matters" | "Is there a specific event or date that would make this a priority? Budget cycle? New quarter?" | "What I'm hearing from similar companies is that [trigger event] is pushing this up the priority list" |
 | "Need to think about it" | "Of course -- this is a significant decision" | "What specific concerns would you want to think through? I might be able to help clarify" | "Would it help if I sent over [case study / ROI calculator / reference call] to help with the evaluation?" |
 | "We need to involve more people" | "Absolutely -- getting alignment is important" | "Who else should be involved? I'd love to tailor the next conversation to their concerns" | "I can prepare a one-pager for [stakeholder] that focuses on [their specific concerns]" |
@@ -393,7 +399,7 @@ Before the meeting starts, have these tabs/resources accessible:
 
 ### Conditional (open when relevant)
 6. Proposal or pricing document (if negotiation stage)
-7. Product demo environment (if demo meeting)
+7. ${company_name} product demo environment (if demo meeting)
 8. Case study or ROI calculator (if value discussion)
 9. Previous meeting transcript or notes
 10. Competitor comparison one-pager (if competitive deal)

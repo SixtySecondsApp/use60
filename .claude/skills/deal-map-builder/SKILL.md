@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: sales
   agent_affinity:
     - pipeline
   triggers:
@@ -49,6 +50,7 @@ metadata:
   requires_context:
     - deal
     - open_tasks
+    - company_name
   inputs:
     - name: deal_id
       type: string
@@ -73,6 +75,10 @@ metadata:
       description: "3-6 bullet point highlights of the plan"
   priority: critical
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Deal MAP Builder (Mutual Action Plan)
 
@@ -121,7 +127,7 @@ Every MAP needs a single "North Star" statement -- the measurable outcome both p
 - "Achieve SOC 2 compliance before the Series B audit in October"
 
 **Bad North Stars:**
-- "Implement our platform" (feature, not outcome)
+- "Implement the platform" (feature, not outcome)
 - "Close this deal by March 15" (your goal, not theirs)
 - "Improve efficiency" (vague, unmeasurable)
 
@@ -267,7 +273,7 @@ Transform milestones into executable tasks. Each task should be:
 
 **Task Categories:**
 - `customer`: Tasks the buyer must complete (send requirements doc, schedule stakeholder meeting, complete security review)
-- `internal`: Tasks your team must complete (prepare demo, build ROI model, draft proposal)
+- `internal`: Tasks the ${company_name} team must complete (prepare demo, build ROI model, draft proposal)
 - `mutual`: Tasks requiring coordination (joint workshop, reference call, executive alignment meeting)
 
 ## Output Contract
@@ -343,7 +349,7 @@ Why this fails: Vague title, no specific deliverable. Only seller-owned (buyer n
 ```
 {
   "title": "Send security questionnaire to CISO Jane Smith",
-  "description": "- [ ] Download SOC 2 questionnaire template from legal folder\n- [ ] Pre-fill sections 1-3 with our compliance data\n- [ ] Email to jane.smith@acme.com with 5-day turnaround request\n- [ ] CC our security lead for follow-up questions",
+  "description": "- [ ] Download SOC 2 questionnaire template from legal folder\n- [ ] Pre-fill sections 1-3 with ${company_name}'s compliance data\n- [ ] Email to jane.smith@acme.com with 5-day turnaround request\n- [ ] CC the security lead for follow-up questions",
   "due_date": "2026-03-01",
   "priority": "high",
   "owner": "us",
@@ -413,7 +419,7 @@ When contacts are available on the deal, classify each stakeholder into one of t
 
 ### Expansion (Existing customer)
 - Shorter discovery (you already know the business)
-- Skip basic technical validation (they are already on your platform)
+- Skip basic technical validation (they are already on the ${company_name} platform)
 - Legal may be covered by existing MSA (check for amendment needs)
 - Focus milestones on: new use case validation, additional user onboarding, incremental commercial terms
 

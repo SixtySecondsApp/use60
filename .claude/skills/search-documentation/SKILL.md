@@ -11,6 +11,7 @@ metadata:
   author: sixty-ai
   version: "2"
   is_active: true
+  context_profile: full
   triggers:
     - pattern: "how do I"
       intent: "how_to_question"
@@ -51,7 +52,8 @@ metadata:
     - "how does"
     - "setup"
     - "instructions"
-  required_context: []
+  required_context:
+    - company_name
   optional_context:
     - user_query
   inputs:
@@ -86,6 +88,10 @@ metadata:
     - search
     - self-service
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Search Documentation
 

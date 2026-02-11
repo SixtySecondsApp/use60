@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: sales
   agent_affinity:
     - pipeline
   triggers:
@@ -46,6 +47,7 @@ metadata:
     - "recommendations"
   required_context:
     - deal_id
+    - company_name
   inputs:
     - name: deal_id
       type: string
@@ -84,6 +86,10 @@ metadata:
     - pipeline
     - prioritization
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Deal Next Best Actions
 
@@ -183,13 +189,13 @@ See `references/action-library.md` for the full action catalog with impact ratin
 
 ### Stage 3-4: Evaluation / Demo
 
-**Primary objective:** Prove your solution solves their specific problem better than alternatives.
+**Primary objective:** Prove ${company_name}'s solution solves their specific problem better than alternatives.
 
 **Highest-impact actions at this stage:**
 1. **Deliver a customized demo** (Impact: 5). Generic demos close at 20% vs. 45% for demos tailored to the buyer's specific use case and data (Consensus benchmark data).
 2. **Introduce a reference customer** (Impact: 5). Peer validation is the #1 trust accelerator. Same industry, same problem, measurable results. Time it for after the demo, before the proposal.
 3. **Create the business case / ROI model** (Impact: 5). Shift the conversation from "does this work?" to "how much is it worth?" Quantify cost of inaction, implementation cost, time to value, and 3-year return.
-4. **Engage the economic buyer** (Impact: 4). If you have only been talking to evaluators, the deal is at risk. Request an executive alignment meeting: "We want to make sure our solution aligns with [exec name]'s priorities."
+4. **Engage the economic buyer** (Impact: 4). If you have only been talking to evaluators, the deal is at risk. Request an executive alignment meeting: "We want to make sure ${company_name}'s solution aligns with [exec name]'s priorities."
 5. **Identify and address the competitor** (Impact: 4). If you do not know who else they are evaluating, ask directly. Then position: do not attack the competitor, differentiate on the buyer's specific criteria.
 
 **Red flags to check:** Demo requested but keeps getting postponed, technical team engaged but no executive sponsor, evaluation criteria not shared, "we need to see more" without specific asks.

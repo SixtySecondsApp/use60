@@ -93,6 +93,10 @@ metadata:
     - scoring
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Lead Qualification
 
 ## Why Qualification Matters
@@ -126,7 +130,7 @@ Score an inbound lead against ICP criteria and provide a clear qualification tie
 - `contact` (optional): from `execute_action("get_contact", { email: lead_email })` if lead exists in CRM
 - `company_status` (optional): from `execute_action("get_company_status", { company_name })` if company is known
 - `organization_id`: Current organization context
-- Organization variables: `${company_name}`, `${icp_criteria}`, `${products}`
+- Organization context: ICP criteria, products, and value propositions from the Organization Context block above
 
 ## Data Gathering (via execute_action)
 1. Check if lead already exists in CRM: `execute_action("get_contact", { email: lead_email })`
@@ -177,7 +181,7 @@ Company size is the strongest single predictor of ICP fit. If the company is too
 - **1**: Far outside ICP range (e.g., 5-person startup or 50,000-employee enterprise when you sell mid-market)
 - **0**: Cannot determine company size from available data
 
-**Calibration guidance:** If `${icp_criteria}` specifies size ranges, use those. If not, use industry norms for the product category. When in doubt about whether a borderline company qualifies, look for compensating factors (growth rate, funding, department size) before scoring.
+**Calibration guidance:** If the Organization Context above specifies ICP size ranges, use those. If not, use industry norms for the product category. When in doubt about whether a borderline company qualifies, look for compensating factors (growth rate, funding, department size) before scoring.
 
 ### 2. Industry Fit (weight: 25%)
 
@@ -389,7 +393,7 @@ Before returning the qualification result, verify:
 - [ ] The output is scannable -- a rep can get the verdict in 5 seconds and the details in 30
 
 ## Guidelines
-- Use ${icp_criteria} if available, and the ICP criteria from Organization Context above, to calibrate scoring to the organization's specific ICP. Organization Context provides the company's target market, products, and value propositions which should inform how you weight each scoring dimension. If no ICP criteria are provided, note this gap and use reasonable defaults for the industry. See `references/icp-templates.md` for ICP definition templates, scoring calibration examples, and ICP fit correlation data.
+- Use the ICP criteria from the Organization Context above to calibrate scoring to the organization's specific ICP. Organization Context provides the company's target market, products, and value propositions which should inform how you weight each scoring dimension. If no ICP criteria are provided, note this gap and use reasonable defaults for the industry. See `references/icp-templates.md` for ICP definition templates, scoring calibration examples, and ICP fit correlation data.
 - If critical data is missing (e.g., no company size), note it in `missing_info` and score that dimension as 0 (cannot assess). Do NOT assume a midpoint score for missing data.
 - Consider the lead source -- apply the source quality multiplier as described above.
 - Check for existing relationships in CRM -- if the company is already a customer or has open deals, flag this prominently and adjust the routing recommendation.

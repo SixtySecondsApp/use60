@@ -12,6 +12,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: research
   agent_affinity:
     - research
   triggers:
@@ -55,6 +56,7 @@ metadata:
     - "rival"
   required_context:
     - competitor_name
+    - company_name
   inputs:
     - name: competitor_name
       type: string
@@ -94,6 +96,10 @@ metadata:
     - positioning
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Competitor Intel
 
 ## The Philosophy of Competitive Intelligence
@@ -122,7 +128,7 @@ Generate actionable competitive intelligence and a battlecard that helps sales r
 - `competitor_website`: Competitor's website URL (if known, speeds up research)
 - `deal_context`: Current deal context where competitor is involved (if available) -- includes prospect company, deal stage, key stakeholders, and stated requirements
 - `organization_id`: Current organization context
-- Organization variables: `${company_name}`, `${products}`, `${value_proposition}`
+- Organization context: Products, value propositions, and competitive positioning from the Organization Context block above
 
 ## Data Gathering (via web search)
 
@@ -153,7 +159,7 @@ Synthesize all findings into the structured battlecard format below.
 
 ## Battlecard Design Principles
 
-An effective battlecard follows these principles. See `references/battlecard-templates.md` for complete card structures at three depth levels: Quick Reference Card (mid-call), Full Competitive Brief (deal prep), and Displacement Playbook (switchout deals).
+An effective battlecard follows these principles. Reference the products, value propositions, and competitive positioning from Organization Context to ground all comparison points, differentiators, and win themes in ${company_name}'s actual capabilities. See `references/battlecard-templates.md` for complete card structures at three depth levels: Quick Reference Card (mid-call), Full Competitive Brief (deal prep), and Displacement Playbook (switchout deals).
 
 ### 1. Scannable in 30 seconds
 The rep may pull this up MID-CALL. The key differentiators, elevator pitch, and top objection handlers must be visible at a glance. Do not bury the lead.
@@ -173,7 +179,7 @@ Feature comparison is the backbone of the battlecard. It must be honest to be us
 
 ### How to Assess Each Feature
 
-For each feature area, assign one of these ratings to BOTH your product and the competitor:
+For each feature area, assign one of these ratings to BOTH ${company_name}'s product and the competitor. Reference the products, value propositions, and competitive positioning from Organization Context to inform these ratings:
 
 | Rating | Definition |
 |--------|-----------|
@@ -185,10 +191,10 @@ For each feature area, assign one of these ratings to BOTH your product and the 
 
 ### Honesty Rules
 
-- **Never rate your product as "Strong" in an area where reviews say otherwise.** If G2 reviews consistently cite a weakness in your product, acknowledge it. The rep will lose credibility if they claim strength in an area the prospect has already read is weak.
+- **Never rate ${company_name}'s product as "Strong" in an area where reviews say otherwise.** If G2 reviews consistently cite a weakness in ${company_name}'s product, acknowledge it. The rep will lose credibility if they claim strength in an area the prospect has already read is weak.
 - **Never rate the competitor as "Weak" without evidence.** "We think they're weak at X" is not evidence. "G2 reviews consistently cite X as a pain point" is evidence. "Their pricing page doesn't mention X" is suggestive but not conclusive.
 - **Always note "Absent" vs "Weak."** There's a big difference between "they don't have it at all" and "they have it but it's not great." Conflating these destroys trust.
-- **Acknowledge areas where the competitor wins.** A battlecard that claims your product is better in every dimension is not a battlecard -- it's propaganda, and no rep will trust it. The most useful battlecards clearly identify WHERE you lose so the rep knows which discussions to steer away from.
+- **Acknowledge areas where the competitor wins.** A battlecard that claims ${company_name}'s product is better in every dimension is not a battlecard -- it's propaganda, and no rep will trust it. The most useful battlecards clearly identify WHERE you lose so the rep knows which discussions to steer away from.
 
 ### Feature Comparison Categories
 

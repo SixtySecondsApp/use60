@@ -116,6 +116,9 @@ metadata:
     - daily-brief-planner
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Catch Me Up
 
 This sequence generates an adaptive daily briefing:

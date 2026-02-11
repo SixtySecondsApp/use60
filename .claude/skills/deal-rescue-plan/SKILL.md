@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: sales
   agent_affinity:
     - pipeline
   triggers:
@@ -46,6 +47,7 @@ metadata:
     - "deal"
   required_context:
     - deal
+    - company_name
   inputs:
     - name: deal_id
       type: string
@@ -69,6 +71,10 @@ metadata:
   requires_capabilities:
     - crm
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Deal Rescue Plan
 
@@ -238,7 +244,7 @@ Before prescribing a rescue plan, diagnose the root cause. Incorrect diagnosis l
 ### 8. Poor Discovery / Bad Fit (5%)
 
 **Signals:**
-- Buyer keeps asking "but can it do X?" where X is outside your product
+- Buyer keeps asking "but can it do X?" where X is outside ${company_name}'s product
 - Implementation scope keeps expanding
 - Buyer's actual use case diverges from what was discussed in discovery
 - Multiple demos without clear next steps
@@ -250,7 +256,7 @@ Before prescribing a rescue plan, diagnose the root cause. Incorrect diagnosis l
 - The buyer's needs evolved during the evaluation
 - The product genuinely is not the right fit (and rescue means graceful disqualification)
 
-**Diagnosis confidence:** HIGH if the buyer has explicitly stated a gap between your solution and their needs. MEDIUM if there is a pattern of expanding requirements.
+**Diagnosis confidence:** HIGH if the buyer has explicitly stated a gap between ${company_name}'s solution and their needs. MEDIUM if there is a pattern of expanding requirements.
 
 ## The 72-Hour Rescue Window Methodology
 
@@ -294,7 +300,7 @@ If no response after 72 hours of multi-channel, multi-contact rescue attempts:
 ### Rescue: Champion Gone Dark
 1. **Switch channels.** Call instead of email. Leave a voicemail referencing a specific conversation point.
 2. **Go around.** Reach out to another stakeholder on the deal. "Hi [Name], I had been working with [Champion] on [project]. I wanted to check in on the project status -- is it still moving forward?"
-3. **Add value.** Share a relevant article, case study, or data point. Make it about their business, not your product.
+3. **Add value.** Share a relevant article, case study, or data point. Make it about their business, not ${company_name}'s product.
 4. **Use the breakup email** after 72 hours of silence across all channels.
 
 ### Rescue: No Compelling Event
@@ -334,7 +340,7 @@ If no response after 72 hours of multi-channel, multi-contact rescue attempts:
 4. **If M&A: wait.** Do not push during active M&A. Set a reminder for 90 days post-close and re-engage then.
 
 ### Rescue: Poor Discovery / Bad Fit
-1. **Be honest.** If your product genuinely cannot do what they need, say so. "Based on what I'm hearing, I'm not sure we're the best fit for [specific requirement]. Let me explain what we can and cannot do."
+1. **Be honest.** If ${company_name}'s product genuinely cannot do what they need, say so. "Based on what I'm hearing, I'm not sure we're the best fit for [specific requirement]. Let me explain what we can and cannot do."
 2. **Narrow the scope.** If the full use case is a bad fit, maybe a subset works. "We can't do X, but we're excellent at Y. Would it make sense to start there?"
 3. **Refer gracefully.** If the fit is truly wrong, refer them to a partner or even a competitor. This builds long-term trust and reputation. The deal you lose honestly becomes the referral you win later.
 

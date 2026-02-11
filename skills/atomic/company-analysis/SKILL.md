@@ -98,6 +98,10 @@ metadata:
     - account-intel
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Company Analysis
 
 ## What Separates Analysis from Research
@@ -401,7 +405,7 @@ Look for someone who:
 
 ## ICP Fit Assessment
 
-If `${icp_criteria}` is available, explicitly map the analyzed company against each ICP dimension:
+If ICP criteria are available in the Organization Context above, explicitly map the analyzed company against each ICP dimension:
 
 | ICP Dimension | This Company | Fit |
 |--------------|-------------|-----|
@@ -412,7 +416,7 @@ If `${icp_criteria}` is available, explicitly map the analyzed company against e
 | Tech stack | [Relevant technologies] | Match / Partial / Mismatch |
 | Growth stage | [Their stage] | Match / Partial / Mismatch |
 
-If `${icp_criteria}` is not available, still provide the raw data points so the rep can make their own assessment.
+If ICP criteria are not available in the Organization Context, still provide the raw data points so the rep can make their own assessment.
 
 ## Output Contract
 
@@ -463,7 +467,7 @@ Return a SkillResult with:
   - `secondary`: Backup entry point
   - `champion_profile`: Description of the ideal internal champion for ${company_name}'s product
   - `approach_angle`: How to frame the outreach based on the analysis
-- `data.icp_fit`: ICP fit assessment (if `${icp_criteria}` available) with dimension-by-dimension mapping
+- `data.icp_fit`: ICP fit assessment (if ICP criteria available in Organization Context) with dimension-by-dimension mapping
 - `data.news_timeline`: Array of 5-8 recent news items (Critical and High significance only) with:
   - `date`: Publication date
   - `title`: Headline

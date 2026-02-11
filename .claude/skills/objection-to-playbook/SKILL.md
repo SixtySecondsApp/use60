@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: sales
   agent_affinity:
     - outreach
     - pipeline
@@ -54,6 +55,7 @@ metadata:
     - "response"
     - "pricing"
   required_context:
+    - company_name
     - objection
     - deal_id
   inputs:
@@ -103,6 +105,10 @@ metadata:
     - compliance
     - responses
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Objection to Playbook Mapper
 
@@ -317,9 +323,10 @@ Not all proof points work for all objections. Match evidence to concern:
 - Pricing guarantees beyond the current proposal
 
 ### Organization-Specific Guardrails
-- Check `words_to_avoid` from organization context
+- Check `words_to_avoid` from Organization Context
 - Check `key_phrases` for approved messaging
 - Check `banned_phrases` for compliance restrictions
+- Reference competitors and value propositions from Organization Context for battlecard-style responses
 - When in doubt, use softer language: "typically" instead of "always," "our customers often see" instead of "you will get"
 
 ## When the Objection Is a Disqualifier

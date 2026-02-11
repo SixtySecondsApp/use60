@@ -106,6 +106,10 @@ metadata:
     - responses
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Objection to Playbook Mapper
 
 ## Goal

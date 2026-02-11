@@ -86,6 +86,10 @@ metadata:
     - crm
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Pipeline Focus Task Planner
 
 ## Goal

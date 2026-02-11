@@ -130,6 +130,9 @@ metadata:
     - post-meeting-followup-pack-builder
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Post-Meeting Follow-Up Pack
 
 This sequence produces a complete follow-up package for your most recent recorded meeting:

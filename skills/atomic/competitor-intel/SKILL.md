@@ -96,6 +96,10 @@ metadata:
     - positioning
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Competitor Intel
 
 ## The Philosophy of Competitive Intelligence
@@ -124,7 +128,7 @@ Generate actionable competitive intelligence and a battlecard that helps sales r
 - `competitor_website`: Competitor's website URL (if known, speeds up research)
 - `deal_context`: Current deal context where competitor is involved (if available) -- includes prospect company, deal stage, key stakeholders, and stated requirements
 - `organization_id`: Current organization context
-- Organization variables: `${company_name}`, `${products}`, `${value_proposition}`
+- Organization context: Products, value propositions, and competitive positioning from the Organization Context block above
 
 ## Data Gathering (via web search)
 

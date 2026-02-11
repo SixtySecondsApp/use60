@@ -422,6 +422,49 @@ function compileSkillDocument(
 }
 
 // ============================================================================
+// @Reference Resolution — inlines @skill-key/doc-title from skill_documents
+// ============================================================================
+
+async function resolveReferences(
+  content: string,
+  supabase: any
+): Promise<string> {
+  const refPattern = /@([a-z0-9_-]+)\/([a-z0-9_.-]+)/g;
+  const matches = [...content.matchAll(refPattern)];
+  if (matches.length === 0) return content;
+
+  // Batch fetch: collect unique skill keys
+  const skillKeys = [...new Set(matches.map(m => m[1]))];
+  const { data: skills } = await supabase
+    .from('platform_skills')
+    .select('id, skill_key')
+    .in('skill_key', skillKeys);
+
+  if (!skills?.length) return content;
+  const skillMap = new Map(skills.map((s: any) => [s.skill_key, s.id]));
+
+  // Resolve each reference
+  for (const [fullMatch, skillKey, docTitleRaw] of matches) {
+    const title = docTitleRaw.replace(/\.md$/, '');
+    const skillId = skillMap.get(skillKey);
+    if (!skillId) continue;
+
+    const { data: doc } = await supabase
+      .from('skill_documents')
+      .select('content')
+      .eq('skill_id', skillId)
+      .eq('title', title)
+      .maybeSingle();
+
+    if (doc?.content) {
+      content = content.replaceAll(fullMatch, doc.content);
+    }
+  }
+
+  return content;
+}
+
+// ============================================================================
 // Main Handler
 // ============================================================================
 
@@ -536,9 +579,12 @@ async function compileAllSkills(
   // Compile each skill
   for (const skill of platformSkills as PlatformSkill[]) {
     try {
+      // Resolve @skill-key/doc-title references before compilation
+      const resolvedContent = await resolveReferences(skill.content_template, supabase);
+
       const result = compileSkillDocument(
         skill.frontmatter,
-        skill.content_template,
+        resolvedContent,
         context
       );
 
@@ -606,10 +652,13 @@ async function compileOneSkill(
 
   const context: OrganizationContext = contextData || {};
 
+  // Resolve @skill-key/doc-title references before compilation
+  const resolvedContent = await resolveReferences(skill.content_template, supabase);
+
   // Compile the skill
   const result = compileSkillDocument(
     skill.frontmatter,
-    skill.content_template,
+    resolvedContent,
     context
   );
 
@@ -674,10 +723,13 @@ async function previewSkill(
     context = contextData || {};
   }
 
+  // Resolve @skill-key/doc-title references before compilation
+  const resolvedContent = await resolveReferences(skill.content_template, supabase);
+
   // Compile the skill (preview only, don't save)
   const result = compileSkillDocument(
     skill.frontmatter,
-    skill.content_template,
+    resolvedContent,
     context
   );
 

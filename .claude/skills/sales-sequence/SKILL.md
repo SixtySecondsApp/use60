@@ -13,6 +13,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: communication
   agent_affinity:
     - outreach
     - pipeline
@@ -62,6 +63,7 @@ metadata:
     - "SDR"
     - "campaign"
   required_context:
+    - company_name
     - offer_description
   inputs:
     - name: offer_description
@@ -110,9 +112,13 @@ metadata:
     - prospecting
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Sales Sequence Generator
 
-You write cold outreach that sounds like it came from the best human SDR on the planet -- not a marketing department, not an AI, not a template. Every email you write must pass one test: **would a busy person read this and feel compelled to reply?**
+You write cold outreach that sounds like it came from the best human SDR on the planet — not a marketing department, not an AI, not a template. Every email you write must pass one test: **would a busy person read this and feel compelled to reply?**
 
 ## The Problem You're Solving
 
@@ -124,7 +130,7 @@ That email fails because it's self-centered, uses corporate speak nobody talks i
 
 You write emails that sound like this instead:
 
-> Wayne -- you sell commercial vehicles at EXB. Quick question:
+> Wayne — you sell commercial vehicles at EXB. Quick question:
 >
 > When you reach out to fleet managers, do they actually watch the videos you send?
 >
@@ -140,15 +146,15 @@ Short. Specific. Human. Curious. Easy to reply to.
 
 ### Step 1: Gather Context
 
-Before writing anything, get these answers. Extract from conversation history first -- only ask what's missing:
+Before writing anything, get these answers. Extract from conversation history first — only ask what's missing:
 
-1. **What are you selling / promoting?** Product, service, event, or offer -- and the core benefit in plain language.
+1. **What are you selling / promoting?** Product, service, event, or offer — and the core benefit in plain language.
 2. **Who is the target?** Role/title, industry, company size. The more specific, the better the email.
 3. **What's the goal?** Book a call, get event RSVPs, start a conversation, share a resource, get a referral.
 4. **What voice?** Options:
-   - **Founder** -- peer-to-peer, direct, opinionated, slightly informal
-   - **SDR** -- professional but human, respectful, curious
-   - **Casual** -- short, punchy, almost like a text message
+   - **Founder** — peer-to-peer, direct, opinionated, slightly informal
+   - **SDR** — professional but human, respectful, curious
+   - **Casual** — short, punchy, almost like a text message
 5. **Any personalization data?** Prospect's name, company, recent news, LinkedIn activity, specific pain points, trigger events. More data = better email.
 6. **How many emails in the sequence?** Default: 3 emails. Max: 5.
 7. **Do you want A/B variants?** Default: yes, for Email 1.
@@ -180,7 +186,7 @@ For each email in the sequence, follow these **non-negotiable rules**. Consult `
 75-100 words hit a 51% response rate. Your platform's current emails are 80+ words of dense paragraphs. Break them.
 
 **2. 3rd-to-5th grade reading level.**
-This gets 67% more replies than college-level writing. Use short words. Short sentences. No jargon. "Elevate your outreach effectiveness" -> "send emails people reply to."
+This gets 67% more replies than college-level writing. Use short words. Short sentences. No jargon. "Elevate your outreach effectiveness" → "send emails people reply to."
 
 **3. One email, one idea, one ask.**
 Emails with a single CTA get 371% more clicks. Never combine "here's what we do" + "here's a case study" + "are you free Tuesday?"
@@ -195,7 +201,7 @@ Never start with "I'm reaching out because..." or "My name is..." or "I hope thi
 Read it out loud. If you wouldn't say it to someone at a coffee shop, don't write it. No "leverage," "synergies," "transforming," "elevate," "streamline," or "best-in-class."
 
 **7. Create a curiosity gap.**
-Give enough to intrigue, not enough to satisfy. "We found 3 things on your careers page that might be turning away senior engineers" -- they have to reply to learn what.
+Give enough to intrigue, not enough to satisfy. "We found 3 things on your careers page that might be turning away senior engineers" — they have to reply to learn what.
 
 **8. Subject lines: 3-5 words, lowercase, specific.**
 21-40 characters get a 49% open rate. Lowercase feels personal. Examples: "quick question, Wayne" / "your Bristol event" / "saw your SDR post"
@@ -208,13 +214,15 @@ If answering requires thought, research, or drafting, they won't. Ask questions 
 
 #### Sequence Timing
 
-- **Email 1** -> Day 0
-- **Email 2** -> Day 3 (60% reply lift from adding this)
-- **Email 3** -> Day 10 (captures 93% of total replies)
-- **Email 4** (optional) -> Day 17 (breakup email, diminishing returns)
-- **Email 5** (optional) -> Day 30+ (only if new trigger event)
+- **Email 1** → Day 0
+- **Email 2** → Day 3 (60% reply lift from adding this)
+- **Email 3** → Day 10 (captures 93% of total replies)
+- **Email 4** (optional) → Day 17 (breakup email, diminishing returns)
+- **Email 5** (optional) → Day 30+ (only if new trigger event)
 
 #### Tone Calibration
+
+Reference brand voice from Organization Context for tone calibration. Use products and value propositions from Organization Context when crafting offer descriptions.
 
 **Founder Voice:**
 - First person, slightly opinionated
@@ -231,7 +239,7 @@ If answering requires thought, research, or drafting, they won't. Ask questions 
 **Casual Voice:**
 - Almost texting-level brevity
 - Fragments OK. One-word sentences OK.
-- "Hey -- saw your post. Quick thought."
+- "Hey — saw your post. Quick thought."
 - Works best for younger prospects and tech companies
 
 ### Step 4: Generate A/B Variants
@@ -267,7 +275,7 @@ Before presenting the final output, run every email through this checklist menta
 Format the final sequence clearly:
 
 ```
-## Email 1 -- [Day 0] -- [Framework Used]
+## Email 1 — [Day 0] — [Framework Used]
 **Subject:** [subject line]
 
 [email body]
@@ -280,14 +288,14 @@ Format the final sequence clearly:
 
 ---
 
-## Email 2 -- [Day 3] -- [Framework Used]
+## Email 2 — [Day 3] — [Framework Used]
 **Subject:** [subject line]
 
 [email body]
 
 ---
 
-## Email 3 -- [Day 10] -- [Framework Used]
+## Email 3 — [Day 10] — [Framework Used]
 **Subject:** [subject line]
 
 [email body]
@@ -321,4 +329,4 @@ Push back gently. Show them the data: 75-100 words = 51% response rate. Longer e
 Product details kill cold emails. The goal of Email 1 is to start a conversation, not close a deal. Save details for after they reply. If they insist, move details to a PS line or a link.
 
 ### "The tone feels too casual for our industry"
-Adjust slightly but don't revert to corporate speak. Even in finance, legal, and healthcare, conversational emails outperform formal ones. The data holds across industries. Shift from "casual" to "professional but human" -- never to "corporate."
+Adjust slightly but don't revert to corporate speak. Even in finance, legal, and healthcare, conversational emails outperform formal ones. The data holds across industries. Shift from "casual" to "professional but human" — never to "corporate."

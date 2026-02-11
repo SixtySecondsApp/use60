@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: communication
   agent_affinity:
     - outreach
   triggers:
@@ -48,9 +49,10 @@ metadata:
   requires_capabilities:
     - email
     - crm
-  requires_context:
+  required_context:
     - email_threads
     - recent_contacts
+    - company_name
   inputs:
     - name: days_since_contact
       type: number
@@ -76,6 +78,10 @@ metadata:
       description: "Top 3 most urgent threads requiring immediate attention"
   priority: high
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Follow-Up Triage
 
@@ -234,6 +240,13 @@ response_debt = SUM(urgency_score) for all threads needing response
 ### Debt Trend
 When possible, compare current debt to the previous triage run. Report whether debt is increasing, stable, or decreasing. An increasing trend over 3+ consecutive triages is a red flag that the rep is over-capacity.
 
+## Organization Context Integration
+
+When generating recommended actions and mini-briefs, leverage the Organization Context to make guidance actionable:
+- Reference ${company_name} value propositions when suggesting re-engagement angles for stale threads
+- Use case studies from the Organization Context to suggest relevant resources the rep can share
+- Align recommended action tone with the organization's brand voice (e.g., consultative vs. direct)
+
 ## Priority Matrix: Urgency x Deal Value x Relationship Warmth
 
 For the top 3 priority threads, provide a mini-brief:
@@ -335,6 +348,7 @@ Before returning results, validate:
 - [ ] Summary paragraph is included and reads naturally
 - [ ] Threads are sorted by urgency_score descending, not by date
 - [ ] Staleness thresholds match the context-aware table, not a flat 7 days
+- [ ] Recommended actions reference ${company_name} value props or case studies from Organization Context where relevant
 
 ## Error Handling
 

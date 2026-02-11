@@ -49,7 +49,7 @@ metadata:
   requires_capabilities:
     - email
     - crm
-  requires_context:
+  required_context:
     - email_threads
     - recent_contacts
     - company_name
@@ -78,6 +78,10 @@ metadata:
       description: "Top 3 most urgent threads requiring immediate attention"
   priority: high
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Follow-Up Triage
 

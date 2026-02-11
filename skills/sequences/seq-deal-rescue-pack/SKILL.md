@@ -81,6 +81,9 @@ metadata:
     - deal-rescue-plan
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Deal Rescue Pack
 
 1) Load deal context

@@ -11,6 +11,7 @@ metadata:
   category: enrichment
   skill_type: atomic
   is_active: true
+  context_profile: research
   agent_affinity:
     - research
     - pipeline
@@ -96,6 +97,10 @@ metadata:
     - analysis
     - account-intel
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Company Analysis
 
@@ -283,7 +288,7 @@ Assess how quickly the company adopts new technology:
 - **Fast movers**: Latest framework versions in job postings, engineering blog about cutting-edge topics, AI/ML experimentation
 - **Steady adopters**: Mainstream, well-established tech choices, occasional upgrades
 - **Conservative**: Older, proven technologies, emphasis on stability over innovation
-- This affects your sales approach: fast movers are easier to sell new categories to; conservative orgs need more proof and social proof.
+- This affects the sales approach: fast movers are easier to sell new categories to; conservative orgs need more proof and social proof.
 
 ## Growth Trajectory Assessment
 
@@ -376,7 +381,7 @@ Only include Critical and High significance items in the news timeline. Medium c
 The most strategically valuable part of a company analysis is identifying WHERE in the organization to start a conversation.
 
 ### Ideal Entry Point Characteristics
-1. **Pain proximity**: They personally feel the problem your product solves
+1. **Pain proximity**: They personally feel the problem that ${company_name}'s product solves
 2. **Budget influence**: They can either approve spending or champion it to someone who can
 3. **Accessibility**: They're reachable (not behind layers of gatekeepers)
 4. **Openness**: Something has recently changed that makes them receptive (new role, new mandate, new challenge)
@@ -394,13 +399,13 @@ The most strategically valuable part of a company analysis is identifying WHERE 
 
 Look for someone who:
 - Recently posted about the problem space on LinkedIn
-- Recently changed into a role where your product is relevant
-- Has a title that suggests they own the function your product serves
+- Recently changed into a role where ${company_name}'s product is relevant
+- Has a title that suggests they own the function ${company_name}'s product serves
 - Has a history of adopting similar tools at previous companies (check career history)
 
 ## ICP Fit Assessment
 
-If `${icp_criteria}` is available, explicitly map the analyzed company against each ICP dimension:
+If ICP criteria are available in the Organization Context above, explicitly map the analyzed company against each ICP dimension:
 
 | ICP Dimension | This Company | Fit |
 |--------------|-------------|-----|
@@ -411,7 +416,7 @@ If `${icp_criteria}` is available, explicitly map the analyzed company against e
 | Tech stack | [Relevant technologies] | Match / Partial / Mismatch |
 | Growth stage | [Their stage] | Match / Partial / Mismatch |
 
-If `${icp_criteria}` is not available, still provide the raw data points so the rep can make their own assessment.
+If ICP criteria are not available in the Organization Context, still provide the raw data points so the rep can make their own assessment.
 
 ## Output Contract
 
@@ -460,9 +465,9 @@ Return a SkillResult with:
 - `data.entry_points`: Recommended entry points with:
   - `primary`: Best person/role to approach (with reasoning)
   - `secondary`: Backup entry point
-  - `champion_profile`: Description of the ideal internal champion for your product
+  - `champion_profile`: Description of the ideal internal champion for ${company_name}'s product
   - `approach_angle`: How to frame the outreach based on the analysis
-- `data.icp_fit`: ICP fit assessment (if `${icp_criteria}` available) with dimension-by-dimension mapping
+- `data.icp_fit`: ICP fit assessment (if ICP criteria available in Organization Context) with dimension-by-dimension mapping
 - `data.news_timeline`: Array of 5-8 recent news items (Critical and High significance only) with:
   - `date`: Publication date
   - `title`: Headline
@@ -510,7 +515,7 @@ Limited data is expected for early-stage companies. Adjust approach:
 ### Company is very large (Fortune 500+)
 Too much data is the problem, not too little. Focus:
 - Latest 12 months only (skip deep history)
-- Most relevant business unit or division (if your product only applies to a segment)
+- Most relevant business unit or division (if ${company_name}'s product only applies to a segment)
 - Most recent strategic initiatives and leadership changes
 - Tailor to the specific stakeholder the rep is targeting, if known
 
@@ -520,7 +525,7 @@ Present the most recent and most credible source as primary. Note the conflict:
 - For critical conflicts (e.g., different business models described), present both and note which seems more current.
 
 ### ${company_name} product information not available
-If organization variables are not resolved, note this and skip the ICP fit assessment and competitive comparison against your product. Focus on the target company's analysis standalone. Note: "ICP fit assessment skipped -- organization product context not available."
+If Organization Context is not available, note this and skip the ICP fit assessment and competitive comparison against ${company_name}'s product. Focus on the target company's analysis standalone. Note: "ICP fit assessment skipped -- organization product context not available."
 
 ### Always return at least business_overview
 Even if other sections have limited data, always return `business_overview` with whatever is available. A partial analysis with honest gaps is better than nothing. The rep needs something to work with.

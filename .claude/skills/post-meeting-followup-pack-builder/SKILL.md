@@ -11,6 +11,7 @@ metadata:
   category: writing
   skill_type: atomic
   is_active: true
+  context_profile: full
   agent_affinity:
     - outreach
     - meetings
@@ -52,6 +53,7 @@ metadata:
   requires_context:
     - meeting_data
     - meeting_digest
+    - company_name
   inputs:
     - name: context
       type: string
@@ -83,6 +85,10 @@ metadata:
       description: "3 actionable task previews: internal follow-up, customer follow-up, deal hygiene"
   priority: critical
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Post-Meeting Follow-Up Pack Builder
 
@@ -140,7 +146,7 @@ Without the email, the buyer drifts. Without the Slack, your team cannot help. W
 
 ## Artifact 1: Buyer Email — Best Practices
 
-The buyer email is the external-facing artifact. It represents you and your company to the prospect. It must be excellent.
+The buyer email is the external-facing artifact. It represents you and ${company_name} to the prospect. Use the brand voice and writing style from Organization Context to ensure it matches ${company_name}'s communication standards.
 
 ### Personalization Requirements
 Every buyer email must include at least 3 personalization signals:
@@ -174,7 +180,7 @@ Every buyer email must include at least 3 personalization signals:
 ### What NOT to Include in the Buyer Email
 - Feature lists or product pitches that were not discussed in the meeting
 - Pricing that was not explicitly shared or approved for external communication
-- Internal team names, deal stages, or CRM terminology
+- Internal ${company_name} team names, deal stages, or CRM terminology
 - Competitive intelligence or references to other prospects
 - Anything that was said "off the record" during the meeting
 

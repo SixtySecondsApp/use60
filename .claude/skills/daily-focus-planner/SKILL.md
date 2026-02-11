@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: full
   agent_affinity:
     - pipeline
   triggers:
@@ -50,6 +51,7 @@ metadata:
     - crm
     - tasks
   requires_context:
+    - company_name
     - pipeline_deals
     - contacts_needing_attention
     - open_tasks
@@ -83,6 +85,10 @@ metadata:
       description: "Top 3 task previews ready to create, targeting fastest pipeline movement"
   priority: critical
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Daily Focus Planner
 

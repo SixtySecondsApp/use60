@@ -94,6 +94,9 @@ metadata:
     - pipeline
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Apify Scrape Flow Sequence
 
 ## Overview

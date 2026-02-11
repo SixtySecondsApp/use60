@@ -11,6 +11,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: sales
   agent_affinity:
     - pipeline
   triggers:
@@ -45,6 +46,7 @@ metadata:
     - "priorities"
     - "this week"
   required_context:
+    - company_name
     - pipeline_deals
   inputs:
     - name: date
@@ -83,6 +85,10 @@ metadata:
   requires_capabilities:
     - crm
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Pipeline Focus Task Planner
 

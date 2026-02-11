@@ -84,6 +84,9 @@ metadata:
     - ai-ark
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # AI Ark Lookalike Prospecting Sequence
 
 ## Overview

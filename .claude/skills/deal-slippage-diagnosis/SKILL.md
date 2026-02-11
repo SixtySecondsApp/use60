@@ -10,6 +10,7 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  context_profile: sales
   agent_affinity:
     - pipeline
   triggers:
@@ -47,6 +48,7 @@ metadata:
   required_context:
     - at_risk_deals
     - deal_details
+    - company_name
   inputs:
     - name: deal_id
       type: string
@@ -84,6 +86,10 @@ metadata:
     - pipeline-management
     - risk-mitigation
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Deal Slippage Diagnosis
 

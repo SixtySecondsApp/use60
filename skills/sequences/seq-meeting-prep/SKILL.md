@@ -84,6 +84,9 @@ metadata:
     - pre-meeting
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Meeting Prep Sequence
 
 This sequence orchestrates meeting preparation:

@@ -131,6 +131,9 @@ metadata:
     - pipeline
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Stalled Deal Revival Sequence
 
 This sequence orchestrates stalled deal recovery:

@@ -87,6 +87,10 @@ metadata:
     - risk-mitigation
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Deal Slippage Diagnosis
 
 ## Goal

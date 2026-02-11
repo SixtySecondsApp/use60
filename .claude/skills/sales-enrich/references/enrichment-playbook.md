@@ -214,10 +214,10 @@ Use these BEFORE calling paid integrations. They're free and often sufficient.
 
 | Level | Criteria | Display |
 |-------|----------|---------|
-| **High** | Confirmed by 2+ independent sources, or from verified API (Apollo email verification) | ✅ High |
-| **Medium** | Single credible source (company website, LinkedIn), or API data without verification flag | 🟡 Medium |
-| **Low** | Inferred, single unverified source, or data older than 6 months | ⚠️ Low |
-| **Stale** | Data older than 12 months with no recent confirmation | 🔴 Stale |
+| **High** | Confirmed by 2+ independent sources, or from verified API (Apollo email verification) | High |
+| **Medium** | Single credible source (company website, LinkedIn), or API data without verification flag | Medium |
+| **Low** | Inferred, single unverified source, or data older than 6 months | Low |
+| **Stale** | Data older than 12 months with no recent confirmation | Stale |
 
 ### Freshness Rules
 
@@ -254,7 +254,7 @@ Use these BEFORE calling paid integrations. They're free and often sufficient.
 - SDRs waste 27% of selling time on bad data without enrichment
 
 **What matters most for conversion (ranked):**
-1. Intent data (buying signals) — highest conversion impact
+1. Intent data (buying signals) -- highest conversion impact
 2. Behavioral data (engagement patterns)
 3. Firmographic fit (company size, industry, revenue)
 4. Technographic fit (compatible tech stack)
@@ -264,7 +264,7 @@ Use these BEFORE calling paid integrations. They're free and often sufficient.
 
 ## Output Schema
 
-### Single Lead — Full Profile
+### Single Lead -- Full Profile
 
 ```json
 {
@@ -317,7 +317,7 @@ Use these BEFORE calling paid integrations. They're free and often sufficient.
 }
 ```
 
-### Batch — Summary Table
+### Batch -- Summary Table
 
 ```json
 {

@@ -133,6 +133,10 @@ metadata:
     - account-intel
 ---
 
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
+
 # Company Research Report
 
 ## Goal
@@ -291,14 +295,14 @@ The `report` field must use this exact markdown structure. Omit sections where n
 
 ## Buying Intent Signals
 
-Flag these if found — they're high value for sales teams:
+Flag these if found -- they're high value for sales teams. Use the products, competitors, and industry from the Organization Context above to identify signals relevant to ${company_name}'s sales motion:
 
 - **Leadership changes**: New CTO/VP Engineering = potential tech stack review
 - **Funding round**: Fresh capital = budget for new tools
-- **Job postings**: Hiring for roles related to ${company_name}'s product = active need
+- **Job postings**: Hiring for roles related to ${company_name}'s product area (as described in Organization Context) = active need
 - **Competitor mentions**: Complaints about current vendor = switching intent
 - **Conference attendance**: Speaking/sponsoring = active in market
-- **Blog content**: Writing about problems ${company_name}'s product solves = awareness stage
+- **Blog content**: Writing about problems that ${company_name}'s products solve (reference Organization Context for product details) = awareness stage
 - **Tech stack changes**: Migrating platforms = evaluation window
 - **Expansion signals**: New offices, new markets, international growth
 

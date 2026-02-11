@@ -131,6 +131,9 @@ metadata:
     - routing
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Inbound Lead Qualification Sequence
 
 This sequence orchestrates end-to-end inbound lead qualification:

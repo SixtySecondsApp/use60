@@ -121,6 +121,9 @@ metadata:
     - followup-reply-drafter
 ---
 
+## Available Context
+@_platform-references/org-variables.md
+
 # Follow-Up Zero Inbox
 
 This sequence helps reps catch missed follow-ups:

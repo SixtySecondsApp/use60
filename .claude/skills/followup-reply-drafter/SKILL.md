@@ -10,6 +10,7 @@ metadata:
   category: writing
   skill_type: atomic
   is_active: true
+  context_profile: communication
   agent_affinity:
     - outreach
   triggers:
@@ -46,9 +47,10 @@ metadata:
   requires_capabilities:
     - email
     - crm
-  requires_context:
+  required_context:
     - threads_needing_response
     - contact_data
+    - company_name
   inputs:
     - name: context
       type: string
@@ -73,6 +75,10 @@ metadata:
       description: "2-3 follow-up task previews with title, description, due date, and priority"
   priority: high
 ---
+
+## Available Context & Tools
+@_platform-references/org-variables.md
+@_platform-references/capabilities.md
 
 # Follow-Up Reply Drafter
 
@@ -167,7 +173,7 @@ Best,
 The conversation went cold and you need to restart momentum without being pushy.
 
 **Framework: Value-Hook-Easy-Ask**
-1. **Value**: Lead with something genuinely useful — a relevant insight, resource, case study, or market update. Never lead with "just checking in."
+1. **Value**: Lead with something genuinely useful — a relevant insight, resource, case study, or market update. Never lead with "just checking in." Pull from ${company_name} case studies or customer success stories in the Organization Context when a relevant example exists for the prospect's industry.
 2. **Hook**: Connect the value to their specific situation or a previous conversation point.
 3. **Easy Ask**: Make the CTA low-friction. Not "let's schedule a call" but "worth a look?"
 
@@ -249,6 +255,8 @@ This is the universal principle underlying all reply frameworks. Every good repl
 ## Tone Matching Methodology
 
 See `references/tone-matching.md` for the complete tone calibration guide with sender detection signals, the tone matching matrix, the formality ladder with word substitutions, cultural and industry adjustments, and data on tone matching impact on reply rates.
+
+**Organization Context:** Use the brand voice and communication style from the Organization Context to calibrate reply tone. The organization's preferred voice (e.g., authoritative, consultative, conversational) sets the baseline; tone matching with the sender adjusts from there. Reference ${company_name} value propositions and case studies from the Organization Context when they naturally support re-engagement or deal advancement.
 
 Reply tone should mirror the sender's formality level, adjusted one notch toward professional. This builds rapport without being jarring.
 
@@ -408,6 +416,8 @@ Before returning results, validate every reply draft against these criteria:
 - [ ] No confidential information from CRM is exposed to external recipients
 - [ ] Company name and contact title are correct and current
 - [ ] Dates and deadlines mentioned are realistic and not in the past
+- [ ] Reply tone aligns with ${company_name} brand voice from Organization Context
+- [ ] Case studies or value propositions from Organization Context are used where they naturally fit (especially for re-engagement and deal advancement scenarios)
 
 ### Thread Quality
 - [ ] Subject line preserves "Re:" threading unless topic changed significantly
