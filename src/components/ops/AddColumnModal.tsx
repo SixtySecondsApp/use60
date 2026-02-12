@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers } from 'lucide-react';
+import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { GENERIC_TEMPLATES, EXA_TEMPLATES, type EnrichmentTemplate } from './enrichmentTemplates';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -40,6 +40,15 @@ interface ColumnConfig {
   actionConfig?: ButtonConfig | Record<string, unknown>;
   enrichmentSchema?: { fields: { name: string; type: string; description: string }[] };
   enrichmentPackId?: string;
+  agentPromptTemplate?: string;
+  agentOutputFormat?: 'free_text' | 'single_value' | 'yes_no' | 'url' | 'list';
+  agentResearchDepth?: 'low' | 'medium' | 'high';
+  agentAutoRoute?: boolean;
+  agentSourcePreferences?: {
+    perplexity?: boolean;
+    exa?: boolean;
+    apify_linkedin?: boolean;
+  };
 }
 
 interface AddColumnModalProps {
@@ -47,6 +56,7 @@ interface AddColumnModalProps {
   onClose: () => void;
   onAdd: (column: ColumnConfig) => void;
   onAddMultiple?: (columns: ColumnConfig[]) => void;
+  onSuccess?: () => void;
   existingColumns?: ExistingColumn[];
   sampleRowValues?: Record<string, string>;
   sourceType?: 'manual' | 'csv' | 'hubspot' | null;
@@ -165,6 +175,7 @@ const BASE_COLUMN_TYPES = [
   { value: 'integration', label: 'Integration' },
   { value: 'signal', label: 'Signal (Smart Listening)' },
   { value: 'enrichment', label: 'Enrichment' },
+  { value: 'agent_research', label: 'AI Research Agent' },
 ];
 
 const HUBSPOT_COLUMN_TYPE = { value: 'hubspot_property', label: 'HubSpot Property' };
@@ -239,7 +250,24 @@ function toSnakeCase(str: string): string {
     .replace(/\s+/g, '_');
 }
 
-export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existingColumns = [], sampleRowValues = {}, sourceType, tableId, orgId }: AddColumnModalProps) {
+function getNextAvailableKey(baseKey: string, usedKeys: Set<string>): string {
+  const normalizedBase = toSnakeCase(baseKey) || 'column';
+  if (!usedKeys.has(normalizedBase)) {
+    usedKeys.add(normalizedBase);
+    return normalizedBase;
+  }
+
+  let suffix = 2;
+  let candidate = `${normalizedBase}_${suffix}`;
+  while (usedKeys.has(candidate)) {
+    suffix += 1;
+    candidate = `${normalizedBase}_${suffix}`;
+  }
+  usedKeys.add(candidate);
+  return candidate;
+}
+
+export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSuccess, existingColumns = [], sampleRowValues = {}, sourceType, tableId, orgId }: AddColumnModalProps) {
   const isHubSpotTable = sourceType === 'hubspot';
   const COLUMN_TYPES = useMemo(() => {
     const types = [...BASE_COLUMN_TYPES];
@@ -284,6 +312,16 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     intent_signals?: { signal?: string; strength?: string; evidence?: string }[];
     confidence?: number;
   } | null>(null);
+
+  // Agent Research column state
+  const [agentPromptTemplate, setAgentPromptTemplate] = useState('');
+  const [agentOutputFormat, setAgentOutputFormat] = useState<'free_text' | 'single_value' | 'yes_no' | 'url' | 'list'>('free_text');
+  const [agentResearchDepth, setAgentResearchDepth] = useState<'low' | 'medium' | 'high'>('medium');
+  const [agentAutoRoute, setAgentAutoRoute] = useState(true);
+  const [agentSourcePerplexity, setAgentSourcePerplexity] = useState(true);
+  const [agentSourceExa, setAgentSourceExa] = useState(true);
+  const [agentSourceApify, setAgentSourceApify] = useState(false);
+
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -302,6 +340,10 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
   const [formulaMentionIndex, setFormulaMentionIndex] = useState(0);
   const [formulaMentionStartPos, setFormulaMentionStartPos] = useState(0);
   const formulaDropdownRef = useRef<HTMLDivElement>(null);
+  const existingKeySet = useMemo(
+    () => new Set(existingColumns.map((col) => col.key.toLowerCase())),
+    [existingColumns],
+  );
 
   const isEnrichment = columnType === 'enrichment';
   const isDropdownOrTags = columnType === 'dropdown' || columnType === 'tags';
@@ -312,6 +354,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
   const isLinkedInProperty = columnType === 'linkedin_property';
   const isButton = columnType === 'button';
   const isInstantly = columnType === 'instantly';
+  const isAgentResearch = columnType === 'agent_research';
   const key = toSnakeCase(label);
   const canAdd =
     label.trim().length > 0
@@ -323,6 +366,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     && (!isApolloProperty || apolloPropertyName.length > 0)
     && (!isLinkedInProperty || linkedinPropertyName.length > 0)
     && (!isButton || (buttonConfig.label.trim().length > 0 && buttonConfig.actions.length > 0))
+    && (!isAgentResearch || agentPromptTemplate.trim().length > 0)
     && !isInstantly; // Instantly uses its own wizard flow, not the standard Add button
 
   // Filter columns for the @mention dropdown (enrichment prompt)
@@ -372,6 +416,13 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     setExaMode('single');
     setSelectedPack(null);
     setButtonConfig({ label: '', color: '#8b5cf6', actions: [] });
+    setAgentPromptTemplate('');
+    setAgentOutputFormat('free_text');
+    setAgentResearchDepth('medium');
+    setAgentAutoRoute(true);
+    setAgentSourcePerplexity(true);
+    setAgentSourceExa(true);
+    setAgentSourceApify(false);
     setMentionOpen(false);
     setMentionQuery('');
     setMentionIndex(0);
@@ -404,8 +455,57 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     }
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!canAdd) return;
+
+    // Handle agent research columns separately (backend integration)
+    if (isAgentResearch && tableId && orgId) {
+      try {
+        // Validate {{variable}} references
+        const variablePattern = /\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g;
+        const matches = [...agentPromptTemplate.matchAll(variablePattern)];
+        const referencedKeys = matches.map(m => m[1]);
+        const existingKeys = existingColumns.map(col => col.key);
+        const invalidRefs = referencedKeys.filter(k => !existingKeys.includes(k));
+
+        if (invalidRefs.length > 0) {
+          toast.error(`Invalid column references: ${invalidRefs.map(k => `{{${k}}}`).join(', ')}`);
+          return;
+        }
+
+        // Create agent column via service
+        const { OpsTableService } = await import('@/lib/services/opsTableService');
+        const { supabase: supabaseClient } = await import('@/lib/supabase/clientV2');
+        const opsTableService = new OpsTableService(supabaseClient);
+
+        await opsTableService.createAgentColumn({
+          opsTableId: tableId,
+          organizationId: orgId,
+          name: label.trim(),
+          promptTemplate: agentPromptTemplate.trim(),
+          outputFormat: agentOutputFormat,
+          researchDepth: agentResearchDepth,
+          sourcePreferences: {
+            perplexity: agentSourcePerplexity,
+            exa: agentSourceExa,
+            apify_linkedin: agentSourceApify,
+            apify_maps: agentSourceApify, // Same toggle for now
+            apify_serp: agentSourceApify,
+          },
+          autoRoute: agentAutoRoute,
+        });
+
+        toast.success(`AI Research column "${label.trim()}" created successfully`);
+        onSuccess?.(); // Trigger parent refresh
+        onClose();
+        return;
+      } catch (error) {
+        toast.error(`Failed to create agent column: ${(error as Error).message}`);
+        return;
+      }
+    }
+
+    // Standard column handling (all other types)
     const parsedAutoRun = autoRunRows === 'all' ? 'all' as const
       : autoRunRows === 'none' ? undefined
       : Number(autoRunRows);
@@ -415,8 +515,11 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     const parsedLinkedInAutoRun = linkedinAutoRunRows === 'all' ? 'all' as const
       : linkedinAutoRunRows === 'none' ? undefined
       : Number(linkedinAutoRunRows);
+    const preferredKey = isApolloProperty ? apolloPropertyName : isLinkedInProperty ? linkedinPropertyName : key;
+    const resolvedKey = getNextAvailableKey(preferredKey, new Set(existingKeySet));
+
     onAdd({
-      key: isApolloProperty ? apolloPropertyName : isLinkedInProperty ? linkedinPropertyName : key,
+      key: resolvedKey,
       label: isApolloProperty ? label.trim() || apolloPropertyName : isLinkedInProperty ? label.trim() || linkedinPropertyName : label.trim(),
       columnType: isHubSpotProperty ? hubspotPropertyColumnType
         : isApolloProperty ? apolloPropertyColumnType
@@ -454,7 +557,21 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
         apolloPropertyName: linkedinPropertyName,
         autoRunRows: parsedLinkedInAutoRun,
       } : {}),
+      ...(isAgentResearch ? {
+        agentPromptTemplate: agentPromptTemplate.trim(),
+        agentOutputFormat,
+        agentResearchDepth,
+        agentAutoRoute,
+        agentSourcePreferences: {
+          perplexity: agentSourcePerplexity,
+          exa: agentSourceExa,
+          apify_linkedin: agentSourceApify,
+        },
+      } : {}),
     });
+    if (resolvedKey !== preferredKey) {
+      toast.info(`Column key "${preferredKey}" already exists, added as "${resolvedKey}" instead.`);
+    }
     onClose();
   };
 
@@ -1254,6 +1371,191 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
             </div>
           )}
 
+          {/* AI Research Agent Section */}
+          {isAgentResearch && (
+            <div className="space-y-4">
+              {/* Info Banner */}
+              <div className="flex items-start gap-2.5 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3.5 py-3">
+                <Brain className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
+                <div>
+                  <p className="text-xs leading-relaxed text-gray-300">
+                    AI Research Agent columns use intelligent routing to automatically research and answer custom questions for each row using the best data sources (Perplexity, Exa, Apify).
+                  </p>
+                </div>
+              </div>
+
+              {/* Research Question */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  <Search className="mr-1.5 inline-block h-4 w-4 text-blue-400" />
+                  Research Question
+                </label>
+                <div className="relative">
+                  <textarea
+                    value={agentPromptTemplate}
+                    onChange={(e) => setAgentPromptTemplate(e.target.value)}
+                    placeholder="What to research... Use {{column_name}} to reference values. Example: Find the latest funding news for {{company_name}}"
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
+                  />
+                  {existingColumns.length > 0 && (
+                    <>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Use <span className="font-mono text-gray-400">{"{{column_key}}"}</span> to reference column values in your research question
+                      </p>
+                      <div className="mt-2">
+                        <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                          Insert Variable
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {existingColumns.slice(0, 8).map((col) => (
+                            <button
+                              key={col.key}
+                              type="button"
+                              onClick={() => {
+                                const cursorPos = agentPromptTemplate.length;
+                                const before = agentPromptTemplate.slice(0, cursorPos);
+                                const after = agentPromptTemplate.slice(cursorPos);
+                                setAgentPromptTemplate(`${before}{{${col.key}}}${after}`);
+                              }}
+                              className="rounded border border-gray-700 bg-gray-800/50 px-2 py-1 text-xs font-medium text-gray-400 hover:border-blue-500/40 hover:text-blue-300"
+                              title={col.label}
+                            >
+                              {`{{${col.key}}}`}
+                            </button>
+                          ))}
+                          {existingColumns.length > 8 && (
+                            <span className="flex items-center px-2 py-1 text-xs text-gray-600">
+                              +{existingColumns.length - 8} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Output Format */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Output Format
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'free_text' as const, label: 'Free Text', desc: 'Natural language answer' },
+                    { value: 'single_value' as const, label: 'Single Value', desc: 'Extract one piece of data' },
+                    { value: 'yes_no' as const, label: 'Yes/No', desc: 'Boolean answer' },
+                    { value: 'url' as const, label: 'URL', desc: 'Extract a URL' },
+                    { value: 'list' as const, label: 'List', desc: 'Multiple items' },
+                  ].map((format) => (
+                    <button
+                      key={format.value}
+                      type="button"
+                      onClick={() => setAgentOutputFormat(format.value)}
+                      className={`rounded-lg border p-3 text-left transition-colors ${
+                        agentOutputFormat === format.value
+                          ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/30'
+                          : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                      }`}
+                    >
+                      <p className={`text-sm font-medium ${agentOutputFormat === format.value ? 'text-blue-200' : 'text-gray-200'}`}>
+                        {format.label}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">{format.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Research Depth */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Research Depth
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'low' as const, label: 'Quick', desc: 'Fast, surface-level' },
+                    { value: 'medium' as const, label: 'Balanced', desc: 'Good quality & speed' },
+                    { value: 'high' as const, label: 'Comprehensive', desc: 'Deep research' },
+                  ].map((depth) => (
+                    <button
+                      key={depth.value}
+                      type="button"
+                      onClick={() => setAgentResearchDepth(depth.value)}
+                      className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                        agentResearchDepth === depth.value
+                          ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/30'
+                          : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                      }`}
+                    >
+                      <p className={`text-sm font-medium ${agentResearchDepth === depth.value ? 'text-blue-200' : 'text-gray-200'}`}>
+                        {depth.label}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">{depth.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Source Selection */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Research Sources
+                </label>
+                <label className="flex items-center gap-3 rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2.5 cursor-pointer hover:border-gray-600 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={agentAutoRoute}
+                    onChange={(e) => setAgentAutoRoute(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500/30"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm text-gray-200">Automatic routing</span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      AI selects the best source based on your question
+                    </p>
+                  </div>
+                </label>
+
+                {!agentAutoRoute && (
+                  <div className="space-y-1.5 ml-4 pl-4 border-l-2 border-gray-700">
+                    <label className="flex items-center gap-2 text-sm text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={agentSourcePerplexity}
+                        onChange={(e) => setAgentSourcePerplexity(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500/30"
+                      />
+                      <Globe className="h-3.5 w-3.5 text-blue-400" />
+                      Perplexity (web search & current data)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={agentSourceExa}
+                        onChange={(e) => setAgentSourceExa(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500/30"
+                      />
+                      <Search className="h-3.5 w-3.5 text-blue-400" />
+                      Exa (semantic search & research)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={agentSourceApify}
+                        onChange={(e) => setAgentSourceApify(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500/30"
+                      />
+                      <Code className="h-3.5 w-3.5 text-blue-400" />
+                      Apify (LinkedIn, Maps, SERP)
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Enrichment Section */}
           {isEnrichment && (
             <div className="space-y-4">
@@ -1625,8 +1927,14 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
                 const pack = PREDEFINED_PACKS.find(p => p.id === selectedPack);
                 if (!pack) return;
                 const packId = crypto.randomUUID();
+                const usedKeys = new Set(existingKeySet);
+                let adjustedCount = 0;
                 const columns: ColumnConfig[] = pack.schema.fields.map((field) => ({
-                  key: field.name,
+                  key: (() => {
+                    const resolved = getNextAvailableKey(field.name, usedKeys);
+                    if (resolved !== field.name) adjustedCount += 1;
+                    return resolved;
+                  })(),
                   label: field.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
                   columnType: 'enrichment',
                   isEnrichment: true,
@@ -1636,6 +1944,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
                   enrichmentSchema: { fields: [field] },
                   enrichmentPackId: packId,
                 }));
+                if (adjustedCount > 0) {
+                  toast.info(`Adjusted ${adjustedCount} column key${adjustedCount === 1 ? '' : 's'} to avoid duplicates.`);
+                }
                 onAddMultiple(columns);
                 onClose();
               }}

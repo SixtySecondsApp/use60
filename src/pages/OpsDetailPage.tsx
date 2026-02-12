@@ -318,6 +318,7 @@ function OpsDetailPage() {
     queryKey: ['ops-table', tableId],
     queryFn: () => tableService.getTable(tableId!),
     enabled: !!tableId,
+    staleTime: 30_000, // 30s — table metadata changes often (column adds, renames)
   });
 
   // Normalize sort for query — primary sort goes to server, multi-sort client-side
@@ -349,6 +350,7 @@ function OpsDetailPage() {
   const { startEnrichment, startSingleRowEnrichment, isEnriching } = useEnrichment(tableId ?? '');
   const { startApolloEnrichment, singleRowApolloEnrichment, reEnrichApollo, startApolloOrgEnrichment, isEnrichingApollo, isEnrichingApolloOrg } = useApolloEnrichment(tableId ?? '');
   const { startLinkedInEnrichment, singleRowLinkedInEnrichment, reEnrichLinkedIn } = useLinkedInEnrichment(tableId ?? '');
+  const isAnyEnriching = isEnriching || isEnrichingApollo || isEnrichingApolloOrg;
 
   // ---- HubSpot sync hook ----
   const { sync: syncHubSpot, isSyncing: isHubSpotSyncing } = useHubSpotSync(tableId);
@@ -716,7 +718,21 @@ function OpsDetailPage() {
         }
       }
     },
-    onError: () => toast.error('Failed to add column'),
+    onError: (error: unknown) => {
+      const err = error as { code?: string; message?: string; details?: string; hint?: string };
+      const conflict =
+        err?.code === '23505'
+        || err?.message?.includes('duplicate key')
+        || err?.message?.includes('unique_column_key_per_table')
+        || err?.details?.includes('unique_column_key_per_table');
+
+      if (conflict) {
+        toast.error('Column key already exists in this table. Rename the column or use a different key.');
+        return;
+      }
+
+      toast.error(err?.message || 'Failed to add column');
+    },
   });
 
   const renameColumnMutation = useMutation({
@@ -1237,7 +1253,16 @@ function OpsDetailPage() {
     setNlQueryLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
-        body: { tableId, query },
+        body: {
+          tableId,
+          query,
+          columns: columns.map((c) => ({
+            key: c.key,
+            label: c.label,
+            column_type: c.column_type,
+          })),
+          rowCount: table?.row_count,
+        },
       });
       if (error) throw error;
       const result = data as Record<string, unknown>;
@@ -1581,6 +1606,14 @@ function OpsDetailPage() {
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!queryInput.trim() || !tableId) return;
+
+      if (!columns || columns.length === 0) {
+        // Force refetch — React Query may have cached stale data with 0 columns
+        console.warn('[AI Query] columns empty, forcing refetch');
+        await queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+        toast.error('Table columns are loading. Please try again in a moment.');
+        return;
+      }
 
       const submittedQuery = queryInput.trim();
 
@@ -1975,9 +2008,21 @@ function OpsDetailPage() {
             parsedResult: result,
           });
         }
-      } catch (err) {
+      } catch (err: any) {
+        // Extract actual error body from FunctionsHttpError
+        let message = 'Failed to parse query';
+        if (err?.context?.json) {
+          try {
+            const body = await err.context.json();
+            message = body?.error || body?.message || err.message;
+            console.error('[AI Query] Error body:', body);
+          } catch {
+            message = err.message;
+          }
+        } else if (err instanceof Error) {
+          message = err.message;
+        }
         console.error('[AI Query] Error:', err);
-        const message = err instanceof Error ? err.message : 'Failed to parse query';
         toast.error(message);
       } finally {
         setIsAiQueryParsing(false);
@@ -2444,8 +2489,14 @@ function OpsDetailPage() {
                 onEditFilters={() => setShowApolloFilters(true)}
                 onCollectMore={() => setShowCollectMore(true)}
                 onEnrichAll={handleEnrichAll}
-                isEnriching={isEnriching || isEnrichingApollo || isEnrichingApolloOrg}
+                isEnriching={isAnyEnriching}
               />
+            )}
+            {isAnyEnriching && (
+              <div className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-3 py-1.5 text-xs font-medium text-violet-300">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Enrichment in progress
+              </div>
             )}
             {/* Create Campaign button — visible when table has email column and rows */}
             {(() => {
@@ -2694,6 +2745,7 @@ function OpsDetailPage() {
           style={{ '--ops-table-max-height': isFullscreen ? 'calc(100vh - 90px)' : 'calc(100vh - 220px)' } as React.CSSProperties}
         >
           <OpsTable
+            tableId={tableId}
             columns={columns}
             rows={rows}
             selectedRows={selectedRows}
@@ -2787,11 +2839,36 @@ function OpsDetailPage() {
         isOpen={showAddColumn}
         onClose={() => setShowAddColumn(false)}
         onAdd={(col) => addColumnMutation.mutate(col)}
+        onSuccess={() => {
+          // Refresh table data after agent column creation
+          queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+          queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+        }}
         onAddMultiple={async (cols) => {
           // Add multiple property columns (HubSpot, Apollo, or Exa Pack) sequentially
           try {
+            const createdColumns: { id: string; enrichment_pack_id?: string | null }[] = [];
             for (const col of cols) {
-              await addColumnMutation.mutateAsync(col);
+              const result = await addColumnMutation.mutateAsync(col);
+              createdColumns.push({
+                id: result.column.id,
+                enrichment_pack_id: result.column.enrichment_pack_id,
+              });
+            }
+
+            // Exa pack columns share a pack ID and should run as one enrichment job.
+            // Trigger once on any created pack column to process all sibling columns.
+            const packId = cols[0]?.enrichmentPackId;
+            const isExaPack =
+              cols.length > 1
+              && !!packId
+              && cols.every((c) => c.enrichmentPackId === packId && c.enrichmentProvider === 'exa' && c.isEnrichment);
+            if (isExaPack) {
+              const driverColumn = createdColumns.find((c) => c.enrichment_pack_id === packId) ?? createdColumns[0];
+              if (driverColumn) {
+                startEnrichment({ columnId: driverColumn.id });
+                toast.info('Exa pack enrichment started');
+              }
             }
           } catch (err: unknown) {
             const msg = err && typeof err === 'object' && 'message' in err ? (err as { message: string }).message : 'Failed to add columns';

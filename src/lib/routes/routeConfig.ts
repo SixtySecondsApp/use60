@@ -36,6 +36,7 @@ import {
   BookOpen,
   Crosshair,
   FileSearch,
+  Brain,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -264,26 +265,14 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     badge: 'New',
   },
   {
-    path: '/prospecting',
+    path: '/profiles',
     access: 'internal',
-    label: 'Prospecting',
-    icon: Crosshair,
+    label: 'Profiles',
+    icon: Building2,
     showInNav: true,
     navSection: 'tools',
     order: 4,
     displayGroup: 2,
-    badge: 'New',
-  },
-  {
-    path: '/fact-profiles',
-    access: 'internal',
-    label: 'Fact Profiles',
-    icon: FileSearch,
-    showInNav: true,
-    navSection: 'tools',
-    order: 5,
-    displayGroup: 2,
-    badge: 'New',
   },
   // Calendar and Email routes removed from navigation - users should use Google Calendar/Gmail directly
   // Routes still exist but redirect to Google services in App.tsx
@@ -346,6 +335,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     navSection: 'tools',
     order: 6,
     displayGroup: 2,
+  },
+  {
+    path: '/demo/agent-research',
+    access: 'internal',
+    label: 'AI Research Demo',
+    icon: Brain,
+    showInNav: false,
+    navSection: 'tools',
+    order: 7,
+    badge: 'Demo',
   },
 
   // ========== Settings Section (Tier 1: All Users) ==========

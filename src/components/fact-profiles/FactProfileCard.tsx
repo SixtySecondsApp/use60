@@ -149,14 +149,14 @@ function ProfileTypeBadge({ type, isOrgProfile }: { type: FactProfile['profile_t
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-brand-blue/10 dark:bg-brand-blue/10 px-2 py-0.5 text-xs font-medium text-brand-blue dark:text-blue-400">
         <Building2 className="h-3 w-3" />
-        Client Org
+        Client
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 dark:bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-400">
       <Target className="h-3 w-3" />
-      Target Company
+      Prospect
     </span>
   );
 }

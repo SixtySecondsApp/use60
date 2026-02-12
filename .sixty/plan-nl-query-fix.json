@@ -1,0 +1,230 @@
+{
+  "project": {
+    "name": "Natural Language Query Bar - Quality Fix",
+    "description": "Fix critical bugs causing wrong entity types, empty fields, and poor result quality in the NL Query Bar feature",
+    "createdAt": "2026-02-12T23:00:00Z",
+    "prdSource": "consult",
+    "consultReport": "Generated from 60/dev-consult analysis of test results"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "realtime": "supabase-realtime"
+  },
+  "features": [
+    {
+      "id": "nl-query-fix",
+      "name": "NL Query Bar Quality Fix",
+      "status": "pending",
+      "priority": 1,
+      "description": "Fix entity type detection, field mapping, provider routing, and result display"
+    }
+  ],
+  "stories": [
+    {
+      "id": "NLFIX-001",
+      "feature": "nl-query-fix",
+      "title": "Fix parse-nl-query to return normalized entity_type enum",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "description": "The Claude tool schema in parse-nl-query returns freeform entity_type like 'marketing agencies' instead of enum values. Fix the tool schema to constrain entity_type to exactly: 'companies', 'people'. Add a post-processing step that normalizes any freeform value (agencies→companies, organizations→companies, contacts→people, etc). This is the root cause of downstream routing failures.",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLFIX-003"],
+      "parallelWith": ["NLFIX-002"],
+      "acceptance": [
+        "Claude tool schema constrains entity_type to enum: 'companies' | 'people'",
+        "Post-processing normalizes any freeform value to the enum",
+        "'marketing agencies' → 'companies', 'HR managers' → 'people'",
+        "Returns 'companies' for ambiguous company-like queries",
+        "Confidence score reflects entity type certainty"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/parse-nl-query/index.ts"
+      ]
+    },
+    {
+      "id": "NLFIX-002",
+      "feature": "nl-query-fix",
+      "title": "Fix Apollo field mapping in apify-multi-query",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "description": "executeApollo() reads wrong field names from the normalized apollo-search response. It reads contact.name (undefined) instead of contact.full_name, and contact.organization_name (undefined) instead of contact.company. Fix the field mapping to match the actual NormalizedContact schema returned by apollo-search edge function: full_name, company, city, state, country, linkedin_url, email, phone, website_url.",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NLFIX-001"],
+      "acceptance": [
+        "Apollo results show full_name in the Name column",
+        "Apollo results show company in the Company column",
+        "Apollo results show city/state in the Location column",
+        "Apollo results show linkedin_url, email, phone when available",
+        "No more '-' placeholders for fields that have data"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/apify-multi-query/index.ts"
+      ]
+    },
+    {
+      "id": "NLFIX-003",
+      "feature": "nl-query-fix",
+      "title": "Add entity-type-aware provider routing in apify-multi-query",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "description": "When entity_type is 'companies', the orchestrator should: (1) Use AI Ark /companies endpoint (already correct), (2) Use Apollo with organization_keyword_tags instead of person search params, (3) Use Google Maps for location-based business searches, (4) Skip LinkedIn people search. When entity_type is 'people', keep current behavior. Also fix buildApolloQuery to use q_organization_keyword_tags for company searches and person_titles for people searches.",
+      "dependencies": {
+        "stories": ["NLFIX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLFIX-005"],
+      "parallelWith": ["NLFIX-004"],
+      "acceptance": [
+        "'Find 20 marketing agencies' routes to AI Ark companies + Maps, not LinkedIn people",
+        "'Find HR managers' routes to Apollo people + LinkedIn",
+        "Apollo company queries use q_organization_keyword_tags, not person_titles",
+        "Apollo people queries use person_titles and person_locations",
+        "Provider ranking changes based on entity_type"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/apify-multi-query/index.ts"
+      ]
+    },
+    {
+      "id": "NLFIX-004",
+      "feature": "nl-query-fix",
+      "title": "Fix AI Ark company result normalization - add name field",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "description": "AI Ark executeAiArk() correctly maps company.summary.name to the 'company' field but doesn't set the 'name' field. The QueryResultsPreview reads result.name for the Name column, which is undefined for AI Ark results. Fix: set name = company.summary.name (same as company field) for company results. Also ensure website, industry, employee_count, location, and description are all mapped.",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NLFIX-003"],
+      "acceptance": [
+        "AI Ark company results show company name in Name column",
+        "AI Ark results show domain in Website column",
+        "AI Ark results show industry, employee count, location",
+        "All fields from summary.*, link.*, location.* correctly mapped"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/apify-multi-query/index.ts"
+      ]
+    },
+    {
+      "id": "NLFIX-005",
+      "feature": "nl-query-fix",
+      "title": "Make QueryResultsPreview entity-type-aware with adaptive columns",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "description": "QueryResultsPreview currently shows person-centric columns (Name, Title, Company, Location). For company searches, show company-centric columns (Company, Industry, Employees, Location, Website). Pass entity_type from the parsed query to QueryResultsPreview and conditionally render appropriate columns. Also add a parsed query summary bar showing what the AI understood (entity type, count, location, keywords).",
+      "dependencies": {
+        "stories": ["NLFIX-003"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLFIX-007"],
+      "parallelWith": ["NLFIX-006"],
+      "acceptance": [
+        "Company queries show: Company, Industry, Employees, Location, Website, Source",
+        "People queries show: Name, Title, Company, Location, Source",
+        "Parsed query summary shows entity type, count, location, keywords",
+        "Summary bar appears between input and results",
+        "Columns auto-switch based on entity_type"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/prospecting/QueryResultsPreview.tsx",
+        "src/pages/demo/AgentResearchDemo.tsx"
+      ]
+    },
+    {
+      "id": "NLFIX-006",
+      "feature": "nl-query-fix",
+      "title": "Add result deduplication across providers",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "description": "When multiple providers return overlapping results (e.g., same company from Apollo and AI Ark), deduplicate by matching on company name or domain. Keep the result with more fields populated. Add a deduplication step in apify-multi-query after merging all provider results.",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NLFIX-005"],
+      "acceptance": [
+        "No duplicate companies in results (matched by domain or normalized name)",
+        "Deduplication prefers the result with more populated fields",
+        "Result count reflects unique results after dedup",
+        "Provider badges show which providers found the result"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/apify-multi-query/index.ts"
+      ]
+    },
+    {
+      "id": "NLFIX-007",
+      "feature": "nl-query-fix",
+      "title": "Deploy fixes, test end-to-end, verify with Playwright",
+      "type": "test",
+      "status": "pending",
+      "priority": 4,
+      "description": "Deploy updated edge functions to staging. Test full flow: (1) 'Find 20 marketing agencies in Bristol' returns companies with name, industry, location, (2) 'Find HR managers in London' returns people with name, title, company, (3) Results have no empty fields where data exists, (4) Deduplication works across providers.",
+      "dependencies": {
+        "stories": ["NLFIX-005"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Company search returns actual companies with populated fields",
+        "People search returns actual people with populated fields",
+        "No '-' placeholders where provider has data",
+        "Columns adapt to entity type",
+        "Parsed query summary shows correct interpretation",
+        "Playwright screenshots confirm working UI"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/parse-nl-query/index.ts",
+        "supabase/functions/apify-multi-query/index.ts",
+        "src/components/prospecting/QueryResultsPreview.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 7,
+    "currentFeature": "nl-query-fix",
+    "lastUpdated": "2026-02-13T00:30:00Z",
+    "estimatedHours": {
+      "optimistic": 1,
+      "realistic": 2,
+      "pessimistic": 3
+    },
+    "actualMinutes": 25
+  }
+}

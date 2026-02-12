@@ -38,9 +38,12 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { OpsTableCell } from './OpsTableCell';
+import { AgentColumnHeader } from './AgentColumnHeader';
 import { evaluateFormattingRules, evaluateRowFormatting, formattingStyleToCSS } from '@/lib/utils/conditionalFormatting';
 import type { FormattingRule } from '@/lib/utils/conditionalFormatting';
 import { getLogoS3Url, getIntegrationDomain } from '@/lib/hooks/useIntegrationLogo';
+import { useMultipleAgentRunsRealtime } from '@/lib/hooks/useAgentRunsRealtime';
+import { supabase } from '@/lib/supabase/clientV2';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -80,6 +83,7 @@ interface GroupConfig {
 type AggregateType = 'count' | 'sum' | 'average' | 'min' | 'max' | 'filled_percent' | 'unique_count' | 'none';
 
 interface OpsTableProps {
+  tableId?: string;
   columns: Column[];
   rows: Row[];
   selectedRows: Set<string>;
@@ -148,6 +152,8 @@ function SortableColumnHeader({
   resizingWidth,
   isAutoEnrich,
   scheduleLabel,
+  tableId,
+  selectedRowIds,
 }: {
   col: Column;
   isHovered: boolean;
@@ -159,6 +165,8 @@ function SortableColumnHeader({
   resizingWidth?: number;
   isAutoEnrich?: boolean;
   scheduleLabel?: string;
+  tableId?: string;
+  selectedRowIds: string[];
 }) {
   const {
     attributes,
@@ -179,6 +187,50 @@ function SortableColumnHeader({
     zIndex: isDragging ? 50 : undefined,
   };
 
+  // For agent_research columns, use AgentColumnHeader
+  if (col.column_type === 'agent_research' && tableId) {
+    return (
+      <div
+        ref={setNodeRef}
+        className={`
+          relative flex items-center gap-1 px-2 border-r border-gray-800 shrink-0 select-none
+          bg-violet-500/5
+        `}
+        style={style}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        data-column-id={col.id}
+      >
+        {/* Drag handle */}
+        <div
+          {...attributes}
+          {...listeners}
+          className={`shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${
+            isHovered ? 'opacity-60' : 'opacity-0'
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="w-3 h-3 text-gray-500" />
+        </div>
+        <AgentColumnHeader
+          agentColumnId={col.id}
+          tableId={tableId}
+          selectedRowIds={selectedRowIds}
+        />
+        {/* Resize handle */}
+        <div
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/60 transition-colors z-10"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onResizeStart?.(e, col.id);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Default header for all other columns
   return (
     <div
       ref={setNodeRef}
@@ -242,6 +294,7 @@ function SortableColumnHeader({
 // ---------------------------------------------------------------------------
 
 export const OpsTable: React.FC<OpsTableProps> = ({
+  tableId,
   columns,
   rows,
   selectedRows,
@@ -324,6 +377,13 @@ export const OpsTable: React.FC<OpsTableProps> = ({
       return aIdx - bIdx;
     });
   }, [columns, columnOrder]);
+
+  // Subscribe to realtime updates for all agent research columns
+  const agentColumnIds = useMemo(
+    () => visibleColumns.filter((c) => c.column_type === 'agent_research').map((c) => c.id),
+    [visibleColumns]
+  );
+  useMultipleAgentRunsRealtime(agentColumnIds);
 
   // Drag-end handler for column reordering
   const handleDragEnd = useCallback(
@@ -500,6 +560,46 @@ export const OpsTable: React.FC<OpsTableProps> = ({
     [],
   );
 
+  // Agent research handlers
+  const handleRunAgentResearch = useCallback(async (agentColumnId: string, rowId: string) => {
+    try {
+      await supabase.functions.invoke('research-orchestrator', {
+        body: {
+          agent_column_id: agentColumnId,
+          row_ids: [rowId],
+        },
+      });
+    } catch (error) {
+      console.error('Failed to start agent research:', error);
+    }
+  }, []);
+
+  const handleRetryAgentResearch = useCallback(async (
+    agentColumnId: string,
+    rowId: string,
+    depthOverride?: 'low' | 'medium' | 'high'
+  ) => {
+    try {
+      // Delete existing run first
+      await supabase
+        .from('agent_runs')
+        .delete()
+        .eq('agent_column_id', agentColumnId)
+        .eq('row_id', rowId);
+
+      // Trigger new run
+      await supabase.functions.invoke('research-orchestrator', {
+        body: {
+          agent_column_id: agentColumnId,
+          row_ids: [rowId],
+          depth_override: depthOverride,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to retry agent research:', error);
+    }
+  }, []);
+
   // -----------------------------------------------------------------------
   // Render helpers
   // -----------------------------------------------------------------------
@@ -603,6 +703,8 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                     resizingWidth={resizingColumnId === col.id ? resizingWidth ?? undefined : undefined}
                     isAutoEnrich={autoEnrichColumnIds?.has(col.id)}
                     scheduleLabel={columnScheduleLabels?.[col.id]}
+                    tableId={tableId}
+                    selectedRowIds={Array.from(selectedRows)}
                   />
                 ))}
               </SortableContext>
@@ -752,6 +854,10 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                             Object.entries(row.cells).map(([k, v]) => [k, v.value ?? ''])
                           ) : undefined}
                           integrationConfig={col.column_type === 'instantly' ? col.integration_config : undefined}
+                          agentColumnId={col.column_type === 'agent_research' ? col.id : undefined}
+                          rowId={col.column_type === 'agent_research' ? row.id : undefined}
+                          onRunAgentResearch={col.column_type === 'agent_research' ? () => handleRunAgentResearch(col.id, row.id) : undefined}
+                          onRetryAgentResearch={col.column_type === 'agent_research' ? (depth) => handleRetryAgentResearch(col.id, row.id, depth) : undefined}
                         />
                       </div>
                     );

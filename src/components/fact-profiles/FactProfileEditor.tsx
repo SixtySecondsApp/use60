@@ -23,7 +23,15 @@ import {
   Loader2,
   Send,
   Sparkles,
+  History,
 } from 'lucide-react';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { ProfileVersionHistory } from '@/components/profiles/ProfileVersionHistory';
 import { FactProfileSection } from './FactProfileSection';
 import type {
   FactProfile,
@@ -334,6 +342,7 @@ export function FactProfileEditor({
   isSaving,
 }: FactProfileEditorProps) {
   const navigate = useNavigate();
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
   // Initialize section state from profile research_data
   const rd = profile.research_data;
@@ -493,7 +502,7 @@ export function FactProfileEditor({
             {/* Back */}
             <button
               type="button"
-              onClick={() => navigate('/fact-profiles')}
+              onClick={() => navigate('/profiles')}
               className="flex items-center gap-1.5 text-sm text-[#64748B] dark:text-gray-400 hover:text-[#1E293B] dark:hover:text-gray-100 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -542,6 +551,16 @@ export function FactProfileEditor({
 
             {/* Actions */}
             <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowVersionHistory(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-[#E2E8F0] dark:border-gray-700 text-[#64748B] dark:text-gray-400 hover:bg-[#F8FAFC] dark:hover:bg-gray-800 transition-colors"
+                title="Version history"
+              >
+                <History className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">History</span>
+              </button>
+
               {onResearch && (
                 <button
                   type="button"
@@ -1078,6 +1097,22 @@ export function FactProfileEditor({
           />
         </FactProfileSection>
       </div>
+
+      {/* Version History Sheet */}
+      <Sheet open={showVersionHistory} onOpenChange={setShowVersionHistory}>
+        <SheetContent side="right" className="!top-16 !h-[calc(100vh-4rem)] w-[400px] sm:w-[440px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Version History</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <ProfileVersionHistory
+              profileType="fact_profile"
+              profileId={profile.id}
+              currentVersion={profile.version}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

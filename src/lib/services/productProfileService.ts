@@ -17,7 +17,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 const PROFILE_COLUMNS =
-  'id, organization_id, fact_profile_id, created_by, name, description, category, product_url, logo_url, research_data, research_sources, research_status, is_primary, created_at, updated_at';
+  'id, organization_id, fact_profile_id, created_by, name, description, category, product_url, logo_url, research_data, research_sources, research_status, is_primary, version, created_at, updated_at';
 
 // ---------------------------------------------------------------------------
 // Service

@@ -6,7 +6,7 @@
  * If no org profile exists, shows a CTA to create one.
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -26,7 +26,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { useOrgProfile, useSyncOrgProfileToContext } from '@/lib/hooks/useFactProfiles';
+import { useOrgProfile } from '@/lib/hooks/useFactProfiles';
 import { useRecompileOrgSkills } from '@/lib/hooks/useOrganizationContext';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useQueryClient } from '@tanstack/react-query';
@@ -42,7 +42,6 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: orgProfile, isLoading, error } = useOrgProfile(orgId);
-  const syncMutation = useSyncOrgProfileToContext();
   const recompileMutation = useRecompileOrgSkills();
   const [isResearching, setIsResearching] = useState(false);
 
@@ -69,12 +68,45 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
 
   const handleSyncToSkills = async (profile: FactProfile) => {
     try {
-      await syncMutation.mutateAsync({ profileId: profile.id, orgId });
+      // Use the edge function for comprehensive sync (enrichment + context)
+      const { data, error: syncError } = await supabase.functions.invoke('sync-fact-profile-context', {
+        body: { profileId: profile.id },
+      });
+      if (syncError) throw syncError;
+      if (data?.success) {
+        toast.success(`Org context synced: ${data.context_keys_synced} fields updated`);
+      }
       await recompileMutation.mutateAsync(orgId);
     } catch {
       // Error toasts are handled by the mutation hooks
     }
   };
+
+  // Auto-sync when research transitions to 'complete' (e.g. after re-research)
+  const prevResearchStatusRef = useRef(orgProfile?.research_status);
+  useEffect(() => {
+    const prev = prevResearchStatusRef.current;
+    const curr = orgProfile?.research_status;
+    prevResearchStatusRef.current = curr;
+
+    if (prev && prev !== 'complete' && curr === 'complete' && orgProfile) {
+      supabase.functions
+        .invoke('sync-fact-profile-context', { body: { profileId: orgProfile.id } })
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('[auto-sync] Failed to sync after re-research:', error);
+            return;
+          }
+          if (data?.success) {
+            toast.success(
+              `Org context synced: ${data.context_keys_synced} fields updated`,
+              { description: 'Email generation and skills will now use this data.' }
+            );
+          }
+        })
+        .catch((err) => console.error('[auto-sync] Error:', err));
+    }
+  }, [orgProfile?.research_status, orgProfile?.id]);
 
   if (isLoading) {
     return (
@@ -109,7 +141,7 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
         </p>
         {canManage && (
           <Button
-            onClick={() => navigate('/fact-profiles', { state: { createOrgProfile: true } })}
+            onClick={() => navigate('/profiles?tab=business', { state: { createOrgProfile: true } })}
             className="bg-[#37bd7e] hover:bg-[#2da76c]"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -231,7 +263,7 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate(`/fact-profiles/${orgProfile.id}`)}
+            onClick={() => navigate(`/profiles/${orgProfile.id}`)}
           >
             <ExternalLink className="w-4 h-4 mr-2" />
             Edit Profile

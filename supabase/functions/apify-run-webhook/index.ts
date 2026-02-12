@@ -3,6 +3,37 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { resolvePath, applyTransform, gdpr_check_record } from '../_shared/apifyTransforms.ts'
 
 /**
+ * Progress event types for Realtime broadcasts
+ */
+type ProgressEvent =
+  | { type: 'actor_started'; actor: string; query?: Record<string, unknown> }
+  | { type: 'actor_progress'; actor: string; percent: number; current: number; total: number }
+  | { type: 'actor_completed'; actor: string; result_count: number; duration_ms: number }
+  | { type: 'actor_failed'; actor: string; error: string }
+
+/**
+ * Publish progress event to Realtime channel
+ */
+async function publishProgressEvent(
+  supabase: ReturnType<typeof createClient>,
+  organizationId: string,
+  event: ProgressEvent
+): Promise<void> {
+  try {
+    const channel = supabase.channel(`apify_progress_${organizationId}`)
+    await channel.send({
+      type: 'broadcast',
+      event: 'progress_update',
+      payload: event,
+    })
+    console.log(`[apify-run-webhook] Published progress event: ${event.type} for ${event.actor}`)
+  } catch (error) {
+    // Don't fail the webhook if Realtime publish fails
+    console.error('[apify-run-webhook] Failed to publish progress event:', error)
+  }
+}
+
+/**
  * apify-run-webhook — Called by Apify when an actor run completes or fails.
  *
  * IMPORTANT: Deploy with --no-verify-jwt since this is called externally by Apify.
@@ -71,7 +102,7 @@ serve(async (req) => {
     // Look up the run record
     const { data: run, error: runError } = await svc
       .from('apify_runs')
-      .select('id, org_id, actor_id, status, mapping_template_id')
+      .select('id, org_id, actor_id, status, mapping_template_id, started_at')
       .eq('apify_run_id', apifyRunId)
       .maybeSingle()
 
@@ -79,6 +110,42 @@ serve(async (req) => {
       console.error('[apify-run-webhook] Run not found for apify_run_id:', apifyRunId, runError)
       // Return 200 to prevent Apify from retrying for unknown runs
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    // --- Handle ACTOR.RUN.RUNNING (progress updates) ---
+    if (eventType === 'ACTOR.RUN.RUNNING') {
+      const statusMessage = resource.statusMessage as string
+      const stats = resource.stats as Record<string, unknown> | undefined
+
+      // Extract progress info if available
+      const current = (stats?.outputSeqNo as number) || 0
+      const total = (stats?.expectedSeqNo as number) || 100
+      const percent = total > 0 ? Math.min(Math.round((current / total) * 100), 100) : 0
+
+      // Update run status and progress
+      await svc
+        .from('apify_runs')
+        .update({
+          status: 'running',
+          started_at: run.status !== 'running' ? new Date().toISOString() : undefined,
+          progress_percent: percent,
+        })
+        .eq('id', run.id)
+
+      // Publish progress event
+      await publishProgressEvent(svc, run.org_id, {
+        type: 'actor_progress',
+        actor: run.actor_id,
+        percent,
+        current,
+        total,
+      })
+
+      console.log(`[apify-run-webhook] Run ${run.id} progress: ${percent}% (${current}/${total})`)
+      return new Response(JSON.stringify({ ok: true, status: 'running', progress: percent }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -99,6 +166,13 @@ serve(async (req) => {
         })
         .eq('id', run.id)
 
+      // Publish failure event
+      await publishProgressEvent(svc, run.org_id, {
+        type: 'actor_failed',
+        actor: run.actor_id,
+        error: errorMessage,
+      })
+
       console.log(`[apify-run-webhook] Marked run ${run.id} as failed: ${errorMessage}`)
       return new Response(JSON.stringify({ ok: true, status: 'failed' }), {
         status: 200,
@@ -108,6 +182,7 @@ serve(async (req) => {
 
     // --- Handle ACTOR.RUN.SUCCEEDED ---
     if (eventType === 'ACTOR.RUN.SUCCEEDED') {
+      const runStartTime = run.started_at ? new Date(run.started_at).getTime() : Date.now()
       // Get org's Apify token to fetch dataset
       const { data: creds } = await svc
         .from('integration_credentials')
@@ -408,6 +483,15 @@ serve(async (req) => {
       console.log(
         `[apify-run-webhook] Run ${run.id} complete: ${totalRecords} raw, ${mappedCount} mapped, ${errorCount} errors`
       )
+
+      // Publish completion event
+      const durationMs = Date.now() - runStartTime
+      await publishProgressEvent(svc, run.org_id, {
+        type: 'actor_completed',
+        actor: run.actor_id,
+        result_count: totalRecords,
+        duration_ms: durationMs,
+      })
 
       return new Response(
         JSON.stringify({

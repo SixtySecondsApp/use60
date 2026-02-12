@@ -50,6 +50,7 @@ export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo
 export const ResearchComparisonDemo = lazyWithRetry(() => import('@/pages/demo/ResearchComparison'));
 export const ExaAbilitiesDemo = lazyWithRetry(() => import('@/pages/demo/ExaAbilitiesDemo'));
 export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailSequenceTest'));
+export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));

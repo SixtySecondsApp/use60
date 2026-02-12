@@ -9,6 +9,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { factProfileService } from '@/lib/services/factProfileService';
+import { supabase } from '@/lib/supabase/clientV2';
 import type {
   FactProfile,
   CreateFactProfilePayload,
@@ -141,8 +142,37 @@ export function useUpdateFactProfile() {
     onSuccess: (profile, variables) => {
       queryClient.invalidateQueries({ queryKey: factProfileKeys.list(profile.organization_id) });
       queryClient.invalidateQueries({ queryKey: factProfileKeys.detail(profile.id) });
+      if (profile.is_org_profile) {
+        queryClient.invalidateQueries({ queryKey: factProfileKeys.orgProfile(profile.organization_id) });
+      }
       if (!variables.silent) {
         toast.success(`Fact profile "${profile.company_name}" updated`);
+      }
+
+      // Auto-sync to org enrichment + context when an org profile with completed research is saved
+      if (
+        profile.is_org_profile &&
+        profile.profile_type === 'client_org' &&
+        profile.research_status === 'complete'
+      ) {
+        supabase.functions
+          .invoke('sync-fact-profile-context', { body: { profileId: profile.id } })
+          .then(({ data, error }) => {
+            if (error) {
+              console.error('[auto-sync] Failed to sync org profile to context:', error);
+              return;
+            }
+            if (data?.success) {
+              toast.success(
+                `Org context synced: ${data.context_keys_synced} fields updated`,
+                { description: 'Email generation and skills will now use this data.' }
+              );
+              queryClient.invalidateQueries({ queryKey: ['organization-context'] });
+            }
+          })
+          .catch((err) => {
+            console.error('[auto-sync] Error syncing org profile:', err);
+          });
       }
     },
     onError: (error) => {

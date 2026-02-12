@@ -7,7 +7,7 @@
  * status banner and print-friendly styles.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -31,6 +31,9 @@ import {
   Briefcase,
   Link2,
   User,
+  Plus,
+  Star,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +41,12 @@ import { CreateICPFromFactsButton } from './CreateICPFromFactsButton';
 import { ExportFactProfilePDF } from './ExportFactProfilePDF';
 import { PushFactProfileToOps } from './PushFactProfileToOps';
 import { SyncFactProfileToOrg } from './SyncFactProfileToOrg';
+import { NewProductProfileDialog } from '@/components/product-profiles/NewProductProfileDialog';
+import { ProductProfileCard } from '@/components/product-profiles/ProductProfileCard';
+import { useProductProfilesByFactProfile, useDeleteProductProfile } from '@/lib/hooks/useProductProfiles';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
+import { combinedProfileToICPCriteria } from '@/lib/utils/productProfileToICP';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import type {
   FactProfile,
@@ -288,6 +297,33 @@ function ApprovalBanner({ profile }: { profile: FactProfile }) {
 
 export function FactProfileView({ profile }: FactProfileViewProps) {
   const navigate = useNavigate();
+  const { userId } = useAuth();
+  const orgId = useActiveOrgId();
+  const [showNewProductDialog, setShowNewProductDialog] = useState(false);
+  const { data: productProfiles = [], isLoading: loadingProducts } = useProductProfilesByFactProfile(profile.id);
+  const deleteProductMutation = useDeleteProductProfile();
+
+  const handleCreateICPFromProduct = (productProfile: import('@/lib/types/productProfile').ProductProfile) => {
+    const criteria = combinedProfileToICPCriteria(
+      profile.research_data ?? {} as any,
+      productProfile.research_data ?? {} as any,
+    );
+    const handoff = {
+      prefillCriteria: criteria,
+      fromFactProfileId: profile.id,
+      fromFactProfileName: profile.company_name,
+      fromProductProfileId: productProfile.id,
+      fromProductProfileName: productProfile.name,
+    };
+    try {
+      sessionStorage.setItem(
+        'prospecting-prefill-fact-profile',
+        JSON.stringify({ ...handoff, createdAt: Date.now() }),
+      );
+    } catch { /* ignore */ }
+    navigate('/profiles?tab=icps', { state: handoff });
+  };
+
   const rd = profile.research_data;
   const overview = rd?.company_overview;
   const market = rd?.market_position;
@@ -326,7 +362,7 @@ export function FactProfileView({ profile }: FactProfileViewProps) {
             {/* Back */}
             <button
               type="button"
-              onClick={() => navigate('/fact-profiles')}
+              onClick={() => navigate('/profiles')}
               className="flex items-center gap-1.5 text-sm text-[#64748B] dark:text-gray-400 hover:text-[#1E293B] dark:hover:text-gray-100 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -363,7 +399,7 @@ export function FactProfileView({ profile }: FactProfileViewProps) {
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => navigate(`/fact-profiles/${profile.id}/edit`)}
+                onClick={() => navigate(`/profiles/${profile.id}/edit`)}
               >
                 <Pencil className="h-3.5 w-3.5 mr-1.5" />
                 Edit Profile
@@ -613,6 +649,54 @@ export function FactProfileView({ profile }: FactProfileViewProps) {
           )}
         </SectionCard>
 
+        {/* ---- Product Profiles (linked to this fact profile) ---- */}
+        <section className="rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-[#E2E8F0] dark:border-gray-700/50 bg-[#F8FAFC]/50 dark:bg-gray-800/30">
+            <Package className="h-4 w-4 flex-shrink-0 text-[#64748B] dark:text-gray-400" />
+            <h2 className="flex-1 text-sm font-semibold text-[#1E293B] dark:text-gray-100">
+              Product & Service Profiles
+            </h2>
+            <span className="text-xs text-[#94A3B8] dark:text-gray-500">
+              {productProfiles.length} {productProfiles.length === 1 ? 'profile' : 'profiles'}
+            </span>
+          </div>
+          <div className="px-5 py-5">
+            {loadingProducts ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-[#94A3B8]" />
+              </div>
+            ) : productProfiles.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {productProfiles.map((pp) => (
+                  <ProductProfileCard
+                    key={pp.id}
+                    profile={pp}
+                    onClick={() => navigate(`/profiles/${profile.id}/products/${pp.id}`)}
+                    onEdit={() => navigate(`/profiles/${profile.id}/products/${pp.id}/edit`)}
+                    onDelete={() => deleteProductMutation.mutate(pp.id)}
+                    onCreateICP={() => handleCreateICPFromProduct(pp)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[#94A3B8] dark:text-gray-500 italic">
+                No product or service profiles yet. Add one to build detailed product intelligence.
+              </p>
+            )}
+            {orgId && userId && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => setShowNewProductDialog(true)}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Add Product Profile
+              </Button>
+            )}
+          </div>
+        </section>
+
         {/* ---- 4. Team & Leadership ---- */}
         <SectionCard
           title="Team & Leadership"
@@ -848,6 +932,17 @@ export function FactProfileView({ profile }: FactProfileViewProps) {
           </p>
         </div>
       </div>
+
+      {/* New Product Profile Dialog */}
+      {orgId && userId && (
+        <NewProductProfileDialog
+          open={showNewProductDialog}
+          onOpenChange={setShowNewProductDialog}
+          organizationId={orgId}
+          userId={userId}
+          factProfileId={profile.id}
+        />
+      )}
     </div>
   );
 }

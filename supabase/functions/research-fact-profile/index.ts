@@ -216,6 +216,64 @@ async function syncResearchToOrgContext(
   return { synced }
 }
 
+async function syncResearchToOrgEnrichment(
+  serviceClient: ReturnType<typeof createClient>,
+  orgId: string,
+  rd: FactProfileResearchData
+): Promise<void> {
+  const ov = rd.company_overview
+  const mp = rd.market_position
+  const ps = rd.products_services
+  const tl = rd.team_leadership
+  const fi = rd.financials
+  const te = rd.technology
+  const ic = rd.ideal_customer_indicators
+  const ra = rd.recent_activity
+
+  const fields: Record<string, unknown> = {
+    organization_id: orgId,
+    status: 'completed',
+  }
+
+  if (ov.name) fields.company_name = ov.name
+  if (ov.tagline) fields.tagline = ov.tagline
+  if (ov.description) fields.description = ov.description
+  if (ov.headquarters) fields.headquarters = ov.headquarters
+  if (ov.founded_year) fields.founded_year = ov.founded_year
+  if (ov.website) fields.domain = ov.website
+  if (mp.industry) fields.industry = mp.industry
+  if (mp.target_market) fields.target_market = mp.target_market
+  if (tl.employee_range) fields.employee_count = tl.employee_range
+  if (ps.products?.length) fields.products = ps.products.map((p: string) => ({ name: p, description: '' }))
+  if (ps.use_cases?.length) fields.use_cases = ps.use_cases
+  if (ic.value_propositions?.length) fields.value_propositions = ic.value_propositions
+  if (ic.pain_points?.length) fields.pain_points = ic.pain_points
+  if (ic.buying_signals?.length) fields.buying_signals = ic.buying_signals
+  if (mp.competitors?.length) fields.competitors = mp.competitors.map((c: string) => ({ name: c }))
+  if (te.tech_stack?.length) fields.tech_stack = te.tech_stack
+  if (tl.key_people?.length) fields.key_people = tl.key_people.map((p) => ({ name: p.name, title: p.title }))
+  if (fi.funding_status) fields.funding_stage = fi.funding_status
+  if (ic.target_industries?.length || ic.target_roles?.length || ic.pain_points?.length) {
+    fields.ideal_customer_profile = {
+      target_industries: ic.target_industries || [],
+      target_company_sizes: ic.target_company_sizes || [],
+      target_roles: ic.target_roles || [],
+      pain_points: ic.pain_points || [],
+      value_propositions: ic.value_propositions || [],
+      buying_signals: ic.buying_signals || [],
+    }
+  }
+  if (ra.news?.length) fields.recent_news = ra.news
+
+  const { error } = await serviceClient
+    .from('organization_enrichment')
+    .upsert(fields, { onConflict: 'organization_id' })
+
+  if (error) {
+    console.warn('[research-fact-profile] Enrichment upsert failed:', error.message)
+  }
+}
+
 function parseResearchProvider(rawValue: unknown): ResearchProvider {
   if (typeof rawValue !== 'string') return 'disabled'
   if (rawValue === 'gemini' || rawValue === 'exa' || rawValue === 'disabled') {
@@ -765,8 +823,10 @@ serve(async (req) => {
         // -------------------------------------------------------------------
         if (isOrgProfile && orgId) {
           try {
+            // Sync to both organization_enrichment and organization_context
+            await syncResearchToOrgEnrichment(serviceClient, orgId, researchData)
             const syncResult = await syncResearchToOrgContext(serviceClient, orgId, researchData)
-            console.log(`[research-fact-profile] Synced ${syncResult.synced} context keys for org ${orgId}`)
+            console.log(`[research-fact-profile] Synced enrichment + ${syncResult.synced} context keys for org ${orgId}`)
 
             // Trigger skill recompilation so skills pick up the new context
             try {

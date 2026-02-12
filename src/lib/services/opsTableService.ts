@@ -88,7 +88,8 @@ export interface OpsTableColumn {
     | 'apollo_org_property'
     | 'linkedin_property'
     | 'instantly'
-    | 'signal';
+    | 'signal'
+    | 'agent_research';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
   enrichment_model: string | null;
@@ -264,19 +265,45 @@ export class OpsTableService {
   }
 
   async getTable(tableId: string): Promise<OpsTableRecord | null> {
-    const { data, error } = await this.supabase
+    // Fetch table first
+    const tableResult = await this.supabase
       .from('dynamic_tables')
-      .select(`${TABLE_COLUMNS}, dynamic_table_columns(${COLUMN_COLUMNS})`)
+      .select(TABLE_COLUMNS)
       .eq('id', tableId)
       .maybeSingle();
 
-    if (error) throw error;
-    if (!data) return null;
+    if (tableResult.error) throw tableResult.error;
+    if (!tableResult.data) return null;
 
-    const { dynamic_table_columns, ...rest } = data as Record<string, unknown>;
+    // Fetch columns separately — try full select, fall back to minimal if schema cache is stale
+    let columns: OpsTableColumn[] = [];
+    const columnsResult = await this.supabase
+      .from('dynamic_table_columns')
+      .select(COLUMN_COLUMNS)
+      .eq('table_id', tableId)
+      .order('position', { ascending: true });
+
+    if (columnsResult.error) {
+      console.warn('[OpsTableService] Full column select failed, trying minimal:', columnsResult.error.message);
+      // Fallback: fetch with wildcard (schema cache may not know about newer columns)
+      const fallback = await this.supabase
+        .from('dynamic_table_columns')
+        .select('*')
+        .eq('table_id', tableId)
+        .order('position', { ascending: true });
+
+      if (fallback.error) {
+        console.error('[OpsTableService] Column fetch failed entirely:', fallback.error);
+      } else {
+        columns = (fallback.data as OpsTableColumn[]) ?? [];
+      }
+    } else {
+      columns = (columnsResult.data as OpsTableColumn[]) ?? [];
+    }
+
     return {
-      ...rest,
-      columns: (dynamic_table_columns as OpsTableColumn[]) ?? [],
+      ...tableResult.data,
+      columns,
     } as OpsTableRecord;
   }
 
@@ -1803,6 +1830,145 @@ export class OpsTableService {
       .eq('id', sessionId);
 
     if (error) throw error;
+  }
+
+  // ===========================================================================
+  // Agent Research Columns
+  // ===========================================================================
+
+  /**
+   * Create an AI research agent column.
+   * This creates both the column definition in dynamic_table_columns and the agent config in agent_columns.
+   */
+  async createAgentColumn(params: {
+    opsTableId: string;
+    organizationId: string;
+    name: string;
+    promptTemplate: string;
+    outputFormat: 'free_text' | 'single_value' | 'yes_no' | 'url' | 'list';
+    researchDepth: 'low' | 'medium' | 'high';
+    sourcePreferences: {
+      perplexity: boolean;
+      exa: boolean;
+      apify_linkedin: boolean;
+      apify_maps?: boolean;
+      apify_serp?: boolean;
+    };
+    autoRoute: boolean;
+  }): Promise<{ columnId: string; agentColumnId: string }> {
+    // Create the agent column config first
+    const { data: agentColumn, error: agentError } = await this.supabase
+      .from('agent_columns')
+      .insert({
+        ops_table_id: params.opsTableId,
+        organization_id: params.organizationId,
+        name: params.name,
+        prompt_template: params.promptTemplate,
+        output_format: params.outputFormat,
+        research_depth: params.researchDepth,
+        source_preferences: params.sourcePreferences,
+        auto_route: params.autoRoute,
+      })
+      .select('id')
+      .single();
+
+    if (agentError) throw agentError;
+
+    // Now create the corresponding ops table column
+    const { data: column, error: columnError } = await this.supabase
+      .from('dynamic_table_columns')
+      .insert({
+        table_id: params.opsTableId,
+        key: this.toSnakeCase(params.name),
+        label: params.name,
+        column_type: 'agent_research',
+        is_enrichment: false,
+      })
+      .select('id')
+      .single();
+
+    if (columnError) {
+      // Rollback: delete the agent column if the ops column fails
+      await this.supabase.from('agent_columns').delete().eq('id', agentColumn.id);
+      throw columnError;
+    }
+
+    return {
+      columnId: column.id,
+      agentColumnId: agentColumn.id,
+    };
+  }
+
+  /**
+   * Get agent column config for a given ops table column.
+   */
+  async getAgentColumn(opsTableId: string, columnName: string) {
+    const { data, error } = await this.supabase
+      .from('agent_columns')
+      .select('*')
+      .eq('ops_table_id', opsTableId)
+      .eq('name', columnName)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Update an agent column config.
+   */
+  async updateAgentColumn(agentColumnId: string, updates: {
+    promptTemplate?: string;
+    outputFormat?: 'free_text' | 'single_value' | 'yes_no' | 'url' | 'list';
+    researchDepth?: 'low' | 'medium' | 'high';
+    sourcePreferences?: {
+      perplexity: boolean;
+      exa: boolean;
+      apify_linkedin: boolean;
+      apify_maps?: boolean;
+      apify_serp?: boolean;
+    };
+    autoRoute?: boolean;
+  }) {
+    const payload: Record<string, unknown> = {};
+    if (updates.promptTemplate !== undefined) payload.prompt_template = updates.promptTemplate;
+    if (updates.outputFormat !== undefined) payload.output_format = updates.outputFormat;
+    if (updates.researchDepth !== undefined) payload.research_depth = updates.researchDepth;
+    if (updates.sourcePreferences !== undefined) payload.source_preferences = updates.sourcePreferences;
+    if (updates.autoRoute !== undefined) payload.auto_route = updates.autoRoute;
+
+    const { data, error } = await this.supabase
+      .from('agent_columns')
+      .update(payload)
+      .eq('id', agentColumnId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Delete an agent column (also deletes the corresponding ops table column via CASCADE).
+   */
+  async deleteAgentColumn(agentColumnId: string) {
+    const { error } = await this.supabase
+      .from('agent_columns')
+      .delete()
+      .eq('id', agentColumnId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Helper to convert string to snake_case for column keys.
+   */
+  private toSnakeCase(str: string): string {
+    return str
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, '_');
   }
 
   // ===========================================================================

@@ -73,7 +73,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest,
+  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -431,6 +431,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/demo/research-comparison" element={<PlatformAdminRouteGuard><AppLayout><ResearchComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/exa-abilities" element={<PlatformAdminRouteGuard><AppLayout><ExaAbilitiesDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/email-sequence-test" element={<PlatformAdminRouteGuard><AppLayout><EmailSequenceTest /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/agent-research" element={<PlatformAdminRouteGuard><AppLayout><AgentResearchDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Documentation CMS Admin */}
                 <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}

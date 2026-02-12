@@ -98,6 +98,7 @@ export interface ProductProfile {
   research_sources: ResearchSource[];
   research_status: ResearchStatus;
   is_primary: boolean;
+  version: number;
   created_at: string;
   updated_at: string;
 }

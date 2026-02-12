@@ -72,7 +72,11 @@ export const factProfileService = {
       .select(PROFILE_COLUMNS)
       .single();
 
-    if (error) throw new Error(error.message || 'Failed to create fact profile');
+    if (error) {
+      // Include error code for unique constraint violation detection (23505)
+      const code = (error as any).code;
+      throw new Error(code ? `${code}: ${error.message}` : (error.message || 'Failed to create fact profile'));
+    }
     return data as FactProfile;
   },
 

@@ -22,8 +22,8 @@ export function SyncFactProfileToOrg({ profile, variant = 'outline', size = 'sm'
   const [isSyncing, setIsSyncing] = useState(false);
   const [synced, setSynced] = useState(false);
 
-  // Only show for completed client_org profiles
-  if (profile.profile_type !== 'client_org' || profile.research_status !== 'complete') {
+  // Only show for the org's own profile with completed research
+  if (!profile.is_org_profile || profile.research_status !== 'complete') {
     return null;
   }
 

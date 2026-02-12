@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink, Send, Clock, MessageSquare, Eye, Radio, Link2 } from 'lucide-react';
 import type { InstantlyColumnConfig } from '@/lib/types/instantly';
 import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
+import { AgentColumnCell } from './AgentColumnCell';
 
 interface CellData {
   value: string | null;
@@ -45,6 +46,14 @@ interface OpsTableCellProps {
   rowCellValues?: Record<string, string>;
   /** Instantly column config (subtype, campaign, field mapping) */
   integrationConfig?: Record<string, unknown> | null;
+  /** Agent column ID (for agent_research columns) */
+  agentColumnId?: string;
+  /** Row ID (for agent_research columns) */
+  rowId?: string;
+  /** Callback to run agent research for this cell */
+  onRunAgentResearch?: () => void;
+  /** Callback to retry agent research with optional depth override */
+  onRetryAgentResearch?: (depth?: 'low' | 'medium' | 'high') => void;
 }
 
 /**
@@ -71,6 +80,10 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   buttonConfig,
   rowCellValues,
   integrationConfig,
+  agentColumnId,
+  rowId,
+  onRunAgentResearch,
+  onRetryAgentResearch,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(cell.value ?? '');
@@ -890,7 +903,6 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     const hasSources = Array.isArray(metadata?.sources) && (metadata.sources as SourceEntry[]).length > 0;
     const sourceCount = hasSources ? (metadata!.sources as SourceEntry[]).length : 0;
     const intentSignals = Array.isArray(metadata?.intent_signals) ? (metadata!.intent_signals as IntentSignalEntry[]) : [];
-    const hasInlineSignals = intentSignals.length > 0;
     return (
       <>
         <div
@@ -901,8 +913,14 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
             <span className={`truncate text-sm ${opacityClass} group-hover/enrich:text-violet-300 transition-colors`}>
               {cell.value}
             </span>
-            {hasSources && !hasInlineSignals && (
-              <ExternalLink className="w-3 h-3 ml-1 shrink-0 text-gray-600 group-hover/enrich:text-violet-400 transition-colors" />
+            {hasSources && (
+              <span
+                className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-gray-500 shrink-0 group-hover/enrich:text-violet-400 transition-colors"
+                title={`${sourceCount} ${sourceCount === 1 ? 'source' : 'sources'}`}
+              >
+                {sourceCount}
+                <Link2 className="h-3 w-3" />
+              </span>
             )}
             {onEnrichRow && (
               <button
@@ -915,39 +933,6 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
               </button>
             )}
           </div>
-          {hasInlineSignals && (
-            <div className="flex flex-wrap gap-1 mt-1">
-              {intentSignals.slice(0, 2).map((sig, i) => {
-                const strength = sig.strength ?? 'context';
-                const pillClass =
-                  strength === 'high'
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                    : strength === 'medium'
-                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                      : 'bg-gray-500/15 text-gray-400 border border-gray-600/30';
-                return (
-                  <span
-                    key={i}
-                    className={`text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 truncate max-w-[140px] ${pillClass}`}
-                    title={sig.signal}
-                  >
-                    {sig.signal ?? 'Signal'}
-                  </span>
-                );
-              })}
-              {intentSignals.length > 2 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center bg-gray-500/15 text-gray-400 border border-gray-600/30">
-                  +{intentSignals.length - 2} more
-                </span>
-              )}
-            </div>
-          )}
-          {hasSources && (
-            <div className="text-[10px] text-gray-500 flex items-center gap-1 mt-0.5 hover:text-violet-400 transition-colors">
-              <Link2 className="h-3 w-3" />
-              {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}
-            </div>
-          )}
           {(() => {
             const enrichedAt = metadata?.enriched_at as string | undefined;
             if (!enrichedAt) return null;
@@ -1310,6 +1295,25 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
           <span className="truncate max-w-[120px]">{cell.value}</span>
         </span>
       </div>
+    );
+  }
+
+  // Agent Research column — AI-powered research cell with status tracking
+  if (columnType === 'agent_research') {
+    if (!agentColumnId || !rowId) {
+      return (
+        <div className="w-full h-full flex items-center">
+          <span className="text-gray-600 text-xs italic">Configuration error</span>
+        </div>
+      );
+    }
+    return (
+      <AgentColumnCell
+        agentColumnId={agentColumnId}
+        rowId={rowId}
+        onRun={onRunAgentResearch}
+        onRetry={onRetryAgentResearch}
+      />
     );
   }
 

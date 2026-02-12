@@ -1,0 +1,349 @@
+{
+  "project": {
+    "name": "Natural Language Query Bar",
+    "description": "Add NL query interface to demo that parses queries like 'find me 20 marketing agencies in Bristol' and orchestrates Apify actors (Maps, LinkedIn, SERP) to find data and populate the table",
+    "createdAt": "2026-02-12T22:00:00Z",
+    "prdSource": "consult",
+    "consultReport": "Generated from 60/dev-consult analysis"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "realtime": "supabase-realtime"
+  },
+  "features": [
+    {
+      "id": "nl-query",
+      "name": "Natural Language Query Bar",
+      "status": "pending",
+      "priority": 1,
+      "description": "Parse natural language queries, route to Apify actors, and populate demo table with results"
+    }
+  ],
+  "stories": [
+    {
+      "id": "NLPQ-001",
+      "feature": "nl-query",
+      "title": "Create NL query parser edge function (Claude-based)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "description": "New edge function that uses Claude Haiku to extract: entity_type, count, location, filters, source_preference from natural language. Returns structured QueryParseResult with per_page capped at 100.",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-004"],
+      "parallelWith": ["NLPQ-002", "NLPQ-007"],
+      "acceptance": [
+        "Edge function /parse-nl-query accepts natural language query string",
+        "Uses Claude Haiku 4.5 with tool_use for extraction",
+        "Extracts: entity_type, count, location, keywords, source_preference",
+        "Returns QueryParseResult with confidence score",
+        "Caps per_page at 100 to prevent oversized result sets"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/parse-nl-query/index.ts"
+      ]
+    },
+    {
+      "id": "NLPQ-002",
+      "feature": "nl-query",
+      "title": "Create QueryParseResult types and validation",
+      "type": "util",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-003", "NLPQ-007"],
+      "parallelWith": ["NLPQ-001", "NLPQ-007"],
+      "acceptance": [
+        "TypeScript types: QueryParseResult, EntityType, ParsedFilter, SourcePreference",
+        "Validation helper ensures fields within acceptable ranges",
+        "Integrates with existing apolloSearchService types"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/types/apifyQuery.ts"
+      ]
+    },
+    {
+      "id": "NLPQ-003",
+      "feature": "nl-query",
+      "title": "Create source preference resolver util",
+      "type": "util",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["NLPQ-002"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-004"],
+      "parallelWith": ["NLPQ-006"],
+      "acceptance": [
+        "Takes source_preference ('linkedin'|'maps'|'serp'|'apollo'|'ai_ark')",
+        "Checks integration availability per organization",
+        "Returns ranked provider list based on availability + user preference",
+        "Parallels research-router provider ranking logic"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/utils/apifySourceResolver.ts"
+      ]
+    },
+    {
+      "id": "NLPQ-004",
+      "feature": "nl-query",
+      "title": "Create apify-multi-query orchestrator edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["NLPQ-001", "NLPQ-003"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-005", "NLPQ-010"],
+      "parallelWith": ["NLPQ-008", "NLPQ-009"],
+      "acceptance": [
+        "Receives ParsedQuery from frontend",
+        "Orchestrates multiple Apify actors in parallel based on source preferences",
+        "Handles rate limits via apify_runs table",
+        "Returns structured merged results with providers_used and sources",
+        "Publishes progress events to Realtime channel"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/apify-multi-query/index.ts"
+      ]
+    },
+    {
+      "id": "NLPQ-005",
+      "feature": "nl-query",
+      "title": "Add progress webhook/SSE for Apify runs",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["NLPQ-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Extends /apify-run-webhook to publish progress events",
+        "Events: actor_started, actor_progress %, actor_completed",
+        "Publishes to Supabase Realtime channel",
+        "Frontend can subscribe and show progress bar"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/apify-run-webhook/index.ts"
+      ]
+    },
+    {
+      "id": "NLPQ-006",
+      "feature": "nl-query",
+      "title": "Create result normalizer for Apify outputs",
+      "type": "util",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["NLPQ-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-010"],
+      "parallelWith": ["NLPQ-003"],
+      "acceptance": [
+        "Normalizes Apify LinkedIn (profile data) to common schema",
+        "Normalizes Apify Maps (business listings) to common schema",
+        "Normalizes Apify SERP (search results) to common schema",
+        "Output schema: {name, title, company, location, url, source_provider}",
+        "Handles deeply nested Apify JSON structures"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/utils/apifyResultNormalizer.ts"
+      ]
+    },
+    {
+      "id": "NLPQ-007",
+      "feature": "nl-query",
+      "title": "Create NaturalLanguageQueryBar component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-010", "NLPQ-011"],
+      "parallelWith": ["NLPQ-001", "NLPQ-002"],
+      "acceptance": [
+        "Text input with placeholder examples ('find 20 marketing agencies in Bristol')",
+        "Send button with inline loading state",
+        "Calls /parse-nl-query edge function on submit",
+        "Shows error toast on parse failure",
+        "Props: onQuerySubmit(ParsedQuery)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/prospecting/NaturalLanguageQueryBar.tsx"
+      ]
+    },
+    {
+      "id": "NLPQ-008",
+      "feature": "nl-query",
+      "title": "Create ProgressIndicator component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["NLPQ-005"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-010"],
+      "parallelWith": ["NLPQ-004", "NLPQ-009"],
+      "acceptance": [
+        "Subscribes to Supabase Realtime channel 'apify_progress'",
+        "Displays: current_actor, progress_percent, results_so_far, time_elapsed",
+        "Shows stepper: parser → actor_1 → actor_2 → merge → done",
+        "Uses Progress bar from UI library + lucide-react icons"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/prospecting/ProgressIndicator.tsx"
+      ]
+    },
+    {
+      "id": "NLPQ-009",
+      "feature": "nl-query",
+      "title": "Create QueryResultsPreview component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["NLPQ-006"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["NLPQ-010"],
+      "parallelWith": ["NLPQ-004", "NLPQ-008"],
+      "acceptance": [
+        "Displays merged results in paginated table",
+        "Columns: Name, Title, Company, Location, Source Provider",
+        "Action column with 'Add to Table' button",
+        "Shows result count by provider",
+        "Uses existing Table UI component"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/prospecting/QueryResultsPreview.tsx"
+      ]
+    },
+    {
+      "id": "NLPQ-010",
+      "feature": "nl-query",
+      "title": "Integrate NL query bar into demo page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["NLPQ-007", "NLPQ-008", "NLPQ-009"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NLPQ-011", "NLPQ-012"],
+      "acceptance": [
+        "Add NaturalLanguageQueryBar to AgentResearchDemo page",
+        "Wire: query submit → parse → apify orchestrate → progress → results",
+        "Results append to demo table via existing importSelectedCompanies() logic",
+        "Realtime subscription updates progress indicator",
+        "Full flow works end-to-end"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/demo/AgentResearchDemo.tsx"
+      ]
+    },
+    {
+      "id": "NLPQ-011",
+      "feature": "nl-query",
+      "title": "Create source preference UI selector",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["NLPQ-007"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NLPQ-010", "NLPQ-012"],
+      "acceptance": [
+        "Checkbox group or dropdown showing available sources",
+        "Sources: LinkedIn, Maps, SERP, Apollo, AI Ark",
+        "Shows only integrated sources based on org config",
+        "Queries like 'find on LinkedIn' pre-select this source",
+        "Defaults to all available sources",
+        "Collapsible 'Advanced' section in query bar"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/prospecting/SourcePreferenceSelector.tsx"
+      ]
+    },
+    {
+      "id": "NLPQ-012",
+      "feature": "nl-query",
+      "title": "Create error states and retry logic",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["NLPQ-010"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NLPQ-010", "NLPQ-011"],
+      "acceptance": [
+        "Parser failed: show error + suggest reformulation",
+        "Actor timeout: retry button with simpler query",
+        "Merge failed: show partial results with warning",
+        "Friendly error messages for all failure modes",
+        "Retry button re-submits with same/modified query",
+        "Uses toast.error() for error notifications"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/demo/AgentResearchDemo.tsx",
+        "src/components/prospecting/NaturalLanguageQueryBar.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 12,
+    "completedStories": 0,
+    "currentFeature": "nl-query",
+    "lastUpdated": "2026-02-12T22:00:00Z",
+    "estimatedHours": {
+      "optimistic": 6,
+      "realistic": 9.5,
+      "pessimistic": 14
+    }
+  }
+}

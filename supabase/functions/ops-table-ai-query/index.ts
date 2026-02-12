@@ -1363,9 +1363,17 @@ serve(async (req: Request) => {
     const body: RequestBody = await req.json();
     const { tableId, query, columns, rowCount, sampleValues } = body;
 
+    console.log(`${LOG_PREFIX} Body received:`, JSON.stringify({
+      hasTableId: !!tableId,
+      hasQuery: !!query,
+      hasColumns: !!columns,
+      columnsLength: columns?.length ?? 'null',
+      bodyKeys: Object.keys(body),
+    }));
+
     if (!tableId || !query || !columns || columns.length === 0) {
       return errorResponse(
-        'Missing required fields: tableId, query, columns',
+        `Missing required fields: ${!tableId ? 'tableId' : ''} ${!query ? 'query' : ''} ${!columns || columns.length === 0 ? 'columns' : ''}`.trim(),
         req,
         400
       );

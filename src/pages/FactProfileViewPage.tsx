@@ -102,18 +102,18 @@ function NotFoundState() {
           <ArrowLeft className="h-7 w-7 text-[#94A3B8] dark:text-gray-500" />
         </div>
         <h2 className="text-lg font-semibold text-[#1E293B] dark:text-gray-100 mb-2">
-          Fact profile not found
+          Profile not found
         </h2>
         <p className="text-sm text-[#64748B] dark:text-gray-400 mb-6">
-          The fact profile you are looking for does not exist or may have been deleted.
+          The profile you are looking for does not exist or may have been deleted.
         </p>
         <button
           type="button"
-          onClick={() => navigate('/fact-profiles')}
+          onClick={() => navigate('/profiles')}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-blue text-white hover:bg-brand-blue/90 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Fact Profiles
+          Back to Profiles
         </button>
       </div>
     </div>

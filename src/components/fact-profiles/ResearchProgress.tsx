@@ -96,23 +96,30 @@ export function ResearchProgress({
     return () => clearInterval(interval);
   }, [isComplete, isFailed]);
 
-  // Handle status changes
+  // Stable ref for onComplete to avoid re-render issues
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; });
+
+  // Detect status transitions
   useEffect(() => {
     if (researchStatus === 'complete' && !isComplete) {
       setIsComplete(true);
       setProgress(100);
-      // Call onComplete after a short delay to show the success state
-      completeTimerRef.current = setTimeout(() => {
-        if (profile) onComplete(profile);
-      }, 1000);
     } else if (researchStatus === 'failed' && !isFailed) {
       setIsFailed(true);
     }
+  }, [researchStatus, isComplete, isFailed]);
 
+  // Fire completion callback after a brief delay so the user sees the success state
+  useEffect(() => {
+    if (!isComplete || !profile) return;
+    completeTimerRef.current = setTimeout(() => {
+      onCompleteRef.current(profile);
+    }, 1000);
     return () => {
       if (completeTimerRef.current) clearTimeout(completeTimerRef.current);
     };
-  }, [researchStatus, isComplete, isFailed, profile, onComplete]);
+  }, [isComplete, profile]);
 
   // Retry handler
   const handleRetry = useCallback(async () => {
