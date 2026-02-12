@@ -47,6 +47,8 @@ export interface ICPProfile {
   status: ICPStatus;
   visibility: ICPVisibility;
   is_active: boolean;
+  fact_profile_id?: string | null;
+  product_profile_id?: string | null;
   last_tested_at: string | null;
   last_test_result_count: number | null;
   created_at: string;
@@ -67,6 +69,8 @@ export interface CreateICPProfilePayload {
   status?: ICPStatus;
   visibility?: ICPVisibility;
   is_active?: boolean;
+  fact_profile_id?: string | null;
+  product_profile_id?: string | null;
 }
 
 export interface UpdateICPProfilePayload {
@@ -77,6 +81,8 @@ export interface UpdateICPProfilePayload {
   status?: ICPStatus;
   visibility?: ICPVisibility;
   is_active?: boolean;
+  fact_profile_id?: string | null;
+  product_profile_id?: string | null;
   last_tested_at?: string | null;
   last_test_result_count?: number | null;
 }

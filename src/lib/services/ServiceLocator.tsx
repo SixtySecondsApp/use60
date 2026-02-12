@@ -19,6 +19,7 @@ import { IApplicationConfig } from '../interfaces/IConfiguration';
 import { IRepository } from '../interfaces/IDataRepository';
 import { DealWithRelationships } from '../hooks/deals/types/dealTypes';
 import { OpsTableService } from './opsTableService';
+import { productProfileService } from './productProfileService';
 import { supabase } from '@/lib/supabase/clientV2';
 
 /**
@@ -97,6 +98,11 @@ export class ServiceLocator {
       this._opsTableService = new OpsTableService(supabase);
     }
     return this._opsTableService;
+  }
+
+  // Product Profile Service (standalone export, accessed via ServiceLocator for consistency)
+  get productProfileService() {
+    return productProfileService;
   }
 
   /**

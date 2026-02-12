@@ -43,6 +43,7 @@ export interface ToneSettings {
   max_length_override?: number;
   include_cta?: boolean;
   cta_style?: CTAStyle;
+  email_sign_off?: string;
   created_at?: string;
   updated_at?: string;
 }

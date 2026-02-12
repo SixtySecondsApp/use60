@@ -1385,6 +1385,11 @@ export class AIProviderService {
     // Also log to cost tracking table if provider/model are available
     if (response.provider && response.model) {
       try {
+        const supportedProvider = response.provider === 'anthropic' || response.provider === 'gemini';
+        if (!supportedProvider) {
+          return;
+        }
+
         // Get user's organization ID
         const { data: membership } = await supabase
           .from('organization_memberships')
@@ -1392,7 +1397,7 @@ export class AIProviderService {
           .eq('user_id', userId)
           .order('created_at', { ascending: true })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (membership?.org_id) {
           // Calculate cost using database function
@@ -1410,7 +1415,7 @@ export class AIProviderService {
             await supabase.from('ai_cost_events').insert({
               org_id: membership.org_id,
               user_id: userId,
-              provider: response.provider as 'anthropic' | 'gemini',
+              provider: response.provider,
               model: response.model,
               feature: workflowId ? 'workflow' : null,
               input_tokens: response.usage.promptTokens,
@@ -1418,6 +1423,16 @@ export class AIProviderService {
               estimated_cost: estimatedCost,
               metadata: workflowId ? { workflow_id: workflowId } : null,
             });
+
+            if (estimatedCost > 0) {
+              await supabase.rpc('deduct_credits', {
+                p_org_id: membership.org_id,
+                p_amount: estimatedCost,
+                p_description: `AI usage: ${workflowId ? 'workflow' : 'unknown'}`,
+                p_feature_key: workflowId ? 'workflow' : null,
+                p_cost_event_id: null,
+              });
+            }
           }
         }
       } catch (err) {

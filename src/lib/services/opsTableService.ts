@@ -13,6 +13,8 @@ export interface OpsTableRecord {
   source_type: 'manual' | 'apollo' | 'csv' | 'copilot' | 'hubspot' | 'ops_table';
   source_query: Record<string, unknown> | null;
   row_count: number;
+  /** Fact profile used as context for enrichment variable resolution */
+  context_profile_id: string | null;
   created_at: string;
   updated_at: string;
   columns?: OpsTableColumn[];
@@ -90,6 +92,7 @@ export interface OpsTableColumn {
   is_enrichment: boolean;
   enrichment_prompt: string | null;
   enrichment_model: string | null;
+  enrichment_provider: string | null;
   dropdown_options: DropdownOption[] | null;
   formula_expression: string | null;
   integration_type: string | null;
@@ -98,6 +101,8 @@ export interface OpsTableColumn {
   action_config: ButtonConfig | Record<string, unknown> | null;
   hubspot_property_name: string | null;
   apollo_property_name: string | null;
+  enrichment_schema: { fields: { name: string; type: string; description: string }[] } | null;
+  enrichment_pack_id: string | null;
   position: number;
   width: number;
   is_visible: boolean;
@@ -204,10 +209,10 @@ interface RawRow {
 // ---------------------------------------------------------------------------
 
 const TABLE_COLUMNS =
-  'id, organization_id, created_by, name, description, source_type, source_query, row_count, created_at, updated_at';
+  'id, organization_id, created_by, name, description, source_type, source_query, row_count, context_profile_id, created_at, updated_at';
 
 const COLUMN_COLUMNS =
-  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, enrichment_model, dropdown_options, formula_expression, integration_type, integration_config, action_type, action_config, hubspot_property_name, apollo_property_name, position, width, is_visible, created_at';
+  'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, enrichment_model, enrichment_provider, enrichment_schema, enrichment_pack_id, dropdown_options, formula_expression, integration_type, integration_config, action_type, action_config, hubspot_property_name, apollo_property_name, position, width, is_visible, created_at';
 
 const ROW_COLUMNS =
   'id, table_id, row_index, source_id, source_data, created_at';
@@ -288,7 +293,7 @@ export class OpsTableService {
 
   async updateTable(
     tableId: string,
-    updates: { name?: string; description?: string; source_query?: Record<string, unknown> }
+    updates: { name?: string; description?: string; source_query?: Record<string, unknown>; context_profile_id?: string | null }
   ): Promise<OpsTableRecord> {
     const { data, error } = await this.supabase
       .from('dynamic_tables')
@@ -322,6 +327,7 @@ export class OpsTableService {
     isEnrichment?: boolean;
     enrichmentPrompt?: string;
     enrichmentModel?: string;
+    enrichmentProvider?: string;
     dropdownOptions?: DropdownOption[];
     formulaExpression?: string;
     integrationType?: string;
@@ -330,6 +336,8 @@ export class OpsTableService {
     actionConfig?: Record<string, unknown>;
     hubspotPropertyName?: string;
     apolloPropertyName?: string;
+    enrichmentSchema?: { fields: { name: string; type: string; description: string }[] };
+    enrichmentPackId?: string;
     position?: number;
   }): Promise<OpsTableColumn> {
     const { data, error } = await this.supabase
@@ -342,6 +350,9 @@ export class OpsTableService {
         is_enrichment: params.isEnrichment ?? false,
         enrichment_prompt: params.enrichmentPrompt ?? null,
         enrichment_model: params.enrichmentModel ?? null,
+        enrichment_provider: params.enrichmentProvider ?? null,
+        enrichment_schema: params.enrichmentSchema ?? null,
+        enrichment_pack_id: params.enrichmentPackId ?? null,
         dropdown_options: params.dropdownOptions ?? null,
         formula_expression: params.formulaExpression ?? null,
         integration_type: params.integrationType ?? null,
@@ -370,6 +381,7 @@ export class OpsTableService {
       formulaExpression?: string;
       enrichmentPrompt?: string;
       enrichmentModel?: string;
+      enrichmentProvider?: string;
       actionType?: string;
       actionConfig?: ButtonConfig | Record<string, unknown>;
       integrationConfig?: Record<string, unknown>;
@@ -384,6 +396,7 @@ export class OpsTableService {
     if (updates.formulaExpression !== undefined) payload.formula_expression = updates.formulaExpression;
     if (updates.enrichmentPrompt !== undefined) payload.enrichment_prompt = updates.enrichmentPrompt;
     if (updates.enrichmentModel !== undefined) payload.enrichment_model = updates.enrichmentModel;
+    if (updates.enrichmentProvider !== undefined) payload.enrichment_provider = updates.enrichmentProvider;
     if (updates.actionType !== undefined) payload.action_type = updates.actionType;
     if (updates.actionConfig !== undefined) payload.action_config = updates.actionConfig;
     if (updates.integrationConfig !== undefined) payload.integration_config = updates.integrationConfig;

@@ -115,6 +115,7 @@ export interface FactProfile {
   company_domain: string | null;
   company_logo_url: string | null;
   profile_type: FactProfileType;
+  is_org_profile: boolean;
   research_data: FactProfileResearchData;
   research_sources: ResearchSource[];
   research_status: ResearchStatus;
@@ -129,6 +130,9 @@ export interface FactProfile {
   last_viewed_at: string | null;
   share_expires_at: string | null;
   linked_icp_profile_ids: string[];
+  linked_contact_id: string | null;
+  linked_deal_id: string | null;
+  linked_company_domain: string | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -144,6 +148,10 @@ export interface CreateFactProfilePayload {
   company_name: string;
   company_domain?: string | null;
   profile_type?: FactProfileType;
+  is_org_profile?: boolean;
+  linked_contact_id?: string | null;
+  linked_deal_id?: string | null;
+  linked_company_domain?: string | null;
 }
 
 export interface UpdateFactProfilePayload {

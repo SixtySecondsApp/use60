@@ -13,6 +13,7 @@
 
 import type { ICPCriteria } from '@/lib/types/prospecting'
 import type { FactProfileResearchData } from '@/lib/types/factProfile'
+import type { ProductProfileResearchData } from '@/lib/types/productProfile'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -467,6 +468,381 @@ export function checkICPFactProfileAlignment(
   }
 
   // Calculate overall score as average of non-no_data dimensions
+  const scoredDimensions = dimensions.filter((d) => d.status !== 'no_data')
+  const overallScore =
+    scoredDimensions.length > 0
+      ? Math.round(
+          scoredDimensions.reduce((sum, d) => sum + d.score, 0) /
+            scoredDimensions.length
+        )
+      : 0
+
+  return {
+    overallScore,
+    dimensions,
+    verified: overallScore > 70,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Product profile dimension checkers
+// ---------------------------------------------------------------------------
+
+function checkIndustryAlignmentProduct(
+  criteria: ICPCriteria,
+  research: ProductProfileResearchData
+): AlignmentDimension | null {
+  const icpIndustries = criteria.industries
+  if (!icpIndustries || icpIndustries.length === 0) return null
+
+  const productIndustries = research.target_market?.industries ?? []
+
+  if (productIndustries.length === 0) {
+    return {
+      dimension: 'industry',
+      label: 'Industry',
+      score: 0,
+      status: 'no_data',
+      icpValues: icpIndustries,
+      factValues: [],
+      suggestion: 'Product profile has no industry data to compare against',
+    }
+  }
+
+  const ratio = overlapPercentage(icpIndustries, productIndustries)
+  const score = ratioToScore(ratio)
+  const status = scoreToStatus(score)
+
+  let suggestion: string | undefined
+  if (status === 'match') {
+    suggestion = `Good match: ICP industries align with product target market`
+  } else if (status === 'partial') {
+    suggestion = `Partial overlap: ICP targets ${icpIndustries.join(', ')} but product targets ${productIndustries.slice(0, 3).join(', ')}`
+  } else {
+    suggestion = `ICP targets ${icpIndustries.join(', ')} but product targets ${productIndustries.slice(0, 3).join(', ')} -- significant industry mismatch`
+  }
+
+  return {
+    dimension: 'industry',
+    label: 'Industry',
+    score,
+    status,
+    icpValues: icpIndustries,
+    factValues: productIndustries,
+    suggestion,
+  }
+}
+
+function checkCompanySizeAlignmentProduct(
+  criteria: ICPCriteria,
+  research: ProductProfileResearchData
+): AlignmentDimension | null {
+  const icpRanges = criteria.employee_ranges
+  if (!icpRanges || icpRanges.length === 0) return null
+
+  const productSizes = research.target_market?.company_sizes ?? []
+
+  if (productSizes.length === 0) {
+    return {
+      dimension: 'company_size',
+      label: 'Company Size',
+      score: 0,
+      status: 'no_data',
+      icpValues: icpRanges.map(formatRange),
+      factValues: [],
+      suggestion: 'Product profile has no target company size data to compare against',
+    }
+  }
+
+  const { ratio } = rangesOverlap(icpRanges, productSizes)
+  const score = ratioToScore(ratio)
+  const status = scoreToStatus(score)
+
+  const icpLabels = icpRanges.map(formatRange)
+  let suggestion: string | undefined
+  if (status === 'match') {
+    suggestion = `Good match: ICP size ranges (${icpLabels.join(', ')}) overlap with product target sizes (${productSizes.join(', ')})`
+  } else if (status === 'partial') {
+    suggestion = `Some overlap: ICP targets ${icpLabels.join(', ')} employees but product targets ${productSizes.join(', ')}`
+  } else {
+    suggestion = `ICP targets ${icpLabels.join(', ')} employees but product targets ${productSizes.join(', ')} -- company size mismatch`
+  }
+
+  return {
+    dimension: 'company_size',
+    label: 'Company Size',
+    score,
+    status,
+    icpValues: icpLabels,
+    factValues: productSizes,
+    suggestion,
+  }
+}
+
+function checkRoleSeniorityAlignmentProduct(
+  criteria: ICPCriteria,
+  research: ProductProfileResearchData
+): AlignmentDimension | null {
+  const icpTitles = criteria.title_keywords ?? []
+  const icpSeniority = criteria.seniority_levels ?? []
+  const icpRoleTerms = [...icpTitles, ...icpSeniority]
+
+  if (icpRoleTerms.length === 0) return null
+
+  const buyerPersonas = research.target_market?.buyer_personas ?? []
+
+  if (buyerPersonas.length === 0) {
+    return {
+      dimension: 'role_seniority',
+      label: 'Role / Seniority',
+      score: 0,
+      status: 'no_data',
+      icpValues: icpRoleTerms,
+      factValues: [],
+      suggestion: 'Product profile has no buyer persona data to compare against',
+    }
+  }
+
+  const ratio = overlapPercentage(icpRoleTerms, buyerPersonas)
+  const score = ratioToScore(ratio)
+  const status = scoreToStatus(score)
+
+  let suggestion: string | undefined
+  if (status === 'match') {
+    suggestion = `Good match: ICP target roles align with product buyer personas`
+  } else if (status === 'partial') {
+    suggestion = `Partial overlap: ICP targets ${icpRoleTerms.slice(0, 3).join(', ')} but product buyer personas are ${buyerPersonas.slice(0, 3).join(', ')}`
+  } else {
+    suggestion = `ICP targets ${icpRoleTerms.slice(0, 3).join(', ')} but product buyer personas are ${buyerPersonas.slice(0, 3).join(', ')} -- significant role mismatch`
+  }
+
+  return {
+    dimension: 'role_seniority',
+    label: 'Role / Seniority',
+    score,
+    status,
+    icpValues: icpRoleTerms,
+    factValues: buyerPersonas,
+    suggestion,
+  }
+}
+
+function checkTechnologyAlignmentProduct(
+  criteria: ICPCriteria,
+  research: ProductProfileResearchData
+): AlignmentDimension | null {
+  const icpTech = criteria.technology_keywords
+  if (!icpTech || icpTech.length === 0) return null
+
+  const productTech: string[] = []
+  if (research.integrations?.platforms?.length) {
+    productTech.push(...research.integrations.platforms)
+  }
+  if (research.integrations?.native_integrations?.length) {
+    productTech.push(...research.integrations.native_integrations)
+  }
+
+  if (productTech.length === 0) {
+    return {
+      dimension: 'technology',
+      label: 'Technology',
+      score: 0,
+      status: 'no_data',
+      icpValues: icpTech,
+      factValues: [],
+      suggestion: 'Product profile has no technology/integration data to compare against',
+    }
+  }
+
+  const ratio = overlapPercentage(icpTech, productTech)
+  const score = ratioToScore(ratio)
+  const status = scoreToStatus(score)
+
+  const matchedTech = icpTech.filter((needle) =>
+    productTech.some(
+      (h) =>
+        h.toLowerCase().includes(needle.toLowerCase()) ||
+        needle.toLowerCase().includes(h.toLowerCase())
+    )
+  )
+
+  let suggestion: string | undefined
+  if (status === 'match') {
+    suggestion = `Good match: ${matchedTech.length} of ${icpTech.length} required technologies found in product integrations`
+  } else if (status === 'partial') {
+    suggestion = `Some overlap: ICP requires ${icpTech.join(', ')} but product integrates with ${productTech.slice(0, 4).join(', ')}`
+  } else {
+    suggestion = `ICP requires ${icpTech.join(', ')} but product integrates with ${productTech.slice(0, 4).join(', ')} -- minimal technology overlap`
+  }
+
+  return {
+    dimension: 'technology',
+    label: 'Technology',
+    score,
+    status,
+    icpValues: icpTech,
+    factValues: productTech,
+    suggestion,
+  }
+}
+
+function checkDepartmentAlignmentProduct(
+  criteria: ICPCriteria,
+  research: ProductProfileResearchData
+): AlignmentDimension | null {
+  const icpDepts = criteria.departments
+  if (!icpDepts || icpDepts.length === 0) return null
+
+  // Product profiles don't have explicit department data — derive from buyer personas and use cases
+  const derivedDepts: string[] = []
+  if (research.use_cases?.primary_use_cases?.length) {
+    for (const uc of research.use_cases.primary_use_cases) {
+      if (uc.persona && !derivedDepts.includes(uc.persona)) {
+        derivedDepts.push(uc.persona)
+      }
+    }
+  }
+  if (research.target_market?.buyer_personas?.length) {
+    for (const persona of research.target_market.buyer_personas) {
+      if (!derivedDepts.includes(persona)) {
+        derivedDepts.push(persona)
+      }
+    }
+  }
+
+  if (derivedDepts.length === 0) {
+    return {
+      dimension: 'department',
+      label: 'Department',
+      score: 0,
+      status: 'no_data',
+      icpValues: icpDepts,
+      factValues: [],
+      suggestion: 'Product profile has no department/persona data to compare against',
+    }
+  }
+
+  const ratio = overlapPercentage(icpDepts, derivedDepts)
+  const score = ratioToScore(ratio)
+  const status = scoreToStatus(score)
+
+  let suggestion: string | undefined
+  if (status === 'match') {
+    suggestion = `Good match: target departments align well with product buyer personas`
+  } else if (status === 'partial') {
+    suggestion = `Some overlap: ICP targets ${icpDepts.join(', ')} but product personas include ${derivedDepts.slice(0, 4).join(', ')}`
+  } else {
+    suggestion = `ICP targets departments ${icpDepts.join(', ')} but product personas include ${derivedDepts.slice(0, 4).join(', ')} -- department mismatch`
+  }
+
+  return {
+    dimension: 'department',
+    label: 'Department',
+    score,
+    status,
+    icpValues: icpDepts,
+    factValues: derivedDepts,
+    suggestion,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Product profile alignment
+// ---------------------------------------------------------------------------
+
+const PRODUCT_DIMENSION_CHECKERS: ((
+  criteria: ICPCriteria,
+  research: ProductProfileResearchData
+) => AlignmentDimension | null)[] = [
+  checkIndustryAlignmentProduct,
+  checkCompanySizeAlignmentProduct,
+  checkRoleSeniorityAlignmentProduct,
+  checkTechnologyAlignmentProduct,
+  checkDepartmentAlignmentProduct,
+]
+
+/**
+ * Compare ICP criteria against product profile research data and score alignment
+ * across all applicable dimensions.
+ *
+ * Same scoring model as `checkICPFactProfileAlignment` — 5 dimensions, 0-100 each.
+ */
+export function checkICPProductProfileAlignment(
+  criteria: ICPCriteria,
+  researchData: ProductProfileResearchData
+): AlignmentResult {
+  const dimensions: AlignmentDimension[] = []
+
+  for (const checker of PRODUCT_DIMENSION_CHECKERS) {
+    const result = checker(criteria, researchData)
+    if (result) {
+      dimensions.push(result)
+    }
+  }
+
+  const scoredDimensions = dimensions.filter((d) => d.status !== 'no_data')
+  const overallScore =
+    scoredDimensions.length > 0
+      ? Math.round(
+          scoredDimensions.reduce((sum, d) => sum + d.score, 0) /
+            scoredDimensions.length
+        )
+      : 0
+
+  return {
+    overallScore,
+    dimensions,
+    verified: overallScore > 70,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Combined alignment (fact + product)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check ICP alignment against both fact profile and product profile.
+ * Product profile dimensions take precedence where both provide data for the
+ * same dimension. Fact profile fills in dimensions the product doesn't cover.
+ *
+ * Returns a single AlignmentResult with the best-available score per dimension.
+ */
+export function checkICPCombinedAlignment(
+  criteria: ICPCriteria,
+  factResearch: FactProfileResearchData,
+  productResearch: ProductProfileResearchData
+): AlignmentResult {
+  const factResult = checkICPFactProfileAlignment(criteria, factResearch)
+  const productResult = checkICPProductProfileAlignment(criteria, productResearch)
+
+  // Build a map of product dimensions (product takes precedence)
+  const productDimMap = new Map<string, AlignmentDimension>()
+  for (const dim of productResult.dimensions) {
+    productDimMap.set(dim.dimension, dim)
+  }
+
+  const factDimMap = new Map<string, AlignmentDimension>()
+  for (const dim of factResult.dimensions) {
+    factDimMap.set(dim.dimension, dim)
+  }
+
+  // Merge: product takes precedence if it has actual data, otherwise fall back to fact
+  const allDimensionKeys = new Set([...productDimMap.keys(), ...factDimMap.keys()])
+  const dimensions: AlignmentDimension[] = []
+
+  for (const key of allDimensionKeys) {
+    const productDim = productDimMap.get(key)
+    const factDim = factDimMap.get(key)
+
+    if (productDim && productDim.status !== 'no_data') {
+      dimensions.push(productDim)
+    } else if (factDim) {
+      dimensions.push(factDim)
+    } else if (productDim) {
+      dimensions.push(productDim) // no_data from product, fact didn't have this dimension at all
+    }
+  }
+
   const scoredDimensions = dimensions.filter((d) => d.status !== 'no_data')
   const overallScore =
     scoredDimensions.length > 0

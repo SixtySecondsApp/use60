@@ -23,6 +23,7 @@ export const factProfileKeys = {
   all: ['fact-profiles'] as const,
   list: (orgId: string) => ['fact-profiles', orgId] as const,
   detail: (id: string) => ['fact-profiles', id] as const,
+  orgProfile: (orgId: string) => ['fact-profiles', 'org-profile', orgId] as const,
   public: (shareToken: string) => ['fact-profiles', 'public', shareToken] as const,
 };
 
@@ -51,6 +52,44 @@ export function useFactProfile(id: string | undefined) {
 }
 
 // ---------------------------------------------------------------------------
+// Query: Get the organization's own fact profile (is_org_profile = true)
+// ---------------------------------------------------------------------------
+
+export function useOrgProfile(orgId: string | undefined) {
+  return useQuery<FactProfile | null, Error>({
+    queryKey: factProfileKeys.orgProfile(orgId ?? ''),
+    queryFn: () => factProfileService.getOrgProfile(orgId!),
+    enabled: !!orgId,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Mutation: Sync org profile research data to organization_context
+// ---------------------------------------------------------------------------
+
+export function useSyncOrgProfileToContext() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { synced: number },
+    Error,
+    { profileId: string; orgId: string }
+  >({
+    mutationFn: ({ profileId, orgId }) =>
+      factProfileService.syncToOrgContext(profileId, orgId),
+    onSuccess: (result, { orgId }) => {
+      // Invalidate org context caches so skill compiler picks up new values
+      queryClient.invalidateQueries({ queryKey: ['organization-context'] });
+      queryClient.invalidateQueries({ queryKey: factProfileKeys.orgProfile(orgId) });
+      toast.success(`Synced ${result.synced} values to org context`);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to sync profile to org context');
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Query: Get a public fact profile by share token (no auth needed)
 // ---------------------------------------------------------------------------
 
@@ -73,6 +112,9 @@ export function useCreateFactProfile() {
     mutationFn: (payload) => factProfileService.createProfile(payload),
     onSuccess: (profile) => {
       queryClient.invalidateQueries({ queryKey: factProfileKeys.list(profile.organization_id) });
+      if (profile.is_org_profile) {
+        queryClient.invalidateQueries({ queryKey: factProfileKeys.orgProfile(profile.organization_id) });
+      }
       toast.success(`Fact profile "${profile.company_name}" created`);
     },
     onError: (error) => {
