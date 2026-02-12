@@ -30,12 +30,15 @@ import {
   MapPin,
   Briefcase,
   Link2,
+  User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CreateICPFromFactsButton } from './CreateICPFromFactsButton';
 import { ExportFactProfilePDF } from './ExportFactProfilePDF';
 import { PushFactProfileToOps } from './PushFactProfileToOps';
+import { SyncFactProfileToOrg } from './SyncFactProfileToOrg';
+import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import type {
   FactProfile,
   CompanyOverviewSection,
@@ -181,15 +184,30 @@ function EmptySection() {
 }
 
 /** Company avatar -- large hero size */
-function HeroAvatar({ name, logoUrl }: { name: string; logoUrl: string | null }) {
+function HeroAvatar({
+  name,
+  logoUrl,
+  domain,
+}: {
+  name: string;
+  logoUrl: string | null;
+  domain: string | null;
+}) {
   const firstLetter = name.charAt(0).toUpperCase();
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const resolvedLogoUrl = logoUrl || getLogoDevUrl(domain, { size: 160, format: 'png' });
 
-  if (logoUrl) {
+  React.useEffect(() => {
+    setImageFailed(false);
+  }, [resolvedLogoUrl]);
+
+  if (resolvedLogoUrl && !imageFailed) {
     return (
       <img
-        src={logoUrl}
+        src={resolvedLogoUrl}
         alt={name}
         className="h-20 w-20 rounded-2xl object-cover ring-4 ring-white dark:ring-gray-900 shadow-lg"
+        onError={() => setImageFailed(true)}
       />
     );
   }
@@ -341,6 +359,7 @@ export function FactProfileView({ profile }: FactProfileViewProps) {
               <ExportFactProfilePDF profile={profile} variant="outline" size="sm" />
               <CreateICPFromFactsButton profile={profile} variant="outline" size="sm" />
               <PushFactProfileToOps profile={profile} variant="outline" size="sm" />
+              <SyncFactProfileToOrg profile={profile} variant="outline" size="sm" />
               <Button
                 variant="default"
                 size="sm"
@@ -363,7 +382,11 @@ export function FactProfileView({ profile }: FactProfileViewProps) {
         <div className="rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 p-6 sm:p-8">
           <div className="flex flex-col sm:flex-row items-start gap-5">
             {/* Avatar */}
-            <HeroAvatar name={profile.company_name} logoUrl={profile.company_logo_url} />
+            <HeroAvatar
+              name={profile.company_name}
+              logoUrl={profile.company_logo_url}
+              domain={profile.company_domain}
+            />
 
             {/* Company info */}
             <div className="flex-1 min-w-0">
@@ -451,6 +474,41 @@ export function FactProfileView({ profile }: FactProfileViewProps) {
             </div>
           </div>
         </div>
+
+        {/* ---- Linked Entities ---- */}
+        {(profile.linked_company_domain || profile.linked_contact_id || profile.linked_deal_id) && (
+          <div className="rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 px-5 py-4">
+            <h3 className="text-xs font-medium text-[#64748B] dark:text-gray-400 mb-3">
+              Linked Entities
+            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              {profile.linked_company_domain && (
+                <a
+                  href={`https://${profile.linked_company_domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] dark:border-gray-700/50 bg-[#F8FAFC] dark:bg-gray-800/50 px-3 py-2 text-sm text-brand-blue hover:text-brand-blue/80 transition-colors"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  {profile.linked_company_domain}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {profile.linked_contact_id && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] dark:border-gray-700/50 bg-[#F8FAFC] dark:bg-gray-800/50 px-3 py-2 text-sm text-[#1E293B] dark:text-gray-100">
+                  <User className="h-3.5 w-3.5 text-[#64748B] dark:text-gray-400" />
+                  Contact: {profile.linked_contact_id}
+                </span>
+              )}
+              {profile.linked_deal_id && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] dark:border-gray-700/50 bg-[#F8FAFC] dark:bg-gray-800/50 px-3 py-2 text-sm text-[#1E293B] dark:text-gray-100">
+                  <Briefcase className="h-3.5 w-3.5 text-[#64748B] dark:text-gray-400" />
+                  Deal: {profile.linked_deal_id}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ---- 1. Company Overview ---- */}
         <SectionCard

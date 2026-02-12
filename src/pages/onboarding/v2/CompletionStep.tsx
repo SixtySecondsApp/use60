@@ -5,7 +5,7 @@
  * Provides navigation to dashboard and suggested next steps.
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Check,
@@ -22,6 +22,9 @@ import { useOnboardingV2Store, SKILLS, SkillId } from '@/lib/stores/onboardingV2
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 import { useInvalidateUserProfile } from '@/lib/hooks/useUserProfile';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { factProfileService } from '@/lib/services/factProfileService';
+import { supabase } from '@/lib/supabase/clientV2';
+import { toast } from 'sonner';
 
 interface NextStepItem {
   icon: typeof FileText;
@@ -38,11 +41,12 @@ const nextSteps: NextStepItem[] = [
 
 export function CompletionStep() {
   const navigate = useNavigate();
-  const { enrichment, skillConfigs, setStep } = useOnboardingV2Store();
+  const { enrichment, skillConfigs, setStep, organizationId } = useOnboardingV2Store();
   const { completeStep } = useOnboardingProgress();
   const { user } = useAuth();
   const invalidateProfile = useInvalidateUserProfile();
   const [isNavigating, setIsNavigating] = useState(false);
+  const orgProfileCreatedRef = useRef(false);
 
   // Determine which skills have been configured (have non-empty data)
   const configuredSkillIds = SKILLS.filter((skill) => {
@@ -56,6 +60,44 @@ export function CompletionStep() {
     });
   }).map((s) => s.id);
 
+  /**
+   * Auto-create the org's fact profile seeded with onboarding enrichment data.
+   * Fire-and-forget: failures here must not block onboarding completion.
+   */
+  const ensureOrgProfile = async () => {
+    // Guard: only run once per mount, and only if we have the required IDs
+    if (orgProfileCreatedRef.current) return;
+    if (!user?.id || !organizationId) return;
+    orgProfileCreatedRef.current = true;
+
+    try {
+      // Check if org profile already exists (defensive)
+      const existing = await factProfileService.getOrgProfile(organizationId);
+      if (existing) return;
+
+      // Create fact profile seeded with enrichment data
+      const profile = await factProfileService.createProfile({
+        organization_id: organizationId,
+        created_by: user.id,
+        company_name: enrichment?.company_name || 'My Company',
+        company_domain: enrichment?.domain ?? null,
+        profile_type: 'client_org',
+        is_org_profile: true,
+      });
+
+      // Fire background research (don't await)
+      supabase.functions.invoke('research-fact-profile', {
+        body: { action: 'research', profileId: profile.id },
+      }).catch((err) => {
+        console.error('[CompletionStep] Background research failed:', err);
+      });
+    } catch (err) {
+      // Non-blocking: log and move on
+      console.error('[CompletionStep] Failed to create org fact profile:', err);
+      toast.error('Could not create company profile. You can set it up later in Settings.');
+    }
+  };
+
   const handleEditSettings = () => {
     setStep('skills_config');
   };
@@ -68,6 +110,9 @@ export function CompletionStep() {
       // Mark onboarding as complete using the proper hook
       // This ensures needsOnboarding state updates before navigation
       await completeStep('complete');
+
+      // Auto-create org fact profile (fire-and-forget, non-blocking)
+      ensureOrgProfile();
 
       // Invalidate profile cache so dashboard fetches fresh data
       // This ensures the profile is populated immediately after onboarding
@@ -183,6 +228,8 @@ export function CompletionStep() {
               setIsNavigating(true);
               try {
                 await completeStep('complete');
+                // Auto-create org fact profile (fire-and-forget, non-blocking)
+                ensureOrgProfile();
                 await new Promise(resolve => setTimeout(resolve, 100));
                 // Use full page load to clear React Query cache
                 window.location.href = item.route;

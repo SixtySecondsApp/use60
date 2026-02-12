@@ -15,6 +15,20 @@ export function CreateICPFromFactsButton({ profile, variant = 'outline', size = 
 
   const handleClick = () => {
     const criteria = factProfileToICPCriteria(profile.research_data);
+    // Persist handoff data so it survives route reloads.
+    try {
+      sessionStorage.setItem(
+        'prospecting-prefill-fact-profile',
+        JSON.stringify({
+          prefillCriteria: criteria,
+          fromFactProfileId: profile.id,
+          fromFactProfileName: profile.company_name,
+          createdAt: Date.now(),
+        })
+      );
+    } catch {
+      // Ignore storage errors and continue with router state handoff.
+    }
     navigate('/prospecting', {
       state: {
         prefillCriteria: criteria,

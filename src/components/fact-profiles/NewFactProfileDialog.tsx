@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building2, Target, Plus, Loader2, Sparkles } from 'lucide-react';
+import { Building2, Target, Plus, Loader2, Sparkles, Shield, Info, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -26,6 +26,7 @@ interface NewFactProfileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (profile: FactProfile, triggerResearch: boolean) => void;
+  hasOrgProfile?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,7 @@ export function NewFactProfileDialog({
   open,
   onOpenChange,
   onCreated,
+  hasOrgProfile = false,
 }: NewFactProfileDialogProps) {
   const orgId = useActiveOrgId();
   const { userId } = useAuth();
@@ -44,6 +46,8 @@ export function NewFactProfileDialog({
   const [companyName, setCompanyName] = useState('');
   const [companyDomain, setCompanyDomain] = useState('');
   const [profileType, setProfileType] = useState<FactProfileType>('client_org');
+  const [markAsOrgProfile, setMarkAsOrgProfile] = useState(false);
+  const [linkedCompanyDomain, setLinkedCompanyDomain] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingWithResearch, setIsCreatingWithResearch] = useState(false);
 
@@ -53,6 +57,8 @@ export function NewFactProfileDialog({
       setCompanyName('');
       setCompanyDomain('');
       setProfileType('client_org');
+      setMarkAsOrgProfile(false);
+      setLinkedCompanyDomain('');
       setIsCreating(false);
       setIsCreatingWithResearch(false);
     }
@@ -83,20 +89,31 @@ export function NewFactProfileDialog({
         company_name: companyName.trim(),
         company_domain: companyDomain.trim() || null,
         profile_type: profileType,
+        is_org_profile: markAsOrgProfile,
+        ...((!markAsOrgProfile && linkedCompanyDomain.trim()) && {
+          linked_company_domain: linkedCompanyDomain.trim(),
+        }),
       });
 
-      if (triggerResearch) {
-        // Trigger research edge function
-        const { error } = await supabase.functions.invoke('research-fact-profile', {
-          body: { action: 'research', profileId: profile.id },
-        });
-        if (error) {
-          toast.error('Profile created but research failed to start: ' + error.message);
-        }
-      }
-
+      // Close dialog and show progress UI immediately after profile creation.
       handleOpenChange(false);
       onCreated(profile, triggerResearch);
+
+      if (triggerResearch) {
+        // Trigger research in the background so progress animation starts right away.
+        void supabase.functions
+          .invoke('research-fact-profile', {
+            body: { action: 'research', profileId: profile.id },
+          })
+          .then(({ error }) => {
+            if (error) {
+              toast.error('Profile created but research failed to start: ' + error.message);
+            }
+          })
+          .catch(() => {
+            toast.error('Profile created but research failed to start');
+          });
+      }
     } catch {
       // Error toast is already handled by the mutation's onError
     } finally {
@@ -181,6 +198,57 @@ export function NewFactProfileDialog({
               </button>
             </div>
           </div>
+
+          {/* Org Profile Option */}
+          <div className="space-y-2">
+            {hasOrgProfile ? (
+              <div className="flex items-center gap-2 rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-gray-50 dark:bg-gray-800/30 px-3 py-2.5">
+                <Info className="h-4 w-4 shrink-0 text-[#94A3B8] dark:text-gray-500" />
+                <span className="text-xs text-[#64748B] dark:text-gray-400">
+                  Your business profile already exists
+                </span>
+              </div>
+            ) : (
+              <label className="flex items-start gap-3 rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 px-3 py-2.5 cursor-pointer hover:border-[#CBD5E1] dark:hover:border-gray-600 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={markAsOrgProfile}
+                  onChange={(e) => setMarkAsOrgProfile(e.target.checked)}
+                  disabled={isSubmitting}
+                  className="mt-0.5 rounded border-gray-300 text-brand-blue focus:ring-brand-blue"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-[#1E293B] dark:text-gray-100">
+                    <Shield className="h-3.5 w-3.5 text-brand-blue dark:text-blue-400" />
+                    Create as org profile
+                  </div>
+                  <p className="text-xs text-[#94A3B8] dark:text-gray-500 mt-0.5">
+                    Designates this as your own business profile. Research data feeds org context for AI features.
+                  </p>
+                </div>
+              </label>
+            )}
+          </div>
+
+          {/* CRM Entity Linking — only for non-org profiles */}
+          {!markAsOrgProfile && (
+            <div className="space-y-2">
+              <Label htmlFor="linked-company-domain" className="flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5 text-[#64748B] dark:text-gray-400" />
+                Linked CRM Company Domain
+              </Label>
+              <Input
+                id="linked-company-domain"
+                placeholder="client-company.com"
+                value={linkedCompanyDomain}
+                onChange={(e) => setLinkedCompanyDomain(e.target.value)}
+                disabled={isSubmitting}
+              />
+              <p className="text-xs text-[#94A3B8] dark:text-gray-500">
+                Optional. Links this profile to a CRM company record by domain.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">

@@ -3,6 +3,7 @@ import {
   Search,
   Building2,
   Target,
+  Shield,
 } from 'lucide-react';
 import { FactProfileCard } from '@/components/fact-profiles/FactProfileCard';
 import type { FactProfile } from '@/lib/types/factProfile';
@@ -48,12 +49,17 @@ function GridSkeleton() {
 // Empty State
 // ---------------------------------------------------------------------------
 
-function EmptyState({ filterType }: { filterType: 'all' | 'client_org' | 'target_company' }) {
+function EmptyState({ filterType }: { filterType: 'all' | 'org_profile' | 'client_org' | 'target_company' }) {
   const config = {
     all: {
       icon: <Search className="h-7 w-7 text-[#94A3B8] dark:text-gray-500" />,
       title: 'No fact profiles yet',
       description: 'Create a fact profile to start building your company research library.',
+    },
+    org_profile: {
+      icon: <Shield className="h-7 w-7 text-brand-blue dark:text-blue-400" />,
+      title: 'No business profile yet',
+      description: 'Create a fact profile for your own business to feed org context into AI features.',
     },
     client_org: {
       icon: <Building2 className="h-7 w-7 text-brand-blue dark:text-blue-400" />,
@@ -91,7 +97,7 @@ function EmptyState({ filterType }: { filterType: 'all' | 'client_org' | 'target
 interface FactProfileGridProps {
   profiles: FactProfile[];
   isLoading: boolean;
-  filterType: 'all' | 'client_org' | 'target_company';
+  filterType: 'all' | 'org_profile' | 'client_org' | 'target_company';
   onView: (profile: FactProfile) => void;
   onEdit: (profile: FactProfile) => void;
   onResearch: (profile: FactProfile) => void;
@@ -115,19 +121,29 @@ export function FactProfileGrid({
 }: FactProfileGridProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Filter profiles by type and search query
+  // Filter profiles by type and search query, org profiles pinned to top
   const filteredProfiles = useMemo(() => {
     if (!profiles) return [];
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return profiles.filter((p) => {
-      const matchesType = filterType === 'all' || p.profile_type === filterType;
+    const filtered = profiles.filter((p) => {
+      // Tab-level filter
+      let matchesType: boolean;
+      if (filterType === 'org_profile') {
+        matchesType = p.is_org_profile === true;
+      } else if (filterType === 'all') {
+        matchesType = true;
+      } else {
+        matchesType = p.profile_type === filterType;
+      }
+
       if (!normalizedQuery) return matchesType;
 
       const rd = p.research_data;
       const haystack = [
         p.company_name,
         p.company_domain ?? '',
+        p.is_org_profile ? 'your business org profile' : '',
         p.profile_type === 'client_org' ? 'client org client organization' : 'target company prospect',
         p.research_status,
         p.approval_status,
@@ -142,6 +158,13 @@ export function FactProfileGrid({
         .toLowerCase();
       const matchesSearch = haystack.includes(normalizedQuery);
       return matchesType && matchesSearch;
+    });
+
+    // Pin org profile(s) to the top in all views
+    return filtered.sort((a, b) => {
+      if (a.is_org_profile && !b.is_org_profile) return -1;
+      if (!a.is_org_profile && b.is_org_profile) return 1;
+      return 0;
     });
   }, [profiles, filterType, searchQuery]);
 

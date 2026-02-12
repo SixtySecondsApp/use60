@@ -16,6 +16,10 @@ import {
   FileText,
   XCircle,
   Archive,
+  Shield,
+  Info,
+  User,
+  Briefcase,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +46,7 @@ import type {
   ResearchStatus,
   ApprovalStatus,
 } from '@/lib/types/factProfile';
+import { getLogoDevUrl } from '@/lib/utils/logoDev';
 
 // ---------------------------------------------------------------------------
 // Section completeness helper
@@ -131,7 +136,15 @@ const APPROVAL_STATUS_CONFIG: Record<
 // Profile type badge
 // ---------------------------------------------------------------------------
 
-function ProfileTypeBadge({ type }: { type: FactProfile['profile_type'] }) {
+function ProfileTypeBadge({ type, isOrgProfile }: { type: FactProfile['profile_type']; isOrgProfile?: boolean }) {
+  if (isOrgProfile) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
+        <Shield className="h-3 w-3" />
+        Your Business
+      </span>
+    );
+  }
   if (type === 'client_org') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-brand-blue/10 dark:bg-brand-blue/10 px-2 py-0.5 text-xs font-medium text-brand-blue dark:text-blue-400">
@@ -155,18 +168,27 @@ function ProfileTypeBadge({ type }: { type: FactProfile['profile_type'] }) {
 function CompanyAvatar({
   name,
   logoUrl,
+  domain,
 }: {
   name: string;
   logoUrl: string | null;
+  domain: string | null;
 }) {
   const firstLetter = name.charAt(0).toUpperCase();
+  const [imageFailed, setImageFailed] = useState(false);
+  const resolvedLogoUrl = logoUrl || getLogoDevUrl(domain, { size: 80, format: 'png' });
 
-  if (logoUrl) {
+  React.useEffect(() => {
+    setImageFailed(false);
+  }, [resolvedLogoUrl]);
+
+  if (resolvedLogoUrl && !imageFailed) {
     return (
       <img
-        src={logoUrl}
+        src={resolvedLogoUrl}
         alt={name}
         className="h-10 w-10 rounded-xl object-cover"
+        onError={() => setImageFailed(true)}
       />
     );
   }
@@ -221,6 +243,7 @@ export function FactProfileCard({
             <CompanyAvatar
               name={profile.company_name}
               logoUrl={profile.company_logo_url}
+              domain={profile.company_domain}
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
@@ -268,21 +291,62 @@ export function FactProfileCard({
                 Share
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setShowDeleteConfirm(true)}
-                className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
+              {profile.is_org_profile ? (
+                <DropdownMenuItem
+                  disabled
+                  className="text-[#94A3B8] dark:text-gray-500"
+                  title="Cannot delete org profile"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
         {/* Profile type badge */}
-        <div className="mb-3">
-          <ProfileTypeBadge type={profile.profile_type} />
+        <div className="mb-3 flex items-center gap-2">
+          <ProfileTypeBadge type={profile.profile_type} isOrgProfile={profile.is_org_profile} />
+          {profile.is_org_profile && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-[#94A3B8] dark:text-gray-500">
+              <Info className="h-3 w-3" />
+              Feeds org context
+            </span>
+          )}
         </div>
+
+        {/* CRM linking chips */}
+        {(profile.linked_company_domain || profile.linked_contact_id || profile.linked_deal_id) && (
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            {profile.linked_company_domain && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] font-medium text-[#64748B] dark:text-gray-400">
+                <Globe className="h-2.5 w-2.5" />
+                {profile.linked_company_domain}
+              </span>
+            )}
+            {profile.linked_contact_id && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] font-medium text-[#64748B] dark:text-gray-400">
+                <User className="h-2.5 w-2.5" />
+                Linked contact
+              </span>
+            )}
+            {profile.linked_deal_id && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] font-medium text-[#64748B] dark:text-gray-400">
+                <Briefcase className="h-2.5 w-2.5" />
+                Linked deal
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Status badges row */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -364,16 +428,26 @@ export function FactProfileCard({
             >
               <Share2 className="h-3.5 w-3.5" />
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowDeleteConfirm(true);
-              }}
-              className="rounded-lg p-1.5 text-[#64748B] dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-              title="Delete"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            {profile.is_org_profile ? (
+              <button
+                disabled
+                className="rounded-lg p-1.5 text-[#CBD5E1] dark:text-gray-600 cursor-not-allowed"
+                title="Cannot delete org profile"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDeleteConfirm(true);
+                }}
+                className="rounded-lg p-1.5 text-[#64748B] dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                title="Delete"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>

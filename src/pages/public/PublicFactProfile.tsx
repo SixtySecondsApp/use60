@@ -18,6 +18,7 @@ import { useParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/lib/supabase/clientV2';
 import { usePublicFactProfile } from '@/lib/hooks/useFactProfiles';
+import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -195,14 +196,30 @@ function EmptySection() {
   );
 }
 
-function HeroAvatar({ name, logoUrl }: { name: string; logoUrl: string | null }) {
+function HeroAvatar({
+  name,
+  logoUrl,
+  domain,
+}: {
+  name: string;
+  logoUrl: string | null;
+  domain: string | null;
+}) {
   const firstLetter = name.charAt(0).toUpperCase();
-  if (logoUrl) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const resolvedLogoUrl = logoUrl || getLogoDevUrl(domain, { size: 160, format: 'png' });
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [resolvedLogoUrl]);
+
+  if (resolvedLogoUrl && !imageFailed) {
     return (
       <img
-        src={logoUrl}
+        src={resolvedLogoUrl}
         alt={name}
         className="h-20 w-20 rounded-2xl object-cover ring-4 ring-white dark:ring-gray-900 shadow-lg"
+        onError={() => setImageFailed(true)}
       />
     );
   }
@@ -748,7 +765,11 @@ function ProfileContent({
         {/* Hero section */}
         <div className="rounded-xl border border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 p-6 sm:p-8">
           <div className="flex flex-col sm:flex-row items-start gap-5">
-            <HeroAvatar name={profile.company_name} logoUrl={profile.company_logo_url} />
+            <HeroAvatar
+              name={profile.company_name}
+              logoUrl={profile.company_logo_url}
+              domain={profile.company_domain}
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-3 flex-wrap">
                 <h1 className="text-2xl sm:text-3xl font-bold text-[#1E293B] dark:text-gray-100 leading-tight">

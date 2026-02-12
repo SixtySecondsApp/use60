@@ -1,7 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileSearch, Plus, Building2, Target } from 'lucide-react';
+import { FileSearch, Plus, Building2, Target, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { FactProfileGrid } from '@/components/fact-profiles/FactProfileGrid';
@@ -19,7 +19,7 @@ export default function FactProfilesPage() {
   const { data: profiles = [], isLoading } = useFactProfiles(orgId ?? undefined);
   const deleteMutation = useDeleteFactProfile();
 
-  const [activeTab, setActiveTab] = useState<'all' | 'client_org' | 'target_company'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'org_profile' | 'client_org' | 'target_company'>('all');
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [researchingProfileId, setResearchingProfileId] = useState<string | null>(null);
 
@@ -43,15 +43,15 @@ export default function FactProfilesPage() {
 
   const handleResearch = useCallback(
     async (profile: FactProfile) => {
-      // Trigger research on an existing profile
+      // Show progress overlay immediately for responsive UX.
+      setResearchingProfileId(profile.id);
       const { error } = await supabase.functions.invoke('research-fact-profile', {
         body: { action: 'research', profileId: profile.id },
       });
       if (error) {
+        setResearchingProfileId(null);
         toast.error('Failed to start research: ' + error.message);
-        return;
       }
-      setResearchingProfileId(profile.id);
     },
     []
   );
@@ -102,6 +102,7 @@ export default function FactProfilesPage() {
   // ---------------------------------------------------------------------------
 
   const hasProfiles = profiles.length > 0;
+  const hasOrgProfile = profiles.some((p) => p.is_org_profile);
 
   return (
     <>
@@ -131,6 +132,7 @@ export default function FactProfilesPage() {
           <div className="flex gap-1 mb-6 p-1 bg-[#F8FAFC] dark:bg-gray-800/50 rounded-xl w-fit">
             {[
               { key: 'all' as const, label: 'All', icon: FileSearch },
+              { key: 'org_profile' as const, label: 'Your Business', icon: Shield },
               { key: 'client_org' as const, label: 'Client Orgs', icon: Building2 },
               { key: 'target_company' as const, label: 'Target Companies', icon: Target },
             ].map(({ key, label, icon: Icon }) => (
@@ -190,6 +192,7 @@ export default function FactProfilesPage() {
         open={showNewDialog}
         onOpenChange={setShowNewDialog}
         onCreated={handleCreated}
+        hasOrgProfile={hasOrgProfile}
       />
 
       {/* Research Progress Overlay */}
