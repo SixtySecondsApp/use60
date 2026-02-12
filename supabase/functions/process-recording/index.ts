@@ -26,7 +26,8 @@ import {
   formatDuration,
 } from '../_shared/meetingbaas.ts';
 // Import AI analysis function from fathom-sync for sentiment, talk time, and coaching
-import { analyzeTranscriptWithClaude, TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts';
+import { analyzeTranscriptWithClaude, TranscriptAnalysis } from '../_shared/aiAnalysis.ts';
+import { adaptNotetakerMeeting, writeMeetingData } from '../_shared/ingestion/index.ts';
 
 // =============================================================================
 // Storage Upload Helper
@@ -733,81 +734,32 @@ async function processRecording(
       .update(recordingUpdate)
       .eq('id', recordingId);
 
-    // Step 7.5: Sync to unified meetings table for 60_notetaker source
-    console.log('[ProcessRecording] Step 7.5: Syncing to meetings table...');
-    const meetingUpdate: Record<string, unknown> = {
-      title: recording.meeting_title,
-      summary: analysis.summary,
-      transcript_text: transcript.text,
-      transcript_json: transcript,
-      duration_minutes: durationSeconds ? Math.round(durationSeconds / 60) : null,
-      processing_status: 'ready',
-      recording_s3_key: uploadResult.storagePath || null,
-      recording_s3_url: uploadResult.storageUrl || recordingData.url,
-      speakers: speakers,
-      provider: '60_notetaker',
-      updated_at: new Date().toISOString(),
-    };
-
-    // Add enhanced AI analysis fields to meeting
-    if (enhancedAnalysis) {
-      meetingUpdate.sentiment_score = enhancedAnalysis.sentiment.score;
-      meetingUpdate.coach_rating = enhancedAnalysis.coaching.rating * 10; // Convert 1-10 to 0-100 scale
-      meetingUpdate.coach_summary = enhancedAnalysis.coaching.summary;
-      meetingUpdate.talk_time_rep_pct = enhancedAnalysis.talkTime.repPct;
-      meetingUpdate.talk_time_customer_pct = enhancedAnalysis.talkTime.customerPct;
-      meetingUpdate.talk_time_judgement = getTalkTimeJudgement(enhancedAnalysis.talkTime.repPct);
-    }
-
-    const { error: meetingError } = await supabase
-      .from('meetings')
-      .update(meetingUpdate)
-      .eq('bot_id', effectiveBotId)
-      .eq('source_type', '60_notetaker');
-
-    if (meetingError) {
-      console.warn('[ProcessRecording] Failed to sync to meetings table (non-fatal):', meetingError.message);
-    } else {
-      console.log('[ProcessRecording] Successfully synced to meetings table');
-    }
-
-    // Step 7.6: Insert action items to meeting_action_items if enhanced analysis available
-    if (enhancedAnalysis && enhancedAnalysis.actionItems.length > 0) {
-      console.log('[ProcessRecording] Step 7.6: Inserting action items...');
-      try {
-        // Get the meeting ID for the action items
-        const { data: meeting } = await supabase
-          .from('meetings')
-          .select('id')
-          .eq('bot_id', effectiveBotId)
-          .eq('source_type', '60_notetaker')
-          .maybeSingle();
-
-        if (meeting) {
-          const actionItemsToInsert = enhancedAnalysis.actionItems.map((item) => ({
-            meeting_id: meeting.id,
-            title: item.title,
-            assignee: item.assignedTo,
-            due_date: item.deadline,
-            priority: item.priority,
-            status: 'pending',
-            confidence: item.confidence,
-            created_at: new Date().toISOString(),
-          }));
-
-          const { error: actionError } = await supabase
-            .from('meeting_action_items')
-            .insert(actionItemsToInsert);
-
-          if (actionError) {
-            console.warn('[ProcessRecording] Failed to insert action items:', actionError.message);
-          } else {
-            console.log(`[ProcessRecording] Inserted ${actionItemsToInsert.length} action items`);
-          }
-        }
-      } catch (actionError) {
-        console.warn('[ProcessRecording] Action items insertion error (non-fatal):', actionError);
+    // Step 7.5 + 7.6: Sync to meetings table + action items via adapter layer
+    console.log('[ProcessRecording] Step 7.5: Syncing to meetings table via adapter...');
+    try {
+      const normalized = adaptNotetakerMeeting({
+        recording,
+        botId: effectiveBotId,
+        transcript,
+        aiSummary: analysis,
+        enhancedAnalysis: enhancedAnalysis || undefined,
+        uploadResult: uploadResult || undefined,
+        attendees: attendees || undefined,
+        speakers: speakers || undefined,
+      });
+      const writeResult = await writeMeetingData(supabase, normalized, {
+        isUpdate: true,
+        companySource: '60_notetaker',
+      });
+      console.log(`[ProcessRecording] Meeting synced: ${writeResult.meetingId} (new=${writeResult.isNew}, actions=${writeResult.actionItemsStored || 0})`);
+      if (writeResult.primaryContactId) {
+        console.log(`[ProcessRecording] CRM linked: contact=${writeResult.primaryContactId}, company=${writeResult.companyId}`);
       }
+      if (writeResult.errors.length > 0) {
+        console.warn('[ProcessRecording] Non-fatal adapter errors:', writeResult.errors);
+      }
+    } catch (adapterError) {
+      console.warn('[ProcessRecording] Adapter sync failed (non-fatal):', adapterError instanceof Error ? adapterError.message : String(adapterError));
     }
 
     // Step 8: Update bot deployment status

@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { analyzeTranscriptWithClaude, deduplicateActionItems } from '../fathom-sync/aiAnalysis.ts'
+import { analyzeTranscriptWithClaude, deduplicateActionItems } from '../_shared/aiAnalysis.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

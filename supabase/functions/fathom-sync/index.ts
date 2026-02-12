@@ -3,31 +3,25 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { captureException } from '../_shared/sentryEdge.ts'
-import { matchOrCreateCompany } from '../_shared/companyMatching.ts'
-import { selectPrimaryContact, determineMeetingCompany } from '../_shared/primaryContactSelection.ts'
+
+// Phase 4: Unified ingestion adapter + writer
+import { adaptFathomMeeting, writeMeetingData } from '../_shared/ingestion/index.ts'
+import type { WriteMeetingResult } from '../_shared/ingestion/index.ts'
 
 // Import refactored services
 import {
   // Owner Resolution
   resolveMeetingOwner,
   // Participants
-  processParticipants,
   extractAndTruncateSummary,
   // Action Items
   processActionItems,
   // Helpers
   buildEmbedUrl,
-  normalizeInviteesType,
   calculateTranscriptFetchCooldownMinutes,
-  generatePlaceholderThumbnail,
   retryWithBackoff,
   corsHeaders,
   getDefaultDateRange,
-  // Meeting Upsert
-  getExistingThumbnail,
-  upsertMeeting,
-  seedOrgCallTypesIfNeeded,
-  enqueueTranscriptRetry,
   // Transcript Processing
   condenseMeetingSummary,
   autoFetchTranscriptAndAnalyze,
@@ -1399,12 +1393,7 @@ async function syncSingleCall(
     const ownerResolved = ownerResult.ownerResolved
     const ownerEmailCandidate = ownerResult.ownerEmail
 
-    // Calculate duration in minutes from recording start/end times
-    const startTime = new Date(call.recording_start_time || call.scheduled_start_time)
-    const endTime = new Date(call.recording_end_time || call.scheduled_end_time)
-    const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60))
-
-    // Compute derived fields prior to DB write
+    // Compute embed URL for thumbnail generation (adapter computes its own for DB record)
     const embedUrl = buildEmbedUrl(call.share_url, call.recording_id)
 
     // Check for existing meeting with valid thumbnail (to preserve it during re-sync)
@@ -1458,87 +1447,58 @@ async function syncSingleCall(
       thumbnailUrl = `https://dummyimage.com/640x360/1a1a1a/10b981&text=${encodeURIComponent(firstLetter)}`
       console.log(`📝 Using placeholder thumbnail for meeting ${call.recording_id}`)
     }
-    // Resolve a stable recording identifier (used for DB uniqueness / upserts).
-    // Fathom payloads can vary; prefer recording_id, otherwise fall back to id.
-    const recordingIdRaw = call?.recording_id ?? call?.id ?? call?.recordingId ?? null
-
     // Use summary from bulk API response only (don't fetch separately)
-    // Summary and transcript should be fetched on-demand via separate endpoint
     const summaryText: string | null = call.default_summary || call.summary || null
+
     // Determine initial processing statuses based on skip flags and available data
-    // - 'complete': Already has data or successfully processed
-    // - 'pending': Queued for background processing
-    // - 'processing': Currently being processed (set during actual processing)
-    // Preserve existing thumbnail status if we have a valid existing thumbnail
-    const initialThumbnailStatus = existingThumbnailStatus === 'complete'
-      ? 'complete'  // Preserve existing complete status
+    const transcriptStatus = skipTranscriptFetch ? 'pending' : 'processing'
+    const summaryStatus = skipTranscriptFetch
+      ? 'pending'
+      : (summaryText ? 'complete' : 'processing')
+
+    // Preserve existing thumbnail status
+    const thumbnailStatus = existingThumbnailStatus === 'complete'
+      ? 'complete'
       : skipThumbnails
-        ? 'pending'  // Queued for background thumbnail generation
+        ? 'pending'
         : (thumbnailUrl && !thumbnailUrl.includes('dummyimage.com') ? 'complete' : 'pending')
 
-    const initialTranscriptStatus = skipTranscriptFetch
-      ? 'pending'  // Queued for background transcript fetch
-      : 'processing'  // Will be updated after transcript fetch
+    // ── Phase 4: Use adapter + writer for meeting upsert + participants ──
+    const normalizedData = adaptFathomMeeting({
+      call,
+      orgId,
+      ownerUserId,
+      ownerEmail: ownerEmailCandidate,
+      fathomUserId: integration.fathom_user_id,
+      thumbnailUrl,
+      summaryText,
+      calendarInvitees: call.calendar_invitees || [],
+      markAsHistorical,
+      transcriptStatus,
+      summaryStatus,
+    })
 
-    const initialSummaryStatus = skipTranscriptFetch
-      ? 'pending'  // Queued for background summary generation
-      : (summaryText ? 'complete' : 'processing')  // Will be updated after AI analysis
+    // Override thumbnail status (adapter uses simplified logic; sync has existing-thumbnail awareness)
+    normalizedData.thumbnail_status = thumbnailStatus
 
-    // Map to meetings table schema using actual Fathom API fields
-    const meetingData: Record<string, any> = {
-      org_id: orgId, // Required for RLS compliance
-      owner_user_id: ownerUserId,
-      fathom_recording_id: recordingIdRaw ? String(recordingIdRaw) : null, // Use recording_id as unique identifier
-      fathom_user_id: integration.fathom_user_id,
-      title: call.title || call.meeting_title,
+    const writeResult: WriteMeetingResult = await writeMeetingData(supabase, normalizedData, {
+      skipActionItems: true,   // Native Fathom items handled by processActionItems below; AI items by transcriptService
+      skipIndexing: true,      // transcriptService handles indexing after AI analysis
+      companySource: 'fathom_meeting',
+    })
+
+    if (writeResult.errors.length > 0) {
+      console.warn(`[fathom-sync] Non-fatal writer errors: ${writeResult.errors.join('; ')}`)
+    }
+
+    // Create a meeting-like object for downstream code that references meeting.id
+    const meeting = { id: writeResult.meetingId, fathom_recording_id: call.recording_id || call.id }
+
+    // Build meetingData reference for activity creation (downstream code reads these fields)
+    const meetingData = {
       meeting_start: call.recording_start_time || call.scheduled_start_time,
-      meeting_end: call.recording_end_time || call.scheduled_end_time,
-      duration_minutes: durationMinutes,
-      owner_email: ownerEmailCandidate || call.recorded_by?.email || call.host_email || null,
-      team_name: call.recorded_by?.team || null,
-      share_url: call.share_url,
-      calls_url: call.url,
-      transcript_doc_url: call.transcript || null, // If Fathom provided a URL
-      sentiment_score: null, // Not available in bulk API response
-      coach_summary: null, // Not available in bulk API response
-      talk_time_rep_pct: null, // Not available in bulk API response
-      talk_time_customer_pct: null, // Not available in bulk API response
-      talk_time_judgement: null, // Not available in bulk API response
-      fathom_embed_url: embedUrl,
-      thumbnail_url: thumbnailUrl,
-      // Processing status columns for real-time UI updates
-      thumbnail_status: initialThumbnailStatus,
-      transcript_status: initialTranscriptStatus,
-      summary_status: initialSummaryStatus,
-      // Additional metadata fields
-      fathom_created_at: call.created_at || null,
-      transcript_language: call.transcript_language || 'en',
-      // Validate calendar_invitees_type against check constraint (only two allowed values)
-      calendar_invitees_type: normalizeInviteesType(
-        call.calendar_invitees_domains_type || call.calendar_invitees_type
-      ),
-      last_synced_at: new Date().toISOString(),
-      sync_status: 'synced',
-      // Free tier enforcement: mark historical imports
-      is_historical_import: markAsHistorical,
-    }
-
-    if (summaryText) {
-      meetingData.summary = summaryText
-    }
-
-    // UPSERT meeting
-    //
-    // Use the refactored upsertMeeting service which handles:
-    // 1. Org-scoped constraint: (org_id, fathom_recording_id)
-    // 2. Legacy constraint fallback: (fathom_recording_id)
-    // 3. Manual find-then-update/insert fallback
-    // 4. Retry logic for transient gateway errors (Cloudflare 500, etc.)
-    const { meeting, error: meetingError } = await upsertMeeting(supabase, meetingData, orgId)
-
-    if (meetingError) {
-      // Error message is already parsed by upsertMeeting for better user feedback
-      throw new Error(`Failed to upsert meeting: ${meetingError.message}`)
+      title: call.title || call.meeting_title,
+      summary: summaryText,
     }
 
     // Seed default call types for org on first sync (if org exists and has no call types)
@@ -1725,243 +1685,86 @@ async function syncSingleCall(
       }
     }
 
-    // Process participants (use calendar_invitees from actual API)
-    // IMPORTANT: Separate handling for internal vs external participants to avoid duplication
-    // - Internal users: Create meeting_attendees entry only (no contact creation)
-    // - External users: Create/update contacts + meeting_contacts junction (no meeting_attendees)
-    const externalContactIds: string[] = []
-
-    if (call.calendar_invitees && call.calendar_invitees.length > 0) {
-      for (const invitee of call.calendar_invitees) {
-        // Handle internal participants (team members) - store in meeting_attendees only
-        if (!invitee.is_external) {
-          // Check if already exists to avoid duplicates
-          const { data: existingAttendee } = await supabase
-            .from('meeting_attendees')
-            .select('id')
-            .eq('meeting_id', meeting.id)
-            .eq('email', invitee.email || invitee.name) // Use name as fallback if no email
-            .single()
-
-          if (!existingAttendee) {
-            await supabase
-              .from('meeting_attendees')
-              .insert({
-                meeting_id: meeting.id,
-                name: invitee.name,
-                email: invitee.email || null,
-                is_external: false,
-                role: 'host',
-              })
-          } else {
-          }
-
-          continue // Skip to next participant
-        }
-
-        // Handle external participants (customers/prospects) - create contacts + meeting_contacts
-        if (invitee.email && invitee.is_external) {
-          // 1. Match or create company from email domain
-          const { company } = await matchOrCreateCompany(supabase, invitee.email, userId, invitee.name)
-          if (company) {
-          }
-
-          // 2. Check for existing contact (email is unique globally, not per owner)
-          const { data: existingContact } = await supabase
-            .from('contacts')
-            .select('id, company_id, owner_id, last_interaction_at')
-            .eq('email', invitee.email)
-            .single()
-
-          // Get the meeting date for last_interaction_at
-          const meetingDate = call.recording_start_time || call.scheduled_start_time
-
-          if (existingContact) {
-            // Build update object - always update last_interaction_at if meeting is newer
-            const updateData: Record<string, any> = {}
-
-            // Update company if not set
-            if (!existingContact.company_id && company) {
-              updateData.company_id = company.id
-            }
-
-            // Update last_interaction_at only if this meeting is newer
-            if (meetingDate) {
-              const existingDate = existingContact.last_interaction_at ? new Date(existingContact.last_interaction_at) : null
-              const newDate = new Date(meetingDate)
-              if (!existingDate || newDate > existingDate) {
-                updateData.last_interaction_at = meetingDate
-              }
-            }
-
-            // Only update if there are changes
-            if (Object.keys(updateData).length > 0) {
-              await supabase
-                .from('contacts')
-                .update(updateData)
-                .eq('id', existingContact.id)
-            }
-
-            externalContactIds.push(existingContact.id)
-          } else {
-            // Create new contact with company link
-            // FIXED: Use owner_id (not user_id) and first_name/last_name (not name)
-            const nameParts = invitee.name.split(' ')
-            const firstName = nameParts[0] || invitee.name
-            const lastName = nameParts.slice(1).join(' ') || null
-
-            const { data: newContact, error: contactError } = await supabase
-              .from('contacts')
-              .insert({
-                owner_id: userId, // FIXED: Use owner_id not user_id
-                first_name: firstName, // FIXED: Use first_name not name
-                last_name: lastName, // FIXED: Use last_name
-                email: invitee.email,
-                company_id: company?.id || null,
-                source: 'fathom_sync',
-                first_seen_at: new Date().toISOString(),
-                last_interaction_at: meetingDate || null // Set to actual meeting date
-              })
-              .select('id')
-              .single()
-
-            if (contactError) {
-            } else if (newContact) {
-              if (company) {
-              }
-              externalContactIds.push(newContact.id)
-            }
-          }
-        }
-      }
-    }
-
-    // After processing all contacts, determine primary contact and company
-    if (externalContactIds.length > 0) {
-      // Select primary contact using smart logic
-      const primaryContactId = await selectPrimaryContact(supabase, externalContactIds, ownerUserId)
-
-      if (primaryContactId) {
-        // Determine meeting company (use primary contact's company)
-        const meetingCompanyId = await determineMeetingCompany(supabase, externalContactIds, primaryContactId, ownerUserId)
-
-        if (meetingCompanyId) {
-          // Fetch and log company name for transparency
-          const { data: companyDetails } = await supabase
-            .from('companies')
-            .select('name, domain')
-            .eq('id', meetingCompanyId)
-            .single()
-
-          if (companyDetails) {
-          } else {
-          }
-        } else {
-        }
-
-        // Update meeting with primary contact and company
-        await supabase
-          .from('meetings')
-          .update({
-            primary_contact_id: primaryContactId,
-            company_id: meetingCompanyId,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', meeting.id)
-
-        // Create meeting_contacts junction records
-        const meetingContactRecords = externalContactIds.map((contactId, idx) => ({
-          meeting_id: meeting.id,
-          contact_id: contactId,
-          is_primary: contactId === primaryContactId,
-          role: 'attendee'
-        }))
-
-        const { error: junctionError } = await supabase
-          .from('meeting_contacts')
-          .upsert(meetingContactRecords, { onConflict: 'meeting_id,contact_id' })
-
-        if (junctionError) {
-        } else {
-        }
+    // ── Participant processing is now handled by writeMeetingData above ──
+    // The writer processes calendar_invitees → contacts, companies, meeting_attendees,
+    // meeting_contacts, primary contact selection, and company determination.
 
     // Conditional activity creation based on per-user preference and meeting date
-        try {
-          // Load user preference
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('preferences')
-        .eq('user_id', ownerUserId)
-        .single()
+    // Uses primaryContactId and companyId from the writer result
+    const primaryContactId = writeResult.primaryContactId || null
+    const meetingCompanyId = writeResult.companyId || null
 
-          const prefs = (settings?.preferences || {}) as any
-          const autoPref = prefs.auto_fathom_activity || {}
-          const enabled = !!autoPref.enabled
-          const fromDateStr = typeof autoPref.from_date === 'string' ? autoPref.from_date : null
+    if (primaryContactId) {
+      try {
+        // Load user preference
+        const { data: settings } = await supabase
+          .from('user_settings')
+          .select('preferences')
+          .eq('user_id', ownerUserId)
+          .single()
 
-      // Only auto-log if: owner was resolved to an internal user AND preferences allow AND from_date provided
-      if (!ownerResolved || !enabled || !fromDateStr) {
-          } else {
-            // Only log if meeting_start is on/after from_date (user-locality not known; use ISO date)
-            const meetingDateOnly = new Date(meetingData.meeting_start)
-            const fromDateOnly = new Date(`${fromDateStr}T00:00:00.000Z`)
+        const prefs = (settings?.preferences || {}) as any
+        const autoPref = prefs.auto_fathom_activity || {}
+        const enabled = !!autoPref.enabled
+        const fromDateStr = typeof autoPref.from_date === 'string' ? autoPref.from_date : null
 
-            if (isNaN(meetingDateOnly.getTime()) || isNaN(fromDateOnly.getTime())) {
-            } else if (meetingDateOnly >= fromDateOnly) {
-              // Get sales rep email - use ownerEmailCandidate or lookup from profile
-              let salesRepEmail = ownerEmailCandidate
-              if (!salesRepEmail) {
-                // Fallback: lookup email from profiles table
-                const { data: ownerProfile } = await supabase
-                  .from('profiles')
-                  .select('email')
-                  .eq('id', ownerUserId)
-                  .single()
-                salesRepEmail = ownerProfile?.email || ownerUserId
+        // Only auto-log if: owner was resolved to an internal user AND preferences allow AND from_date provided
+        if (ownerResolved && enabled && fromDateStr) {
+          // Only log if meeting_start is on/after from_date (user-locality not known; use ISO date)
+          const meetingDateOnly = new Date(meetingData.meeting_start)
+          const fromDateOnly = new Date(`${fromDateStr}T00:00:00.000Z`)
+
+          if (!isNaN(meetingDateOnly.getTime()) && !isNaN(fromDateOnly.getTime()) && meetingDateOnly >= fromDateOnly) {
+            // Get sales rep email - use ownerEmailCandidate or lookup from profile
+            let salesRepEmail = ownerEmailCandidate
+            if (!salesRepEmail) {
+              // Fallback: lookup email from profiles table
+              const { data: ownerProfile } = await supabase
+                .from('profiles')
+                .select('email')
+                .eq('id', ownerUserId)
+                .single()
+              salesRepEmail = ownerProfile?.email || ownerUserId
+            }
+
+            // Get company name from meetingCompanyId (extracted from attendee emails)
+            let companyName = meetingData.title || 'Fathom Meeting' // Fallback to meeting title
+            if (meetingCompanyId) {
+              const { data: companyData, error: companyError } = await supabase
+                .from('companies')
+                .select('name')
+                .eq('id', meetingCompanyId)
+                .single()
+
+              if (!companyError && companyData?.name) {
+                companyName = companyData.name
               }
+            }
 
-              // Get company name from meetingCompanyId (extracted from attendee emails)
-              let companyName = meetingData.title || 'Fathom Meeting' // Fallback to meeting title
-              if (meetingCompanyId) {
-                const { data: companyData, error: companyError } = await supabase
-                  .from('companies')
-                  .select('name')
-                  .eq('id', meetingCompanyId)
-                  .single()
+            // Insert activity - unique constraint on (meeting_id, user_id, type) prevents duplicates
+            const { error: activityError } = await supabase.from('activities').insert({
+              user_id: ownerUserId,
+              sales_rep: salesRepEmail,
+              meeting_id: meeting.id,
+              contact_id: primaryContactId,
+              company_id: meetingCompanyId,
+              type: 'meeting',
+              status: 'completed',
+              client_name: companyName,
+              details: extractAndTruncateSummary(meetingData.summary),
+              date: meetingData.meeting_start,
+              created_at: new Date().toISOString()
+            })
 
-                if (!companyError && companyData?.name) {
-                  companyName = companyData.name
-                } else if (companyError) {
-                }
-              } else {
-              }
-
-              // Insert activity - unique constraint on (meeting_id, user_id, type) prevents duplicates
-              // If a race condition occurs, the constraint will reject the duplicate
-              const { error: activityError } = await supabase.from('activities').insert({
-                user_id: ownerUserId,
-                sales_rep: salesRepEmail,  // Use email instead of UUID
-                meeting_id: meeting.id,
-                contact_id: primaryContactId,
-                company_id: meetingCompanyId,
-                type: 'meeting',
-                status: 'completed',
-                client_name: companyName, // FIXED: Use company name instead of meeting title
-                details: extractAndTruncateSummary(meetingData.summary),
-                date: meetingData.meeting_start,
-                created_at: new Date().toISOString()
-              })
-
-              // Ignore duplicate key errors (23505) - activity already exists
-              if (activityError && activityError.code !== '23505') {
-                console.error(`[fathom-sync] Error creating activity for meeting ${meeting.id}:`, activityError)
-              }
-            } else {
+            // Ignore duplicate key errors (23505) - activity already exists
+            if (activityError && activityError.code !== '23505') {
+              console.error(`[fathom-sync] Error creating activity for meeting ${meeting.id}:`, activityError)
             }
           }
-        } catch (e) {
         }
-      } else {
+      } catch (e) {
+        // Non-fatal: activity creation should not block sync
+        console.warn(`[fathom-sync] Error creating activity for meeting ${meeting.id}:`, e instanceof Error ? e.message : String(e))
       }
     }
 

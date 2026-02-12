@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-import { analyzeTranscriptWithClaude, deduplicateActionItems, type TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts'
+import { analyzeTranscriptWithClaude, deduplicateActionItems, type TranscriptAnalysis } from '../_shared/aiAnalysis.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
 
 const corsHeaders = {

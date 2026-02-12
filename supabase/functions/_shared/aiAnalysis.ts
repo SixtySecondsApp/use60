@@ -338,7 +338,7 @@ export async function analyzeTranscriptWithClaude(
         
         if (membership?.org_id) {
           // Import cost tracking helper
-          const { logAICostEvent } = await import('../_shared/costTracking.ts')
+          const { logAICostEvent } = await import('./costTracking.ts')
           await logAICostEvent(
             supabaseClient,
             meeting.owner_user_id,

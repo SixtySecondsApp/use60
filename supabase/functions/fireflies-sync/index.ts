@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { enrichFirefliesMeeting } from './enrichment.ts'
+import { adaptFirefliesMeeting, writeMeetingData } from '../_shared/ingestion/index.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -447,48 +448,27 @@ serve(async (req) => {
         const insertedMeetingIds: string[] = []
 
         if (newTranscripts.length > 0) {
-          const meetingsToInsert = newTranscripts.map(transcript => ({
-            owner_user_id: user.id,
-            org_id: orgId,
-            external_id: transcript.id,
-            provider: 'fireflies',
-            title: transcript.title,
-            meeting_start: new Date(transcript.date).toISOString(),
-            duration_minutes: transcript.duration || null,
-            share_url: transcript.video_url || transcript.audio_url || transcript.transcript_url,
-            transcript_text: sentencesToText(transcript.sentences),
-            owner_email: transcript.organizer_email || transcript.host_email || null,
-            summary: transcript.summary?.overview || transcript.summary?.short_summary || null,
-            transcript_status: 'complete',
-            summary_status: (transcript.summary?.overview || transcript.summary?.short_summary) ? 'complete' : 'pending',
-            sync_status: 'synced',
-            last_synced_at: new Date().toISOString(),
-          }))
-
-          const { data: insertedRows, error: insertError } = await serviceClient
-            .from('meetings')
-            .insert(meetingsToInsert)
-            .select('id, external_id')
-
-          if (insertError) {
-            console.error('Error batch inserting meetings:', insertError)
-            // Fallback: try inserting one by one to identify which ones fail
-            for (const meeting of meetingsToInsert) {
-              const { data: singleRow, error: singleError } = await serviceClient
-                .from('meetings')
-                .insert(meeting)
-                .select('id, external_id')
-              if (singleError) {
-                console.error(`Error inserting meeting ${meeting.external_id}:`, singleError)
-              } else {
-                syncedCount++
-                if (singleRow?.[0]?.id) insertedMeetingIds.push(singleRow[0].id)
+          for (const transcript of newTranscripts) {
+            try {
+              const normalized = adaptFirefliesMeeting({
+                transcript,
+                userId: user.id,
+                orgId,
+                ownerEmail: user.email,
+              })
+              const result = await writeMeetingData(serviceClient, normalized, {
+                skipParticipants: true,
+                skipActionItems: true,
+                skipIndexing: true,
+                companySource: 'fireflies_sync',
+              })
+              insertedMeetingIds.push(result.meetingId)
+              syncedCount++
+              if (result.errors.length > 0) {
+                console.warn(`[fireflies-sync] Non-fatal errors for ${transcript.id}:`, result.errors)
               }
-            }
-          } else {
-            syncedCount = newTranscripts.length
-            if (insertedRows) {
-              insertedMeetingIds.push(...insertedRows.map(r => r.id))
+            } catch (err) {
+              console.error(`[fireflies-sync] Failed to insert meeting for transcript ${transcript.id}:`, err instanceof Error ? err.message : String(err))
             }
           }
         }
