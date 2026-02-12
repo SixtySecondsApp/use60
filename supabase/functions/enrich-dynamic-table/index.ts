@@ -1,16 +1,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { fetchWithRetry } from '../_shared/rateLimiter.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const JSON_HEADERS = {
-  ...corsHeaders,
-  'Content-Type': 'application/json',
-}
+import { checkCreditBalance, logAICostEvent, logFlatRateCostEvent } from '../_shared/costTracking.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 
 const LOG_PREFIX = '[enrich-dynamic-table]'
 
@@ -41,6 +33,215 @@ interface EnrichRequest {
   resume_job_id?: string
   /** When true, skip rows where the cell already has status='complete' */
   skip_completed?: boolean
+  /** Preview mode: process one row, skip job creation and cell persistence */
+  preview_mode?: boolean
+  /** Override prompt for preview */
+  preview_prompt?: string
+  /** Override provider for preview */
+  preview_provider?: 'openrouter' | 'anthropic' | 'exa'
+  /** Specific row to preview (defaults to first row) */
+  preview_row_id?: string
+  /** Optional product profile ID for injecting product context into prompts */
+  product_profile_id?: string
+  /** Optional fact profile ID for resolving ${variable} placeholders in prompts */
+  context_profile_id?: string
+}
+
+/**
+ * Fetch a product profile and build a context string for prompt injection.
+ * Returns empty string if product_profile_id is not provided or not found.
+ */
+async function buildProductContext(
+  productProfileId: string | undefined,
+  userClient: ReturnType<typeof createClient>
+): Promise<string> {
+  if (!productProfileId) return ''
+
+  const { data: profile, error } = await userClient
+    .from('product_profiles')
+    .select('name, description, research_data, research_status')
+    .eq('id', productProfileId)
+    .maybeSingle()
+
+  if (error || !profile) {
+    console.warn(`${LOG_PREFIX} Product profile ${productProfileId} not found or access denied:`, error?.message)
+    return ''
+  }
+
+  const researchData = (profile.research_data ?? {}) as Record<string, unknown>
+  const parts: string[] = [`Product: ${profile.name}`]
+
+  if (profile.description) {
+    parts.push(`Description: ${profile.description}`)
+  }
+
+  if (researchData.value_propositions) {
+    const vp = Array.isArray(researchData.value_propositions)
+      ? researchData.value_propositions.join('; ')
+      : String(researchData.value_propositions)
+    parts.push(`Value Propositions: ${vp}`)
+  }
+
+  if (researchData.differentiators) {
+    const diff = Array.isArray(researchData.differentiators)
+      ? researchData.differentiators.join('; ')
+      : String(researchData.differentiators)
+    parts.push(`Differentiators: ${diff}`)
+  }
+
+  if (researchData.pain_points_solved) {
+    const pp = Array.isArray(researchData.pain_points_solved)
+      ? researchData.pain_points_solved.join('; ')
+      : String(researchData.pain_points_solved)
+    parts.push(`Pain Points Solved: ${pp}`)
+  }
+
+  return parts.join('\n')
+}
+
+/**
+ * Resolve ${product_context} placeholder in a prompt string.
+ * If product context is empty, removes the placeholder cleanly.
+ */
+function resolveProductContext(prompt: string, productContext: string): string {
+  if (!prompt.includes('${product_context}')) return prompt
+  return prompt.replace(/\$\{product_context\}/g, productContext || '')
+}
+
+/**
+ * Fetch a fact profile and build a flat key-value context for prompt variable resolution.
+ * Returns empty Record if profileId is not provided or not found.
+ */
+async function buildFactProfileContext(
+  profileId: string | undefined,
+  supabaseClient: ReturnType<typeof createClient>
+): Promise<Record<string, string>> {
+  if (!profileId) return {}
+
+  const { data: profile, error } = await supabaseClient
+    .from('client_fact_profiles')
+    .select('research_data, is_org_profile, company_name')
+    .eq('id', profileId)
+    .maybeSingle()
+
+  if (error || !profile) {
+    console.warn(`${LOG_PREFIX} Fact profile ${profileId} not found or error:`, error?.message)
+    return {}
+  }
+
+  const rd = (profile.research_data ?? {}) as Record<string, unknown>
+  const ctx: Record<string, string> = {}
+
+  // Helper: safely stringify a value (arrays joined, objects stringified, primitives as-is)
+  const str = (val: unknown): string => {
+    if (val == null) return ''
+    if (Array.isArray(val)) return val.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(', ')
+    if (typeof val === 'object') return JSON.stringify(val)
+    return String(val)
+  }
+
+  // company_overview
+  const co = rd.company_overview as Record<string, unknown> | undefined
+  ctx.company_name = str(co?.name || profile.company_name)
+  ctx.tagline = str(co?.tagline)
+  ctx.description = str(co?.description)
+
+  // market_position
+  const mp = rd.market_position as Record<string, unknown> | undefined
+  ctx.industry = str(mp?.industry)
+  ctx.target_market = str(mp?.target_market)
+  ctx.competitors = str(mp?.competitors)
+  ctx.differentiators = str(mp?.differentiators)
+
+  // products_services
+  const ps = rd.products_services as Record<string, unknown> | undefined
+  ctx.products = str(ps?.products)
+  ctx.key_features = str(ps?.key_features)
+  ctx.use_cases = str(ps?.use_cases)
+  ctx.pricing_model = str(ps?.pricing_model)
+
+  // team_leadership
+  const tl = rd.team_leadership as Record<string, unknown> | undefined
+  const keyPeople = tl?.key_people as { name: string; title: string }[] | undefined
+  ctx.key_people = keyPeople ? keyPeople.map(p => `${p.name} (${p.title})`).join(', ') : ''
+  ctx.employee_count = str(tl?.employee_count)
+  ctx.employee_range = str(tl?.employee_range)
+
+  // technology
+  const tech = rd.technology as Record<string, unknown> | undefined
+  ctx.tech_stack = str(tech?.tech_stack)
+
+  // financials
+  const fin = rd.financials as Record<string, unknown> | undefined
+  ctx.revenue_range = str(fin?.revenue_range)
+  ctx.funding_status = str(fin?.funding_status)
+
+  // ideal_customer_indicators
+  const ici = rd.ideal_customer_indicators as Record<string, unknown> | undefined
+  ctx.value_propositions = str(ici?.value_propositions)
+  ctx.pain_points = str(ici?.pain_points)
+  ctx.buying_signals = str(ici?.buying_signals)
+
+  // Remove empty-string entries
+  for (const key of Object.keys(ctx)) {
+    if (!ctx[key]) delete ctx[key]
+  }
+
+  return ctx
+}
+
+/**
+ * Resolve ${variable_name} placeholders in a prompt using fact profile context.
+ * Skips ${product_context} (handled separately) and @column_key references.
+ */
+function resolveFactProfileContext(prompt: string, context: Record<string, string>): string {
+  if (Object.keys(context).length === 0) return prompt
+  return prompt.replace(/\$\{([a-z][a-z0-9_]*)\}/g, (_match, varName) => {
+    // Don't replace ${product_context} — that's handled by resolveProductContext
+    if (varName === 'product_context') return _match
+    return context[varName] ?? _match
+  })
+}
+
+/**
+ * Resolve the fact profile ID to use for context, with fallback chain:
+ * 1. Explicit context_profile_id from request body
+ * 2. Table's context_profile_id column
+ * 3. Org's is_org_profile=true profile
+ * 4. null (skip fact profile context)
+ */
+async function resolveContextProfileId(
+  bodyProfileId: string | undefined,
+  tableId: string,
+  orgId: string | null,
+  serviceClient: ReturnType<typeof createClient>
+): Promise<string | undefined> {
+  // 1. Explicit from request body
+  if (bodyProfileId) return bodyProfileId
+
+  // 2. From the table's context_profile_id column
+  const { data: tableRow } = await serviceClient
+    .from('dynamic_tables')
+    .select('context_profile_id')
+    .eq('id', tableId)
+    .maybeSingle()
+
+  if (tableRow?.context_profile_id) return tableRow.context_profile_id as string
+
+  // 3. Org's default org profile
+  if (orgId) {
+    const { data: orgProfile } = await serviceClient
+      .from('client_fact_profiles')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('is_org_profile', true)
+      .maybeSingle()
+
+    if (orgProfile?.id) return orgProfile.id as string
+  }
+
+  // 4. No fact profile context
+  return undefined
 }
 
 interface JobSummary {
@@ -54,6 +255,37 @@ interface JobSummary {
   /** The row_index of the last processed row — used for batch resumption */
   last_processed_row_index: number
 }
+
+interface IntentSignal {
+  signal: string
+  strength: 'high' | 'medium' | 'context'
+  evidence?: string
+}
+
+interface ExaCitation {
+  title?: string
+  url?: string
+}
+
+interface ExaAnswerResponse {
+  answer?: string
+  citations?: ExaCitation[]
+}
+
+interface AICallResult {
+  text: string
+  inputTokens: number
+  outputTokens: number
+}
+
+interface ExtractionResult {
+  data: Record<string, unknown>
+  inputTokens: number
+  outputTokens: number
+}
+
+// Credit costs per API call
+const EXA_ENRICHMENT_CREDIT_COST = 0.05
 
 /**
  * Determine confidence score based on the AI response content.
@@ -112,7 +344,7 @@ function scoreConfidence(text: string): number {
  * Call Claude API directly (fallback when no OpenRouter model specified).
  * Returns the text content or throws on error/timeout.
  */
-async function callClaude(prompt: string, apiKey: string): Promise<string> {
+async function callClaude(prompt: string, apiKey: string): Promise<AICallResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), ROW_TIMEOUT_MS)
 
@@ -154,7 +386,11 @@ async function callClaude(prompt: string, apiKey: string): Promise<string> {
       throw new Error('No text content in Claude response')
     }
 
-    return textBlock.text.trim()
+    return {
+      text: textBlock.text.trim(),
+      inputTokens: data.usage?.input_tokens || 0,
+      outputTokens: data.usage?.output_tokens || 0,
+    }
   } finally {
     clearTimeout(timeout)
   }
@@ -164,7 +400,7 @@ async function callClaude(prompt: string, apiKey: string): Promise<string> {
  * Call OpenRouter API with a specified model.
  * OpenRouter uses OpenAI-compatible API format.
  */
-async function callOpenRouter(prompt: string, apiKey: string, modelId: string): Promise<string> {
+async function callOpenRouter(prompt: string, apiKey: string, modelId: string): Promise<AICallResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), ROW_TIMEOUT_MS)
 
@@ -205,16 +441,138 @@ async function callOpenRouter(prompt: string, apiKey: string, modelId: string): 
       throw new Error('No content in OpenRouter response')
     }
 
-    return content.trim()
+    return {
+      text: content.trim(),
+      inputTokens: data.usage?.prompt_tokens || 0,
+      outputTokens: data.usage?.completion_tokens || 0,
+    }
   } finally {
     clearTimeout(timeout)
   }
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+/**
+ * Call Exa answer endpoint and return answer + citations.
+ */
+async function callExaAnswer(prompt: string, apiKey: string): Promise<ExaAnswerResponse> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), ROW_TIMEOUT_MS)
+
+  try {
+    const response = await fetchWithRetry(
+      'https://api.exa.ai/answer',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          query: prompt,
+          text: true,
+        }),
+      },
+      {
+        maxRetries: 3,
+        baseDelayMs: 2000,
+        signal: controller.signal,
+        logPrefix: LOG_PREFIX,
+      }
+    )
+
+    if (!response.ok) {
+      const errorBody = await response.text()
+      throw new Error(`Exa API error ${response.status}: ${errorBody}`)
+    }
+
+    const data = (await response.json()) as ExaAnswerResponse
+    return data
+  } finally {
+    clearTimeout(timeout)
   }
+}
+
+/**
+ * Post-process an Exa answer through Claude to extract structured JSON
+ * according to a user-defined schema.
+ */
+async function callClaudeForExtraction(
+  exaAnswer: string,
+  citations: ExaCitation[],
+  schema: { fields: { name: string; type: string; description: string }[] },
+  apiKey: string
+): Promise<ExtractionResult> {
+  const prompt = `Extract structured data from this web research result.
+
+RESEARCH RESULT:
+${exaAnswer}
+
+SOURCES:
+${citations.map(c => `- ${c.title}: ${c.url}`).join('\n')}
+
+Extract the following fields as JSON:
+${schema.fields.map(f => `- "${f.name}" (${f.type}): ${f.description}`).join('\n')}
+
+Return ONLY a valid JSON object with these field names as keys. Use null for any field you cannot determine.`
+
+  const result = await callClaude(prompt, apiKey)
+  try {
+    const cleaned = result.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+    return { data: JSON.parse(cleaned), inputTokens: result.inputTokens, outputTokens: result.outputTokens }
+  } catch {
+    return { data: { _raw: result.text }, inputTokens: result.inputTokens, outputTokens: result.outputTokens }
+  }
+}
+
+function deriveIntentSignals(answer: string, citations: ExaCitation[]): IntentSignal[] {
+  const lowered = answer.toLowerCase()
+  const signals: IntentSignal[] = []
+
+  if (lowered.includes('hiring') || lowered.includes('headcount growth')) {
+    signals.push({
+      signal: 'Hiring momentum indicates active GTM investment',
+      strength: 'high',
+      evidence: 'Answer text references hiring or team expansion.',
+    })
+  }
+  if (lowered.includes('funding') || lowered.includes('series ')) {
+    signals.push({
+      signal: 'Recent funding suggests budget availability',
+      strength: 'high',
+      evidence: 'Answer text references funding activity.',
+    })
+  }
+  if (lowered.includes('expansion') || lowered.includes('new market')) {
+    signals.push({
+      signal: 'Expansion activity suggests near-term tooling demand',
+      strength: 'medium',
+      evidence: 'Answer text references expansion/new market entry.',
+    })
+  }
+  if (citations.length > 0) {
+    signals.push({
+      signal: 'Multiple external sources available for outreach personalization',
+      strength: 'medium',
+      evidence: `Found ${citations.length} citation source(s).`,
+    })
+  }
+
+  if (signals.length === 0) {
+    signals.push({
+      signal: 'No strong intent pattern detected; monitor for new triggers',
+      strength: 'context',
+    })
+  }
+
+  return signals.slice(0, 4)
+}
+
+serve(async (req) => {
+  const preflightResponse = handleCorsPreflightRequest(req)
+  if (preflightResponse) return preflightResponse
+
+  const corsHeaders = getCorsHeaders(req)
+  const JSON_HEADERS = { ...corsHeaders, 'Content-Type': 'application/json' }
 
   try {
     // -----------------------------------------------------------------
@@ -233,6 +591,7 @@ serve(async (req) => {
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
     const openrouterApiKey = Deno.env.get('OPENROUTER_API_KEY') ?? ''
+    const exaApiKey = Deno.env.get('EXA_API_KEY') ?? ''
 
     // At least one AI provider must be configured
     if (!anthropicApiKey && !openrouterApiKey) {
@@ -293,10 +652,234 @@ serve(async (req) => {
       )
     }
 
+    const orgId = table.organization_id as string | null
+
+    // -----------------------------------------------------------------
+    // 2a. Credit balance check
+    // -----------------------------------------------------------------
+    if (orgId) {
+      const creditCheck = await checkCreditBalance(serviceClient, orgId)
+      if (!creditCheck.allowed) {
+        console.warn(`${LOG_PREFIX} Credit check failed for org ${orgId}: ${creditCheck.message}`)
+        return new Response(
+          JSON.stringify({ error: creditCheck.message || 'Insufficient credits' }),
+          { status: 402, headers: JSON_HEADERS }
+        )
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // 2b. Fetch product context (optional — non-breaking)
+    // -----------------------------------------------------------------
+    const productContext = await buildProductContext(body.product_profile_id, userClient)
+    if (productContext) {
+      console.log(`${LOG_PREFIX} Product context loaded for profile ${body.product_profile_id}`)
+    }
+
+    // -----------------------------------------------------------------
+    // 2b2. Fetch fact profile context (optional — non-breaking)
+    // Fallback chain: request body → table column → org default → skip
+    // -----------------------------------------------------------------
+    let factProfileContext: Record<string, string> = {}
+    try {
+      const resolvedProfileId = await resolveContextProfileId(
+        body.context_profile_id,
+        table_id,
+        orgId,
+        serviceClient
+      )
+      if (resolvedProfileId) {
+        factProfileContext = await buildFactProfileContext(resolvedProfileId, serviceClient)
+        const keyCount = Object.keys(factProfileContext).length
+        if (keyCount > 0) {
+          console.log(`${LOG_PREFIX} Fact profile context loaded: ${keyCount} variables from profile ${resolvedProfileId}`)
+        } else {
+          console.log(`${LOG_PREFIX} Fact profile ${resolvedProfileId} found but no context variables extracted`)
+        }
+      }
+    } catch (factErr) {
+      console.warn(`${LOG_PREFIX} Fact profile context resolution failed (non-fatal):`, factErr instanceof Error ? factErr.message : factErr)
+      // Non-fatal: continue without fact profile context
+    }
+
+    // -----------------------------------------------------------------
+    // 2c. Preview mode — process one row, skip column/job/cell persistence
+    // -----------------------------------------------------------------
+    if (body.preview_mode) {
+      const previewPrompt = body.preview_prompt
+      if (!previewPrompt?.trim()) {
+        return new Response(
+          JSON.stringify({ error: 'preview_prompt is required for preview mode' }),
+          { status: 400, headers: JSON_HEADERS }
+        )
+      }
+
+      const previewProvider = body.preview_provider ?? 'anthropic'
+      const previewUseExa = previewProvider === 'exa'
+      const previewUseOpenRouter = previewProvider === 'openrouter'
+
+      // Validate API key for selected provider
+      if (previewUseExa && !exaApiKey) {
+        return new Response(JSON.stringify({ error: 'Exa is not configured' }), { status: 500, headers: JSON_HEADERS })
+      }
+      if (previewUseOpenRouter && !openrouterApiKey) {
+        return new Response(JSON.stringify({ error: 'OpenRouter is not configured' }), { status: 500, headers: JSON_HEADERS })
+      }
+      if (!previewUseExa && !previewUseOpenRouter && !anthropicApiKey) {
+        return new Response(JSON.stringify({ error: 'Anthropic is not configured' }), { status: 500, headers: JSON_HEADERS })
+      }
+
+      // Fetch one row (specific or first in table)
+      let previewRowQuery = serviceClient
+        .from('dynamic_table_rows')
+        .select('id, row_index')
+        .eq('table_id', table_id)
+        .order('row_index', { ascending: true })
+        .limit(1)
+
+      if (body.preview_row_id) {
+        previewRowQuery = serviceClient
+          .from('dynamic_table_rows')
+          .select('id, row_index')
+          .eq('id', body.preview_row_id)
+          .eq('table_id', table_id)
+          .limit(1)
+      }
+
+      const { data: previewRows, error: previewRowError } = await previewRowQuery
+      if (previewRowError || !previewRows || previewRows.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'No rows available for preview' }),
+          { status: 404, headers: JSON_HEADERS }
+        )
+      }
+
+      const previewRow = previewRows[0]
+
+      // Fetch all columns for context
+      const { data: prevAllColumns } = await serviceClient
+        .from('dynamic_table_columns')
+        .select('id, key')
+        .eq('table_id', table_id)
+
+      // Build row context
+      const { data: prevCells } = await serviceClient
+        .from('dynamic_table_cells')
+        .select('column_id, value')
+        .eq('row_id', previewRow.id)
+
+      const prevColMap: Record<string, string> = {}
+      for (const col of prevAllColumns ?? []) {
+        prevColMap[col.id] = col.key
+      }
+      const prevRowContext: Record<string, string> = {}
+      for (const cell of prevCells ?? []) {
+        const key = prevColMap[cell.column_id]
+        if (key && cell.value != null) {
+          prevRowContext[key] = cell.value
+        }
+      }
+
+      const resolvedPreviewPrompt = resolveProductContext(
+        resolveFactProfileContext(
+          resolveColumnMentions(previewPrompt, prevRowContext),
+          factProfileContext
+        ),
+        productContext
+      )
+
+      try {
+        let answer = ''
+        let sources: { title?: string; url?: string }[] = []
+        let intentSignals: IntentSignal[] = []
+
+        let previewCreditsConsumed = 0
+
+        if (previewUseExa) {
+          const exaProductCtx = productContext ? `\n\nProduct context: ${productContext}` : ''
+          const exaQuery = `${resolvedPreviewPrompt}\n\nEntity data: ${JSON.stringify(prevRowContext)}${exaProductCtx}`
+          const exaResult = await callExaAnswer(exaQuery, exaApiKey)
+          answer = typeof exaResult.answer === 'string' ? exaResult.answer.trim() : 'N/A'
+          sources = Array.isArray(exaResult.citations)
+            ? exaResult.citations.map(c => ({ title: c.title, url: c.url })).slice(0, 6)
+            : []
+          intentSignals = deriveIntentSignals(answer, exaResult.citations ?? [])
+
+          // Log Exa cost
+          if (orgId) {
+            await logFlatRateCostEvent(serviceClient, user.id, orgId, 'exa', 'exa-answer', EXA_ENRICHMENT_CREDIT_COST, 'exa_enrichment', { table_id, preview: true })
+            previewCreditsConsumed += EXA_ENRICHMENT_CREDIT_COST
+          }
+        } else {
+          const productSection = productContext
+            ? `\n\nPRODUCT CONTEXT:\n${productContext}\n`
+            : ''
+          const prompt = `You are a data enrichment agent. Given the following information about a person/company, complete the requested enrichment task.
+
+PERSON/COMPANY DATA:
+${JSON.stringify(prevRowContext, null, 2)}${productSection}
+
+ENRICHMENT TASK:
+${resolvedPreviewPrompt}
+
+RESPONSE FORMAT:
+Respond with a JSON object containing two fields:
+- "answer": Your concise, factual enrichment result (string). If you cannot determine the answer, use "N/A".
+- "sources": An array of sources you used. Each source is an object with "title" (short description) and optionally "url" (if a specific web URL is known). If no sources, use an empty array.
+
+Respond with ONLY the JSON object, no markdown or extra text.`
+
+          const aiResult = previewUseOpenRouter
+            ? await callOpenRouter(prompt, openrouterApiKey, 'google/gemini-3-flash-preview')
+            : await callClaude(prompt, anthropicApiKey)
+
+          answer = aiResult.text
+          try {
+            const cleaned = aiResult.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+            const parsed = JSON.parse(cleaned)
+            if (parsed && typeof parsed.answer === 'string') {
+              answer = parsed.answer
+              sources = Array.isArray(parsed.sources) ? parsed.sources : []
+            }
+          } catch {
+            // plain text response
+          }
+
+          // Log LLM cost
+          if (orgId && (aiResult.inputTokens > 0 || aiResult.outputTokens > 0)) {
+            const provider = previewUseOpenRouter ? 'openrouter' as const : 'anthropic' as const
+            const model = previewUseOpenRouter ? 'google/gemini-3-flash-preview' : 'claude-sonnet-4-20250514'
+            await logAICostEvent(serviceClient, user.id, orgId, provider, model, aiResult.inputTokens, aiResult.outputTokens, 'enrichment', { table_id, preview: true })
+          }
+        }
+
+        const confidence = scoreConfidence(answer)
+
+        return new Response(
+          JSON.stringify({
+            answer,
+            sources,
+            intent_signals: intentSignals,
+            confidence,
+            row_context: prevRowContext,
+            credits_consumed: previewCreditsConsumed,
+          }),
+          { status: 200, headers: JSON_HEADERS }
+        )
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Preview failed'
+        console.error(`${LOG_PREFIX} Preview error:`, msg)
+        return new Response(
+          JSON.stringify({ error: msg }),
+          { status: 500, headers: JSON_HEADERS }
+        )
+      }
+    }
+
     // Verify the column exists, belongs to this table, and is an enrichment column
     const { data: column, error: columnError } = await serviceClient
       .from('dynamic_table_columns')
-      .select('id, key, label, is_enrichment, enrichment_prompt, enrichment_model')
+      .select('id, key, label, is_enrichment, enrichment_prompt, enrichment_model, enrichment_provider, enrichment_schema, enrichment_pack_id')
       .eq('id', column_id)
       .eq('table_id', table_id)
       .maybeSingle()
@@ -324,19 +907,47 @@ serve(async (req) => {
       )
     }
 
+    // Detect if this column is part of a pack (multi-column enrichment group)
+    const packId = column.enrichment_pack_id as string | null
+    let packColumns: typeof column[] = []
+
+    if (packId) {
+      const { data: siblings } = await serviceClient
+        .from('dynamic_table_columns')
+        .select('id, key, label, enrichment_prompt, enrichment_schema, enrichment_pack_id, position')
+        .eq('table_id', table_id)
+        .eq('enrichment_pack_id', packId)
+        .order('position', { ascending: true })
+
+      packColumns = siblings ?? []
+      console.log(`${LOG_PREFIX} Pack "${packId}" detected with ${packColumns.length} sibling columns`)
+    }
+
+    const isPackEnrichment = packId !== null && packColumns.length > 1
+
     // Determine which AI provider to use
     const enrichmentModel = column.enrichment_model as string | null
-    const useOpenRouter = enrichmentModel && openrouterApiKey
+    const configuredProvider = (column.enrichment_provider as string | null)?.toLowerCase() ?? null
+    const useExa = configuredProvider === 'exa'
+    const useAnthropic = configuredProvider === 'anthropic'
+    const useOpenRouter = Boolean(!useExa && !useAnthropic && enrichmentModel && openrouterApiKey)
 
     // Validate we have the required API key for the selected provider
-    if (useOpenRouter && !openrouterApiKey) {
+    if (useExa && !exaApiKey) {
+      console.error(`${LOG_PREFIX} Exa provider selected but EXA_API_KEY not configured`)
+      return new Response(
+        JSON.stringify({ error: 'Exa is not configured' }),
+        { status: 500, headers: JSON_HEADERS }
+      )
+    }
+    if (!useExa && !useAnthropic && useOpenRouter && !openrouterApiKey) {
       console.error(`${LOG_PREFIX} OpenRouter model specified but OPENROUTER_API_KEY not configured`)
       return new Response(
         JSON.stringify({ error: 'OpenRouter is not configured' }),
         { status: 500, headers: JSON_HEADERS }
       )
     }
-    if (!useOpenRouter && !anthropicApiKey) {
+    if (!useExa && !useOpenRouter && !anthropicApiKey) {
       console.error(`${LOG_PREFIX} No model specified and ANTHROPIC_API_KEY not configured`)
       return new Response(
         JSON.stringify({ error: 'Default AI provider (Anthropic) is not configured' }),
@@ -344,7 +955,15 @@ serve(async (req) => {
       )
     }
 
-    console.log(`${LOG_PREFIX} Using AI provider: ${useOpenRouter ? `OpenRouter (${enrichmentModel})` : 'Anthropic Claude'}`)
+    const providerLabel = useExa
+      ? 'Exa answer'
+      : useOpenRouter
+        ? `OpenRouter (${enrichmentModel})`
+        : 'Anthropic Claude'
+    console.log(`${LOG_PREFIX} Using AI provider: ${providerLabel}`)
+
+    // Track total credits consumed across this batch
+    let totalCreditsConsumed = 0
 
     // -----------------------------------------------------------------
     // 3. Fetch rows to enrich (with batch limits)
@@ -582,16 +1201,23 @@ serve(async (req) => {
     // -----------------------------------------------------------------
     // 6b. Mark all batch cells as 'pending' for instant UI feedback
     // -----------------------------------------------------------------
-    const pendingUpserts = rows.map((row) => ({
-      row_id: row.id,
-      column_id,
-      value: null,
-      confidence: null,
-      status: 'pending',
-      source: 'ai_enrichment',
-      error_message: null,
-      metadata: null,
-    }))
+    // When pack enrichment, mark all sibling columns' cells as pending too
+    const pendingColumnIds = isPackEnrichment
+      ? packColumns.map(c => c.id)
+      : [column_id]
+
+    const pendingUpserts = rows.flatMap((row) =>
+      pendingColumnIds.map((colId) => ({
+        row_id: row.id,
+        column_id: colId,
+        value: null,
+        confidence: null,
+        status: 'pending',
+        source: 'ai_enrichment',
+        error_message: null,
+        metadata: null,
+      }))
+    )
 
     for (let i = 0; i < pendingUpserts.length; i += 500) {
       const chunk = pendingUpserts.slice(i, i + 500)
@@ -603,7 +1229,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`${LOG_PREFIX} Marked ${pendingUpserts.length} cells as pending`)
+    console.log(`${LOG_PREFIX} Marked ${pendingUpserts.length} cells as pending${isPackEnrichment ? ` (pack: ${pendingColumnIds.length} columns)` : ''}`)
 
     // -----------------------------------------------------------------
     // 7. Process rows sequentially (this batch only)
@@ -616,14 +1242,133 @@ serve(async (req) => {
       const rowContext = rowContextMap[row.id] || {}
 
       try {
-        // Resolve @column_key references in the prompt with actual row values
-        const resolvedPrompt = resolveColumnMentions(enrichmentPrompt, rowContext)
+        // Resolve @column_key references, ${variable} fact profile context, and ${product_context}
+        const resolvedPrompt = resolveProductContext(
+          resolveFactProfileContext(
+            resolveColumnMentions(enrichmentPrompt, rowContext),
+            factProfileContext
+          ),
+          productContext
+        )
+
+        // ---------------------------------------------------------------
+        // Pack enrichment: one Exa+Claude call distributes across all pack columns
+        // ---------------------------------------------------------------
+        if (useExa && isPackEnrichment) {
+          // Build combined schema from all pack sibling columns
+          const combinedFields: { name: string; type: string; description: string; _column_id: string }[] = []
+          for (const packCol of packColumns) {
+            const schema = packCol.enrichment_schema as { fields: { name: string; type: string; description: string }[] } | null
+            if (schema?.fields) {
+              for (const f of schema.fields) {
+                combinedFields.push({ ...f, _column_id: packCol.id })
+              }
+            }
+          }
+          const combinedSchema = { fields: combinedFields.map(({ _column_id: _, ...rest }) => rest) }
+
+          // One Exa call
+          const exaProductCtx = productContext ? `\n\nProduct context: ${productContext}` : ''
+          const exaQuery = `${resolvedPrompt}\n\nEntity data: ${JSON.stringify(rowContext)}${exaProductCtx}`
+          const exaResult = await callExaAnswer(exaQuery, exaApiKey)
+          const answer = typeof exaResult.answer === 'string' ? exaResult.answer.trim() : 'N/A'
+          const sources = Array.isArray(exaResult.citations)
+            ? exaResult.citations.map(c => ({ title: c.title, url: c.url })).slice(0, 6)
+            : []
+          const intentSignals = deriveIntentSignals(answer, exaResult.citations ?? [])
+
+          // Log Exa cost
+          if (orgId) {
+            await logFlatRateCostEvent(serviceClient, user.id, orgId, 'exa', 'exa-answer', EXA_ENRICHMENT_CREDIT_COST, 'exa_enrichment', { table_id, column_id, row_id: row.id, pack: true })
+            totalCreditsConsumed += EXA_ENRICHMENT_CREDIT_COST
+          }
+
+          // One Claude extraction with combined schema
+          let structured: Record<string, unknown> = {}
+          let extractionOk = false
+          if (combinedSchema.fields.length > 0 && anthropicApiKey) {
+            try {
+              const extraction = await callClaudeForExtraction(answer, exaResult.citations ?? [], combinedSchema, anthropicApiKey)
+              structured = extraction.data
+              extractionOk = !('_raw' in structured)
+
+              // Log Claude extraction cost
+              if (orgId && (extraction.inputTokens > 0 || extraction.outputTokens > 0)) {
+                await logAICostEvent(serviceClient, user.id, orgId, 'anthropic', 'claude-sonnet-4-20250514', extraction.inputTokens, extraction.outputTokens, 'enrichment_extraction', { table_id, column_id, row_id: row.id, pack: true })
+              }
+            } catch (schemaErr) {
+              console.error(`${LOG_PREFIX} Pack extraction failed for row ${row.id}:`, schemaErr instanceof Error ? schemaErr.message : schemaErr)
+            }
+          }
+
+          // Distribute each field value to the corresponding pack column's cell
+          const packCellUpserts = packColumns.map((packCol) => {
+            let fieldValue = answer // fallback: raw answer for every column
+            if (extractionOk) {
+              const colSchema = packCol.enrichment_schema as { fields: { name: string; type: string; description: string }[] } | null
+              const fieldName = colSchema?.fields?.[0]?.name
+              if (fieldName && fieldName in structured) {
+                const rawVal = structured[fieldName]
+                fieldValue = rawVal != null ? String(rawVal) : 'N/A'
+              }
+            }
+            return {
+              row_id: row.id,
+              column_id: packCol.id,
+              value: fieldValue,
+              confidence: scoreConfidence(fieldValue),
+              source: 'ai_enrichment',
+              status: 'complete',
+              error_message: null,
+              metadata: {
+                enrichment_provider: 'exa',
+                ...(sources.length > 0 ? { sources } : {}),
+                ...(intentSignals.length > 0 ? { intent_signals: intentSignals } : {}),
+                ...(extractionOk ? { structured_data: structured } : {}),
+                enrichment_pack_id: packId,
+              },
+            }
+          })
+
+          const { error: packUpsertError } = await serviceClient
+            .from('dynamic_table_cells')
+            .upsert(packCellUpserts, { onConflict: 'row_id,column_id' })
+
+          if (packUpsertError) {
+            console.error(`${LOG_PREFIX} Pack cell upsert error for row ${row.id}:`, packUpsertError.message)
+            throw new Error(`Pack cell upsert failed: ${packUpsertError.message}`)
+          }
+
+          // Insert job result for the driver column
+          await serviceClient.from('enrichment_job_results').insert({
+            job_id: jobId,
+            row_id: row.id,
+            result: answer,
+            confidence: scoreConfidence(answer),
+            source: 'ai_enrichment',
+          })
+
+          processedRows++
+          lastRowIndex = row.row_index
+          await serviceClient
+            .from('enrichment_jobs')
+            .update({ processed_rows: processedRows, failed_rows: failedRows, last_processed_row_index: lastRowIndex })
+            .eq('id', jobId)
+          continue // skip the normal single-column flow
+        }
+
+        // ---------------------------------------------------------------
+        // Standard single-column enrichment
+        // ---------------------------------------------------------------
 
         // Build the prompt
+        const productSection = productContext
+          ? `\n\nPRODUCT CONTEXT:\n${productContext}\n`
+          : ''
         const prompt = `You are a data enrichment agent. Given the following information about a person/company, complete the requested enrichment task.
 
 PERSON/COMPANY DATA:
-${JSON.stringify(rowContext, null, 2)}
+${JSON.stringify(rowContext, null, 2)}${productSection}
 
 ENRICHMENT TASK:
 ${resolvedPrompt}
@@ -637,28 +1382,83 @@ Example: {"answer": "Series B, raised $50M in Jan 2025", "sources": [{"title": "
 
 Respond with ONLY the JSON object, no markdown or extra text.`
 
-        // Call AI provider (OpenRouter if model specified, otherwise Claude)
-        const rawResult = useOpenRouter
-          ? await callOpenRouter(prompt, openrouterApiKey, enrichmentModel!)
-          : await callClaude(prompt, anthropicApiKey)
-
-        // Parse structured response (answer + sources)
-        let answer = rawResult
+        let answer = ''
         let sources: { title?: string; url?: string }[] = []
-        try {
-          // Strip markdown code fences if present
-          const cleaned = rawResult.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
-          const parsed = JSON.parse(cleaned)
-          if (parsed && typeof parsed.answer === 'string') {
-            answer = parsed.answer
-            sources = Array.isArray(parsed.sources) ? parsed.sources : []
+        let intentSignals: IntentSignal[] = []
+        let structuredData: Record<string, unknown> | null = null
+        const enrichmentSchema = column.enrichment_schema as { fields: { name: string; type: string; description: string }[] } | null
+
+        if (useExa) {
+          const exaProductCtx = productContext ? `\n\nProduct context: ${productContext}` : ''
+          const exaQuery = `${resolvedPrompt}\n\nEntity data: ${JSON.stringify(rowContext)}${exaProductCtx}`
+          const exaResult = await callExaAnswer(exaQuery, exaApiKey)
+          answer = typeof exaResult.answer === 'string' ? exaResult.answer.trim() : 'N/A'
+          sources = Array.isArray(exaResult.citations)
+            ? exaResult.citations
+                .map((citation) => ({
+                  title: citation.title,
+                  url: citation.url,
+                }))
+                .slice(0, 6)
+            : []
+          intentSignals = deriveIntentSignals(answer, exaResult.citations ?? [])
+
+          // Log Exa cost
+          if (orgId) {
+            await logFlatRateCostEvent(serviceClient, user.id, orgId, 'exa', 'exa-answer', EXA_ENRICHMENT_CREDIT_COST, 'exa_enrichment', { table_id, column_id, row_id: row.id })
+            totalCreditsConsumed += EXA_ENRICHMENT_CREDIT_COST
           }
-        } catch {
-          // AI returned plain text — use as-is, no sources
+
+          // Schema-based structured extraction: Exa answer → Claude post-processing
+          if (enrichmentSchema && enrichmentSchema.fields?.length > 0 && anthropicApiKey) {
+            try {
+              const extraction = await callClaudeForExtraction(answer, exaResult.citations ?? [], enrichmentSchema, anthropicApiKey)
+              structuredData = extraction.data
+
+              // Log Claude extraction cost
+              if (orgId && (extraction.inputTokens > 0 || extraction.outputTokens > 0)) {
+                await logAICostEvent(serviceClient, user.id, orgId, 'anthropic', 'claude-sonnet-4-20250514', extraction.inputTokens, extraction.outputTokens, 'enrichment_extraction', { table_id, column_id, row_id: row.id })
+              }
+            } catch (schemaErr) {
+              console.error(`${LOG_PREFIX} Schema extraction failed for row ${row.id}:`, schemaErr instanceof Error ? schemaErr.message : schemaErr)
+              // Non-fatal: continue with unstructured answer
+            }
+          }
+        } else {
+          // Call AI provider (OpenRouter if model specified, otherwise Claude)
+          const aiResult = useOpenRouter
+            ? await callOpenRouter(prompt, openrouterApiKey, enrichmentModel!)
+            : await callClaude(prompt, anthropicApiKey)
+
+          // Parse structured response (answer + sources)
+          answer = aiResult.text
+          try {
+            // Strip markdown code fences if present
+            const cleaned = aiResult.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+            const parsed = JSON.parse(cleaned)
+            if (parsed && typeof parsed.answer === 'string') {
+              answer = parsed.answer
+              sources = Array.isArray(parsed.sources) ? parsed.sources : []
+            }
+          } catch {
+            // AI returned plain text — use as-is, no sources
+          }
+
+          // Log LLM cost
+          if (orgId && (aiResult.inputTokens > 0 || aiResult.outputTokens > 0)) {
+            const provider = useOpenRouter ? 'openrouter' as const : 'anthropic' as const
+            const model = useOpenRouter ? enrichmentModel! : 'claude-sonnet-4-20250514'
+            await logAICostEvent(serviceClient, user.id, orgId, provider, model, aiResult.inputTokens, aiResult.outputTokens, 'enrichment', { table_id, column_id, row_id: row.id })
+          }
         }
 
         const confidence = scoreConfidence(answer)
-        const cellMetadata = sources.length > 0 ? { sources } : null
+        const cellMetadata = {
+          enrichment_provider: useExa ? 'exa' : (useOpenRouter ? 'openrouter' : 'anthropic'),
+          ...(sources.length > 0 ? { sources } : {}),
+          ...(intentSignals.length > 0 ? { intent_signals: intentSignals } : {}),
+          ...(structuredData ? { structured_data: structuredData } : {}),
+        }
 
         // Upsert cell with result (sources in metadata, not in value)
         const { error: upsertError } = await serviceClient
@@ -706,29 +1506,29 @@ Respond with ONLY the JSON object, no markdown or extra text.`
           displayError
         )
 
-        // Mark cell as failed
-        await serviceClient
+        // Mark cell(s) as failed — for pack enrichment, mark all sibling columns
+        const failColumnIds = isPackEnrichment ? packColumns.map(c => c.id) : [column_id]
+        const failUpserts = failColumnIds.map(colId => ({
+          row_id: row.id,
+          column_id: colId,
+          value: null,
+          confidence: null,
+          source: 'ai_enrichment',
+          status: 'failed',
+          error_message: displayError,
+          metadata: null,
+        }))
+
+        const cellFailResult = await serviceClient
           .from('dynamic_table_cells')
-          .upsert(
-            {
-              row_id: row.id,
-              column_id,
-              value: null,
-              confidence: null,
-              source: 'ai_enrichment',
-              status: 'failed',
-              error_message: displayError,
-            },
-            { onConflict: 'row_id,column_id' }
+          .upsert(failUpserts, { onConflict: 'row_id,column_id' })
+
+        if (cellFailResult.error) {
+          console.error(
+            `${LOG_PREFIX} Failed to mark cell as failed for row ${row.id}:`,
+            cellFailResult.error.message
           )
-          .then(({ error: cellErr }) => {
-            if (cellErr) {
-              console.error(
-                `${LOG_PREFIX} Failed to mark cell as failed for row ${row.id}:`,
-                cellErr.message
-              )
-            }
-          })
+        }
 
         // Insert job result with error
         await serviceClient.from('enrichment_job_results').insert({
@@ -787,18 +1587,18 @@ Respond with ONLY the JSON object, no markdown or extra text.`
         .eq('id', jobId)
 
       console.log(
-        `${LOG_PREFIX} Job ${jobId} ${finalStatus}: ${processedRows} processed, ${failedRows} failed`
+        `${LOG_PREFIX} Job ${jobId} ${finalStatus}: ${processedRows} processed, ${failedRows} failed, credits consumed: ${totalCreditsConsumed.toFixed(4)}`
       )
     } else {
       console.log(
-        `${LOG_PREFIX} Job ${jobId} batch complete: ${processedRows} processed, ${failedRows} failed, more rows remain`
+        `${LOG_PREFIX} Job ${jobId} batch complete: ${processedRows} processed, ${failedRows} failed, credits consumed: ${totalCreditsConsumed.toFixed(4)}, more rows remain`
       )
     }
 
     // -----------------------------------------------------------------
     // 9. Return job summary
     // -----------------------------------------------------------------
-    const summary: JobSummary = {
+    const summary: JobSummary & { credits_consumed: number } = {
       job_id: jobId,
       status: hasMore ? 'running' : (processedRows === 0 && failedRows > 0 ? 'failed' : 'complete'),
       total_rows: totalRowCount,
@@ -806,6 +1606,7 @@ Respond with ONLY the JSON object, no markdown or extra text.`
       failed_rows: failedRows,
       has_more: hasMore,
       last_processed_row_index: lastRowIndex,
+      credits_consumed: totalCreditsConsumed,
     }
 
     return new Response(JSON.stringify(summary), {

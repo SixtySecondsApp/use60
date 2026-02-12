@@ -15,6 +15,7 @@ import {
   Settings,
   Mail,
   Zap,
+  Calendar,
 } from 'lucide-react';
 
 interface ColumnHeaderMenuProps {
@@ -40,6 +41,11 @@ interface ColumnHeaderMenuProps {
   onEditEmailGeneration?: () => void;
   onRegenerateEmails?: () => void;
   onCreateCampaignFromSteps?: () => void;
+  onRefreshAll?: () => void;
+  isAutoEnrichEnabled?: boolean;
+  onToggleAutoEnrich?: () => void;
+  refreshSchedule?: string | null;
+  onScheduleRefresh?: () => void;
   anchorRect?: DOMRect;
 }
 
@@ -66,6 +72,11 @@ export function ColumnHeaderMenu({
   onEditEmailGeneration,
   onRegenerateEmails,
   onCreateCampaignFromSteps,
+  onRefreshAll,
+  isAutoEnrichEnabled,
+  onToggleAutoEnrich,
+  refreshSchedule,
+  onScheduleRefresh,
   anchorRect,
 }: ColumnHeaderMenuProps) {
   const [isRenaming, setIsRenaming] = useState(false);
@@ -257,6 +268,38 @@ export function ColumnHeaderMenu({
           label="Re-enrich all rows"
           onClick={() => {
             onReEnrich();
+            onClose();
+          }}
+        />
+      )}
+      {column.is_enrichment && !isEmailStepColumn && onRefreshAll && (
+        <MenuItem
+          icon={<RefreshCw className="h-4 w-4" />}
+          label="Refresh all (overwrite)"
+          onClick={() => {
+            onRefreshAll();
+            onClose();
+          }}
+        />
+      )}
+      {column.is_enrichment && !isEmailStepColumn && onToggleAutoEnrich && (
+        <MenuItem
+          icon={<Zap className="h-4 w-4" />}
+          label="Auto-enrich new rows"
+          trailing={isAutoEnrichEnabled ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : undefined}
+          onClick={() => {
+            onToggleAutoEnrich();
+            onClose();
+          }}
+        />
+      )}
+      {column.is_enrichment && !isEmailStepColumn && onScheduleRefresh && (
+        <MenuItem
+          icon={<Calendar className="h-4 w-4" />}
+          label="Schedule refresh"
+          trailing={refreshSchedule ? <span className="text-[10px] text-violet-400">{refreshSchedule}</span> : undefined}
+          onClick={() => {
+            onScheduleRefresh();
             onClose();
           }}
         />
@@ -454,11 +497,13 @@ function MenuItem({
   label,
   onClick,
   variant = 'default',
+  trailing,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   variant?: 'default' | 'danger';
+  trailing?: React.ReactNode;
 }) {
   const colorClasses =
     variant === 'danger'
@@ -472,6 +517,7 @@ function MenuItem({
     >
       {icon}
       {label}
+      {trailing && <span className="ml-auto">{trailing}</span>}
     </button>
   );
 }

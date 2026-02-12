@@ -1,7 +1,8 @@
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useState, useEffect } from 'react';
-import { Building2, Check, X, Loader2, AlertCircle, ChevronDown, Brain } from 'lucide-react';
+import { Building2, Check, X, Loader2, AlertCircle, ChevronDown, Brain, FileText } from 'lucide-react';
 import { OrgAIUsage } from '@/components/settings/OrgAIUsage';
+import { OrgProfileSettings } from '@/components/settings/OrgProfileSettings';
 import { Button } from '@/components/ui/button';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -246,6 +247,20 @@ export default function OrganizationSettingsPage() {
                 </>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Company Profile (Fact Profile) */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[#37bd7e]" />
+            Company Profile
+          </h2>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+            <OrgProfileSettings
+              orgId={activeOrgId}
+              canManage={permissions.canManageSettings}
+            />
           </div>
         </div>
 

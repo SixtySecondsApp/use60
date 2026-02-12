@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { SalesTemplateService, type UserWritingStyle } from '@/lib/services/salesTemplateService';
 import { EmailTrainingWizard } from '@/components/ai-voice';
+import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
 
 export default function AIPersonalizationSettings() {
@@ -16,6 +17,8 @@ export default function AIPersonalizationSettings() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [showTrainingWizard, setShowTrainingWizard] = useState(false);
+  const [emailSignOff, setEmailSignOff] = useState('');
+  const [emailSignOffSaving, setEmailSignOffSaving] = useState(false);
   const [currentStyle, setCurrentStyle] = useState<Partial<UserWritingStyle>>({
     name: '',
     tone_description: '',
@@ -24,7 +27,48 @@ export default function AIPersonalizationSettings() {
 
   useEffect(() => {
     fetchStyles();
+    fetchEmailSignOff();
   }, []);
+
+  const fetchEmailSignOff = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('user_tone_settings')
+        .select('email_sign_off')
+        .eq('user_id', user.id)
+        .eq('content_type', 'email')
+        .maybeSingle();
+      if (data?.email_sign_off) {
+        setEmailSignOff(data.email_sign_off);
+      }
+    } catch (error) {
+      logger.error('Failed to load email sign-off:', error);
+    }
+  };
+
+  const saveEmailSignOff = async () => {
+    try {
+      setEmailSignOffSaving(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await supabase
+        .from('user_tone_settings')
+        .upsert({
+          user_id: user.id,
+          content_type: 'email',
+          email_sign_off: emailSignOff || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,content_type' });
+      if (error) throw error;
+      toast.success('Email sign-off saved');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save email sign-off');
+    } finally {
+      setEmailSignOffSaving(false);
+    }
+  };
 
   const fetchStyles = async () => {
     try {
@@ -98,6 +142,39 @@ export default function AIPersonalizationSettings() {
           </Button>
         )}
       </div>
+
+      {/* Email Sign-Off */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <div className="p-2 rounded-lg bg-[#37bd7e]/10">
+              <Mail className="w-5 h-5 text-[#37bd7e]" />
+            </div>
+            Email Sign-Off
+          </CardTitle>
+          <CardDescription>
+            How you close off emails. Used by AI when generating outreach sequences and follow-ups.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              value={emailSignOff}
+              onChange={(e) => setEmailSignOff(e.target.value)}
+              placeholder="e.g. Best, Andrew"
+              className="max-w-sm"
+            />
+            <Button
+              onClick={saveEmailSignOff}
+              disabled={emailSignOffSaving}
+              className="bg-[#37bd7e] hover:bg-[#2da76c]"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {emailSignOffSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Train from Emails Card */}
       {!isEditing && (

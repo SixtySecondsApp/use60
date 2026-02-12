@@ -94,6 +94,8 @@ interface OpsTableProps {
   onColumnReorder?: (columnKeys: string[]) => void;
   onColumnResize?: (columnId: string, width: number) => void;
   onEnrichRow?: (rowId: string, columnId: string) => void;
+  autoEnrichColumnIds?: Set<string>;
+  columnScheduleLabels?: Record<string, string>;
   groupConfig?: GroupConfig | null;
   summaryConfig?: Record<string, AggregateType> | null;
 }
@@ -144,6 +146,8 @@ function SortableColumnHeader({
   renderIcon,
   onResizeStart,
   resizingWidth,
+  isAutoEnrich,
+  scheduleLabel,
 }: {
   col: Column;
   isHovered: boolean;
@@ -153,6 +157,8 @@ function SortableColumnHeader({
   renderIcon: (col: Column) => React.ReactNode;
   onResizeStart?: (e: React.MouseEvent, columnId: string) => void;
   resizingWidth?: number;
+  isAutoEnrich?: boolean;
+  scheduleLabel?: string;
 }) {
   const {
     attributes,
@@ -204,6 +210,14 @@ function SortableColumnHeader({
       <span className="truncate text-xs font-medium text-gray-300">
         {col.label}
       </span>
+      {(scheduleLabel || (col.is_enrichment && (col.integration_config as Record<string, unknown> | null)?.refresh_schedule)) && (
+        <span className="shrink-0 text-[9px] px-1 py-0 rounded bg-violet-500/15 text-violet-400 border border-violet-500/30 font-medium uppercase">
+          {scheduleLabel || String((col.integration_config as Record<string, unknown>)!.refresh_schedule)}
+        </span>
+      )}
+      {isAutoEnrich && (
+        <Zap className="w-3 h-3 shrink-0 text-amber-400" title="Auto-enrich enabled" />
+      )}
       <ChevronDown
         className={`
           w-3 h-3 text-gray-500 shrink-0 ml-auto transition-opacity
@@ -242,6 +256,8 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   onColumnReorder,
   onColumnResize,
   onEnrichRow,
+  autoEnrichColumnIds,
+  columnScheduleLabels,
   groupConfig,
   summaryConfig,
 }) => {
@@ -585,6 +601,8 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                     renderIcon={renderColumnIcon}
                     onResizeStart={handleResizeStart}
                     resizingWidth={resizingColumnId === col.id ? resizingWidth ?? undefined : undefined}
+                    isAutoEnrich={autoEnrichColumnIds?.has(col.id)}
+                    scheduleLabel={columnScheduleLabels?.[col.id]}
                   />
                 ))}
               </SortableContext>

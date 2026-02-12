@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Sparkles, Newspaper, Cpu, Swords, AlertTriangle, AtSign, Plus, Trash2 } from 'lucide-react';
+import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers } from 'lucide-react';
+import { toast } from 'sonner';
+import { GENERIC_TEMPLATES, EXA_TEMPLATES, type EnrichmentTemplate } from './enrichmentTemplates';
+import { supabase } from '@/lib/supabase/clientV2';
 import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 import { HubSpotPropertyPicker } from './HubSpotPropertyPicker';
 import { ApolloPropertyPicker } from './ApolloPropertyPicker';
@@ -21,6 +24,7 @@ interface ColumnConfig {
   isEnrichment: boolean;
   enrichmentPrompt?: string;
   enrichmentModel?: string;
+  enrichmentProvider?: 'openrouter' | 'anthropic' | 'exa';
   autoRunRows?: number | 'all';
   dropdownOptions?: DropdownOption[];
   formulaExpression?: string;
@@ -34,6 +38,8 @@ interface ColumnConfig {
   };
   actionType?: string;
   actionConfig?: ButtonConfig | Record<string, unknown>;
+  enrichmentSchema?: { fields: { name: string; type: string; description: string }[] };
+  enrichmentPackId?: string;
 }
 
 interface AddColumnModalProps {
@@ -171,26 +177,57 @@ const INTEGRATION_TYPES = [
   { value: 'apify_actor', label: 'Apify Actor' },
 ];
 
-const ENRICHMENT_TEMPLATES = [
+interface PredefinedPack {
+  id: string;
+  name: string;
+  icon: typeof Building2;
+  prompt: string;
+  schema: { fields: { name: string; type: string; description: string }[] };
+}
+
+const PREDEFINED_PACKS: PredefinedPack[] = [
   {
-    name: 'Recent News',
-    prompt: 'Find recent news about @company_name',
-    icon: Newspaper,
+    id: 'company_intel',
+    name: 'Company Intel Pack',
+    icon: Building2,
+    prompt: 'Research @company_name and extract key company information including industry, size, location, funding, and description.',
+    schema: {
+      fields: [
+        { name: 'industry', type: 'text', description: 'Primary industry' },
+        { name: 'employee_count', type: 'number', description: 'Approximate employee count' },
+        { name: 'headquarters', type: 'text', description: 'HQ city and country' },
+        { name: 'latest_funding', type: 'text', description: 'Most recent funding round details' },
+        { name: 'description', type: 'text', description: 'Brief company description' },
+      ],
+    },
   },
   {
-    name: 'Tech Stack',
-    prompt: "Identify @company_name's tech stack from their website",
-    icon: Cpu,
+    id: 'hiring_signals',
+    name: 'Hiring Signals Pack',
+    icon: Users,
+    prompt: 'Analyze @company_name hiring activity including open positions, departments hiring, growth trends, and notable recent hires.',
+    schema: {
+      fields: [
+        { name: 'open_roles', type: 'number', description: 'Number of open job positions' },
+        { name: 'departments_hiring', type: 'text', description: 'Departments actively hiring' },
+        { name: 'growth_rate', type: 'text', description: 'Team growth rate or trend' },
+        { name: 'key_hires', type: 'text', description: 'Notable recent hires' },
+      ],
+    },
   },
   {
-    name: 'Competitors',
-    prompt: 'List main competitors for @company_name',
-    icon: Swords,
-  },
-  {
-    name: 'Pain Points',
-    prompt: 'Based on @title role at @company_name, identify likely pain points',
-    icon: AlertTriangle,
+    id: 'tech_stack',
+    name: 'Tech Stack Pack',
+    icon: Code,
+    prompt: 'Identify @company_name technology stack from their website, job postings, and public information including languages, frameworks, cloud, and databases.',
+    schema: {
+      fields: [
+        { name: 'languages', type: 'text', description: 'Programming languages used' },
+        { name: 'frameworks', type: 'text', description: 'Major frameworks and libraries' },
+        { name: 'cloud_provider', type: 'text', description: 'Cloud infrastructure provider' },
+        { name: 'databases', type: 'text', description: 'Database technologies used' },
+      ],
+    },
   },
 ];
 
@@ -234,9 +271,19 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
   const [linkedinPropertyColumnType, setLinkedinPropertyColumnType] = useState('text');
   const [linkedinAutoRunRows, setLinkedinAutoRunRows] = useState<string>('none');
   const [enrichmentModel, setEnrichmentModel] = useState('google/gemini-3-flash-preview');
+  const [enrichmentProvider, setEnrichmentProvider] = useState<'openrouter' | 'anthropic' | 'exa'>('openrouter');
+  const [exaMode, setExaMode] = useState<'single' | 'pack'>('single');
+  const [selectedPack, setSelectedPack] = useState<string | null>(null);
   const [buttonConfig, setButtonConfig] = useState<ButtonConfig>({
     label: '', color: '#8b5cf6', actions: [],
   });
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewResult, setPreviewResult] = useState<{
+    answer: string;
+    sources?: { title?: string; url?: string }[];
+    intent_signals?: { signal?: string; strength?: string; evidence?: string }[];
+    confidence?: number;
+  } | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -321,6 +368,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     setLinkedinPropertyColumnType('text');
     setLinkedinAutoRunRows('none');
     setEnrichmentModel('google/gemini-3-flash-preview');
+    setEnrichmentProvider('openrouter');
+    setExaMode('single');
+    setSelectedPack(null);
     setButtonConfig({ label: '', color: '#8b5cf6', actions: [] });
     setMentionOpen(false);
     setMentionQuery('');
@@ -328,6 +378,8 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     setFormulaMentionOpen(false);
     setFormulaMentionQuery('');
     setFormulaMentionIndex(0);
+    setPreviewLoading(false);
+    setPreviewResult(null);
   }, [isHubSpotTable]);
 
   useEffect(() => {
@@ -374,6 +426,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
       ...(isEnrichment ? {
         enrichmentPrompt: enrichmentPrompt.trim(),
         enrichmentModel,
+        enrichmentProvider,
         autoRunRows: parsedAutoRun,
       } : {}),
       ...(isDropdownOrTags ? { dropdownOptions } : {}),
@@ -405,10 +458,34 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     onClose();
   };
 
-  const handleTemplateClick = (template: (typeof ENRICHMENT_TEMPLATES)[number]) => {
+  const handleTemplateClick = (template: EnrichmentTemplate, isExa: boolean) => {
     setLabel(template.name);
     setEnrichmentPrompt(template.prompt);
+    if (isExa) setEnrichmentProvider('exa');
     setMentionOpen(false);
+  };
+
+  const handlePreview = async () => {
+    if (!tableId || previewLoading) return;
+    setPreviewLoading(true);
+    setPreviewResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
+        body: {
+          table_id: tableId,
+          column_id: 'preview',
+          preview_mode: true,
+          preview_prompt: enrichmentPrompt,
+          preview_provider: enrichmentProvider,
+        },
+      });
+      if (error) throw error;
+      setPreviewResult(data);
+    } catch (err) {
+      toast.error('Preview failed: ' + (err as Error).message);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   // Insert a column mention at the current cursor position
@@ -444,6 +521,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
       const value = e.target.value;
       const cursorPos = e.target.selectionStart;
       setEnrichmentPrompt(value);
+      setPreviewResult(null);
 
       // Check if we're in an @mention context
       if (existingColumns.length === 0) return;
@@ -501,6 +579,15 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
     },
     [mentionOpen, filteredColumns, mentionIndex, insertMention],
   );
+
+  // Clear preview and reset pack mode when provider changes
+  useEffect(() => {
+    setPreviewResult(null);
+    if (enrichmentProvider !== 'exa') {
+      setExaMode('single');
+      setSelectedPack(null);
+    }
+  }, [enrichmentProvider]);
 
   // Scroll active dropdown item into view (enrichment)
   useEffect(() => {
@@ -1170,7 +1257,8 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
           {/* Enrichment Section */}
           {isEnrichment && (
             <div className="space-y-4">
-              {/* Enrichment Prompt */}
+              {/* Enrichment Prompt (hidden in pack mode) */}
+              {!(enrichmentProvider === 'exa' && exaMode === 'pack') && (
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-300">
                   <Sparkles className="mr-1.5 inline-block h-4 w-4 text-violet-400" />
@@ -1182,7 +1270,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
                     value={enrichmentPrompt}
                     onChange={handlePromptChange}
                     onKeyDown={handlePromptKeyDown}
-                    placeholder="Describe what to enrich… Type @ to reference a column"
+                    placeholder={enrichmentProvider === 'exa' ? 'What recent funding has @company_name raised?' : 'Describe what to enrich… Type @ to reference a column'}
                     rows={3}
                     className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
                   />
@@ -1226,73 +1314,298 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
                     </p>
                   )}
                 </div>
+
+                {/* Preview Button */}
+                {enrichmentPrompt.trim().length > 0 && tableId && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={handlePreview}
+                      disabled={previewLoading}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-violet-500/40 hover:text-violet-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {previewLoading ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      {previewLoading ? 'Testing...' : 'Test on 1 row'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Preview Loading Skeleton */}
+                {previewLoading && (
+                  <div className="mt-3 animate-pulse rounded-lg border border-gray-700/60 bg-gray-800/30 p-4">
+                    <div className="h-3 w-24 rounded bg-gray-700/50 mb-3" />
+                    <div className="h-4 w-full rounded bg-gray-700/40 mb-2" />
+                    <div className="h-4 w-3/4 rounded bg-gray-700/40" />
+                  </div>
+                )}
+
+                {/* Preview Result Card */}
+                {previewResult && !previewLoading && (
+                  <div className="mt-3 rounded-lg border border-gray-700/60 bg-gray-800/30 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-medium text-gray-500">Preview Result</p>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewResult(null)}
+                        className="rounded p-0.5 text-gray-500 hover:text-gray-300"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <p className="text-sm text-gray-200 leading-relaxed">{previewResult.answer}</p>
+
+                    {/* Intent Signal Pills */}
+                    {previewResult.intent_signals && previewResult.intent_signals.length > 0 && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {previewResult.intent_signals.map((sig, i) => (
+                          <span
+                            key={i}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              sig.strength === 'high'
+                                ? 'bg-rose-500/15 text-rose-300'
+                                : sig.strength === 'medium'
+                                  ? 'bg-amber-500/15 text-amber-300'
+                                  : 'bg-gray-700/50 text-gray-400'
+                            }`}
+                          >
+                            {sig.signal}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Sources */}
+                    {previewResult.sources && previewResult.sources.length > 0 && (
+                      <div className="mt-2.5">
+                        <p className="flex items-center gap-1 text-xs text-gray-400 mb-1">
+                          <Link className="h-3 w-3" />
+                          {previewResult.sources.length} source{previewResult.sources.length !== 1 ? 's' : ''}
+                        </p>
+                        <ul className="space-y-0.5">
+                          {previewResult.sources.map((src, i) => (
+                            <li key={i} className="text-xs text-gray-500">
+                              {src.url ? (
+                                <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 hover:underline">
+                                  {src.title || src.url}
+                                </a>
+                              ) : (
+                                <span>{src.title || 'Unknown source'}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Confidence */}
+                    {previewResult.confidence != null && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Confidence: {previewResult.confidence.toFixed(1)}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
+              )}
 
-              {/* AI Model Selection */}
-              <OpenRouterModelPicker
-                value={enrichmentModel}
-                onChange={setEnrichmentModel}
-              />
-
-              {/* Auto-run preference */}
+              {/* AI Provider Selection */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-300">
-                  Auto-run enrichment
+                  Enrichment Provider
                 </label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {[
-                    { value: 'none', label: "Don't run" },
-                    { value: '10', label: '10 rows' },
-                    { value: '50', label: '50 rows' },
-                    { value: 'all', label: 'All rows' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setAutoRunRows(opt.value)}
-                      className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
-                        autoRunRows === opt.value
-                          ? 'border-violet-500 bg-violet-500/15 text-violet-300'
-                          : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600 hover:text-gray-300'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  How many rows to enrich automatically when the column is added
-                </p>
-              </div>
-
-              {/* Templates Grid */}
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Templates
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {ENRICHMENT_TEMPLATES.map((template) => {
-                    const Icon = template.icon;
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: 'openrouter' as const, icon: Brain, title: 'OpenRouter', desc: 'AI model of your choice', tag: 'Best for custom analysis' },
+                    { value: 'anthropic' as const, icon: Sparkles, title: 'Anthropic Claude', desc: 'Claude by Anthropic', tag: 'Best for structured extraction' },
+                    { value: 'exa' as const, icon: Globe, title: 'Exa Web Search', desc: 'Live web search with citations', tag: 'Best for market signals & news' },
+                  ]).map((p) => {
+                    const Icon = p.icon;
+                    const selected = enrichmentProvider === p.value;
                     return (
                       <button
-                        key={template.name}
-                        onClick={() => handleTemplateClick(template)}
-                        className="flex items-start gap-2.5 rounded-lg border border-gray-700/60 bg-gray-800/50 px-3 py-2.5 text-left transition-colors hover:border-violet-500/40 hover:bg-gray-800"
+                        key={p.value}
+                        type="button"
+                        onClick={() => setEnrichmentProvider(p.value)}
+                        className={`rounded-lg border p-3 text-left transition-colors cursor-pointer ${
+                          selected
+                            ? 'border-violet-500 bg-violet-500/10 ring-1 ring-violet-500/30'
+                            : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                        }`}
                       >
-                        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-violet-400" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-200">
-                            {template.name}
-                          </p>
-                          <p className="mt-0.5 text-xs leading-snug text-gray-500">
-                            {template.prompt}
-                          </p>
-                        </div>
+                        <Icon className={`h-5 w-5 mb-1.5 ${selected ? 'text-violet-400' : 'text-gray-400'}`} />
+                        <p className={`text-sm font-medium ${selected ? 'text-violet-200' : 'text-gray-200'}`}>{p.title}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{p.desc}</p>
+                        <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          selected ? 'bg-violet-500/20 text-violet-300' : 'bg-gray-700/50 text-gray-500'
+                        }`}>{p.tag}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
+
+              {/* Exa callout */}
+              {enrichmentProvider === 'exa' && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-violet-500/20 bg-violet-500/5 px-3.5 py-3">
+                  <Globe className="mt-0.5 h-4 w-4 shrink-0 text-violet-400" />
+                  <p className="text-xs leading-relaxed text-gray-300">
+                    Exa searches the live web and returns answers with source citations and intent signals. Write your prompt as a question about the company or person.
+                  </p>
+                </div>
+              )}
+
+              {/* Exa Mode Toggle */}
+              {enrichmentProvider === 'exa' && onAddMultiple && (
+                <div className="grid grid-cols-2 gap-1 rounded-lg border border-gray-700 bg-gray-800/50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => { setExaMode('single'); setSelectedPack(null); }}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      exaMode === 'single'
+                        ? 'bg-violet-600/20 text-violet-300'
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                  >
+                    Single Column
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExaMode('pack')}
+                    className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      exaMode === 'pack'
+                        ? 'bg-violet-600/20 text-violet-300'
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                  >
+                    <Layers className="h-3 w-3" />
+                    Enrichment Pack
+                  </button>
+                </div>
+              )}
+
+              {/* Pack Wizard */}
+              {enrichmentProvider === 'exa' && exaMode === 'pack' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-500">
+                    Select a pack to create multiple linked enrichment columns. One Exa search fills all columns per row.
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {PREDEFINED_PACKS.map((pack) => {
+                      const Icon = pack.icon;
+                      const selected = selectedPack === pack.id;
+                      return (
+                        <button
+                          key={pack.id}
+                          type="button"
+                          onClick={() => setSelectedPack(selected ? null : pack.id)}
+                          className={`rounded-lg border p-4 text-left transition-colors cursor-pointer ${
+                            selected
+                              ? 'border-violet-500 bg-violet-500/10 ring-1 ring-violet-500/30'
+                              : 'border-gray-700/60 bg-gray-800/50 hover:border-violet-500/40'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <Icon className={`h-5 w-5 ${selected ? 'text-violet-400' : 'text-gray-400'}`} />
+                            <p className={`text-sm font-medium ${selected ? 'text-violet-200' : 'text-gray-200'}`}>
+                              {pack.name}
+                            </p>
+                            <span className="ml-auto text-[10px] text-gray-500">
+                              Creates {pack.schema.fields.length} columns
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {pack.schema.fields.map((field) => (
+                              <span
+                                key={field.name}
+                                className="inline-flex text-[10px] px-1.5 py-0.5 rounded bg-gray-700/50 text-gray-400"
+                              >
+                                {field.name.replace(/_/g, ' ')}
+                              </span>
+                            ))}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Single-column enrichment UI (hidden in pack mode) */}
+              {!(enrichmentProvider === 'exa' && exaMode === 'pack') && (
+                <>
+                  {enrichmentProvider === 'openrouter' && (
+                    <OpenRouterModelPicker
+                      value={enrichmentModel}
+                      onChange={setEnrichmentModel}
+                    />
+                  )}
+
+                  {/* Auto-run preference */}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                      Auto-run enrichment
+                    </label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { value: 'none', label: "Don't run" },
+                        { value: '10', label: '10 rows' },
+                        { value: '50', label: '50 rows' },
+                        { value: 'all', label: 'All rows' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setAutoRunRows(opt.value)}
+                          className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                            autoRunRows === opt.value
+                              ? 'border-violet-500 bg-violet-500/15 text-violet-300'
+                              : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      How many rows to enrich automatically when the column is added
+                    </p>
+                  </div>
+
+                  {/* Templates Grid */}
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {enrichmentProvider === 'exa' ? 'Exa Templates' : 'AI Templates'}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(enrichmentProvider === 'exa' ? EXA_TEMPLATES : GENERIC_TEMPLATES).map((template) => {
+                        const Icon = template.icon;
+                        const isExa = enrichmentProvider === 'exa';
+                        return (
+                          <button
+                            key={template.name}
+                            onClick={() => handleTemplateClick(template, isExa)}
+                            className="flex items-start gap-2.5 rounded-lg border border-gray-700/60 bg-gray-800/50 px-3 py-2.5 text-left transition-colors hover:border-violet-500/40 hover:bg-gray-800"
+                          >
+                            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-violet-400" />
+                            <div>
+                              <p className="text-sm font-medium text-gray-200">
+                                {template.name}
+                              </p>
+                              <p className="mt-0.5 text-xs leading-snug text-gray-500">
+                                {template.description}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1305,13 +1618,43 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, existing
           >
             Cancel
           </button>
-          <button
-            onClick={handleAdd}
-            disabled={!canAdd}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Add Column
-          </button>
+          {isEnrichment && enrichmentProvider === 'exa' && exaMode === 'pack' ? (
+            <button
+              onClick={() => {
+                if (!selectedPack || !onAddMultiple) return;
+                const pack = PREDEFINED_PACKS.find(p => p.id === selectedPack);
+                if (!pack) return;
+                const packId = crypto.randomUUID();
+                const columns: ColumnConfig[] = pack.schema.fields.map((field) => ({
+                  key: field.name,
+                  label: field.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                  columnType: 'enrichment',
+                  isEnrichment: true,
+                  enrichmentPrompt: pack.prompt,
+                  enrichmentProvider: 'exa' as const,
+                  enrichmentModel: '',
+                  enrichmentSchema: { fields: [field] },
+                  enrichmentPackId: packId,
+                }));
+                onAddMultiple(columns);
+                onClose();
+              }}
+              disabled={!selectedPack}
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {selectedPack
+                ? `Add Pack (${PREDEFINED_PACKS.find(p => p.id === selectedPack)?.schema.fields.length ?? 0} columns)`
+                : 'Select a Pack'}
+            </button>
+          ) : (
+            <button
+              onClick={handleAdd}
+              disabled={!canAdd}
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Add Column
+            </button>
+          )}
         </div>
       </div>
     </div>

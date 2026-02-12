@@ -26,6 +26,9 @@ import {
   List,
   Maximize2,
   Minimize2,
+  Send,
+  Building2,
+  Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -89,6 +92,8 @@ import { useWorkflowOrchestrator, isWorkflowPrompt } from '@/lib/hooks/useWorkfl
 import { WorkflowProgressStepper } from '@/components/ops/WorkflowProgressStepper';
 // Instantly top-bar UI removed — integration moved to column system
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useFactProfiles } from '@/lib/hooks/useFactProfiles';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
 
 // ---------------------------------------------------------------------------
@@ -190,6 +195,7 @@ function OpsDetailPage() {
   const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
   const [createCampaignFromStepColumn, setCreateCampaignFromStepColumn] = useState<OpsTableColumn | null>(null);
   const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
+  const [scheduleDialogColumn, setScheduleDialogColumn] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'data' | 'rules'>('data');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
@@ -223,6 +229,9 @@ function OpsDetailPage() {
   const [isLoadingLists, setIsLoadingLists] = useState(false);
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- Campaign wizard ----
+  const [showCampaignWizard, setShowCampaignWizard] = useState(false);
 
   // ---- Apollo source controls ----
   const [showApolloFilters, setShowApolloFilters] = useState(false);
@@ -353,6 +362,81 @@ function OpsDetailPage() {
   // ---- Rules hook ----
   const { rules, createRule, toggleRule, deleteRule, isCreating: isRuleCreating } = useOpsRules(tableId);
 
+  const autoEnrichColumnIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of rules) {
+      if (r.trigger_type === 'row_created' && r.action_type === 'run_enrichment' && r.is_enabled) {
+        const colId = (r.action_config as Record<string, unknown>)?.column_id;
+        if (typeof colId === 'string') ids.add(colId);
+      }
+    }
+    return ids;
+  }, [rules]);
+
+  // ---- Fact profiles for context selector ----
+  const orgId = table?.organization_id;
+  const { data: factProfiles = [] } = useFactProfiles(orgId);
+
+  // Sorted profiles: org profile first, then alphabetically
+  const sortedProfiles = useMemo(() => {
+    const orgProfiles = factProfiles.filter((p) => p.is_org_profile);
+    const clientProfiles = factProfiles
+      .filter((p) => !p.is_org_profile)
+      .sort((a, b) => a.company_name.localeCompare(b.company_name));
+    return [...orgProfiles, ...clientProfiles];
+  }, [factProfiles]);
+
+  // Resolve current context profile for display
+  const contextProfile = useMemo(() => {
+    if (!table?.context_profile_id) return null;
+    return factProfiles.find((p) => p.id === table.context_profile_id) ?? null;
+  }, [table?.context_profile_id, factProfiles]);
+
+  // ---- Enrichment refresh schedules ----
+  const { data: enrichSchedules = [], refetch: refetchSchedules } = useQuery({
+    queryKey: ['enrich-schedules', orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data, error } = await supabase
+        .from('agent_schedules')
+        .select('id, cron_expression, prompt_template')
+        .eq('organization_id', orgId)
+        .eq('agent_name', 'enrich-dynamic-table')
+        .eq('is_active', true);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!orgId,
+  });
+
+  const cronToLabel = (cron: string): string => {
+    if (cron === '0 6 * * *') return 'Daily';
+    if (cron === '0 6 * * 1') return 'Weekly';
+    if (cron === '0 6 1 * *') return 'Monthly';
+    return cron;
+  };
+
+  const getScheduleForColumn = useCallback((columnId: string) => {
+    for (const s of enrichSchedules) {
+      try {
+        const tmpl = JSON.parse(s.prompt_template);
+        if (tmpl.column_id === columnId) return { id: s.id, label: cronToLabel(s.cron_expression), cron: s.cron_expression };
+      } catch { /* skip non-json */ }
+    }
+    return null;
+  }, [enrichSchedules]);
+
+  const columnScheduleLabels = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const s of enrichSchedules) {
+      try {
+        const tmpl = JSON.parse(s.prompt_template);
+        if (tmpl.column_id) map[tmpl.column_id] = cronToLabel(s.cron_expression);
+      } catch { /* skip non-json */ }
+    }
+    return Object.keys(map).length > 0 ? map : undefined;
+  }, [enrichSchedules]);
+
   // ---- Button/Action execution ----
   const { executeButton, executeSingleAction } = useActionExecution(tableId);
 
@@ -464,11 +548,14 @@ function OpsDetailPage() {
   // ---- Mutations ----
 
   const updateTableMutation = useMutation({
-    mutationFn: (updates: { name?: string; description?: string }) =>
+    mutationFn: (updates: { name?: string; description?: string; context_profile_id?: string | null }) =>
       tableService.updateTable(tableId!, updates),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
-      toast.success('Table updated');
+      // Skip generic toast for context_profile_id changes (handled by caller)
+      if (!('context_profile_id' in variables)) {
+        toast.success('Table updated');
+      }
     },
     onError: () => toast.error('Failed to update table'),
   });
@@ -480,6 +567,8 @@ function OpsDetailPage() {
       columnType: string;
       isEnrichment: boolean;
       enrichmentPrompt?: string;
+      enrichmentModel?: string;
+      enrichmentProvider?: string;
       autoRunRows?: number | 'all';
       dropdownOptions?: { value: string; label: string; color?: string }[];
       formulaExpression?: string;
@@ -490,6 +579,8 @@ function OpsDetailPage() {
       hubspotPropertyName?: string;
       apolloPropertyName?: string;
       apolloEnrichConfig?: { reveal_personal_emails?: boolean; reveal_phone_number?: boolean };
+      enrichmentSchema?: { fields: { name: string; type: string; description: string }[] };
+      enrichmentPackId?: string;
     }) => {
       const column = await tableService.addColumn({
         tableId: tableId!,
@@ -498,6 +589,8 @@ function OpsDetailPage() {
         columnType: params.columnType as 'text',
         isEnrichment: params.isEnrichment,
         enrichmentPrompt: params.enrichmentPrompt,
+        enrichmentModel: params.enrichmentModel,
+        enrichmentProvider: params.enrichmentProvider,
         dropdownOptions: params.dropdownOptions,
         formulaExpression: params.formulaExpression,
         integrationType: params.integrationType,
@@ -506,6 +599,8 @@ function OpsDetailPage() {
         actionConfig: params.actionConfig,
         hubspotPropertyName: params.hubspotPropertyName,
         apolloPropertyName: params.apolloPropertyName,
+        enrichmentSchema: params.enrichmentSchema,
+        enrichmentPackId: params.enrichmentPackId,
         position: (table?.columns?.length ?? 0),
       });
       return {
@@ -635,8 +730,13 @@ function OpsDetailPage() {
   });
 
   const updateEnrichmentMutation = useMutation({
-    mutationFn: ({ columnId, enrichmentPrompt, enrichmentModel }: { columnId: string; enrichmentPrompt: string; enrichmentModel: string }) =>
-      tableService.updateColumn(columnId, { enrichmentPrompt, enrichmentModel }),
+    mutationFn: ({ columnId, enrichmentPrompt, enrichmentModel, enrichmentProvider }: {
+      columnId: string;
+      enrichmentPrompt: string;
+      enrichmentModel: string;
+      enrichmentProvider: string;
+    }) =>
+      tableService.updateColumn(columnId, { enrichmentPrompt, enrichmentModel, enrichmentProvider }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
       toast.success('Enrichment settings updated');
@@ -2197,6 +2297,70 @@ function OpsDetailPage() {
               <Rows3 className="h-3 w-3" />
               {table.row_count.toLocaleString()} {table.row_count === 1 ? 'row' : 'rows'}
             </span>
+
+            {/* Profile context selector */}
+            {sortedProfiles.length > 0 && (
+              <Select
+                value={table.context_profile_id ?? '__default__'}
+                onValueChange={(val) => {
+                  const profileId = val === '__default__' ? null : val;
+                  const profile = profileId ? factProfiles.find((p) => p.id === profileId) : null;
+                  updateTableMutation.mutate(
+                    { context_profile_id: profileId },
+                    {
+                      onSuccess: () => {
+                        toast.success(
+                          profile
+                            ? `Enrichment context set to "${profile.company_name}"`
+                            : 'Enrichment context reset to default'
+                        );
+                      },
+                    }
+                  );
+                }}
+              >
+                <SelectTrigger className="h-7 w-auto min-w-[140px] max-w-[200px] gap-1.5 border-gray-700 bg-gray-800/50 px-2 text-xs">
+                  <div className="flex items-center gap-1.5 truncate">
+                    {contextProfile ? (
+                      contextProfile.is_org_profile ? (
+                        <Shield className="h-3 w-3 shrink-0 text-violet-400" />
+                      ) : (
+                        <Building2 className="h-3 w-3 shrink-0 text-blue-400" />
+                      )
+                    ) : (
+                      <Shield className="h-3 w-3 shrink-0 text-gray-500" />
+                    )}
+                    <SelectValue placeholder="Context" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default__">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-3.5 w-3.5 text-violet-400" />
+                      <span>Default (Your Business)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectSeparator />
+                  {sortedProfiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <div className="flex items-center gap-2">
+                        {p.is_org_profile ? (
+                          <Shield className="h-3.5 w-3.5 text-violet-400" />
+                        ) : (
+                          <Building2 className="h-3.5 w-3.5 text-blue-400" />
+                        )}
+                        <span className="truncate">{p.company_name}</span>
+                        {p.is_org_profile && (
+                          <span className="ml-1 rounded bg-violet-500/10 px-1 py-0.5 text-[10px] font-medium text-violet-400">
+                            Your Business
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Center: AI Query Bar */}
@@ -2283,6 +2447,25 @@ function OpsDetailPage() {
                 isEnriching={isEnriching || isEnrichingApollo || isEnrichingApolloOrg}
               />
             )}
+            {/* Create Campaign button — visible when table has email column and rows */}
+            {(() => {
+              const hasEmailColumn = columns.some(
+                (c) => c.column_type === 'email' || c.key.toLowerCase().includes('email')
+              );
+              const hasRows = rows.length > 0;
+              const canCreate = hasEmailColumn && hasRows;
+              return (
+                <button
+                  onClick={() => setShowCampaignWizard(true)}
+                  disabled={!canCreate}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-700/40 bg-blue-900/20 px-3 py-1.5 text-sm font-medium text-blue-300 transition-colors hover:bg-blue-900/40 hover:text-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={canCreate ? 'Create an email campaign from this table' : 'Table needs an email column and at least 1 row'}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Create Campaign
+                </button>
+              );
+            })()}
             <button
               onClick={() => addRowMutation.mutate()}
               disabled={addRowMutation.isPending}
@@ -2529,6 +2712,8 @@ function OpsDetailPage() {
             onColumnReorder={setColumnOrder}
             onColumnResize={(columnId, width) => resizeColumnMutation.mutate({ columnId, width })}
             onEnrichRow={handleEnrichRow}
+            autoEnrichColumnIds={autoEnrichColumnIds}
+            columnScheduleLabels={columnScheduleLabels}
             groupConfig={groupConfig}
             summaryConfig={(() => {
               // Auto-add summary aggregates for Instantly engagement columns
@@ -2603,9 +2788,14 @@ function OpsDetailPage() {
         onClose={() => setShowAddColumn(false)}
         onAdd={(col) => addColumnMutation.mutate(col)}
         onAddMultiple={async (cols) => {
-          // Add multiple property columns (HubSpot or Apollo) sequentially
-          for (const col of cols) {
-            await addColumnMutation.mutateAsync(col);
+          // Add multiple property columns (HubSpot, Apollo, or Exa Pack) sequentially
+          try {
+            for (const col of cols) {
+              await addColumnMutation.mutateAsync(col);
+            }
+          } catch (err: unknown) {
+            const msg = err && typeof err === 'object' && 'message' in err ? (err as { message: string }).message : 'Failed to add columns';
+            toast.error(msg);
           }
         }}
         existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
@@ -2674,6 +2864,41 @@ function OpsDetailPage() {
           } : activeColumn.column_type === 'linkedin_property' ? () => {
             reEnrichLinkedIn({ columnId: activeColumn.id });
           } : undefined}
+          onRefreshAll={activeColumn.is_enrichment ? () => {
+            startEnrichment({ columnId: activeColumn.id, skipCompleted: false });
+            toast.success(`Refreshing all rows for "${activeColumn.label}"`);
+          } : undefined}
+          isAutoEnrichEnabled={activeColumn.is_enrichment ? rules.some(
+            (r) => r.trigger_type === 'row_created' && r.action_type === 'run_enrichment' && (r.action_config as Record<string, unknown>)?.column_id === activeColumn.id && r.is_enabled
+          ) : undefined}
+          onToggleAutoEnrich={activeColumn.is_enrichment ? () => {
+            const existingRule = rules.find(
+              (r) => r.trigger_type === 'row_created' && r.action_type === 'run_enrichment' && (r.action_config as Record<string, unknown>)?.column_id === activeColumn.id
+            );
+            if (existingRule) {
+              if (existingRule.is_enabled) {
+                deleteRule(existingRule.id);
+                toast.success(`Auto-enrich disabled for "${activeColumn.label}"`);
+              } else {
+                toggleRule({ ruleId: existingRule.id, enabled: true });
+                toast.success(`Auto-enrich enabled for "${activeColumn.label}"`);
+              }
+            } else if (currentUserId) {
+              createRule({
+                name: `Auto-enrich: ${activeColumn.label}`,
+                trigger_type: 'row_created',
+                condition: {},
+                action_type: 'run_enrichment',
+                action_config: { column_id: activeColumn.id },
+                created_by: currentUserId,
+              });
+              toast.success(`Auto-enrich enabled for "${activeColumn.label}"`);
+            }
+          } : undefined}
+          refreshSchedule={activeColumn.is_enrichment ? getScheduleForColumn(activeColumn.id)?.label ?? null : undefined}
+          onScheduleRefresh={activeColumn.is_enrichment ? () => {
+            setScheduleDialogColumn(activeColumn.id);
+          } : undefined}
           onEditFormula={activeColumn.column_type === 'formula' ? () => {
             setEditFormulaColumn(activeColumn);
           } : undefined}
@@ -2700,22 +2925,107 @@ function OpsDetailPage() {
         />
       )}
 
+      {/* Schedule Refresh Dialog */}
+      {scheduleDialogColumn && (() => {
+        const colObj = columns.find((c) => c.id === scheduleDialogColumn);
+        const existing = getScheduleForColumn(scheduleDialogColumn);
+        const options = [
+          { label: 'No schedule', cron: null },
+          { label: 'Daily', cron: '0 6 * * *' },
+          { label: 'Weekly (Monday)', cron: '0 6 * * 1' },
+          { label: 'Monthly (1st)', cron: '0 6 1 * *' },
+        ] as const;
+        return (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center" onClick={() => setScheduleDialogColumn(null)}>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div className="relative z-10 w-full max-w-sm mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-violet-400" />
+                  <span className="text-sm font-medium text-gray-200">Schedule Refresh</span>
+                </div>
+                <button type="button" onClick={() => setScheduleDialogColumn(null)} className="p-1 rounded-md text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="px-4 py-4">
+                <p className="text-xs text-gray-500 mb-3">
+                  Automatically re-enrich <span className="text-gray-300">{colObj?.label ?? 'this column'}</span> on a schedule.
+                </p>
+                <div className="space-y-2">
+                  {options.map((opt) => {
+                    const isSelected = opt.cron === null ? !existing : existing?.cron === opt.cron;
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                          isSelected
+                            ? 'border-violet-500/60 bg-violet-500/10 text-violet-300'
+                            : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                        }`}
+                        onClick={async () => {
+                          try {
+                            if (opt.cron === null) {
+                              // Remove schedule
+                              if (existing) {
+                                await supabase.from('agent_schedules').delete().eq('id', existing.id);
+                                toast.success('Refresh schedule removed');
+                              }
+                            } else if (existing) {
+                              // Update existing
+                              await supabase.from('agent_schedules').update({ cron_expression: opt.cron, updated_at: new Date().toISOString() }).eq('id', existing.id);
+                              toast.success(`Refresh set to ${opt.label}`);
+                            } else {
+                              // Create new
+                              await supabase.from('agent_schedules').insert({
+                                organization_id: orgId,
+                                agent_name: 'enrich-dynamic-table',
+                                prompt_template: JSON.stringify({ table_id: tableId, column_id: scheduleDialogColumn }),
+                                cron_expression: opt.cron,
+                                is_active: true,
+                              });
+                              toast.success(`Refresh set to ${opt.label}`);
+                            }
+                            refetchSchedules();
+                            setScheduleDialogColumn(null);
+                          } catch (err: unknown) {
+                            toast.error((err as Error).message || 'Failed to update schedule');
+                          }
+                        }}
+                      >
+                        {isSelected ? <Check className="w-4 h-4 text-violet-400 shrink-0" /> : <div className="w-4 h-4 shrink-0" />}
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Edit Enrichment Modal */}
       {editEnrichmentColumn && (
         <EditEnrichmentModal
           isOpen={!!editEnrichmentColumn}
           onClose={() => setEditEnrichmentColumn(null)}
-          onSave={(prompt, model) => {
+          onSave={(prompt, model, provider) => {
             updateEnrichmentMutation.mutate({
               columnId: editEnrichmentColumn.id,
               enrichmentPrompt: prompt,
               enrichmentModel: model,
+              enrichmentProvider: provider,
             });
           }}
           currentPrompt={editEnrichmentColumn.enrichment_prompt ?? ''}
           currentModel={editEnrichmentColumn.enrichment_model ?? 'anthropic/claude-3.5-sonnet'}
+          currentProvider={editEnrichmentColumn.enrichment_provider ?? 'openrouter'}
           columnLabel={editEnrichmentColumn.label}
           existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          contextProfileName={contextProfile?.company_name ?? (factProfiles.find((p) => p.is_org_profile)?.company_name || null)}
+          contextProfileIsOrg={contextProfile ? contextProfile.is_org_profile : true}
         />
       )}
 
@@ -2868,10 +3178,15 @@ function OpsDetailPage() {
             }
           }}
           onAddStepColumns={async (stepCols) => {
-            for (const col of stepCols) {
-              await addColumnMutation.mutateAsync(col);
+            try {
+              for (const col of stepCols) {
+                await addColumnMutation.mutateAsync(col);
+              }
+              toast.success(`Added ${stepCols.length} step columns`);
+            } catch (err: unknown) {
+              const msg = err && typeof err === 'object' && 'message' in err ? (err as { message: string }).message : 'Failed to add step columns';
+              toast.error(msg);
             }
-            toast.success(`Added ${stepCols.length} step columns`);
           }}
           columnLabel={editInstantlyColumn.label}
           currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
@@ -3375,6 +3690,8 @@ function OpsDetailPage() {
       )}
 
       {/* Instantly integration moved to column system — old modals removed */}
+
+      {/* TODO: PIPE-020 CampaignCreationWizard will render here */}
     </div>
   );
 }

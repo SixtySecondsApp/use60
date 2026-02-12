@@ -136,6 +136,86 @@ const EMPTY_RESEARCH_DATA: FactProfileResearchData = {
   },
 }
 
+// ---------------------------------------------------------------------------
+// Org context sync helper
+// ---------------------------------------------------------------------------
+
+async function syncResearchToOrgContext(
+  serviceClient: ReturnType<typeof createClient>,
+  orgId: string,
+  researchData: FactProfileResearchData
+): Promise<{ synced: number }> {
+  const updates: Array<{ key: string; value: unknown }> = []
+
+  // company_overview
+  const co = researchData.company_overview
+  if (co.name) updates.push({ key: 'company_name', value: co.name })
+  if (co.tagline) updates.push({ key: 'tagline', value: co.tagline })
+  if (co.description) updates.push({ key: 'description', value: co.description })
+  if (co.headquarters) updates.push({ key: 'headquarters', value: co.headquarters })
+  if (co.website) updates.push({ key: 'website', value: co.website })
+  if (co.company_type) updates.push({ key: 'company_type', value: co.company_type })
+
+  // market_position
+  const mp = researchData.market_position
+  if (mp.industry) updates.push({ key: 'industry', value: mp.industry })
+  if (mp.target_market) updates.push({ key: 'target_market', value: mp.target_market })
+  if (mp.competitors?.length) updates.push({ key: 'competitors', value: mp.competitors })
+  if (mp.differentiators?.length) updates.push({ key: 'differentiators', value: mp.differentiators })
+
+  // products_services
+  const ps = researchData.products_services
+  if (ps.products?.length) updates.push({ key: 'products', value: ps.products })
+  if (ps.key_features?.length) updates.push({ key: 'key_features', value: ps.key_features })
+  if (ps.use_cases?.length) updates.push({ key: 'use_cases', value: ps.use_cases })
+  if (ps.pricing_model) updates.push({ key: 'pricing_model', value: ps.pricing_model })
+
+  // team_leadership
+  const tl = researchData.team_leadership
+  if (tl.key_people?.length) updates.push({ key: 'key_people', value: tl.key_people })
+  if (tl.employee_count) updates.push({ key: 'employee_count', value: tl.employee_count })
+  if (tl.employee_range) updates.push({ key: 'employee_range', value: tl.employee_range })
+
+  // financials
+  const fi = researchData.financials
+  if (fi.revenue_range) updates.push({ key: 'revenue_range', value: fi.revenue_range })
+  if (fi.funding_status) updates.push({ key: 'funding_status', value: fi.funding_status })
+  if (fi.total_raised) updates.push({ key: 'total_raised', value: fi.total_raised })
+  if (fi.investors?.length) updates.push({ key: 'investors', value: fi.investors })
+
+  // technology
+  const te = researchData.technology
+  if (te.tech_stack?.length) updates.push({ key: 'tech_stack', value: te.tech_stack })
+  if (te.platforms?.length) updates.push({ key: 'platforms', value: te.platforms })
+  if (te.integrations?.length) updates.push({ key: 'integrations', value: te.integrations })
+
+  // ideal_customer_indicators
+  const ic = researchData.ideal_customer_indicators
+  if (ic.target_industries?.length) updates.push({ key: 'target_industries', value: ic.target_industries })
+  if (ic.target_roles?.length) updates.push({ key: 'target_roles', value: ic.target_roles })
+  if (ic.pain_points?.length) updates.push({ key: 'pain_points', value: ic.pain_points })
+  if (ic.value_propositions?.length) updates.push({ key: 'value_propositions', value: ic.value_propositions })
+  if (ic.buying_signals?.length) updates.push({ key: 'buying_signals', value: ic.buying_signals })
+
+  let synced = 0
+  for (const update of updates) {
+    const { error } = await serviceClient.rpc('upsert_organization_context', {
+      p_org_id: orgId,
+      p_key: update.key,
+      p_value: JSON.stringify(update.value),
+      p_source: 'fact_profile_research',
+      p_confidence: 0.85,
+    })
+    if (!error) {
+      synced++
+    } else {
+      console.warn(`[research-fact-profile] Failed to sync context key "${update.key}":`, error.message)
+    }
+  }
+
+  return { synced }
+}
+
 function parseResearchProvider(rawValue: unknown): ResearchProvider {
   if (typeof rawValue !== 'string') return 'disabled'
   if (rawValue === 'gemini' || rawValue === 'exa' || rawValue === 'disabled') {
@@ -543,7 +623,7 @@ serve(async (req) => {
       const readClient = anonClient ?? serviceClient
       const { data: existingProfile } = await readClient
         .from('client_fact_profiles')
-        .select('id, company_name, company_domain, research_status')
+        .select('id, company_name, company_domain, research_status, is_org_profile')
         .eq('id', factProfileId)
         .eq('organization_id', orgId)
         .maybeSingle()
@@ -552,6 +632,7 @@ serve(async (req) => {
         return json({ error: 'Fact profile not found', code: 'NOT_FOUND' }, 404)
       }
 
+      const isOrgProfile = existingProfile.is_org_profile === true
       companyName = existingProfile.company_name
       researchDomain = researchDomain ?? existingProfile.company_domain
 
@@ -676,6 +757,29 @@ serve(async (req) => {
             .eq('organization_id', orgId)
 
           return json({ error: 'Failed to save research results', code: 'UPDATE_ERROR' }, 500)
+        }
+
+        // -------------------------------------------------------------------
+        // Org profile sync: push research data to organization_context
+        // and trigger skill recompilation
+        // -------------------------------------------------------------------
+        if (isOrgProfile && orgId) {
+          try {
+            const syncResult = await syncResearchToOrgContext(serviceClient, orgId, researchData)
+            console.log(`[research-fact-profile] Synced ${syncResult.synced} context keys for org ${orgId}`)
+
+            // Trigger skill recompilation so skills pick up the new context
+            try {
+              await serviceClient.functions.invoke('compile-organization-skills', {
+                body: { action: 'compile_all', organization_id: orgId },
+              })
+              console.log(`[research-fact-profile] Triggered skill recompilation for org ${orgId}`)
+            } catch (compileError) {
+              console.warn('[research-fact-profile] Skill recompilation failed (non-fatal):', (compileError as Error).message)
+            }
+          } catch (syncError) {
+            console.warn('[research-fact-profile] Org context sync failed (non-fatal):', (syncError as Error).message)
+          }
         }
 
         return json({

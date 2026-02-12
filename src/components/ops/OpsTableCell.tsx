@@ -15,6 +15,12 @@ interface SourceEntry {
   url?: string;
 }
 
+interface IntentSignalEntry {
+  signal?: string;
+  strength?: 'high' | 'medium' | 'context';
+  evidence?: string;
+}
+
 interface OpsTableCellProps {
   cell: CellData;
   columnType: string;
@@ -882,28 +888,84 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
           ? 'text-gray-300'
           : 'text-gray-400 italic';
     const hasSources = Array.isArray(metadata?.sources) && (metadata.sources as SourceEntry[]).length > 0;
+    const sourceCount = hasSources ? (metadata!.sources as SourceEntry[]).length : 0;
+    const intentSignals = Array.isArray(metadata?.intent_signals) ? (metadata!.intent_signals as IntentSignalEntry[]) : [];
+    const hasInlineSignals = intentSignals.length > 0;
     return (
       <>
         <div
-          className="w-full h-full flex items-center cursor-pointer group/enrich"
+          className="w-full h-full flex flex-col justify-center cursor-pointer group/enrich"
           onClick={() => setExpanded(true)}
         >
-          <span className={`truncate text-sm ${opacityClass} group-hover/enrich:text-violet-300 transition-colors`}>
-            {cell.value}
-          </span>
+          <div className="flex items-center">
+            <span className={`truncate text-sm ${opacityClass} group-hover/enrich:text-violet-300 transition-colors`}>
+              {cell.value}
+            </span>
+            {hasSources && !hasInlineSignals && (
+              <ExternalLink className="w-3 h-3 ml-1 shrink-0 text-gray-600 group-hover/enrich:text-violet-400 transition-colors" />
+            )}
+            {onEnrichRow && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
+                className="ml-auto opacity-0 group-hover/enrich:opacity-100 transition-opacity p-0.5 rounded hover:bg-violet-500/20 shrink-0"
+                title="Re-enrich this row"
+              >
+                <Zap className="w-3.5 h-3.5 text-violet-400" />
+              </button>
+            )}
+          </div>
+          {hasInlineSignals && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {intentSignals.slice(0, 2).map((sig, i) => {
+                const strength = sig.strength ?? 'context';
+                const pillClass =
+                  strength === 'high'
+                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                    : strength === 'medium'
+                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      : 'bg-gray-500/15 text-gray-400 border border-gray-600/30';
+                return (
+                  <span
+                    key={i}
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 truncate max-w-[140px] ${pillClass}`}
+                    title={sig.signal}
+                  >
+                    {sig.signal ?? 'Signal'}
+                  </span>
+                );
+              })}
+              {intentSignals.length > 2 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center bg-gray-500/15 text-gray-400 border border-gray-600/30">
+                  +{intentSignals.length - 2} more
+                </span>
+              )}
+            </div>
+          )}
           {hasSources && (
-            <ExternalLink className="w-3 h-3 ml-1 shrink-0 text-gray-600 group-hover/enrich:text-violet-400 transition-colors" />
+            <div className="text-[10px] text-gray-500 flex items-center gap-1 mt-0.5 hover:text-violet-400 transition-colors">
+              <Link2 className="h-3 w-3" />
+              {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}
+            </div>
           )}
-          {onEnrichRow && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onEnrichRow(); }}
-              className="ml-auto opacity-0 group-hover/enrich:opacity-100 transition-opacity p-0.5 rounded hover:bg-violet-500/20 shrink-0"
-              title="Re-enrich this row"
-            >
-              <Zap className="w-3.5 h-3.5 text-violet-400" />
-            </button>
-          )}
+          {(() => {
+            const enrichedAt = metadata?.enriched_at as string | undefined;
+            if (!enrichedAt) return null;
+            const ageMs = Date.now() - new Date(enrichedAt).getTime();
+            const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+            if (ageMs < SEVEN_DAYS) return null;
+            const minutes = Math.floor(ageMs / 60000);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            const weeks = Math.floor(days / 7);
+            const months = Math.floor(days / 30);
+            const relative = months >= 1 ? `${months}mo ago` : weeks >= 1 ? `${weeks}w ago` : `${days}d ago`;
+            return (
+              <span className="text-[10px] text-gray-600 mt-0.5">
+                Enriched {relative}
+              </span>
+            );
+          })()}
         </div>
         {expanded && createPortal(
           <div
@@ -951,6 +1013,39 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
                 <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
                   {cell.value}
                 </p>
+                {(() => {
+                  const intentSignals = (metadata?.intent_signals ?? []) as IntentSignalEntry[];
+                  if (intentSignals.length === 0) return null;
+                  return (
+                    <div className="mt-4 pt-3 border-t border-gray-800">
+                      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Intent Signals</p>
+                      <ul className="space-y-2">
+                        {intentSignals.map((signal, i) => {
+                          const strength = signal.strength ?? 'context';
+                          const strengthClass =
+                            strength === 'high'
+                              ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                              : strength === 'medium'
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                : 'bg-gray-500/15 text-gray-300 border-gray-500/30';
+                          return (
+                            <li key={i} className="rounded-md border border-gray-800 p-2">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${strengthClass}`}>
+                                  {strength}
+                                </span>
+                                <span className="text-xs text-gray-200">{signal.signal ?? 'Intent signal'}</span>
+                              </div>
+                              {signal.evidence && (
+                                <p className="text-xs text-gray-400">{signal.evidence}</p>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })()}
                 {(() => {
                   const sources = (metadata?.sources ?? []) as SourceEntry[];
                   if (sources.length === 0) return null;
