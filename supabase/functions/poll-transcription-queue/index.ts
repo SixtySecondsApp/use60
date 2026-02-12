@@ -54,6 +54,19 @@ serve(async (req) => {
       `[Transcription Queue] Status: ${pendingCount || 0} pending, ${failedCount || 0} failed, ${processingCount || 0} processing`
     );
 
+    // Early exit: no work at all — skip stale detection and fetch
+    if ((pendingCount || 0) === 0 && (failedCount || 0) === 0 && (processingCount || 0) === 0) {
+      console.log('[Transcription Queue] No pending, failed, or processing recordings — skipping');
+      return new Response(
+        JSON.stringify({
+          message: 'No pending transcriptions',
+          processed: 0,
+          processing: 0,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Detect and reset stale processing recordings (Lambda failed without callback)
     if (processingCount && processingCount > 0) {
       const staleThreshold = new Date(now.getTime() - STALE_PROCESSING_MINUTES * 60 * 1000);

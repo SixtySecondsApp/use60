@@ -196,7 +196,7 @@ export default function OrganizationManagementPage() {
     },
     enabled: !!activeOrgId && !!user?.id,
     retry: 2,
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchInterval: 120_000,
   });
 
   // Fetch rejoin requests
@@ -250,7 +250,7 @@ export default function OrganizationManagementPage() {
     },
     enabled: !!activeOrgId && !!user?.id && permissions.canManageTeam,
     retry: 2,
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchInterval: 120_000,
   });
 
 

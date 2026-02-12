@@ -8,7 +8,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '../supabase/clientV2';
-import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 import { useAuth } from '../contexts/AuthContext';
 import { useOrg } from '../contexts/OrgContext';
 import { toast } from 'sonner';
@@ -226,7 +225,6 @@ export function useEmailActions() {
   const { activeOrg } = useOrg();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const emailPolling = useSmartPollingInterval(60000, 'background');
 
   const query = useQuery({
     queryKey: EMAIL_ACTIONS_QUERY_KEYS.pending(activeOrg?.id || ''),
@@ -364,7 +362,6 @@ export function useEmailActions() {
       );
     },
     enabled: !!activeOrg?.id && !!user?.id,
-    refetchInterval: emailPolling,
   });
 
   // Set up real-time subscription for HITL approvals

@@ -95,8 +95,7 @@ export function useApprovalDetection(
       return data as OrganizationMembership | null;
     },
     enabled: enabled && !!userId && !!orgId,
-    staleTime: 1000, // 1 second - frequently refetch for real-time detection
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
 
   // Query for join requests (fallback check - now also checks for rejections)
@@ -131,8 +130,7 @@ export function useApprovalDetection(
       return data as JoinRequest | null;
     },
     enabled: enabled && !!userId,
-    staleTime: 1000, // 1 second - frequently refetch for real-time detection
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
 
   // Refetch both queries

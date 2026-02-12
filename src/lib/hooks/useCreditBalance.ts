@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import { getBalance, type CreditBalance } from '@/lib/services/creditService';
+import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 
 // Query keys
 export const creditKeys = {
@@ -23,13 +24,13 @@ export const creditKeys = {
  */
 export function useCreditBalance() {
   const orgId = useOrgId();
+  const pollingInterval = useSmartPollingInterval(60_000, 'background');
 
   return useQuery<CreditBalance>({
     queryKey: creditKeys.balance(orgId || ''),
     queryFn: () => getBalance(orgId!),
     enabled: !!orgId,
-    refetchInterval: 30_000, // Poll every 30s
-    staleTime: 15_000, // Consider fresh for 15s
-    refetchOnWindowFocus: true,
+    refetchInterval: pollingInterval,
+    staleTime: 30_000,
   });
 }

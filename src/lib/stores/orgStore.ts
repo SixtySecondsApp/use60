@@ -230,22 +230,27 @@ export const useOrgStore = create<OrgStore>()(
             // Filter to only active orgs when selecting default
             const activeOrgs = orgs.filter((o) => o.is_active !== false);
 
-            // Count meetings per org (lightweight: head:true)
-            // Prefer orgs with transcripts since Meeting Intelligence relies on transcript data.
-            const counts = await Promise.all(
-              activeOrgs.map(async (org) => {
-                try {
-                  const { count } = await (supabase as any)
-                    .from('meetings')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('org_id', org.id)
-                    .or('transcript.not.is.null,transcript_text.not.is.null');
-                  return { orgId: org.id, orgName: org.name, count: count ?? 0 };
-                } catch (e) {
-                  return { orgId: org.id, orgName: org.name, count: 0 };
-                }
-              })
-            );
+            // Single batched query instead of N individual count queries per org
+            const orgIds = activeOrgs.map((o) => o.id);
+            let countsByOrg: Record<string, number> = {};
+            try {
+              const { data: meetingData } = await (supabase as any)
+                .from('meetings')
+                .select('org_id')
+                .in('org_id', orgIds)
+                .or('transcript.not.is.null,transcript_text.not.is.null')
+                .limit(1000);
+              for (const m of meetingData || []) {
+                countsByOrg[m.org_id] = (countsByOrg[m.org_id] || 0) + 1;
+              }
+            } catch (e) {
+              // Fallback: all counts 0
+            }
+            const counts = activeOrgs.map((org) => ({
+              orgId: org.id,
+              orgName: org.name,
+              count: countsByOrg[org.id] || 0,
+            }));
 
             const isSixtySeconds = (name: string) => /sixty\s*seconds/i.test(name);
             const sixtySecondsOrgs = counts.filter((c) => isSixtySeconds(c.orgName));

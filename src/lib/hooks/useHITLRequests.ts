@@ -8,7 +8,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '../supabase/clientV2';
-import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
 import { useAuth } from '../contexts/AuthContext';
 import { useOrg } from '../contexts/OrgContext';
 import type { HITLRequest } from './useAgentSequences';
@@ -41,7 +40,6 @@ export function usePendingHITLRequests() {
   const { activeOrg } = useOrg();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const hitlPolling = useSmartPollingInterval(30000, 'important');
 
   const query = useQuery({
     queryKey: SEQUENCE_QUERY_KEYS.pendingHitlRequests(activeOrg?.id || ''),
@@ -78,7 +76,6 @@ export function usePendingHITLRequests() {
       })) as HITLRequestWithDetails[];
     },
     enabled: !!activeOrg?.id,
-    refetchInterval: hitlPolling,
   });
 
   // Set up real-time subscription for HITL request changes
