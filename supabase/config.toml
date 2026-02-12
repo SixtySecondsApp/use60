@@ -99,6 +99,11 @@ verify_jwt = false
 [functions.process-recording]
 verify_jwt = false
 
+# Poll stuck bots - fallback for missed MeetingBaaS webhooks
+# Called internally or via cron, uses service role key for auth
+[functions.poll-stuck-bots]
+verify_jwt = false
+
 # MeetingBaaS Connect Calendar - called from frontend with user JWT
 # We handle auth verification manually inside the function
 [functions.meetingbaas-connect-calendar]
