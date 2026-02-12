@@ -763,59 +763,72 @@ async function processRecording(
     const settings = recording.organizations?.recording_settings;
     const internalDomain = recording.organizations?.company_domain || null;
 
-    // Step 1: Determine media URL for transcription
-    // Priority: 1) Already uploaded S3 URL, 2) Compress-callback S3 URL, 3) Passed video/audio URL, 4) Fallback to MeetingBaaS API
-    let mediaUrlForTranscription: string | null = null;
-    let uploadResult: UploadRecordingResult = { success: false };
+    // Step 1: Resolve recording URL
+    // Priority: 1) Already in S3, 2) URLs from webhook/request, 3) MeetingBaaS bot status API
+    console.log('[ProcessRecording] Step 1: Resolving recording URL...');
+    const meetingBaaSClient = createMeetingBaaSClient();
 
-    // Check if S3 upload already done by webhook handler (legacy field)
-    if (recording.recording_s3_url) {
-      console.log('[ProcessRecording] Step 1: Using existing S3 URL for transcription');
-      mediaUrlForTranscription = recording.recording_s3_url;
-      uploadResult = {
-        success: true,
-        storageUrl: recording.recording_s3_url,
-        storagePath: recording.recording_s3_key,
-      };
-    } else if (recording.s3_video_url || recording.s3_audio_url) {
-      // Use S3 URLs from compress-callback (permanent storage)
-      const s3Url = recording.s3_audio_url || recording.s3_video_url;
-      console.log('[ProcessRecording] Step 1: Using S3 URL from compress-callback for transcription');
-      mediaUrlForTranscription = s3Url!;
-      uploadResult = {
-        success: true,
-        storageUrl: recording.s3_video_url || null,
-        storagePath: null,
-      };
-    } else if (videoUrl || audioUrl) {
-      // Use URLs passed from webhook
+    let recordingMediaUrl: string | null = null;
+    let alreadyInS3 = false;
+
+    // Priority 1: Recording already uploaded to S3 (e.g., by webhook handler)
+    if (recording.recording_s3_key) {
+      console.log('[ProcessRecording] Step 1: Recording already in S3:', recording.recording_s3_key);
+      alreadyInS3 = true;
+      // We still need a URL for transcription — use the S3 URL or generate a signed one
+      recordingMediaUrl = recording.recording_s3_url || null;
+    }
+
+    // Priority 2: URLs passed directly (from webhook bot.completed payload or manual trigger)
+    if (!recordingMediaUrl) {
       const passedUrl = videoUrl || audioUrl;
-      console.log('[ProcessRecording] Step 1: Using passed URL from webhook');
-      mediaUrlForTranscription = passedUrl!;
-
-      // Upload to S3 since webhook didn't do it
-      console.log('[ProcessRecording] Step 1.5: Uploading to storage...');
-      uploadResult = await uploadRecordingToStorage(
-        supabase,
-        passedUrl!,
-        recording.org_id,
-        recording.user_id,
-        recordingId
-      );
-    } else {
-      // Fallback: Try MeetingBaaS API (may fail for old recordings)
-      console.log('[ProcessRecording] Step 1: Fetching recording from MeetingBaaS API...');
-      const meetingBaaSClient = createMeetingBaaSClient();
-      const { data: recordingData, error: recordingError } =
-        await meetingBaaSClient.getRecording(effectiveBotId);
-
-      if (recordingError || !recordingData) {
-        throw new Error(recordingError?.message || 'Failed to get recording from MeetingBaaS');
+      if (passedUrl) {
+        console.log('[ProcessRecording] Step 1: Using URL from request:', passedUrl.substring(0, 80) + '...');
+        recordingMediaUrl = passedUrl;
       }
+    }
 
-      mediaUrlForTranscription = recordingData.url;
+    // Priority 3: Try MeetingBaaS bot status API (GET /v2/bots/{botId}) as fallback
+    if (!recordingMediaUrl) {
+      console.log('[ProcessRecording] Step 1: Trying MeetingBaaS bot status API...');
+      try {
+        const { data: botData } = await meetingBaaSClient.getBotStatus(effectiveBotId);
+        // Bot status response may include video/audio URLs
+        const botDataAny = botData as Record<string, unknown> | undefined;
+        const botVideoUrl = botDataAny?.video_url as string || botDataAny?.video as string;
+        const botAudioUrl = botDataAny?.audio_url as string || botDataAny?.audio as string;
+        const botRecordingUrl = botDataAny?.recording_url as string;
+        recordingMediaUrl = botVideoUrl || botAudioUrl || botRecordingUrl || null;
+        if (recordingMediaUrl) {
+          console.log('[ProcessRecording] Step 1: Got URL from bot status API');
+        } else {
+          console.warn('[ProcessRecording] Step 1: Bot status API returned no recording URL');
+        }
+      } catch (err) {
+        console.warn('[ProcessRecording] Step 1: Bot status API failed:', err);
+      }
+    }
 
-      // Upload to S3
+    if (!recordingMediaUrl) {
+      throw new Error(
+        'No recording URL available. The recording URL is delivered via webhook (bot.completed event). ' +
+        'Ensure MeetingBaaS webhooks are correctly configured and sending events to the meetingbaas-webhook endpoint. ' +
+        'Alternatively, pass video_url or audio_url in the request body.'
+      );
+    }
+
+    const recordingData = { url: recordingMediaUrl, expires_at: '' };
+
+    // Step 1.5: Upload recording to our storage (skip if already in S3)
+    let uploadResult: { success: boolean; storagePath?: string; storageUrl?: string; error?: string };
+    if (alreadyInS3) {
+      console.log('[ProcessRecording] Step 1.5: Skipping upload — already in S3');
+      uploadResult = {
+        success: true,
+        storagePath: recording.recording_s3_key,
+        storageUrl: recording.recording_s3_url,
+      };
+    } else {
       console.log('[ProcessRecording] Step 1.5: Uploading to storage...');
       uploadResult = await uploadRecordingToStorage(
         supabase,
@@ -824,15 +837,11 @@ async function processRecording(
         recording.user_id,
         recordingId
       );
-    }
 
-    if (!mediaUrlForTranscription) {
-      throw new Error('No media URL available for processing');
-    }
-
-    // Log upload result
-    if (!uploadResult.success) {
-      console.warn('[ProcessRecording] Storage upload failed - will continue with original URL:', uploadResult.error);
+      if (!uploadResult.success) {
+        console.warn('[ProcessRecording] Storage upload failed, using source URL:', uploadResult.error);
+        // Don't fail the whole pipeline - we can still process with source URL
+      }
     }
 
     // Step 2: Get transcript
@@ -863,39 +872,34 @@ async function processRecording(
         })),
       };
     } else {
-      // No transcript provided in webhook - try MeetingBaaS API first
-      console.log('[ProcessRecording] No transcript provided, trying MeetingBaaS API...');
-
+      // Try MeetingBaaS transcription first, fall back to Gladia
+      let usedFallback = false;
       try {
-        const meetingBaaSClient = createMeetingBaaSClient();
-        const { data: transcriptData, error: transcriptError } =
+        const { data: mbTranscript, error: transcriptError } =
           await meetingBaaSClient.getTranscript(effectiveBotId);
 
-        if (transcriptData && transcriptData.text && transcriptData.utterances) {
-          console.log('[ProcessRecording] Got transcript from MeetingBaaS API');
-          transcript = {
-            text: transcriptData.text,
-            utterances: transcriptData.utterances.map((u) => ({
-              speaker: u.speaker,
-              start: u.start,
-              end: u.end,
-              text: u.text,
-              confidence: u.confidence,
-            })),
-          };
-        } else {
-          console.warn('[ProcessRecording] MeetingBaaS transcript API returned no data:', transcriptError?.message);
-          // Fall back to external transcription service
-          console.log('[ProcessRecording] Falling back to external transcription service...');
-          const transcriptionUrl = uploadResult.success ? uploadResult.storageUrl! : mediaUrlForTranscription;
-          transcript = await transcribeAudio(transcriptionUrl);
+        if (transcriptError || !mbTranscript) {
+          throw new Error(transcriptError?.message || 'MeetingBaaS transcript not available');
         }
-      } catch (meetingBaaSError) {
-        console.warn('[ProcessRecording] MeetingBaaS transcript API failed:', meetingBaaSError);
-        // Fall back to external transcription service
-        console.log('[ProcessRecording] Falling back to external transcription service...');
-        const transcriptionUrl = uploadResult.success ? uploadResult.storageUrl! : mediaUrlForTranscription;
-        transcript = await transcribeAudio(transcriptionUrl);
+
+        transcript = {
+          text: mbTranscript.text,
+          utterances: mbTranscript.utterances.map((u) => ({
+            speaker: u.speaker,
+            start: u.start,
+            end: u.end,
+            text: u.text,
+            confidence: u.confidence,
+          })),
+        };
+      } catch (mbError) {
+        console.warn('[ProcessRecording] MeetingBaaS transcript failed, falling back to Gladia:', mbError);
+        usedFallback = true;
+        transcript = await transcribeWithGladia(recordingData.url);
+      }
+
+      if (usedFallback) {
+        console.log('[ProcessRecording] Step 2: Transcript obtained via Gladia fallback');
       }
     }
 
@@ -1186,9 +1190,10 @@ async function processRecording(
 
 serve(async (req) => {
   // Handle CORS preflight
-  const preflightResponse = handleCorsPreflightRequest(req);
-  if (preflightResponse) {
-    return preflightResponse;
+  if (req.method === 'OPTIONS') {
+    const preflightResponse = handleCorsPreflightRequest(req);
+    if (preflightResponse) return preflightResponse;
+    return new Response('ok', { status: 200, headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
@@ -1236,7 +1241,7 @@ serve(async (req) => {
       body.video_url,
       body.audio_url,
       body.transcript
-    );
+    , body.video_url, body.audio_url);
 
     return new Response(JSON.stringify(result), {
       status: result.success ? 200 : 500,
