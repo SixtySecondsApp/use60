@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
 import { useEffect, Suspense, lazy } from 'react';
@@ -73,7 +73,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo,
+  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -84,7 +84,7 @@ import {
   MeetingsPage, MeetingIntelligence, MeetingSentimentAnalytics, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   TasksPage, ProjectsHub, GoogleTasksSettings, Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage,
-  OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, DocsPage,
+  OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
@@ -116,6 +116,15 @@ if (typeof window !== 'undefined') {
   } else {
     console.error('[App] Failed to set Supabase client on window!');
   }
+}
+
+function RedirectFactProfile() {
+  const { id } = useParams();
+  return <Navigate to={`/profiles/${id}`} replace />;
+}
+function RedirectFactProfileEdit() {
+  const { id } = useParams();
+  return <Navigate to={`/profiles/${id}/edit`} replace />;
 }
 
 function App() {
@@ -421,6 +430,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/enrichment-demo" element={<PlatformAdminRouteGuard><AppLayout><EnrichmentComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/research-comparison" element={<PlatformAdminRouteGuard><AppLayout><ResearchComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/exa-abilities" element={<PlatformAdminRouteGuard><AppLayout><ExaAbilitiesDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/email-sequence-test" element={<PlatformAdminRouteGuard><AppLayout><EmailSequenceTest /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Documentation CMS Admin */}
                 <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}
@@ -500,10 +510,15 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/prospecting" element={<InternalRouteGuard><AppLayout><ProspectingPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/fact-profiles" element={<InternalRouteGuard><AppLayout><FactProfilesPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/fact-profiles/:id" element={<InternalRouteGuard><AppLayout><FactProfileViewPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/fact-profiles/:id/edit" element={<InternalRouteGuard><AppLayout><FactProfileEditPage /></AppLayout></InternalRouteGuard>} />
+                {/* Unified profiles routes */}
+                <Route path="/profiles" element={<InternalRouteGuard><AppLayout><ProfilesPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/:id" element={<InternalRouteGuard><AppLayout><FactProfileViewPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/:id/edit" element={<InternalRouteGuard><AppLayout><FactProfileEditPage /></AppLayout></InternalRouteGuard>} />
+                {/* Redirects from old URLs */}
+                <Route path="/fact-profiles" element={<Navigate to="/profiles?tab=companies" replace />} />
+                <Route path="/fact-profiles/:id" element={<RedirectFactProfile />} />
+                <Route path="/fact-profiles/:id/edit" element={<RedirectFactProfileEdit />} />
+                <Route path="/prospecting" element={<Navigate to="/profiles?tab=icps" replace />} />
                 <Route path="/docs" element={<AppLayout><DocsPage /></AppLayout>} />
                 <Route path="/tasks/settings" element={<InternalRouteGuard><AppLayout><GoogleTasksSettings /></AppLayout></InternalRouteGuard>} />
                 <Route path="/calendar" element={<ExternalRedirect url="https://calendar.google.com" />} />

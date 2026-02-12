@@ -34,6 +34,11 @@ import {
 import { loadBusinessContext, buildContextPrompt } from '../_shared/businessContext.ts'
 import { getUserOrgId } from '../_shared/edgeAuth.ts'
 import { createConcurrencyLimiter } from '../_shared/rateLimiter.ts'
+import {
+  buildEmailSystemPrompt,
+  buildSequenceTiming,
+  FRAMEWORK_SELECTION_GUIDE,
+} from '../_shared/emailPromptRules.ts'
 
 // ============================================================================
 // Types
@@ -118,35 +123,10 @@ ${prospect.company_keywords?.length ? `- Company Focus: ${prospect.company_keywo
 // Email Type Helpers
 // ============================================================================
 
-function buildEmailSystemPrompt(config: SequenceConfig, signOff: string): string {
-  if (config.email_type === 'event_invitation') {
-    return `You are an expert at writing personalised event invitation emails. Write warm, compelling invitations that make the recipient feel specially selected.
-
-Rules:
-1. Keep emails concise (3-5 sentences for body)
-2. End each email with: ${signOff || 'Best regards'}
-3. Use the event details EXACTLY as provided (name, date, time, venue) — do NOT change or omit any detail
-4. Do NOT reference the prospect's location/city as the event location — use ONLY the venue provided
-5. Do NOT ask for available times or suggest alternative dates — the event time is already set
-6. Do NOT pitch products or services — this is an invitation, not a sales email
-7. Personalise by referencing the prospect's role, expertise, or achievements and why they'd be a great fit for the event
-8. Subject lines should create curiosity and reference the event
-9. Step 1: Personal invitation explaining why they're invited
-10. Follow-up steps: Add urgency (limited spots, deadline approaching), reference the original invitation, and provide additional event value (speakers, networking opportunities)
-11. Match the tone of voice from the business context`
-  }
-
-  // Default: cold outreach
-  return `You are an expert cold email copywriter. Write personalised cold emails that feel human-written, concise, and compelling.
-
-Rules:
-1. Keep emails concise (3-5 sentences for body)
-2. End each email with: ${signOff || 'Best regards'}
-3. Do NOT use generic phrases like "I hope this email finds you well" or "I came across your profile"
-4. Subject lines should be short, curiosity-driven, and personalised
-5. Reference something specific about the prospect's company, role, or industry
-6. The personalised opening must flow naturally into the email body — not feel bolted on
-7. Match the tone of voice from the business context`
+// Extract tone-of-voice from business context prompt for the shared prompt builder
+function extractToneOfVoice(contextPrompt: string): string | undefined {
+  const toneMatch = contextPrompt.match(/(?:tone of voice|brand voice|communication style)[:\s]*([^\n]+)/i)
+  return toneMatch?.[1]?.trim() || undefined
 }
 
 function filterContextForEmailType(contextPrompt: string, emailType?: string): string {
@@ -200,10 +180,12 @@ async function generateExampleEmails(
   const eventBlock = buildEventDetailsBlock(config)
   const sequenceType = isInvitation ? 'event invitation email sequence' : 'cold email sequence'
 
+  const toneVoice = extractToneOfVoice(contextPrompt)
+
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-5-20250929',
     max_tokens: 4096,
-    system: buildEmailSystemPrompt(config, signOff),
+    system: buildEmailSystemPrompt(config.email_type, signOff, toneVoice),
     messages: [{
       role: 'user',
       content: `Write a ${numSteps}-step ${sequenceType} for this prospect.
@@ -215,6 +197,11 @@ ${buildProspectBlock(prospect)}
 ${filteredContext}
 
 ${config.angle ? `## Campaign Angle\n${config.angle}\n` : ''}${eventBlock}
+
+${FRAMEWORK_SELECTION_GUIDE}
+
+## Sequence Timing
+${buildSequenceTiming(numSteps)}
 
 ## Requirements
 1. Generate exactly ${numSteps} email step(s)
@@ -265,7 +252,14 @@ async function generateEmailsFromExample(
   // Format the example emails for the prompt
   const exampleBlock = exampleEmails.map((e, i) => `Step ${i + 1}:\n  Subject: ${e.subject}\n  Body: ${e.body}`).join('\n\n')
 
-  const prompt = `Generate a ${numSteps}-step ${sequenceType} for a NEW prospect, using the example emails below as a style and quality reference.
+  const toneVoice = extractToneOfVoice(contextPrompt)
+  const systemContext = buildEmailSystemPrompt(config.email_type, signOff, toneVoice)
+
+  const prompt = `${systemContext}
+
+---
+
+Generate a ${numSteps}-step ${sequenceType} for a NEW prospect, using the example emails below as a style and quality reference.
 
 ## Example Emails (written for ${exampleProspect.name}, ${exampleProspect.title} at ${exampleProspect.company})
 ${exampleBlock}
@@ -291,7 +285,7 @@ ${isInvitation ? `8. This is an EVENT INVITATION — do NOT pitch products/servi
 Respond with ONLY a JSON array of objects, each with "subject" and "body" fields. No markdown, no explanation.`
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -339,7 +333,14 @@ async function generateEmailsDirectly(
   const eventBlock = buildEventDetailsBlock(config)
   const sequenceType = isInvitation ? 'event invitation email sequence' : 'cold email sequence'
 
-  const prompt = `Generate a ${numSteps}-step ${sequenceType} for this prospect.
+  const toneVoice = extractToneOfVoice(contextPrompt)
+  const systemContext = buildEmailSystemPrompt(config.email_type, signOff, toneVoice)
+
+  const prompt = `${systemContext}
+
+---
+
+Generate a ${numSteps}-step ${sequenceType} for this prospect.
 
 ## Prospect
 ${buildProspectBlock(prospect)}
@@ -349,23 +350,21 @@ ${filteredContext}
 
 ${config.angle ? `## Campaign Angle\n${config.angle}\n` : ''}${eventBlock}
 
+${FRAMEWORK_SELECTION_GUIDE}
+
+## Sequence Timing
+${buildSequenceTiming(numSteps)}
+
 ## Requirements
 1. Generate exactly ${numSteps} email step(s)
 2. Each step needs a subject line and body
 3. Step 1: ${isInvitation ? 'Personal invitation explaining why this prospect is a great fit for the event' : 'Initial outreach with a personalised opening that references the prospect\'s role/company'}
-4. ${numSteps > 1 ? (isInvitation ? 'Step 2+: Follow-up referencing the original invitation, adding urgency (limited spots) and new value' : 'Step 2+: Follow-up emails that reference the previous email, add new value, and create urgency without being pushy') : ''}
-5. The personalised intro must flow naturally into the email body — not feel bolted on
-6. Match the tone of voice from the business context
-7. Keep emails concise (3-5 sentences for body)
-8. End with: ${signOff || 'Best regards'}
-9. Do NOT use generic phrases like "I hope this email finds you well" or "I came across your profile"
-10. Reference something specific about the prospect's company or role
-${isInvitation ? `11. This is an EVENT INVITATION — do NOT pitch products/services, do NOT change the event details, do NOT reference the prospect's city as the event location` : ''}
+${numSteps > 1 ? `4. Step 2+: ${isInvitation ? 'Follow-up referencing the original invitation, adding urgency (limited spots) and new value' : 'Follow-up emails that reference the previous email, add new value, and create urgency without being pushy'}` : ''}
 
 Respond with ONLY a JSON array of objects, each with "subject" and "body" fields. No markdown, no explanation.`
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
