@@ -369,6 +369,7 @@ async function transcribeWithGladia(audioUrl: string): Promise<TranscriptResult>
     text: result.transcription?.full_transcript || '',
     utterances: (result.transcription?.utterances || []).map((u: any) => ({
       speaker: u.speaker ?? 0,
+      speaker_id: u.speaker ?? 0,
       start: u.start ?? 0,
       end: u.end ?? 0,
       text: u.text ?? '',
@@ -886,6 +887,7 @@ async function processRecording(
           text: mbTranscript.text,
           utterances: mbTranscript.utterances.map((u) => ({
             speaker: u.speaker,
+            speaker_id: u.speaker,
             start: u.start,
             end: u.end,
             text: u.text,
