@@ -1,0 +1,180 @@
+{
+  "feature": "exa-ux-enrichment",
+  "title": "Exa UX Enrichment Improvement",
+  "description": "Replace generic enrichment provider setup with an Exa-aware experience: curated use-case templates, provider cards with guidance, conditional form fields, single-row preview, and inline intent signal badges.",
+  "consultReport": ".sixty/consult/exa-ux-enrichment-improvement.md",
+  "createdAt": "2026-02-12T08:45:00Z",
+  "stories": [
+    {
+      "id": "EXA-UX-001",
+      "title": "Add Exa-specific enrichment templates to AddColumnModal",
+      "type": "frontend",
+      "description": "Expand ENRICHMENT_TEMPLATES with 8+ Exa-optimized templates that leverage web search + citations. Templates should be provider-aware: when Exa is selected, show Exa templates; when LLM providers selected, show the existing generic templates. Each Exa template includes a name, pre-built prompt using @column_key references, icon, and a short description of what Exa returns.",
+      "files": [
+        "src/components/ops/AddColumnModal.tsx"
+      ],
+      "acceptance_criteria": [
+        "ENRICHMENT_TEMPLATES split into EXA_TEMPLATES (8+) and GENERIC_TEMPLATES (existing 4)",
+        "Template list dynamically filters based on selected enrichmentProvider",
+        "Exa templates include: Funding Signals, Hiring Intent, Recent Product Launches, Competitor Moves, Tech Stack from Web, Market Expansion, Executive Changes, Company Overview with Citations",
+        "Each Exa template has a description tooltip explaining what Exa returns",
+        "Selecting a template also sets enrichmentProvider to 'exa' if it's an Exa template"
+      ],
+      "estimate": "25min",
+      "dependencies": [],
+      "parallel_with": []
+    },
+    {
+      "id": "EXA-UX-002",
+      "title": "Replace provider dropdown with contextual provider cards",
+      "type": "frontend",
+      "description": "Replace the plain <select> dropdown for enrichment provider (AddColumnModal lines 1240-1248) with visual provider cards. Each card shows: provider name, icon, 1-line description of what it does, and 'best for' tag. When Exa is selected, show a callout explaining citations + intent signals. Also update EditEnrichmentModal provider selection to match.",
+      "files": [
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/EditEnrichmentModal.tsx"
+      ],
+      "acceptance_criteria": [
+        "Provider selection is a row of 3 cards (not a <select> dropdown)",
+        "Each card shows: icon, name, 1-line description, 'best for' tag",
+        "OpenRouter: 'AI model of your choice' / best for 'Custom analysis'",
+        "Anthropic: 'Claude by Anthropic' / best for 'Structured extraction'",
+        "Exa: 'Web search with citations' / best for 'Market signals & news'",
+        "Selected card has violet border highlight",
+        "EditEnrichmentModal uses same card pattern (can be smaller/compact)"
+      ],
+      "estimate": "25min",
+      "dependencies": [],
+      "parallel_with": ["EXA-UX-001"]
+    },
+    {
+      "id": "EXA-UX-003",
+      "title": "Conditional form fields based on selected provider",
+      "type": "frontend",
+      "description": "When Exa is selected as provider: hide the OpenRouter model picker (already conditional), hide any model-related fields, show Exa-specific help text below the prompt textarea ('Exa searches the live web and returns answers with source citations. Write your prompt as a question about the company/person.'). When OpenRouter selected, show model picker. When Anthropic selected, show nothing extra (uses Claude Sonnet).",
+      "files": [
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/EditEnrichmentModal.tsx"
+      ],
+      "acceptance_criteria": [
+        "Model picker hidden when provider is 'exa' or 'anthropic'",
+        "Exa-specific help text shown below prompt textarea when provider is 'exa'",
+        "Help text includes: what Exa does, that it returns citations, and a prompt writing tip",
+        "Provider-specific placeholder text in textarea (Exa: 'What recent funding has @company_name raised?' / LLM: 'Describe what to enrich...')",
+        "No UI regressions for OpenRouter or Anthropic flows"
+      ],
+      "estimate": "20min",
+      "dependencies": ["EXA-UX-002"],
+      "parallel_with": []
+    },
+    {
+      "id": "EXA-UX-004",
+      "title": "Add single-row preview button for enrichment testing",
+      "type": "frontend",
+      "description": "Add a 'Test on 1 row' button in AddColumnModal that enriches a single row and displays the result inline before the user commits to creating the column and running on all rows. Uses the existing useEnrichment hook's invokeEnrichment with rowIds=[firstRowId]. Shows a preview card with: answer text, source citations (if Exa), intent signals (if Exa), and confidence score.",
+      "files": [
+        "src/components/ops/AddColumnModal.tsx"
+      ],
+      "acceptance_criteria": [
+        "Preview button appears below the prompt textarea when enrichment prompt is non-empty",
+        "Button label: 'Test on 1 row' with a Play icon",
+        "Clicking triggers enrichment on the first available row (from sampleRowValues or table data)",
+        "Loading state shown while enriching",
+        "Preview card displays: answer value, sources list (clickable links), intent signals (badges), confidence score",
+        "Preview does not create a column — it's a dry run that calls the edge function with a temporary/preview flag",
+        "Works for all 3 providers, not just Exa"
+      ],
+      "estimate": "30min",
+      "dependencies": ["EXA-UX-003"],
+      "parallel_with": []
+    },
+    {
+      "id": "EXA-UX-005",
+      "title": "Show inline intent signal badges in OpsTableCell",
+      "type": "frontend",
+      "description": "When a cell has intent_signals in its metadata, show the top 1-2 signals as small colored pill badges in the default (non-expanded) cell view. High signals get a red-tinted pill, medium gets amber, context gets gray. This makes Exa's unique value visible without requiring users to click-expand each cell.",
+      "files": [
+        "src/components/ops/OpsTableCell.tsx"
+      ],
+      "acceptance_criteria": [
+        "Cells with intent_signals show top 1-2 signal names as small pills below the value text",
+        "Pill colors: high = red/rose bg, medium = amber bg, context = gray bg",
+        "Pills are max 2 to avoid cell height bloat — show '+N more' if >2",
+        "Pills only render when metadata.intent_signals exists and has entries",
+        "Clicking a pill still opens the expanded view as before",
+        "No visual change for cells without intent signals"
+      ],
+      "estimate": "20min",
+      "dependencies": [],
+      "parallel_with": ["EXA-UX-001", "EXA-UX-002"]
+    },
+    {
+      "id": "EXA-UX-006",
+      "title": "Add source count indicator to enrichment cells",
+      "type": "frontend",
+      "description": "When a cell has sources in its metadata, show a small '3 sources' indicator with a Link icon in the default cell view. This signals that the enrichment result is backed by web citations without requiring expand.",
+      "files": [
+        "src/components/ops/OpsTableCell.tsx"
+      ],
+      "acceptance_criteria": [
+        "Cells with metadata.sources show a small inline indicator: Link icon + 'N sources'",
+        "Indicator is subtle (text-xs text-gray-500) and appears after intent pills or after value",
+        "Clicking the indicator opens the expanded view",
+        "No indicator shown for cells without sources"
+      ],
+      "estimate": "15min",
+      "dependencies": ["EXA-UX-005"],
+      "parallel_with": []
+    },
+    {
+      "id": "EXA-UX-007",
+      "title": "Add Exa templates to EditEnrichmentModal",
+      "type": "frontend",
+      "description": "Add a collapsible 'Templates' section to EditEnrichmentModal (matching the pattern in AddColumnModal) that shows provider-aware templates. When the user selects a template, it replaces the current prompt. This helps users who created a column with a bad prompt fix it without starting over.",
+      "files": [
+        "src/components/ops/EditEnrichmentModal.tsx"
+      ],
+      "acceptance_criteria": [
+        "Collapsible 'Suggested prompts' section below the prompt textarea",
+        "Shows templates filtered by current provider (Exa templates for Exa, generic for others)",
+        "Clicking a template replaces the prompt text and marks form as changed",
+        "Section is collapsed by default to keep modal compact",
+        "Uses same template data as AddColumnModal (shared constant or import)"
+      ],
+      "estimate": "20min",
+      "dependencies": ["EXA-UX-001"],
+      "parallel_with": ["EXA-UX-005", "EXA-UX-006"]
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "phases": {
+      "phase_1_setup": {
+        "name": "Exa-Aware Enrichment Setup",
+        "stories": ["EXA-UX-001", "EXA-UX-002", "EXA-UX-003", "EXA-UX-004"],
+        "description": "Templates, provider cards, conditional form, preview button",
+        "estimate": "1.5-2 hours"
+      },
+      "phase_2_visibility": {
+        "name": "Inline Intent Signals",
+        "stories": ["EXA-UX-005", "EXA-UX-006"],
+        "description": "Show Exa's value in default cell view",
+        "estimate": "35 min"
+      },
+      "phase_3_edit": {
+        "name": "Edit Modal Templates",
+        "stories": ["EXA-UX-007"],
+        "description": "Add templates to edit flow",
+        "estimate": "20 min"
+      }
+    },
+    "parallel_groups": [
+      {
+        "stories": ["EXA-UX-001", "EXA-UX-002", "EXA-UX-005"],
+        "reason": "No file overlap between templates (AddColumnModal constants), provider cards (AddColumnModal+EditModal UI), and cell rendering (OpsTableCell)"
+      }
+    ],
+    "dependency_chain": "EXA-UX-001 + EXA-UX-002 → EXA-UX-003 → EXA-UX-004 | EXA-UX-005 → EXA-UX-006 | EXA-UX-001 → EXA-UX-007",
+    "lastUpdated": "2026-02-12T08:45:00Z"
+  }
+}

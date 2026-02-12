@@ -6,7 +6,7 @@
  *   1. ICP profiles (from generate-icp-profiles cache or org context)
  *   2. Org enrichment data (value_prop, tone, competitors, pain_points)
  *   3. Integration credentials (Apollo, Instantly API keys)
- *   4. User email sign-off preference (profiles table)
+ *   4. User email sign-off preference (user_tone_settings table)
  *   5. Brand voice settings (organization_skills)
  *
  * Returns null fields gracefully — never throws on missing data.
@@ -88,6 +88,7 @@ export async function loadBusinessContext(
     skillsResult,
     credentialsResult,
     profileResult,
+    emailToneResult,
     icpCacheResult,
   ] = await Promise.all([
     // 1. Organization enrichment (company knowledge)
@@ -113,14 +114,22 @@ export async function loadBusinessContext(
       .eq('organization_id', orgId)
       .in('provider', ['apollo', 'instantly']),
 
-    // 4. User profile (sign-off + name)
+    // 4. User profile (name)
     serviceClient
       .from('profiles')
-      .select('first_name, last_name, email_sign_off')
+      .select('first_name, last_name')
       .eq('id', userId)
       .maybeSingle(),
 
-    // 5. Cached ICP profiles from organization_context
+    // 5. Email sign-off from user_tone_settings
+    serviceClient
+      .from('user_tone_settings')
+      .select('email_sign_off')
+      .eq('user_id', userId)
+      .eq('content_type', 'email')
+      .maybeSingle(),
+
+    // 6. Cached ICP profiles from organization_context
     serviceClient
       .from('organization_context')
       .select('value')
@@ -169,7 +178,7 @@ export async function loadBusinessContext(
 
   // --- Extract user profile ---
   const profile = profileResult.data
-  const emailSignOff = profile?.email_sign_off ?? null
+  const emailSignOff = emailToneResult.data?.email_sign_off ?? null
   const userName = profile
     ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || null
     : null

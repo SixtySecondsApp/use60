@@ -74,6 +74,8 @@ interface RequestBody {
   organizationId?: string;
   context?: Record<string, unknown>;
   stream?: boolean;
+  fact_profile_id?: string;
+  product_profile_id?: string;
 }
 
 // =============================================================================
@@ -672,6 +674,79 @@ async function checkApifyConnection(
 }
 
 // =============================================================================
+// Profile Context (Fact Profile + Product Profile)
+// =============================================================================
+
+interface ProfileContext {
+  companyContext?: string;
+  productContext?: string;
+}
+
+async function fetchProfileContext(
+  client: ReturnType<typeof createClient>,
+  factProfileId?: string,
+  productProfileId?: string
+): Promise<ProfileContext> {
+  const result: ProfileContext = {};
+
+  if (factProfileId) {
+    try {
+      const { data } = await client
+        .from('client_fact_profiles')
+        .select('company_name, company_domain, research_data, research_status')
+        .eq('id', factProfileId)
+        .maybeSingle();
+
+      if (data && data.research_status === 'complete' && data.research_data) {
+        const rd = data.research_data as Record<string, unknown>;
+        const sections: string[] = [`Company: ${data.company_name}`];
+        if (data.company_domain) sections.push(`Domain: ${data.company_domain}`);
+        for (const [key, value] of Object.entries(rd)) {
+          if (value && typeof value === 'object') {
+            sections.push(`### ${key}\n${JSON.stringify(value, null, 2)}`);
+          } else if (value) {
+            sections.push(`**${key}**: ${String(value)}`);
+          }
+        }
+        result.companyContext = sections.join('\n');
+      }
+    } catch (err) {
+      console.error('[fetchProfileContext] Error fetching fact profile:', err);
+    }
+  }
+
+  if (productProfileId) {
+    try {
+      const { data } = await client
+        .from('product_profiles')
+        .select('name, description, category, product_url, research_data, research_status')
+        .eq('id', productProfileId)
+        .maybeSingle();
+
+      if (data && data.research_status === 'complete' && data.research_data) {
+        const rd = data.research_data as Record<string, unknown>;
+        const sections: string[] = [`Product: ${data.name}`];
+        if (data.description) sections.push(`Description: ${data.description}`);
+        if (data.category) sections.push(`Category: ${data.category}`);
+        if (data.product_url) sections.push(`URL: ${data.product_url}`);
+        for (const [key, value] of Object.entries(rd)) {
+          if (value && typeof value === 'object') {
+            sections.push(`### ${key}\n${JSON.stringify(value, null, 2)}`);
+          } else if (value) {
+            sections.push(`**${key}**: ${String(value)}`);
+          }
+        }
+        result.productContext = sections.join('\n');
+      }
+    } catch (err) {
+      console.error('[fetchProfileContext] Error fetching product profile:', err);
+    }
+  }
+
+  return result;
+}
+
+// =============================================================================
 // System Prompt
 // =============================================================================
 
@@ -679,7 +754,8 @@ function buildSystemPrompt(
   organizationId?: string,
   context?: Record<string, unknown>,
   memoryContext?: string,
-  apifyConnection?: ApifyConnectionInfo
+  apifyConnection?: ApifyConnectionInfo,
+  profileContext?: ProfileContext
 ): string {
   return `You are an AI sales assistant for a platform called Sixty. You help sales professionals manage their pipeline, prepare for meetings, track contacts, and execute sales workflows.
 
@@ -751,6 +827,8 @@ ${organizationId ? `Organization ID: ${organizationId}` : 'No organization speci
 ${context && Object.keys(context).length > 0 ? `\nAvailable context: ${Object.keys(context).join(', ')}` : ''}
 ${memoryContext || ''}
 ${memoryContext ? MEMORY_SYSTEM_ADDITION : ''}
+${profileContext?.companyContext ? `\n## Company Context\n\nThe user has selected a company profile for this conversation. Use this context to personalize responses, tailor outreach messaging, and inform sales strategy:\n\n${profileContext.companyContext}\n` : ''}
+${profileContext?.productContext ? `\n## Product Context\n\nThe user has selected a product profile for this conversation. Use this context to craft relevant messaging, highlight product-market fit, and tailor sales approaches:\n\n${profileContext.productContext}\n` : ''}
 
 ## Behavior Guidelines
 
@@ -1262,7 +1340,7 @@ serve(async (req: Request) => {
   try {
     // Parse request
     const body: RequestBody = await req.json();
-    const { message, organizationId, context = {}, stream = true } = body;
+    const { message, organizationId, context = {}, stream = true, fact_profile_id, product_profile_id } = body;
 
     if (!message) {
       return new Response(JSON.stringify({ error: 'Message is required' }), {
@@ -1322,8 +1400,13 @@ serve(async (req: Request) => {
       console.log('[copilot-autonomous] Apify connected for org:', organizationId);
     }
 
+    // Fetch profile context if IDs provided (non-blocking on failure)
+    const profileContext = (fact_profile_id || product_profile_id)
+      ? await fetchProfileContext(supabase, fact_profile_id, product_profile_id)
+      : undefined;
+
     // Build system prompt (no longer depends on per-skill tool defs)
-    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection);
+    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext);
 
     // Use the 4-tool architecture (same as api-copilot)
     const claudeTools = FIVE_TOOL_DEFINITIONS;
@@ -1567,15 +1650,19 @@ serve(async (req: Request) => {
             // Get the final message with complete content
             const finalMessage = await stream.finalMessage();
 
-            // Log cost
+            // Log cost + deduct org credits for autonomous copilot usage
             if (userId && finalMessage.usage) {
-              await logAICostEvent(supabase, {
-                user_id: userId,
-                model: MODEL,
-                input_tokens: finalMessage.usage.input_tokens,
-                output_tokens: finalMessage.usage.output_tokens,
-                request_type: 'copilot_autonomous',
-              });
+              await logAICostEvent(
+                supabase,
+                userId,
+                resolvedOrgForConfig,
+                'anthropic',
+                MODEL,
+                finalMessage.usage.input_tokens,
+                finalMessage.usage.output_tokens,
+                'copilot_autonomous',
+                { request_type: 'copilot_autonomous' }
+              );
             }
 
             if (finalMessage.stop_reason === 'end_turn') {

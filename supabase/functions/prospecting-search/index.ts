@@ -157,6 +157,7 @@ serve(async (req) => {
         ...search_params,
         page,
         per_page: Math.min(per_page, 100),
+        _skip_credit_deduction: true,
       }
 
       searchResponse = await fetch(`${supabaseUrl}/functions/v1/apollo-search`, {
@@ -174,6 +175,7 @@ serve(async (req) => {
         ...search_params,
         page,
         per_page: Math.min(per_page, 100),
+        _skip_credit_deduction: true,
       }
 
       searchResponse = await fetch(`${supabaseUrl}/functions/v1/ai-ark-search`, {

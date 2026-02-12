@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
+import { checkCreditBalance } from '../_shared/costTracking.ts'
 
 const AI_ARK_API_BASE = 'https://api.ai-ark.com/api/developer-portal/v1'
 
@@ -39,6 +40,7 @@ interface PeopleSearchParams {
 interface AIArkSearchParams {
   action: 'company_search' | 'people_search'
   _auth_token?: string
+  _skip_credit_deduction?: boolean
   // Company search flat params
   industry?: string[]
   employee_min?: number
@@ -60,6 +62,11 @@ interface AIArkSearchParams {
   // Pagination
   page?: number
   per_page?: number
+}
+
+const CREDIT_COSTS = {
+  ai_ark_company: 2.5,
+  ai_ark_people: 12.5,
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +299,7 @@ serve(async (req) => {
   try {
     // Parse body -- auth token may be in body as fallback when headers are stripped
     const body = await req.json()
-    const { _auth_token, action, ...searchParams } = body as AIArkSearchParams
+    const { _auth_token, _skip_credit_deduction, action, ...searchParams } = body as AIArkSearchParams
 
     // Validate action
     if (!action || !['company_search', 'people_search'].includes(action)) {
@@ -344,6 +351,20 @@ serve(async (req) => {
         JSON.stringify({ error: 'No organization found' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    if (!_skip_credit_deduction && membership.org_id) {
+      const creditCheck = await checkCreditBalance(supabase, membership.org_id)
+      if (!creditCheck.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: 'insufficient_credits',
+            message: creditCheck.message || 'Your organization has run out of AI credits. Please top up to continue.',
+            balance: creditCheck.balance,
+          }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     // Get AI Ark API key from org integrations (service role to bypass RLS)
@@ -402,7 +423,14 @@ serve(async (req) => {
     })
 
     // Extract credits consumed from response header
-    const creditsConsumed = aiArkResponse.headers.get('x-credit')
+    const creditsConsumedHeader = aiArkResponse.headers.get('x-credit')
+    const creditsFromProvider = creditsConsumedHeader ? parseFloat(creditsConsumedHeader) : null
+    const estimatedCredits = action === 'company_search'
+      ? CREDIT_COSTS.ai_ark_company
+      : CREDIT_COSTS.ai_ark_people
+    const creditsConsumed = Number.isFinite(creditsFromProvider) && creditsFromProvider !== null
+      ? creditsFromProvider
+      : estimatedCredits
 
     if (!aiArkResponse.ok) {
       const errorBody = await aiArkResponse.text()
@@ -440,6 +468,19 @@ serve(async (req) => {
 
     const aiArkData = await aiArkResponse.json()
 
+    if (!_skip_credit_deduction && membership.org_id && creditsConsumed > 0) {
+      try {
+        await supabase.rpc('deduct_credits', {
+          p_org_id: membership.org_id,
+          p_amount: creditsConsumed,
+          p_description: `AI Ark search: ${action}`,
+          p_feature_key: 'ai_ark_search',
+        })
+      } catch (err) {
+        console.warn('[ai-ark-search] Credit deduction error (non-blocking):', err)
+      }
+    }
+
     // AI Ark uses Spring-style pagination:
     // content[], totalElements, totalPages, pageable.pageNumber, size, number
     const content = (aiArkData.content || []) as Record<string, unknown>[]
@@ -463,7 +504,7 @@ serve(async (req) => {
             total_pages: totalPages,
             has_more: callerPage < totalPages,
           },
-          credits_consumed: creditsConsumed ? parseFloat(creditsConsumed) : null,
+          credits_consumed: creditsConsumed,
           query: searchPayload,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -485,7 +526,7 @@ serve(async (req) => {
             total_pages: totalPages,
             has_more: callerPage < totalPages,
           },
-          credits_consumed: creditsConsumed ? parseFloat(creditsConsumed) : null,
+          credits_consumed: creditsConsumed,
           query: searchPayload,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

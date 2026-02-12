@@ -14,7 +14,7 @@ export async function logAICostEvent(
   supabaseClient: any,
   userId: string,
   orgId: string | null,
-  provider: 'anthropic' | 'gemini',
+  provider: 'anthropic' | 'gemini' | 'openrouter' | 'exa',
   model: string,
   inputTokens: number,
   outputTokens: number,
@@ -126,6 +126,63 @@ export function extractGeminiUsage(response: any): { inputTokens: number; output
     inputTokens: usageMetadata.promptTokenCount || 0,
     outputTokens: usageMetadata.candidatesTokenCount || 0,
   };
+}
+
+/**
+ * Log a flat-rate cost event (non-token-based providers like Exa, Apollo, AI Ark).
+ * Inserts into ai_cost_events for analytics and calls deduct_credits for balance.
+ */
+export async function logFlatRateCostEvent(
+  supabaseClient: any,
+  userId: string,
+  orgId: string,
+  provider: string,
+  model: string,
+  cost: number,
+  feature?: string,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  try {
+    // Log to ai_cost_events for usage analytics
+    const { error: insertError } = await supabaseClient.from('ai_cost_events').insert({
+      org_id: orgId,
+      user_id: userId,
+      provider,
+      model,
+      feature: feature || null,
+      input_tokens: 0,
+      output_tokens: 0,
+      estimated_cost: cost,
+      metadata: metadata || null,
+    });
+
+    if (insertError) {
+      if (!insertError.message.includes('relation') && !insertError.message.includes('does not exist')) {
+        console.warn('[CostTracking] Flat rate cost event insert error:', insertError);
+      }
+    }
+
+    // Deduct credits from org balance
+    if (cost > 0) {
+      const { error: deductError } = await supabaseClient.rpc('deduct_credits', {
+        p_org_id: orgId,
+        p_amount: cost,
+        p_description: `${provider} usage: ${feature || 'unknown'}`,
+        p_feature_key: feature || null,
+        p_cost_event_id: null,
+      });
+
+      if (deductError) {
+        if (!deductError.message.includes('relation') && !deductError.message.includes('does not exist') && !deductError.message.includes('function')) {
+          console.warn('[CostTracking] Flat rate credit deduction error:', deductError);
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
+      console.warn('[CostTracking] Flat rate cost logging exception:', err);
+    }
+  }
 }
 
 // =============================================================================

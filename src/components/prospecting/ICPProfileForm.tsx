@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Building2, Users, MapPin, Cpu, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Plus, Building2, Users, MapPin, Cpu, ChevronDown, ChevronRight, Link, Package } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useCreateICPProfile, useUpdateICPProfile } from '@/lib/hooks/useICPProfilesCRUD';
+import { useFactProfiles } from '@/lib/hooks/useFactProfiles';
+import { useProductProfiles, useProductProfilesByFactProfile } from '@/lib/hooks/useProductProfiles';
+import { productProfileToICPCriteria } from '@/lib/utils/productProfileToICP';
+import { toast } from 'sonner';
 import type {
   ICPProfile,
   ICPCriteria,
@@ -317,6 +321,16 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
   const [status, setStatus] = useState<ICPStatus>('draft');
   const [visibility, setVisibility] = useState<ICPVisibility>('team_only');
 
+  // Profile link state
+  const [selectedFactProfileId, setSelectedFactProfileId] = useState<string | null>(null);
+  const [selectedProductProfileId, setSelectedProductProfileId] = useState<string | null>(null);
+
+  // Profile data hooks
+  const { data: factProfiles } = useFactProfiles(orgId);
+  const { data: filteredProductProfiles } = useProductProfilesByFactProfile(selectedFactProfileId ?? undefined);
+  const { data: allProductProfiles } = useProductProfiles(orgId);
+  const productProfiles = selectedFactProfileId ? filteredProductProfiles : allProductProfiles;
+
   // Criteria state
   const [industries, setIndustries] = useState<string[]>([]);
   const [employeeRanges, setEmployeeRanges] = useState<{ min: number; max: number }[]>([]);
@@ -343,6 +357,8 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
       setTargetProvider(editProfile.target_provider);
       setStatus(editProfile.status);
       setVisibility(editProfile.visibility);
+      setSelectedFactProfileId(editProfile.fact_profile_id ?? null);
+      setSelectedProductProfileId(editProfile.product_profile_id ?? null);
 
       const c = editProfile.criteria;
       setIndustries(c.industries ?? []);
@@ -365,6 +381,8 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
       setTargetProvider('apollo');
       setStatus('draft');
       setVisibility('team_only');
+      setSelectedFactProfileId(null);
+      setSelectedProductProfileId(null);
       setIndustries([]);
       setEmployeeRanges([]);
       setFundingStages([]);
@@ -390,6 +408,42 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
     arr.some((r) => r.min === range.min && r.max === range.max)
       ? arr.filter((r) => !(r.min === range.min && r.max === range.max))
       : [...arr, range], []);
+
+  // ----- Handle product profile selection → auto-populate empty fields -----
+  const handleProductProfileSelect = useCallback((profileId: string | null) => {
+    setSelectedProductProfileId(profileId);
+    if (!profileId || !productProfiles) return;
+
+    const profile = productProfiles.find((p) => p.id === profileId);
+    if (!profile?.research_data) return;
+
+    const converted = productProfileToICPCriteria(profile.research_data);
+
+    // Only fill fields that are currently empty
+    if (converted.industries?.length && industries.length === 0) setIndustries(converted.industries);
+    if (converted.employee_ranges?.length && employeeRanges.length === 0) setEmployeeRanges(converted.employee_ranges);
+    if (converted.title_keywords?.length && titleKeywords.length === 0) {
+      setTitleKeywords(converted.title_keywords);
+      if (converted.title_search_mode) setTitleSearchMode(converted.title_search_mode);
+    }
+    if (converted.location_regions?.length && regions.length === 0) setRegions(converted.location_regions);
+    if (converted.technology_keywords?.length && technologyKeywords.length === 0) setTechnologyKeywords(converted.technology_keywords);
+    if (converted.custom_keywords?.length && customKeywords.length === 0) setCustomKeywords(converted.custom_keywords);
+
+    toast.success(`Pre-filled criteria from ${profile.name}`);
+  }, [productProfiles, industries.length, employeeRanges.length, titleKeywords.length, regions.length, technologyKeywords.length, customKeywords.length]);
+
+  // ----- Handle fact profile change → clear product if not linked -----
+  const handleFactProfileSelect = useCallback((profileId: string | null) => {
+    setSelectedFactProfileId(profileId);
+    // Clear product selection if it doesn't belong to the new fact profile
+    if (selectedProductProfileId && profileId) {
+      const filtered = filteredProductProfiles ?? [];
+      if (!filtered.some((p) => p.id === selectedProductProfileId)) {
+        setSelectedProductProfileId(null);
+      }
+    }
+  }, [selectedProductProfileId, filteredProductProfiles]);
 
   // ----- Build criteria object -----
   const buildCriteria = (): ICPCriteria => {
@@ -457,6 +511,8 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
             status,
             visibility,
             criteria,
+            fact_profile_id: selectedFactProfileId,
+            product_profile_id: selectedProductProfileId,
           },
         },
         {
@@ -477,6 +533,8 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
           target_provider: targetProvider,
           status,
           visibility,
+          fact_profile_id: selectedFactProfileId,
+          product_profile_id: selectedProductProfileId,
         },
         {
           onSuccess: (profile) => {
@@ -560,6 +618,104 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
                     <SelectItem value="client_visible">Client Visible</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* ---- Link to Profile ---- */}
+          <div className="space-y-3 pb-4 border-b border-[#E2E8F0] dark:border-gray-700/50">
+            <div className="flex items-center gap-2 text-sm font-medium text-[#1E293B] dark:text-gray-100">
+              <Link className="h-4 w-4 text-[#64748B] dark:text-gray-400" />
+              Link to Profile
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Company Profile */}
+              <div className="space-y-1.5">
+                <Label className="text-sm text-[#64748B] dark:text-gray-400 flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5" />
+                  Company Profile
+                </Label>
+                <div className="flex gap-1.5">
+                  <Select
+                    value={selectedFactProfileId ?? '__none__'}
+                    onValueChange={(v) => handleFactProfileSelect(v === '__none__' ? null : v)}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select company..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {factProfiles?.map((fp) => (
+                        <SelectItem key={fp.id} value={fp.id}>
+                          <span className="flex items-center gap-2">
+                            {fp.company_name}
+                            {fp.research_data?.market_position?.industry && (
+                              <span className="text-xs text-[#94A3B8] dark:text-gray-500">
+                                {fp.research_data.market_position.industry}
+                              </span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedFactProfileId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => handleFactProfileSelect(null)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Product Profile */}
+              <div className="space-y-1.5">
+                <Label className="text-sm text-[#64748B] dark:text-gray-400 flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5" />
+                  Product Profile
+                </Label>
+                <div className="flex gap-1.5">
+                  <Select
+                    value={selectedProductProfileId ?? '__none__'}
+                    onValueChange={(v) => handleProductProfileSelect(v === '__none__' ? null : v)}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select product..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {productProfiles?.map((pp) => (
+                        <SelectItem key={pp.id} value={pp.id}>
+                          <span className="flex items-center gap-2">
+                            {pp.name}
+                            {pp.category && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                {pp.category}
+                              </Badge>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedProductProfileId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => setSelectedProductProfileId(null)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

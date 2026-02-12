@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useLocation } from 'react-router-dom';
 import {
   Crosshair,
   Plus,
@@ -67,6 +68,7 @@ function PageSkeleton() {
 function ProspectingPage() {
   const { activeOrg } = useOrg();
   const { userId } = useAuth();
+  const location = useLocation();
   const orgId = activeOrg?.id ?? '';
 
   // ICP profiles query
@@ -98,6 +100,8 @@ function ProspectingPage() {
   const [importSelectedRows, setImportSelectedRows] = useState<number[]>([]);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [prefillSourceName, setPrefillSourceName] = useState<string | null>(null);
+  const consumedPrefillRef = useRef(false);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -226,6 +230,87 @@ function ProspectingPage() {
     setSearchParams((prev) => ({ ...prev, ...filterChange }));
   }, []);
 
+  const applyFactProfilePrefill = useCallback((payload: {
+    prefillCriteria: Partial<ICPCriteria>;
+    fromFactProfileId?: string;
+    fromFactProfileName?: string;
+  }) => {
+    const fromFactProfileName = payload.fromFactProfileName || 'Fact Profile';
+    setPrefillSourceName(fromFactProfileName);
+    setEditProfile({
+      id: '',
+      organization_id: orgId,
+      created_by: userId ?? '',
+      name: `${fromFactProfileName} ICP`,
+      description: payload.fromFactProfileId
+        ? `Draft ICP generated from fact profile "${fromFactProfileName}" (${payload.fromFactProfileId}).`
+        : `Draft ICP generated from fact profile "${fromFactProfileName}".`,
+      criteria: payload.prefillCriteria as ICPCriteria,
+      target_provider: 'apollo',
+      status: 'draft',
+      visibility: 'team_only',
+      is_active: true,
+      last_tested_at: null,
+      last_test_result_count: null,
+      created_at: '',
+      updated_at: '',
+    } as ICPProfile);
+    setShowProfileForm(true);
+  }, [orgId, userId]);
+
+  useEffect(() => {
+    if (consumedPrefillRef.current || !orgId) return;
+
+    const statePayload = location.state as {
+      prefillCriteria?: Partial<ICPCriteria>;
+      fromFactProfileId?: string;
+      fromFactProfileName?: string;
+    } | null;
+
+    if (statePayload?.prefillCriteria) {
+      consumedPrefillRef.current = true;
+      applyFactProfilePrefill({
+        prefillCriteria: statePayload.prefillCriteria,
+        fromFactProfileId: statePayload.fromFactProfileId,
+        fromFactProfileName: statePayload.fromFactProfileName,
+      });
+      try {
+        sessionStorage.removeItem('prospecting-prefill-fact-profile');
+      } catch {
+        // Ignore storage cleanup errors.
+      }
+      return;
+    }
+
+    try {
+      const raw = sessionStorage.getItem('prospecting-prefill-fact-profile');
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        prefillCriteria?: Partial<ICPCriteria>;
+        fromFactProfileId?: string;
+        fromFactProfileName?: string;
+        createdAt?: number;
+      };
+      if (!parsed.prefillCriteria) return;
+
+      // Ignore stale payloads older than 15 minutes.
+      if (parsed.createdAt && Date.now() - parsed.createdAt > 15 * 60 * 1000) {
+        sessionStorage.removeItem('prospecting-prefill-fact-profile');
+        return;
+      }
+
+      consumedPrefillRef.current = true;
+      applyFactProfilePrefill({
+        prefillCriteria: parsed.prefillCriteria,
+        fromFactProfileId: parsed.fromFactProfileId,
+        fromFactProfileName: parsed.fromFactProfileName,
+      });
+      sessionStorage.removeItem('prospecting-prefill-fact-profile');
+    } catch {
+      // Ignore malformed storage payloads.
+    }
+  }, [location.state, orgId, applyFactProfilePrefill]);
+
   // ----- Loading -----
   if (profilesLoading || !activeOrg) {
     return (
@@ -254,6 +339,11 @@ function ProspectingPage() {
               <p className="text-xs sm:text-sm text-[#64748B] dark:text-gray-400 mt-1">
                 Define your ideal customer profile and search across providers to find matching leads
               </p>
+              {prefillSourceName && (
+                <p className="text-xs text-brand-blue dark:text-blue-400 mt-1">
+                  Prefilled from fact profile: {prefillSourceName}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

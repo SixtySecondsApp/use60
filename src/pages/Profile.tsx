@@ -23,7 +23,6 @@ export default function Profile() {
     firstName: '',
     lastName: '',
     email: '',
-    emailSignOff: '',
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
@@ -73,7 +72,6 @@ export default function Profile() {
         firstName: profileData.first_name || '',
         lastName: profileData.last_name || '',
         email: profileData.email || '',
-        emailSignOff: profileData.email_sign_off || '',
       }));
     }
     // Reset pending avatar when user data changes (to sync with global state)
@@ -106,10 +104,7 @@ export default function Profile() {
       if (user?.id) {
         const { error: profileError } = await supabase
           .from('profiles')
-          .update({
-            ...updates,
-            email_sign_off: formData.emailSignOff || null,
-          })
+          .update(updates)
           .eq('id', user.id);
 
         if (profileError) throw profileError;
@@ -451,23 +446,6 @@ export default function Profile() {
                   )}
                 </div>
               )}
-            </div>
-
-            {/* Email Sign-Off */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">
-                Email Sign-Off
-              </label>
-              <input
-                type="text"
-                value={formData.emailSignOff}
-                onChange={(e) => setFormData({ ...formData, emailSignOff: e.target.value })}
-                placeholder="e.g. Best, Andrew"
-                className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-all duration-200"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                How you close off emails. Used by AI when generating outreach sequences.
-              </p>
             </div>
 
             {/* Password Section */}

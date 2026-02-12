@@ -248,6 +248,15 @@ const platformSections: Record<string, PlatformSection[]> = {
       badge: 'New',
     },
     {
+      id: 'exa-abilities-demo',
+      title: 'Exa Prospecting Demo',
+      description: 'Guided 4-step showcase for account discovery, persona discovery, intent signals, and Websets strategy',
+      icon: Search,
+      href: '/demo/exa-abilities',
+      color: 'text-sky-600 bg-sky-100 dark:bg-sky-900/30',
+      badge: 'New',
+    },
+    {
       id: 'feature-flags',
       title: 'Feature Flags',
       description: 'Control feature availability per customer',

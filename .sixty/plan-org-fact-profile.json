@@ -1,0 +1,243 @@
+{
+  "feature": "org-fact-profile-onboarding",
+  "createdAt": "2026-02-12",
+  "consultReport": ".sixty/consult/org-fact-profile-onboarding.md",
+  "branch": "feature/prospecting-icp-builder",
+  "stories": [
+    {
+      "id": "OFP-001",
+      "title": "Schema: Add is_org_profile flag and CRM linking columns",
+      "type": "schema",
+      "estimate": "15m",
+      "dependencies": [],
+      "description": "Create migration adding `is_org_profile BOOLEAN DEFAULT false` with partial unique index (`WHERE is_org_profile = true`) to `client_fact_profiles`. Add `linked_contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL`, `linked_deal_id UUID REFERENCES deals(id) ON DELETE SET NULL`, and `linked_company_domain TEXT`. Add indexes on linking columns.",
+      "files": [
+        "supabase/migrations/20260212_org_fact_profile.sql"
+      ],
+      "acceptanceCriteria": [
+        "Migration runs without errors",
+        "Only one is_org_profile=true per organization_id enforced by partial unique index",
+        "CRM linking columns are nullable with proper foreign keys",
+        "Existing fact profiles remain is_org_profile=false"
+      ]
+    },
+    {
+      "id": "OFP-002",
+      "title": "Types, service, hooks: Org profile support",
+      "type": "frontend",
+      "estimate": "20m",
+      "dependencies": ["OFP-001"],
+      "description": "Extend FactProfile type in factProfile.ts with is_org_profile, linked_contact_id, linked_deal_id, linked_company_domain. Add getOrgProfile(orgId) to factProfileService. Add useOrgProfile(orgId) React Query hook. Add syncToOrgContext(profileId) service method that maps fact profile research sections to organization_context keys.",
+      "files": [
+        "src/lib/types/factProfile.ts",
+        "src/lib/services/factProfileService.ts",
+        "src/lib/hooks/useFactProfiles.ts"
+      ],
+      "acceptanceCriteria": [
+        "FactProfile type includes new columns",
+        "getOrgProfile returns the org's fact profile or null",
+        "useOrgProfile hook with proper query key caching",
+        "syncToOrgContext maps research_data sections to org context keys"
+      ]
+    },
+    {
+      "id": "OFP-003",
+      "title": "Onboarding: Auto-create org fact profile on completion",
+      "type": "frontend",
+      "estimate": "30m",
+      "dependencies": ["OFP-002"],
+      "description": "In CompletionStep.tsx, after org onboarding completes: (1) Create fact profile with is_org_profile=true, profile_type='client_org', seeded with enrichment data from onboarding. (2) Fire background research for deeper analysis. (3) On research complete, sync to organization_context and trigger skill recompilation. Handle case where org profile already exists (skip creation).",
+      "files": [
+        "src/pages/onboarding/v2/CompletionStep.tsx",
+        "supabase/functions/research-fact-profile/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "New org created via onboarding gets a fact profile with is_org_profile=true",
+        "Profile seeded with enrichment data (company_name, domain, industry, etc.)",
+        "Background research triggered automatically",
+        "If org profile already exists, creation is skipped gracefully",
+        "Toast feedback on success"
+      ]
+    },
+    {
+      "id": "OFP-004",
+      "title": "Sync bridge: Fact profile research → organization_context",
+      "type": "backend",
+      "estimate": "25m",
+      "dependencies": ["OFP-002"],
+      "parallel_with": ["OFP-003"],
+      "description": "After research-fact-profile completes for an is_org_profile=true profile, automatically sync research data to organization_context. Mapping: company_overview → company_name, industry, description, tagline; products_services → products, value_propositions; market_position → competitors, target_market; team_leadership → key_people; financials → revenue, funding; technology → tech_stack. Then call compile-organization-skills to recompile. Can be done as a post-research hook in the edge function or as a separate sync function.",
+      "files": [
+        "supabase/functions/research-fact-profile/index.ts",
+        "src/lib/services/factProfileService.ts"
+      ],
+      "acceptanceCriteria": [
+        "Research completion for org profile triggers org context sync",
+        "8 research sections mapped to appropriate context keys",
+        "Skill recompilation triggered after sync",
+        "Non-org profiles (is_org_profile=false) do NOT trigger sync",
+        "Sync is idempotent (can re-run safely)"
+      ]
+    },
+    {
+      "id": "OFP-005",
+      "title": "FactProfilesPage: 'Your Business' tab and badge",
+      "type": "frontend",
+      "estimate": "20m",
+      "dependencies": ["OFP-002"],
+      "parallel_with": ["OFP-003", "OFP-004"],
+      "description": "Update FactProfilesPage.tsx: (1) Add 'Your Business' tab or pin org profile at top with distinct badge. (2) Show 'Feeds org context' indicator on org profile card. (3) Prevent deletion of org profile. (4) In NewFactProfileDialog, if org profile exists, hide 'Create as org profile' option. (5) FactProfileCard shows special styling for org profile.",
+      "files": [
+        "src/pages/FactProfilesPage.tsx",
+        "src/components/fact-profiles/FactProfileCard.tsx",
+        "src/components/fact-profiles/FactProfileGrid.tsx",
+        "src/components/fact-profiles/NewFactProfileDialog.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Org profile visually distinct (badge, pinned, or dedicated tab)",
+        "Delete action disabled for org profile with tooltip explanation",
+        "NewFactProfileDialog prevents creating second org profile",
+        "'Feeds org context' indicator visible on org profile"
+      ]
+    },
+    {
+      "id": "OFP-006",
+      "title": "Client profiles: CRM entity linking",
+      "type": "frontend",
+      "estimate": "25m",
+      "dependencies": ["OFP-002"],
+      "parallel_with": ["OFP-003", "OFP-004", "OFP-005"],
+      "description": "Add optional CRM linking to NewFactProfileDialog and FactProfileView. (1) In create dialog: optional contact picker, deal picker, company domain input. (2) On FactProfileCard: show linked entity badge (contact name, deal name, or company domain). (3) In FactProfileView: link to navigate to the CRM entity. (4) Client profiles explicitly marked as NOT feeding org context.",
+      "files": [
+        "src/components/fact-profiles/NewFactProfileDialog.tsx",
+        "src/components/fact-profiles/FactProfileCard.tsx",
+        "src/components/fact-profiles/FactProfileView.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Client profiles can optionally link to contact, deal, or company",
+        "Linked entity shown on card with clickable badge",
+        "Profile view shows linked entity with navigation",
+        "CRM linking fields only shown for non-org profiles"
+      ]
+    },
+    {
+      "id": "OFP-007",
+      "title": "Settings: Company Profile section",
+      "type": "frontend",
+      "estimate": "20m",
+      "dependencies": ["OFP-004", "OFP-005"],
+      "description": "Add 'Company Profile' section to org Settings page. (1) Quick summary view of org fact profile research data. (2) 'Edit Profile' button → navigates to fact profile edit view. (3) 'Re-research' button → triggers fresh research. (4) 'Sync to Skills' button → manual sync to org context + recompile. (5) Show last synced/researched timestamps. (6) If no org profile exists yet, show 'Create Company Profile' CTA.",
+      "files": [
+        "src/components/settings/OrgProfileSettings.tsx",
+        "src/pages/settings/"
+      ],
+      "acceptanceCriteria": [
+        "Company Profile section visible in org Settings",
+        "Shows key research data at a glance",
+        "Edit navigates to fact profile edit page",
+        "Re-research triggers background research with toast feedback",
+        "Sync button updates org context and recompiles skills",
+        "Timestamps shown for last research and last sync",
+        "Create CTA if org profile doesn't exist"
+      ]
+    }
+    {
+      "id": "OFP-008",
+      "title": "Schema: Add context_profile_id to dynamic_tables",
+      "type": "schema",
+      "estimate": "10m",
+      "dependencies": ["OFP-001"],
+      "description": "Add `context_profile_id UUID REFERENCES client_fact_profiles(id) ON DELETE SET NULL` to `dynamic_tables`. Defaults to NULL (uses org profile fallback). When set, enrichments on this table resolve ${variables} from the selected fact profile's research_data instead of org context. Can be combined into OFP-001 migration.",
+      "files": [
+        "supabase/migrations/20260212_org_fact_profile.sql"
+      ],
+      "acceptanceCriteria": [
+        "dynamic_tables has context_profile_id column",
+        "Foreign key to client_fact_profiles with ON DELETE SET NULL",
+        "Existing tables unaffected (NULL = use org profile fallback)"
+      ]
+    },
+    {
+      "id": "OFP-009",
+      "title": "Backend: Enrichment context resolution from fact profiles",
+      "type": "backend",
+      "estimate": "30m",
+      "dependencies": ["OFP-008", "OFP-002"],
+      "description": "Extend enrich-dynamic-table edge function: (1) Accept context_profile_id parameter from table metadata. (2) New buildFactProfileContext(profileId) function that maps 8 research sections to flat context variables (company_name, industry, products, competitors, etc.). (3) Resolve ${variable} placeholders in enrichment prompts using profile context. (4) Fallback chain: table context_profile_id → org is_org_profile=true → organization_context → no context. (5) Coexists with existing product_profile_id and @column references.",
+      "files": [
+        "supabase/functions/enrich-dynamic-table/index.ts",
+        "src/lib/services/opsTableService.ts"
+      ],
+      "acceptanceCriteria": [
+        "Enrichment prompts can use ${company_name}, ${products}, ${competitors} etc.",
+        "Variables resolve from the table's selected fact profile",
+        "Fallback chain works: table profile → org profile → org context → empty",
+        "Existing @column and ${product_context} references still work",
+        "No breaking changes to enrichments without context profiles"
+      ]
+    },
+    {
+      "id": "OFP-010",
+      "title": "Frontend: Profile focus selector on OpsDetailPage",
+      "type": "frontend",
+      "estimate": "25m",
+      "dependencies": ["OFP-008", "OFP-005"],
+      "description": "Add profile focus selector to OpsDetailPage: (1) Dropdown in top bar listing all fact profiles for the org (org profile first with 'Your Business' badge, then client profiles). (2) Show active profile name as a chip/badge (e.g., 'Context: Acme Corp'). (3) Selecting a profile updates dynamic_tables.context_profile_id via opsTableService. (4) 'Default (Your Business)' option sets NULL (falls back to org profile). (5) EditEnrichmentModal shows which profile provides context. (6) Visual indicator on enrichment columns showing active context source.",
+      "files": [
+        "src/pages/OpsDetailPage.tsx",
+        "src/components/ops/EditEnrichmentModal.tsx",
+        "src/lib/services/opsTableService.ts"
+      ],
+      "acceptanceCriteria": [
+        "Profile selector visible in OpsDetailPage top bar",
+        "Org profile listed first with 'Your Business' badge",
+        "Selecting a profile persists to dynamic_tables.context_profile_id",
+        "Default option resets to org profile fallback",
+        "EditEnrichmentModal shows active context profile name",
+        "Toast feedback on profile switch"
+      ]
+    }
+  ],
+  "parallelGroups": [
+    {
+      "stories": ["OFP-003", "OFP-004"],
+      "reason": "Both depend on OFP-002 but don't overlap in files"
+    },
+    {
+      "stories": ["OFP-005", "OFP-006"],
+      "reason": "Independent UI changes to different parts of fact profiles"
+    },
+    {
+      "stories": ["OFP-009", "OFP-010"],
+      "reason": "Backend enrichment context + frontend selector can develop in parallel"
+    }
+  ],
+  "mvp": {
+    "stories": ["OFP-001", "OFP-002", "OFP-003", "OFP-004", "OFP-005"],
+    "estimate": "~2 hours",
+    "delivers": "Org profile auto-created on onboarding, syncs to org context, visible in fact profiles with badge"
+  },
+  "full": {
+    "stories": ["OFP-001", "OFP-002", "OFP-003", "OFP-004", "OFP-005", "OFP-006", "OFP-007", "OFP-008", "OFP-009", "OFP-010"],
+    "estimate": "~4 hours",
+    "delivers": "Complete org + client profile system with CRM linking, Settings integration, and Ops profile focus switching"
+  },
+  "phases": {
+    "phase_1_foundation": {
+      "stories": ["OFP-001", "OFP-002"],
+      "delivers": "Schema + types/service/hooks foundation"
+    },
+    "phase_2_onboarding": {
+      "stories": ["OFP-003", "OFP-004"],
+      "delivers": "Org profile auto-created on onboarding, syncs to org context"
+    },
+    "phase_3_ui": {
+      "stories": ["OFP-005", "OFP-006", "OFP-007"],
+      "delivers": "Fact profiles page, CRM linking, Settings section"
+    },
+    "phase_4_ops_context": {
+      "stories": ["OFP-008", "OFP-009", "OFP-010"],
+      "delivers": "Ops table profile focus switching with enrichment context resolution"
+    }
+  }
+}

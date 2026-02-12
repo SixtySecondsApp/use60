@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { checkCreditBalance } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -69,7 +70,10 @@ interface ApolloSearchParams {
   per_page?: number
   page?: number
   _auth_token?: string
+  _skip_credit_deduction?: boolean
 }
+
+const APOLLO_SEARCH_CREDIT_COST = 0.10
 
 interface NormalizedContact {
   apollo_id: string
@@ -150,7 +154,7 @@ serve(async (req) => {
   try {
     // Parse body — auth token may be in body as fallback when headers are stripped
     const body = await req.json()
-    const { _auth_token, ...searchParams } = body as ApolloSearchParams
+    const { _auth_token, _skip_credit_deduction, ...searchParams } = body as ApolloSearchParams
 
     // Get auth token: prefer Authorization header, fallback to body token
     const authHeader = req.headers.get('Authorization')
@@ -192,6 +196,20 @@ serve(async (req) => {
         JSON.stringify({ error: 'No organization found' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    if (!_skip_credit_deduction && membership.org_id) {
+      const creditCheck = await checkCreditBalance(supabase, membership.org_id)
+      if (!creditCheck.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: 'insufficient_credits',
+            message: creditCheck.message || 'Your organization has run out of AI credits. Please top up to continue.',
+            balance: creditCheck.balance,
+          }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     // Get Apollo API key from org integrations
@@ -282,6 +300,19 @@ serve(async (req) => {
     const people = (apolloData.people || []) as Record<string, unknown>[]
     const totalResults = (apolloData.pagination?.total_entries as number) || 0
 
+    if (!_skip_credit_deduction && membership.org_id) {
+      try {
+        await supabase.rpc('deduct_credits', {
+          p_org_id: membership.org_id,
+          p_amount: APOLLO_SEARCH_CREDIT_COST,
+          p_description: 'Apollo people search',
+          p_feature_key: 'apollo_search',
+        })
+      } catch (err) {
+        console.warn('[apollo-search] Credit deduction error (non-blocking):', err)
+      }
+    }
+
     // Log first result for debugging field names
     if (people.length > 0) {
       console.log('[apollo-search] Sample person keys:', Object.keys(people[0]).join(', '))
@@ -315,6 +346,7 @@ serve(async (req) => {
           total: totalResults,
           has_more: page * per_page < totalResults,
         },
+        credits_consumed: APOLLO_SEARCH_CREDIT_COST,
         query: {
           person_titles,
           person_locations,

@@ -1,0 +1,501 @@
+{
+  "feature": "profile-icp-campaign-pipeline",
+  "title": "Profile → Product → ICP → Audience → Campaign Pipeline",
+  "description": "Elevate products/services from JSONB arrays to first-class entities with AI research. Link ICPs to specific products. Wire profile context into sales-sequence skill for better copy. Build campaign creation wizard from Ops tables to Instantly.",
+  "consultReport": ".sixty/consult/profile-icp-campaign-pipeline.md",
+  "createdAt": "2026-02-12T14:00:00Z",
+  "decisions": {
+    "multiple_products_per_company": true,
+    "product_research": "ai_powered",
+    "campaign_send": "stop_at_created_in_instantly"
+  },
+  "stories": [
+    {
+      "id": "PIPE-001",
+      "title": "Create product_profiles table migration + RLS policies",
+      "type": "schema",
+      "description": "Create product_profiles table with: id (UUID PK), organization_id (FK), fact_profile_id (FK nullable to client_fact_profiles), created_by (FK), name (text), description (text), category (text — e.g. 'SaaS', 'Service', 'Platform'), product_url (text nullable), logo_url (text nullable), research_data (JSONB with sections: overview, target_market, value_propositions, pricing, competitors, use_cases, differentiators, pain_points_solved, key_features, integrations), research_sources (JSONB array of {url, title, confidence, section}), research_status (enum: pending/researching/complete/failed), is_primary (boolean default false — marks the main product for a company), created_at, updated_at. RLS: org members SELECT, creator/admin UPDATE/DELETE. Indexes on organization_id, fact_profile_id. Use ON DELETE SET NULL for fact_profile_id FK (don't cascade delete products if company profile deleted).",
+      "files": [
+        "supabase/migrations/20260212_product_profiles.sql"
+      ],
+      "acceptance_criteria": [
+        "Table created with all columns and correct types",
+        "RLS policies: org members can view, creator or org admin can update/delete",
+        "Indexes on organization_id, fact_profile_id",
+        "FK to client_fact_profiles with ON DELETE SET NULL",
+        "research_status enum created with 4 values",
+        "is_primary boolean defaults to false"
+      ],
+      "estimate": "30min",
+      "dependencies": [],
+      "parallel_with": ["PIPE-002", "PIPE-003"]
+    },
+    {
+      "id": "PIPE-002",
+      "title": "Add fact_profile_id + product_profile_id to icp_profiles",
+      "type": "schema",
+      "description": "Alter icp_profiles table to add: fact_profile_id (UUID nullable FK to client_fact_profiles ON DELETE SET NULL), product_profile_id (UUID nullable FK to product_profiles ON DELETE SET NULL). These allow an ICP to optionally be linked to a specific company profile and/or product profile. Existing ICPs without these FKs continue to work (both nullable). Add indexes on both new columns.",
+      "files": [
+        "supabase/migrations/20260212_icp_product_linking.sql"
+      ],
+      "acceptance_criteria": [
+        "fact_profile_id column added to icp_profiles (nullable UUID FK)",
+        "product_profile_id column added to icp_profiles (nullable UUID FK)",
+        "Both use ON DELETE SET NULL",
+        "Indexes created on both columns",
+        "Existing ICP records unaffected (null values)"
+      ],
+      "estimate": "15min",
+      "dependencies": [],
+      "parallel_with": ["PIPE-001", "PIPE-003"]
+    },
+    {
+      "id": "PIPE-003",
+      "title": "Create ProductProfile TypeScript types",
+      "type": "types",
+      "description": "Create src/lib/types/productProfile.ts with: ProductProfileResearchData interface (overview: {description, tagline, category, product_url}, target_market: {industries, company_sizes, regions, buyer_personas}, value_propositions: {primary_value_prop, supporting_points[], proof_points[]}, pricing: {model, tiers[], price_range, billing_options}, competitors: {direct_competitors[{name, domain, differentiator}], indirect_competitors[]}, use_cases: {primary_use_cases[{title, description, persona}], secondary_use_cases[]}, differentiators: {key_differentiators[], unique_capabilities[], awards[]}, pain_points_solved: {pain_points[{pain, solution, impact}]}, key_features: {features[{name, description, category}]}, integrations: {native_integrations[], api_available, platforms[]}). Also: ProductProfile interface (maps to table), CreateProductProfilePayload, UpdateProductProfilePayload. ResearchStatus type reused from factProfile.ts.",
+      "files": [
+        "src/lib/types/productProfile.ts"
+      ],
+      "acceptance_criteria": [
+        "ProductProfileResearchData with 10 structured sections",
+        "ProductProfile interface maps to product_profiles table columns",
+        "Create and Update payload types defined",
+        "Exports all types and interfaces",
+        "Reuses ResearchStatus from factProfile.ts"
+      ],
+      "estimate": "20min",
+      "dependencies": [],
+      "parallel_with": ["PIPE-001", "PIPE-002"]
+    },
+    {
+      "id": "PIPE-004",
+      "title": "Create productProfileService.ts + register in ServiceLocator",
+      "type": "service",
+      "description": "Create src/lib/services/productProfileService.ts following the exact pattern of factProfileService.ts. Methods: listByOrg(orgId), listByFactProfile(factProfileId), getProfile(id), createProfile(payload), updateProfile(id, payload), deleteProfile(id). Use explicit PROFILE_COLUMNS constant (never select('*')). Use maybeSingle() for getProfile. Register in ServiceLocator.tsx as lazy singleton with getter.",
+      "files": [
+        "src/lib/services/productProfileService.ts",
+        "src/lib/services/ServiceLocator.tsx"
+      ],
+      "acceptance_criteria": [
+        "All 6 CRUD methods implemented",
+        "Explicit column selection via PROFILE_COLUMNS constant",
+        "maybeSingle() for single-record queries",
+        "Error handling: throw on error",
+        "Registered in ServiceLocator as lazy singleton",
+        "Accessible via useServices().productProfileService"
+      ],
+      "estimate": "30min",
+      "dependencies": ["PIPE-001", "PIPE-003"],
+      "parallel_with": []
+    },
+    {
+      "id": "PIPE-005",
+      "title": "Create useProductProfiles.ts React Query hooks",
+      "type": "hooks",
+      "description": "Create src/lib/hooks/useProductProfiles.ts following the exact pattern of useFactProfiles.ts. Hooks: useProductProfiles(orgId), useProductProfilesByFactProfile(factProfileId), useProductProfile(id), useCreateProductProfile(), useUpdateProductProfile(), useDeleteProductProfile(). Query keys: productProfileKeys.all, .list(orgId), .byFactProfile(factProfileId), .detail(id). Mutations invalidate appropriate keys. Toast feedback on success/error.",
+      "files": [
+        "src/lib/hooks/useProductProfiles.ts"
+      ],
+      "acceptance_criteria": [
+        "6 hooks matching the factProfile pattern",
+        "Hierarchical query keys for cache management",
+        "Mutations invalidate parent list queries on success",
+        "Toast feedback: success + error messages",
+        "enabled: !!id guard on detail queries",
+        "useProductProfilesByFactProfile filters by fact_profile_id"
+      ],
+      "estimate": "25min",
+      "dependencies": ["PIPE-004"],
+      "parallel_with": []
+    },
+    {
+      "id": "PIPE-006",
+      "title": "Create NewProductProfileDialog component",
+      "type": "frontend",
+      "description": "Create src/components/product-profiles/NewProductProfileDialog.tsx following the NewFactProfileDialog pattern. Dialog with fields: name (required), description (textarea), category (select: SaaS, Service, Platform, Hardware, Consulting, Other), product_url (optional). Hidden field: fact_profile_id (passed as prop when creating from within a fact profile view). Two buttons: 'Create' and 'Create & Research' (triggers AI research after creation). On create, calls useCreateProductProfile mutation, then optionally invokes research-product-profile edge function.",
+      "files": [
+        "src/components/product-profiles/NewProductProfileDialog.tsx"
+      ],
+      "acceptance_criteria": [
+        "Dialog opens/closes properly, resets on close",
+        "Required field validation for name",
+        "Category dropdown with 6 options",
+        "fact_profile_id passed as prop and included in create payload",
+        "'Create' button creates profile only",
+        "'Create & Research' creates then triggers edge function",
+        "Loading state during creation",
+        "Toast feedback on success/error"
+      ],
+      "estimate": "30min",
+      "dependencies": ["PIPE-005"],
+      "parallel_with": ["PIPE-007", "PIPE-008"]
+    },
+    {
+      "id": "PIPE-007",
+      "title": "Create ProductProfileView component",
+      "type": "frontend",
+      "description": "Create src/components/product-profiles/ProductProfileView.tsx to display a product profile's full research data in organized sections. Follow the FactProfileView pattern: hero header (name, category badge, product_url link), then section cards for each research_data section. Include completeness indicators per section. Actions: Edit, Delete, Create ICP from Product. Use Lucide icons throughout (Package, Target, DollarSign, Users, Zap, Shield, etc). Show research_status badge (pending/researching/complete/failed). Show linked fact profile name with link back.",
+      "files": [
+        "src/components/product-profiles/ProductProfileView.tsx"
+      ],
+      "acceptance_criteria": [
+        "Hero header with name, category badge, research status badge",
+        "10 section cards matching ProductProfileResearchData structure",
+        "Completeness indicator per section",
+        "Action buttons: Edit, Delete, Create ICP",
+        "Link back to parent fact profile",
+        "Lucide icons only, no emoji",
+        "Loading skeleton while data loads",
+        "Responsive layout"
+      ],
+      "estimate": "45min",
+      "dependencies": ["PIPE-005"],
+      "parallel_with": ["PIPE-006", "PIPE-008"]
+    },
+    {
+      "id": "PIPE-008",
+      "title": "Create ProductProfileCard component",
+      "type": "frontend",
+      "description": "Create src/components/product-profiles/ProductProfileCard.tsx for product profile listings. Shows: product name, category badge, research status indicator, description truncated to 2 lines, linked ICP count (query icp_profiles where product_profile_id matches). Actions: View, Edit, Delete, Create ICP. Follow FactProfileCard pattern for styling and layout.",
+      "files": [
+        "src/components/product-profiles/ProductProfileCard.tsx"
+      ],
+      "acceptance_criteria": [
+        "Card displays name, category, status, truncated description",
+        "Action menu with View, Edit, Delete, Create ICP",
+        "Research status badge (pending/researching/complete/failed)",
+        "Click card navigates to product profile view",
+        "Consistent styling with FactProfileCard"
+      ],
+      "estimate": "20min",
+      "dependencies": ["PIPE-005"],
+      "parallel_with": ["PIPE-006", "PIPE-007"]
+    },
+    {
+      "id": "PIPE-009",
+      "title": "Add product profiles section to FactProfileView",
+      "type": "frontend",
+      "description": "Add a 'Products & Services' section to FactProfileView.tsx that lists all product profiles linked to this fact profile (useProductProfilesByFactProfile). Show as a grid of ProductProfileCard components. Include 'Add Product' button that opens NewProductProfileDialog with fact_profile_id pre-filled. If no products exist, show an empty state with prompt to add first product. Section should appear below the company overview section. Also seed from existing research_data.products_services: if the fact profile has products in the JSONB but no product_profiles linked, show a 'Convert to Product Profiles' action that creates product_profiles from the existing data.",
+      "files": [
+        "src/components/fact-profiles/FactProfileView.tsx"
+      ],
+      "acceptance_criteria": [
+        "Products section visible in FactProfileView below company overview",
+        "Lists ProductProfileCard components for linked products",
+        "'Add Product' button opens NewProductProfileDialog",
+        "Empty state with helpful prompt when no products exist",
+        "'Convert to Product Profiles' action when JSONB has products but no linked profiles",
+        "Product count shown in section header"
+      ],
+      "estimate": "35min",
+      "dependencies": ["PIPE-006", "PIPE-007", "PIPE-008"],
+      "parallel_with": []
+    },
+    {
+      "id": "PIPE-010",
+      "title": "Create research-product-profile edge function",
+      "type": "backend",
+      "description": "Create supabase/functions/research-product-profile/index.ts following the research-fact-profile pattern. Accepts POST with {action: 'research'|'status'|'retry', product_profile_id, organization_id}. Uses Gemini (primary) to research the product: fetches product_url, company domain from parent fact_profile, and product name. Populates all 10 sections of ProductProfileResearchData. Stores research_sources with confidence scores. Updates research_status (pending → researching → complete/failed). Use getCorsHeaders(req) from _shared/corsHelper.ts. Pin esm.sh imports to @2.43.4. JWT protected with org membership validation.",
+      "files": [
+        "supabase/functions/research-product-profile/index.ts"
+      ],
+      "acceptance_criteria": [
+        "Handles 'research', 'status', 'retry' actions",
+        "Validates JWT and org membership",
+        "Uses Gemini for web research (with Exa fallback if available)",
+        "Populates all 10 ProductProfileResearchData sections",
+        "Stores research_sources with url, title, confidence, section",
+        "Updates research_status through lifecycle",
+        "Uses getCorsHeaders(req) for CORS",
+        "Pinned esm.sh imports at @2.43.4",
+        "Error handling: sets research_status to 'failed' on error"
+      ],
+      "estimate": "50min",
+      "dependencies": ["PIPE-001"],
+      "parallel_with": ["PIPE-006", "PIPE-007", "PIPE-008"]
+    },
+    {
+      "id": "PIPE-011",
+      "title": "Update ICPProfileForm with product profile selector",
+      "type": "frontend",
+      "description": "Update src/components/prospecting/ICPProfileForm.tsx to add an optional section at the top: 'Link to Profile'. This section has two optional dropdowns: (1) Company Profile — lists fact_profiles for the org, (2) Product Profile — lists product_profiles filtered by selected fact_profile (or all if no company selected). When a product profile is selected, auto-populate some ICP criteria from the product's research_data (target_market industries, company sizes, buyer personas → title keywords). Store fact_profile_id and product_profile_id on the ICP when saving. Update ICPProfile type imports to include the new fields.",
+      "files": [
+        "src/components/prospecting/ICPProfileForm.tsx",
+        "src/lib/types/prospecting.ts"
+      ],
+      "acceptance_criteria": [
+        "'Link to Profile' section at top of form with two optional selectors",
+        "Product dropdown filters by selected company profile",
+        "Auto-populate criteria from product research_data.target_market",
+        "User can override auto-populated values",
+        "fact_profile_id and product_profile_id saved to ICP on create/update",
+        "Backward compatible — existing ICPs without links still work",
+        "Clear button to remove profile links"
+      ],
+      "estimate": "35min",
+      "dependencies": ["PIPE-002", "PIPE-005"],
+      "parallel_with": ["PIPE-012"]
+    },
+    {
+      "id": "PIPE-012",
+      "title": "Create productProfileToICPCriteria() conversion utility",
+      "type": "utility",
+      "description": "Create src/lib/utils/productProfileToICP.ts with a function productProfileToICPCriteria(researchData: ProductProfileResearchData) → Partial<ICPCriteria>. Mapping: target_market.industries → criteria.industries, target_market.company_sizes → criteria.employee_ranges (parse ranges like factProfileToICP does), target_market.buyer_personas → criteria.title_keywords, integrations.platforms → criteria.technology_keywords, target_market.regions → criteria.location_regions. Also create combinedProfileToICPCriteria(factResearch, productResearch) that merges both company-level and product-level criteria (product takes precedence where both exist).",
+      "files": [
+        "src/lib/utils/productProfileToICP.ts"
+      ],
+      "acceptance_criteria": [
+        "productProfileToICPCriteria maps all relevant fields to ICPCriteria",
+        "combinedProfileToICPCriteria merges company + product criteria",
+        "Product-level criteria takes precedence over company-level",
+        "Reuses parseEmployeeRanges from factProfileToICP.ts",
+        "Handles missing/empty sections gracefully (returns partial criteria)",
+        "Exported for use in ICPProfileForm and CreateICPFromFactsButton"
+      ],
+      "estimate": "25min",
+      "dependencies": ["PIPE-003"],
+      "parallel_with": ["PIPE-011"]
+    },
+    {
+      "id": "PIPE-013",
+      "title": "Update CreateICPFromFactsButton to support product-level ICP",
+      "type": "frontend",
+      "description": "Update src/components/fact-profiles/CreateICPFromFactsButton.tsx. Currently it converts fact profile research to ICP criteria and navigates to /prospecting. Enhance to: (1) If the fact profile has product profiles, show a dropdown/popover letting the user choose: 'Create ICP for [Company Name]' or 'Create ICP for [Product Name]' for each linked product. (2) When a product is selected, use combinedProfileToICPCriteria() to merge company + product context. (3) Store both fact_profile_id and product_profile_id in the sessionStorage prefill data so ProspectingPage can set them on the ICP.",
+      "files": [
+        "src/components/fact-profiles/CreateICPFromFactsButton.tsx"
+      ],
+      "acceptance_criteria": [
+        "If products exist, shows popover with company-level and per-product ICP options",
+        "If no products, works exactly as before (company-level only)",
+        "Product selection uses combinedProfileToICPCriteria for richer criteria",
+        "sessionStorage prefill includes fact_profile_id and product_profile_id",
+        "ProspectingPage reads and applies both IDs when creating ICP"
+      ],
+      "estimate": "25min",
+      "dependencies": ["PIPE-011", "PIPE-012"],
+      "parallel_with": ["PIPE-014"]
+    },
+    {
+      "id": "PIPE-014",
+      "title": "Update icpFactProfileAlignment for product profiles",
+      "type": "utility",
+      "description": "Update src/lib/utils/icpFactProfileAlignment.ts to support checking alignment against a product profile's research data in addition to (or instead of) a company fact profile. Add: checkICPProductProfileAlignment(criteria: ICPCriteria, productResearch: ProductProfileResearchData) → AlignmentResult. Same 5-dimension scoring but sourced from product research_data instead of fact profile research_data. Also update the combined check: if ICP has both fact_profile and product_profile, run alignment against both and merge results (product dimensions take precedence).",
+      "files": [
+        "src/lib/utils/icpFactProfileAlignment.ts"
+      ],
+      "acceptance_criteria": [
+        "checkICPProductProfileAlignment function with same return type as existing",
+        "Scores 5 dimensions from product research_data",
+        "Combined alignment check when both profiles linked",
+        "Product dimensions take precedence in combined check",
+        "Backward compatible — existing fact-profile-only alignment unchanged"
+      ],
+      "estimate": "25min",
+      "dependencies": ["PIPE-012"],
+      "parallel_with": ["PIPE-013"]
+    },
+    {
+      "id": "PIPE-015",
+      "title": "Add profile context inputs to sales-sequence skill",
+      "type": "skill",
+      "description": "Update skills/atomic/sales-sequence/SKILL.md frontmatter to add two optional inputs: fact_profile_id (string, optional, 'ID of the company fact profile for context') and product_profile_id (string, optional, 'ID of the product profile for offer context'). Update the skill body to instruct: 'If fact_profile_id or product_profile_id are provided, use the profile data to enrich the offer_description and target_persona automatically. The product profile provides detailed value propositions, pain points solved, differentiators, and pricing — use these to write more specific, compelling copy instead of generic descriptions.' Also add to required_context: organization_id (already implicit but make explicit).",
+      "files": [
+        "skills/atomic/sales-sequence/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "fact_profile_id and product_profile_id added as optional inputs",
+        "Skill instructions reference profile data for enriching copy",
+        "Backward compatible — skill works without profile IDs",
+        "organization_id made explicit in required_context"
+      ],
+      "estimate": "15min",
+      "dependencies": ["PIPE-003"],
+      "parallel_with": ["PIPE-016"]
+    },
+    {
+      "id": "PIPE-016",
+      "title": "Add factProfile + productProfile to promptVariables context",
+      "type": "utility",
+      "description": "Update src/lib/utils/promptVariables.ts to add factProfile and productProfile to the VariableContext interface. factProfile: {id, company_name, industry, description, products, value_propositions, pain_points, differentiators, tech_stack}. productProfile: {id, name, category, description, value_propositions, pricing_model, key_features, differentiators, pain_points_solved, target_industries, target_company_sizes, target_roles}. Update getAvailableVariables() to include these new paths. Update resolveVariable() to handle nested access into these objects.",
+      "files": [
+        "src/lib/utils/promptVariables.ts"
+      ],
+      "acceptance_criteria": [
+        "VariableContext includes factProfile and productProfile interfaces",
+        "getAvailableVariables lists all profile variable paths",
+        "{{factProfile.company_name}} and {{productProfile.name}} resolve correctly",
+        "Deeply nested access works: {{productProfile.value_propositions}}",
+        "Backward compatible — existing variables unchanged"
+      ],
+      "estimate": "20min",
+      "dependencies": ["PIPE-003"],
+      "parallel_with": ["PIPE-015"]
+    },
+    {
+      "id": "PIPE-017",
+      "title": "Create profile selector component for copilot/sequence context",
+      "type": "frontend",
+      "description": "Create src/components/shared/ProfileContextSelector.tsx — a reusable component that lets users select a fact profile + product profile to inject as context. Shows two cascading dropdowns: (1) Company Profile (from useFactProfiles), (2) Product Profile (from useProductProfilesByFactProfile, filtered by selected company). Returns {factProfileId, productProfileId, factProfile, productProfile} via onChange callback. Used in: copilot chat context bar, campaign wizard, and anywhere profile context is needed. Compact design — can fit in a toolbar or sidebar.",
+      "files": [
+        "src/components/shared/ProfileContextSelector.tsx"
+      ],
+      "acceptance_criteria": [
+        "Two cascading dropdowns: Company → Product",
+        "Product dropdown filters by selected company",
+        "Returns full profile objects + IDs via onChange",
+        "Compact design suitable for toolbar embedding",
+        "Clear button to remove selection",
+        "Shows profile logos/icons if available",
+        "Loading states for async data"
+      ],
+      "estimate": "30min",
+      "dependencies": ["PIPE-005", "PIPE-016"],
+      "parallel_with": []
+    },
+    {
+      "id": "PIPE-018",
+      "title": "Wire profile context into copilot-autonomous edge function",
+      "type": "backend",
+      "description": "Update supabase/functions/copilot-autonomous/index.ts to accept optional fact_profile_id and product_profile_id in the request body. When provided, fetch the full profile data from DB and inject it into the system prompt context as 'Company Context' and 'Product Context' sections. This allows the autonomous copilot to use profile data when executing skills like sales-sequence. The profile data should be formatted as structured text (not raw JSON) for better LLM comprehension. Also update the tool_use schema for execute_action to include optional profile context fields.",
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "acceptance_criteria": [
+        "Accepts fact_profile_id and product_profile_id in request body",
+        "Fetches profile data from DB when IDs provided",
+        "Injects formatted profile context into system prompt",
+        "Profile context available to all skill executions in the session",
+        "No regression when profile IDs not provided",
+        "Uses user-scoped Supabase client (respects RLS)"
+      ],
+      "estimate": "35min",
+      "dependencies": ["PIPE-015", "PIPE-016"],
+      "parallel_with": []
+    },
+    {
+      "id": "PIPE-019",
+      "title": "Add 'Create Campaign' button to OpsDetailPage",
+      "type": "frontend",
+      "description": "Add a 'Create Campaign' action button to src/pages/OpsDetailPage.tsx in the table actions bar (near existing export/enrichment buttons). Button should be visible when the table has email column(s) and at least 1 row. Clicking opens the CampaignCreationWizard (PIPE-020). Pass the table ID, row count, and available columns to the wizard. Use Lucide Send icon.",
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "acceptance_criteria": [
+        "'Create Campaign' button in table actions bar",
+        "Only visible when table has email-type columns and rows > 0",
+        "Opens CampaignCreationWizard dialog on click",
+        "Passes tableId, rowCount, columns to wizard",
+        "Send icon from Lucide",
+        "Disabled state with tooltip when prerequisites not met"
+      ],
+      "estimate": "25min",
+      "dependencies": [],
+      "parallel_with": ["PIPE-020"]
+    },
+    {
+      "id": "PIPE-020",
+      "title": "Create CampaignCreationWizard component",
+      "type": "frontend",
+      "description": "Create src/components/ops/CampaignCreationWizard.tsx — a 4-step wizard dialog following the CSVImportOpsTableWizard pattern. Steps: (1) Campaign Setup — name, Instantly account selector (from integration_credentials where provider='instantly'), sending schedule (default: Mon-Fri 9am-5pm America/Chicago). (2) Profile Context — embed ProfileContextSelector to optionally select company + product profile for email copy context. (3) Column Mapping — map table columns to Instantly lead fields (email, first_name, last_name, company_name, custom variables). (4) Review & Create — summary of settings, row count, estimated sends. 'Create Campaign' button calls instantly-push edge function to create campaign + upload leads. Phase tracking: idle → creating_campaign → uploading_leads → complete/error. On complete, show campaign ID and 'Open in Instantly' link. Does NOT auto-send — stops at campaign created.",
+      "files": [
+        "src/components/ops/CampaignCreationWizard.tsx"
+      ],
+      "acceptance_criteria": [
+        "4-step wizard with step indicator",
+        "Step 1: Campaign name, Instantly account selector, schedule config",
+        "Step 2: ProfileContextSelector for company + product profile",
+        "Step 3: Column mapping to Instantly lead fields",
+        "Step 4: Review summary with row count and settings",
+        "Phase tracking with loading states per phase",
+        "Creates campaign in Instantly via edge function (does NOT send)",
+        "Shows campaign ID and 'Open in Instantly' link on complete",
+        "Error handling with retry option",
+        "Dialog prevents closing during creation",
+        "Schedule uses valid Instantly timezone enum (default America/Chicago)"
+      ],
+      "estimate": "60min",
+      "dependencies": ["PIPE-017"],
+      "parallel_with": ["PIPE-019"]
+    },
+    {
+      "id": "PIPE-021",
+      "title": "Wire CampaignCreationWizard to instantly-push edge function",
+      "type": "backend",
+      "description": "Update the campaign creation flow to use the existing supabase/functions/instantly-push/index.ts edge function. The wizard should: (1) Create campaign via Instantly API (POST /api/v2/campaigns with campaign_schedule using valid timezone enum), (2) Map and upload leads from the Ops table rows, (3) If profile context is selected, pass product profile's value_propositions and differentiators as custom variables on each lead (so Instantly templates can reference them). Store the campaign link in existing instantly_campaign_links table or metadata. Ensure the edge function handles the create_campaign + upload_leads actions. May need to add 'create_campaign' action to instantly-push if it doesn't exist.",
+      "files": [
+        "supabase/functions/instantly-push/index.ts",
+        "src/components/ops/CampaignCreationWizard.tsx"
+      ],
+      "acceptance_criteria": [
+        "Campaign created in Instantly with valid schedule",
+        "Leads uploaded from Ops table with column mapping applied",
+        "Product profile context injected as custom lead variables",
+        "Campaign link stored for reference",
+        "Error handling for Instantly API failures",
+        "Uses existing instantly-push edge function (extended if needed)",
+        "Does NOT trigger campaign send — campaign created in draft/paused state"
+      ],
+      "estimate": "35min",
+      "dependencies": ["PIPE-020"],
+      "parallel_with": []
+    },
+    {
+      "id": "PIPE-022",
+      "title": "Add profile context to enrichment prompts (enrich-dynamic-table)",
+      "type": "backend",
+      "description": "Update supabase/functions/enrich-dynamic-table/index.ts to accept optional product_profile_id in the request body. When provided, fetch the product profile from DB and inject key fields (name, value_propositions, differentiators, pain_points_solved) into the enrichment prompt context. This allows enrichment prompts like 'Find buying signals for @company_name related to {product_context}' to generate product-aware enrichment results. Add a new system-level variable ${product_context} that gets resolved before the prompt is sent to the AI provider. Non-breaking: when product_profile_id is not provided, behavior is identical to current.",
+      "files": [
+        "supabase/functions/enrich-dynamic-table/index.ts"
+      ],
+      "acceptance_criteria": [
+        "Accepts optional product_profile_id in request body",
+        "Fetches product profile when ID provided",
+        "${product_context} variable resolved in enrichment prompts",
+        "Product context includes: name, value_propositions, differentiators, pain_points_solved",
+        "No regression when product_profile_id not provided",
+        "Works with all enrichment providers (Exa, OpenRouter, Anthropic)"
+      ],
+      "estimate": "30min",
+      "dependencies": ["PIPE-001"],
+      "parallel_with": ["PIPE-018"]
+    }
+  ],
+  "phases": {
+    "phase_1_foundation": {
+      "name": "Product Profile Foundation",
+      "stories": ["PIPE-001", "PIPE-002", "PIPE-003", "PIPE-004", "PIPE-005"],
+      "estimate": "2h",
+      "description": "Schema, types, service, hooks — the infrastructure"
+    },
+    "phase_2_ui_research": {
+      "name": "Product Profile UI + Research",
+      "stories": ["PIPE-006", "PIPE-007", "PIPE-008", "PIPE-009", "PIPE-010"],
+      "estimate": "3h",
+      "description": "Create/view/list components + AI research edge function"
+    },
+    "phase_3_icp_linking": {
+      "name": "ICP ↔ Product Linking",
+      "stories": ["PIPE-011", "PIPE-012", "PIPE-013", "PIPE-014"],
+      "estimate": "2h",
+      "description": "Connect ICPs to product profiles, enhanced conversion"
+    },
+    "phase_4_profile_context": {
+      "name": "Profile Context in Skills & Copilot",
+      "stories": ["PIPE-015", "PIPE-016", "PIPE-017", "PIPE-018", "PIPE-022"],
+      "estimate": "2.5h",
+      "description": "Wire profile data into sales sequence, copilot, and enrichment"
+    },
+    "phase_5_campaign_pipeline": {
+      "name": "Audience → Campaign Pipeline",
+      "stories": ["PIPE-019", "PIPE-020", "PIPE-021"],
+      "estimate": "2h",
+      "description": "Campaign wizard from Ops table to Instantly (draft, not auto-send)"
+    }
+  },
+  "total_estimate": {
+    "sequential": "11.5h",
+    "with_parallelism": "8-9h",
+    "mvp_phases_1_3": "7h"
+  }
+}

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { captureException } from '../_shared/sentryEdge.ts';
-import { checkCreditBalance } from '../_shared/costTracking.ts';
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts';
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -201,14 +201,19 @@ interface EnrichedCompanyData {
   confidence?: number;
 }
 
+interface UsageMetrics {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 /**
  * Call Gemini API to enrich contact data
  */
 async function enrichContactWithGemini(
   contactData: ContactData
-): Promise<EnrichedContactData | null> {
+): Promise<{ enrichedData: EnrichedContactData | null; usage: UsageMetrics | null }> {
   if (!GEMINI_API_KEY) {
-    return null;
+    return { enrichedData: null, usage: null };
   }
 
   try {
@@ -264,10 +269,15 @@ Example of valid JSON:
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Gemini API error:", errorText);
-      return null;
+      return { enrichedData: null, usage: null };
     }
 
     const data = await response.json();
+    const usageMetadata = data.usageMetadata || {};
+    const usage: UsageMetrics = {
+      inputTokens: usageMetadata.promptTokenCount || 0,
+      outputTokens: usageMetadata.candidatesTokenCount || 0,
+    };
     const parts = data.candidates?.[0]?.content?.parts ?? [];
     const text = parts
       .map((part: Record<string, unknown>) => (typeof part.text === "string" ? part.text : ""))
@@ -276,27 +286,30 @@ Example of valid JSON:
 
     if (!text) {
       console.error("Empty response from Gemini API");
-      return null;
+      return { enrichedData: null, usage };
     }
 
     // Parse JSON response with robust error handling
     try {
       const parsed = parseGeminiJSONResponse(text);
       return {
-        title: parsed.title,
-        linkedin_url: parsed.linkedin_url,
-        industry: parsed.industry,
-        summary: parsed.summary,
-        confidence: parsed.confidence || 0.5,
+        enrichedData: {
+          title: parsed.title,
+          linkedin_url: parsed.linkedin_url,
+          industry: parsed.industry,
+          summary: parsed.summary,
+          confidence: parsed.confidence || 0.5,
+        },
+        usage,
       };
     } catch (parseError) {
       console.error("Failed to parse Gemini response:", parseError);
       console.error("Raw response text:", text.substring(0, 500)); // Log first 500 chars for debugging
-      return null;
+      return { enrichedData: null, usage };
     }
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    return null;
+    return { enrichedData: null, usage: null };
   }
 }
 
@@ -305,9 +318,9 @@ Example of valid JSON:
  */
 async function enrichCompanyWithGemini(
   companyData: CompanyData
-): Promise<EnrichedCompanyData | null> {
+): Promise<{ enrichedData: EnrichedCompanyData | null; usage: UsageMetrics | null }> {
   if (!GEMINI_API_KEY) {
-    return null;
+    return { enrichedData: null, usage: null };
   }
 
   try {
@@ -361,10 +374,15 @@ Example of valid JSON:
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Gemini API error:", errorText);
-      return null;
+      return { enrichedData: null, usage: null };
     }
 
     const data = await response.json();
+    const usageMetadata = data.usageMetadata || {};
+    const usage: UsageMetrics = {
+      inputTokens: usageMetadata.promptTokenCount || 0,
+      outputTokens: usageMetadata.candidatesTokenCount || 0,
+    };
     const parts = data.candidates?.[0]?.content?.parts ?? [];
     const text = parts
       .map((part: Record<string, unknown>) => (typeof part.text === "string" ? part.text : ""))
@@ -373,29 +391,32 @@ Example of valid JSON:
 
     if (!text) {
       console.error("Empty response from Gemini API");
-      return null;
+      return { enrichedData: null, usage };
     }
 
     // Parse JSON response with robust error handling
     try {
       const parsed = parseGeminiJSONResponse(text);
       return {
-        industry: parsed.industry,
-        size: parsed.size,
-        description: parsed.description,
-        linkedin_url: parsed.linkedin_url,
-        address: parsed.address,
-        phone: parsed.phone,
-        confidence: parsed.confidence || 0.5,
+        enrichedData: {
+          industry: parsed.industry,
+          size: parsed.size,
+          description: parsed.description,
+          linkedin_url: parsed.linkedin_url,
+          address: parsed.address,
+          phone: parsed.phone,
+          confidence: parsed.confidence || 0.5,
+        },
+        usage,
       };
     } catch (parseError) {
       console.error("Failed to parse Gemini response:", parseError);
       console.error("Raw response text:", text.substring(0, 500)); // Log first 500 chars for debugging
-      return null;
+      return { enrichedData: null, usage };
     }
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    return null;
+    return { enrichedData: null, usage: null };
   }
 }
 
@@ -476,6 +497,7 @@ serve(async (req) => {
   }
 
   try {
+    let orgId: string | null = null;
     // Get user from authorization header
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -515,6 +537,7 @@ serve(async (req) => {
         .maybeSingle();
 
       if (membership?.org_id) {
+        orgId = membership.org_id;
         const creditCheck = await checkCreditBalance(supabase, membership.org_id);
         if (!creditCheck.allowed) {
           return new Response(
@@ -543,6 +566,7 @@ serve(async (req) => {
     }
 
     let enrichedData: EnrichedContactData | EnrichedCompanyData | null = null;
+    let usage: UsageMetrics | null = null;
     let updated = false;
 
     if (body.type === 'contact') {
@@ -553,7 +577,9 @@ serve(async (req) => {
         );
       }
 
-      enrichedData = await enrichContactWithGemini(body.contact_data);
+      const contactResult = await enrichContactWithGemini(body.contact_data);
+      enrichedData = contactResult.enrichedData;
+      usage = contactResult.usage;
       
       if (enrichedData) {
         updated = await updateContact(
@@ -571,7 +597,9 @@ serve(async (req) => {
         );
       }
 
-      enrichedData = await enrichCompanyWithGemini(body.company_data);
+      const companyResult = await enrichCompanyWithGemini(body.company_data);
+      enrichedData = companyResult.enrichedData;
+      usage = companyResult.usage;
       
       if (enrichedData) {
         updated = await updateCompany(
@@ -592,6 +620,20 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: "Failed to enrich data" }),
         { status: 500, headers: JSON_HEADERS }
+      );
+    }
+
+    if (orgId && usage && (usage.inputTokens > 0 || usage.outputTokens > 0)) {
+      await logAICostEvent(
+        supabase,
+        user.id,
+        orgId,
+        'gemini',
+        GEMINI_MODEL,
+        usage.inputTokens,
+        usage.outputTokens,
+        body.type === 'contact' ? 'enrich_crm_contact' : 'enrich_crm_company',
+        { source: 'enrich-crm-record' }
       );
     }
 

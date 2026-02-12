@@ -65,6 +65,7 @@ metadata:
   required_context:
     - company_name
     - offer_description
+    - organization_id
   inputs:
     - name: offer_description
       type: string
@@ -89,6 +90,14 @@ metadata:
     - name: sequence_length
       type: number
       description: "Number of emails in sequence (default: 3, max: 5)"
+      required: false
+    - name: fact_profile_id
+      type: string
+      description: "ID of the company fact profile — provides company context (industry, products, value props, pain points) for richer, more specific email copy"
+      required: false
+    - name: product_profile_id
+      type: string
+      description: "ID of the product/service profile — provides detailed offer context (features, differentiators, pricing, use cases) so emails reference specific product benefits instead of generic descriptions"
       required: false
   outputs:
     - name: sequence
@@ -115,6 +124,21 @@ metadata:
 ## Available Context & Tools
 @_platform-references/org-variables.md
 @_platform-references/capabilities.md
+
+## Profile Context (Optional)
+
+When `fact_profile_id` or `product_profile_id` are provided, the system injects rich company and product data into your context. Use this to write dramatically better copy:
+
+**Company Profile** provides: industry, market position, competitors, technology stack, ideal customer indicators, value propositions, and pain points. Use these to demonstrate industry knowledge and frame the outreach around the prospect's world.
+
+**Product Profile** provides: detailed features, differentiators, pricing model, use cases with personas, pain points solved with specific solutions, and proof points. Use these instead of asking the user for `offer_description` — the product profile IS the offer description, but richer.
+
+When profiles are available:
+- Replace generic benefit claims with specific product differentiators
+- Reference the prospect's likely pain points (from product profile's pain_points_solved)
+- Use proof points and case study references naturally
+- Match the product's target persona to the prospect for relevance
+- Never dump product features — weave them into the narrative naturally
 
 # Sales Sequence Generator
 
