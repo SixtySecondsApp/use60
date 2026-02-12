@@ -692,10 +692,14 @@ ${sourcesList}
 Use the cross_table_query tool to join or enrich data from these sources.`;
   }
 
+  const hasColumns = columns.length > 0;
+
   return `You are an AI assistant that parses natural language queries into structured table operations.
 
-The user has a table with ${rowCount ?? 'unknown'} rows and the following columns:
-${columnList}${sampleSection}${contextSection}${dataSourcesSection}
+${hasColumns
+    ? `The user has a table with ${rowCount ?? 'unknown'} rows and the following columns:\n${columnList}${sampleSection}`
+    : `The user has a NEW TABLE with no columns yet. When they describe data they want (e.g. "add columns for name, email, and company" or "create a lead tracking table"), use the create_column tool to add each column. Infer appropriate column_type from the data description (e.g. "email" → email, "website" → url, "phone" → phone, "LinkedIn" → linkedin, "company" → company, "name" → person). You can call create_column multiple times.`
+  }${contextSection}${dataSourcesSection}
 
 Select the appropriate tool based on user intent:
 
@@ -1371,13 +1375,16 @@ serve(async (req: Request) => {
       bodyKeys: Object.keys(body),
     }));
 
-    if (!tableId || !query || !columns || columns.length === 0) {
+    if (!tableId || !query) {
       return errorResponse(
-        `Missing required fields: ${!tableId ? 'tableId' : ''} ${!query ? 'query' : ''} ${!columns || columns.length === 0 ? 'columns' : ''}`.trim(),
+        `Missing required fields: ${!tableId ? 'tableId' : ''} ${!query ? 'query' : ''}`.trim(),
         req,
         400
       );
     }
+
+    // Columns may be empty for new/fresh tables — AI can still create columns
+    const effectiveColumns = columns ?? [];
 
     console.log(`${LOG_PREFIX} Processing query for table ${tableId}: "${query}"`);
 
@@ -1502,7 +1509,7 @@ serve(async (req: Request) => {
 
     // Build system prompt with column context, conversation history, and available data sources
     const systemPrompt = buildSystemPrompt(
-      columns,
+      effectiveColumns,
       rowCount,
       sampleValues,
       conversationHistory,
@@ -1541,12 +1548,12 @@ serve(async (req: Request) => {
       { tableId, query }
     );
 
-    // Extract tool use from response
-    const toolUseBlock = response.content.find(
+    // Extract ALL tool_use blocks from response
+    const allToolUseBlocks = response.content.filter(
       (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
     );
 
-    if (!toolUseBlock) {
+    if (allToolUseBlocks.length === 0) {
       console.error(`${LOG_PREFIX} No tool use in response`, response.content);
       return errorResponse(
         "I couldn't understand that query. Try something like 'delete rows with blank emails', 'sort by company', or 'how many leads per stage?'.",
@@ -1555,6 +1562,38 @@ serve(async (req: Request) => {
       );
     }
 
+    // Check for batch create_column: if multiple tool calls are all create_column, batch them
+    const allCreateColumn = allToolUseBlocks.every((b) => b.name === 'create_column');
+    if (allCreateColumn && allToolUseBlocks.length > 1) {
+      console.log(`${LOG_PREFIX} Batch create_column: ${allToolUseBlocks.length} columns`);
+      const columnDefs = allToolUseBlocks.map((block) => {
+        const input = block.input as Record<string, unknown>;
+        const label = input.label as string;
+        const key = generateColumnKey(label, effectiveColumns.map((c) => c.key));
+        // Add key to effectiveColumns so next column doesn't collide
+        effectiveColumns.push({ key, label, column_type: (input.column_type as string) || 'text' });
+        return {
+          key,
+          label,
+          columnType: (input.column_type as string) || 'text',
+          enrichmentPrompt: input.enrichment_prompt as string | undefined,
+          autoRun: input.auto_run !== false,
+        };
+      });
+      const summaryText = `Created ${columnDefs.length} columns: ${columnDefs.map((c) => c.label).join(', ')}`;
+      const batchResult: Record<string, unknown> = {
+        type: 'batch_create_columns',
+        columnDefs,
+        summary: summaryText,
+        sessionId: currentSessionId,
+      };
+
+      return jsonResponse(batchResult, req);
+    }
+
+    // Single tool call — use the first one
+    const toolUseBlock = allToolUseBlocks[0];
+
     // Parse tool response into structured operation
     const toolName = toolUseBlock.name;
     const toolInput = toolUseBlock.input as Record<string, unknown>;
@@ -1562,65 +1601,65 @@ serve(async (req: Request) => {
     console.log(`${LOG_PREFIX} Tool selected: ${toolName}`);
 
     // Generate summary
-    const summary = generateSummary(toolName, toolInput, columns);
+    const summary = generateSummary(toolName, toolInput, effectiveColumns);
 
     // Build typed response based on tool
     let result: Record<string, unknown>;
 
     switch (toolName) {
       case 'filter_rows':
-        result = buildFilterResponse(toolInput, columns, summary);
+        result = buildFilterResponse(toolInput, effectiveColumns, summary);
         break;
       case 'delete_rows':
-        result = buildDeleteResponse(toolInput, columns, summary);
+        result = buildDeleteResponse(toolInput, effectiveColumns, summary);
         break;
       case 'update_rows':
-        result = buildUpdateResponse(toolInput, columns, summary);
+        result = buildUpdateResponse(toolInput, effectiveColumns, summary);
         break;
       case 'transform_column':
-        result = buildTransformResponse(toolInput, columns, summary);
+        result = buildTransformResponse(toolInput, effectiveColumns, summary);
         break;
       case 'deduplicate_rows':
-        result = buildDeduplicateResponse(toolInput, columns, summary);
+        result = buildDeduplicateResponse(toolInput, effectiveColumns, summary);
         break;
       case 'summarize_table':
-        result = buildSummarizeResponse(toolInput, columns, summary);
+        result = buildSummarizeResponse(toolInput, effectiveColumns, summary);
         break;
       case 'create_column':
-        result = buildCreateColumnResponse(toolInput, columns, summary);
+        result = buildCreateColumnResponse(toolInput, effectiveColumns, summary);
         break;
       case 'create_view':
-        result = buildCreateViewResponse(toolInput, columns, summary);
+        result = buildCreateViewResponse(toolInput, effectiveColumns, summary);
         break;
       case 'batch_create_views':
-        result = buildBatchCreateViewsResponse(toolInput, columns, summary);
+        result = buildBatchCreateViewsResponse(toolInput, effectiveColumns, summary);
         break;
       case 'sort_rows':
-        result = buildSortResponse(toolInput, columns, summary);
+        result = buildSortResponse(toolInput, effectiveColumns, summary);
         break;
       case 'apply_formatting':
-        result = buildFormattingResponse(toolInput, columns, summary);
+        result = buildFormattingResponse(toolInput, effectiveColumns, summary);
         break;
       case 'conditional_update':
-        result = buildConditionalUpdateResponse(toolInput, columns, summary);
+        result = buildConditionalUpdateResponse(toolInput, effectiveColumns, summary);
         break;
       case 'export_rows':
-        result = buildExportResponse(toolInput, columns, summary);
+        result = buildExportResponse(toolInput, effectiveColumns, summary);
         break;
       case 'move_rows':
-        result = buildMoveRowsResponse(toolInput, columns, summary);
+        result = buildMoveRowsResponse(toolInput, effectiveColumns, summary);
         break;
       case 'cross_column_validate':
-        result = buildCrossColumnValidateResponse(toolInput, columns, summary);
+        result = buildCrossColumnValidateResponse(toolInput, effectiveColumns, summary);
         break;
       // PV-009: Suggest views
       case 'suggest_views':
-        result = buildSuggestViewsResponse(toolInput, columns, summary);
+        result = buildSuggestViewsResponse(toolInput, effectiveColumns, summary);
         break;
 
       // PV-010: Configure view from natural language
       case 'configure_view':
-        result = buildConfigureViewResponse(toolInput, columns, summary);
+        result = buildConfigureViewResponse(toolInput, effectiveColumns, summary);
         break;
 
       // OI-021: Cross-table query handler

@@ -1607,14 +1607,6 @@ function OpsDetailPage() {
       e.preventDefault();
       if (!queryInput.trim() || !tableId) return;
 
-      if (!columns || columns.length === 0) {
-        // Force refetch — React Query may have cached stale data with 0 columns
-        console.warn('[AI Query] columns empty, forcing refetch');
-        await queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
-        toast.error('Table columns are loading. Please try again in a moment.');
-        return;
-      }
-
       const submittedQuery = queryInput.trim();
 
       // NLT: Detect workflow-level prompts and route to orchestrator
@@ -1627,23 +1619,38 @@ function OpsDetailPage() {
       setIsAiQueryParsing(true);
 
       try {
+        // Use cached columns, or fetch directly if cache is stale, or send empty for new tables
+        let effectiveColumns = columns;
+        if (!effectiveColumns || effectiveColumns.length === 0) {
+          console.warn('[AI Query] columns empty in cache, fetching directly');
+          const { data: freshCols } = await supabase
+            .from('dynamic_table_columns')
+            .select('id, key, label, column_type, position')
+            .eq('table_id', tableId)
+            .order('position', { ascending: true });
+          effectiveColumns = (freshCols as typeof columns) ?? [];
+          if (effectiveColumns.length > 0) {
+            // Cache was stale — refresh it
+            queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+          }
+        }
 
         // Build sample values from first 5 rows to help AI match column references
         const sampleValues: Record<string, string[]> = {};
         const sampleRows = rows.slice(0, 5);
-        for (const col of columns) {
+        for (const col of effectiveColumns) {
           const vals = sampleRows
             .map((r) => r.cells[col.key]?.value)
             .filter((v): v is string => !!v && v.trim() !== '');
           if (vals.length > 0) sampleValues[col.key] = vals;
         }
 
-        // Call the AI query edge function to parse the natural language
+        // Call the AI query edge function — handles both existing columns and empty tables
         const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
           body: {
             tableId,
-            query: queryInput.trim(),
-            columns: columns.map((c) => ({
+            query: submittedQuery,
+            columns: effectiveColumns.map((c) => ({
               key: c.key,
               label: c.label,
               column_type: c.column_type,
@@ -1736,6 +1743,35 @@ function OpsDetailPage() {
               enrichmentPrompt: colDef.enrichmentPrompt,
               autoRunRows: colDef.autoRun ? 'all' : undefined,
             });
+            setQueryInput('');
+            toast.success(result.summary as string);
+            break;
+          }
+
+          // === NEW: Batch Create Columns (for empty tables) ===
+          case 'batch_create_columns': {
+            const colDefs = result.columnDefs as {
+              key: string;
+              label: string;
+              columnType: string;
+              enrichmentPrompt?: string;
+              autoRun?: boolean;
+            }[];
+            // Create columns sequentially to avoid race conditions
+            for (const colDef of colDefs) {
+              try {
+                await addColumnMutation.mutateAsync({
+                  key: colDef.key,
+                  label: colDef.label,
+                  columnType: colDef.columnType,
+                  isEnrichment: colDef.columnType === 'enrichment',
+                  enrichmentPrompt: colDef.enrichmentPrompt,
+                  autoRunRows: colDef.autoRun ? 'all' : undefined,
+                });
+              } catch (err) {
+                console.error(`Failed to create column "${colDef.label}":`, err);
+              }
+            }
             setQueryInput('');
             toast.success(result.summary as string);
             break;
