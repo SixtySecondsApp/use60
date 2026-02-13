@@ -219,7 +219,7 @@ async function prepMeetingsForUserInternal(
     try {
       // Check if prep already exists for this meeting
       const hasPrep = await checkPrepExists(supabase, meeting.id, userId);
-      
+
       if (hasPrep) {
         console.log(`[MeetingPrep] Prep already exists for meeting: ${meeting.title}`);
         results.push({
@@ -231,9 +231,67 @@ async function prepMeetingsForUserInternal(
         continue;
       }
 
-      // Generate prep by running the meeting prep sequence
-      console.log(`[MeetingPrep] Generating prep for: ${meeting.title}`);
-      
+      // Feature flag: use orchestrator if enabled (safe rollout)
+      const useOrchestrator = true; // TODO: read from notification_feature_settings
+
+      if (useOrchestrator) {
+        // ORCH-010: Trigger orchestrator for meeting prep workflow
+        try {
+          const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+          const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+          // Get org_id for the user
+          const { data: membership } = await supabase
+            .from('organization_memberships')
+            .select('org_id')
+            .eq('user_id', userId)
+            .limit(1)
+            .maybeSingle();
+
+          const orgId = membership?.org_id;
+
+          if (orgId) {
+            await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'pre_meeting_90min',
+                source: 'cron:proactive-meeting-prep',
+                org_id: orgId,
+                user_id: userId,
+                payload: {
+                  meeting_id: meeting.id,
+                  title: meeting.title,
+                  start_time: meeting.start_time,
+                  attendees: meeting.attendees,
+                },
+                idempotency_key: `pre_meeting:${meeting.id}`,
+              }),
+            });
+
+            console.log(`[MeetingPrep] Orchestrator triggered for: ${meeting.title}`);
+            results.push({
+              meetingId: meeting.id,
+              title: meeting.title,
+              prepGenerated: true,
+              slackNotified: false, // Orchestrator handles notification
+            });
+            continue;
+          } else {
+            console.warn(`[MeetingPrep] No org_id found for user ${userId}, falling back to legacy`);
+          }
+        } catch (err) {
+          console.error('[MeetingPrep] Failed to trigger orchestrator:', err);
+          // Fall through to legacy implementation
+        }
+      }
+
+      // Fallback: Generate prep by running the meeting prep sequence (legacy)
+      console.log(`[MeetingPrep] Generating prep for: ${meeting.title} (legacy mode)`);
+
       const prepResult = await generateMeetingPrep(supabase, userId, meeting);
       
       // Send Slack notification

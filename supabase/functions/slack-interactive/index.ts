@@ -6806,6 +6806,29 @@ serve(async (req) => {
         }
 
         // =====================================================================
+        // ORCH-009: Route orchestrator actions (orch_*) to orchestrator handler
+        // =====================================================================
+        if (action.action_id.startsWith('orch_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleOrchestratorAction } = await import('./handlers/orchestrator.ts');
+            await handleOrchestratorAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
         // SLACK-001/003/004/007: Proactive Copilot action handlers
         // Format: {action}::{entity_type}::{entity_id}
         // =====================================================================

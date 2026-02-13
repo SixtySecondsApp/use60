@@ -1179,6 +1179,44 @@ async function processRecording(
       }
     }
 
+    // Step 12: Fire-and-forget: trigger orchestrator for post-meeting workflow
+    try {
+      // Fetch the meeting record to get all required fields
+      const { data: meeting } = await supabase
+        .from('meetings')
+        .select('id, title, owner_user_id, org_id, contact_id, attendees_count')
+        .eq('bot_id', effectiveBotId)
+        .eq('source_type', '60_notetaker')
+        .maybeSingle();
+
+      // Only trigger for real meetings (2+ attendees)
+      if (meeting && (meeting.attendees_count || 0) > 1) {
+        fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'meeting_ended',
+            source: 'edge:process-recording',
+            org_id: meeting.org_id || recording.org_id,
+            user_id: meeting.owner_user_id || recording.user_id,
+            payload: {
+              meeting_id: meeting.id,
+              contact_id: meeting.contact_id || null,
+              title: meeting.title,
+              transcript_available: true,
+            },
+            idempotency_key: `meeting_ended:${meeting.id}`,
+          }),
+        }).catch(err => console.error('[ProcessRecording] Orchestrator call failed:', err));
+      }
+    } catch (err) {
+      console.error('[ProcessRecording] Failed to trigger orchestrator:', err);
+      // Don't fail the pipeline — this is additive
+    }
+
     console.log('[ProcessRecording] Pipeline complete for recording:', recordingId);
 
     return { success: true };
