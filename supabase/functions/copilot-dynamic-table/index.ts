@@ -14,6 +14,7 @@ interface CreateDynamicTableRequest {
   query_description: string
   search_params: Record<string, unknown>
   table_name?: string
+  target_table_id?: string  // If provided, add data to existing table instead of creating new
   auto_enrich?: {
     email?: boolean
     phone?: boolean
@@ -341,7 +342,7 @@ serve(async (req) => {
       )
     }
 
-    const { source = 'apollo', action, query_description, search_params, table_name: requestedTableName, auto_enrich } = body
+    const { source = 'apollo', action, query_description, search_params, table_name: requestedTableName, target_table_id, auto_enrich } = body
 
     // ---------------------------------------------------------------
     // AI Ark branch — separate flow for AI Ark data source
@@ -754,10 +755,27 @@ serve(async (req) => {
     let totalDuplicates = 0
     let hasMore = true
 
-    console.log(`[copilot-dynamic-table] Calling apollo-search with params:`, JSON.stringify(search_params))
+    // Sanitize search_params to only include known Apollo fields — AI planners
+    // may generate extra fields that cause 422 errors from the Apollo API.
+    const KNOWN_APOLLO_FIELDS = new Set([
+      'person_titles', 'person_locations', 'person_seniorities', 'person_departments',
+      'organization_num_employees_ranges', 'organization_latest_funding_stage_cd',
+      'q_keywords', 'q_organization_keyword_tags', 'q_organization_domains',
+      'contact_email_status', 'per_page', 'page',
+    ])
+    const cleanSearchParams: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(search_params)) {
+      if (KNOWN_APOLLO_FIELDS.has(key)) {
+        cleanSearchParams[key] = value
+      } else {
+        console.warn(`[copilot-dynamic-table] Stripping unknown Apollo param: ${key}=${JSON.stringify(value)}`)
+      }
+    }
+
+    console.log(`[copilot-dynamic-table] Calling apollo-search with sanitized params:`, JSON.stringify(cleanSearchParams))
 
     for (let attempt = 0; attempt < MAX_PAGES && hasMore; attempt++) {
-      const searchParamsWithPage = { ...search_params, page: currentPage }
+      const searchParamsWithPage = { ...cleanSearchParams, page: currentPage }
       if (attempt > 0) {
         console.log(`[copilot-dynamic-table] Page ${currentPage}: fetching more results (have ${allNewContacts.length}/${desiredCount} net-new so far)`)
       }
@@ -782,12 +800,17 @@ serve(async (req) => {
         try {
           const parsed = JSON.parse(errorBody)
           return new Response(
-            JSON.stringify({ error: parsed.error || 'Apollo search failed', code: parsed.code }),
+            JSON.stringify({
+              error: parsed.error || 'Apollo search failed',
+              code: parsed.code,
+              details: parsed.details,
+              payload_sent: parsed.payload_sent,
+            }),
             { status: apolloResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         } catch {
           return new Response(
-            JSON.stringify({ error: 'Apollo search failed' }),
+            JSON.stringify({ error: 'Apollo search failed', details: errorBody }),
             { status: apolloResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
@@ -854,55 +877,78 @@ serve(async (req) => {
     const tableName = requestedTableName || generateTableName(search_params, query_description)
 
     // ---------------------------------------------------------------
-    // 6. Create ops table + columns + rows + cells using service role
+    // 6. Create or reuse ops table + columns + rows + cells using service role
     // ---------------------------------------------------------------
     const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
 
-    // 6a. Insert the ops table
-    const { data: newTable, error: tableError } = await serviceClient
-      .from('dynamic_tables')
-      .insert({
-        organization_id: orgId,
-        created_by: user.id,
-        name: tableName,
-        description: query_description,
-        source_type: 'apollo',
-        source_query: search_params,
-      })
-      .select('id, name')
-      .single()
+    // 6a. Use existing table or create new one
+    let tableId: string
+    let tableNameFinal: string
+    const isExistingTable = !!target_table_id
 
-    if (tableError || !newTable) {
-      console.error('[copilot-dynamic-table] Failed to create table:', tableError?.message)
+    if (target_table_id) {
+      // Use existing table — verify it exists
+      const { data: existingTable, error: lookupErr } = await serviceClient
+        .from('dynamic_tables')
+        .select('id, name')
+        .eq('id', target_table_id)
+        .maybeSingle()
 
-      // Handle unique constraint violation (duplicate table name)
-      if (tableError?.code === '23505') {
+      if (lookupErr || !existingTable) {
         return new Response(
-          JSON.stringify({
-            error: `A table named "${tableName}" already exists. Please provide a different name.`,
-            code: 'DUPLICATE_TABLE_NAME',
-          }),
-          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Target table not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      return new Response(
-        JSON.stringify({ error: 'Failed to create ops table' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      tableId = existingTable.id
+      tableNameFinal = existingTable.name
+      console.log(`[copilot-dynamic-table] Using existing table: ${tableId} — "${tableNameFinal}"`)
+    } else {
+      const { data: newTable, error: tableError } = await serviceClient
+        .from('dynamic_tables')
+        .insert({
+          organization_id: orgId,
+          created_by: user.id,
+          name: tableName,
+          description: query_description,
+          source_type: 'apollo',
+          source_query: search_params,
+        })
+        .select('id, name')
+        .single()
+
+      if (tableError || !newTable) {
+        console.error('[copilot-dynamic-table] Failed to create table:', tableError?.message)
+
+        // Handle unique constraint violation (duplicate table name)
+        if (tableError?.code === '23505') {
+          return new Response(
+            JSON.stringify({
+              error: `A table named "${tableName}" already exists. Please provide a different name.`,
+              code: 'DUPLICATE_TABLE_NAME',
+            }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        return new Response(
+          JSON.stringify({ error: 'Failed to create ops table' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      tableId = newTable.id
+      tableNameFinal = newTable.name
+      console.log(`[copilot-dynamic-table] Created table: ${tableId} — "${tableNameFinal}"`)
     }
 
-    const tableId = newTable.id
-    console.log(`[copilot-dynamic-table] Created table: ${tableId} — "${newTable.name}"`)
-
-    // 6b. Insert standard columns (with apollo_property_name when auto-enrich is requested)
+    // 6b. Insert standard columns (skip existing ones for target tables)
     const enrichEmail = auto_enrich?.email === true
     const enrichPhone = auto_enrich?.phone === true
     const hasAnyEnrich = enrichEmail || enrichPhone
 
     // Map column keys to their Apollo enrichment property names.
-    // When enrichment is requested, we tag additional columns so they can be
-    // populated from the cached Apollo response (zero extra API calls).
     const ENRICH_COLUMN_MAP: Record<string, string> = {
       email: 'email',
       phone: 'phone',
@@ -913,53 +959,81 @@ serve(async (req) => {
       employees: 'company_employees',
     }
 
-    const columnInserts = APOLLO_COLUMNS.map((col) => {
-      // Only tag email/phone columns if specifically requested
-      const tagEmail = col.key === 'email' && enrichEmail
-      const tagPhone = col.key === 'phone' && enrichPhone
-      // Tag other columns whenever ANY enrichment is requested (they use the cache)
-      const tagOther = hasAnyEnrich && col.key !== 'email' && col.key !== 'phone' && ENRICH_COLUMN_MAP[col.key]
-
-      return {
-        table_id: tableId,
-        key: col.key,
-        label: col.label,
-        column_type: col.column_type,
-        position: col.position,
-        width: col.width,
-        is_enrichment: false,
-        is_visible: true,
-        ...(tagEmail ? { apollo_property_name: 'email' } : {}),
-        ...(tagPhone ? { apollo_property_name: 'phone' } : {}),
-        ...(tagOther ? { apollo_property_name: ENRICH_COLUMN_MAP[col.key] } : {}),
-      }
-    })
-
-    const { data: columns, error: columnsError } = await serviceClient
-      .from('dynamic_table_columns')
-      .insert(columnInserts)
-      .select('id, key')
-
-    if (columnsError || !columns) {
-      console.error('[copilot-dynamic-table] Failed to create columns:', columnsError?.message)
-      // Clean up the table we just created
-      await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
-      return new Response(
-        JSON.stringify({ error: 'Failed to create table columns' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    // For existing tables, check which columns already exist
+    let existingColumnKeys = new Set<string>()
+    if (isExistingTable) {
+      const { data: existingCols } = await serviceClient
+        .from('dynamic_table_columns')
+        .select('key')
+        .eq('table_id', tableId)
+      existingColumnKeys = new Set((existingCols || []).map((c: { key: string }) => c.key))
     }
 
-    // Build a key→id map for quick lookup when inserting cells
+    const columnInserts = APOLLO_COLUMNS
+      .filter((col) => !existingColumnKeys.has(col.key))  // Skip columns that already exist
+      .map((col) => {
+        const tagEmail = col.key === 'email' && enrichEmail
+        const tagPhone = col.key === 'phone' && enrichPhone
+        const tagOther = hasAnyEnrich && col.key !== 'email' && col.key !== 'phone' && ENRICH_COLUMN_MAP[col.key]
+
+        return {
+          table_id: tableId,
+          key: col.key,
+          label: col.label,
+          column_type: col.column_type,
+          position: col.position,
+          width: col.width,
+          is_enrichment: false,
+          is_visible: true,
+          ...(tagEmail ? { apollo_property_name: 'email' } : {}),
+          ...(tagPhone ? { apollo_property_name: 'phone' } : {}),
+          ...(tagOther ? { apollo_property_name: ENRICH_COLUMN_MAP[col.key] } : {}),
+        }
+      })
+
+    let columns: { id: string; key: string }[] | null = null
+
+    if (columnInserts.length > 0) {
+      const { data: insertedCols, error: columnsError } = await serviceClient
+        .from('dynamic_table_columns')
+        .insert(columnInserts)
+        .select('id, key')
+
+      if (columnsError || !insertedCols) {
+        console.error('[copilot-dynamic-table] Failed to create columns:', columnsError?.message)
+        if (!isExistingTable) await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
+        return new Response(
+          JSON.stringify({ error: 'Failed to create table columns' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      columns = insertedCols
+    }
+
+    // Fetch ALL columns for this table (including pre-existing ones) to build key→id map
+    const { data: allColumns } = await serviceClient
+      .from('dynamic_table_columns')
+      .select('id, key')
+      .eq('table_id', tableId)
+
     const columnKeyToId: Record<string, string> = {}
-    for (const col of columns) {
+    for (const col of (allColumns || [])) {
       columnKeyToId[col.key] = col.id
     }
 
-    // 6c. Insert rows
+    // 6c. Insert rows (offset row_index for existing tables)
+    let rowIndexOffset = 0
+    if (isExistingTable) {
+      const { count } = await serviceClient
+        .from('dynamic_table_rows')
+        .select('id', { count: 'exact', head: true })
+        .eq('table_id', tableId)
+      rowIndexOffset = count || 0
+    }
+
     const rowInserts = filteredContacts.map((contact, index) => ({
       table_id: tableId,
-      row_index: index,
+      row_index: rowIndexOffset + index,
       source_id: contact.apollo_id,
       source_data: contact as unknown as Record<string, unknown>,
     }))
@@ -971,8 +1045,8 @@ serve(async (req) => {
 
     if (rowsError || !rows) {
       console.error('[copilot-dynamic-table] Failed to create rows:', rowsError?.message)
-      // Clean up — cascade delete will handle columns
-      await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
+      // Only clean up if we created the table
+      if (!isExistingTable) await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
       return new Response(
         JSON.stringify({ error: 'Failed to create table rows' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -1215,7 +1289,7 @@ serve(async (req) => {
 
     const response = {
       table_id: tableId,
-      table_name: newTable.name,
+      table_name: tableNameFinal,
       row_count: filteredContacts.length,
       column_count: APOLLO_COLUMNS.length,
       source_type: 'apollo' as const,

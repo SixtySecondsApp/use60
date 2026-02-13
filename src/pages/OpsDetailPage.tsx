@@ -1612,7 +1612,7 @@ function OpsDetailPage() {
       // NLT: Detect workflow-level prompts and route to orchestrator
       if (isWorkflowPrompt(submittedQuery)) {
         setQueryInput('');
-        workflow.execute(submittedQuery);
+        workflow.execute(submittedQuery, { target_table_id: tableId });
         return;
       }
 
@@ -2028,6 +2028,19 @@ function OpsDetailPage() {
             });
             setQueryInput('');
             toast.success(result.summary as string);
+            break;
+          }
+
+          // === Cross-table query ===
+          case 'cross_query': {
+            const hasData = result.joinConfig && (result.enrichedRows?.length > 0 || result.matched > 0 || result.netNew > 0);
+            if (hasData) {
+              setCrossQueryResult(result);
+              toast.success(result.summary as string);
+            } else {
+              toast.info(result.summary as string || 'Cross-query returned no results');
+            }
+            setQueryInput('');
             break;
           }
 
@@ -2713,7 +2726,15 @@ function OpsDetailPage() {
             onAnswerClarifications={workflow.answerClarifications}
             onAbort={workflow.abort}
             onDismiss={workflow.reset}
-            onNavigateToTable={(id) => navigate(`/ops/${id}`)}
+            onNavigateToTable={(id) => {
+              if (id === tableId) {
+                // Same table — just refresh the data
+                queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+              } else {
+                navigate(`/ops/${id}`);
+              }
+            }}
           />
         )}
 

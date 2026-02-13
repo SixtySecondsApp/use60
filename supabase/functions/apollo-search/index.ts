@@ -253,6 +253,15 @@ serve(async (req) => {
       page = 1,
     } = searchParams as ApolloSearchParams
 
+    // Coerce string values to arrays — AI planners sometimes generate strings
+    // instead of arrays, which causes Apollo to return 422.
+    const toArray = (v: unknown): string[] | undefined => {
+      if (!v) return undefined
+      if (Array.isArray(v)) return v.length > 0 ? v : undefined
+      if (typeof v === 'string') return [v]
+      return undefined
+    }
+
     // Build Apollo search payload
     const searchPayload: Record<string, unknown> = {
       api_key: apolloApiKey,
@@ -260,17 +269,28 @@ serve(async (req) => {
       page,
     }
 
-    if (person_titles?.length) searchPayload.person_titles = person_titles
-    if (person_locations?.length) searchPayload.person_locations = person_locations
-    const validEmployeeRanges = normalizeEmployeeRanges(organization_num_employees_ranges)
+    const pTitles = toArray(person_titles)
+    if (pTitles) searchPayload.person_titles = pTitles
+    const pLocations = toArray(person_locations)
+    if (pLocations) searchPayload.person_locations = pLocations
+    const validEmployeeRanges = normalizeEmployeeRanges(toArray(organization_num_employees_ranges))
     if (validEmployeeRanges?.length) searchPayload.organization_num_employees_ranges = validEmployeeRanges
-    if (organization_latest_funding_stage_cd?.length) searchPayload.organization_latest_funding_stage_cd = organization_latest_funding_stage_cd
-    if (q_keywords) searchPayload.q_keywords = q_keywords
-    if (q_organization_keyword_tags?.length) searchPayload.q_organization_keyword_tags = q_organization_keyword_tags
-    if (person_seniorities?.length) searchPayload.person_seniorities = person_seniorities
-    if (person_departments?.length) searchPayload.person_departments = person_departments
-    if (q_organization_domains?.length) searchPayload.q_organization_domains = q_organization_domains
-    if (contact_email_status?.length) searchPayload.contact_email_status = contact_email_status
+    const fundingStages = toArray(organization_latest_funding_stage_cd)
+    if (fundingStages) searchPayload.organization_latest_funding_stage_cd = fundingStages
+    if (q_keywords) searchPayload.q_keywords = Array.isArray(q_keywords) ? q_keywords.join(' ') : String(q_keywords)
+    const orgKeywordTags = toArray(q_organization_keyword_tags)
+    if (orgKeywordTags) searchPayload.q_organization_keyword_tags = orgKeywordTags
+    const pSeniorities = toArray(person_seniorities)
+    if (pSeniorities) searchPayload.person_seniorities = pSeniorities
+    const pDepartments = toArray(person_departments)
+    if (pDepartments) searchPayload.person_departments = pDepartments
+    const orgDomains = toArray(q_organization_domains)
+    if (orgDomains) searchPayload.q_organization_domains = orgDomains
+    const emailStatus = toArray(contact_email_status)
+    if (emailStatus) searchPayload.contact_email_status = emailStatus
+
+    // Log the exact payload for debugging
+    console.log('[apollo-search] Sending to Apollo:', JSON.stringify(searchPayload))
 
     // Call Apollo People Search API
     const apolloResponse = await fetch(`${APOLLO_API_BASE}/mixed_people/api_search`, {
@@ -282,6 +302,7 @@ serve(async (req) => {
     if (!apolloResponse.ok) {
       const errorBody = await apolloResponse.text()
       console.error('[apollo-search] Apollo API error:', apolloResponse.status, errorBody)
+      console.error('[apollo-search] Payload that caused error:', JSON.stringify(searchPayload))
 
       if (apolloResponse.status === 429) {
         return new Response(
@@ -290,8 +311,19 @@ serve(async (req) => {
         )
       }
 
+      // Try to extract a useful message from Apollo's error response
+      let apolloErrorMsg = ''
+      try {
+        const parsed = JSON.parse(errorBody)
+        apolloErrorMsg = parsed.message || parsed.error || ''
+      } catch { /* raw text */ }
+
       return new Response(
-        JSON.stringify({ error: `Apollo API error: ${apolloResponse.status}`, details: errorBody }),
+        JSON.stringify({
+          error: `Apollo API error: ${apolloResponse.status}${apolloErrorMsg ? ` — ${apolloErrorMsg}` : ''}`,
+          details: errorBody,
+          payload_sent: searchPayload,
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }

@@ -526,7 +526,7 @@ const MOVE_ROWS_TOOL: Anthropic.Tool = {
 const CROSS_TABLE_QUERY_TOOL: Anthropic.Tool = {
   name: 'cross_table_query',
   description:
-    'Query data across multiple sources: other ops tables, CRM entities (contacts, deals, companies, activities), and meetings with transcripts. Use this when the user wants to cross-reference, enrich, or compare data from different sources.',
+    'ONLY use when the user explicitly asks to cross-reference, enrich from, or compare against a DIFFERENT table or data source (e.g. "cross-reference with deals", "pull meeting notes for these contacts", "compare against the Bristol table"). Do NOT use for filtering, sorting, or querying within the current table.',
   input_schema: {
     type: 'object' as const,
     properties: {

@@ -61,6 +61,7 @@ export interface WorkflowConfig {
   skip_campaign_creation?: boolean;
   num_email_steps?: number;
   campaign_angle?: string;
+  target_table_id?: string;
 }
 
 // ---------------------------------------------------------------------------

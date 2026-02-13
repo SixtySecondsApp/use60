@@ -44,6 +44,7 @@ interface WorkflowConfig {
   skip_campaign_creation?: boolean
   num_email_steps?: number
   campaign_angle?: string
+  target_table_id?: string
 }
 
 interface WorkflowRequest {
@@ -468,10 +469,24 @@ Rules:
 async function executeSearch(
   plan: SkillPlan,
   authHeader: string,
+  targetTableId?: string,
 ): Promise<StepResult> {
   const start = Date.now()
   try {
-    // Call copilot-dynamic-table to search + create table in one step
+    // Call copilot-dynamic-table to search + create/populate table
+    const requestBody: Record<string, unknown> = {
+      query_description: plan.summary,
+      search_params: plan.search_params,
+      table_name: plan.table_name,
+      auto_enrich: plan.enrichment.email || plan.enrichment.phone
+        ? { email: plan.enrichment.email, phone: plan.enrichment.phone }
+        : undefined,
+    }
+    // If targeting an existing table, pass its ID so data gets added there
+    if (targetTableId) {
+      requestBody.target_table_id = targetTableId
+    }
+
     const response = await fetch(`${SUPABASE_URL}/functions/v1/copilot-dynamic-table`, {
       method: 'POST',
       headers: {
@@ -479,24 +494,19 @@ async function executeSearch(
         Authorization: authHeader,
         apikey: SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({
-        query_description: plan.summary,
-        search_params: plan.search_params,
-        table_name: plan.table_name,
-        auto_enrich: plan.enrichment.email || plan.enrichment.phone
-          ? { email: plan.enrichment.email, phone: plan.enrichment.phone }
-          : undefined,
-      }),
+      body: JSON.stringify(requestBody),
     })
 
     const data = await response.json()
 
     if (!response.ok || data.error) {
+      const errorDetail = data.details ? ` Details: ${typeof data.details === 'string' ? data.details.slice(0, 200) : JSON.stringify(data.details).slice(0, 200)}` : ''
+      console.error(`${LOG} Search failed:`, data.error, errorDetail)
       return {
         step: 'search',
         status: 'error',
         summary: data.error || 'Apollo search failed',
-        error: data.error,
+        error: `${data.error || 'Apollo search failed'}${errorDetail}`,
         duration_ms: Date.now() - start,
         agent: 'research' as AgentName,
       }
@@ -977,9 +987,9 @@ serve(async (req) => {
 
           const steps: StepResult[] = []
 
-          // STEP 2: Apollo search + table creation (research agent)
+          // STEP 2: Apollo search + table creation/population (research agent)
           sseEvent(controller, 'step_start', { step: 'search', label: 'Searching Apollo for prospects', agent: 'research' })
-          const searchResult = await executeSearch(plan, authHeader)
+          const searchResult = await executeSearch(plan, authHeader, body.config?.target_table_id)
           steps.push(searchResult)
           sseEvent(controller, searchResult.status === 'complete' ? 'step_complete' : 'step_error', searchResult)
 
