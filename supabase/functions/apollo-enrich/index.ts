@@ -668,6 +668,55 @@ serve(async (req: Request) => {
       )
     }
 
+    // Post-enrichment: update full_name cells with unmasked names from Apollo
+    // Apollo search masks last names ("****") but the enrich/match API returns real names
+    const nameColumnId = columnKeyToId.get('full_name')
+    if (nameColumnId && needsEnrichment.length > 0) {
+      try {
+        const { data: enrichedRows } = await serviceClient
+          .from('dynamic_table_rows')
+          .select('id, source_data')
+          .in('id', needsEnrichment.map(r => r.id))
+
+        if (enrichedRows && enrichedRows.length > 0) {
+          const nameCellUpserts: Array<{ row_id: string; column_id: string; value: string; source: string; status: string }> = []
+
+          for (const row of enrichedRows) {
+            const sd = (row.source_data || {}) as Record<string, unknown>
+            const apolloData = sd.apollo as Record<string, unknown> | undefined
+            if (!apolloData) continue
+
+            const firstName = apolloData.first_name as string | undefined
+            const lastName = apolloData.last_name as string | undefined
+
+            // Skip if last name is still masked or missing
+            if (!firstName && !lastName) continue
+            if (lastName && /^\*+$/.test(lastName)) continue
+
+            const fullName = [firstName, lastName].filter(Boolean).join(' ')
+            if (fullName) {
+              nameCellUpserts.push({
+                row_id: row.id,
+                column_id: nameColumnId,
+                value: fullName,
+                source: 'apollo',
+                status: 'complete',
+              })
+            }
+          }
+
+          if (nameCellUpserts.length > 0) {
+            await serviceClient
+              .from('dynamic_table_cells')
+              .upsert(nameCellUpserts, { onConflict: 'row_id,column_id' })
+            console.log(`[apollo-enrich] Updated ${nameCellUpserts.length} name cells with unmasked data`)
+          }
+        }
+      } catch (nameErr) {
+        console.warn('[apollo-enrich] Post-enrichment name update warning:', nameErr)
+      }
+    }
+
     return new Response(
       JSON.stringify({
         processed: filteredRows.length,
