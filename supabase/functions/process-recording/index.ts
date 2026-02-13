@@ -3,7 +3,7 @@
  *
  * Processes a completed recording through the full analysis pipeline:
  * 1. Download recording from MeetingBaaS
- * 2. Transcribe using Gladia (or MeetingBaaS fallback)
+ * 2. Transcribe using AssemblyAI (or MeetingBaaS/Gladia fallback)
  * 3. Identify speakers using email matching + AI inference
  * 4. Generate AI summary with highlights and action items
  * 5. Update recording with results
@@ -16,7 +16,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { S3Client, PutObjectCommand, HeadObjectCommand } from 'npm:@aws-sdk/client-s3@3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from 'npm:@aws-sdk/client-s3@3';
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import { legacyCorsHeaders as corsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
@@ -105,7 +105,7 @@ async function uploadRecordingToStorage(
     await s3Client.send(putCommand);
 
     // Generate a signed URL (7 days expiry)
-    const getCommand = new HeadObjectCommand({
+    const getCommand = new GetObjectCommand({
       Bucket: bucketName,
       Key: s3Key,
     });
@@ -194,93 +194,82 @@ interface AttendeeInfo {
 }
 
 // =============================================================================
-// Gladia Transcription Service
+// AssemblyAI Transcription Service
 // =============================================================================
 
-interface GladiaTranscriptResult {
-  text: string;
-  utterances: TranscriptUtterance[];
-  speakers?: { id: number; count: number }[];
-}
-
-async function transcribeWithGladia(audioUrl: string): Promise<GladiaTranscriptResult> {
-  const gladiaApiKey = Deno.env.get('GLADIA_API_KEY');
-  if (!gladiaApiKey) {
-    throw new Error('GLADIA_API_KEY not configured');
+async function transcribeWithAssemblyAI(audioUrl: string): Promise<TranscriptData> {
+  const apiKey = Deno.env.get('ASSEMBLYAI_API_KEY');
+  if (!apiKey) {
+    throw new Error('ASSEMBLYAI_API_KEY not configured');
   }
 
-  console.log('[ProcessRecording] Starting Gladia transcription...');
+  console.log('[ProcessRecording] Starting AssemblyAI transcription...');
 
-  // Step 1: Request transcription
-  const transcriptResponse = await fetch('https://api.gladia.io/v2/transcription', {
+  // Step 1: Submit transcription request
+  const submitResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
     method: 'POST',
     headers: {
-      'x-gladia-key': gladiaApiKey,
+      'Authorization': apiKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       audio_url: audioUrl,
-      diarization: true,
-      diarization_config: {
-        min_speakers: 2,
-        max_speakers: 10,
-      },
+      speech_models: ['universal-3-pro'],
+      speaker_labels: true,
     }),
   });
 
-  if (!transcriptResponse.ok) {
-    const error = await transcriptResponse.text();
-    throw new Error(`Gladia API error: ${error}`);
+  if (!submitResponse.ok) {
+    const error = await submitResponse.text();
+    throw new Error(`AssemblyAI submit error: ${error}`);
   }
 
-  const { result_url } = await transcriptResponse.json();
+  const { id: transcriptId } = await submitResponse.json();
+  console.log(`[ProcessRecording] AssemblyAI transcript ID: ${transcriptId}`);
 
   // Step 2: Poll for results
-  let result = null;
   let attempts = 0;
   const maxAttempts = 120; // 10 minutes with 5s intervals
 
-  while (!result && attempts < maxAttempts) {
+  while (attempts < maxAttempts) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    const statusResponse = await fetch(result_url, {
-      headers: { 'x-gladia-key': gladiaApiKey },
+    const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+      headers: { 'Authorization': apiKey },
     });
 
-    if (!statusResponse.ok) {
+    if (!pollResponse.ok) {
       attempts++;
       continue;
     }
 
-    const status = await statusResponse.json();
+    const result = await pollResponse.json();
 
-    if (status.status === 'done') {
-      result = status.result;
-    } else if (status.status === 'error') {
-      throw new Error(`Gladia transcription failed: ${status.error}`);
+    if (result.status === 'completed') {
+      console.log('[ProcessRecording] AssemblyAI transcription complete');
+
+      // Map AssemblyAI utterances to our format
+      // AssemblyAI uses speaker labels like "A", "B", "C"... — map to numeric IDs
+      const utterances: TranscriptUtterance[] = (result.utterances || []).map((u: any) => ({
+        speaker: u.speaker ? u.speaker.charCodeAt(0) - 'A'.charCodeAt(0) : 0,
+        start: (u.start || 0) / 1000, // AssemblyAI uses ms, we use seconds
+        end: (u.end || 0) / 1000,
+        text: u.text || '',
+        confidence: u.confidence,
+      }));
+
+      return {
+        text: result.text || '',
+        utterances,
+      };
+    } else if (result.status === 'error') {
+      throw new Error(`AssemblyAI transcription failed: ${result.error}`);
     }
 
     attempts++;
   }
 
-  if (!result) {
-    throw new Error('Gladia transcription timed out');
-  }
-
-  console.log('[ProcessRecording] Gladia transcription complete');
-
-  return {
-    text: result.transcription?.full_transcript || '',
-    utterances: (result.transcription?.utterances || []).map((u: any) => ({
-      speaker: u.speaker ?? 0,
-      speaker_id: u.speaker ?? 0,
-      start: u.start ?? 0,
-      end: u.end ?? 0,
-      text: u.text ?? '',
-      confidence: u.confidence,
-    })),
-    speakers: result.transcription?.speakers,
-  };
+  throw new Error('AssemblyAI transcription timed out');
 }
 
 // =============================================================================
@@ -571,7 +560,6 @@ async function processRecording(
       .update({ status: 'processing' })
       .eq('id', recordingId);
 
-    const settings = recording.organizations?.recording_settings;
     const internalDomain = recording.organizations?.company_domain || null;
 
     // Step 1: Resolve recording URL
@@ -586,8 +574,25 @@ async function processRecording(
     if (recording.recording_s3_key) {
       console.log('[ProcessRecording] Step 1: Recording already in S3:', recording.recording_s3_key);
       alreadyInS3 = true;
-      // We still need a URL for transcription — use the S3 URL or generate a signed one
-      recordingMediaUrl = recording.recording_s3_url || null;
+      // Generate a fresh signed GET URL so external services (AssemblyAI) can download it
+      try {
+        const s3Client = new S3Client({
+          region: Deno.env.get('AWS_REGION') || 'eu-west-2',
+          credentials: {
+            accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID')!,
+            secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY')!,
+          },
+        });
+        const getCmd = new GetObjectCommand({
+          Bucket: Deno.env.get('AWS_S3_BUCKET') || 'use60-application',
+          Key: recording.recording_s3_key,
+        });
+        recordingMediaUrl = await getSignedUrl(s3Client, getCmd, { expiresIn: 60 * 60 * 2 }); // 2 hours
+        console.log('[ProcessRecording] Step 1: Generated fresh signed GET URL');
+      } catch (s3Err) {
+        console.warn('[ProcessRecording] Step 1: Failed to generate signed URL, falling back to stored URL:', s3Err);
+        recordingMediaUrl = recording.recording_s3_url || null;
+      }
     }
 
     // Priority 2: URLs passed directly (from webhook bot.completed payload or manual trigger)
@@ -659,43 +664,9 @@ async function processRecording(
     console.log('[ProcessRecording] Step 2: Getting transcript...');
     let transcript: TranscriptData;
 
-    const transcriptionProvider = settings?.default_transcription_provider || 'meetingbaas';
-
-    if (transcriptionProvider === 'gladia') {
-      // Use Gladia for transcription
-      transcript = await transcribeWithGladia(recordingData.url);
-    } else {
-      // Try MeetingBaaS transcription first, fall back to Gladia
-      let usedFallback = false;
-      try {
-        const { data: mbTranscript, error: transcriptError } =
-          await meetingBaaSClient.getTranscript(effectiveBotId);
-
-        if (transcriptError || !mbTranscript) {
-          throw new Error(transcriptError?.message || 'MeetingBaaS transcript not available');
-        }
-
-        transcript = {
-          text: mbTranscript.text,
-          utterances: mbTranscript.utterances.map((u) => ({
-            speaker: u.speaker,
-            speaker_id: u.speaker,
-            start: u.start,
-            end: u.end,
-            text: u.text,
-            confidence: u.confidence,
-          })),
-        };
-      } catch (mbError) {
-        console.warn('[ProcessRecording] MeetingBaaS transcript failed, falling back to Gladia:', mbError);
-        usedFallback = true;
-        transcript = await transcribeWithGladia(recordingData.url);
-      }
-
-      if (usedFallback) {
-        console.log('[ProcessRecording] Step 2: Transcript obtained via Gladia fallback');
-      }
-    }
+    // Always use AssemblyAI for transcription
+    console.log('[ProcessRecording] Step 2: Using AssemblyAI for transcription');
+    transcript = await transcribeWithAssemblyAI(recordingData.url);
 
     // Get attendees from calendar event if available
     let attendees: AttendeeInfo[] = [];
