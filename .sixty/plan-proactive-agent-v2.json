@@ -1,0 +1,57 @@
+{
+  "name": "Proactive Agent Master Plan v2",
+  "version": "2.0",
+  "createdAt": "2026-02-13T00:00:00Z",
+  "description": "From Working Parts to Autonomous Sales Copilot — wire existing 30+ Slack functions, 6 specialist agents, sequence executor, and proactive delivery system into event-driven workflows via a single orchestrator",
+  "author": "Andrew Bryce",
+  "principle": "Extend, don't rebuild. No new queue tables. No new preference tables. No polling heartbeat.",
+  "features": [
+    { "id": "orch", "name": "Build 1: The Orchestrator", "status": "pending", "weeks": "1-2", "stories": 10 },
+    { "id": "intents", "name": "Build 2: Intent Detection", "status": "pending", "weeks": "3-4", "stories": 3 },
+    { "id": "calendar", "name": "Build 3: Calendar Availability Finder", "status": "pending", "weeks": "5-6", "stories": 3 },
+    { "id": "email-send", "name": "Build 4: Email Send-as-Rep", "status": "pending", "weeks": "7-8", "stories": 4 },
+    { "id": "proposal-pipe", "name": "Build 5: Proposal Pipeline", "status": "pending", "weeks": "7-8", "stories": 2 },
+    { "id": "campaign-mon", "name": "Build 6: Campaign Monitoring", "status": "pending", "weeks": "9-10", "stories": 3 },
+    { "id": "coaching", "name": "Build 7: Coaching & Trend Analysis", "status": "pending", "weeks": "11-12", "stories": 4 }
+  ],
+  "total_stories": 29,
+  "new_skills": [
+    ".claude/skills/detect-intents/SKILL.md",
+    ".claude/skills/find-available-slots/SKILL.md",
+    ".claude/skills/email-send-as-rep/SKILL.md",
+    ".claude/skills/monitor-campaigns/SKILL.md",
+    ".claude/skills/coaching-analysis/SKILL.md",
+    ".claude/skills/proactive-orchestrator/SKILL.md"
+  ],
+  "new_edge_functions": [
+    "supabase/functions/agent-orchestrator/index.ts",
+    "supabase/functions/detect-intents/index.ts",
+    "supabase/functions/find-available-slots/index.ts",
+    "supabase/functions/email-send-as-rep/index.ts",
+    "supabase/functions/create-calendar-event/index.ts",
+    "supabase/functions/monitor-campaigns/index.ts",
+    "supabase/functions/coaching-analysis/index.ts"
+  ],
+  "new_shared_modules": [
+    "supabase/functions/_shared/orchestrator/types.ts",
+    "supabase/functions/_shared/orchestrator/contextLoader.ts",
+    "supabase/functions/_shared/orchestrator/eventSequences.ts",
+    "supabase/functions/_shared/orchestrator/runner.ts",
+    "supabase/functions/_shared/orchestrator/adapters/actionItems.ts",
+    "supabase/functions/_shared/orchestrator/adapters/nextActions.ts",
+    "supabase/functions/_shared/orchestrator/adapters/createTasks.ts",
+    "supabase/functions/_shared/orchestrator/adapters/emailClassifier.ts",
+    "supabase/functions/_shared/orchestrator/adapters/detectIntents.ts",
+    "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+  ],
+  "new_migrations": [
+    "YYYYMMDD_extend_sequence_jobs_orchestrator.sql",
+    "YYYYMMDD_deal_last_activity_view.sql",
+    "YYYYMMDD_create_coaching_analyses.sql"
+  ],
+  "parallel_groups": [
+    { "stories": ["ORCH-006", "ORCH-007", "ORCH-008"], "reason": "Independent webhook wiring, no file overlap" },
+    { "stories": ["EMAIL-001", "PROP-001"], "reason": "Builds 4+5 skill definitions in parallel" },
+    { "stories": ["EMAIL-003", "PROP-002"], "reason": "Builds 4+5 implementation in parallel" }
+  ]
+}
