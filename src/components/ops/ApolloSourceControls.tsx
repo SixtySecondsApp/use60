@@ -33,7 +33,7 @@ export function ApolloSourceControls({
         <button
           onClick={onEnrichAll}
           disabled={isEnriching}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm shadow-purple-500/20 transition-all hover:from-purple-400 hover:to-indigo-500 hover:shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/40 bg-violet-500/15 px-3 py-1.5 text-sm font-medium text-violet-300 transition-colors hover:bg-violet-500/25 hover:text-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isEnriching ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

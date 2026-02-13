@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Sparkles, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ApolloEnrichmentBannerProps {
   rows: Array<{ cells: Record<string, { value: string | null }> }>;
@@ -34,36 +35,36 @@ export function ApolloEnrichmentBanner({
   if (dismissed || !shouldShow || isEnriching) return null;
 
   return (
-    <div className="relative mx-0 mb-3 overflow-hidden rounded-xl border border-purple-500/20 bg-gradient-to-r from-purple-950/60 via-indigo-950/40 to-purple-950/60 px-5 py-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-500/20">
-            <Sparkles className="h-4.5 w-4.5 text-purple-400" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-white">
-              {totalContacts.toLocaleString()} contacts found — enrich to get verified emails, phone numbers & full profiles
-            </p>
-            <p className="mt-0.5 text-xs text-purple-300/70">
-              Apollo search returns names and titles. Run enrichment to fill in contact details.
-            </p>
+    <div className="mx-4 mb-3 rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10">
+          <Sparkles className="h-4 w-4 text-violet-400" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h4 className="text-sm font-medium text-violet-300">
+            {totalContacts.toLocaleString()} contacts ready to enrich
+          </h4>
+          <p className="mt-0.5 text-xs text-violet-300/70">
+            Enrich to get verified emails, phone numbers & full profiles from Apollo.
+          </p>
+          <div className="mt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onEnrichAll}
+              className="h-7 gap-1.5 border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 text-xs"
+            >
+              <Sparkles className="h-3 w-3" />
+              Enrich All Contacts
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onEnrichAll}
-            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-500/20 transition-all hover:from-purple-400 hover:to-indigo-500 hover:shadow-purple-500/30"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Enrich All Contacts
-          </button>
-          <button
-            onClick={() => setDismissed(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-purple-400/60 transition-colors hover:bg-purple-500/10 hover:text-purple-300"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <button
+          onClick={() => setDismissed(true)}
+          className="shrink-0 text-violet-400/50 transition-colors hover:text-violet-400"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
