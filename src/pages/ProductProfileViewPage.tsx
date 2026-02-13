@@ -11,13 +11,11 @@ import {
 } from '@/lib/hooks/useProductProfiles';
 import { useFactProfile } from '@/lib/hooks/useFactProfiles';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
-import { useCopilot } from '@/lib/contexts/CopilotContext';
 
 export default function ProductProfileViewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const orgId = useActiveOrgId();
-  const { openCopilot } = useCopilot();
   const { id, productId } = useParams<{ id?: string; productId?: string }>();
   const resolvedProductId = productId ?? id;
 
@@ -74,18 +72,11 @@ export default function ProductProfileViewPage() {
   };
 
   const handleBuildWithCopilot = () => {
-    if (!profile) return;
-    const prompt = `Help me build a COMPLETE Product Profile for ${profile.name}.
-
-Current context:
-- Category: ${profile.category || 'Service'}
-- Description: ${profile.description || 'No description provided yet'}
-- URL: ${profile.product_url || 'N/A'}
-
-Ask clarifying questions, then return a single JSON object that matches our product profile schema sections (overview, target_market, value_propositions, pricing, competitors, use_cases, differentiators, pain_points_solved, key_features, integrations).`;
-
-    openCopilot(prompt, true);
-    navigate('/copilot');
+    navigate(`${location.pathname.replace(/\/$/, '')}/edit`, {
+      state: {
+        startBuilder: true,
+      },
+    });
   };
 
   if (isLoading) {
