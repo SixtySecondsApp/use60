@@ -358,46 +358,50 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
               )}
             </motion.div>
           ) : (
-            /* Campaign name step (last step) */
+            /* Campaign name step (last step) — includes submit button */
             <motion.div
               key="campaign-name"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
-              className="space-y-2"
+              className="space-y-3"
             >
-              <p className="text-sm font-medium text-gray-200">Campaign name</p>
-              <input
-                type="text"
-                value={campaignName}
-                onChange={(e) => setCampaignName(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
-              />
+              <p className="text-sm font-medium text-gray-200">Name your campaign</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={campaignName}
+                  onChange={(e) => setCampaignName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && allAnswered && campaignName.trim()) {
+                      handleSubmit();
+                    }
+                  }}
+                  placeholder="e.g. Bristol SaaS Outreach"
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  disabled={!allAnswered || !campaignName.trim()}
+                  onClick={handleSubmit}
+                  className={cn(
+                    'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40',
+                    allAnswered && campaignName.trim()
+                      ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                      : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                  )}
+                >
+                  Start Pipeline
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Progress indicator */}
         <p className="text-xs text-gray-500">{answeredCount} of {totalSteps} answered</p>
-
-        {/* Submit button */}
-        {allAnswered && campaignName.trim() && (
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <button
-              type="button"
-              onClick={handleSubmit}
-              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-            >
-              Start Campaign Pipeline
-              <Send className="w-4 h-4" />
-            </button>
-          </motion.div>
-        )}
       </div>
     </div>
   );
