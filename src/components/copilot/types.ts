@@ -8,6 +8,14 @@
 
 import type { ToolCall } from '../copilot/toolTypes';
 import type { EntityDisambiguationData } from './responses/EntityDisambiguationResponse';
+import type { ProspectingClarificationData } from './responses/ProspectingClarificationResponse';
+import type { ClarifyingQuestion } from '@/lib/utils/prospectingDetector';
+
+export interface CampaignWorkflowData {
+  original_prompt: string;
+  questions: ClarifyingQuestion[];
+  suggested_campaign_name: string;
+}
 
 export interface CopilotMessage {
   id: string;
@@ -18,6 +26,8 @@ export interface CopilotMessage {
   toolCall?: ToolCall;
   structuredResponse?: CopilotResponse; // New structured response format
   entityDisambiguation?: EntityDisambiguationData; // Interactive contact selection for disambiguation
+  preflightQuestions?: ProspectingClarificationData; // Prospecting clarification before workflow
+  campaignWorkflow?: CampaignWorkflowData; // Campaign workflow clarification
   isError?: boolean; // UX-001: Flag to indicate this message is an error response
 }
 

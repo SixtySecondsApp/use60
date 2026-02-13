@@ -12,7 +12,11 @@ import { ProductProfileCard } from '@/components/product-profiles/ProductProfile
 import { NewProductProfileDialog } from '@/components/product-profiles/NewProductProfileDialog';
 import { ProspectingTab } from '@/components/prospecting/ProspectingTab';
 import { useFactProfiles, useDeleteFactProfile } from '@/lib/hooks/useFactProfiles';
-import { useProductProfilesByFactProfile, useDeleteProductProfile } from '@/lib/hooks/useProductProfiles';
+import {
+  useProductProfilesByFactProfile,
+  useDeleteProductProfile,
+  useCreateProductProfile,
+} from '@/lib/hooks/useProductProfiles';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -29,6 +33,33 @@ const TABS = [
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
+
+const PACKAGE_PROFILE_SEEDS = [
+  {
+    name: 'Managed Service Email Outreach',
+    category: 'Service',
+    description:
+      'Done-for-you outbound email campaigns including strategy, targeting, copy, launch, and weekly optimization.',
+  },
+  {
+    name: 'Multi Channel Outreach and Advertising',
+    category: 'Service',
+    description:
+      'Integrated outbound and paid campaign execution across email, social, and ads to drive pipeline from multiple channels.',
+  },
+  {
+    name: 'Video Creation',
+    category: 'Service',
+    description:
+      'End-to-end video production for demand generation, outreach, and conversion assets, from scripting to final delivery.',
+  },
+  {
+    name: 'AI Consult and Build',
+    category: 'Consulting',
+    description:
+      'Advisory and implementation services to design, build, and operationalize AI workflows and automations.',
+  },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -64,6 +95,7 @@ export default function ProfilesPage() {
   // Product profiles for org profile
   const { data: productProfiles = [] } = useProductProfilesByFactProfile(orgProfile?.id);
   const deleteProductMutation = useDeleteProductProfile();
+  const createProductMutation = useCreateProductProfile();
 
   // Dialog / overlay state
   const [showNewDialog, setShowNewDialog] = useState(false);
@@ -178,6 +210,39 @@ export default function ProfilesPage() {
     [orgId, deleteProductMutation],
   );
 
+  const handleAddPackageProfiles = useCallback(async () => {
+    if (!orgId || !userId || !orgProfile) return;
+
+    const existingNames = new Set(
+      productProfiles.map((profile) => profile.name.trim().toLowerCase()),
+    );
+
+    const profilesToCreate = PACKAGE_PROFILE_SEEDS.filter(
+      (seed) => !existingNames.has(seed.name.toLowerCase()),
+    );
+
+    if (profilesToCreate.length === 0) {
+      toast.info('All package profiles are already added.');
+      return;
+    }
+
+    try {
+      for (const seed of profilesToCreate) {
+        await createProductMutation.mutateAsync({
+          organization_id: orgId,
+          created_by: userId,
+          fact_profile_id: orgProfile.id,
+          name: seed.name,
+          category: seed.category,
+          description: seed.description,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to add package profiles:', error);
+      toast.error('Failed to add package profiles');
+    }
+  }, [orgId, userId, orgProfile, productProfiles, createProductMutation]);
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -273,6 +338,15 @@ export default function ProfilesPage() {
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Add Product
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddPackageProfiles}
+                        disabled={createProductMutation.isPending || !orgId || !userId || !orgProfile}
+                      >
+                        <Package className="h-4 w-4 mr-2" />
+                        Add Package Profiles
                       </Button>
                     </div>
 

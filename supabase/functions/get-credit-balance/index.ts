@@ -25,8 +25,10 @@ interface UsageByFeature {
 }
 
 interface RecentTransaction {
+  id: string;
   type: string;
   amount: number;
+  balance_after: number;
   created_at: string;
   description: string | null;
   feature_key: string | null;
@@ -103,12 +105,14 @@ serve(async (req: Request) => {
 
     const balance = balanceRow?.balance_credits ?? 0;
 
-    // 4. Calculate daily burn rate (last 7 days)
+    // 4. Calculate daily burn rate (last 7 days) from ledger deductions
+    // This keeps runway aligned to actual debits from balance.
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: burnData, error: burnError } = await supabase
-      .from('ai_cost_events')
-      .select('estimated_cost')
+      .from('credit_transactions')
+      .select('amount')
       .eq('org_id', org_id)
+      .eq('type', 'deduction')
       .gte('created_at', sevenDaysAgo);
 
     if (burnError) {
@@ -116,7 +120,7 @@ serve(async (req: Request) => {
     }
 
     const totalCostLast7Days = (burnData ?? []).reduce(
-      (sum: number, row: { estimated_cost: number | null }) => sum + (row.estimated_cost ?? 0),
+      (sum: number, row: { amount: number | null }) => sum + Math.abs(row.amount ?? 0),
       0
     );
     const dailyBurnRate = totalCostLast7Days / 7;
@@ -127,12 +131,13 @@ serve(async (req: Request) => {
         ? Math.floor(balance / dailyBurnRate)
         : -1;
 
-    // 6. Usage by feature (last 30 days)
+    // 6. Usage by feature (last 30 days) from ledger deductions
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: usageData, error: usageError } = await supabase
-      .from('ai_cost_events')
-      .select('feature_key, estimated_cost')
+      .from('credit_transactions')
+      .select('feature_key, amount')
       .eq('org_id', org_id)
+      .eq('type', 'deduction')
       .gte('created_at', thirtyDaysAgo);
 
     if (usageError) {
@@ -144,7 +149,7 @@ serve(async (req: Request) => {
     for (const row of usageData ?? []) {
       const key = row.feature_key ?? 'unknown';
       const existing = featureMap.get(key) ?? { total_cost: 0, call_count: 0 };
-      existing.total_cost += row.estimated_cost ?? 0;
+      existing.total_cost += Math.abs(row.amount ?? 0);
       existing.call_count += 1;
       featureMap.set(key, existing);
     }
@@ -183,7 +188,7 @@ serve(async (req: Request) => {
     // 7. Recent transactions
     const { data: transactionData, error: txError } = await supabase
       .from('credit_transactions')
-      .select('type, amount, created_at, description, feature_key')
+      .select('id, type, amount, balance_after, created_at, description, feature_key')
       .eq('org_id', org_id)
       .order('created_at', { ascending: false })
       .limit(5);
@@ -193,9 +198,19 @@ serve(async (req: Request) => {
     }
 
     const recentTransactions: RecentTransaction[] = (transactionData ?? []).map(
-      (tx: { type: string; amount: number; created_at: string; description: string | null; feature_key: string | null }) => ({
+      (tx: {
+        id: string;
+        type: string;
+        amount: number;
+        balance_after: number;
+        created_at: string;
+        description: string | null;
+        feature_key: string | null;
+      }) => ({
+        id: tx.id,
         type: tx.type,
         amount: tx.amount,
+        balance_after: tx.balance_after,
         created_at: tx.created_at,
         description: tx.description,
         feature_key: tx.feature_key,

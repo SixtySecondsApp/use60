@@ -73,7 +73,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo,
+  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -85,6 +85,7 @@ import {
   TasksPage, ProjectsHub, GoogleTasksSettings, Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage,
   OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage,
+  ProductProfileViewPage, ProductProfileEditPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
@@ -432,6 +433,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/demo/exa-abilities" element={<PlatformAdminRouteGuard><AppLayout><ExaAbilitiesDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/email-sequence-test" element={<PlatformAdminRouteGuard><AppLayout><EmailSequenceTest /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/agent-research" element={<PlatformAdminRouteGuard><AppLayout><AgentResearchDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/campaign-workflow" element={<PlatformAdminRouteGuard><AppLayout><CampaignWorkflowDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Documentation CMS Admin */}
                 <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}
@@ -515,6 +517,10 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/profiles" element={<InternalRouteGuard><AppLayout><ProfilesPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/profiles/:id" element={<InternalRouteGuard><AppLayout><FactProfileViewPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/profiles/:id/edit" element={<InternalRouteGuard><AppLayout><FactProfileEditPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/products/:id" element={<InternalRouteGuard><AppLayout><ProductProfileViewPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/products/:id/edit" element={<InternalRouteGuard><AppLayout><ProductProfileEditPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/:id/products/:productId" element={<InternalRouteGuard><AppLayout><ProductProfileViewPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/:id/products/:productId/edit" element={<InternalRouteGuard><AppLayout><ProductProfileEditPage /></AppLayout></InternalRouteGuard>} />
                 {/* Redirects from old URLs */}
                 <Route path="/fact-profiles" element={<Navigate to="/profiles?tab=companies" replace />} />
                 <Route path="/fact-profiles/:id" element={<RedirectFactProfile />} />

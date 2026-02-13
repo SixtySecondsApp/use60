@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { supabase } from '@/lib/supabase/clientV2';
+import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { CopilotSessionService } from '@/lib/services/copilotSessionService';
 import type { CopilotMessage as PersistedMessage, CopilotMessageMetadata } from '@/lib/types/copilot';
 
@@ -50,6 +50,8 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
   isStreaming?: boolean;
   structuredResponse?: unknown;
+  preflightQuestions?: unknown;
+  campaignWorkflow?: unknown;
 }
 
 export interface UseCopilotChatOptions {
@@ -71,9 +73,14 @@ export interface UseCopilotChatOptions {
   historyLimit?: number;
 }
 
+export interface SendMessageOptions {
+  /** If true, don't show the user message in chat (used for enriched prompts from preflight) */
+  silent?: boolean;
+}
+
 export interface UseCopilotChatReturn {
   /** Send a message to the copilot */
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, options?: SendMessageOptions) => Promise<void>;
   /** All messages in the conversation */
   messages: ChatMessage[];
   /** Whether the copilot is currently processing */
@@ -88,6 +95,8 @@ export interface UseCopilotChatReturn {
   error: string | null;
   /** Clear all messages */
   clearMessages: () => void;
+  /** Inject synthetic messages (e.g. preflight questions) */
+  injectMessages: (msgs: ChatMessage[]) => void;
   /** Stop the current request */
   stopGeneration: () => void;
   /** Current conversation ID */
@@ -136,18 +145,22 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
    * Send a message to the autonomous copilot
    */
   const sendMessage = useCallback(
-    async (message: string) => {
+    async (message: string, options?: SendMessageOptions) => {
       if (!message.trim()) return;
 
-      // Add user message
-      const userMessage: ChatMessage = {
-        id: generateId(),
-        role: 'user',
-        content: message,
-        timestamp: new Date(),
-      };
+      const silent = options?.silent ?? false;
 
-      setMessages((prev) => [...prev, userMessage]);
+      // Add user message (skip if silent — e.g. enriched prompts from preflight)
+      if (!silent) {
+        const userMessage: ChatMessage = {
+          id: generateId(),
+          role: 'user',
+          content: message,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+      }
+
       setIsThinking(true);
       setError(null);
       setActiveAgents([]);
@@ -180,9 +193,8 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
       abortControllerRef.current = new AbortController();
 
       try {
-        // Get auth token
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
+        // Resolve auth token across both Supabase Auth and Clerk auth modes.
+        const token = await getSupabaseAuthToken();
 
         console.log('[useCopilotChat] Auth token present:', !!token);
         console.log('[useCopilotChat] Calling copilot-autonomous with org:', options.organizationId);
@@ -503,6 +515,13 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
   }, []);
 
   /**
+   * Inject synthetic messages (e.g. preflight clarification questions)
+   */
+  const injectMessages = useCallback((msgs: ChatMessage[]) => {
+    setMessages((prev) => [...prev, ...msgs]);
+  }, []);
+
+  /**
    * Stop the current generation
    */
   const stopGeneration = useCallback(() => {
@@ -588,6 +607,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     toolsUsed,
     error,
     clearMessages,
+    injectMessages,
     stopGeneration,
     conversationId,
     isLoadingSession,

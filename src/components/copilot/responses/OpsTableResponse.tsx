@@ -1,7 +1,6 @@
 import React from 'react';
-import { Table2, Sparkles, ExternalLink, Rows3, Send } from 'lucide-react';
+import { Table2, Sparkles, ExternalLink, Rows3, Send, Download, ChevronRight } from 'lucide-react';
 import type { QuickActionResponse } from '../types';
-import { formatNumber } from '@/lib/utils/formatters';
 
 export interface OpsTableResponseData {
   table_id: string;
@@ -25,15 +24,9 @@ export const OpsTableResponse: React.FC<OpsTableResponseProps> = ({ data, onActi
     table_id,
     table_name,
     row_count,
-    column_count,
-    source_type,
     enriched_count,
-    preview_rows,
-    preview_columns,
     query_description,
   } = data;
-
-  const displayRows = preview_rows.slice(0, 5);
 
   /** Emit a canonical action */
   const emitAction = (callback: string, label: string, params?: Record<string, any>) => {
@@ -75,71 +68,49 @@ export const OpsTableResponse: React.FC<OpsTableResponseProps> = ({ data, onActi
         </div>
       </div>
 
-      {/* Preview Table */}
-      {displayRows.length > 0 && preview_columns.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-800">
-                {preview_columns.map((col) => (
-                  <th
-                    key={col}
-                    className="px-3 py-2 text-left text-gray-400 font-medium whitespace-nowrap"
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {displayRows.map((row, rowIndex) => (
-                <tr
-                  key={rowIndex}
-                  className="border-b border-gray-800/50 last:border-b-0 hover:bg-gray-800/30"
-                >
-                  {preview_columns.map((col) => (
-                    <td
-                      key={col}
-                      className="px-3 py-2 text-gray-300 whitespace-nowrap max-w-[200px] truncate"
-                    >
-                      {row[col] ?? '-'}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {row_count > 5 && (
-            <div className="px-3 py-1.5 text-xs text-gray-500 text-center border-t border-gray-800/50">
-              Showing 5 of {row_count} rows
-            </div>
-          )}
-        </div>
-      )}
+      {/* Keep table layout in the Ops table page (not inline in chat card). */}
+      <div className="px-4 py-3 border-b border-gray-800/60">
+        <p className="text-xs text-gray-400">
+          Table preview and layout editing are available in Ops Table.
+        </p>
+      </div>
 
-      {/* Action Buttons */}
-      <div className="px-4 py-3 border-t border-gray-800 flex items-center gap-2 flex-wrap">
-        <button
-          onClick={() => emitAction('open_dynamic_table', 'Open Table', { table_id })}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/30 transition-colors"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          Open Table
-        </button>
-        <button
-          onClick={() => emitAction('add_enrichment', 'Add Enrichment', { table_id })}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 text-xs font-medium hover:bg-purple-500/30 transition-colors"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          Add Enrichment
-        </button>
-        <button
-          onClick={() => emitAction('push_to_instantly', 'Push to Instantly', { table_id })}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/60 text-gray-300 text-xs font-medium hover:bg-gray-700/80 transition-colors"
-        >
-          <Send className="w-3.5 h-3.5" />
-          Push to Instantly
-        </button>
+      {/* What's Next? Pipeline */}
+      <div className="px-4 py-3 border-t border-gray-800">
+        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">What's next?</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => emitAction('open_dynamic_table', 'Open Table', { table_id })}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/30 transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Open Table
+          </button>
+          <button
+            onClick={() => emitAction('add_enrichment', 'Enrich All', { table_id })}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 text-xs font-medium hover:bg-purple-500/30 transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Enrich All
+          </button>
+          <ChevronRight className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+          <button
+            onClick={enriched_count > 0 ? () => emitAction('start_campaign', 'Create Campaign', { table_id }) : undefined}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-medium transition-colors ${
+              enriched_count === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-500/30'
+            }`}
+          >
+            <Send className="w-3.5 h-3.5" />
+            Create Campaign
+          </button>
+          <button
+            onClick={() => emitAction('export_table_csv', 'Export CSV', { table_id })}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/60 text-gray-300 text-xs font-medium hover:bg-gray-700/80 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+        </div>
       </div>
     </div>
   );

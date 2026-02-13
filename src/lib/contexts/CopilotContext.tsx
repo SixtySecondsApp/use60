@@ -35,7 +35,8 @@ import { toast } from 'sonner';
 import { useAutonomousAgent } from '@/lib/copilot/agent/useAutonomousAgent';
 import { useActionItemsStore, createActionItemFromStep, type ActionItemType } from '@/lib/stores/actionItemsStore';
 import { getStepDurationEstimate } from '@/lib/utils/toolUtils';
-import { useCopilotChat, type ToolCall as AutonomousToolCall, type ActiveAgent } from '@/lib/hooks/useCopilotChat';
+import { useCopilotChat, type ToolCall as AutonomousToolCall, type ActiveAgent, type ChatMessage as AutonomousChatMessage } from '@/lib/hooks/useCopilotChat';
+import { detectMissingInfo, enrichPromptWithAnswers, isWorkflowPrompt, isCampaignPrompt, detectCampaignMissingInfo, generateCampaignName } from '@/lib/utils/prospectingDetector';
 
 // =============================================================================
 // Agent Mode Types
@@ -86,7 +87,7 @@ interface CopilotContextValue {
   isOpen: boolean;
   openCopilot: (initialQuery?: string, startNewChat?: boolean) => void;
   closeCopilot: () => void;
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, options?: { silent?: boolean }) => Promise<void>;
   cancelRequest: () => void;
   messages: CopilotMessage[];
   isLoading: boolean;
@@ -1017,7 +1018,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   }, []);
 
   const sendMessage = useCallback(
-    async (message: string) => {
+    async (message: string, options?: { silent?: boolean }) => {
       if (!message.trim() || state.isLoading) return;
 
       // Detect relevant context types for the right panel BEFORE routing
@@ -1029,8 +1030,62 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       // Autonomous Copilot Mode Routing (new skill-based tool use)
       // =============================================================================
       if (autonomousModeEnabled) {
+        // Campaign pre-flight: intercept campaign prompts (more specific, check first)
+        if (!options?.silent && isCampaignPrompt(message)) {
+          const campaignQuestions = detectCampaignMissingInfo(message);
+          if (campaignQuestions.length > 0) {
+            logger.log('[CopilotContext] Campaign preflight: injecting campaign workflow questions');
+            const userMsg: AutonomousChatMessage = {
+              id: `msg-${Date.now()}-user`,
+              role: 'user',
+              content: message,
+              timestamp: new Date(),
+            };
+            const assistantMsg: AutonomousChatMessage = {
+              id: `msg-${Date.now()}-campaign`,
+              role: 'assistant',
+              content: '',
+              timestamp: new Date(),
+              campaignWorkflow: {
+                original_prompt: message,
+                questions: campaignQuestions,
+                suggested_campaign_name: generateCampaignName(message),
+              },
+            };
+            autonomousCopilot.injectMessages([userMsg, assistantMsg]);
+            return;
+          }
+        }
+
+        // Prospecting pre-flight: intercept workflow prompts to ask clarifying questions
+        // Skip preflight if this is already an enriched prompt sent silently from preflight UI
+        if (!options?.silent && isWorkflowPrompt(message)) {
+          const questions = detectMissingInfo(message);
+          if (questions.length > 0) {
+            logger.log('[CopilotContext] Prospecting preflight: injecting clarifying questions');
+            const userMsg: AutonomousChatMessage = {
+              id: `msg-${Date.now()}-user`,
+              role: 'user',
+              content: message,
+              timestamp: new Date(),
+            };
+            const assistantMsg: AutonomousChatMessage = {
+              id: `msg-${Date.now()}-preflight`,
+              role: 'assistant',
+              content: '',
+              timestamp: new Date(),
+              preflightQuestions: {
+                original_prompt: message,
+                questions,
+              },
+            };
+            autonomousCopilot.injectMessages([userMsg, assistantMsg]);
+            return;
+          }
+        }
+
         logger.log('[CopilotContext] Routing to autonomous copilot mode');
-        await autonomousCopilot.sendMessage(message);
+        await autonomousCopilot.sendMessage(message, options);
         return;
       }
 
@@ -1612,6 +1667,8 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         content: msg.content,
         timestamp: msg.timestamp,
         structuredResponse: msg.structuredResponse as CopilotMessage['structuredResponse'],
+        preflightQuestions: msg.preflightQuestions as CopilotMessage['preflightQuestions'],
+        campaignWorkflow: msg.campaignWorkflow as CopilotMessage['campaignWorkflow'],
         // Note: toolCalls are passed separately via ChatMessage props
       }));
     }

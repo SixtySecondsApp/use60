@@ -67,7 +67,6 @@ import { useTaskNotifications } from '@/lib/hooks/useTaskNotifications';
 import { SmartSearch } from '@/components/SmartSearch';
 import { CreditWidget } from '@/components/credits/CreditWidget';
 import { LowBalanceBanner } from '@/components/credits/LowBalanceBanner';
-import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { useNavigate } from 'react-router-dom';
 import { CommandCenter } from '@/components/command-center';
 // MeetingUsageIndicator moved to MeetingsList page
@@ -147,7 +146,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
   const [isMobileUserMenuOpen, setIsMobileUserMenuOpen] = useState(false);
   const navigate = useNavigate();
-  const { openCopilot } = useCopilot();
   // Allow decoupled components (assistant/chat panels/etc) to open Quick Add.
   useEventListener(
     'modal:opened',

@@ -51,6 +51,15 @@ interface AIModelPricing {
   output_cost_per_million: number;
 }
 
+function getUtcDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function getUtcStartOfDayDaysAgo(daysAgo: number): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysAgo, 0, 0, 0)).toISOString();
+}
+
 // ─── Data hook ──────────────────────────────────────────────────────────
 
 function useDailyUsageWithCalls(days: number = 30) {
@@ -59,14 +68,13 @@ function useDailyUsageWithCalls(days: number = 30) {
   return useQuery<DailyUsageRaw[]>({
     queryKey: ['credits', 'daily-usage-calls', orgId, days],
     queryFn: async () => {
-      const since = new Date();
-      since.setDate(since.getDate() - days);
+      const sinceIso = getUtcStartOfDayDaysAgo(days);
 
       const { data, error } = await supabase
         .from('ai_cost_events')
         .select('created_at, estimated_cost')
         .eq('org_id', orgId!)
-        .gte('created_at', since.toISOString())
+        .gte('created_at', sinceIso)
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -79,9 +87,9 @@ function useDailyUsageWithCalls(days: number = 30) {
 
       // Pre-fill all days so chart has no gaps
       for (let i = days; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
+        const now = new Date();
+        const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
+        const key = getUtcDateKey(d);
         dayMap.set(key, { cost: 0, calls: 0 });
       }
 
@@ -139,11 +147,11 @@ function formatDateLabel(dateStr: string) {
 }
 
 function isToday(dateStr: string) {
-  return dateStr === new Date().toISOString().slice(0, 10);
+  return dateStr === getUtcDateKey(new Date());
 }
 
 function isFuture(dateStr: string) {
-  return dateStr > new Date().toISOString().slice(0, 10);
+  return dateStr > getUtcDateKey(new Date());
 }
 
 /** Blended cost per call for a model tier (rough: assumes 3K input + 700 output avg) */
@@ -237,7 +245,7 @@ export function UsageChart({ days = 30 }: { days?: number }) {
   const { data: dailyData, isLoading: usageLoading } = useDailyUsageWithCalls(days);
   const { data: pricing } = useModelPricing();
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getUtcDateKey(new Date());
 
   // Build chart data with projections
   const { chartData, totalCost, projectedMonthly } = useMemo(() => {
@@ -290,9 +298,9 @@ export function UsageChart({ days = 30 }: { days?: number }) {
     // Future projection points (30 days forward)
     const projectionDays = 30;
     for (let i = 1; i <= projectionDays; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      const key = d.toISOString().slice(0, 10);
+      const now = new Date();
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + i));
+      const key = getUtcDateKey(d);
 
       points.push({
         date: key,

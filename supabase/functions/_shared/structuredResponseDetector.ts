@@ -6310,9 +6310,12 @@ export async function detectAndStructureResponse(
       }
     }
 
-    // Dynamic table creation
+    // Dynamic table creation (via execute_action or dedicated search_leads tool)
     const dynamicTableExec = toolExecutions
-      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'search_leads_create_table')
+      .filter((e: any) => e?.success && (
+        (e?.toolName === 'execute_action' && e?.args?.action === 'search_leads_create_table') ||
+        (e?.toolName === 'search_leads')
+      ))
       .slice(-1)[0] as any;
 
     if (dynamicTableExec?.result?.data) {

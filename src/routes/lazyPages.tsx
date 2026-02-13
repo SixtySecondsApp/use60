@@ -51,6 +51,7 @@ export const ResearchComparisonDemo = lazyWithRetry(() => import('@/pages/demo/R
 export const ExaAbilitiesDemo = lazyWithRetry(() => import('@/pages/demo/ExaAbilitiesDemo'));
 export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailSequenceTest'));
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
+export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
@@ -156,6 +157,8 @@ export const FactProfilesPage = lazyWithRetry(() => import('@/pages/FactProfiles
 export const ProfilesPage = lazyWithRetry(() => import('@/pages/ProfilesPage'));
 export const FactProfileViewPage = lazyWithRetry(() => import('@/pages/FactProfileViewPage'));
 export const FactProfileEditPage = lazyWithRetry(() => import('@/pages/FactProfileEditPage'));
+export const ProductProfileViewPage = lazyWithRetry(() => import('@/pages/ProductProfileViewPage'));
+export const ProductProfileEditPage = lazyWithRetry(() => import('@/pages/ProductProfileEditPage'));
 export const DocsPage = lazyWithRetry(() => import('@/pages/DocsPage'));
 
 // ============================================================

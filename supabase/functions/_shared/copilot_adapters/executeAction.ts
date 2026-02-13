@@ -25,7 +25,8 @@ export async function executeAction(
   userId: string,
   orgId: string | null,
   action: ExecuteActionName,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  options?: { userAuthToken?: string }
 ): Promise<ActionResult & { capability?: string; provider?: string }> {
   const confirm = params.confirm === true;
   const ctx: AdapterContext = { userId, orgId, confirm };
@@ -862,28 +863,92 @@ export async function executeAction(
 
     case 'search_leads_create_table': {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+
+      console.log(`[executeAction] search_leads_create_table called. userId=${userId}, orgId=${orgId}, hasToken=${!!options?.userAuthToken}, params keys: ${Object.keys(params).join(', ')}`);
+
+      // Separate meta params from Apollo/AI Ark search params
+      // copilot-dynamic-table expects { query_description, search_params: {...}, source?, table_name? }
+      const {
+        query, query_description, title, table_name,
+        source, action, auto_enrich, target_table_id,
+        ...searchParams
+      } = params as Record<string, unknown>;
+
+      const queryDescription = String(query_description || query || 'Lead search');
+      const normalizedSearchParams: Record<string, unknown> = { ...searchParams };
+      const apolloFilterKeys = [
+        'person_titles',
+        'person_locations',
+        'person_seniorities',
+        'person_departments',
+        'organization_num_employees_ranges',
+        'organization_latest_funding_stage_cd',
+        'q_keywords',
+        'q_organization_keyword_tags',
+        'q_organization_domains',
+      ];
+      const hasApolloFilter = apolloFilterKeys.some((key) => {
+        const value = normalizedSearchParams[key];
+        if (Array.isArray(value)) return value.length > 0;
+        if (typeof value === 'string') return value.trim().length > 0;
+        return value != null;
+      });
+
+      // Keep lead search resilient for plain-English prompts (e.g. "marketing agencies in bristol")
+      // by inferring minimal Apollo filters when the model omitted structured params.
+      if (!hasApolloFilter && queryDescription) {
+        const locationMatch = queryDescription.match(/\b(?:in|near|around)\s+([a-zA-Z][a-zA-Z\s-]{1,60})/i);
+        if (!normalizedSearchParams.person_locations && locationMatch?.[1]) {
+          const location = locationMatch[1].trim().replace(/\s+/g, ' ');
+          normalizedSearchParams.person_locations = [location];
+        }
+
+        if (!normalizedSearchParams.q_keywords) {
+          const keywordSeed = queryDescription
+            .replace(/^\s*(find|search|show|build|prospect)(\s+me)?\s+/i, '')
+            .replace(/\b(?:in|near|around)\s+[a-zA-Z][a-zA-Z\s-]{1,60}\b/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          if (keywordSeed) {
+            normalizedSearchParams.q_keywords = keywordSeed;
+          }
+        }
+
+        if (!normalizedSearchParams.per_page) {
+          normalizedSearchParams.per_page = 25;
+        }
+      }
+
+      const requestBody = {
+        query_description: queryDescription,
+        search_params: normalizedSearchParams,
+        table_name: table_name || title || undefined,
+        source: source || 'apollo',
+        action: action || undefined,
+        target_table_id: target_table_id || undefined,
+        auto_enrich: auto_enrich || undefined,
+      };
+      console.log(`[executeAction] search_leads_create_table request body:`, JSON.stringify(requestBody));
+
+      // Pass user JWT through — both functions deployed with --no-verify-jwt
+      const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
       try {
         const resp = await fetch(`${supabaseUrl}/functions/v1/copilot-dynamic-table`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authHeader,
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY')!,
           },
-          body: JSON.stringify({
-            query: params.query ? String(params.query) : '',
-            title: params.title ? String(params.title) : undefined,
-            person_titles: params.person_titles,
-            person_locations: params.person_locations,
-            organization_num_employees_ranges: params.organization_num_employees_ranges,
-            person_seniorities: params.person_seniorities,
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         if (!resp.ok) {
           const errBody = await resp.text();
-          return { success: false, data: null, error: `Dynamic table creation failed: ${errBody}` };
+          console.error(`[executeAction] search_leads_create_table failed (${resp.status}):`, errBody);
+          return { success: false, data: null, error: `Dynamic table creation failed (${resp.status}): ${errBody}` };
         }
 
         const result = await resp.json();
@@ -895,14 +960,17 @@ export async function executeAction(
 
     case 'enrich_table_column': {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
+      const enrichAuthHeader = options?.userAuthToken
+        ? `Bearer ${options.userAuthToken}`
+        : `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
 
       try {
         const resp = await fetch(`${supabaseUrl}/functions/v1/enrich-dynamic-table`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authHeader,
+            'Authorization': enrichAuthHeader,
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY')!,
           },
           body: JSON.stringify({
             table_id: params.table_id ? String(params.table_id) : '',

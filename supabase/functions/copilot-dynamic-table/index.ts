@@ -279,7 +279,6 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-    // User-scoped client (for auth only)
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     })
@@ -297,18 +296,18 @@ serve(async (req) => {
       )
     }
 
-    // ---------------------------------------------------------------
-    // 2. Get org_id from organization_memberships
-    // ---------------------------------------------------------------
+    const userId = user.id
+
+    // Get org_id from organization_memberships
     const { data: membership } = await userClient
       .from('organization_memberships')
       .select('org_id')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .limit(1)
       .maybeSingle()
 
     if (!membership) {
-      console.error('[copilot-dynamic-table] No organization found for user:', user.id)
+      console.error('[copilot-dynamic-table] No organization found for user:', userId)
       return new Response(
         JSON.stringify({ error: 'No organization found for user' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -401,7 +400,7 @@ serve(async (req) => {
         .from('dynamic_tables')
         .insert({
           organization_id: orgId,
-          created_by: user.id,
+          created_by: userId,
           name: tableName,
           description: query_description,
           source_type: 'ai_ark',
@@ -909,7 +908,7 @@ serve(async (req) => {
         .from('dynamic_tables')
         .insert({
           organization_id: orgId,
-          created_by: user.id,
+          created_by: userId,
           name: tableName,
           description: query_description,
           source_type: 'apollo',
@@ -972,9 +971,7 @@ serve(async (req) => {
     const columnInserts = APOLLO_COLUMNS
       .filter((col) => !existingColumnKeys.has(col.key))  // Skip columns that already exist
       .map((col) => {
-        const tagEmail = col.key === 'email' && enrichEmail
-        const tagPhone = col.key === 'phone' && enrichPhone
-        const tagOther = hasAnyEnrich && col.key !== 'email' && col.key !== 'phone' && ENRICH_COLUMN_MAP[col.key]
+        const apolloPropName = ENRICH_COLUMN_MAP[col.key] ?? null
 
         return {
           table_id: tableId,
@@ -985,9 +982,7 @@ serve(async (req) => {
           width: col.width,
           is_enrichment: false,
           is_visible: true,
-          ...(tagEmail ? { apollo_property_name: 'email' } : {}),
-          ...(tagPhone ? { apollo_property_name: 'phone' } : {}),
-          ...(tagOther ? { apollo_property_name: ENRICH_COLUMN_MAP[col.key] } : {}),
+          ...(apolloPropName ? { apollo_property_name: apolloPropName } : {}),
         }
       })
 

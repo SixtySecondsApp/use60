@@ -159,6 +159,16 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       return;
     }
 
+    if (actionName === 'start_campaign' && (payload?.table_id || payload?.tableId)) {
+      navigate(`/ops/${String(payload.table_id || payload.tableId)}?action=campaign`);
+      return;
+    }
+
+    if (actionName === 'export_table_csv' && (payload?.table_id || payload?.tableId)) {
+      navigate(`/ops/${String(payload.table_id || payload.tableId)}?action=export`);
+      return;
+    }
+
     // External navigation
     if (actionName === 'open_external_url' && payload?.url) {
       window.open(String(payload.url), '_blank');

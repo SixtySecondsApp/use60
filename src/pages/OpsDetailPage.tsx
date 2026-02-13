@@ -88,6 +88,7 @@ import { CrossQueryResultPanel } from '@/components/ops/CrossQueryResultPanel';
 import { QuickFilterBar } from '@/components/ops/QuickFilterBar';
 import { SmartViewSuggestions } from '@/components/ops/SmartViewSuggestions';
 import { CampaignApprovalBanner } from '@/components/ops/CampaignApprovalBanner';
+import { ApolloEnrichmentBanner } from '@/components/ops/ApolloEnrichmentBanner';
 import { useWorkflowOrchestrator, isWorkflowPrompt } from '@/lib/hooks/useWorkflowOrchestrator';
 import { WorkflowProgressStepper } from '@/components/ops/WorkflowProgressStepper';
 // Instantly top-bar UI removed — integration moved to column system
@@ -451,13 +452,24 @@ function OpsDetailPage() {
   );
 
   // ---- Enrich All handler ----
+  const APOLLO_ENRICHABLE_KEYS = new Set(['email', 'phone', 'linkedin_url', 'city', 'website_url', 'funding_stage', 'employees']);
   const handleEnrichAll = useCallback(() => {
     const apolloPropCols = columns.filter(c => c.column_type === 'apollo_property');
     const apolloOrgCols = columns.filter(c => c.column_type === 'apollo_org_property');
     const linkedinPropCols = columns.filter(c => c.column_type === 'linkedin_property');
     const aiEnrichCols = columns.filter(c => c.is_enrichment);
 
-    const totalCount = apolloPropCols.length + apolloOrgCols.length + linkedinPropCols.length + aiEnrichCols.length;
+    // For Apollo-sourced tables, also detect columns by apollo_property_name or standard key
+    const isApolloTable = table?.source_type === 'apollo';
+    const alreadyIncluded = new Set(apolloPropCols.map(c => c.id));
+    const apolloKeyFallbackCols = isApolloTable
+      ? columns.filter(c =>
+          !alreadyIncluded.has(c.id) &&
+          (c.apollo_property_name || APOLLO_ENRICHABLE_KEYS.has(c.key))
+        )
+      : [];
+
+    const totalCount = apolloPropCols.length + apolloKeyFallbackCols.length + apolloOrgCols.length + linkedinPropCols.length + aiEnrichCols.length;
     if (totalCount === 0) {
       toast.info('No enrichable columns found in this table');
       return;
@@ -467,6 +479,10 @@ function OpsDetailPage() {
 
     // Fire Apollo enrichments first (synchronous/fast)
     for (const col of apolloPropCols) {
+      startApolloEnrichment({ columnId: col.id, columnKey: col.key, skipCompleted: true });
+    }
+    // Fire Apollo key-based fallback columns
+    for (const col of apolloKeyFallbackCols) {
       startApolloEnrichment({ columnId: col.id, columnKey: col.key, skipCompleted: true });
     }
     for (const col of apolloOrgCols) {
@@ -480,7 +496,7 @@ function OpsDetailPage() {
     for (const col of aiEnrichCols) {
       startEnrichment({ columnId: col.id });
     }
-  }, [columns, startApolloEnrichment, startApolloOrgEnrichment, startLinkedInEnrichment, startEnrichment]);
+  }, [columns, table?.source_type, startApolloEnrichment, startApolloOrgEnrichment, startLinkedInEnrichment, startEnrichment]);
 
   // Auto-create system views when a table has zero views
   useEffect(() => {
@@ -546,6 +562,26 @@ function OpsDetailPage() {
 
   // ---- Integration polling ----
   useIntegrationPolling(tableId, columns, rows);
+
+  // ---- Handle ?action= query params (from copilot navigation) ----
+  useEffect(() => {
+    const action = searchParams.get('action');
+    if (!action || !table) return;
+
+    if (action === 'campaign') {
+      // Open campaign wizard
+      setShowCampaignWizard(true);
+      searchParams.delete('action');
+      setSearchParams(searchParams, { replace: true });
+    } else if (action === 'export') {
+      // Trigger CSV export
+      const visibleCols = columns.filter((c) => c.is_visible);
+      OpsTableService.generateCSVExport(rows, visibleCols, table.name || 'export');
+      toast.success(`Exported ${rows.length} rows to CSV`);
+      searchParams.delete('action');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, table, columns, rows, setSearchParams]);
 
   // ---- Mutations ----
 
@@ -1610,9 +1646,10 @@ function OpsDetailPage() {
       const submittedQuery = queryInput.trim();
 
       // NLT: Detect workflow-level prompts and route to orchestrator
+      // Uses startWorkflow which shows pre-flight questions before executing
       if (isWorkflowPrompt(submittedQuery)) {
         setQueryInput('');
-        workflow.execute(submittedQuery, { target_table_id: tableId });
+        workflow.startWorkflow(submittedQuery, { target_table_id: tableId });
         return;
       }
 
@@ -2699,6 +2736,16 @@ function OpsDetailPage() {
           />
         )}
 
+        {/* Apollo Enrichment Banner — shown on Apollo tables when emails are mostly empty */}
+        {!isFullscreen && table?.source_type === 'apollo' && (
+          <ApolloEnrichmentBanner
+            rows={rows}
+            columns={columns}
+            onEnrichAll={handleEnrichAll}
+            isEnriching={isAnyEnriching}
+          />
+        )}
+
         {/* NLT-008: Campaign Approval Banner — shown when workflow created a paused campaign */}
         {!isFullscreen && table?.organization_id && (
           <CampaignApprovalBanner
@@ -2716,14 +2763,16 @@ function OpsDetailPage() {
         )}
 
         {/* NLT-010: Workflow Progress Stepper */}
-        {(workflow.isRunning || workflow.result || workflow.clarifyingQuestions || workflow.steps.length > 0) && (
+        {(workflow.isRunning || workflow.result || workflow.clarifyingQuestions || workflow.preflightQuestions || workflow.steps.length > 0) && (
           <WorkflowProgressStepper
             isRunning={workflow.isRunning}
             steps={workflow.steps}
             plan={workflow.plan}
             result={workflow.result}
             clarifyingQuestions={workflow.clarifyingQuestions}
+            preflightQuestions={workflow.preflightQuestions}
             onAnswerClarifications={workflow.answerClarifications}
+            onAnswerPreflight={workflow.answerPreflight}
             onAbort={workflow.abort}
             onDismiss={workflow.reset}
             onNavigateToTable={(id) => {

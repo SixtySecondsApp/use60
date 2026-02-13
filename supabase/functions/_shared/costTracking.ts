@@ -56,17 +56,22 @@ export async function logAICostEvent(
     const estimatedCost = typeof costData === 'number' ? costData : parseFloat(costData || '0');
 
     // Log to ai_cost_events table
-    const { error: insertError } = await supabaseClient.from('ai_cost_events').insert({
-      org_id: orgId,
-      user_id: userId,
-      provider,
-      model,
-      feature: feature || null,
-      input_tokens: inputTokens,
-      output_tokens: outputTokens,
-      estimated_cost: estimatedCost,
-      metadata: metadata || null,
-    });
+    const { data: insertedCostEvent, error: insertError } = await supabaseClient
+      .from('ai_cost_events')
+      .insert({
+        org_id: orgId,
+        user_id: userId,
+        provider,
+        model,
+        feature: feature || null,
+        feature_key: feature || null,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        estimated_cost: estimatedCost,
+        metadata: metadata || null,
+      })
+      .select('id')
+      .single();
 
     if (insertError) {
       // Silently fail if table doesn't exist yet (expected during initial setup)
@@ -83,7 +88,7 @@ export async function logAICostEvent(
           p_amount: estimatedCost,
           p_description: `AI usage: ${feature || 'unknown'}`,
           p_feature_key: feature || null,
-          p_cost_event_id: null, // We don't have the cost event ID from the insert
+          p_cost_event_id: insertedCostEvent?.id ?? null,
         });
 
         if (deductError) {
@@ -144,17 +149,22 @@ export async function logFlatRateCostEvent(
 ): Promise<void> {
   try {
     // Log to ai_cost_events for usage analytics
-    const { error: insertError } = await supabaseClient.from('ai_cost_events').insert({
-      org_id: orgId,
-      user_id: userId,
-      provider,
-      model,
-      feature: feature || null,
-      input_tokens: 0,
-      output_tokens: 0,
-      estimated_cost: cost,
-      metadata: metadata || null,
-    });
+    const { data: insertedCostEvent, error: insertError } = await supabaseClient
+      .from('ai_cost_events')
+      .insert({
+        org_id: orgId,
+        user_id: userId,
+        provider,
+        model,
+        feature: feature || null,
+        feature_key: feature || null,
+        input_tokens: 0,
+        output_tokens: 0,
+        estimated_cost: cost,
+        metadata: metadata || null,
+      })
+      .select('id')
+      .single();
 
     if (insertError) {
       if (!insertError.message.includes('relation') && !insertError.message.includes('does not exist')) {
@@ -169,7 +179,7 @@ export async function logFlatRateCostEvent(
         p_amount: cost,
         p_description: `${provider} usage: ${feature || 'unknown'}`,
         p_feature_key: feature || null,
-        p_cost_event_id: null,
+        p_cost_event_id: insertedCostEvent?.id ?? null,
       });
 
       if (deductError) {

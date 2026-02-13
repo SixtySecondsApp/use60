@@ -48,7 +48,9 @@ interface WorkflowProgressStepperProps {
   plan: SkillPlan | null;
   result: WorkflowResult | null;
   clarifyingQuestions: ClarifyingQuestion[] | null;
+  preflightQuestions: ClarifyingQuestion[] | null;
   onAnswerClarifications: (answers: Record<string, string>) => void;
+  onAnswerPreflight: (answers: Record<string, string>) => void;
   onAbort: () => void;
   onDismiss: () => void;
   onNavigateToTable?: (tableId: string) => void;
@@ -156,7 +158,9 @@ export function WorkflowProgressStepper({
   plan,
   result,
   clarifyingQuestions,
+  preflightQuestions,
   onAnswerClarifications,
+  onAnswerPreflight,
   onAbort,
   onDismiss,
   onNavigateToTable,
@@ -183,13 +187,14 @@ export function WorkflowProgressStepper({
   }, [isRunning, result]);
 
   // Nothing to show
-  if (!isRunning && !result && !clarifyingQuestions && steps.length === 0) {
+  if (!isRunning && !result && !clarifyingQuestions && !preflightQuestions && steps.length === 0) {
     return null;
   }
 
   const isComplete = !!result && !isRunning;
   const isPaused = result?.status === 'paused';
   const hasErrors = result?.errors && result.errors.length > 0;
+  const isPreflightPhase = !!preflightQuestions && preflightQuestions.length > 0 && !isRunning;
 
   return (
     <div className="mx-4 mb-3 rounded-xl border border-zinc-700/50 bg-zinc-900/80 backdrop-blur-sm overflow-hidden">
@@ -199,7 +204,9 @@ export function WorkflowProgressStepper({
           onClick={() => setExpanded(!expanded)}
           className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
         >
-          {isRunning ? (
+          {isPreflightPhase ? (
+            <Target className="h-4 w-4 text-blue-400" />
+          ) : isRunning ? (
             <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
           ) : isComplete && !hasErrors ? (
             <CheckCircle2 className="h-4 w-4 text-green-400" />
@@ -211,7 +218,9 @@ export function WorkflowProgressStepper({
             <Circle className="h-4 w-4 text-zinc-500" />
           )}
           <span className="text-sm font-medium text-zinc-200">
-            {isRunning
+            {isPreflightPhase
+              ? 'Setting up your search'
+              : isRunning
               ? 'Running workflow...'
               : isPaused
               ? 'Needs your input'
@@ -243,6 +252,15 @@ export function WorkflowProgressStepper({
               Cancel
             </button>
           )}
+          {isPreflightPhase && (
+            <button
+              onClick={onDismiss}
+              className="text-zinc-500 hover:text-zinc-300 transition-colors"
+              title="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
           {isComplete && (
             <button
               onClick={onDismiss}
@@ -256,6 +274,15 @@ export function WorkflowProgressStepper({
 
       {expanded && (
         <div className="px-4 py-3 space-y-3">
+          {/* Pre-flight Questions (before any backend call) */}
+          {isPreflightPhase && (
+            <ClarifyingQuestionsForm
+              questions={preflightQuestions!}
+              onSubmit={onAnswerPreflight}
+              headerText="A few details to refine your search:"
+            />
+          )}
+
           {/* Plan Summary */}
           {plan && (
             <div className="text-xs text-zinc-400 leading-relaxed">
@@ -266,7 +293,7 @@ export function WorkflowProgressStepper({
           {/* Step list (with parallel grouping) */}
           <StepList steps={steps} />
 
-          {/* Clarifying Questions */}
+          {/* Clarifying Questions (backend-generated, mid-workflow) */}
           {clarifyingQuestions && clarifyingQuestions.length > 0 && (
             <ClarifyingQuestionsForm
               questions={clarifyingQuestions}
@@ -498,18 +525,20 @@ function CompletionSummary({
 function ClarifyingQuestionsForm({
   questions,
   onSubmit,
+  headerText,
 }: {
   questions: ClarifyingQuestion[];
   onSubmit: (answers: Record<string, string>) => void;
+  headerText?: string;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   const allAnswered = questions.every(q => answers[q.key]?.trim());
 
   return (
-    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-3">
-      <p className="text-xs font-medium text-amber-300">
-        A few questions before we proceed:
+    <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 space-y-3">
+      <p className="text-xs font-medium text-blue-300">
+        {headerText || 'A few questions before we proceed:'}
       </p>
       {questions.map((q) => (
         <div key={q.key} className="space-y-1.5">

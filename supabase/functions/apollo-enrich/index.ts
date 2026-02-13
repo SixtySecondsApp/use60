@@ -288,10 +288,21 @@ serve(async (req: Request) => {
       )
     }
 
+    // Key-to-Apollo-property fallback map (mirrors copilot-dynamic-table ENRICH_COLUMN_MAP)
+    const KEY_TO_APOLLO: Record<string, string> = {
+      email: 'email',
+      phone: 'phone',
+      linkedin_url: 'linkedin_url',
+      city: 'city',
+      website_url: 'company_website',
+      funding_stage: 'company_funding',
+      employees: 'company_employees',
+    }
+
     // 1. Get target column config (which Apollo field to extract)
     const { data: column, error: colError } = await serviceClient
       .from('dynamic_table_columns')
-      .select('id, apollo_property_name, table_id')
+      .select('id, key, apollo_property_name, table_id')
       .eq('id', column_id)
       .single()
 
@@ -302,7 +313,20 @@ serve(async (req: Request) => {
       )
     }
 
-    const apolloField = column.apollo_property_name as string
+    // Use apollo_property_name if set, otherwise infer from column key
+    let apolloField = column.apollo_property_name as string | null
+    if (!apolloField && column.key) {
+      apolloField = KEY_TO_APOLLO[column.key as string] ?? null
+      // Backfill the column so future calls don't need the fallback
+      if (apolloField) {
+        serviceClient
+          .from('dynamic_table_columns')
+          .update({ apollo_property_name: apolloField })
+          .eq('id', column_id)
+          .then(() => {}) // fire-and-forget
+      }
+    }
+
     if (!apolloField || !APOLLO_FIELD_MAP[apolloField]) {
       return new Response(
         JSON.stringify({ error: `Unknown Apollo field: ${apolloField}` }),

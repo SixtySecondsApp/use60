@@ -9,6 +9,7 @@ import React from 'react';
 import { Mail, Calendar, Target, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDynamicPrompts } from '@/lib/hooks/useDynamicPrompts';
+import { CampaignRecipeCards } from './CampaignRecipeCards';
 
 interface CopilotEmptyProps {
   onPromptClick: (prompt: string) => void;
@@ -103,6 +104,11 @@ export const CopilotEmpty: React.FC<CopilotEmptyProps> = ({ onPromptClick }) => 
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
             </button>
           ))}
+        </div>
+
+        {/* Campaign Recipes */}
+        <div className="w-full max-w-2xl mb-8">
+          <CampaignRecipeCards onSelectRecipe={onPromptClick} />
         </div>
 
         {/* Quick Prompts */}

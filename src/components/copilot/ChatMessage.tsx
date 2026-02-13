@@ -16,7 +16,10 @@ import { ToolCallIndicator } from './ToolCallIndicator';
 import { ToolCallCard } from './ToolCallCard';
 import { CopilotResponse } from './CopilotResponse';
 import { EntityDisambiguationResponse } from './responses/EntityDisambiguationResponse';
-import type { CopilotMessage } from './types';
+import { ProspectingClarificationResponse } from './responses/ProspectingClarificationResponse';
+import type { ProspectingClarificationData } from './responses/ProspectingClarificationResponse';
+import { CampaignWorkflowResponse } from './responses/CampaignWorkflowResponse';
+import type { CopilotMessage, CampaignWorkflowData } from './types';
 import type { ToolCall as AutonomousToolCall } from '@/lib/hooks/useCopilotChat';
 import { useUser } from '@/lib/hooks/useUser';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
@@ -200,6 +203,38 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
                   className="bg-white dark:bg-gray-900/60 backdrop-blur-xl border border-gray-200 dark:border-gray-800/40 rounded-xl px-5 py-4 shadow-lg dark:shadow-none"
                 >
                   <EntityDisambiguationResponse data={message.entityDisambiguation} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Prospecting Clarification - Chip-select questions before workflow */}
+            <AnimatePresence mode="wait">
+              {message.preflightQuestions && (message.preflightQuestions as ProspectingClarificationData).questions?.length > 0 && (
+                <motion.div
+                  key="prospecting-clarification"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="bg-white dark:bg-gray-900/60 backdrop-blur-xl border border-gray-200 dark:border-gray-800/40 rounded-xl px-5 py-4 shadow-lg dark:shadow-none"
+                >
+                  <ProspectingClarificationResponse data={message.preflightQuestions as ProspectingClarificationData} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Campaign Workflow - Interactive campaign setup with questions */}
+            <AnimatePresence mode="wait">
+              {message.campaignWorkflow && (message.campaignWorkflow as CampaignWorkflowData).questions?.length > 0 && (
+                <motion.div
+                  key="campaign-workflow"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="bg-white dark:bg-gray-900/60 backdrop-blur-xl border border-gray-200 dark:border-gray-800/40 rounded-xl px-5 py-4 shadow-lg dark:shadow-none"
+                >
+                  <CampaignWorkflowResponse data={message.campaignWorkflow as CampaignWorkflowData} onActionClick={onActionClick} />
                 </motion.div>
               )}
             </AnimatePresence>

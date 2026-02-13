@@ -216,7 +216,11 @@ ACTION PARAMETERS:
 - push_ops_to_instantly: { table_id, campaign_id?, row_ids? } - Push rows to Instantly campaign (requires confirm=true)
 - get_ops_insights: { table_id, insight_type? } - Get AI-generated table insights
 
-Write actions require params.confirm=true.`,
+## Lead Search & Prospecting (NO confirmation needed — execute immediately)
+- search_leads_create_table: { query, person_titles?, person_locations?, organization_num_employees_ranges?, person_seniorities?, per_page?, source? } - Search for leads and create an ops table with results. query is a plain-English description of the search (e.g. "marketing agencies in Bristol"). source defaults to "apollo". Does NOT require confirm=true.
+- enrich_table_column: { table_id, column_id, row_ids? } - Enrich a column in an ops table. Does NOT require confirm=true.
+
+Write actions (create_task, create_ops_table, update_crm, etc.) require params.confirm=true. search_leads_create_table and enrich_table_column do NOT require confirmation.`,
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -266,6 +270,8 @@ Write actions require params.confirm=true.`,
             'sync_ops_attio',
             'push_ops_to_instantly',
             'get_ops_insights',
+            'search_leads_create_table',
+            'enrich_table_column',
           ],
           description: 'The action to execute',
         },
@@ -304,6 +310,58 @@ The tool returns structured data with sources.`,
       required: ['query'],
     },
   },
+  // 6. search_leads - Dedicated lead search tool (first-class, NOT nested in execute_action)
+  {
+    name: 'search_leads',
+    description: `Search for leads/companies and create an ops table with results. This is an all-in-one tool: it searches the database, creates an ops table, and populates it with results automatically. No confirmation needed.
+
+USE THIS TOOL when the user asks to:
+- Find companies or people (e.g., "Find marketing agencies in Bristol")
+- Search for leads or prospects
+- Build a list of companies or contacts
+- Prospect for new business
+
+The tool returns the created table with ID and results. Present the table link to the user.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Plain-English description of what to search for (e.g., "accounting firms in Bristol with 50 employees")',
+        },
+        person_titles: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Job titles to search for (e.g., ["Partner", "Director", "CEO"])',
+        },
+        person_locations: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Locations to search (e.g., ["Bristol, United Kingdom"])',
+        },
+        organization_num_employees_ranges: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Employee count ranges (e.g., ["1,50", "51,200", "201,500"])',
+        },
+        person_seniorities: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Seniority levels (e.g., ["senior", "manager", "director", "vp", "c_suite"])',
+        },
+        per_page: {
+          type: 'number',
+          description: 'Number of results to return (default 25, max 100)',
+        },
+        q_organization_keyword_tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Keywords to match against company descriptions (e.g., ["accounting", "audit", "tax"])',
+        },
+      },
+      required: ['query'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -319,7 +377,8 @@ async function executeToolCall(
   input: Record<string, unknown>,
   client: ReturnType<typeof createClient>,
   userId: string,
-  orgId: string | null
+  orgId: string | null,
+  userAuthToken?: string
 ): Promise<unknown> {
   // Resolve org for skills/execute_action tools
   const resolvedOrgId = await resolveOrgId(client, userId, orgId);
@@ -348,10 +407,11 @@ async function executeToolCall(
     case 'execute_action': {
       const action = input.action as ExecuteActionName;
       const params = (input.params || {}) as Record<string, unknown>;
+      console.log(`[executeToolCall] execute_action called: action=${action}, hasUserAuthToken=${!!userAuthToken}, params keys: ${Object.keys(params).join(', ')}`);
       if (!action) {
         return { success: false, data: null, error: 'action is required for execute_action' };
       }
-      return await executeAction(client, userId, resolvedOrgId, action, params);
+      return await executeAction(client, userId, resolvedOrgId, action, params, { userAuthToken });
     }
 
     case 'gemini_research': {
@@ -381,6 +441,17 @@ async function executeToolCall(
       } catch (error: any) {
         return { success: false, error: error.message || 'gemini_research failed' };
       }
+    }
+
+    case 'search_leads': {
+      // Dedicated lead search tool — routes to search_leads_create_table in executeAction
+      const { query, ...searchParams } = input;
+      const params = {
+        query: query ? String(query) : 'Lead search',
+        ...searchParams,
+      };
+      console.log(`[executeToolCall] search_leads called directly. query=${params.query}, params keys: ${Object.keys(params).join(', ')}`);
+      return await executeAction(client, userId, resolvedOrgId, 'search_leads_create_table' as ExecuteActionName, params, { userAuthToken });
     }
 
     default:
@@ -783,7 +854,7 @@ When the user's request involves MULTIPLE steps (e.g., "find leads AND create em
 4. **Report progress** — briefly mention what you're doing at each step
 
 ### Example: "Find 20 Directors in Bristol and create a 2-stage invite sequence for our event"
-→ Step 1: execute_action("search_leads_create_table", {person_titles: ["Director"], person_locations: ["Bristol, United Kingdom"], per_page: 20})
+→ Step 1: execute_action("search_leads_create_table", {query: "Directors in Bristol", person_titles: ["Director"], person_locations: ["Bristol, United Kingdom"], per_page: 20})
 → Step 2: execute_action("run_skill", {skill_key: "sales-sequence", skill_context: {sequence_type: "event_invitation", ...event details from user message...}})
 → Step 3: execute_action("push_ops_to_instantly", {table_id: "<from step 1>", campaign_config: {name: "...", emails: [<from step 2>]}})
 → Step 4: Present summary with lead count, email previews, and campaign status
@@ -834,9 +905,25 @@ ${profileContext?.productContext ? `\n## Product Context\n\nThe user has selecte
 
 - Be concise but thorough in your responses
 - When presenting CRM data, format it clearly
-- Confirm before any CRM updates or notifications (execute_action write actions require params.confirm=true)
+- Confirm before CRM updates or notifications (execute_action write actions like create_task, update_crm require params.confirm=true). Lead searches do NOT need confirmation.
 - If a tool returns an error, explain what happened and suggest alternatives
 - Present data in a helpful, actionable way for sales professionals
+
+### LEAD SEARCH — MANDATORY TOOL USAGE
+
+When the user asks to find leads, search for companies/people, prospect, or build a list:
+
+1. **ALWAYS use action="search_leads_create_table"** — this is an all-in-one action that searches the database, creates the ops table, and populates it with results automatically.
+2. **NEVER use create_ops_table for lead searches** — that only creates an empty table and requires confirmation. search_leads_create_table does NOT require confirmation.
+3. **Do NOT ask for confirmation** — just call the tool immediately.
+4. **Do NOT describe what you would do** — execute the search directly.
+
+Example: User says "Find marketing agencies in Bristol"
+→ Immediately call: execute_action("search_leads_create_table", {query: "marketing agencies in Bristol", person_locations: ["Bristol, United Kingdom"], per_page: 10})
+
+5. **After a successful search**, keep your response SHORT. Just say something like:
+   "I've prepared a table with X [companies/contacts] matching your search."
+   Do NOT list individual results in the chat — the structured response card with "Open Table" button handles that. Do NOT repeat search parameters back. Keep it to 1-2 sentences max.
 ${apifyConnection?.connected ? `
 ## Apify Web Scraping (Connected)
 
@@ -1354,8 +1441,8 @@ serve(async (req: Request) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     let userId: string | null = null;
+    const token = authHeader ? authHeader.replace('Bearer ', '') : '';
     if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
       const userClient = createClient(
         SUPABASE_URL,
         Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -1471,11 +1558,20 @@ serve(async (req: Request) => {
       }
     }
 
+    console.log(`[CopilotAutonomous] Models: planner=${plannerModel}, driver=${driverModel}`);
+
+    // Detect lead search queries to force tool usage
+    const isLeadSearchQuery = /find\s+(me\s+)?|search\s+for|prospect|build\s+(me\s+)?a\s+list|find\s+leads/i.test(message)
+      && /compan|firm|agenc|people|contact|lead|director|manager|ceo|cto/i.test(message);
+    if (isLeadSearchQuery) {
+      console.log(`[CopilotAutonomous] Lead search query detected — will force search_leads tool for: "${message.slice(0, 80)}"`);
+    }
+
     // force_single_agent is a demo-only context flag used by the side-by-side
     // comparison page. Normal copilot requests always attempt classification.
     const forceSingleAgent = !!context?.force_single_agent;
 
-    if (resolvedOrgForConfig && stream && !forceSingleAgent) {
+    if (resolvedOrgForConfig && stream && !forceSingleAgent && !isLeadSearchQuery) {
       const agentTeamConfig = await loadAgentTeamConfig(supabase, resolvedOrgForConfig);
 
       // Check budget before multi-agent delegation
@@ -1582,12 +1678,17 @@ serve(async (req: Request) => {
             const iterationModel = iterations === 1 ? plannerModel : driverModel;
 
             // Use streaming API for real-time token delivery
+            // Force search_leads tool on first iteration for lead search queries
+            const forceToolChoice = (isLeadSearchQuery && iterations === 1)
+              ? { type: 'tool' as const, name: 'search_leads' }
+              : undefined;
             const stream = anthropic.messages.stream({
               model: iterationModel,
               max_tokens: MAX_TOKENS,
               system: systemPrompt,
               tools: claudeTools,
               messages: claudeMessages,
+              ...(forceToolChoice && { tool_choice: forceToolChoice }),
             });
 
             // Track content blocks as they stream
@@ -1780,7 +1881,8 @@ serve(async (req: Request) => {
                     toolUse.input as Record<string, unknown>,
                     supabase,
                     userId,
-                    organizationId || null
+                    organizationId || null,
+                    token
                   );
 
                   const toolLatencyMs = Date.now() - toolStartTime;
@@ -1929,12 +2031,17 @@ serve(async (req: Request) => {
         // Use planner model for first iteration (tool selection), driver for subsequent
         const iterationModel = iterations === 1 ? plannerModel : driverModel;
 
+        // Force search_leads tool on first iteration for lead search queries
+        const forceToolChoiceNonStream = (isLeadSearchQuery && iterations === 1)
+          ? { type: 'tool' as const, name: 'search_leads' }
+          : undefined;
         const response = await anthropic.messages.create({
           model: iterationModel,
           max_tokens: MAX_TOKENS,
           system: systemPrompt,
           tools: claudeTools,
           messages: claudeMessages,
+          ...(forceToolChoiceNonStream && { tool_choice: forceToolChoiceNonStream }),
         });
 
         if (response.stop_reason === 'end_turn') {
@@ -1959,7 +2066,8 @@ serve(async (req: Request) => {
                 toolUse.input as Record<string, unknown>,
                 supabase,
                 userId,
-                organizationId || null
+                organizationId || null,
+                token
               );
 
               toolResults.push({

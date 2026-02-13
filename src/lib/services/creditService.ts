@@ -48,6 +48,34 @@ export interface CreditPurchaseResult {
   sessionId: string;
 }
 
+function getUtcStartOfDayDaysAgo(daysAgo: number): string {
+  const now = new Date();
+  const utc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysAgo, 0, 0, 0));
+  return utc.toISOString();
+}
+
+interface BalanceResponseDto {
+  balance?: number;
+  daily_burn_rate?: number;
+  projected_days_remaining?: number;
+  usage_by_feature?: Array<{
+    feature_key: string;
+    feature_name: string;
+    total_cost: number;
+    call_count: number;
+  }>;
+  recent_transactions?: Array<{
+    id: string;
+    type: CreditTransaction['type'];
+    amount: number;
+    balance_after: number;
+    description: string | null;
+    feature_key: string | null;
+    created_at: string;
+  }>;
+  last_purchase_date?: string | null;
+}
+
 // ============================================================================
 // Credit Balance
 // ============================================================================
@@ -57,7 +85,7 @@ export interface CreditPurchaseResult {
  */
 export async function getBalance(orgId: string): Promise<CreditBalance> {
   // Try edge function first (provides full data: burn rate, usage, transactions)
-  const { data, error } = await supabase.functions.invoke('get-credit-balance', {
+  const { data, error } = await supabase.functions.invoke<BalanceResponseDto>('get-credit-balance', {
     body: { org_id: orgId },
   });
 
@@ -66,13 +94,13 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
       balance: data?.balance ?? 0,
       dailyBurnRate: data?.daily_burn_rate ?? 0,
       projectedDaysRemaining: data?.projected_days_remaining ?? 0,
-      usageByFeature: (data?.usage_by_feature ?? []).map((f: any) => ({
+      usageByFeature: (data?.usage_by_feature ?? []).map((f) => ({
         featureKey: f.feature_key,
         featureName: f.feature_name,
         totalCost: f.total_cost,
         callCount: f.call_count,
       })),
-      recentTransactions: (data?.recent_transactions ?? []).map((t: any) => ({
+      recentTransactions: (data?.recent_transactions ?? []).map((t) => ({
         id: t.id ?? '',
         type: t.type,
         amount: t.amount,
@@ -106,7 +134,7 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
     return {
       balance: 0,
       dailyBurnRate: 0,
-      projectedDaysRemaining: 0,
+      projectedDaysRemaining: -1,
       usageByFeature: [],
       recentTransactions: [],
       lastPurchaseDate: null,
@@ -232,14 +260,13 @@ export async function getUsageBreakdown(
   orgId: string,
   days: number = 30
 ): Promise<FeatureUsage[]> {
-  const since = new Date();
-  since.setDate(since.getDate() - days);
+  const sinceIso = getUtcStartOfDayDaysAgo(days);
 
   const { data, error } = await supabase
     .from('ai_cost_events')
     .select('feature_key, estimated_cost')
     .eq('org_id', orgId)
-    .gte('created_at', since.toISOString());
+    .gte('created_at', sinceIso);
 
   if (error) {
     console.error('[CreditService] Error fetching usage breakdown:', error);

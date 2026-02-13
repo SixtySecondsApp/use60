@@ -1412,17 +1412,22 @@ export class AIProviderService {
             const estimatedCost = typeof costData === 'number' ? costData : parseFloat(costData);
 
             // Log to ai_cost_events table
-            await supabase.from('ai_cost_events').insert({
-              org_id: membership.org_id,
-              user_id: userId,
-              provider: response.provider,
-              model: response.model,
-              feature: workflowId ? 'workflow' : null,
-              input_tokens: response.usage.promptTokens,
-              output_tokens: response.usage.completionTokens,
-              estimated_cost: estimatedCost,
-              metadata: workflowId ? { workflow_id: workflowId } : null,
-            });
+            const { data: insertedCostEvent } = await supabase
+              .from('ai_cost_events')
+              .insert({
+                org_id: membership.org_id,
+                user_id: userId,
+                provider: response.provider,
+                model: response.model,
+                feature: workflowId ? 'workflow' : null,
+                feature_key: workflowId ? 'workflow' : null,
+                input_tokens: response.usage.promptTokens,
+                output_tokens: response.usage.completionTokens,
+                estimated_cost: estimatedCost,
+                metadata: workflowId ? { workflow_id: workflowId } : null,
+              })
+              .select('id')
+              .single();
 
             if (estimatedCost > 0) {
               await supabase.rpc('deduct_credits', {
@@ -1430,7 +1435,7 @@ export class AIProviderService {
                 p_amount: estimatedCost,
                 p_description: `AI usage: ${workflowId ? 'workflow' : 'unknown'}`,
                 p_feature_key: workflowId ? 'workflow' : null,
-                p_cost_event_id: null,
+                p_cost_event_id: insertedCostEvent?.id ?? null,
               });
             }
           }

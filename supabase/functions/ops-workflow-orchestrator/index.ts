@@ -138,8 +138,12 @@ You have one tool: create_workflow_plan. Always use it to return the structured 
 3. Determine if an email sequence should be generated (look for "outreach", "sequence", "campaign", "email", "follow up")
 4. Determine if an Instantly campaign should be created (look for "campaign", "send", "outreach", "Instantly")
 5. Generate a descriptive table name (2-5 words)
-6. If the prompt is ambiguous or missing critical information that cannot be inferred from business context, include clarifying questions
-7. Only ask questions when genuinely needed — if business context provides the answer, proceed directly
+6. Do NOT include clarifying_questions — the frontend handles pre-flight questions before calling this endpoint
+7. When the user says "companies" or "businesses" (not "contacts" or "people"), focus the search on COMPANIES:
+   - Use q_organization_keyword_tags for company type/industry keywords (e.g. ["marketing agency", "digital agency"])
+   - Set organization_num_employees_ranges to match company size
+   - Do NOT set person_titles or person_seniorities unless the user explicitly requests specific roles
+   - The search still returns people (Apollo is people-first), but filtered by the RIGHT companies
 8. For locations, use full country names (e.g. "United Kingdom" not "UK")
 9. Always include contact_email_status: ["verified"] unless user specifies otherwise
 10. Default per_page to 50 unless user specifies a count (max 100)
@@ -229,20 +233,6 @@ You have one tool: create_workflow_plan. Always use it to return the structured 
             },
           },
           summary: { type: 'string', description: 'Human-readable summary of the plan' },
-          clarifying_questions: {
-            type: 'array',
-            description: 'Questions to ask if prompt is ambiguous. Only include when genuinely needed.',
-            items: {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['select', 'text'] },
-                question: { type: 'string' },
-                options: { type: 'array', items: { type: 'string' } },
-                key: { type: 'string', description: 'Unique key for this question' },
-              },
-              required: ['type', 'question', 'key'],
-            },
-          },
         },
         required: ['search_params', 'table_name', 'enrichment', 'summary'],
       },
@@ -336,6 +326,7 @@ Rules:
 - For C-level roles, add person_seniorities: ["c_suite", "owner", "founder", "partner"]
 - For organization_num_employees_ranges, use Apollo buckets: "1,10", "11,20", "21,50", "51,100", "101,200", "201,500", "501,1000", "1001,5000", "5001,10000", "10001,"
 - When a specific number of results is requested, set per_page to that number
+- When the user says "companies" or "businesses" (not "contacts" or "people"), focus on COMPANIES: use q_organization_keyword_tags for company type/industry keywords, set organization_num_employees_ranges, do NOT set person_titles or person_seniorities unless the user explicitly requests specific roles
 - Today's date is ${new Date().toISOString().split('T')[0]}${answersContext}`,
     },
     {

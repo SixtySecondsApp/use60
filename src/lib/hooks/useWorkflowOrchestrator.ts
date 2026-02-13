@@ -7,8 +7,17 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase/clientV2';
+import { getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
+import {
+  detectMissingInfo,
+  enrichPromptWithAnswers,
+  isWorkflowPrompt,
+  type ClarifyingQuestion,
+} from '@/lib/utils/prospectingDetector';
+
+// Re-export for consumers
+export { isWorkflowPrompt, type ClarifyingQuestion };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,13 +33,6 @@ export interface WorkflowStep {
   duration_ms?: number;
   progress?: string;
   agent?: string;
-}
-
-export interface ClarifyingQuestion {
-  type: 'select' | 'text';
-  question: string;
-  options?: string[];
-  key: string;
 }
 
 export interface SkillPlan {
@@ -74,6 +76,7 @@ export function useWorkflowOrchestrator() {
   const [plan, setPlan] = useState<SkillPlan | null>(null);
   const [result, setResult] = useState<WorkflowResult | null>(null);
   const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarifyingQuestion[] | null>(null);
+  const [preflightQuestions, setPreflightQuestions] = useState<ClarifyingQuestion[] | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
   const [pendingConfig, setPendingConfig] = useState<WorkflowConfig | null>(null);
 
@@ -86,6 +89,7 @@ export function useWorkflowOrchestrator() {
     setPlan(null);
     setResult(null);
     setClarifyingQuestions(null);
+    setPreflightQuestions(null);
     setPendingPrompt(null);
     setPendingConfig(null);
     abortRef.current?.abort();
@@ -112,9 +116,8 @@ export function useWorkflowOrchestrator() {
     abortRef.current = abortController;
 
     try {
-      // Get the auth token for the SSE request
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      // Resolve auth token across both Supabase Auth and Clerk auth modes.
+      const token = await getSupabaseAuthToken();
       if (!token) {
         toast.error('Not authenticated');
         setIsRunning(false);
@@ -285,11 +288,37 @@ export function useWorkflowOrchestrator() {
     }
   }, []);
 
-  // ---- Answer clarifying questions ----
+  // ---- Answer clarifying questions (backend-generated) ----
   const answerClarifications = useCallback((answers: Record<string, string>) => {
     if (!pendingPrompt) return;
     setClarifyingQuestions(null);
     execute(pendingPrompt, pendingConfig ?? undefined, answers);
+  }, [pendingPrompt, pendingConfig, execute]);
+
+  // ---- Start workflow with pre-flight questions ----
+  const startWorkflow = useCallback((prompt: string, config?: WorkflowConfig) => {
+    // Reset everything
+    reset();
+    setPendingPrompt(prompt);
+    setPendingConfig(config ?? null);
+
+    // Check for missing info
+    const missing = detectMissingInfo(prompt);
+    if (missing.length > 0) {
+      setPreflightQuestions(missing);
+      return; // Wait for user to answer
+    }
+
+    // No questions needed — execute immediately
+    execute(prompt, config);
+  }, [reset, execute]);
+
+  // ---- Answer pre-flight questions ----
+  const answerPreflight = useCallback((answers: Record<string, string>) => {
+    if (!pendingPrompt) return;
+    setPreflightQuestions(null);
+    const enrichedPrompt = enrichPromptWithAnswers(pendingPrompt, answers);
+    execute(enrichedPrompt, pendingConfig ?? undefined);
   }, [pendingPrompt, pendingConfig, execute]);
 
   // ---- Abort ----
@@ -305,47 +334,15 @@ export function useWorkflowOrchestrator() {
     plan,
     result,
     clarifyingQuestions,
+    preflightQuestions,
 
     // Actions
     execute,
+    startWorkflow,
+    answerPreflight,
     answerClarifications,
     abort,
     reset,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Workflow prompt detector
-// ---------------------------------------------------------------------------
-
-const WORKFLOW_KEYWORDS = [
-  'find me',
-  'find and',
-  'search for',
-  'search and',
-  'prospect',
-  'outreach',
-  'sequence',
-  'campaign',
-  'cold email',
-  'send emails',
-  'email sequence',
-  'create a table',
-  'build a list',
-  'build me a list',
-  'run a search',
-  'apollo search',
-  'find leads',
-  'generate emails',
-  'start a campaign',
-  'reach out',
-];
-
-/**
- * Detect if a query is a workflow-level prompt (prospecting/outreach)
- * vs a table-level query (filter, sort, analyze existing data).
- */
-export function isWorkflowPrompt(query: string): boolean {
-  const lower = query.toLowerCase().trim();
-  return WORKFLOW_KEYWORDS.some(kw => lower.includes(kw));
-}

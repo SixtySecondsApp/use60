@@ -37,6 +37,7 @@ import {
   Crosshair,
   FileSearch,
   Brain,
+  Send,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -344,6 +345,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false,
     navSection: 'tools',
     order: 7,
+    badge: 'Demo',
+  },
+  {
+    path: '/demo/campaign-workflow',
+    access: 'internal',
+    label: 'Campaign Workflow Demo',
+    icon: Send,
+    showInNav: false,
+    navSection: 'tools',
+    order: 8,
     badge: 'Demo',
   },
 
