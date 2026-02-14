@@ -15,9 +15,10 @@ import { nextActionsAdapter } from './nextActions.ts';
 import { createTasksAdapter } from './createTasks.ts';
 import { emailClassifierAdapter } from './emailClassifier.ts';
 import { detectIntentsAdapter } from './detectIntents.ts';
-import { proposalGeneratorAdapter } from './proposalGenerator.ts';
-import { findAvailableSlotsAdapter, presentTimeOptionsAdapter } from './calendar.ts';
+import { proposalGeneratorAdapter, populateProposalAdapter, generateCustomSectionsAdapter, presentForReviewAdapter } from './proposalGenerator.ts';
+import { findAvailableSlotsAdapter, presentTimeOptionsAdapter, parseSchedulingRequestAdapter } from './calendar.ts';
 import { draftFollowupEmailAdapter, sendEmailAsRepAdapter } from './emailSend.ts';
+import { matchToCrmContactAdapter } from './emailHandler.ts';
 import {
   pullCampaignMetricsAdapter,
   classifyRepliesAdapter,
@@ -38,6 +39,16 @@ import {
   generateBriefingAdapter,
   deliverSlackBriefingAdapter,
 } from './preMeeting.ts';
+import { notifySlackSummaryAdapter } from './notifySlackSummary.ts';
+import { crmFieldExtractorAdapter } from './crmFieldExtractor.ts';
+import { crmUpdateAdapter } from './crmUpdate.ts';
+import { researchTriggerEventsAdapter, analyseStallReasonAdapter, draftReengagementAdapter } from './reengagement.ts';
+import {
+  scanActiveDealsAdapter,
+  scoreDealRisksAdapter,
+  generateRiskAlertsAdapter,
+  deliverRiskSlackAdapter,
+} from './dealRisk.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -78,9 +89,10 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'correlate-win-loss': correlateWinLossAdapter,
   'generate-coaching-digest': generateCoachingDigestAdapter,
   'deliver-coaching-slack': deliverCoachingSlackAdapter,
-  // Stubs — prevent 404 fallthrough to callEdgeFunctionDirect
-  'update-crm-from-meeting': stubAdapter('update-crm-from-meeting', 'CRM update not yet implemented'),
-  'notify-slack-summary': stubAdapter('notify-slack-summary', 'Slack summary not yet implemented'),
+  // CRM field extraction
+  'extract-crm-fields': crmFieldExtractorAdapter,
+  'update-crm-from-meeting': crmUpdateAdapter,
+  'notify-slack-summary': notifySlackSummaryAdapter,
 
   // Pre-Meeting Briefing (pre_meeting_90min sequence)
   'enrich-attendees': enrichAttendeesAdapter,
@@ -89,21 +101,27 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'generate-briefing': generateBriefingAdapter,
   'deliver-slack-briefing': deliverSlackBriefingAdapter,
 
-  // Email Received stubs (email_received sequence)
-  'match-to-crm-contact': stubAdapter('match-to-crm-contact', 'CRM contact matching not yet implemented'),
+  // Email Received (email_received sequence)
+  'match-to-crm-contact': matchToCrmContactAdapter,
 
-  // Proposal stubs (proposal_generation sequence)
-  'populate-proposal': stubAdapter('populate-proposal', 'Proposal population not yet implemented'),
-  'generate-custom-sections': stubAdapter('generate-custom-sections', 'Custom section generation not yet implemented'),
-  'present-for-review': stubAdapter('present-for-review', 'Review presentation not yet implemented'),
+  // Proposal (proposal_generation sequence)
+  'populate-proposal': populateProposalAdapter,
+  'generate-custom-sections': generateCustomSectionsAdapter,
+  'present-for-review': presentForReviewAdapter,
 
-  // Calendar stubs (calendar_find_times sequence)
-  'parse-scheduling-request': stubAdapter('parse-scheduling-request', 'Scheduling request parsing not yet implemented'),
+  // Calendar (calendar_find_times sequence)
+  'parse-scheduling-request': parseSchedulingRequestAdapter,
 
-  // Stale Deal stubs (stale_deal_revival sequence)
-  'research-trigger-events': stubAdapter('research-trigger-events', 'Trigger event research not yet implemented'),
-  'analyse-stall-reason': stubAdapter('analyse-stall-reason', 'Stall reason analysis not yet implemented'),
-  'draft-reengagement': stubAdapter('draft-reengagement', 'Re-engagement draft not yet implemented'),
+  // Stale Deal Revival (stale_deal_revival sequence)
+  'research-trigger-events': researchTriggerEventsAdapter,
+  'analyse-stall-reason': analyseStallReasonAdapter,
+  'draft-reengagement': draftReengagementAdapter,
+
+  // Deal Risk Scan (deal_risk_scan sequence)
+  'scan-active-deals': scanActiveDealsAdapter,
+  'score-deal-risks': scoreDealRisksAdapter,
+  'generate-risk-alerts': generateRiskAlertsAdapter,
+  'deliver-risk-slack': deliverRiskSlackAdapter,
 };
 
 /**

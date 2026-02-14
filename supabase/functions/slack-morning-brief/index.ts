@@ -261,6 +261,11 @@ serve(async (req) => {
       }
     }
 
+    // TODO: Fire orchestrator events for coaching_weekly and campaign_daily_check
+    // These need separate cron functions or conditional logic based on day-of-week.
+    // coaching_weekly: fire { type: 'coaching_weekly' } on Mondays for users with coaching enabled
+    // campaign_daily_check: fire { type: 'campaign_daily_check' } for users with Instantly connected
+
     return jsonResponse({
       success: true,
       briefsSent: totalBriefsSent,
@@ -495,7 +500,7 @@ async function buildMorningBriefData(
     supabase
       .from('tasks')
       .select('id, title, due_date, deals:deal_id (title)')
-      .eq('user_id', userId)
+      .eq('assigned_to', userId)
       .eq('completed', false)
       .lt('due_date', today.toISOString())
       .order('due_date', { ascending: true })
@@ -505,7 +510,7 @@ async function buildMorningBriefData(
     supabase
       .from('tasks')
       .select('id, title, deals:deal_id (title)')
-      .eq('user_id', userId)
+      .eq('assigned_to', userId)
       .eq('completed', false)
       .gte('due_date', today.toISOString())
       .lt('due_date', tomorrow.toISOString())
@@ -515,7 +520,7 @@ async function buildMorningBriefData(
     supabase
       .from('deals')
       .select('id, title, value, stage, close_date, health_status')
-      .eq('user_id', userId)
+      .eq('owner_id', userId)
       .in('stage', ['sql', 'opportunity', 'verbal', 'proposal', 'negotiation'])
       .not('close_date', 'is', null)
       .lte('close_date', weekFromNow.toISOString())

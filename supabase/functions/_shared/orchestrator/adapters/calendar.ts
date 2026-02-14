@@ -79,3 +79,93 @@ export const presentTimeOptionsAdapter: SkillAdapter = {
     }
   },
 };
+
+export const parseSchedulingRequestAdapter: SkillAdapter = {
+  name: 'parse-scheduling-request',
+  async execute(state: SequenceState, step: SequenceStep): Promise<StepResult> {
+    const start = Date.now();
+    try {
+      console.log('[parse-scheduling-request] Parsing natural language scheduling request...');
+
+      // Get scheduling text from payload (email body or explicit scheduling_text)
+      const schedulingText = (
+        (state.event.payload.scheduling_text as string) ||
+        (state.event.payload.body as string) ||
+        ''
+      ).toLowerCase();
+
+      // Default values
+      let durationMinutes = 30;
+      let timeframeDays = 5;
+      const timezone = state.context.tier1.user.timezone || 'UTC';
+      const preferences: Record<string, string> = {};
+
+      // Parse duration patterns
+      if (/\b30\s*min(ute)?s?\b/i.test(schedulingText)) {
+        durationMinutes = 30;
+      } else if (/\b1\s*hour\b/i.test(schedulingText) || /\bhour\s+meeting\b/i.test(schedulingText)) {
+        durationMinutes = 60;
+      } else if (/\b15\s*min(ute)?s?\b/i.test(schedulingText) || /\bquick\s+sync\b/i.test(schedulingText)) {
+        durationMinutes = 15;
+      } else if (/\b45\s*min(ute)?s?\b/i.test(schedulingText)) {
+        durationMinutes = 45;
+      } else if (/\b2\s*hours?\b/i.test(schedulingText)) {
+        durationMinutes = 120;
+      }
+
+      // Parse timeframe patterns
+      if (/\bnext\s+week\b/i.test(schedulingText)) {
+        timeframeDays = 7;
+      } else if (/\bthis\s+week\b/i.test(schedulingText)) {
+        timeframeDays = 5;
+      } else if (/\bthis\s+thursday\b/i.test(schedulingText)) {
+        // Calculate days until Thursday
+        const now = new Date();
+        const currentDay = now.getDay(); // 0 = Sunday, 4 = Thursday
+        const daysUntilThursday = (4 - currentDay + 7) % 7 || 7;
+        timeframeDays = daysUntilThursday;
+      } else if (/\bthis\s+friday\b/i.test(schedulingText)) {
+        // Calculate days until Friday
+        const now = new Date();
+        const currentDay = now.getDay();
+        const daysUntilFriday = (5 - currentDay + 7) % 7 || 7;
+        timeframeDays = daysUntilFriday;
+      } else if (/\btoday\b/i.test(schedulingText) || /\basap\b/i.test(schedulingText)) {
+        timeframeDays = 1;
+      } else if (/\btomorrow\b/i.test(schedulingText)) {
+        timeframeDays = 2;
+      } else if (/\bnext\s+(\d+)\s+days?\b/i.test(schedulingText)) {
+        const match = schedulingText.match(/\bnext\s+(\d+)\s+days?\b/i);
+        if (match) {
+          timeframeDays = parseInt(match[1], 10);
+        }
+      }
+
+      // Parse time of day preferences
+      if (/\bmorning\b/i.test(schedulingText)) {
+        preferences.time_of_day = 'morning';
+      } else if (/\bafternoon\b/i.test(schedulingText)) {
+        preferences.time_of_day = 'afternoon';
+      } else if (/\bevening\b/i.test(schedulingText)) {
+        preferences.time_of_day = 'evening';
+      }
+
+      const output = {
+        duration_minutes: durationMinutes,
+        timeframe_days: timeframeDays,
+        timezone,
+        preferences,
+      };
+
+      console.log(
+        `[parse-scheduling-request] Parsed: ${durationMinutes}min, ${timeframeDays}d, ` +
+        `${timezone}${preferences.time_of_day ? `, prefer ${preferences.time_of_day}` : ''}`
+      );
+
+      return { success: true, output, duration_ms: Date.now() - start };
+    } catch (err) {
+      console.error('[parse-scheduling-request] Error:', err);
+      return { success: false, error: String(err), duration_ms: Date.now() - start };
+    }
+  },
+};

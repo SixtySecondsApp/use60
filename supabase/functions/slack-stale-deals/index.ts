@@ -111,14 +111,14 @@ serve(async (req) => {
             value,
             stage,
             close_date,
-            user_id,
+            owner_id,
             updated_at,
-            profiles:user_id (full_name, email)
+            profiles:owner_id (full_name, email)
           `)
           .eq('org_id', org.org_id)
           .in('stage', ['sql', 'opportunity', 'verbal', 'proposal', 'negotiation'])
           .lt('updated_at', thresholdDate.toISOString())
-          .not('user_id', 'is', null);
+          .not('owner_id', 'is', null);
 
         if (!staleDeals?.length) {
           continue;
@@ -127,7 +127,7 @@ serve(async (req) => {
         // Process each stale deal
         for (const deal of staleDeals) {
           try {
-            const ownerId = deal.user_id;
+            const ownerId = deal.owner_id;
             if (!ownerId) continue;
 
             // Get Slack recipient
@@ -322,6 +322,29 @@ serve(async (req) => {
             console.error(`[slack-stale-deals] Error processing deal ${deal.id}:`, dealError);
             errors.push(`Deal ${deal.id}: ${dealError instanceof Error ? dealError.message : 'Unknown error'}`);
           }
+        }
+
+        // Fire orchestrator deal_risk_scan event (parallel, non-blocking)
+        try {
+          const firstOwnerId = staleDeals?.[0]?.owner_id;
+          if (firstOwnerId) {
+            fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'deal_risk_scan',
+                source: 'cron:daily',
+                org_id: org.org_id,
+                user_id: firstOwnerId,
+                payload: {},
+              }),
+            }).catch(err => console.warn('[slack-stale-deals] Orchestrator fire-and-forget failed:', err));
+          }
+        } catch (orchErr) {
+          console.warn('[slack-stale-deals] Non-fatal: orchestrator event failed:', orchErr);
         }
       } catch (orgError) {
         console.error(`[slack-stale-deals] Error processing org ${org.org_id}:`, orgError);
