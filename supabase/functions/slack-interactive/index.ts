@@ -304,8 +304,8 @@ async function createTask(
       // Our tasks schema uses assigned_to/created_by (not user_id)
       assigned_to: ctx.userId,
       created_by: ctx.userId,
-      // Multi-tenant: include org_id when available
-      ...(ctx.orgId ? { org_id: ctx.orgId } : {}),
+      // Multi-tenant: include clerk_org_id when available
+      ...(ctx.orgId ? { clerk_org_id: ctx.orgId } : {}),
       deal_id: taskData.dealId || null,
       meeting_id: taskData.meetingId || null,
       due_date: dueDate.toISOString(),
@@ -872,6 +872,536 @@ async function handlePrepMeetingAction(
     status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// ============================================================================
+// CRM-005: Undo CRM Update Action Handler
+// ============================================================================
+
+/**
+ * Handle undo_crm_update::{update_id} actions.
+ * Calls the undo_crm_field_update RPC to revert a CRM field change.
+ */
+async function handleUndoCrmUpdate(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const updateId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // Fetch the update record before undoing it (to get field info for confirmation)
+    const { data: updateRecord, error: fetchError } = await supabase
+      .from('crm_field_updates')
+      .select('field_name, old_value, new_value')
+      .eq('id', updateId)
+      .single();
+
+    if (fetchError || !updateRecord) {
+      console.error('[UndoCrmUpdate] Failed to fetch update record:', fetchError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Could not find the CRM update to undo.' } }],
+          text: 'Update not found',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Call the RPC to undo the update
+    const { error: undoError } = await supabase.rpc('undo_crm_field_update', {
+      p_update_id: updateId,
+      p_user_id: ctx.userId,
+    });
+
+    if (undoError) {
+      console.error('[UndoCrmUpdate] RPC error:', undoError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ Failed to undo CRM update: ${undoError.message}` } }],
+          text: 'Undo failed',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Successfully undone - update the Slack message with strikethrough
+    if (payload.response_url && payload.message?.blocks) {
+      const updatedBlocks = payload.message.blocks.map((block: any) => {
+        // Find the section block that contains this field update
+        if (block.type === 'section' && block.text?.text?.includes(`*${updateRecord.field_name}*`)) {
+          const oldVal = formatUpdateValue(updateRecord.old_value);
+          const newVal = formatUpdateValue(updateRecord.new_value);
+          return {
+            ...block,
+            text: {
+              ...block.text,
+              text: `~*${updateRecord.field_name}*: \`${oldVal}\` → \`${newVal}\`~\n_✓ Reverted by <@${payload.user.id}>_`,
+            },
+          };
+        }
+        // Remove the undo button for this specific update
+        if (block.type === 'actions') {
+          const filteredElements = block.elements?.filter((el: any) =>
+            el.action_id !== `undo_crm_update::${updateId}`
+          );
+          if (filteredElements && filteredElements.length > 0) {
+            return { ...block, elements: filteredElements };
+          }
+          // If no buttons left, return null to filter out the block
+          return null;
+        }
+        return block;
+      }).filter(Boolean); // Remove null blocks
+
+      await updateMessage(payload.response_url, updatedBlocks);
+    }
+
+    // Log activity for analytics
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'undo_crm_update',
+      actionCategory: 'crm',
+      entityType: 'crm_field_update',
+      entityId: updateId,
+      metadata: { field_name: updateRecord.field_name },
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[UndoCrmUpdate] Unexpected error:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ An unexpected error occurred while undoing the CRM update.' } }],
+        text: 'Unexpected error',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Format a CRM field value for display (helper for undo confirmation)
+ */
+function formatUpdateValue(value: unknown): string {
+  if (value === null || value === undefined) return '_empty_';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return JSON.stringify(value);
+}
+
+// ============================================================================
+// RET-005: Re-engagement HITL Action Handlers
+// ============================================================================
+
+/**
+ * Handle reengagement_send::{deal_id} actions.
+ * Sends the re-engagement email and updates watchlist status to 'converted'.
+ */
+async function handleReengagementSend(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const dealId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // Get contact name from the message blocks for confirmation
+    let contactName = 'contact';
+    if (payload.message?.blocks) {
+      for (const block of payload.message.blocks) {
+        if (block.type === 'section' && block.fields) {
+          for (const field of block.fields) {
+            if (field.text?.includes('Contact')) {
+              // Extract contact name from the field value
+              const match = field.text.match(/Contact\*\n(.+?)(?:\n|$)/);
+              if (match) contactName = match[1].trim();
+            }
+          }
+        }
+      }
+    }
+
+    // V1: Log the send intent (actual email sending will come later)
+    console.log('[ReengagementSend] Would send email for deal:', dealId);
+
+    // Update watchlist status to 'converted'
+    const { error: updateError } = await supabase.rpc('update_watchlist_status', {
+      p_deal_id: dealId,
+      p_status: 'converted',
+      p_next_check_days: null,
+    });
+
+    if (updateError) {
+      console.error('[ReengagementSend] Error updating watchlist status:', updateError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to update watchlist status.' } }],
+          text: 'Failed to update watchlist status.',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update Slack message with confirmation and remove buttons
+    if (payload.response_url && payload.message?.blocks) {
+      const updatedBlocks = payload.message.blocks.map((block: any) => {
+        // Remove the action buttons
+        if (block.type === 'actions') {
+          return null;
+        }
+        return block;
+      }).filter(Boolean);
+
+      // Add confirmation message
+      updatedBlocks.push(divider());
+      updatedBlocks.push(section({
+        type: 'mrkdwn',
+        text: `✅ *Email sent to ${contactName}*\nWatchlist status updated to converted.`,
+      }));
+      updatedBlocks.push(contextBlock([`Actioned by <@${payload.user.id}>`]));
+
+      await updateMessage(payload.response_url, updatedBlocks);
+    }
+
+    // Log activity
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'reengagement_send',
+      actionCategory: 'reengagement',
+      entityType: 'deal',
+      entityId: dealId,
+      metadata: { contact_name: contactName },
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[ReengagementSend] Unexpected error:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ An unexpected error occurred while sending the re-engagement email.' } }],
+        text: 'Unexpected error',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Handle reengagement_edit::{deal_id} actions.
+ * V1: Show placeholder message (full edit will come later).
+ */
+async function handleReengagementEdit(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const dealId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // V1: Show ephemeral placeholder message
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '✏️ Edit functionality coming soon. Please copy and modify the draft above.'
+          }
+        }],
+        text: 'Edit functionality coming soon.',
+      });
+    }
+
+    // Log activity
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'reengagement_edit',
+      actionCategory: 'reengagement',
+      entityType: 'deal',
+      entityId: dealId,
+      metadata: { placeholder: true },
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[ReengagementEdit] Unexpected error:', err);
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Handle reengagement_snooze::{deal_id} actions.
+ * Snoozes the watchlist entry for 2 weeks.
+ */
+async function handleReengagementSnooze(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const dealId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // Update watchlist status to 'snoozed' with 2 weeks delay
+    const { error: updateError } = await supabase.rpc('update_watchlist_status', {
+      p_deal_id: dealId,
+      p_status: 'snoozed',
+      p_next_check_days: 14, // 2 weeks
+    });
+
+    if (updateError) {
+      console.error('[ReengagementSnooze] Error updating watchlist status:', updateError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to snooze watchlist entry.' } }],
+          text: 'Failed to snooze watchlist entry.',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update Slack message with confirmation and remove buttons
+    if (payload.response_url && payload.message?.blocks) {
+      const updatedBlocks = payload.message.blocks.map((block: any) => {
+        // Remove the action buttons
+        if (block.type === 'actions') {
+          return null;
+        }
+        return block;
+      }).filter(Boolean);
+
+      // Add confirmation message
+      updatedBlocks.push(divider());
+      updatedBlocks.push(section({
+        type: 'mrkdwn',
+        text: '⏰ *Snoozed for 2 weeks*\nYou\'ll be reminded to follow up later.',
+      }));
+      updatedBlocks.push(contextBlock([`Actioned by <@${payload.user.id}>`]));
+
+      await updateMessage(payload.response_url, updatedBlocks);
+    }
+
+    // Log activity
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'reengagement_snooze',
+      actionCategory: 'reengagement',
+      entityType: 'deal',
+      entityId: dealId,
+      metadata: { snooze_days: 14 },
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[ReengagementSnooze] Unexpected error:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ An unexpected error occurred while snoozing the watchlist entry.' } }],
+        text: 'Unexpected error',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Handle reengagement_remove::{deal_id} actions.
+ * Removes the deal from the re-engagement watchlist.
+ */
+async function handleReengagementRemove(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const dealId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // Update watchlist status to 'removed'
+    const { error: updateError } = await supabase.rpc('update_watchlist_status', {
+      p_deal_id: dealId,
+      p_status: 'removed',
+      p_next_check_days: null,
+    });
+
+    if (updateError) {
+      console.error('[ReengagementRemove] Error updating watchlist status:', updateError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to remove from watchlist.' } }],
+          text: 'Failed to remove from watchlist.',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update Slack message with confirmation and remove buttons
+    if (payload.response_url && payload.message?.blocks) {
+      const updatedBlocks = payload.message.blocks.map((block: any) => {
+        // Remove the action buttons
+        if (block.type === 'actions') {
+          return null;
+        }
+        return block;
+      }).filter(Boolean);
+
+      // Add confirmation message
+      updatedBlocks.push(divider());
+      updatedBlocks.push(section({
+        type: 'mrkdwn',
+        text: '🗑️ *Removed from watchlist*\nThis deal will no longer be tracked for re-engagement.',
+      }));
+      updatedBlocks.push(contextBlock([`Actioned by <@${payload.user.id}>`]));
+
+      await updateMessage(payload.response_url, updatedBlocks);
+    }
+
+    // Log activity
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'reengagement_remove',
+      actionCategory: 'reengagement',
+      entityType: 'deal',
+      entityId: dealId,
+      metadata: {},
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[ReengagementRemove] Unexpected error:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ An unexpected error occurred while removing from watchlist.' } }],
+        text: 'Unexpected error',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 /**
@@ -6499,11 +7029,12 @@ async function handleDebriefAddTask(
   const { data: task, error } = await supabase
     .from('tasks')
     .insert({
-      user_id: ctx.userId,
-      org_id: ctx.orgId,
+      assigned_to: ctx.userId,
+      created_by: ctx.userId,
+      clerk_org_id: ctx.orgId,
       title: taskData.title || 'Follow-up task',
       due_date: dueDate.toISOString(),
-      status: 'todo',
+      status: 'pending',
       priority: 'medium',
       deal_id: taskData.dealId || null,
       meeting_id: taskData.meetingId || null,
@@ -6627,11 +7158,12 @@ async function handleDebriefAddAllTasks(
     dueDate.setDate(dueDate.getDate() + (task.dueInDays || 3));
 
     return {
-      user_id: ctx.userId,
-      org_id: ctx.orgId,
+      assigned_to: ctx.userId,
+      created_by: ctx.userId,
+      clerk_org_id: ctx.orgId,
       title: task.title,
       due_date: dueDate.toISOString(),
-      status: 'todo',
+      status: 'pending',
       priority: 'medium',
       deal_id: task.dealId || null,
       meeting_id: task.meetingId || null,
@@ -6829,6 +7361,98 @@ serve(async (req) => {
         }
 
         // =====================================================================
+        // WIRE-002: Route proposal HITL actions (prop_*)
+        // =====================================================================
+        if (action.action_id.startsWith('prop_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleProposalAction } = await import('./handlers/proposal.ts');
+            await handleProposalAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // WIRE-002: Route calendar HITL actions (cal_*)
+        // =====================================================================
+        if (action.action_id.startsWith('cal_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleCalendarAction } = await import('./handlers/calendar.ts');
+            await handleCalendarAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // WIRE-002: Route email send HITL actions (email_*)
+        // =====================================================================
+        if (action.action_id.startsWith('email_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleEmailSendAction } = await import('./handlers/emailSend.ts');
+            await handleEmailSendAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // WIRE-002: Route campaign HITL actions (camp_*)
+        // =====================================================================
+        if (action.action_id.startsWith('camp_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleCampaignAction } = await import('./handlers/campaigns.ts');
+            await handleCampaignAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
         // SLACK-001/003/004/007: Proactive Copilot action handlers
         // Format: {action}::{entity_type}::{entity_id}
         // =====================================================================
@@ -6840,6 +7464,21 @@ serve(async (req) => {
           return handleDraftFollowupAction(supabase, payload, action);
         } else if (action.action_id.startsWith('prep_meeting::')) {
           return handlePrepMeetingAction(supabase, payload, action);
+        } else if (action.action_id.startsWith('undo_crm_update::')) {
+          return handleUndoCrmUpdate(supabase, payload, action);
+        }
+
+        // =====================================================================
+        // RET-005: Re-engagement HITL action handlers
+        // =====================================================================
+        if (action.action_id.startsWith('reengagement_send::')) {
+          return handleReengagementSend(supabase, payload, action);
+        } else if (action.action_id.startsWith('reengagement_edit::')) {
+          return handleReengagementEdit(supabase, payload, action);
+        } else if (action.action_id.startsWith('reengagement_snooze::')) {
+          return handleReengagementSnooze(supabase, payload, action);
+        } else if (action.action_id.startsWith('reengagement_remove::')) {
+          return handleReengagementRemove(supabase, payload, action);
         }
 
         // =====================================================================

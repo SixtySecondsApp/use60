@@ -4,6 +4,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { buildEmailPreviewMessage, type EmailPreviewData } from '../../_shared/slackBlocks.ts';
 
 interface EmailSendActionContext {
   actionId: string;
@@ -150,105 +151,4 @@ async function sendSlackResponse(responseUrl: string, text: string): Promise<voi
   }
 }
 
-/**
- * Build Slack blocks for email preview and approval
- */
-export function buildEmailPreviewMessage(
-  to: string,
-  subject: string,
-  body: string,
-  jobId: string,
-  pendingActionId: string,
-  cc?: string,
-  bcc?: string,
-): unknown[] {
-  // Truncate body to 500 chars for preview
-  const bodyPreview = body.length > 500 ? body.substring(0, 500) + '...' : body;
-
-  const blocks: unknown[] = [
-    {
-      type: 'header',
-      text: { type: 'plain_text', text: '📧 Email Ready to Send', emoji: true },
-    },
-    { type: 'divider' },
-    {
-      type: 'section',
-      fields: [
-        {
-          type: 'mrkdwn',
-          text: `*To:*\n${to}`,
-        },
-        {
-          type: 'mrkdwn',
-          text: `*Subject:*\n${subject}`,
-        },
-      ],
-    },
-  ];
-
-  // Add CC/BCC if present
-  if (cc || bcc) {
-    const fields = [];
-    if (cc) {
-      fields.push({
-        type: 'mrkdwn',
-        text: `*CC:*\n${cc}`,
-      });
-    }
-    if (bcc) {
-      fields.push({
-        type: 'mrkdwn',
-        text: `*BCC:*\n${bcc}`,
-      });
-    }
-    blocks.push({
-      type: 'section',
-      fields,
-    });
-  }
-
-  blocks.push(
-    { type: 'divider' },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `*Body:*\n${bodyPreview}`,
-      },
-    },
-    { type: 'divider' },
-    {
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '✅ Send Now', emoji: true },
-          action_id: `email_send_now_${jobId}`,
-          value: pendingActionId,
-          style: 'primary',
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '✏️ Edit in use60', emoji: true },
-          action_id: `email_edit_${jobId}`,
-          value: pendingActionId,
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '📅 Send Later', emoji: true },
-          action_id: `email_send_later_${jobId}`,
-          value: pendingActionId,
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '❌ Cancel', emoji: true },
-          action_id: `email_cancel_${jobId}`,
-          value: pendingActionId,
-          style: 'danger',
-        },
-      ],
-    },
-  );
-
-  return blocks;
-}
+// buildEmailPreviewMessage is now imported from ../../_shared/slackBlocks.ts

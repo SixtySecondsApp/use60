@@ -4,6 +4,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { buildProposalReviewMessage, type ProposalReviewData } from '../../_shared/slackBlocks.ts';
 
 interface ProposalActionContext {
   actionId: string;
@@ -119,91 +120,4 @@ async function sendSlackResponse(responseUrl: string, text: string): Promise<voi
   }
 }
 
-/**
- * Build Slack blocks for proposal review
- */
-export function buildProposalReviewMessage(
-  proposal: {
-    id: string;
-    title: string;
-    deal_name: string;
-    contact_name: string;
-    summary: string;
-    total_value?: number;
-    sections: Array<{ title: string; preview: string }>;
-  },
-  jobId: string,
-  pendingActionId: string,
-): unknown[] {
-  const blocks: unknown[] = [
-    {
-      type: 'header',
-      text: { type: 'plain_text', text: `📄 Proposal Ready: ${proposal.title}`, emoji: true },
-    },
-    { type: 'divider' },
-    {
-      type: 'section',
-      fields: [
-        { type: 'mrkdwn', text: `*Deal:* ${proposal.deal_name}` },
-        { type: 'mrkdwn', text: `*Contact:* ${proposal.contact_name}` },
-        ...(proposal.total_value ? [{ type: 'mrkdwn', text: `*Value:* $${proposal.total_value.toLocaleString()}` }] : []),
-      ],
-    },
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*Summary:*\n${proposal.summary.substring(0, 500)}` },
-    },
-  ];
-
-  // Add section previews
-  if (proposal.sections.length > 0) {
-    blocks.push({ type: 'divider' });
-    for (const section of proposal.sections.slice(0, 3)) {
-      blocks.push({
-        type: 'section',
-        text: { type: 'mrkdwn', text: `*${section.title}*\n${section.preview.substring(0, 200)}...` },
-      });
-    }
-    if (proposal.sections.length > 3) {
-      blocks.push({
-        type: 'context',
-        elements: [{ type: 'mrkdwn', text: `+${proposal.sections.length - 3} more sections` }],
-      });
-    }
-  }
-
-  // Action buttons
-  blocks.push({ type: 'divider' });
-  blocks.push({
-    type: 'actions',
-    elements: [
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: 'Approve & Send', emoji: true },
-        action_id: `prop_approve_send_${jobId}`,
-        value: pendingActionId,
-        style: 'primary',
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: 'Edit First', emoji: true },
-        action_id: `prop_edit_${jobId}`,
-        value: pendingActionId,
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: 'Share Link', emoji: true },
-        action_id: `prop_share_link_${jobId}`,
-        value: pendingActionId,
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: 'Skip', emoji: true },
-        action_id: `prop_skip_${jobId}`,
-        value: pendingActionId,
-      },
-    ],
-  });
-
-  return blocks;
-}
+// buildProposalReviewMessage is now imported from ../../_shared/slackBlocks.ts

@@ -11,7 +11,6 @@ export const MeetingsWaitlist = lazyWithRetry(() => import('@/pages/platform/Mee
 export const WaitlistSlackSettings = lazyWithRetry(() => import('@/pages/platform/WaitlistSlackSettings'));
 export const OnboardingSimulator = lazyWithRetry(() => import('@/pages/platform/OnboardingSimulator'));
 export const TrialTimelineSimulator = lazyWithRetry(() => import('@/pages/platform/TrialTimelineSimulator'));
-export const ProactiveSimulator = lazyWithRetry(() => import('@/pages/platform/ProactiveSimulator'));
 export const DealTruthSimulator = lazyWithRetry(() => import('@/pages/platform/DealTruthSimulator'));
 export const PricingControl = lazyWithRetry(() => import('@/pages/platform/PricingControl'));
 export const CostAnalysis = lazyWithRetry(() => import('@/pages/platform/CostAnalysis'));
@@ -44,6 +43,8 @@ export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionC
 export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
+export const AgentAbilitiesPage = lazyWithRetry(() => import('@/pages/platform/AgentAbilitiesPage'));
+export const OrchestratorDashboard = lazyWithRetry(() => import('@/pages/platform/OrchestratorDashboard'));
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
 export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
@@ -52,8 +53,6 @@ export const ExaAbilitiesDemo = lazyWithRetry(() => import('@/pages/demo/ExaAbil
 export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailSequenceTest'));
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
-export const ProactiveAgentV2Demo = lazyWithRetry(() => import('@/pages/platform/ProactiveAgentV2Demo'));
-
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
 export const PipelineSettings = lazyWithRetry(() => import('@/pages/admin/PipelineSettings'));

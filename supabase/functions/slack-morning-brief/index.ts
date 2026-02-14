@@ -250,6 +250,62 @@ serve(async (req) => {
             } else {
               errors.push(`Failed to send to ${recipient.email || recipient.userId}: ${slackResult.error}`);
             }
+
+            // Fire coaching_weekly orchestrator event (Mondays only, non-blocking)
+            if (new Date().getDay() === 1) {
+              try {
+                const today = new Date().toISOString().split('T')[0];
+                fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    type: 'coaching_weekly',
+                    source: 'cron:weekly',
+                    org_id: org.org_id,
+                    user_id: recipient.userId,
+                    payload: {},
+                    idempotency_key: `coaching_weekly:${recipient.userId}:${today}`,
+                  }),
+                }).catch(err => console.warn('[slack-morning-brief] coaching_weekly fire-and-forget failed:', err));
+              } catch (err) {
+                console.warn('[slack-morning-brief] Non-fatal: coaching_weekly event failed:', err);
+              }
+            }
+
+            // Fire campaign_daily_check orchestrator event (daily, non-blocking)
+            // Only fire if org has Instantly integration configured
+            try {
+              const { data: instantlyCreds } = await supabase
+                .from('integration_credentials')
+                .select('credentials')
+                .eq('organization_id', org.org_id)
+                .eq('integration_name', 'instantly')
+                .maybeSingle();
+
+              if (instantlyCreds?.credentials?.api_key) {
+                const today = new Date().toISOString().split('T')[0];
+                fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    type: 'campaign_daily_check',
+                    source: 'cron:morning',
+                    org_id: org.org_id,
+                    user_id: recipient.userId,
+                    payload: {},
+                    idempotency_key: `campaign_daily_check:${recipient.userId}:${today}`,
+                  }),
+                }).catch(err => console.warn('[slack-morning-brief] campaign_daily_check fire-and-forget failed:', err));
+              }
+            } catch (err) {
+              console.warn('[slack-morning-brief] Non-fatal: campaign_daily_check event failed:', err);
+            }
           } catch (userError) {
             console.error(`[slack-morning-brief] Error processing user ${recipient.userId}:`, userError);
             errors.push(`User ${recipient.userId}: ${userError instanceof Error ? userError.message : 'Unknown error'}`);
@@ -260,11 +316,6 @@ serve(async (req) => {
         errors.push(`Org ${org.org_id}: ${orgError instanceof Error ? orgError.message : 'Unknown error'}`);
       }
     }
-
-    // TODO: Fire orchestrator events for coaching_weekly and campaign_daily_check
-    // These need separate cron functions or conditional logic based on day-of-week.
-    // coaching_weekly: fire { type: 'coaching_weekly' } on Mondays for users with coaching enabled
-    // campaign_daily_check: fire { type: 'campaign_daily_check' } for users with Instantly connected
 
     return jsonResponse({
       success: true,

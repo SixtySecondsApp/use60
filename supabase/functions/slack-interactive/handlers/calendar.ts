@@ -4,6 +4,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { buildCalendarSlotsMessage, type CalendarSlotsData } from '../../_shared/slackBlocks.ts';
 
 interface CalendarActionContext {
   actionId: string;
@@ -183,89 +184,4 @@ async function sendSlackResponse(responseUrl: string, text: string): Promise<voi
   }
 }
 
-/**
- * Build Slack blocks for calendar time slot selection
- */
-export function buildCalendarSlotsMessage(
-  slots: Array<{ start_time: string; end_time: string; score?: number; timezone?: string }>,
-  jobId: string,
-  pendingActionId: string,
-  prospectName?: string,
-): unknown[] {
-  const blocks: unknown[] = [
-    {
-      type: 'header',
-      text: { type: 'plain_text', text: `📅 Available Times${prospectName ? ` for ${prospectName}` : ''}`, emoji: true },
-    },
-    { type: 'divider' },
-  ];
-
-  // Add slots as radio button options
-  const options = slots.slice(0, 5).map((slot, i) => ({
-    text: { type: 'plain_text', text: `${formatSlotTime(slot.start_time, slot.timezone)} - ${formatSlotTime(slot.end_time, slot.timezone)}` },
-    value: `${i}`,
-  }));
-
-  blocks.push({
-    type: 'section',
-    text: { type: 'mrkdwn', text: 'Select a time slot:' },
-    accessory: {
-      type: 'radio_buttons',
-      action_id: `cal_select_slot_${jobId}`,
-      options,
-    },
-  });
-
-  blocks.push({ type: 'divider' });
-
-  // Action buttons
-  blocks.push({
-    type: 'actions',
-    elements: [
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: '📅 Send Invite', emoji: true },
-        action_id: `cal_send_invite_${jobId}`,
-        value: pendingActionId,
-        style: 'primary',
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: '📧 Send Times via Email', emoji: true },
-        action_id: `cal_send_times_${jobId}`,
-        value: pendingActionId,
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: '🔍 More Options', emoji: true },
-        action_id: `cal_more_${jobId}`,
-        value: pendingActionId,
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: 'I\'ll Handle This', emoji: true },
-        action_id: `cal_handle_${jobId}`,
-        value: pendingActionId,
-      },
-    ],
-  });
-
-  return blocks;
-}
-
-function formatSlotTime(isoTime: string, timezone?: string): string {
-  try {
-    const date = new Date(isoTime);
-    return date.toLocaleString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZone: timezone || 'UTC',
-      timeZoneName: 'short',
-    });
-  } catch {
-    return isoTime;
-  }
-}
+// buildCalendarSlotsMessage is now imported from ../../_shared/slackBlocks.ts

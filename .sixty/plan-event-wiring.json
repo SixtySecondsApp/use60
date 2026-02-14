@@ -1,0 +1,254 @@
+{
+  "feature": "event-wiring",
+  "name": "Proactive Agent V2 — Event Source Wiring & Production Hardening",
+  "status": "complete",
+  "createdAt": "2026-02-15T12:00:00Z",
+  "completedAt": "2026-02-15T12:52:00Z",
+  "consultReport": ".sixty/consult/proactive-agent-v2-gap-analysis.md",
+  "description": "Wire event sources (webhooks, crons, Slack interactive) into the orchestrator so all 9 sequences can fire end-to-end. Then add Gmail push notifications, centralize Block Kit, build observability, and create smoke tests.",
+
+  "stories": [
+    {
+      "id": "WIRE-001",
+      "title": "Wire coaching_weekly + campaign_daily_check events from morning brief cron",
+      "type": "integration",
+      "status": "complete",
+      "priority": 1,
+      "phase": "A",
+      "dependencies": { "stories": [], "files": ["supabase/functions/slack-morning-brief/index.ts"] },
+      "blocks": [],
+      "parallelWith": ["WIRE-002"],
+      "acceptance": [
+        "coaching_weekly event fires on Mondays only, inside the recipient loop, for each user",
+        "campaign_daily_check event fires daily, inside the recipient loop, for each user with campaign features enabled",
+        "Both use fire-and-forget pattern (bare fetch, no await) matching slack-stale-deals:327-348",
+        "Existing morning brief behavior unchanged — orchestrator runs in parallel",
+        "TODO comment at line 264 replaced with real implementation"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/slack-morning-brief/index.ts"
+      ],
+      "notes": "The recipient loop (line 117: `for (const recipient of recipients)`) provides `org.org_id` and `recipient.userId`. Fire-and-forget pattern: bare `fetch()` with `.catch()`, wrapped in outer try/catch. coaching_weekly uses `new Date().getDay() === 1` for Monday gate. campaign_daily_check checks org feature flags for Instantly/campaign monitoring. Both use source: 'cron:morning' or 'cron:weekly' respectively. Use idempotency_key with date to prevent duplicates."
+    },
+    {
+      "id": "WIRE-002",
+      "title": "Route HITL action handlers in slack-interactive dispatcher",
+      "type": "integration",
+      "status": "complete",
+      "priority": 2,
+      "phase": "A",
+      "dependencies": { "stories": [], "files": ["supabase/functions/slack-interactive/index.ts"] },
+      "blocks": ["WIRE-008"],
+      "parallelWith": ["WIRE-001"],
+      "acceptance": [
+        "Actions prefixed prop_ route to handlers/proposal.ts handleProposalAction",
+        "Actions prefixed cal_ route to handlers/calendar.ts handleCalendarAction",
+        "Actions prefixed email_ route to handlers/emailSend.ts handleEmailSendAction",
+        "Actions prefixed camp_ route to handlers/campaigns.ts handleCampaignAction",
+        "All 4 routes use dynamic import matching existing orch_* pattern at lines 7340-7361"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/handlers/proposal.ts",
+        "supabase/functions/slack-interactive/handlers/calendar.ts",
+        "supabase/functions/slack-interactive/handlers/emailSend.ts",
+        "supabase/functions/slack-interactive/handlers/campaigns.ts"
+      ],
+      "notes": "The 4 handler files already exist with correct interfaces (matching OrchestratorActionContext pattern) and already call agent-orchestrator with resume_job_id. The work is purely adding routing blocks in the main dispatcher. Pattern to follow: `if (action.action_id.startsWith('prop_')) { const ctx = await getSixtyUserContext(...); const { handleProposalAction } = await import('./handlers/proposal.ts'); await handleProposalAction({...}); return response; }`. Also verify the action_id prefixes match what the adapters emit in their Slack blocks (presentForReviewAdapter uses prop_*, presentTimeOptionsAdapter uses cal_*, send-email-as-rep uses email_*)."
+    },
+    {
+      "id": "WIRE-003",
+      "title": "Create Gmail push webhook handler edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "phase": "B",
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["WIRE-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function gmail-push-webhook handles Google Pub/Sub push notifications",
+        "Decodes Pub/Sub message to extract emailAddress and historyId",
+        "Fetches new messages via Gmail API history.list since last historyId",
+        "Fires email_received event to agent-orchestrator with sender, subject, thread context",
+        "Idempotency key prevents duplicate processing: email_received:{message_id}",
+        "Uses getCorsHeaders(req) from corsHelper.ts"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/gmail-push-webhook/index.ts",
+        "supabase/functions/gmail-push-webhook/config.toml"
+      ],
+      "notes": "Google Pub/Sub push format: POST with base64-encoded JSON in body.message.data containing { emailAddress, historyId }. Need to look up user by email in google_integrations table to get user_id and org_id. Gmail history.list requires the user's OAuth access token (stored in google_integrations). config.toml needs verify_jwt = false since Google Pub/Sub can't send JWTs. Deploy with --no-verify-jwt flag. Rate limit: check for duplicate historyIds to avoid reprocessing."
+    },
+    {
+      "id": "WIRE-004",
+      "title": "Gmail API watch setup and OAuth scope management",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "phase": "B",
+      "dependencies": { "stories": ["WIRE-003"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function or extension to existing Gmail integration sets up gmail.users.watch per user",
+        "Watch targets the gmail-push-webhook URL via GCP Pub/Sub topic",
+        "Watch auto-renews before 7-day expiry (cron or on-access renewal)",
+        "Detects users missing gmail.readonly or gmail.send scopes and flags for upgrade",
+        "Tracks authorized scopes and watch expiry in google_integrations table"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/gmail-push-webhook/index.ts",
+        "supabase/migrations/20260216000001_add_gmail_watch_tracking.sql"
+      ],
+      "notes": "Gmail API watch requires: topicName (GCP Pub/Sub topic ARN), labelIds: ['INBOX']. Returns expiration (epoch ms, max 7 days). Store watch_expiration and watch_history_id in google_integrations. Need GCP project with Pub/Sub API enabled and a topic that grants publish permissions to gmail-api-push@system.gserviceaccount.com. Consider adding a daily cron to renew watches expiring within 24h."
+    },
+    {
+      "id": "WIRE-005",
+      "title": "Centralize Block Kit builders and fix campaign_report rendering",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 5,
+      "phase": "C",
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/slackBlocks.ts"] },
+      "blocks": [],
+      "parallelWith": ["WIRE-006"],
+      "acceptance": [
+        "buildProposalReviewMessage moved from handlers/proposal.ts to slackBlocks.ts using safe primitives",
+        "buildCalendarSlotsMessage moved from handlers/calendar.ts to slackBlocks.ts using safe primitives",
+        "buildEmailPreviewMessage moved from handlers/emailSend.ts to slackBlocks.ts using safe primitives",
+        "buildCampaignReportMessage moved from handlers/campaigns.ts to slackBlocks.ts using safe primitives",
+        "campaign_report case in send-slack-message/index.ts updated to use Block Kit builder instead of plain text",
+        "Handler files import builders from slackBlocks.ts instead of defining inline"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-interactive/handlers/proposal.ts",
+        "supabase/functions/slack-interactive/handlers/calendar.ts",
+        "supabase/functions/slack-interactive/handlers/emailSend.ts",
+        "supabase/functions/slack-interactive/handlers/campaigns.ts",
+        "supabase/functions/send-slack-message/index.ts"
+      ],
+      "notes": "~351 lines of inline Block Kit across 4 handler files. All should use slackBlocks.ts primitives: header(), section(), sectionWithFields(), divider(), context(), actions() for truncation safety (safeHeaderText, safeMrkdwn). The campaign_report case in send-slack-message (line 207-209) is a plain text stub — needs to call the new buildCampaignReportMessage builder. TypeScript interfaces for each message data type should be added."
+    },
+    {
+      "id": "WIRE-006",
+      "title": "Create orchestrator job metrics RPC and migration",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "phase": "C",
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["WIRE-007"],
+      "parallelWith": ["WIRE-005"],
+      "acceptance": [
+        "New migration adds get_orchestrator_metrics RPC returning sequences/day, step success rates, avg duration",
+        "RPC accepts org_id and date range parameters",
+        "Metrics derived from existing sequence_jobs table (no new tables needed)",
+        "Includes HITL response time stats from pending_approvals timestamps",
+        "Includes stuck job detection (status = 'paused' for >24hrs)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260216000002_add_orchestrator_metrics_rpc.sql"
+      ],
+      "notes": "sequence_jobs table already has: id, event_type, status, started_at, completed_at, context (JSONB with step timings), org_id, user_id. Metrics to compute: total_sequences (COUNT), sequences_by_type (GROUP BY event_type), avg_duration_ms (AVG completed_at - started_at), step_success_rate (from context.steps_completed vs total steps), hitl_response_time (from context.pending_approvals timestamps), stuck_jobs (status = 'paused' AND updated_at < now() - interval '24 hours')."
+    },
+    {
+      "id": "WIRE-007",
+      "title": "Build orchestrator observability dashboard page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "phase": "C",
+      "dependencies": { "stories": ["WIRE-006"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New page at /platform/orchestrator-dashboard accessible from platform admin nav",
+        "Shows: sequences/day chart, step success rate by sequence type, avg duration",
+        "Shows: HITL response time distribution, stuck approvals (>24hrs) with alert badges",
+        "Date range selector (7d, 30d, 90d)",
+        "Uses React Query to call get_orchestrator_metrics RPC"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/platform/OrchestratorDashboard.tsx",
+        "src/routes/lazyPages.tsx"
+      ],
+      "notes": "Follow existing platform dashboard patterns (PlatformDashboard.tsx). Use Recharts or existing charting library for visualizations. Use Lucide React icons (never emoji). Cards layout with stat summaries at top, charts below. Add lazy route in lazyPages.tsx. Use Radix UI primitives from @/components/ui/."
+    },
+    {
+      "id": "WIRE-008",
+      "title": "End-to-end smoke tests for all 9 sequences",
+      "type": "test",
+      "status": "complete",
+      "priority": 8,
+      "phase": "C",
+      "dependencies": { "stories": ["WIRE-001", "WIRE-002"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "proactive-simulate extended with orchestrator_smoke_test mode",
+        "Fires each of the 9 event types to agent-orchestrator with test payloads",
+        "Verifies: sequence_job created, all steps execute, final status is 'completed' or 'paused' (for HITL)",
+        "Reports per-sequence: steps completed, duration, any errors",
+        "Can run against any Supabase environment (dev/staging/prod)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/proactive-simulate/index.ts"
+      ],
+      "notes": "proactive-simulate already supports 8 feature simulations but uses its own Slack Block Kit path, not the orchestrator. Add a new feature type 'orchestrator_smoke_test' that fires real events to agent-orchestrator with sync: true to get blocking results. Test payloads need realistic entity IDs from the target org. HITL sequences (proposal, calendar, email) will pause at approval gates — verify they reach 'paused' status with correct pending_approval data."
+    }
+  ],
+
+  "phases": {
+    "A": {
+      "name": "Event Source Wiring",
+      "stories": ["WIRE-001", "WIRE-002"],
+      "estimatedMinutes": 45,
+      "status": "pending",
+      "description": "Wire the last 2 missing event sources (coaching_weekly, campaign_daily_check) and route 4 dead HITL handler files into the slack-interactive dispatcher. After this phase, all 9 sequences can fire end-to-end. NOTE: meeting_ended (process-recording), pre_meeting_90min (proactive-meeting-prep), and deal_risk_scan (slack-stale-deals) are already wired."
+    },
+    "B": {
+      "name": "Gmail Push Notifications",
+      "stories": ["WIRE-003", "WIRE-004"],
+      "estimatedMinutes": 60,
+      "status": "pending",
+      "description": "Create the Gmail push webhook handler and set up Gmail API watches so email_received events fire automatically when reps receive new emails. Requires GCP Pub/Sub topic configuration."
+    },
+    "C": {
+      "name": "Production Hardening",
+      "stories": ["WIRE-005", "WIRE-006", "WIRE-007", "WIRE-008"],
+      "estimatedMinutes": 115,
+      "status": "pending",
+      "description": "Centralize ~351 lines of inline Block Kit into slackBlocks.ts, fix campaign_report plain-text rendering, build orchestrator observability dashboard with metrics RPC, and create end-to-end smoke tests for all 9 sequences."
+    }
+  },
+
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 8,
+    "estimatedTotalMinutes": 220,
+    "parallelOpportunities": [
+      { "group": ["WIRE-001", "WIRE-002"], "reason": "Different files, no overlap — morning brief cron vs slack-interactive dispatcher" },
+      { "group": ["WIRE-005", "WIRE-006"], "reason": "Different files — slackBlocks.ts/handlers vs migration SQL" }
+    ],
+    "sequenceReadinessAfter": {
+      "phaseA": "9/9 sequences can fire end-to-end (coaching_weekly + campaign_daily_check wired, HITL handlers routed)",
+      "phaseB": "email_received fires automatically from Gmail push notifications",
+      "phaseC": "Production-grade: centralized Block Kit, observability dashboard, smoke tests for all sequences"
+    },
+    "alreadyWired": {
+      "meeting_ended": "process-recording/index.ts:1182-1218 — fire-and-forget with idempotency_key",
+      "pre_meeting_90min": "proactive-meeting-prep/index.ts:237-290 — cron every 30min, checks 30-120min window",
+      "deal_risk_scan": "slack-stale-deals/index.ts:327-348 — fire-and-forget from daily stale deals cron"
+    }
+  }
+}

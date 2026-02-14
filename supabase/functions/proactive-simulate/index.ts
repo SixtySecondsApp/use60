@@ -20,7 +20,8 @@ type ProactiveSimulateFeature =
   | 'stale_deal_alert'
   | 'email_reply_alert'
   | 'hitl_followup_email'
-  | 'ai_smart_suggestion';
+  | 'ai_smart_suggestion'
+  | 'orchestrator_smoke_test';
 
 type NotificationCategory = 'workflow' | 'deal' | 'task' | 'meeting' | 'system' | 'team';
 type NotificationType = 'info' | 'success' | 'warning' | 'error';
@@ -42,6 +43,8 @@ type SimulateRequest = {
     emailThreadId?: string;
     emailId?: string;
   };
+  /** For orchestrator_smoke_test: which sequences to test (default: all 9) */
+  sequences?: string[];
 };
 
 // ============================================================================
@@ -214,8 +217,7 @@ async function fetchPreMeetingNudgeData(
       .eq('id', meetingId)
       .single();
   } else {
-    // Find next meeting within 30 minutes
-    const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000);
+    // Find next upcoming meeting (any time in the future) for testing flexibility
     meetingQuery = supabase
       .from('calendar_events')
       .select(`
@@ -228,10 +230,10 @@ async function fetchPreMeetingNudgeData(
       `)
       .eq('user_id', userId)
       .gte('start_time', now.toISOString())
-      .lte('start_time', thirtyMinutesFromNow.toISOString())
+      .gt('attendees_count', 1)
       .order('start_time', { ascending: true })
       .limit(1)
-      .single();
+      .maybeSingle();
   }
 
   const { data: meeting } = await meetingQuery;
@@ -776,7 +778,7 @@ async function fetchMorningBriefData(
   const { data: overdueTasks } = await supabase
     .from('tasks')
     .select('id, title, due_date, deal_id, deals:deal_id (id, title)')
-    .eq('user_id', userId)
+    .eq('assigned_to', userId)
     .eq('completed', false)
     .lt('due_date', today.toISOString())
     .order('due_date', { ascending: true })
@@ -786,7 +788,7 @@ async function fetchMorningBriefData(
   const { data: dueTodayTasks } = await supabase
     .from('tasks')
     .select('id, title, deal_id, deals:deal_id (id, title)')
-    .eq('user_id', userId)
+    .eq('assigned_to', userId)
     .eq('completed', false)
     .gte('due_date', today.toISOString())
     .lt('due_date', tomorrow.toISOString())
@@ -796,7 +798,7 @@ async function fetchMorningBriefData(
   const { data: deals } = await supabase
     .from('deals')
     .select('id, title, value, stage, close_date, health_status, primary_contact_id')
-    .eq('user_id', userId)
+    .eq('owner_id', userId)
     .in('stage', ['sql', 'opportunity', 'verbal', 'proposal', 'negotiation'])
     .not('close_date', 'is', null)
     .lte('close_date', weekFromNow.toISOString())
@@ -1298,7 +1300,7 @@ async function fetchStaleDealData(
           companies:company_id (id, name, industry)
         )
       `)
-      .eq('user_id', userId)
+      .eq('owner_id', userId)
       .in('stage', ['sql', 'opportunity', 'verbal', 'proposal', 'negotiation'])
       .lt('last_activity_at', fourteenDaysAgo.toISOString())
       .order('last_activity_at', { ascending: true })
@@ -2527,6 +2529,11 @@ function buildInAppPayload(feature: ProactiveSimulateFeature): {
       message: 'Your AI sales assistant has a suggestion for you.',
       category: 'team',
     },
+    orchestrator_smoke_test: {
+      title: 'Orchestrator Smoke Test',
+      message: 'Running smoke tests for all event sequences.',
+      category: 'system',
+    },
   };
 
   const item = meta[feature];
@@ -2681,6 +2688,199 @@ function buildRealMorningBriefBlocks(data: MorningBriefRealData): { text: string
     text: `Good morning ${data.userName}! Here's your day at a glance.`,
     blocks,
   };
+}
+
+// ============================================================================
+// Orchestrator Smoke Test
+// ============================================================================
+
+type EventType =
+  | 'meeting_ended'
+  | 'pre_meeting_90min'
+  | 'email_received'
+  | 'proposal_generation'
+  | 'calendar_find_times'
+  | 'stale_deal_revival'
+  | 'campaign_daily_check'
+  | 'coaching_weekly'
+  | 'deal_risk_scan';
+
+interface SmokeTestResult {
+  event_type: string;
+  status: 'passed' | 'failed' | 'paused';
+  job_id?: string;
+  steps_completed: number;
+  total_steps: number;
+  duration_ms: number;
+  error?: string;
+}
+
+/**
+ * Build test payload for each event type
+ */
+function getTestPayload(type: EventType, entityIds?: SimulateRequest['entityIds']): Record<string, unknown> {
+  const now = Date.now();
+  switch (type) {
+    case 'meeting_ended':
+      return {
+        meeting_id: entityIds?.meetingId || 'smoke-test',
+        title: 'Smoke Test Meeting',
+        transcript_available: true,
+        ended_at: new Date().toISOString(),
+      };
+    case 'pre_meeting_90min':
+      return {
+        meeting_id: entityIds?.meetingId || 'smoke-test',
+        title: 'Upcoming Meeting',
+        start_time: new Date(now + 90 * 60 * 1000).toISOString(),
+      };
+    case 'email_received':
+      return {
+        email_address: 'test@example.com',
+        history_id: `smoke-${now}`,
+      };
+    case 'proposal_generation':
+      return {
+        deal_id: entityIds?.dealId || 'smoke-test',
+        contact_id: entityIds?.contactId || 'smoke-test',
+      };
+    case 'calendar_find_times':
+      return {
+        contact_id: entityIds?.contactId || 'smoke-test',
+        scheduling_request: 'Find 30 min next week',
+      };
+    case 'stale_deal_revival':
+      return {
+        deal_id: entityIds?.dealId || 'smoke-test',
+      };
+    case 'campaign_daily_check':
+      return {};
+    case 'coaching_weekly':
+      return {};
+    case 'deal_risk_scan':
+      return {};
+  }
+}
+
+/**
+ * Run orchestrator smoke test for one or all event types
+ */
+async function runOrchestratorSmokeTest(
+  orgId: string,
+  targetUserId: string,
+  entityIds?: SimulateRequest['entityIds'],
+  sequencesToTest?: string[]
+): Promise<{ results: SmokeTestResult[]; summary: any }> {
+  const allEventTypes: EventType[] = [
+    'meeting_ended',
+    'pre_meeting_90min',
+    'email_received',
+    'proposal_generation',
+    'calendar_find_times',
+    'stale_deal_revival',
+    'campaign_daily_check',
+    'coaching_weekly',
+    'deal_risk_scan',
+  ];
+
+  const eventTypes = sequencesToTest && sequencesToTest.length > 0
+    ? (sequencesToTest.filter(s => allEventTypes.includes(s as EventType)) as EventType[])
+    : allEventTypes;
+
+  const results: SmokeTestResult[] = [];
+  const TIMEOUT_PER_SEQUENCE = 30000; // 30 seconds
+
+  // Run tests sequentially to avoid overwhelming the system
+  for (const eventType of eventTypes) {
+    const startTime = Date.now();
+
+    try {
+      const payload = getTestPayload(eventType, entityIds);
+
+      // Fire synchronous event to agent-orchestrator
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_PER_SEQUENCE);
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: eventType,
+          source: 'manual',
+          org_id: orgId,
+          user_id: targetUserId,
+          payload,
+          sync: true, // BLOCKING — wait for result
+          idempotency_key: `smoke_test:${eventType}:${Date.now()}`,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const duration = Date.now() - startTime;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        results.push({
+          event_type: eventType,
+          status: 'failed',
+          steps_completed: 0,
+          total_steps: 0,
+          duration_ms: duration,
+          error: `HTTP ${response.status}: ${errorText}`,
+        });
+        continue;
+      }
+
+      const data = await response.json();
+
+      // Determine status based on response
+      let status: 'passed' | 'failed' | 'paused' = 'passed';
+      if (data.error) {
+        status = 'failed';
+      } else if (data.status === 'paused' || data.pending_approvals?.length > 0) {
+        // HITL sequences correctly paused — treat as passing
+        status = 'paused';
+      }
+
+      results.push({
+        event_type: eventType,
+        status,
+        job_id: data.job_id,
+        steps_completed: data.steps_completed || 0,
+        total_steps: data.total_steps || 0,
+        duration_ms: duration,
+        error: data.error,
+      });
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      results.push({
+        event_type: eventType,
+        status: 'failed',
+        steps_completed: 0,
+        total_steps: 0,
+        duration_ms: duration,
+        error: message,
+      });
+    }
+  }
+
+  // Calculate summary
+  const summary = {
+    total: results.length,
+    passed: results.filter(r => r.status === 'passed').length,
+    paused: results.filter(r => r.status === 'paused').length,
+    failed: results.filter(r => r.status === 'failed').length,
+    duration_ms: results.reduce((sum, r) => sum + r.duration_ms, 0),
+  };
+
+  return { results, summary };
 }
 
 function buildFeatureBlocks(feature: ProactiveSimulateFeature): { text: string; blocks: any[]; hitlMode?: boolean } {
@@ -3221,6 +3421,23 @@ serve(async (req) => {
     const targetUserId = body.targetUserId || authCtx.userId;
     if (!targetUserId) return json({ success: false, error: 'targetUserId is required' }, 400);
 
+    // Special handling for orchestrator_smoke_test
+    if (body.feature === 'orchestrator_smoke_test') {
+      const { results, summary } = await runOrchestratorSmokeTest(
+        body.orgId,
+        targetUserId,
+        body.entityIds,
+        body.sequences
+      );
+
+      return json({
+        success: true,
+        feature: 'orchestrator_smoke_test',
+        results,
+        summary,
+      });
+    }
+
     const sendSlack = body.sendSlack !== false;
     const createInApp = body.createInApp !== false;
     const dryRun = body.dryRun === true;
@@ -3243,6 +3460,16 @@ serve(async (req) => {
     let blocks: any[];
     let hitlMode: boolean | undefined;
 
+    // Merge top-level entity IDs into entityIds for backwards compatibility
+    const entityIds = {
+      ...body.entityIds,
+      meetingId: body.entityIds?.meetingId || (body as any).meetingId,
+      dealId: body.entityIds?.dealId || (body as any).dealId,
+      contactId: body.entityIds?.contactId || (body as any).contactId,
+      emailId: body.entityIds?.emailId || (body as any).emailId,
+      emailThreadId: body.entityIds?.emailThreadId || (body as any).emailThreadId,
+    };
+
     if (!simulationMode) {
       // Real data mode - fetch from database and build enhanced blocks
       switch (body.feature) {
@@ -3261,17 +3488,17 @@ serve(async (req) => {
             text = realResult.text;
             blocks = realResult.blocks;
           } else {
-            // Fall back to demo if no data
-            const fallback = buildFeatureBlocks(body.feature);
-            text = fallback.text;
-            blocks = fallback.blocks;
-            hitlMode = fallback.hitlMode;
+            text = '☀️ All clear — no meetings, tasks, or deals need attention right now.';
+            blocks = [
+              { type: 'section', text: { type: 'mrkdwn', text: '*☀️ All clear!*\nNo meetings, tasks, or deals need your attention right now.' } },
+              { type: 'context', elements: [{ type: 'mrkdwn', text: '_60 AI morning brief — nothing actionable found_' }] },
+            ];
           }
           break;
         }
         case 'pre_meeting_nudge': {
           // Fetch meeting data and enrich with AI
-          const meetingId = body.entityIds?.meetingId;
+          const meetingId = entityIds.meetingId;
           const nudgeData = await fetchPreMeetingNudgeData(supabase, body.orgId, targetUserId, meetingId);
           if (nudgeData) {
             // Enrich with AI-generated insights
@@ -3280,34 +3507,38 @@ serve(async (req) => {
             text = realResult.text;
             blocks = realResult.blocks;
           } else {
-            // Fall back to demo if no upcoming meeting found
-            const fallback = buildFeatureBlocks(body.feature);
-            text = fallback.text;
-            blocks = fallback.blocks;
-            hitlMode = fallback.hitlMode;
+            text = '📅 No upcoming meetings found in the next 30 minutes.';
+            blocks = [
+              { type: 'section', text: { type: 'mrkdwn', text: meetingId
+                ? `*📅 Meeting not found*\nCould not find meeting \`${meetingId}\` in your calendar.`
+                : '*📅 No upcoming meetings*\nNo meetings found in the next 30 minutes. Select a specific meeting to prep for.' } },
+              { type: 'context', elements: [{ type: 'mrkdwn', text: '_60 AI pre-meeting prep_' }] },
+            ];
           }
           break;
         }
         case 'post_call_summary': {
           // Fetch post-call summary data from meeting analysis tables
-          const meetingId = body.entityIds?.meetingId;
+          const meetingId = entityIds.meetingId;
           const postCallData = await fetchPostCallSummaryData(supabase, body.orgId, targetUserId, meetingId);
           if (postCallData) {
             const realResult = buildRealPostCallSummaryBlocks(postCallData);
             text = realResult.text;
             blocks = realResult.blocks;
           } else {
-            // Fall back to demo if no recent meeting found
-            const fallback = buildFeatureBlocks(body.feature);
-            text = fallback.text;
-            blocks = fallback.blocks;
-            hitlMode = fallback.hitlMode;
+            text = '📞 No recent meeting found for post-call summary.';
+            blocks = [
+              { type: 'section', text: { type: 'mrkdwn', text: meetingId
+                ? `*📞 No analysis found*\nMeeting \`${meetingId}\` has no transcript or analysis available yet.`
+                : '*📞 No recent meetings*\nNo recent meetings with transcripts found. Select a specific meeting.' } },
+              { type: 'context', elements: [{ type: 'mrkdwn', text: '_60 AI post-call summary_' }] },
+            ];
           }
           break;
         }
         case 'stale_deal_alert': {
           // Fetch stale deal data and enrich with AI re-engagement strategy
-          const dealId = body.entityIds?.dealId;
+          const dealId = entityIds.dealId;
           const staleDealData = await fetchStaleDealData(supabase, body.orgId, targetUserId, dealId);
           if (staleDealData) {
             const enrichedData = await enrichStaleDealWithAI(staleDealData);
@@ -3315,17 +3546,19 @@ serve(async (req) => {
             text = realResult.text;
             blocks = realResult.blocks;
           } else {
-            // Fall back to demo if no stale deals found
-            const fallback = buildFeatureBlocks(body.feature);
-            text = fallback.text;
-            blocks = fallback.blocks;
-            hitlMode = fallback.hitlMode;
+            text = '💼 No stale deals found — your pipeline is active.';
+            blocks = [
+              { type: 'section', text: { type: 'mrkdwn', text: dealId
+                ? `*💼 Deal not found*\nCould not find deal \`${dealId}\` or it has recent activity.`
+                : '*💼 All deals active*\nNo stale deals found. Your pipeline looks healthy!' } },
+              { type: 'context', elements: [{ type: 'mrkdwn', text: '_60 AI stale deal alert_' }] },
+            ];
           }
           break;
         }
         case 'email_reply_alert': {
           // Fetch email reply data and enrich with AI reply suggestion
-          const emailId = body.entityIds?.emailId;
+          const emailId = entityIds.emailId;
           const emailData = await fetchEmailReplyData(supabase, body.orgId, targetUserId, emailId);
           if (emailData) {
             const enrichedData = await enrichEmailReplyWithAI(emailData);
@@ -3333,11 +3566,11 @@ serve(async (req) => {
             text = realResult.text;
             blocks = realResult.blocks;
           } else {
-            // Fall back to demo if no emails found
-            const fallback = buildFeatureBlocks(body.feature);
-            text = fallback.text;
-            blocks = fallback.blocks;
-            hitlMode = fallback.hitlMode;
+            text = '📧 No emails needing a reply right now.';
+            blocks = [
+              { type: 'section', text: { type: 'mrkdwn', text: '*📧 No emails need replies*\nNo unanswered emails found that need your attention.' } },
+              { type: 'context', elements: [{ type: 'mrkdwn', text: '_60 AI email reply alert_' }] },
+            ];
           }
           break;
         }
