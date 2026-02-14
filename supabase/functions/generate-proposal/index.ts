@@ -2100,52 +2100,72 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
-    
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error('Missing Supabase environment variables')
       throw new Error('Server configuration error: Missing Supabase credentials')
     }
 
-    const supabase = createClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
-    )
+    // Support service role auth (orchestrator inter-function calls)
+    const token = authHeader.replace('Bearer ', '')
+    const isServiceRole = supabaseServiceKey && token === supabaseServiceKey
 
-    console.log('Fetching user from auth...')
-    let user
-    try {
-      // Add timeout protection for auth call
-      const authPromise = supabase.auth.getUser()
-      const authTimeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Authentication timeout')), 15000) // 15 second timeout for reliability
+    let supabase
+    let user: { id: string } | null = null
+
+    if (isServiceRole) {
+      // Service role: trust user_id from body
+      const bodyUserId = body?.user_id || body?.context?.user_id
+      if (!bodyUserId) {
+        throw new Error('Service role calls must include user_id')
+      }
+      supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+      user = { id: bodyUserId }
+      console.log(`Service role auth for user: ${bodyUserId}`)
+    } else {
+      supabase = createClient(
+        supabaseUrl,
+        supabaseAnonKey,
+        {
+          global: {
+            headers: { Authorization: authHeader },
+          },
+        }
       )
-      
-      const { data: userData, error: userError } = await Promise.race([authPromise, authTimeoutPromise]) as any
-      
-      if (userError) {
-        console.error('Error fetching user:', userError)
-        throw new Error(`Authentication error: ${userError.message}`)
+
+      console.log('Fetching user from auth...')
+      try {
+        // Add timeout protection for auth call
+        const authPromise = supabase.auth.getUser()
+        const authTimeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Authentication timeout')), 15000) // 15 second timeout for reliability
+        )
+
+        const { data: userData, error: userError } = await Promise.race([authPromise, authTimeoutPromise]) as any
+
+        if (userError) {
+          console.error('Error fetching user:', userError)
+          throw new Error(`Authentication error: ${userError.message}`)
+        }
+
+        user = userData?.user
+      } catch (authError) {
+        console.error('Exception during auth.getUser():', authError)
+        if (authError instanceof Error && authError.message === 'Authentication timeout') {
+          throw new Error('Authentication request timed out. Please try again.')
+        }
+        throw new Error(`Failed to authenticate: ${authError instanceof Error ? authError.message : 'Unknown error'}`)
       }
-      
-      user = userData?.user
-    } catch (authError) {
-      console.error('Exception during auth.getUser():', authError)
-      if (authError instanceof Error && authError.message === 'Authentication timeout') {
-        throw new Error('Authentication request timed out. Please try again.')
-      }
-      throw new Error(`Failed to authenticate: ${authError instanceof Error ? authError.message : 'Unknown error'}`)
     }
 
     if (!user) {
       console.error('No user found after authentication')
       throw new Error('Unauthorized: User not found')
     }
-    
+
     console.log(`Authenticated user: ${user.id}`)
 
     // Temporary action to fix database migration

@@ -1,0 +1,190 @@
+{
+  "feature": {
+    "id": "proactive-v2-demo",
+    "name": "Proactive Agent v2 Demo — Animated + Live Rebuild",
+    "status": "complete",
+    "prd": null,
+    "createdAt": "2026-02-14T11:00:00Z",
+    "completedAt": "2026-02-14T14:40:00Z",
+    "description": "Replace the static ProactiveAgentV2Demo page with an animated simulation that shows steps executing progressively, plus a 'Run for Real' mode that triggers the actual orchestrator on a real meeting."
+  },
+
+  "stories": [
+    {
+      "id": "PV2D-001",
+      "feature": "proactive-v2-demo",
+      "title": "Refactor scenario data to SimStep structure",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["PV2D-002", "PV2D-003", "PV2D-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "SimStep interface added: name, delayMs, blocksRevealed, gated?, label?",
+        "DemoScenario.steps replaced with SimStep[] (steps now have delayMs instead of static status/duration)",
+        "All 8 scenarios remapped with realistic delay values and cumulative block indices",
+        "Existing SlackMessage, SlackBlockRenderer, EmailPreview, renderMrkdwn components unchanged"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 15,
+      "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"],
+      "activeForm": "Refactoring scenario data to SimStep structure"
+    },
+    {
+      "id": "PV2D-002",
+      "feature": "proactive-v2-demo",
+      "title": "Build useSimulation hook with requestAnimationFrame timer",
+      "type": "feature",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["PV2D-001"], "files": [], "schema": [] },
+      "blocks": ["PV2D-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "useSimulation(steps, isRunning, scenario) hook created inline in the file",
+        "Uses requestAnimationFrame for smooth elapsed-time counters (100ms visual updates)",
+        "Steps execute sequentially: runningStepIndex advances after each step's delayMs elapses",
+        "Gated steps (sales-only, coaching) skip instantly with 'skipped' state when scenario.callType.isSales === false",
+        "Exposes: runningStepIndex, completedStepIndex, stepTimers (per-step elapsed), visibleBlocks, totalElapsedMs, isComplete",
+        "Reset function clears all state for re-runs"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 20,
+      "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"],
+      "activeForm": "Building useSimulation hook"
+    },
+    {
+      "id": "PV2D-003",
+      "feature": "proactive-v2-demo",
+      "title": "Replace StepVisualizer with animated version",
+      "type": "feature",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["PV2D-001"], "files": [], "schema": [] },
+      "blocks": ["PV2D-005"],
+      "parallelWith": ["PV2D-002"],
+      "acceptance": [
+        "StepVisualizer accepts steps + simulation state (runningStepIndex, completedStepIndex, stepTimers)",
+        "Running step: Loader2 spinner + live elapsed counter (e.g. '2.4s...')",
+        "Complete step: CheckCircle2 green + final duration",
+        "Skipped step: SkipForward icon + line-through text + reason badge (e.g. 'Non-sales')",
+        "Approval step: Clock amber icon + 'Awaiting approval' label",
+        "Pending step: gray circle with step number",
+        "Connector lines between steps colored by status"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 15,
+      "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"],
+      "activeForm": "Building animated StepVisualizer"
+    },
+    {
+      "id": "PV2D-004",
+      "feature": "proactive-v2-demo",
+      "title": "Progressive Slack message builder with AnimatePresence",
+      "type": "feature",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["PV2D-001"], "files": [], "schema": [] },
+      "blocks": ["PV2D-005"],
+      "parallelWith": ["PV2D-002", "PV2D-003"],
+      "acceptance": [
+        "SlackMessage wraps blocks with AnimatePresence + motion.div (opacity + y animation)",
+        "Only scenario.slackBlocks.slice(0, visibleBlocks) rendered",
+        "When visibleBlocks === 0, empty Slack shell shows 'Waiting for orchestrator...' placeholder",
+        "Blocks fade in with staggered delay (i * 0.05s) as each step completes",
+        "Email preview (if present) appears with fade animation after the relevant step completes",
+        "Animated call type confidence badge appears after classify-call-type step (emerald bar animates width)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 15,
+      "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"],
+      "activeForm": "Building progressive Slack message builder"
+    },
+    {
+      "id": "PV2D-005",
+      "feature": "proactive-v2-demo",
+      "title": "Wire page layout with mode toggle and execution metrics",
+      "type": "feature",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["PV2D-002", "PV2D-003", "PV2D-004"], "files": [], "schema": [] },
+      "blocks": ["PV2D-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Mode toggle (Simulate / Live) renders top-right of content area",
+        "Run button triggers useSimulation; Reset button clears state",
+        "2-column layout: left (trigger card + animated stepper + metrics), right (progressive Slack + email)",
+        "Execution metrics bar below stepper: total duration, steps complete/total, approval count",
+        "Scenario tab selector remains (8 tabs), switching scenario resets simulation",
+        "Architecture flow card and footer stats card preserved from existing page"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 15,
+      "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"],
+      "activeForm": "Wiring page layout and mode toggle"
+    },
+    {
+      "id": "PV2D-006",
+      "feature": "proactive-v2-demo",
+      "title": "Live mode: meeting picker, orchestrator trigger, Realtime subscription",
+      "type": "feature",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["PV2D-005"], "files": [], "schema": [] },
+      "blocks": ["PV2D-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "When mode === 'live', meeting picker replaces the Run button area",
+        "useQuery fetches 15 recent meetings with transcripts (owner_user_id filter, 30 days)",
+        "Selected meeting shown with title, date, source badge",
+        "Run Orchestrator button POSTs to agent-orchestrator edge function with meeting_ended event",
+        "Supabase Realtime subscription on sequence_jobs table (filter by job_id)",
+        "Live step_results mapped to StepVisualizer states (running/complete/failed/skipped)",
+        "Channel cleanup on unmount",
+        "Error state shown if orchestrator call fails or Realtime disconnects"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 25,
+      "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"],
+      "activeForm": "Building live mode with orchestrator integration"
+    },
+    {
+      "id": "PV2D-007",
+      "feature": "proactive-v2-demo",
+      "title": "Verification: lint, build, manual walkthrough",
+      "type": "test",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["PV2D-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "npx eslint src/pages/platform/ProactiveAgentV2Demo.tsx --quiet — 0 errors",
+        "npx vite build --mode development — succeeds",
+        "Simulation mode: post-meeting scenario runs with progressive animation",
+        "Internal meeting scenario: 3+ steps skip with strikethrough",
+        "Live mode: meeting picker visible (requires auth)",
+        "No regressions in existing SlackMessage/EmailPreview rendering"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 10,
+      "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"],
+      "activeForm": "Verifying lint, build, and manual walkthrough"
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 7,
+    "currentFeature": "proactive-v2-demo",
+    "estimatedTotal": "~140 minutes",
+    "actualTotal": "~100 minutes",
+    "efficiency": "140%",
+    "parallelGroups": [
+      ["PV2D-002", "PV2D-003", "PV2D-004"]
+    ],
+    "criticalPath": "PV2D-001 → PV2D-002 → PV2D-005 → PV2D-006 → PV2D-007",
+    "notes": "All changes in a single file (ProactiveAgentV2Demo.tsx). New components are inline following the existing pattern. Framer Motion already imported in the project. Completed in 71% of estimated time with zero errors."
+  }
+}

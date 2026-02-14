@@ -85,6 +85,34 @@ export async function enrichFirefliesMeeting(
     condenseMeetingSummary(supabase, meeting.id, meeting.summary, meeting.title || 'Meeting')
       .catch(() => undefined)
   }
+
+  // 6. Trigger orchestrator for post-meeting workflows (fire-and-forget)
+  if (orgId) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (supabaseUrl && serviceRoleKey) {
+      fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'meeting_ended',
+          source: 'edge:fireflies-sync',
+          org_id: orgId,
+          user_id: userId,
+          payload: {
+            meeting_id: meeting.id,
+            title: meeting.title,
+            transcript_available: true,
+          },
+          idempotency_key: `meeting_ended:${meeting.id}`,
+        }),
+      }).catch(err => console.error('[fireflies-enrich] Orchestrator trigger failed:', err))
+      console.log(`🚀 Orchestrator triggered for meeting ${meeting.id} (source: fireflies-sync)`)
+    }
+  }
 }
 
 // ─── Participant Processing ───────────────────────────────────────────

@@ -20,12 +20,11 @@ export const findAvailableSlotsAdapter: SkillAdapter = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: state.event.user_id,
+          userId: state.event.user_id,
           org_id: state.event.org_id,
-          prospect_email: state.context.tier2?.contact?.email,
           prospect_timezone: state.event.payload.prospect_timezone,
           days_ahead: state.event.payload.days_ahead || 5,
-          preferred_duration_min: state.event.payload.duration_minutes || 30,
+          duration_minutes: state.event.payload.duration_minutes || 30,
         }),
       });
 

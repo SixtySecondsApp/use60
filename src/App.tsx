@@ -73,7 +73,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo,
+  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, ActionCentre, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, ProactiveAgentV2Demo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -478,6 +478,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/sentry-bridge" element={<PlatformAdminRouteGuard><AppLayout><SentryBridge /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-simulator" element={<PlatformAdminRouteGuard><AppLayout><ProactiveSimulator /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/proactive-simulator" element={<Navigate to="/platform/agent-simulator" replace />} />
+                <Route path="/platform/proactive-v2-demo" element={<PlatformAdminRouteGuard><AppLayout><ProactiveAgentV2Demo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/deal-truth-simulator" element={<PlatformAdminRouteGuard><AppLayout><DealTruthSimulator /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/slack-demo" element={<PlatformAdminRouteGuard><AppLayout><SlackDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Cron Jobs Admin - Monitor and manage scheduled jobs */}

@@ -21,6 +21,9 @@ export type EventType =
 
 export type EventSource =
   | 'webhook:meetingbaas'
+  | 'edge:process-recording'
+  | 'edge:fathom-sync'
+  | 'edge:fireflies-sync'
   | 'cron:morning'
   | 'cron:weekly'
   | 'slack:button'
@@ -51,6 +54,7 @@ export interface SequenceStep {
   criticality: StepCriticality;
   available: boolean; // false for stubs not yet implemented
   timeout_ms?: number;
+  depends_on?: string[]; // skill names this step depends on (for parallel execution)
 }
 
 export type ContextTierSpec = 'tier1' | 'tier2' | `tier3:${string}`;

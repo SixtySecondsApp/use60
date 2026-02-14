@@ -50,15 +50,27 @@ serve(async (req) => {
   try {
     const { org_id, user_id, campaign_id, time_range = '24h' } = await req.json() as MonitorCampaignsRequest;
 
-    // 1. Pull Instantly API settings from integration_settings
-    const { data: instantlySettings } = await supabase
-      .from('integration_settings')
-      .select('api_key, settings')
-      .eq('organization_id', org_id)
-      .eq('provider', 'instantly')
+    // 1. Pull Instantly API key — check instantly_org_credentials first, then integration_credentials (legacy)
+    const { data: instantlyCreds } = await supabase
+      .from('instantly_org_credentials')
+      .select('api_key')
+      .eq('org_id', org_id)
       .maybeSingle();
 
-    if (!instantlySettings?.api_key) {
+    let instantlyApiKey = instantlyCreds?.api_key || null;
+
+    if (!instantlyApiKey) {
+      const { data: legacyCreds } = await supabase
+        .from('integration_credentials')
+        .select('credentials')
+        .eq('organization_id', org_id)
+        .eq('provider', 'instantly')
+        .maybeSingle();
+
+      instantlyApiKey = (legacyCreds?.credentials as Record<string, string>)?.api_key || null;
+    }
+
+    if (!instantlyApiKey) {
       return new Response(JSON.stringify({ error: 'Instantly API not configured' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -67,16 +79,16 @@ serve(async (req) => {
 
     // 2. Fetch campaign analytics from Instantly
     const metricsUrl = campaign_id
-      ? `https://api.instantly.ai/api/v1/campaign/analytics?api_key=${instantlySettings.api_key}&campaign_id=${campaign_id}`
-      : `https://api.instantly.ai/api/v1/campaigns?api_key=${instantlySettings.api_key}`;
+      ? `https://api.instantly.ai/api/v1/campaign/analytics?api_key=${instantlyApiKey}&campaign_id=${campaign_id}`
+      : `https://api.instantly.ai/api/v1/campaigns?api_key=${instantlyApiKey}`;
 
     const metricsResponse = await fetch(metricsUrl);
     const metrics = await metricsResponse.json();
 
     // 3. Fetch recent replies
     const repliesUrl = campaign_id
-      ? `https://api.instantly.ai/api/v1/campaign/replies?api_key=${instantlySettings.api_key}&campaign_id=${campaign_id}&limit=50`
-      : `https://api.instantly.ai/api/v1/replies?api_key=${instantlySettings.api_key}&limit=50`;
+      ? `https://api.instantly.ai/api/v1/campaign/replies?api_key=${instantlyApiKey}&campaign_id=${campaign_id}&limit=50`
+      : `https://api.instantly.ai/api/v1/replies?api_key=${instantlyApiKey}&limit=50`;
 
     const repliesResponse = await fetch(repliesUrl);
     const replies = await repliesResponse.json();

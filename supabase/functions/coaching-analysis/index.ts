@@ -1,6 +1,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders } from '../_shared/corsHelper.ts';
+import { logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts';
+
+// =============================================================================
+// Types
+// =============================================================================
 
 interface CoachingAnalysisRequest {
   user_id: string;
@@ -8,12 +13,28 @@ interface CoachingAnalysisRequest {
   meeting_id?: string;
   transcript?: string;
   analysis_type?: 'per_meeting' | 'weekly';
+  context?: {
+    rep_name?: string;
+    org_name?: string;
+    products?: Array<{ name: string; description?: string } | string>;
+    attendees_section?: string;
+    contact_section?: string;
+    relationship_history?: string;
+    coaching_history_section?: string;
+    deal_context?: { id?: string; name: string; stage: string; value?: number; close_date?: string; probability?: number };
+    call_type?: any;
+    action_items_summary?: any;
+    meeting_title?: string;
+    meeting_duration?: number;
+    meeting_start?: string;
+  };
 }
 
 interface AnalysisInsight {
   category: 'talk_ratio' | 'questions' | 'objections' | 'discovery' | 'closing';
   text: string;
   severity: 'high' | 'medium' | 'low';
+  timestamp?: string;
 }
 
 interface AnalysisRecommendation {
@@ -31,6 +52,8 @@ interface RawMetrics {
   closed_questions: number;
   objections_detected: number;
   objections_handled: number;
+  longest_monologue_seconds?: number;
+  monologues_over_76s?: number;
 }
 
 interface MeetingAnalysis {
@@ -38,10 +61,200 @@ interface MeetingAnalysis {
   question_quality_score: number;
   objection_handling_score: number;
   discovery_depth_score: number;
+  overall_score?: number;
   insights: AnalysisInsight[];
   recommendations: AnalysisRecommendation[];
+  quick_wins?: string[];
+  one_thing_to_focus_on?: string;
+  spin_breakdown?: { situation: number; problem: number; implication: number; need_payoff: number; total_questions: number };
+  discovery_dimensions?: { pain_points: number; quantification: number; decision_process: number; timeline_urgency: number; competitive_landscape: number };
   raw_metrics: RawMetrics;
 }
+
+// =============================================================================
+// Coaching Prompt Builder — based on coaching-analysis skill methodology
+// =============================================================================
+
+function buildCoachingPrompt(transcript: string, context: CoachingAnalysisRequest['context']): string {
+  const repName = context?.rep_name || 'the rep';
+  const orgName = context?.org_name || 'the organization';
+  const meetingTitle = context?.meeting_title || 'Meeting';
+
+  const sections: string[] = [];
+
+  // Meeting metadata
+  sections.push(`## MEETING: ${meetingTitle}`);
+  if (context?.meeting_duration) sections.push(`Duration: ${context.meeting_duration} minutes`);
+  if (context?.meeting_start) {
+    const d = new Date(context.meeting_start).toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    });
+    sections.push(`Date: ${d}`);
+  }
+
+  // Attendees with roles/titles
+  if (context?.attendees_section) {
+    sections.push(`\n## ATTENDEES\n${context.attendees_section}`);
+  }
+
+  // Primary contact
+  if (context?.contact_section) {
+    sections.push(`\n## PRIMARY CONTACT\n${context.contact_section}`);
+  }
+
+  // Relationship history (prior meetings, emails, activities)
+  if (context?.relationship_history) {
+    sections.push(`\n## RELATIONSHIP HISTORY\n${context.relationship_history}`);
+  }
+
+  // Deal context
+  if (context?.deal_context) {
+    const deal = context.deal_context;
+    const parts = [`Deal: "${deal.name}" — Stage: ${deal.stage}`];
+    if (deal.value) parts.push(`Value: $${deal.value.toLocaleString()}`);
+    if (deal.close_date) parts.push(`Close: ${deal.close_date}`);
+    if (deal.probability) parts.push(`Probability: ${deal.probability}%`);
+    sections.push(`\n## DEAL CONTEXT\n${parts.join(', ')}`);
+  }
+
+  // Coaching history (prior scores, org winning patterns)
+  if (context?.coaching_history_section) {
+    sections.push(`\n## COACHING HISTORY FOR ${repName.toUpperCase()}\n${context.coaching_history_section}`);
+  }
+
+  // Call type classification
+  if (context?.call_type) {
+    const ct = context.call_type;
+    const typeLabel = ct.call_type || ct.classification || ct.type || 'unknown';
+    sections.push(`\n## CALL CLASSIFICATION\nType: ${typeLabel}`);
+  }
+
+  // Products/services
+  if (context?.products && context.products.length > 0) {
+    const productText = context.products
+      .map((p: any) => typeof p === 'string' ? p : `${p.name}${p.description ? `: ${p.description}` : ''}`)
+      .join('\n  - ');
+    sections.push(`\n## PRODUCTS/SERVICES\n  - ${productText}`);
+  }
+
+  return `You are a world-class sales coach analyzing a meeting transcript for ${orgName}. You deliver specific, evidence-based coaching feedback. Every piece of feedback references a specific moment, quote, or data point from the conversation. You balance positive reinforcement with growth areas.
+
+Your coaching philosophy: top performers are made, not born. The difference between a 20% close rate and a 40% close rate is a set of specific, learnable behaviors. Your job is to identify which behaviors to reinforce and which to adjust, with the precision of a sports coach reviewing game film.
+
+Rep being coached: ${repName}
+
+${sections.join('\n')}
+
+## TRANSCRIPT
+${transcript?.substring(0, 15000) || 'No transcript available'}
+
+## ANALYSIS METHODOLOGY
+
+Analyze this meeting following these steps:
+
+### Step 1: Talk-to-Listen Ratio
+Calculate the rep's talk percentage. Research-backed benchmarks:
+- Top performers: 43% talk / 57% listen (Gong, 500K+ calls)
+- Average: 65% talk / 35% listen
+- Poor: 72%+ talk / 28%- listen
+Flag monologues > 76 seconds — engagement drops sharply after 76s (Gong research). Note what the rep was saying during each monologue.
+
+### Step 2: Question Quality (SPIN Framework)
+Categorize every question the rep asked using SPIN (Neil Rackham, 35,000 sales calls):
+- Situation questions (1pt) — establish facts/context. Benchmark: 2-4 per call.
+- Problem questions (2pts) — uncover pain/challenges. Benchmark: 3-5 per call.
+- Implication questions (3pts) — explore impact/consequences. Benchmark: 2-4 per call.
+- Need-Payoff questions (4pts) — connect solution to buyer value. Benchmark: 1-3 per call.
+Winning calls average 11-14 questions (Gong, 2023). Losing calls: 6-8.
+Flag: leading questions (>20% = seeking validation), question clusters (4+ rapid-fire = interrogation), no follow-up to great answers.
+
+### Step 3: Objection Handling (1-5 Scale)
+Score each objection response:
+- Level 5 (Expert): Acknowledge + Explore root cause + Reframe + Evidence/case study
+- Level 4 (Strong): Acknowledge + Explore + Reframe
+- Level 3 (Adequate): Acknowledge + Direct Response
+- Level 2 (Weak): Deflect, rush past, or pivot to features
+- Level 1 (Poor): Ignore, talk over, or argue
+
+### Step 4: Discovery Depth (Weighted Composite, 1-5 each)
+- Pain Points Surfaced (30%): Was root cause uncovered and impact quantified?
+- Quantification Attempted (25%): Were specific numbers discussed (revenue impact, time saved)?
+- Decision Process Explored (20%): Were stakeholders mapped, criteria understood?
+- Timeline and Urgency (15%): Was a compelling event established with cost of delay?
+- Competitive Landscape (10%): Were alternatives identified, differentiation established?
+
+### Step 5: Winning Pattern Comparison
+Compare this call's metrics to the coaching history and org winning patterns provided above.
+If no org data is available, use the industry benchmarks from Steps 1-4.
+Show specific gaps and improvements from prior coaching sessions.
+
+## OUTPUT FORMAT
+Return JSON only (no markdown code blocks):
+{
+  "talk_ratio": <number 0-100>,
+  "question_quality_score": <number 0.0-1.0>,
+  "objection_handling_score": <number 0.0-1.0>,
+  "discovery_depth_score": <number 0.0-1.0>,
+  "overall_score": <number 0.0-1.0, weighted: talk 20%, questions 25%, objections 25%, discovery 30%>,
+  "insights": [
+    {
+      "category": "talk_ratio|questions|objections|discovery|closing",
+      "text": "Specific feedback referencing a moment/quote from the transcript",
+      "severity": "high|medium|low",
+      "timestamp": "approximate time if identifiable"
+    }
+  ],
+  "recommendations": [
+    {
+      "category": "talk_ratio|questions|objections|discovery|closing",
+      "action": "Specific actionable advice with an example script to use",
+      "priority": 1-5,
+      "rationale": "Why this matters with benchmark data"
+    }
+  ],
+  "quick_wins": [
+    "Specific positive behavior to reinforce (with quote if possible)"
+  ],
+  "one_thing_to_focus_on": "The single highest-leverage behavior change for the next call with a specific technique",
+  "spin_breakdown": {
+    "situation": <count>,
+    "problem": <count>,
+    "implication": <count>,
+    "need_payoff": <count>,
+    "total_questions": <count>
+  },
+  "discovery_dimensions": {
+    "pain_points": <1-5>,
+    "quantification": <1-5>,
+    "decision_process": <1-5>,
+    "timeline_urgency": <1-5>,
+    "competitive_landscape": <1-5>
+  },
+  "raw_metrics": {
+    "total_words_rep": <number>,
+    "total_words_prospect": <number>,
+    "questions_asked": <number>,
+    "open_questions": <number>,
+    "closed_questions": <number>,
+    "objections_detected": <number>,
+    "objections_handled": <number>,
+    "longest_monologue_seconds": <estimated number>,
+    "monologues_over_76s": <count>
+  }
+}
+
+IMPORTANT:
+- Every insight MUST reference a specific moment, quote, or data point
+- Recommendations MUST include example scripts — not generic "ask better questions"
+- Compare to coaching history and winning patterns when provided
+- Positive feedback first (quick_wins), then growth areas
+- Use encouraging language: "opportunity", "next time", "stronger approach" — never "bad", "wrong", "failed"
+- If this is the rep's first analysis, note "This is your first coaching analysis — tracking starts now"`;
+}
+
+// =============================================================================
+// Main Handler
+// =============================================================================
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
@@ -62,11 +275,11 @@ serve(async (req) => {
       meeting_id,
       transcript,
       analysis_type = 'per_meeting',
+      context,
     } = await req.json() as CoachingAnalysisRequest;
 
     if (analysis_type === 'per_meeting') {
-      // Single meeting micro-feedback
-      const result = await analyzeMeeting(transcript || '', user_id);
+      const result = await analyzeMeeting(transcript || '', user_id, org_id, context, supabase);
 
       // Store in coaching_analyses table
       await supabase.from('coaching_analyses').insert({
@@ -89,7 +302,6 @@ serve(async (req) => {
     }
 
     if (analysis_type === 'weekly') {
-      // Weekly digest: aggregate past 7 days
       const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data: analyses } = await supabase
         .from('coaching_analyses')
@@ -101,7 +313,6 @@ serve(async (req) => {
 
       const digest = generateWeeklyDigest(analyses || []);
 
-      // Store weekly digest
       await supabase.from('coaching_analyses').insert({
         user_id,
         org_id,
@@ -127,45 +338,27 @@ serve(async (req) => {
   }
 });
 
-/**
- * Analyze a single meeting transcript using Claude Haiku
- */
-async function analyzeMeeting(transcript: string, userId: string): Promise<MeetingAnalysis> {
+// =============================================================================
+// Analyze a single meeting transcript using Claude Haiku
+// =============================================================================
+
+async function analyzeMeeting(
+  transcript: string,
+  userId: string,
+  orgId: string,
+  context: CoachingAnalysisRequest['context'],
+  supabase: any,
+): Promise<MeetingAnalysis> {
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
 
   if (!anthropicKey) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  const prompt = `Analyze this sales meeting transcript for coaching insights.
-
-Return JSON:
-{
-  "talk_ratio": <number 0-100, rep's speaking percentage>,
-  "question_quality_score": <number 0-1>,
-  "objection_handling_score": <number 0-1>,
-  "discovery_depth_score": <number 0-1>,
-  "insights": [
-    { "category": "talk_ratio|questions|objections|discovery|closing", "text": "specific feedback", "severity": "high|medium|low" }
-  ],
-  "recommendations": [
-    { "category": "...", "action": "specific actionable advice", "priority": 1-5, "rationale": "why" }
-  ],
-  "raw_metrics": {
-    "total_words_rep": <number>,
-    "total_words_prospect": <number>,
-    "questions_asked": <number>,
-    "open_questions": <number>,
-    "closed_questions": <number>,
-    "objections_detected": <number>,
-    "objections_handled": <number>
-  }
-}
-
-Transcript:
-${transcript?.substring(0, 15000) || 'No transcript available'}`;
+  const prompt = buildCoachingPrompt(transcript, context);
 
   try {
+    console.log('[coaching-analysis] Calling Anthropic API with enriched context...');
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -175,25 +368,85 @@ ${transcript?.substring(0, 15000) || 'No transcript available'}`;
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2000,
+        max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
 
-    const aiResult = await response.json();
-    const text = aiResult.content?.[0]?.text || '{}';
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.error(`[coaching-analysis] Anthropic API returned ${response.status}: ${errText.substring(0, 300)}`);
+      throw new Error(`Anthropic API returned ${response.status}`);
+    }
 
-    // Extract JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    const aiResult = await response.json();
+
+    // Cost tracking
+    const usage = extractAnthropicUsage(aiResult);
+    await logAICostEvent(
+      supabase, userId, orgId,
+      'anthropic', 'claude-haiku-4-5-20251001',
+      usage.inputTokens, usage.outputTokens,
+      'coaching-analysis',
+      { meeting_id: context?.meeting_title },
+    );
+
+    const text = aiResult.content?.[0]?.text || '';
+    const stopReason = aiResult.stop_reason;
+
+    if (!text) {
+      console.error('[coaching-analysis] Empty AI response content');
+      throw new Error('Empty AI response');
+    }
+
+    if (stopReason === 'max_tokens') {
+      console.warn('[coaching-analysis] Response was truncated (max_tokens reached)');
+    }
+
+    // Extract JSON robustly — handle code blocks, surrounding text
+    let jsonText = text.trim();
+    const codeFenceMatch = jsonText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (codeFenceMatch) {
+      jsonText = codeFenceMatch[1].trim();
+    }
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[coaching-analysis] No JSON object found in AI response:', text.substring(0, 300));
+      throw new Error('No JSON in AI response');
+    }
+
+    let analysis: any;
+    try {
+      analysis = JSON.parse(jsonMatch[0]);
+    } catch {
+      // Attempt to repair truncated JSON
+      console.warn('[coaching-analysis] JSON parse failed, attempting repair');
+      let repaired = jsonMatch[0];
+      const quoteCount = (repaired.match(/(?<!\\)"/g) || []).length;
+      if (quoteCount % 2 !== 0) repaired += '"';
+      const opens = (repaired.match(/[\[{]/g) || []).length;
+      const closes = (repaired.match(/[\]}]/g) || []).length;
+      for (let i = 0; i < opens - closes; i++) {
+        const lastOpen = Math.max(repaired.lastIndexOf('['), repaired.lastIndexOf('{'));
+        const lastClose = Math.max(repaired.lastIndexOf(']'), repaired.lastIndexOf('}'));
+        repaired += (lastOpen > lastClose && repaired[lastOpen] === '[') ? ']' : '}';
+      }
+      analysis = JSON.parse(repaired);
+      console.log('[coaching-analysis] JSON repair succeeded');
+    }
 
     return {
       talk_ratio: analysis.talk_ratio || 50,
       question_quality_score: analysis.question_quality_score || 0.5,
       objection_handling_score: analysis.objection_handling_score || 0.5,
       discovery_depth_score: analysis.discovery_depth_score || 0.5,
+      overall_score: analysis.overall_score,
       insights: analysis.insights || [],
       recommendations: analysis.recommendations || [],
+      quick_wins: analysis.quick_wins || [],
+      one_thing_to_focus_on: analysis.one_thing_to_focus_on,
+      spin_breakdown: analysis.spin_breakdown,
+      discovery_dimensions: analysis.discovery_dimensions,
       raw_metrics: analysis.raw_metrics || {
         total_words_rep: 0,
         total_words_prospect: 0,
@@ -206,13 +459,12 @@ ${transcript?.substring(0, 15000) || 'No transcript available'}`;
     };
   } catch (error) {
     console.error('[coaching-analysis] AI analysis failed:', error);
-    // Return default analysis
     return {
       talk_ratio: 50,
       question_quality_score: 0.5,
       objection_handling_score: 0.5,
       discovery_depth_score: 0.5,
-      insights: [{ category: 'discovery', text: 'Analysis failed', severity: 'high' }],
+      insights: [{ category: 'discovery', text: 'Analysis failed — will retry on next run', severity: 'high' }],
       recommendations: [{ category: 'general', action: 'Retry analysis', priority: 1, rationale: 'AI analysis error' }],
       raw_metrics: {
         total_words_rep: 0,
@@ -227,9 +479,10 @@ ${transcript?.substring(0, 15000) || 'No transcript available'}`;
   }
 }
 
-/**
- * Generate weekly coaching digest from multiple analyses
- */
+// =============================================================================
+// Generate weekly coaching digest from multiple analyses
+// =============================================================================
+
 function generateWeeklyDigest(analyses: any[]) {
   if (analyses.length === 0) {
     return {
@@ -251,16 +504,14 @@ function generateWeeklyDigest(analyses: any[]) {
   const avgObjectionHandling = analyses.reduce((sum, a) => sum + (a.objection_handling_score || 0), 0) / analyses.length;
   const avgDiscoveryDepth = analyses.reduce((sum, a) => sum + (a.discovery_depth_score || 0), 0) / analyses.length;
 
-  // Collect top insights (most severe, most recent)
   const allInsights = analyses.flatMap(a => a.insights || []);
   const topInsights = allInsights
     .sort((a, b) => {
-      const severityScore = { high: 3, medium: 2, low: 1 };
+      const severityScore: Record<string, number> = { high: 3, medium: 2, low: 1 };
       return (severityScore[b.severity] || 0) - (severityScore[a.severity] || 0);
     })
     .slice(0, 10);
 
-  // Collect top recommendations (highest priority)
   const allRecommendations = analyses.flatMap(a => a.recommendations || []);
   const topRecommendations = allRecommendations
     .sort((a, b) => (a.priority || 5) - (b.priority || 5))

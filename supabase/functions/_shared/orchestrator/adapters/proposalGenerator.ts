@@ -23,6 +23,7 @@ export const proposalGeneratorAdapter: SkillAdapter = {
 
       // Prepare payload for generate-proposal
       const payload = {
+        action: 'analyze_focus_areas',
         org_id: state.event.org_id,
         user_id: state.event.user_id,
         deal_id: state.context.tier2?.deal?.id,
@@ -30,6 +31,7 @@ export const proposalGeneratorAdapter: SkillAdapter = {
         trigger_phrase: state.event.payload.trigger_phrase as string | undefined,
         meeting_context: state.outputs['extract-action-items'] || {},
         intent_data: state.outputs['detect-intents'] || {},
+        transcripts: state.context.tier1?.transcript ? [state.context.tier1.transcript.substring(0, 5000)] : [],
       };
 
       // Call generate-proposal edge function

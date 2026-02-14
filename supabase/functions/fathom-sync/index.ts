@@ -1887,14 +1887,28 @@ async function syncSingleCall(
       }
     }
 
-    // Process participants (use calendar_invitees from actual API)
+    // Process participants: prefer calendar_invitees, fallback to participants
+    // calendar_invitees has is_external flag from Fathom's calendar integration
+    // participants has who actually joined the call (always available)
     // IMPORTANT: Separate handling for internal vs external participants to avoid duplication
     // - Internal users: Create meeting_attendees entry only (no contact creation)
     // - External users: Create/update contacts + meeting_contacts junction (no meeting_attendees)
     const externalContactIds: string[] = []
 
-    if (call.calendar_invitees && call.calendar_invitees.length > 0) {
-      for (const invitee of call.calendar_invitees) {
+    // Determine which participant list to use
+    const inviteeList = (call.calendar_invitees && call.calendar_invitees.length > 0)
+      ? call.calendar_invitees
+      : (call.participants && call.participants.length > 0)
+        ? call.participants.map((p: any) => ({
+            ...p,
+            // participants don't have is_external — infer: non-host = external
+            is_external: p.is_external ?? !p.is_host,
+          }))
+        : [];
+
+    if (inviteeList.length > 0) {
+      console.log(`[fathom-sync] Processing ${inviteeList.length} participants (source: ${call.calendar_invitees?.length ? 'calendar_invitees' : 'participants'})`)
+      for (const invitee of inviteeList) {
         // Handle internal participants (team members) - store in meeting_attendees only
         if (!invitee.is_external) {
           // Check if already exists to avoid duplicates

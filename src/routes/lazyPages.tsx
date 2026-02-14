@@ -52,6 +52,7 @@ export const ExaAbilitiesDemo = lazyWithRetry(() => import('@/pages/demo/ExaAbil
 export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailSequenceTest'));
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
+export const ProactiveAgentV2Demo = lazyWithRetry(() => import('@/pages/platform/ProactiveAgentV2Demo'));
 
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));

@@ -120,7 +120,7 @@ export const deliverCampaignSlackAdapter: SkillAdapter = {
       const report = state.outputs['generate-campaign-report'] as any;
 
       // Send via existing Slack delivery infrastructure
-      const response = await fetch(`${supabaseUrl}/functions/v1/slack-send-message`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-slack-message`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${serviceKey}`,
@@ -135,7 +135,7 @@ export const deliverCampaignSlackAdapter: SkillAdapter = {
       });
 
       if (!response.ok) {
-        throw new Error(`slack-send-message returned ${response.status}: ${await response.text()}`);
+        throw new Error(`send-slack-message returned ${response.status}: ${await response.text()}`);
       }
 
       const output = await response.json();

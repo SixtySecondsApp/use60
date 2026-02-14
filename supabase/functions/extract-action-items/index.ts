@@ -58,12 +58,24 @@ serve(async (req) => {
       )
     }
 
-    // Initialize Supabase client with RLS using the caller's token
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    )
+    // Detect if caller is using the service role key (e.g., from orchestrator)
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const token = authHeader.replace('Bearer ', '')
+    const isServiceRole = !!serviceRoleKey && token === serviceRoleKey
+
+    // Use service-role client when called from orchestrator (bypasses RLS properly)
+    // Otherwise use anon-key client with user auth (respects RLS)
+    const supabaseClient = isServiceRole
+      ? createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          serviceRoleKey,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+      : createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+          { global: { headers: { Authorization: authHeader } } }
+        )
 
     // Load meeting with minimal fields we need (including owner_user_id for extraction rules)
     const { data: meeting, error: meetingErr } = await supabaseClient

@@ -4,8 +4,8 @@
  * Wraps the create-task-unified edge function to conform to the orchestrator's
  * SkillAdapter interface. Creates tasks from action items extracted in previous steps.
  *
- * This is a batch adapter — it iterates over action items from previous step output
- * and creates tasks for each.
+ * Uses enriched action item data from the upgraded actionItems adapter,
+ * and includes deal/contact/meeting context in the output for downstream use.
  */
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
@@ -24,8 +24,7 @@ export const createTasksAdapter: SkillAdapter = {
         throw new Error('Missing required environment variables');
       }
 
-      // Extract action items from previous step output
-      // The extract-action-items step should have stored action items in outputs
+      // Get enriched action items from previous step
       const actionItemsOutput = state.outputs['extract-action-items'] as any;
 
       if (!actionItemsOutput?.action_items || actionItemsOutput.action_items.length === 0) {
@@ -36,8 +35,10 @@ export const createTasksAdapter: SkillAdapter = {
         };
       }
 
-      // Extract action item IDs
-      const actionItemIds = actionItemsOutput.action_items.map((item: any) => item.id).filter(Boolean);
+      // Extract action item IDs from enriched output
+      const actionItemIds = actionItemsOutput.action_items
+        .map((item: any) => item.id)
+        .filter(Boolean);
 
       if (actionItemIds.length === 0) {
         return {
@@ -47,7 +48,19 @@ export const createTasksAdapter: SkillAdapter = {
         };
       }
 
-      // Call create-task-unified in auto mode
+      console.log(`[create-tasks] Creating tasks from ${actionItemIds.length} action items`);
+
+      // Include context metadata for smarter task creation
+      const meetingId = state.event.payload.meeting_id as string | undefined;
+      const contactName = state.context.tier2?.contact?.name;
+      const dealName = state.context.tier2?.deal?.name;
+      const meetingTitle = state.event.payload.title as string | undefined;
+
+      if (contactName || dealName) {
+        console.log(`[create-tasks] Context: contact=${contactName || 'none'}, deal=${dealName || 'none'}, meeting=${meetingTitle || 'none'}`);
+      }
+
+      // Call create-task-unified in manual mode (orchestrator bypasses user auto-sync prefs)
       const response = await fetch(`${supabaseUrl}/functions/v1/create-task-unified`, {
         method: 'POST',
         headers: {
@@ -55,9 +68,18 @@ export const createTasksAdapter: SkillAdapter = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          mode: 'auto',
+          mode: 'manual',
           action_item_ids: actionItemIds,
           source: 'action_item',
+          // Pass context metadata (edge function may use in future)
+          context: {
+            meeting_id: meetingId,
+            meeting_title: meetingTitle,
+            contact_name: contactName,
+            deal_name: dealName,
+            user_id: state.event.user_id,
+            org_id: state.event.org_id,
+          },
         }),
       });
 
@@ -68,9 +90,16 @@ export const createTasksAdapter: SkillAdapter = {
 
       const result = await response.json();
 
+      console.log(`[create-tasks] Result: ${result.tasks_created || 0} tasks created`);
+
       return {
         success: result.success || false,
-        output: result,
+        output: {
+          ...result,
+          meeting_id: meetingId,
+          contact_name: contactName,
+          deal_name: dealName,
+        },
         duration_ms: Date.now() - start,
       };
     } catch (error) {

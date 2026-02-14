@@ -92,6 +92,7 @@ npm run dev              # Start landing (port 5173)
 **Edge Function Gotchas**:
 - Default to JWT-protected functions.
 - For public/demo/webhook endpoints, disable JWT verification explicitly with `verify_jwt = false` (or deploy with `--no-verify-jwt`) and enforce your own validation/rate limits in function code.
+- **ALWAYS deploy with `--no-verify-jwt` flag** when a function has `verify_jwt = false` in its `config.toml`. The `config.toml` alone is unreliable — the Supabase gateway may still enforce JWT verification unless the CLI flag is passed explicitly. Example: `npx supabase functions deploy my-function --project-ref <ref> --no-verify-jwt`. Forgetting this causes 401 errors on every request.
 - Use `esm.sh` with pinned versions for imports.
 - Always use explicit column selection (not `select('*')`).
 - New functions must import `getCorsHeaders(req)` from `_shared/corsHelper.ts` for origin-validated CORS.

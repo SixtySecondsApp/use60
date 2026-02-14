@@ -1,0 +1,210 @@
+{
+  "name": "Call Type Classification Gating + Multi-Recorder Orchestrator",
+  "version": "1.0",
+  "createdAt": "2026-02-14T00:00:00Z",
+  "description": "Add call type classification as the first orchestrator step to gate sales-only workflows, wire Fathom and Fireflies as orchestrator trigger sources, and update the demo page to visualize call type gating behavior.",
+  "author": "Andrew Bryce",
+  "principle": "Leverage existing org_call_types infrastructure — classifyCallType(), CallTypeSettings UI, 6 default types. No new tables needed.",
+  "features": [
+    { "id": "classify", "name": "Call Type Classifier Adapter + Gating", "status": "complete", "stories": 4 },
+    { "id": "triggers", "name": "Multi-Recorder Orchestrator Triggers", "status": "complete", "stories": 3 },
+    { "id": "demo", "name": "Demo Page Call Type Visualization", "status": "complete", "stories": 1 }
+  ],
+  "total_stories": 8,
+  "stories": [
+    {
+      "id": "CTG-001",
+      "title": "Create classify-call-type orchestrator adapter",
+      "feature": "classify",
+      "type": "backend",
+      "priority": 1,
+      "status": "complete",
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": [] },
+      "blocks": ["CTG-002", "CTG-003", "CTG-008"],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/callTypeClassifier.ts"
+      ],
+      "acceptance": [
+        "Adapter reads meetings.call_type_id for event.payload.meeting_id",
+        "If already classified (confidence >= 0.5), returns existing classification without re-running AI",
+        "If NOT classified, calls shared classifyCallType() from fathom-sync/aiAnalysis.ts",
+        "Saves classification result to meetings table (call_type_id, call_type_confidence, call_type_reasoning)",
+        "Returns {call_type_id, call_type_name, confidence, enable_coaching, is_sales} in step output"
+      ]
+    },
+    {
+      "id": "CTG-002",
+      "title": "Register adapter and add classify-call-type as step 0 in meeting_ended",
+      "feature": "classify",
+      "type": "backend",
+      "priority": 2,
+      "status": "complete",
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["CTG-001"] },
+      "blocks": ["CTG-003"],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/index.ts",
+        "supabase/functions/_shared/orchestrator/eventSequences.ts"
+      ],
+      "acceptance": [
+        "callTypeClassifierAdapter registered in adapters/index.ts",
+        "classify-call-type inserted as first step (before extract-action-items) in meeting_ended sequence",
+        "Helper functions exported: getCallTypeFromState(state) and isSalesCallType(name)",
+        "Sales types defined: names containing 'discovery', 'demo', 'close' (case-insensitive)"
+      ]
+    },
+    {
+      "id": "CTG-003",
+      "title": "Add per-step call type gating in orchestrator runner",
+      "feature": "classify",
+      "type": "backend",
+      "priority": 3,
+      "status": "complete",
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["CTG-001", "CTG-002"] },
+      "blocks": ["CTG-008"],
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ],
+      "acceptance": [
+        "shouldSkipForCallType() check added inside executeSteps() loop before step execution",
+        "SALES_ONLY_STEPS set: detect-intents, suggest-next-actions, draft-followup-email",
+        "Sales-only steps skipped for non-sales calls with {skipped: true, reason: 'Non-sales call type: <name>'}",
+        "coaching-micro-feedback skipped when call type has enable_coaching: false",
+        "Universal steps always run: classify-call-type, extract-action-items, update-crm-from-meeting, create-tasks-from-actions, notify-slack-summary"
+      ]
+    },
+    {
+      "id": "CTG-004",
+      "title": "Add new EventSource values for Fathom and Fireflies",
+      "feature": "classify",
+      "type": "backend",
+      "priority": 2,
+      "status": "complete",
+      "estimatedMinutes": 5,
+      "dependencies": { "stories": [] },
+      "blocks": ["CTG-005", "CTG-006"],
+      "parallelWith": ["CTG-001"],
+      "files": [
+        "supabase/functions/_shared/orchestrator/types.ts"
+      ],
+      "acceptance": [
+        "EventSource union includes 'edge:fathom-sync'",
+        "EventSource union includes 'edge:fireflies-sync'",
+        "EventSource union includes 'edge:process-recording' (existing MeetingBaaS source)"
+      ]
+    },
+    {
+      "id": "CTG-005",
+      "title": "Wire Fathom sync to trigger orchestrator after AI analysis",
+      "feature": "triggers",
+      "type": "backend",
+      "priority": 4,
+      "status": "complete",
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["CTG-004"] },
+      "blocks": ["CTG-008"],
+      "files": [
+        "supabase/functions/fathom-sync/services/transcriptService.ts"
+      ],
+      "acceptance": [
+        "Fire-and-forget fetch to agent-orchestrator added after AI analysis completes (~line 455)",
+        "Event type: meeting_ended, source: edge:fathom-sync",
+        "Idempotency key format: meeting_ended:{meeting.id}",
+        "Payload includes meeting_id, title, transcript_available: true",
+        "Trigger only fires when meeting.org_id is present",
+        "Error caught and logged (non-blocking)"
+      ]
+    },
+    {
+      "id": "CTG-006",
+      "title": "Wire Fireflies enrichment to trigger orchestrator after analysis",
+      "feature": "triggers",
+      "type": "backend",
+      "priority": 4,
+      "status": "complete",
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["CTG-004"] },
+      "blocks": ["CTG-008"],
+      "parallelWith": ["CTG-005"],
+      "files": [
+        "supabase/functions/fireflies-sync/enrichment.ts"
+      ],
+      "acceptance": [
+        "Fire-and-forget fetch to agent-orchestrator added after step 5 (summary condensation, ~line 87)",
+        "Event type: meeting_ended, source: edge:fireflies-sync",
+        "Idempotency key format: meeting_ended:{meeting.id}",
+        "Payload includes meeting_id, title, transcript_available: true",
+        "Trigger only fires when orgId is present",
+        "Error caught and logged (non-blocking)"
+      ]
+    },
+    {
+      "id": "CTG-007",
+      "title": "Add process-recording EventSource for completeness",
+      "feature": "triggers",
+      "type": "backend",
+      "priority": 5,
+      "status": "complete",
+      "estimatedMinutes": 5,
+      "dependencies": { "stories": ["CTG-004"] },
+      "parallelWith": ["CTG-005", "CTG-006"],
+      "files": [
+        "supabase/functions/process-recording/index.ts"
+      ],
+      "acceptance": [
+        "Existing orchestrator trigger in process-recording uses source: 'edge:process-recording' (verify/update)",
+        "No functional change if source already matches — story is for verification only"
+      ]
+    },
+    {
+      "id": "CTG-008",
+      "title": "Update demo page with call type badges, gating visualization, and source indicators",
+      "feature": "demo",
+      "type": "frontend",
+      "priority": 6,
+      "status": "complete",
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["CTG-001", "CTG-003", "CTG-005", "CTG-006"] },
+      "files": [
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ],
+      "acceptance": [
+        "CallTypeBadge component shows classified call type with confidence percentage on each scenario card",
+        "classify-call-type shown as step 0 in post-meeting scenario step pipeline",
+        "New 'Internal Meeting' scenario variant shows sales-only steps skipped (grey/strikethrough)",
+        "Architecture overview bar shows 'Fathom | Fireflies | MeetingBaaS' as event sources",
+        "Source badge on trigger event cards shows which recorder triggered the workflow"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 8,
+    "currentFeature": "classify",
+    "lastUpdated": "2026-02-14T00:00:00Z"
+  },
+  "parallelGroups": [
+    {
+      "description": "Adapter + types can be built in parallel (no file overlap)",
+      "stories": ["CTG-001", "CTG-004"]
+    },
+    {
+      "description": "Fathom + Fireflies + process-recording triggers (no file overlap)",
+      "stories": ["CTG-005", "CTG-006", "CTG-007"]
+    }
+  ],
+  "existingInfrastructure": {
+    "description": "These existing features are leveraged — no need to build from scratch",
+    "components": [
+      "org_call_types table — 6 default types: Discovery, Demo, Close, Client, Internal Stand Up, Scrum",
+      "meetings.call_type_id FK, call_type_confidence, call_type_reasoning columns",
+      "classifyCallType() in supabase/functions/fathom-sync/aiAnalysis.ts — Claude Haiku classifier",
+      "Fathom sync already classifies call types (transcriptService.ts:376-412)",
+      "Fireflies enrichment already classifies call types (enrichment.ts:489-493)",
+      "callTypeService.ts — full CRUD service layer",
+      "CallTypeSettings.tsx + CallTypeWorkflowEditor.tsx — admin UI"
+    ]
+  }
+}

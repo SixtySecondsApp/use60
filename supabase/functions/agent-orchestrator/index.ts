@@ -69,9 +69,55 @@ serve(async (req) => {
 
     console.log(`[agent-orchestrator] New event: ${event.type} from ${event.source}`);
 
-    const result = await runSequence(event, { supabase, startTime });
+    // Check if caller wants synchronous (blocking) execution
+    const sync = body.sync === true;
 
-    return new Response(JSON.stringify(result), {
+    if (sync) {
+      // Synchronous mode: wait for completion (used by service-role test calls)
+      const result = await runSequence(event, { supabase, startTime });
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Async mode (default): start the sequence in the background, return job_id immediately.
+    // The runner creates the job in the DB first, then executes steps.
+    // The frontend polls sequence_jobs for live step updates.
+    const sequencePromise = runSequence(event, { supabase, startTime });
+
+    // Use EdgeRuntime.waitUntil to keep the function alive while running in background
+    // @ts-ignore - EdgeRuntime is a Deno Deploy global
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(sequencePromise);
+    } else {
+      // Fallback: fire-and-forget (the promise runs but response returns immediately)
+      sequencePromise.catch((err) => {
+        console.error('[agent-orchestrator] Background sequence error:', err);
+      });
+    }
+
+    // Wait briefly for the job to be created in the DB (steps 1-6 of runSequence)
+    // then return the job_id to the caller so they can start polling
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Try to find the job that was just created for this user/event
+    const { data: recentJob } = await supabase
+      .from('sequence_jobs')
+      .select('id, status')
+      .eq('user_id', event.user_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentJob) {
+      return new Response(JSON.stringify({ job_id: recentJob.id, status: recentJob.status }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Job not yet created — return a pending status
+    return new Response(JSON.stringify({ status: 'pending', message: 'Sequence starting...' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

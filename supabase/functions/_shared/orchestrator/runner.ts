@@ -29,8 +29,15 @@ import {
   MAX_STEP_RETRIES,
   DEFAULT_STEP_TIMEOUT_MS,
 } from './types.ts';
-import { getSequenceForEvent, getRequiredContextTiers } from './eventSequences.ts';
+import { getSequenceForEvent, getRequiredContextTiers, getCallTypeFromState } from './eventSequences.ts';
 import { loadContext } from './contextLoader.ts';
+
+// Steps that should only run for sales calls (Discovery, Demo, Close)
+const SALES_ONLY_STEPS = new Set([
+  'detect-intents',
+  'suggest-next-actions',
+  'draft-followup-email',
+]);
 
 // Chain depth constant from types (not exported, so defined here too)
 const MAX_CHAIN_DEPTH = 5;
@@ -81,31 +88,26 @@ export async function runSequence(
     return { job_id: '', status: 'budget_exceeded', error: context.tier1.costBudget.reason };
   }
 
-  // 6. Create sequence job record
-  const { data: jobData, error: jobError } = await supabase.rpc('start_sequence_job', {
-    p_sequence_skill_id: null, // orchestrator-managed, not skill-linked
-    p_user_id: event.user_id,
-    p_organization_id: event.org_id,
-    p_initial_input: {
-      event_type: event.type,
-      event_source: event.source,
-      payload: event.payload,
-    },
-  });
+  // 6. Create sequence job record (with RPC fallback)
+  const { jobId: newJobId, error: jobError } = await rpcStartJob(supabase, event);
 
-  if (jobError || !jobData) {
-    return { job_id: '', status: 'error', error: `Failed to create job: ${jobError?.message}` };
+  if (jobError || !newJobId) {
+    return { job_id: '', status: 'error', error: `Failed to create job: ${jobError}` };
   }
 
-  const jobId = jobData as string;
+  const jobId = newJobId;
 
-  // Update with orchestrator-specific columns
-  await supabase.from('sequence_jobs').update({
-    event_source: event.source,
-    event_chain: event.parent_job_id ? { parent: event.parent_job_id } : {},
-    trigger_payload: event.payload,
-    idempotency_key: event.idempotency_key || null,
-  }).eq('id', jobId);
+  // Update with orchestrator-specific columns (non-fatal if columns missing)
+  try {
+    await supabase.from('sequence_jobs').update({
+      event_source: event.source,
+      event_chain: event.parent_job_id ? { parent: event.parent_job_id } : {},
+      trigger_payload: event.payload,
+      idempotency_key: event.idempotency_key || null,
+    }).eq('id', jobId);
+  } catch {
+    console.warn('[orchestrator] Could not update orchestrator columns on sequence_jobs');
+  }
 
   // 7. Build initial state
   const state: SequenceState = {
@@ -148,11 +150,19 @@ export async function resumeSequence(
     return { job_id: jobId, status: 'error', error: `Job is ${job.status}, not waiting_approval` };
   }
 
-  // Resume the job
-  await supabase.rpc('resume_sequence_job', {
+  // Resume the job (with direct fallback)
+  const { error: resumeError } = await supabase.rpc('resume_sequence_job', {
     p_job_id: jobId,
     p_approval_data: approvalData,
   });
+  if (resumeError?.message?.includes('does not exist') || resumeError?.code === '42883') {
+    await supabase.from('sequence_jobs').update({
+      status: 'running',
+      waiting_for_approval_since: null,
+      context: { ...((job.context as Record<string, unknown>) || {}), approval_data: approvalData },
+      updated_at: new Date().toISOString(),
+    }).eq('id', jobId);
+  }
 
   // Rebuild state from persisted context
   const state = job.context as SequenceState;
@@ -167,6 +177,10 @@ export async function resumeSequence(
 
 /**
  * Core step execution loop.
+ *
+ * Supports parallel execution when steps declare `depends_on`.
+ * Steps whose dependencies are all satisfied run concurrently in waves.
+ * Falls back to sequential execution when no depends_on is declared.
  */
 async function executeSteps(
   supabase: SupabaseClient,
@@ -176,98 +190,276 @@ async function executeSteps(
   startTime: number,
 ): Promise<{ job_id: string; status: string; error?: string }> {
 
-  for (const step of steps) {
-    // Already completed? Skip.
-    if (state.steps_completed.includes(step.skill)) continue;
+  // Check if any step uses depends_on — if so, use parallel wave execution
+  const hasParallelDeps = steps.some(s => s.depends_on !== undefined);
+
+  if (hasParallelDeps) {
+    return await executeStepsParallel(supabase, jobId, state, steps, startTime);
+  }
+
+  // Sequential fallback for sequences without depends_on
+  return await executeStepsSequential(supabase, jobId, state, steps, startTime);
+}
+
+/**
+ * Parallel wave-based execution. Steps run concurrently when their
+ * dependencies are satisfied. Each wave waits for all parallel steps.
+ */
+async function executeStepsParallel(
+  supabase: SupabaseClient,
+  jobId: string,
+  state: SequenceState,
+  steps: SequenceStep[],
+  startTime: number,
+): Promise<{ job_id: string; status: string; error?: string }> {
+
+  const remaining = new Set(steps.filter(s => !state.steps_completed.includes(s.skill)).map(s => s.skill));
+  const stepMap = new Map(steps.map(s => [s.skill, s]));
+  let waveNum = 0;
+
+  while (remaining.size > 0) {
+    waveNum++;
 
     // Time check: self-invoke if running low
     const elapsed = Date.now() - startTime;
-    const remaining = EDGE_FUNCTION_TIMEOUT_MS - elapsed;
-    if (remaining < SAFETY_MARGIN_MS) {
-      // Persist state and self-invoke
+    const timeLeft = EDGE_FUNCTION_TIMEOUT_MS - elapsed;
+    if (timeLeft < SAFETY_MARGIN_MS) {
       await persistState(supabase, jobId, state);
       await selfInvoke(jobId);
       return { job_id: jobId, status: 'continuing' };
     }
 
+    // Find steps ready to execute: all depends_on are in steps_completed
+    const ready: SequenceStep[] = [];
+    for (const skillName of remaining) {
+      const step = stepMap.get(skillName)!;
+      const deps = step.depends_on || [];
+      const depsReady = deps.every(d => state.steps_completed.includes(d));
+      if (depsReady) ready.push(step);
+    }
+
+    if (ready.length === 0) {
+      // Deadlock: remaining steps have unsatisfied deps — should not happen with correct config
+      console.error(`[orchestrator] Deadlock: ${remaining.size} steps remaining but none ready. Remaining: ${[...remaining].join(', ')}`);
+      break;
+    }
+
+    console.log(`[orchestrator] Wave ${waveNum}: running ${ready.map(s => s.skill).join(', ')} in parallel`);
+
+    // Apply gating and execute ready steps in parallel
+    const callTypeInfo = getCallTypeFromState(state);
+    const execPromises: Array<{ step: SequenceStep; promise: Promise<StepResult> | null }> = [];
+
+    for (const step of ready) {
+      // Call type gating
+      if (callTypeInfo) {
+        if (SALES_ONLY_STEPS.has(step.skill) && !callTypeInfo.is_sales) {
+          console.log(`[orchestrator] Skipping ${step.skill} — non-sales call type: ${callTypeInfo.call_type_name}`);
+          state.steps_completed.push(step.skill);
+          state.outputs[step.skill] = { skipped: true, reason: `Non-sales call type: ${callTypeInfo.call_type_name}` };
+          remaining.delete(step.skill);
+          continue;
+        }
+        if (step.skill === 'coaching-micro-feedback' && !callTypeInfo.enable_coaching) {
+          console.log(`[orchestrator] Skipping coaching-micro-feedback — coaching disabled for: ${callTypeInfo.call_type_name}`);
+          state.steps_completed.push(step.skill);
+          state.outputs[step.skill] = { skipped: true, reason: `Coaching disabled for call type: ${callTypeInfo.call_type_name}` };
+          remaining.delete(step.skill);
+          continue;
+        }
+      }
+
+      // Mark step as running in DB
+      await rpcUpdateStep(supabase, jobId, state.steps_completed.length + 1, step.skill, null, 'running');
+
+      execPromises.push({
+        step,
+        promise: executeStepWithRetry(supabase, state, step),
+      });
+    }
+
+    // Await all parallel steps
+    const results = await Promise.allSettled(
+      execPromises.map(async ({ step, promise }) => {
+        if (!promise) return { step, result: { success: true, output: { skipped: true }, duration_ms: 0 } as StepResult };
+        const result = await promise;
+        return { step, result };
+      })
+    );
+
+    // Process results
+    for (const settled of results) {
+      if (settled.status === 'rejected') {
+        console.error(`[orchestrator] Parallel step rejected:`, settled.reason);
+        continue;
+      }
+
+      const { step, result } = settled.value;
+
+      if (result.success) {
+        state.steps_completed.push(step.skill);
+        state.outputs[step.skill] = result.output;
+        remaining.delete(step.skill);
+
+        if (result.queued_followups) {
+          state.queued_followups.push(...result.queued_followups);
+        }
+
+        if (result.pending_approval) {
+          state.pending_approvals.push(result.pending_approval);
+          await persistState(supabase, jobId, state);
+          const { error: pauseError } = await supabase.rpc('pause_sequence_job', {
+            p_job_id: jobId,
+            p_approval_channel: 'slack',
+            p_approval_request_id: null,
+          });
+          if (pauseError?.message?.includes('does not exist') || pauseError?.code === '42883') {
+            await supabase.from('sequence_jobs').update({
+              status: 'waiting_approval',
+              approval_channel: 'slack',
+              waiting_for_approval_since: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }).eq('id', jobId);
+          }
+          return { job_id: jobId, status: 'waiting_approval' };
+        }
+
+        await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
+
+      } else {
+        if (step.criticality === 'critical') {
+          state.error = `Critical step ${step.skill} failed: ${result.error}`;
+          await persistState(supabase, jobId, state);
+          await supabase.from('sequence_jobs').update({
+            status: 'failed',
+            error_message: result.error,
+            error_step: state.steps_completed.length + 1,
+            current_skill_key: step.skill,
+          }).eq('id', jobId);
+          return { job_id: jobId, status: 'failed', error: result.error };
+        }
+
+        console.warn(`[orchestrator] Best-effort step ${step.skill} failed: ${result.error}`);
+        state.steps_completed.push(step.skill);
+        state.outputs[step.skill] = { error: result.error, skipped: true };
+        remaining.delete(step.skill);
+        await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, { error: result.error }, 'failed');
+      }
+    }
+
+    state.updated_at = new Date().toISOString();
+  }
+
+  // All steps complete
+  await processFollowups(supabase, jobId, state);
+  await rpcCompleteJob(supabase, jobId, {
+    steps_completed: state.steps_completed,
+    outputs: state.outputs,
+    queued_followups: state.queued_followups.length,
+  });
+
+  return { job_id: jobId, status: 'completed' };
+}
+
+/**
+ * Sequential execution (fallback for sequences without depends_on).
+ */
+async function executeStepsSequential(
+  supabase: SupabaseClient,
+  jobId: string,
+  state: SequenceState,
+  steps: SequenceStep[],
+  startTime: number,
+): Promise<{ job_id: string; status: string; error?: string }> {
+
+  for (const step of steps) {
+    if (state.steps_completed.includes(step.skill)) continue;
+
+    const elapsed = Date.now() - startTime;
+    const remaining = EDGE_FUNCTION_TIMEOUT_MS - elapsed;
+    if (remaining < SAFETY_MARGIN_MS) {
+      await persistState(supabase, jobId, state);
+      await selfInvoke(jobId);
+      return { job_id: jobId, status: 'continuing' };
+    }
+
+    const callTypeInfo = getCallTypeFromState(state);
+    if (callTypeInfo) {
+      if (SALES_ONLY_STEPS.has(step.skill) && !callTypeInfo.is_sales) {
+        console.log(`[orchestrator] Skipping ${step.skill} — non-sales call type: ${callTypeInfo.call_type_name}`);
+        state.steps_completed.push(step.skill);
+        state.outputs[step.skill] = { skipped: true, reason: `Non-sales call type: ${callTypeInfo.call_type_name}` };
+        continue;
+      }
+      if (step.skill === 'coaching-micro-feedback' && !callTypeInfo.enable_coaching) {
+        console.log(`[orchestrator] Skipping coaching-micro-feedback — coaching disabled for: ${callTypeInfo.call_type_name}`);
+        state.steps_completed.push(step.skill);
+        state.outputs[step.skill] = { skipped: true, reason: `Coaching disabled for call type: ${callTypeInfo.call_type_name}` };
+        continue;
+      }
+    }
+
     state.current_step = step.skill;
     state.updated_at = new Date().toISOString();
 
-    // Update step tracking in DB
-    await supabase.rpc('update_sequence_job_step', {
-      p_job_id: jobId,
-      p_step: state.steps_completed.length + 1,
-      p_skill_key: step.skill,
-      p_output: null,
-      p_status: 'running',
-    });
+    await rpcUpdateStep(supabase, jobId, state.steps_completed.length + 1, step.skill, null, 'running');
 
-    // Execute step with retries
     const result = await executeStepWithRetry(supabase, state, step);
 
     if (result.success) {
       state.steps_completed.push(step.skill);
       state.outputs[step.skill] = result.output;
 
-      // Collect queued followups
       if (result.queued_followups) {
         state.queued_followups.push(...result.queued_followups);
       }
 
-      // Handle approval pause
       if (result.pending_approval) {
         state.pending_approvals.push(result.pending_approval);
         await persistState(supabase, jobId, state);
-        await supabase.rpc('pause_sequence_job', {
+        const { error: pauseError } = await supabase.rpc('pause_sequence_job', {
           p_job_id: jobId,
           p_approval_channel: 'slack',
           p_approval_request_id: null,
         });
+        if (pauseError?.message?.includes('does not exist') || pauseError?.code === '42883') {
+          await supabase.from('sequence_jobs').update({
+            status: 'waiting_approval',
+            approval_channel: 'slack',
+            waiting_for_approval_since: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq('id', jobId);
+        }
         return { job_id: jobId, status: 'waiting_approval' };
       }
 
-      // Update step as completed
-      await supabase.rpc('update_sequence_job_step', {
-        p_job_id: jobId,
-        p_step: state.steps_completed.length,
-        p_skill_key: step.skill,
-        p_output: result.output,
-        p_status: 'completed',
-      });
+      await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
 
     } else {
-      // Step failed
       if (step.criticality === 'critical') {
-        // Critical step failure — halt sequence
         state.error = `Critical step ${step.skill} failed: ${result.error}`;
         await persistState(supabase, jobId, state);
-
         await supabase.from('sequence_jobs').update({
           status: 'failed',
           error_message: result.error,
-          error_step: step.skill,
+          error_step: state.steps_completed.length + 1,
+          current_skill_key: step.skill,
         }).eq('id', jobId);
-
         return { job_id: jobId, status: 'failed', error: result.error };
       }
-      // Best-effort step failure — log and continue
+
       console.warn(`[orchestrator] Best-effort step ${step.skill} failed: ${result.error}`);
-      state.steps_completed.push(step.skill); // Mark as attempted
+      state.steps_completed.push(step.skill);
       state.outputs[step.skill] = { error: result.error, skipped: true };
+      await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, { error: result.error }, 'failed');
     }
   }
 
-  // All steps complete — process queued followups
   await processFollowups(supabase, jobId, state);
-
-  // Mark job complete
-  await supabase.rpc('complete_sequence_job', {
-    p_job_id: jobId,
-    p_final_output: {
-      steps_completed: state.steps_completed,
-      outputs: state.outputs,
-      queued_followups: state.queued_followups.length,
-    },
+  await rpcCompleteJob(supabase, jobId, {
+    steps_completed: state.steps_completed,
+    outputs: state.outputs,
+    queued_followups: state.queued_followups.length,
   });
 
   return { job_id: jobId, status: 'completed' };
@@ -479,4 +671,97 @@ function isTransientError(error: string): boolean {
   ];
   const lowerError = error.toLowerCase();
   return transientPatterns.some(pattern => lowerError.includes(pattern.toLowerCase()));
+}
+
+// ============================================================================
+// RPC helpers with direct-table fallbacks (for environments without RPCs)
+// ============================================================================
+
+async function rpcStartJob(
+  supabase: SupabaseClient,
+  event: OrchestratorEvent,
+): Promise<{ jobId: string | null; error: string | null }> {
+  // Try RPC first
+  const { data, error } = await supabase.rpc('start_sequence_job', {
+    p_sequence_skill_id: null,
+    p_user_id: event.user_id,
+    p_organization_id: event.org_id,
+    p_initial_input: { event_type: event.type, event_source: event.source, payload: event.payload },
+  });
+
+  if (!error && data) return { jobId: data as string, error: null };
+
+  // Fallback: direct insert (RPC missing, or RPC rejects null skill_id for orchestrator-managed jobs)
+  if (error?.message?.includes('does not exist') || error?.message?.includes('404') || error?.code === '42883'
+      || error?.message?.includes('Skill not found')) {
+    console.warn('[orchestrator] start_sequence_job RPC unavailable or rejected null skill_id, using direct insert');
+    const jobId = crypto.randomUUID();
+    const { error: insertError } = await supabase.from('sequence_jobs').insert({
+      id: jobId,
+      user_id: event.user_id,
+      organization_id: event.org_id,
+      status: 'running',
+      current_step: 0,
+      initial_input: { event_type: event.type, event_source: event.source, payload: event.payload },
+      context: {},
+      step_results: [],
+      started_at: new Date().toISOString(),
+    });
+    if (insertError) return { jobId: null, error: insertError.message };
+    return { jobId, error: null };
+  }
+
+  return { jobId: null, error: error?.message || 'Unknown RPC error' };
+}
+
+async function rpcUpdateStep(
+  supabase: SupabaseClient,
+  jobId: string,
+  stepNum: number,
+  skillKey: string,
+  output: unknown,
+  status: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('update_sequence_job_step', {
+    p_job_id: jobId,
+    p_step: stepNum,
+    p_skill_key: skillKey,
+    p_output: output,
+    p_status: status,
+  });
+
+  if (error?.message?.includes('does not exist') || error?.code === '42883') {
+    // Fallback: direct update
+    console.warn('[orchestrator] update_sequence_job_step RPC not found, using direct update');
+    const { data: job } = await supabase.from('sequence_jobs').select('step_results').eq('id', jobId).maybeSingle();
+    const results = (job?.step_results as any[]) || [];
+    results.push({ step: stepNum, skill_key: skillKey, output, status, completed_at: new Date().toISOString() });
+    await supabase.from('sequence_jobs').update({
+      current_step: stepNum,
+      current_skill_key: skillKey,
+      step_results: results,
+      updated_at: new Date().toISOString(),
+    }).eq('id', jobId);
+  }
+}
+
+async function rpcCompleteJob(
+  supabase: SupabaseClient,
+  jobId: string,
+  finalOutput: unknown,
+): Promise<void> {
+  const { error } = await supabase.rpc('complete_sequence_job', {
+    p_job_id: jobId,
+    p_final_output: finalOutput,
+  });
+
+  if (error?.message?.includes('does not exist') || error?.code === '42883') {
+    console.warn('[orchestrator] complete_sequence_job RPC not found, using direct update');
+    await supabase.from('sequence_jobs').update({
+      status: 'completed',
+      context: finalOutput,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', jobId);
+  }
 }

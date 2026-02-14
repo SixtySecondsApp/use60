@@ -1,0 +1,209 @@
+{
+  "feature": {
+    "id": "pre-meeting-briefing",
+    "name": "Pre-Meeting Briefing Flow — Full Orchestrator Implementation",
+    "status": "complete",
+    "prd": null,
+    "createdAt": "2026-02-14T16:00:00Z",
+    "description": "Replace 6 stub adapters in the pre_meeting_90min orchestrator sequence with real implementations. Analyzes company (client vs prospect), classifies meeting type (discovery/demo), runs full lead-research enrichment, and delivers a rich Slack briefing. Reuses existing infrastructure: contextEnrichment.ts, deep-enrich-organization, buildMeetingPrepMessage(), send-slack-message."
+  },
+
+  "stories": [
+    {
+      "id": "PMB-001",
+      "feature": "pre-meeting-briefing",
+      "title": "Update event sequence with parallel depends_on declarations",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["PMB-002", "PMB-003", "PMB-004", "PMB-005", "PMB-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "pre_meeting_90min sequence in eventSequences.ts updated to 5 steps (remove check-previous-action-items)",
+        "Wave 1: enrich-attendees + pull-crm-history (depends_on: [])",
+        "Wave 2: research-company-news (depends_on: ['enrich-attendees'])",
+        "Wave 3: generate-briefing (depends_on: ['enrich-attendees', 'pull-crm-history', 'research-company-news'])",
+        "Wave 4: deliver-slack-briefing (depends_on: ['generate-briefing'])"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/eventSequences.ts"
+      ],
+      "activeForm": "Updating event sequence with parallel dependencies"
+    },
+    {
+      "id": "PMB-002",
+      "feature": "pre-meeting-briefing",
+      "title": "Build enrichAttendeesAdapter — attendee resolution + client/prospect classification",
+      "type": "feature",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["PMB-001"], "files": ["supabase/functions/_shared/orchestrator/adapters/contextEnrichment.ts"], "schema": [] },
+      "blocks": ["PMB-004", "PMB-005", "PMB-007"],
+      "parallelWith": ["PMB-003"],
+      "acceptance": [
+        "Resolves attendee emails from payload.attendees or tier2 contact",
+        "Queries contacts table for known contacts, enriches with title/company",
+        "Resolves company via contact.company_id FK or domain extraction from email",
+        "Classifies relationship: active deal = client, closed-won = existing client, closed-lost = re-engagement, no deal = prospect",
+        "Derives meeting type from deal stage (sql->discovery, opportunity->demo, verbal->negotiation) or title keywords",
+        "Output includes: attendees[], company, classification, deal"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "activeForm": "Building enrichAttendeesAdapter"
+    },
+    {
+      "id": "PMB-003",
+      "feature": "pre-meeting-briefing",
+      "title": "Build pullCrmHistoryAdapter — meetings, emails, action items, objections",
+      "type": "feature",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["PMB-001"], "files": ["supabase/functions/_shared/orchestrator/adapters/contextEnrichment.ts"], "schema": [] },
+      "blocks": ["PMB-005", "PMB-007"],
+      "parallelWith": ["PMB-002"],
+      "acceptance": [
+        "Uses enrichContactContext() from contextEnrichment.ts for recent meetings, emails, activities, deal",
+        "Queries meeting_action_items for open items from prior meetings with this contact",
+        "Queries meeting_structured_summaries for previous objections_raised",
+        "Calculates meeting_count (total meetings with contact) for relationship depth",
+        "Output includes: contact, recent_meetings, recent_emails, open_action_items, previous_objections, deal, meeting_count"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "activeForm": "Building pullCrmHistoryAdapter"
+    },
+    {
+      "id": "PMB-004",
+      "feature": "pre-meeting-briefing",
+      "title": "Build researchCompanyNewsAdapter — deep-enrich-organization call",
+      "type": "feature",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["PMB-002"], "files": [], "schema": [] },
+      "blocks": ["PMB-005", "PMB-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Gets company domain from enrich-attendees output",
+        "Calls deep-enrich-organization edge function with company domain",
+        "Handles missing domain gracefully (returns empty profile)",
+        "Extracts key fields: description, industry, funding_status, tech_stack, competitors, recent_news, hiring_signals",
+        "Defensive: timeout + try/catch, non-fatal failure returns partial output"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "activeForm": "Building researchCompanyNewsAdapter"
+    },
+    {
+      "id": "PMB-005",
+      "feature": "pre-meeting-briefing",
+      "title": "Build generateBriefingAdapter — AI synthesis with Claude Haiku",
+      "type": "feature",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["PMB-002", "PMB-003", "PMB-004"], "files": [], "schema": [] },
+      "blocks": ["PMB-006", "PMB-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Collects outputs from all 3 upstream adapters (attendees + CRM + research)",
+        "Builds structured prompt with: meeting context, relationship classification, company profile, deal context, risk signals, objections, action items",
+        "Calls Claude Haiku API (same pattern as coaching adapter) with JSON output schema",
+        "Returns structured briefing: meeting_type_label, relationship_label, executive_summary, talking_points[], risk_signals[], questions_to_ask[], action_item_followups[], company_snapshot, attendee_notes",
+        "Fallback: if AI call fails, produces a basic briefing from raw data"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "activeForm": "Building AI briefing generator"
+    },
+    {
+      "id": "PMB-006",
+      "feature": "pre-meeting-briefing",
+      "title": "Build deliverSlackBriefingAdapter — Slack Block Kit via send-slack-message",
+      "type": "feature",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["PMB-005"], "files": [], "schema": [] },
+      "blocks": ["PMB-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Maps briefing output to MeetingPrepData interface from slackBlocks.ts",
+        "Calls buildMeetingPrepMessage() for rich Block Kit formatting",
+        "Sends via send-slack-message edge function (DM to user's slack_user_id, fallback: org channel)",
+        "Records delivery in slack_notifications_sent table (dedup for re-runs)",
+        "Also delivers to in-app notifications (best-effort mirror)",
+        "Output includes: delivered, channel type, slack_ts"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "activeForm": "Building Slack briefing delivery"
+    },
+    {
+      "id": "PMB-007",
+      "feature": "pre-meeting-briefing",
+      "title": "Wire adapter registry, deploy to staging, end-to-end test",
+      "type": "test",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["PMB-002", "PMB-003", "PMB-004", "PMB-005", "PMB-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "adapters/index.ts imports all 5 adapters from preMeeting.ts and replaces 6 stub entries",
+        "check-previous-action-items stub removed from registry",
+        "agent-orchestrator deployed to staging (caerqjzvuerejfrdtygb)",
+        "curl test with pre_meeting_90min event type executes all 5 steps",
+        "sequence_jobs shows 4 parallel waves (Wave 1 parallel, Wave 2, Wave 3, Wave 4)",
+        "No TypeScript errors in build"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/index.ts",
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts",
+        "supabase/functions/_shared/orchestrator/eventSequences.ts"
+      ],
+      "activeForm": "Wiring registry, deploying, and testing"
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 7,
+    "currentFeature": "pre-meeting-briefing",
+    "estimatedTotal": "~125 minutes",
+    "parallelGroups": [
+      ["PMB-002", "PMB-003"]
+    ],
+    "criticalPath": "PMB-001 -> PMB-002 -> PMB-004 -> PMB-005 -> PMB-006 -> PMB-007",
+    "notes": "All adapter code goes in a single new file (preMeeting.ts) following the coaching.ts pattern. Heavy reuse of existing infrastructure: contextEnrichment.ts, deep-enrich-organization, buildMeetingPrepMessage(), send-slack-message. PMB-002 and PMB-003 can execute in parallel as they share no data dependencies."
+  },
+
+  "keyFiles": {
+    "newFile": "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts",
+    "modifyEventSequences": "supabase/functions/_shared/orchestrator/eventSequences.ts",
+    "modifyRegistry": "supabase/functions/_shared/orchestrator/adapters/index.ts",
+    "reuseContextEnrichment": "supabase/functions/_shared/orchestrator/adapters/contextEnrichment.ts",
+    "reuseSlackBlocks": "supabase/functions/_shared/slackBlocks.ts",
+    "reuseDeepEnrich": "supabase/functions/deep-enrich-organization/index.ts",
+    "reuseSendSlack": "supabase/functions/send-slack-message/index.ts",
+    "referenceSlackMeetingPrep": "supabase/functions/slack-meeting-prep/index.ts"
+  }
+}

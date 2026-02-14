@@ -3,9 +3,13 @@
  *
  * Wraps the extract-action-items edge function to conform to the orchestrator's
  * SkillAdapter interface. Extracts action items from meeting transcripts using AI.
+ *
+ * After extraction, queries the actual action items and includes them in the output
+ * so downstream steps (createTasks, nextActions, detectIntents) can use the details.
  */
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
+import { getServiceClient } from './contextEnrichment.ts';
 
 export const actionItemsAdapter: SkillAdapter = {
   name: 'extract-action-items',
@@ -21,7 +25,6 @@ export const actionItemsAdapter: SkillAdapter = {
         throw new Error('Missing required environment variables');
       }
 
-      // Extract meeting_id from event payload
       const meetingId = state.event.payload.meeting_id as string;
       if (!meetingId) {
         throw new Error('meeting_id not found in event payload');
@@ -36,7 +39,7 @@ export const actionItemsAdapter: SkillAdapter = {
         },
         body: JSON.stringify({
           meetingId,
-          rerun: false, // Don't rerun if already extracted
+          rerun: false,
         }),
       });
 
@@ -47,9 +50,28 @@ export const actionItemsAdapter: SkillAdapter = {
 
       const result = await response.json();
 
+      // --- Enrich output with actual action item details ---
+      // This makes downstream steps (createTasks, nextActions) context-aware
+      // by seeing the actual items rather than just a count
+      const supabase = getServiceClient();
+      const { data: actionItems } = await supabase
+        .from('meeting_action_items')
+        .select('id, title, assignee_name, assignee_email, priority, category, deadline_at, ai_confidence')
+        .eq('meeting_id', meetingId)
+        .eq('ai_generated', true)
+        .order('priority', { ascending: true });
+
+      const enrichedOutput = {
+        ...result,
+        action_items: actionItems || [],
+        meeting_id: meetingId,
+      };
+
+      console.log(`[extract-action-items] Extracted ${result.itemsCreated || 0} items, ${actionItems?.length || 0} total AI items for meeting`);
+
       return {
         success: true,
-        output: result,
+        output: enrichedOutput,
         duration_ms: Date.now() - start,
       };
     } catch (error) {

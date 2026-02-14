@@ -18,12 +18,23 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
    * Triggered when a meeting ends (webhook:meetingbaas)
    */
   meeting_ended: [
+    // Wave 1: Classify call type first (gates downstream sales-only steps)
+    {
+      skill: 'classify-call-type',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    // Wave 2: Extract, detect, and coaching run in parallel (all depend on classify for gating)
     {
       skill: 'extract-action-items',
       requires_context: ['tier1', 'tier2'],
       requires_approval: false,
       criticality: 'critical',
       available: true,
+      depends_on: ['classify-call-type'],
     },
     {
       skill: 'detect-intents',
@@ -31,41 +42,7 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
-    },
-    {
-      skill: 'suggest-next-actions',
-      requires_context: ['tier1', 'tier2'],
-      requires_approval: false,
-      criticality: 'best-effort',
-      available: true,
-    },
-    {
-      skill: 'draft-followup-email',
-      requires_context: ['tier1', 'tier2'],
-      requires_approval: true,
-      criticality: 'critical',
-      available: true,
-    },
-    {
-      skill: 'update-crm-from-meeting',
-      requires_context: ['tier2'],
-      requires_approval: false,
-      criticality: 'best-effort',
-      available: true,
-    },
-    {
-      skill: 'create-tasks-from-actions',
-      requires_context: ['tier2'],
-      requires_approval: false,
-      criticality: 'best-effort',
-      available: true,
-    },
-    {
-      skill: 'notify-slack-summary',
-      requires_context: ['tier1'],
-      requires_approval: false,
-      criticality: 'critical',
-      available: true,
+      depends_on: ['classify-call-type'],
     },
     {
       skill: 'coaching-micro-feedback',
@@ -73,55 +50,105 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
+      depends_on: ['classify-call-type'],
+    },
+    // Wave 3: These depend on extract/detect outputs
+    {
+      skill: 'suggest-next-actions',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['extract-action-items', 'detect-intents'],
+    },
+    {
+      skill: 'draft-followup-email',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['extract-action-items', 'detect-intents'],
+    },
+    {
+      skill: 'update-crm-from-meeting',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['extract-action-items'],
+    },
+    {
+      skill: 'create-tasks-from-actions',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['extract-action-items'],
+    },
+    // Wave 4: Slack summary after all substantive steps complete
+    {
+      skill: 'notify-slack-summary',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['suggest-next-actions', 'draft-followup-email', 'create-tasks-from-actions'],
     },
   ],
 
   /**
    * Pre-Meeting Briefing
    * Triggered 90 minutes before a meeting (cron:morning)
+   *
+   * Wave 1: enrich-attendees + pull-crm-history (parallel)
+   * Wave 2: research-company-news (needs company from Wave 1)
+   * Wave 3: generate-briefing (AI synthesis from all upstream)
+   * Wave 4: deliver-slack-briefing (Slack Block Kit delivery)
    */
   pre_meeting_90min: [
+    // Wave 1: Parallel — attendee enrichment + CRM history
     {
       skill: 'enrich-attendees',
-      requires_context: ['tier1', 'tier3:apollo'],
+      requires_context: ['tier1', 'tier2'],
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
+      depends_on: [],
     },
     {
       skill: 'pull-crm-history',
-      requires_context: ['tier2'],
-      requires_approval: false,
-      criticality: 'critical',
-      available: true,
-    },
-    {
-      skill: 'check-previous-action-items',
-      requires_context: ['tier2'],
+      requires_context: ['tier1', 'tier2'],
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
+      depends_on: [],
     },
+    // Wave 2: Company research (needs company from enrich-attendees)
     {
       skill: 'research-company-news',
-      requires_context: ['tier3:news'],
+      requires_context: ['tier1'],
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
+      depends_on: ['enrich-attendees'],
     },
+    // Wave 3: AI briefing synthesis (needs all upstream data)
     {
       skill: 'generate-briefing',
       requires_context: ['tier1', 'tier2'],
       requires_approval: false,
       criticality: 'critical',
       available: true,
+      depends_on: ['enrich-attendees', 'pull-crm-history', 'research-company-news'],
     },
+    // Wave 4: Deliver to Slack
     {
       skill: 'deliver-slack-briefing',
       requires_context: ['tier1'],
       requires_approval: false,
       criticality: 'critical',
       available: true,
+      depends_on: ['generate-briefing'],
     },
   ],
 
@@ -361,4 +388,39 @@ export function getCriticalSteps(eventType: EventType): SequenceStep[] {
   return getAvailableSteps(eventType).filter(
     (step) => step.criticality === 'critical'
   );
+}
+
+// =============================================================================
+// Call Type Gating Helpers
+// =============================================================================
+
+/** Sales call type keywords (case-insensitive substring match) */
+const SALES_TYPE_KEYWORDS = ['discovery', 'demo', 'close'];
+
+/**
+ * Extract call type classification from sequence state outputs.
+ * Returns the output of the classify-call-type step if present.
+ */
+export function getCallTypeFromState(
+  state: { outputs: Record<string, unknown> }
+): { call_type_name: string | null; is_sales: boolean; enable_coaching: boolean } | null {
+  const output = state.outputs['classify-call-type'] as
+    | { call_type_name?: string; is_sales?: boolean; enable_coaching?: boolean }
+    | undefined;
+  if (!output) return null;
+  return {
+    call_type_name: output.call_type_name || null,
+    is_sales: output.is_sales ?? true,
+    enable_coaching: output.enable_coaching ?? true,
+  };
+}
+
+/**
+ * Check if a call type name indicates a sales conversation.
+ * Sales types: Discovery, Demo, Close (names containing those keywords).
+ */
+export function isSalesCallType(name: string | null | undefined): boolean {
+  if (!name) return true; // Default to sales when unknown
+  const lower = name.toLowerCase();
+  return SALES_TYPE_KEYWORDS.some(kw => lower.includes(kw));
 }

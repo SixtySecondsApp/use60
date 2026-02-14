@@ -106,14 +106,29 @@ serve(async (req) => {
     )
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const isServiceRole = token === serviceKey
 
-    if (userError || !user) {
-      throw new Error('Unauthorized')
+    // Parse request body first (needed for service role user_id)
+    const body = await req.json() as CreateTaskRequest & { context?: { user_id?: string } }
+    const { mode, action_item_ids, source } = body
+
+    let user: { id: string } | null = null
+
+    if (isServiceRole) {
+      // Service role calls (from orchestrator) pass user_id in context
+      const userId = body.context?.user_id
+      if (!userId) {
+        throw new Error('Service role calls must include context.user_id')
+      }
+      user = { id: userId }
+    } else {
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser(token)
+      if (userError || !authUser) {
+        throw new Error('Unauthorized')
+      }
+      user = authUser
     }
-
-    // Parse request body
-    const { mode, action_item_ids, source } = await req.json() as CreateTaskRequest
 
     if (!action_item_ids || action_item_ids.length === 0) {
       throw new Error('action_item_ids is required')
