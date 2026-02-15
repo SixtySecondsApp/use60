@@ -8,7 +8,7 @@
 import {
   Activity, Brain, Calendar, Mail, FileText, BarChart3,
   GraduationCap, Send, MessageSquare, Zap, Users, Clock,
-  Bell, CheckSquare, ShieldAlert, Sparkles,
+  Bell, CheckSquare, ShieldAlert, Sparkles, TrendingUp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -22,6 +22,47 @@ export type LifecycleStage =
   | 'pipeline'
   | 'outreach'
   | 'coaching';
+
+export type UseCase = 'meeting-prep' | 'post-meeting' | 'pipeline-health' | 'coaching-insights';
+
+export interface UseCaseCategory {
+  id: UseCase;
+  name: string;
+  description: string;
+  icon: LucideIcon;
+  gradient: string;
+}
+
+export const USE_CASE_CATEGORIES: UseCaseCategory[] = [
+  {
+    id: 'meeting-prep',
+    name: 'Meeting Prep',
+    description: 'Go into every call prepared and confident',
+    icon: Calendar,
+    gradient: 'from-blue-500 to-cyan-500',
+  },
+  {
+    id: 'post-meeting',
+    name: 'Post-Meeting Automation',
+    description: 'Never drop the ball after a call',
+    icon: CheckSquare,
+    gradient: 'from-green-500 to-emerald-500',
+  },
+  {
+    id: 'pipeline-health',
+    name: 'Pipeline Health',
+    description: 'Keep your deals moving and predictable',
+    icon: TrendingUp,
+    gradient: 'from-orange-500 to-amber-500',
+  },
+  {
+    id: 'coaching-insights',
+    name: 'Coaching & Insights',
+    description: 'Improve your sales performance with data',
+    icon: GraduationCap,
+    gradient: 'from-purple-500 to-violet-500',
+  },
+];
 
 export type TriggerType =
   | 'event'      // Triggered by a real-time event (meeting ended, email received)
@@ -49,6 +90,7 @@ export interface AbilityDefinition {
   name: string;
   description: string;
   stage: LifecycleStage;
+  useCase: UseCase;            // Use-case category for marketplace grouping
   icon: LucideIcon;
   gradient: string;
   eventType: string;           // Maps to EventType in orchestrator types
@@ -73,6 +115,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Pre-Meeting Briefing',
     description: 'Enriches attendees, pulls CRM history, researches company news, and delivers a Slack briefing 90 minutes before your meeting.',
     stage: 'pre-meeting',
+    useCase: 'meeting-prep',
     icon: Brain,
     gradient: 'from-purple-500 to-pink-600',
     eventType: 'pre_meeting_90min',
@@ -94,6 +137,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Post-Meeting Follow-up',
     description: 'Classifies call type, extracts action items, detects buying signals, drafts follow-up email, creates CRM tasks, and sends Slack summary.',
     stage: 'post-meeting',
+    useCase: 'post-meeting',
     icon: Activity,
     gradient: 'from-blue-500 to-indigo-600',
     eventType: 'meeting_ended',
@@ -113,6 +157,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Call Type Classification',
     description: 'Classifies meeting recordings as sales calls (discovery, demo, close) vs internal meetings to gate downstream workflows.',
     stage: 'post-meeting',
+    useCase: 'post-meeting',
     icon: MessageSquare,
     gradient: 'from-cyan-500 to-blue-500',
     eventType: 'meeting_ended',
@@ -132,6 +177,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Coaching Micro-Feedback',
     description: 'Analyzes talk ratio, question quality, and objection handling after each sales meeting. Generates 2-3 actionable coaching bullet points.',
     stage: 'post-meeting',
+    useCase: 'coaching-insights',
     icon: GraduationCap,
     gradient: 'from-violet-500 to-purple-600',
     eventType: 'meeting_ended',
@@ -153,6 +199,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Calendar Scheduling',
     description: 'Finds mutual availability, proposes time slots via Slack, and creates calendar events when confirmed.',
     stage: 'pipeline',
+    useCase: 'meeting-prep',
     icon: Calendar,
     gradient: 'from-emerald-500 to-teal-600',
     eventType: 'calendar_find_times',
@@ -172,6 +219,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Deal Risk Scanner',
     description: 'Scans active deals for risk indicators, scores deal health, generates alerts for at-risk deals, and delivers daily risk briefing via Slack.',
     stage: 'pipeline',
+    useCase: 'pipeline-health',
     icon: ShieldAlert,
     gradient: 'from-red-500 to-rose-600',
     eventType: 'deal_risk_scan',
@@ -190,6 +238,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Stale Deal Revival',
     description: 'Identifies stalled deals, researches trigger events, analyzes stall reasons, and drafts re-engagement outreach.',
     stage: 'pipeline',
+    useCase: 'pipeline-health',
     icon: Clock,
     gradient: 'from-amber-500 to-orange-600',
     eventType: 'stale_deal_revival',
@@ -208,6 +257,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Intent Detection',
     description: 'Analyzes transcripts to detect commitments, buying signals, and follow-up items that map to automated actions.',
     stage: 'pipeline',
+    useCase: 'meeting-prep',
     icon: Zap,
     gradient: 'from-rose-500 to-pink-600',
     eventType: 'meeting_ended',
@@ -229,6 +279,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Email Send-as-Rep',
     description: 'Drafts and sends emails from the rep\'s real Gmail. Appears in Sent folder, thread-aware, with HITL approval in Slack.',
     stage: 'outreach',
+    useCase: 'post-meeting',
     icon: Send,
     gradient: 'from-orange-500 to-red-500',
     eventType: 'email_received',
@@ -248,6 +299,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Proposal Generation',
     description: 'Auto-generates proposals from deal context and meeting notes. Presents for review via Slack before sending.',
     stage: 'outreach',
+    useCase: 'pipeline-health',
     icon: FileText,
     gradient: 'from-cyan-500 to-blue-600',
     eventType: 'proposal_generation',
@@ -266,6 +318,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Campaign Monitoring',
     description: 'Pulls Instantly campaign metrics, classifies replies by intent, and generates optimization recommendations.',
     stage: 'outreach',
+    useCase: 'coaching-insights',
     icon: BarChart3,
     gradient: 'from-teal-500 to-emerald-600',
     eventType: 'campaign_daily_check',
@@ -285,6 +338,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Email Classification',
     description: 'Classifies inbound emails by intent (positive, negative, OOO, unsubscribe) and routes to appropriate workflows.',
     stage: 'outreach',
+    useCase: 'pipeline-health',
     icon: Mail,
     gradient: 'from-indigo-500 to-violet-600',
     eventType: 'email_received',
@@ -306,6 +360,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Weekly Coaching Digest',
     description: 'Aggregates weekly metrics, correlates with win/loss outcomes, and delivers a coaching digest with improving areas and winning patterns.',
     stage: 'coaching',
+    useCase: 'coaching-insights',
     icon: GraduationCap,
     gradient: 'from-violet-500 to-indigo-600',
     eventType: 'coaching_weekly',
@@ -325,6 +380,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Coaching Analysis',
     description: 'Deep analysis of talk ratios, question quality, objection handling, and discovery depth with specific evidence-based recommendations.',
     stage: 'coaching',
+    useCase: 'coaching-insights',
     icon: Users,
     gradient: 'from-pink-500 to-rose-600',
     eventType: 'meeting_ended',
@@ -346,6 +402,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Daily Brief',
     description: 'Time-aware daily briefing: schedule, priority deals, contacts needing attention, and tasks. Adapts to morning, afternoon, or evening with real CRM data.',
     stage: 'pre-meeting',
+    useCase: 'meeting-prep',
     icon: Bell,
     gradient: 'from-amber-500 to-yellow-500',
     eventType: 'morning_brief',
@@ -365,6 +422,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Daily Focus Planner',
     description: 'Prioritized daily action plan with CVHS-scored deals, contacts needing attention, concrete next best actions, and a ready-to-create task pack.',
     stage: 'pipeline',
+    useCase: 'pipeline-health',
     icon: Activity,
     gradient: 'from-sky-500 to-blue-600',
     eventType: 'sales_assistant_digest',
@@ -384,6 +442,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Pre-Meeting Nudge',
     description: 'AI-enriched talking points, prospect intel, company context, risk factors, and suggested opener delivered before your next meeting.',
     stage: 'pre-meeting',
+    useCase: 'meeting-prep',
     icon: MessageSquare,
     gradient: 'from-indigo-400 to-blue-500',
     eventType: 'pre_meeting_nudge',
@@ -403,6 +462,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Post-Call Summary',
     description: 'Meeting summary with detected action items, classification, follow-up email draft, and internal Slack update from your most recent call.',
     stage: 'post-meeting',
+    useCase: 'post-meeting',
     icon: CheckSquare,
     gradient: 'from-emerald-500 to-green-600',
     eventType: 'post_call_summary',
@@ -422,6 +482,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'HITL Follow-up Email',
     description: 'Drafts a contextual follow-up email and sends Slack buttons for approve/edit/reject. Full human-in-the-loop flow with real thread context.',
     stage: 'outreach',
+    useCase: 'post-meeting',
     icon: Mail,
     gradient: 'from-rose-500 to-red-500',
     eventType: 'hitl_followup_email',
@@ -441,6 +502,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Stale Deal Alert',
     description: 'Identifies deals with 14+ days of inactivity, analyzes stall reason, relationship health, and generates AI-powered re-engagement message with next steps.',
     stage: 'pipeline',
+    useCase: 'pipeline-health',
     icon: ShieldAlert,
     gradient: 'from-red-500 to-orange-500',
     eventType: 'stale_deal_alert',
@@ -460,6 +522,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: 'Email Reply Received',
     description: 'Detects high-priority inbound replies, matches to CRM contacts and deals, analyzes sentiment, and suggests the best next action.',
     stage: 'outreach',
+    useCase: 'post-meeting',
     icon: Mail,
     gradient: 'from-fuchsia-500 to-purple-600',
     eventType: 'email_reply_alert',
@@ -479,6 +542,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     name: '60 Smart Suggestion',
     description: 'Context-aware AI insight based on 15 real data points: calendar density, pipeline health, task patterns, relationship scores, and recent activity.',
     stage: 'coaching',
+    useCase: 'coaching-insights',
     icon: Sparkles,
     gradient: 'from-yellow-400 to-amber-500',
     eventType: 'ai_smart_suggestion',
@@ -632,6 +696,10 @@ export const EVENT_TYPE_TO_SEQUENCE_TYPE: Record<string, string> = {
 
 export function getAbilitiesByStage(stage: LifecycleStage): AbilityDefinition[] {
   return ABILITY_REGISTRY.filter(a => a.stage === stage);
+}
+
+export function getAbilitiesByUseCase(useCase: UseCase): AbilityDefinition[] {
+  return ABILITY_REGISTRY.filter(a => a.useCase === useCase);
 }
 
 export function getAbilityById(id: string): AbilityDefinition | undefined {

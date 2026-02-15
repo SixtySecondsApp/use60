@@ -1,0 +1,156 @@
+{
+  "project": {
+    "name": "Org Marketplace Redesign — App Store Experience",
+    "branch": "feat/proactive-agent-v2",
+    "createdAt": "2026-02-16T12:00:00Z",
+    "consultReport": ".sixty/consult/marketplace-redesign-brief.md"
+  },
+  "features": [
+    {
+      "id": "marketplace-redesign",
+      "name": "Org Marketplace Redesign",
+      "status": "complete",
+      "priority": 1
+    }
+  ],
+  "stories": [
+    {
+      "id": "MKTV2-001",
+      "feature": "marketplace-redesign",
+      "title": "Add use-case categories to ability registry",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["MKTV2-002", "MKTV2-003", "MKTV2-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "New UseCase type: 'meeting-prep' | 'post-meeting' | 'pipeline-health' | 'coaching-insights'",
+        "New USE_CASE_CATEGORIES array with id, name, description, icon, gradient for each category",
+        "New useCase field added to AbilityDefinition interface",
+        "All 22 abilities mapped to a use-case category",
+        "New getAbilitiesByUseCase(useCase) helper function exported",
+        "Existing getAbilitiesByStage still works (no breaking change)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "MKTV2-002",
+      "feature": "marketplace-redesign",
+      "title": "Create MarketplaceHero component with org-aware recommendations",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["MKTV2-001"], "files": [], "schema": [] },
+      "blocks": ["MKTV2-005"],
+      "parallelWith": ["MKTV2-003", "MKTV2-004"],
+      "acceptance": [
+        "New MarketplaceHero component at src/components/agent/marketplace/MarketplaceHero.tsx",
+        "Gradient background banner with 'Supercharge your sales workflow' headline",
+        "Subheadline showing org name and stat: 'X of Y abilities enabled'",
+        "3 recommended ability mini-cards based on: connected integrations (unlocked first), org industry match, highest-value abilities",
+        "Each recommendation card is clickable (fires onAbilityClick callback)",
+        "Graceful fallback if no org profile data available (shows top 3 by default)",
+        "Uses useActiveOrgId + useIntegrationStore to determine connected integrations"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/marketplace/MarketplaceHero.tsx"
+      ]
+    },
+    {
+      "id": "MKTV2-003",
+      "feature": "marketplace-redesign",
+      "title": "Create MarketplaceAbilityCard — rich preview card",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["MKTV2-001"], "files": [], "schema": [] },
+      "blocks": ["MKTV2-005"],
+      "parallelWith": ["MKTV2-002", "MKTV2-004"],
+      "acceptance": [
+        "New MarketplaceAbilityCard at src/components/agent/marketplace/MarketplaceAbilityCard.tsx",
+        "Card shows: icon with gradient, name, 2-line description, integration requirement badges, enable/disable toggle",
+        "When locked (missing integrations): overlay with lock icon and 'Connect X to unlock' text",
+        "Quick stats row: last run time, total runs, success rate (if available)",
+        "Trigger type badge (event/cron/manual) and status badge (active/beta/planned)",
+        "HITL badge when ability requires human approval",
+        "onClick opens the detail sheet (fires onViewDetails callback with ability ID)",
+        "Uses useAbilityPrerequisites hook for lock state",
+        "Larger card than admin version: more whitespace, bigger icon, description not truncated to 2 lines"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/marketplace/MarketplaceAbilityCard.tsx"
+      ]
+    },
+    {
+      "id": "MKTV2-004",
+      "feature": "marketplace-redesign",
+      "title": "Create AbilityDetailSheet — side panel detail view",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["MKTV2-001"], "files": [], "schema": [] },
+      "blocks": ["MKTV2-005"],
+      "parallelWith": ["MKTV2-002", "MKTV2-003"],
+      "acceptance": [
+        "New AbilityDetailSheet at src/components/agent/marketplace/AbilityDetailSheet.tsx",
+        "Uses Sheet/SheetContent with !top-16 !h-[calc(100vh-4rem)] pattern, width w-full sm:max-w-lg",
+        "Header: icon + name + status badge + enable/disable toggle",
+        "Sections: Description (full text), How it Works (step count, trigger type explanation), Required Integrations (with Connect CTA for missing), Delivery Channels (Slack/Email/In-App toggles), Quick Stats (runs, success rate, last run, cost if available)",
+        "When locked: prominent 'Connect X to unlock' section with indigo CTA buttons using navigate()",
+        "When enabled: shows green 'Active' indicator",
+        "Uses useAbilityPrerequisites for integration checks",
+        "Uses useAgentAbilityPreferences for enable/disable toggle (backend abilities) and localStorage for V1 abilities",
+        "Close button and keyboard escape dismiss the sheet"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/agent/marketplace/AbilityDetailSheet.tsx"
+      ]
+    },
+    {
+      "id": "MKTV2-005",
+      "feature": "marketplace-redesign",
+      "title": "Assemble OrgMarketplacePage — full page with categories",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["MKTV2-002", "MKTV2-003", "MKTV2-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Replace AgentMarketplacePage content with new marketplace layout",
+        "Page structure: MarketplaceHero at top, then category sections, then footer",
+        "Each category section: icon + name + outcome description header, then grid of MarketplaceAbilityCards",
+        "Category grid: 1 col mobile, 2 cols md, 3 cols lg",
+        "Selected ability state: clicking any card opens AbilityDetailSheet",
+        "Hero recommendation clicks also open the detail sheet",
+        "Category sections show count of enabled/total abilities per category",
+        "Smooth scroll to category when clicking category name (optional)",
+        "Fetch ability stats from sequence_jobs (reuse existing useQuery pattern from AbilityMarketplace)",
+        "No regression on /platform/agent-abilities (still uses AbilityMarketplace with showDebugTabs)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/agent/AgentMarketplacePage.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 5,
+    "lastUpdated": "2026-02-17T10:00:00Z"
+  },
+  "decisions": {
+    "visual_style": "App store / showcase (clean cards, hero banner, browsable catalog)",
+    "organization": "By use-case / outcome (Meeting Prep, Post-Meeting, Pipeline Health, Coaching & Insights)",
+    "card_design": "Rich preview card (icon, description, integration badges, stats, toggle, click-to-detail)",
+    "onboarding": "Hero banner + 3 recommended abilities based on org profile + connected integrations",
+    "detail_view": "Side panel (Sheet) with full config, stats, and integration status"
+  }
+}
