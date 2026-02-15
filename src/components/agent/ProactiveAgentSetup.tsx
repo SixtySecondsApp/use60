@@ -704,12 +704,11 @@ async function checkSlackUserMapped(orgId: string, userId: string): Promise<Prer
   }
 }
 
-async function checkGoogleCalendar(orgId: string, userId: string): Promise<PrerequisiteCheck> {
+async function checkGoogleCalendar(_orgId: string, userId: string): Promise<PrerequisiteCheck> {
   try {
     const { data, error } = await supabase
       .from('google_integrations')
       .select('scopes, is_active')
-      .eq('org_id', orgId)
       .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle();

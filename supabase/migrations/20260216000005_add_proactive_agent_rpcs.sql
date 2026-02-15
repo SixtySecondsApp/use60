@@ -91,19 +91,13 @@ CREATE OR REPLACE FUNCTION upsert_proactive_agent_config(
   p_enabled_sequences JSONB DEFAULT NULL,
   p_default_delivery TEXT DEFAULT 'slack'
 )
-RETURNS TABLE (
-  org_id TEXT,
-  is_enabled BOOLEAN,
-  enabled_sequences JSONB,
-  default_delivery TEXT,
-  created_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ
-)
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
   v_enabled_sequences JSONB;
+  v_result RECORD;
 BEGIN
   -- Validate default_delivery
   IF p_default_delivery NOT IN ('slack', 'in_app', 'both') THEN
@@ -123,8 +117,8 @@ BEGIN
     'calendar_find_times', jsonb_build_object('enabled', false, 'delivery_channel', 'slack')
   ));
 
-  -- Upsert the config
-  INSERT INTO proactive_agent_config (
+  -- Upsert the config (use alias to avoid column name ambiguity with plpgsql variables)
+  INSERT INTO proactive_agent_config AS pac (
     org_id,
     is_enabled,
     enabled_sequences,
@@ -141,13 +135,16 @@ BEGIN
     enabled_sequences = EXCLUDED.enabled_sequences,
     default_delivery = EXCLUDED.default_delivery,
     updated_at = now()
-  RETURNING
-    org_id,
-    is_enabled,
-    enabled_sequences,
-    default_delivery,
-    created_at,
-    updated_at;
+  RETURNING pac.* INTO v_result;
+
+  RETURN jsonb_build_object(
+    'org_id', v_result.org_id,
+    'is_enabled', v_result.is_enabled,
+    'enabled_sequences', v_result.enabled_sequences,
+    'default_delivery', v_result.default_delivery,
+    'created_at', v_result.created_at,
+    'updated_at', v_result.updated_at
+  );
 END;
 $$;
 
