@@ -1,0 +1,162 @@
+{
+  "id": "crm-data-strategy",
+  "name": "CRM Data Strategy: Hybrid Index + Lazy Materialization",
+  "brief": ".sixty/consult/crm-data-strategy.md",
+  "createdAt": "2026-02-15T16:00:00Z",
+  "completedAt": "2026-02-19T12:00:00Z",
+  "status": "complete",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Schema + Index Infrastructure",
+      "status": "complete"
+    },
+    {
+      "id": "phase-2",
+      "name": "Copilot Integration",
+      "status": "complete"
+    },
+    {
+      "id": "phase-3",
+      "name": "Materialization",
+      "status": "complete"
+    },
+    {
+      "id": "phase-4",
+      "name": "Write-back",
+      "status": "complete"
+    }
+  ],
+  "stories": [
+    {
+      "id": "CRM-001",
+      "title": "Create CRM index tables migration",
+      "phase": "phase-1",
+      "type": "schema",
+      "status": "complete",
+      "dependencies": [],
+      "files": ["supabase/migrations/20260219000002_crm_index_tables.sql"],
+      "description": "Create crm_contact_index, crm_company_index, crm_deal_index tables with all indexes including full-text search GIN index"
+    },
+    {
+      "id": "CRM-002",
+      "title": "Create write-back queue migration",
+      "phase": "phase-1",
+      "type": "schema",
+      "status": "complete",
+      "dependencies": [],
+      "files": ["supabase/migrations/20260219000003_crm_writeback_queue.sql"],
+      "description": "Create crm_writeback_queue table with status, retry, dedup, and dead-letter support"
+    },
+    {
+      "id": "CRM-003",
+      "title": "Build shared upsertCrmIndex utility",
+      "phase": "phase-1",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-001"],
+      "files": ["supabase/functions/_shared/upsertCrmIndex.ts"],
+      "description": "Shared utility that webhook handlers call to upsert into crm_contact_index, crm_company_index, crm_deal_index."
+    },
+    {
+      "id": "CRM-004",
+      "title": "Modify hubspot-webhook to upsert into CRM index",
+      "phase": "phase-1",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-003"],
+      "files": ["supabase/functions/hubspot-webhook/index.ts"],
+      "description": "Add upsertCrmIndex call to HubSpot webhook handler for contact, company, and deal events."
+    },
+    {
+      "id": "CRM-005",
+      "title": "Modify attio-webhook to upsert into CRM index",
+      "phase": "phase-1",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-003"],
+      "files": ["supabase/functions/attio-webhook/index.ts"],
+      "description": "Add upsertCrmIndex call to Attio webhook handler for people and company events."
+    },
+    {
+      "id": "CRM-006",
+      "title": "Build hubspot-initial-sync edge function",
+      "phase": "phase-1",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-003"],
+      "files": ["supabase/functions/hubspot-initial-sync/index.ts", "supabase/functions/hubspot-initial-sync/config.toml"],
+      "description": "Edge function that paginates through all HubSpot contacts, companies, and deals, batch-upserts into index tables."
+    },
+    {
+      "id": "CRM-007",
+      "title": "Build crmIndexAdapter for copilot",
+      "phase": "phase-2",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-001"],
+      "files": ["supabase/functions/_shared/copilot_adapters/crmIndexAdapter.ts"],
+      "description": "New adapter with searchContacts and searchCompanies for the copilot to query CRM index."
+    },
+    {
+      "id": "CRM-008",
+      "title": "Add search_crm_index action to copilot-autonomous",
+      "phase": "phase-2",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-007"],
+      "files": ["supabase/functions/copilot-autonomous/index.ts"],
+      "description": "Add search_crm_index and materialize_contact as new tool types in copilot-autonomous."
+    },
+    {
+      "id": "CRM-009",
+      "title": "Enhance resolve_entity with index search",
+      "phase": "phase-2",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-007"],
+      "files": ["supabase/functions/_shared/resolveEntityAdapter.ts"],
+      "description": "Add crm_contact_index as 4th parallel search source in entity resolution."
+    },
+    {
+      "id": "CRM-010",
+      "title": "Build materializationService",
+      "phase": "phase-3",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-001", "CRM-003"],
+      "files": ["supabase/functions/_shared/materializationService.ts"],
+      "description": "Service that fetches full CRM records, inserts into contacts/companies, updates index materialization state."
+    },
+    {
+      "id": "CRM-011",
+      "title": "Wire meeting-booked auto-materialize",
+      "phase": "phase-3",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-010"],
+      "files": ["supabase/functions/savvycal-leads-webhook/index.ts"],
+      "description": "When a lead is created via SavvyCal webhook, search crm_contact_index by email. If found and not materialized, auto-materialize and link to lead."
+    },
+    {
+      "id": "CRM-012",
+      "title": "Build crm-writeback-worker edge function",
+      "phase": "phase-4",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-002"],
+      "files": ["supabase/functions/crm-writeback-worker/index.ts", "supabase/functions/crm-writeback-worker/config.toml"],
+      "description": "Cron-triggered edge function that dequeues pending jobs, calls CRM API, handles retry with exponential backoff."
+    },
+    {
+      "id": "CRM-013",
+      "title": "Wire copilot actions to enqueue write-back",
+      "phase": "phase-4",
+      "type": "backend",
+      "status": "complete",
+      "dependencies": ["CRM-012"],
+      "files": ["supabase/functions/_shared/copilot_adapters/dbAdapters.ts", "supabase/functions/_shared/enqueueWriteback.ts"],
+      "description": "When copilot execute_action updates a contact/deal/company, enqueue a write-back job in crm_writeback_queue."
+    }
+  ]
+}

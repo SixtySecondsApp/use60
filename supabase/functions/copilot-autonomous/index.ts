@@ -37,6 +37,7 @@ import { logAICostEvent, checkAgentBudget, checkCreditBalance } from '../_shared
 import { executeAction } from '../_shared/copilot_adapters/executeAction.ts';
 import type { ExecuteActionName } from '../_shared/copilot_adapters/types.ts';
 import { resolveEntity } from '../_shared/resolveEntityAdapter.ts';
+import { searchCrmContacts, searchCrmCompanies } from '../_shared/copilot_adapters/crmIndexAdapter.ts';
 import {
   handleListSkills,
   handleGetSkill,
@@ -82,7 +83,7 @@ interface RequestBody {
 // 4-Tool Architecture (matches api-copilot)
 // =============================================================================
 
-const FIVE_TOOL_DEFINITIONS: Anthropic.Tool[] = [
+const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   // 1. resolve_entity - MUST BE FIRST for first-name-only references
   {
     name: 'resolve_entity',
@@ -216,6 +217,10 @@ ACTION PARAMETERS:
 - push_ops_to_instantly: { table_id, campaign_id?, row_ids? } - Push rows to Instantly campaign (requires confirm=true)
 - get_ops_insights: { table_id, insight_type? } - Get AI-generated table insights
 
+## Standard Tables (Auto-provisioned CRM Data)
+- list_standard_tables: {} - List available standard tables (Leads, Meetings, All Contacts, All Companies)
+- query_standard_table: { table_name, filters?, sort_by?, sort_direction?, limit? } - Query data from standard ops tables. table_name must be one of: "Leads", "Meetings", "All Contacts", "All Companies". Use for user queries like "show me my leads", "list contacts", "recent meetings".
+
 ## Lead Search & Prospecting (NO confirmation needed — execute immediately)
 - search_leads_create_table: { query, person_titles?, person_locations?, organization_num_employees_ranges?, person_seniorities?, per_page?, source? } - Search for leads and create an ops table with results. query is a plain-English description of the search (e.g. "marketing agencies in Bristol"). source defaults to "apollo". Does NOT require confirm=true.
 - enrich_table_column: { table_id, column_id, row_ids? } - Enrich a column in an ops table. Does NOT require confirm=true.
@@ -272,6 +277,8 @@ Write actions (create_task, create_ops_table, update_crm, etc.) require params.c
             'get_ops_insights',
             'search_leads_create_table',
             'enrich_table_column',
+            'list_standard_tables',
+            'query_standard_table',
           ],
           description: 'The action to execute',
         },
@@ -360,6 +367,91 @@ The tool returns the created table with ID and results. Present the table link t
         },
       },
       required: ['query'],
+    },
+  },
+  // 7. search_crm_index - Search lightweight CRM index before materialization
+  {
+    name: 'search_crm_index',
+    description: `Search the lightweight CRM index for contacts or companies from HubSpot/Attio without materializing full records. Use this for fast CRM searches before deciding whether to materialize.
+
+USE THIS TOOL when the user asks to:
+- Find CRM contacts or companies by name, email, title, or company
+- Search for contacts with specific lifecycle stages or deal associations
+- Look up CRM data without needing full materialization
+
+The tool returns lightweight index records with basic fields and materialization status.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        search_type: {
+          type: 'string',
+          enum: ['contacts', 'companies'],
+          description: 'Whether to search contacts or companies',
+        },
+        query: {
+          type: 'string',
+          description: 'Full-text search query across relevant fields (name, email, company, title for contacts; name, domain, industry for companies)',
+        },
+        email: {
+          type: 'string',
+          description: 'Exact email lookup (contacts only)',
+        },
+        name: {
+          type: 'string',
+          description: 'Name search - first/last name for contacts, company name for companies',
+        },
+        company: {
+          type: 'string',
+          description: 'Company name filter (contacts only)',
+        },
+        job_title: {
+          type: 'string',
+          description: 'Job title filter (contacts only)',
+        },
+        lifecycle_stage: {
+          type: 'string',
+          description: 'Lifecycle stage filter (contacts only)',
+        },
+        has_active_deal: {
+          type: 'boolean',
+          description: 'Filter by whether contact has an active deal (contacts only)',
+        },
+        domain: {
+          type: 'string',
+          description: 'Domain filter (companies only)',
+        },
+        industry: {
+          type: 'string',
+          description: 'Industry filter (companies only)',
+        },
+        limit: {
+          type: 'number',
+          description: 'Number of results to return (default 25, max 100)',
+        },
+      },
+      required: ['search_type'],
+    },
+  },
+  // 8. materialize_contact - Pull full CRM record into local contacts table
+  {
+    name: 'materialize_contact',
+    description: `Materialize a CRM contact from the index into the full contacts table. This pulls the complete record from HubSpot/Attio and creates a local contact record.
+
+USE THIS TOOL when:
+- User wants to work with a specific contact found in search results
+- User needs full contact details beyond the index fields
+- User wants to associate the contact with local deals/tasks/meetings
+
+For now, this is a placeholder - materialization will be implemented in Phase 3.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        index_record_id: {
+          type: 'string',
+          description: 'The UUID from crm_contact_index to materialize',
+        },
+      },
+      required: ['index_record_id'],
     },
   },
 ];
@@ -452,6 +544,56 @@ async function executeToolCall(
       };
       console.log(`[executeToolCall] search_leads called directly. query=${params.query}, params keys: ${Object.keys(params).join(', ')}`);
       return await executeAction(client, userId, resolvedOrgId, 'search_leads_create_table' as ExecuteActionName, params, { userAuthToken });
+    }
+
+    case 'search_crm_index': {
+      if (!resolvedOrgId) {
+        return { success: false, error: 'Organization ID is required for CRM index search' };
+      }
+
+      const searchType = input.search_type ? String(input.search_type) : 'contacts';
+
+      if (searchType === 'contacts') {
+        const params = {
+          query: input.query ? String(input.query) : undefined,
+          email: input.email ? String(input.email) : undefined,
+          name: input.name ? String(input.name) : undefined,
+          company: input.company ? String(input.company) : undefined,
+          jobTitle: input.job_title ? String(input.job_title) : undefined,
+          lifecycleStage: input.lifecycle_stage ? String(input.lifecycle_stage) : undefined,
+          hasActiveDeal: input.has_active_deal !== undefined ? Boolean(input.has_active_deal) : undefined,
+          limit: input.limit ? Number(input.limit) : undefined,
+        };
+        return await searchCrmContacts(client, resolvedOrgId, params);
+      } else if (searchType === 'companies') {
+        const params = {
+          query: input.query ? String(input.query) : undefined,
+          name: input.name ? String(input.name) : undefined,
+          domain: input.domain ? String(input.domain) : undefined,
+          industry: input.industry ? String(input.industry) : undefined,
+          limit: input.limit ? Number(input.limit) : undefined,
+        };
+        return await searchCrmCompanies(client, resolvedOrgId, params);
+      } else {
+        return { success: false, error: `Invalid search_type: ${searchType}. Must be 'contacts' or 'companies'` };
+      }
+    }
+
+    case 'materialize_contact': {
+      const indexRecordId = input.index_record_id ? String(input.index_record_id) : '';
+      if (!indexRecordId) {
+        return { success: false, error: 'index_record_id is required for materialize_contact' };
+      }
+
+      // Placeholder for Phase 3 implementation
+      return {
+        success: true,
+        data: {
+          message: 'Contact materialization will be available in Phase 3. For now, this contact exists in the CRM index and can be searched.',
+          index_record_id: indexRecordId,
+          materialization_status: 'not_implemented',
+        },
+      };
     }
 
     default:
@@ -891,6 +1033,22 @@ Don't stop after completing just one step — complete the FULL workflow the use
 - Use execute_action with ai_transform_ops_column { table_id, column_id, prompt } to transform column values
 - Use execute_action with sync_ops_hubspot { table_id } to sync with HubSpot
 - Use execute_action with push_ops_to_instantly { table_id } to push to Instantly campaigns
+
+### Standard Tables (Canonical CRM Data Sources)
+These are auto-provisioned, auto-synced tables that serve as the single source of truth for core CRM entities:
+- **Leads**: Lead pipeline from contacts + CRM integrations
+- **Meetings**: Meeting history with recordings and transcripts
+- **All Contacts**: Universal mirror of all CRM contacts
+- **All Companies**: Unified company data across all sources
+
+When users ask for CRM data ("show me my leads", "list contacts", "recent meetings", "find companies"):
+1. Use execute_action with list_standard_tables {} to see available standard tables
+2. Use execute_action with query_standard_table { table_name, filters?, sort_by?, limit? } to query data
+   - table_name must be exactly: "Leads", "Meetings", "All Contacts", or "All Companies"
+   - filters is optional array of {column, operator, value} objects
+   - Present results in a structured format with row count
+
+These tables are READ-ONLY — do not attempt to modify them with create/update/delete operations.
 
 ## Organization Context
 
@@ -1495,8 +1653,8 @@ serve(async (req: Request) => {
     // Build system prompt (no longer depends on per-skill tool defs)
     const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext);
 
-    // Use the 4-tool architecture (same as api-copilot)
-    const claudeTools = FIVE_TOOL_DEFINITIONS;
+    // Use the tool architecture (expanded from original 4-tool to include CRM index and more)
+    const claudeTools = TOOL_DEFINITIONS;
 
     // =========================================================================
     // Multi-Agent Orchestration

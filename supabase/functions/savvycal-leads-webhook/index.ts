@@ -5,6 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 type SupabaseClient = ReturnType<typeof createClient>;
 import { corsHeaders } from "../_shared/cors.ts";
 import { extractBusinessDomain, matchOrCreateCompany } from "../_shared/companyMatching.ts";
+import { materializeContact } from "../_shared/materializationService.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -612,6 +613,56 @@ async function processSavvyCalEvent(
     });
 
   if (insertEventError) {
+  }
+
+  // Auto-materialize CRM contact if exists in index (non-blocking)
+  if (status !== "cancelled" && contactEmail && explicitOrgId) {
+    try {
+      // Search CRM index by email
+      const { data: crmIndexRecords } = await supabase
+        .from('crm_contact_index')
+        .select('id, org_id, crm_source, crm_record_id, first_name, last_name, email, company_name, job_title, materialized_contact_id, is_materialized')
+        .eq('org_id', explicitOrgId)
+        .ilike('email', contactEmail)
+        .limit(1);
+
+      const crmIndexRecord = crmIndexRecords?.[0];
+
+      if (crmIndexRecord) {
+        let materializedContactId = crmIndexRecord.materialized_contact_id;
+
+        if (!crmIndexRecord.is_materialized) {
+          // Contact exists in CRM index but not materialized yet - materialize it
+          console.log(`[savvycal-webhook] Auto-materializing CRM contact for lead ${leadData.id}: ${contactEmail}`);
+          const materializationResult = await materializeContact(supabase, explicitOrgId, crmIndexRecord);
+
+          if (materializationResult.success && materializationResult.contact_id) {
+            materializedContactId = materializationResult.contact_id;
+            console.log(`[savvycal-webhook] Materialized contact ${materializedContactId} for lead ${leadData.id}`);
+          } else {
+            console.error(`[savvycal-webhook] Materialization failed for lead ${leadData.id}: ${materializationResult.error}`);
+          }
+        } else {
+          console.log(`[savvycal-webhook] CRM contact already materialized for lead ${leadData.id}: ${materializedContactId}`);
+        }
+
+        // Link lead to materialized contact (whether newly materialized or already existed)
+        if (materializedContactId) {
+          await supabase
+            .from('leads')
+            .update({
+              contact_id: materializedContactId,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', leadData.id);
+
+          console.log(`[savvycal-webhook] Linked lead ${leadData.id} to materialized contact ${materializedContactId}`);
+        }
+      }
+    } catch (materializationError) {
+      // Non-blocking - don't fail lead creation if materialization fails
+      console.error(`[savvycal-webhook] Auto-materialization error (non-fatal):`, materializationError);
+    }
   }
 
   // Skip enrichment and prep for cancelled leads

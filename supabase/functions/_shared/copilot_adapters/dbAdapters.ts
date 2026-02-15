@@ -8,6 +8,7 @@ import type {
   MeetingAdapter,
   NotificationAdapter,
 } from './types.ts';
+import { enqueueWriteback, mapFieldsToHubSpot, mapFieldsToAttio, type CrmSource } from '../enqueueWriteback.ts';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -1162,6 +1163,9 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
         const id = String(params.id);
         const updates = params.updates || {};
 
+        let result: any;
+        let entityRecord: any;
+
         switch (params.entity) {
           case 'deal': {
             const { data, error } = await client
@@ -1169,10 +1173,12 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               .update(updates)
               .eq('id', id)
               .eq('owner_id', userId)
-              .select()
+              .select('*, organization_id')
               .maybeSingle();
             if (error) throw error;
-            return ok({ deal: data }, source);
+            entityRecord = data;
+            result = ok({ deal: data }, source);
+            break;
           }
           case 'contact': {
             const { data, error } = await client
@@ -1180,10 +1186,12 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               .update(updates)
               .eq('id', id)
               .eq('owner_id', userId)
-              .select()
+              .select('*, organization_id')
               .maybeSingle();
             if (error) throw error;
-            return ok({ contact: data }, source);
+            entityRecord = data;
+            result = ok({ contact: data }, source);
+            break;
           }
           case 'task': {
             const { data, error } = await client
@@ -1194,6 +1202,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               .select()
               .maybeSingle();
             if (error) throw error;
+            // Tasks don't sync to external CRM
             return ok({ task: data }, source);
           }
           case 'activity': {
@@ -1205,11 +1214,70 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               .select()
               .maybeSingle();
             if (error) throw error;
+            // Activities don't sync to external CRM yet
             return ok({ activity: data }, source);
           }
           default:
             return fail(`Unsupported entity: ${String(params.entity)}`, source);
         }
+
+        // Enqueue write-back for deals and contacts if orgId is available
+        if (entityRecord && ctx.orgId && (params.entity === 'deal' || params.entity === 'contact')) {
+          try {
+            // Determine CRM source (check for active integrations)
+            const { data: hubspotIntegration } = await client
+              .from('hubspot_org_integrations')
+              .select('org_id')
+              .eq('org_id', ctx.orgId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            const { data: attioIntegration } = await client
+              .from('attio_org_integrations')
+              .select('org_id')
+              .eq('org_id', ctx.orgId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            let crmSource: CrmSource | null = null;
+            if (hubspotIntegration) {
+              crmSource = 'hubspot';
+            } else if (attioIntegration) {
+              crmSource = 'attio';
+            }
+
+            if (crmSource) {
+              // Get the external CRM record ID if it exists
+              const crmRecordId = entityRecord.crm_id || entityRecord.external_id || null;
+
+              // Map field names based on CRM source
+              const mappedPayload = crmSource === 'hubspot'
+                ? mapFieldsToHubSpot(params.entity as any, updates)
+                : mapFieldsToAttio(params.entity as any, updates);
+
+              // Enqueue the write-back operation
+              await enqueueWriteback({
+                supabase: client,
+                orgId: ctx.orgId,
+                crmSource,
+                entityType: params.entity as any,
+                operation: crmRecordId ? 'update' : 'create',
+                crmRecordId: crmRecordId || undefined,
+                payload: mappedPayload,
+                triggeredBy: 'copilot',
+                triggeredByUserId: userId,
+                priority: 3, // Higher priority for copilot-triggered updates
+              });
+
+              console.log(`[dbAdapter] Enqueued ${params.entity} write-back to ${crmSource}`);
+            }
+          } catch (writebackErr) {
+            // Log but don't fail the main operation
+            console.error('[dbAdapter] Failed to enqueue write-back:', writebackErr);
+          }
+        }
+
+        return result;
       } catch (e) {
         const msg = formatAdapterError(e);
         return fail(msg, source);

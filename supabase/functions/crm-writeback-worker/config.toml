@@ -1,0 +1,18 @@
+# CRM Write-Back Worker
+# Processes crm_writeback_queue to sync data to external CRMs (HubSpot, Attio, Salesforce)
+# Triggered by: pg_cron every 1 minute
+
+[function]
+verify_jwt = false
+
+# Cron schedule: every 1 minute
+# Note: pg_cron must be installed and configured in Supabase dashboard
+# CREATE EXTENSION IF NOT EXISTS pg_cron;
+# SELECT cron.schedule(
+#   'crm-writeback-worker',
+#   '* * * * *',
+#   $$SELECT net.http_post(
+#     url := 'https://PROJECT_REF.supabase.co/functions/v1/crm-writeback-worker',
+#     headers := '{"Content-Type": "application/json", "Authorization": "Bearer SERVICE_ROLE_KEY"}'::jsonb
+#   );$$
+# );

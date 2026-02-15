@@ -26,7 +26,7 @@ interface RecentInteraction {
 
 interface EntityCandidate {
   id: string;
-  type: 'contact' | 'meeting_attendee' | 'calendar_attendee' | 'email_participant';
+  type: 'contact' | 'meeting_attendee' | 'calendar_attendee' | 'email_participant' | 'crm_index';
   first_name: string;
   last_name?: string;
   full_name: string;
@@ -42,6 +42,8 @@ interface EntityCandidate {
   contact_id?: string;
   crm_url?: string;
   recent_interactions?: RecentInteraction[];
+  is_materialized?: boolean;
+  crm_source?: string;
 }
 
 export interface ResolveEntityResult {
@@ -276,6 +278,9 @@ export async function resolveEntity(
   const candidates: EntityCandidate[] = [];
   const searchSteps: Array<{ source: string; status: 'complete' | 'no_results'; count: number }> = [];
 
+  // Helper to check if org exists (needed for CRM index search)
+  const hasOrgId = !!orgId;
+
   // 1. Search CRM Contacts
   const contactsPromise = (async () => {
     try {
@@ -478,8 +483,74 @@ export async function resolveEntity(
     }
   })();
 
-  // Wait for all parallel searches
-  await Promise.all([contactsPromise, meetingsPromise, calendarPromise]);
+  // 4. Search CRM Index (only if org is available)
+  const crmIndexPromise = (async () => {
+    if (!hasOrgId) {
+      searchSteps.push({ source: 'CRM Index', status: 'no_results', count: 0 });
+      return;
+    }
+
+    try {
+      // Search by name
+      let nameQuery = client
+        .from('crm_contact_index')
+        .select('id, first_name, last_name, email, company_name, job_title, is_materialized, crm_source, crm_updated_at')
+        .eq('org_id', orgId)
+        .or(`first_name.ilike.${firstName}%,last_name.ilike.${firstName}%`)
+        .order('crm_updated_at', { ascending: false, nullsFirst: false })
+        .limit(10);
+
+      if (lastName) {
+        nameQuery = nameQuery.or(`first_name.ilike.${firstName}%,last_name.ilike.${lastName}%`);
+      }
+
+      const { data: nameMatches, error: nameError } = await nameQuery;
+
+      // Also search by email if we can extract it from context
+      // For now, just use name-based search
+      const allMatches = nameMatches || [];
+
+      if (nameError || allMatches.length === 0) {
+        searchSteps.push({ source: 'CRM Index', status: 'no_results', count: 0 });
+        return;
+      }
+
+      searchSteps.push({ source: 'CRM Index', status: 'complete', count: allMatches.length });
+
+      for (const match of allMatches) {
+        const fullName = [match.first_name, match.last_name].filter(Boolean).join(' ');
+
+        // Give materialized contacts a higher recency score (boost by 20 points)
+        const baseRecency = calcRecencyScore(match.crm_updated_at);
+        const recencyScore = match.is_materialized ? baseRecency + 20 : baseRecency;
+
+        candidates.push({
+          id: match.id,
+          type: 'crm_index',
+          first_name: match.first_name || '',
+          last_name: match.last_name || undefined,
+          full_name: fullName || match.email || 'Unknown',
+          email: match.email || undefined,
+          company_name: match.company_name || undefined,
+          title: match.job_title || undefined,
+          source: `CRM Index (${match.crm_source})`,
+          last_interaction: match.crm_updated_at || new Date().toISOString(),
+          last_interaction_type: 'crm_index',
+          last_interaction_description: match.is_materialized
+            ? `CRM contact (${match.crm_source}, materialized)`
+            : `CRM contact (${match.crm_source}, indexed only)`,
+          recency_score: recencyScore,
+          is_materialized: match.is_materialized || false,
+          crm_source: match.crm_source,
+        });
+      }
+    } catch (_e) {
+      searchSteps.push({ source: 'CRM Index', status: 'no_results', count: 0 });
+    }
+  })();
+
+  // Wait for all parallel searches (now including CRM index)
+  await Promise.all([contactsPromise, meetingsPromise, calendarPromise, crmIndexPromise]);
 
   // Deduplicate and score candidates
   const deduped = new Map<string, EntityCandidate>();
@@ -506,7 +577,9 @@ export async function resolveEntity(
 
   const totalCandidates = sortedCandidates.length;
 
-  const sourcesSearched = ['CRM Contacts', 'Recent Meetings', 'Calendar Events'];
+  const sourcesSearched = hasOrgId
+    ? ['CRM Contacts', 'Recent Meetings', 'Calendar Events', 'CRM Index']
+    : ['CRM Contacts', 'Recent Meetings', 'Calendar Events'];
 
   // Determine resolution outcome
   if (totalCandidates === 0) {

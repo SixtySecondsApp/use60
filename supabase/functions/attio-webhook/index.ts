@@ -1,5 +1,7 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { syncToStandardTable } from '../_shared/standardTableSync.ts'
+import { upsertContactIndex, upsertCompanyIndex } from '../_shared/upsertCrmIndex.ts'
 
 /**
  * Attio Webhook Receiver
@@ -114,6 +116,97 @@ serve(async (req) => {
       }
     }
 
+    // Sync to standard ops tables for contact and company records
+    let syncedToStandard = false
+    let syncedToCrmIndex = false
+    const recordData = payload?.data?.record || payload?.data || {}
+    const objectType = recordData?.object_type || payload?.object_type
+    const recordId = recordData?.id?.record_id || recordData?.id || eventId
+
+    if (objectType && recordId && (objectType === 'people' || objectType === 'companies')) {
+      const entityType = objectType === 'people' ? 'contact' : 'company'
+      const timestamp = payload?.timestamp || new Date().toISOString()
+
+      try {
+        const syncResult = await syncToStandardTable({
+          supabase: svc,
+          orgId: integration.org_id,
+          crmSource: 'attio',
+          entityType,
+          crmRecordId: recordId,
+          properties: recordData?.values || recordData || {},
+          timestamp,
+        })
+
+        if (syncResult.success && syncResult.rowsUpserted > 0) {
+          syncedToStandard = true
+          console.log(`[attio-webhook] Synced ${entityType} ${recordId} to standard tables`)
+        }
+      } catch (syncErr) {
+        // Log but don't fail the webhook - standard table sync is non-critical
+        console.error(`[attio-webhook] Standard table sync failed for ${entityType} ${recordId}:`, syncErr)
+      }
+
+      // Upsert to CRM index for fast copilot search
+      try {
+        // Extract values from Attio format
+        const values = recordData?.values || {}
+
+        if (objectType === 'people') {
+          // Map Attio contact fields
+          const indexProperties = {
+            first_name: values.first_name?.[0]?.first_name || values.name?.[0]?.first_name,
+            last_name: values.last_name?.[0]?.last_name || values.name?.[0]?.last_name,
+            email: values.email_addresses?.[0]?.email_address,
+            company_name: values.company?.[0]?.target_object_name || values.company_name?.[0]?.value,
+            job_title: values.job_title?.[0]?.value,
+            lifecycle_stage: values.lifecycle_stage?.[0]?.value,
+            lead_status: values.lead_status?.[0]?.value,
+            updated_at: values.updated_at || new Date().toISOString(),
+          }
+
+          const indexResult = await upsertContactIndex({
+            supabase: svc,
+            orgId: integration.org_id,
+            crmSource: 'attio',
+            crmRecordId: recordId,
+            properties: indexProperties,
+          })
+
+          if (indexResult.success) {
+            syncedToCrmIndex = true
+            console.log(`[attio-webhook] Indexed contact ${recordId} in CRM index`)
+          }
+        } else if (objectType === 'companies') {
+          // Map Attio company fields
+          const indexProperties = {
+            name: values.name?.[0]?.value,
+            domain: values.domains?.[0]?.domain || values.primary_domain?.[0]?.value,
+            industry: values.industry?.[0]?.value,
+            employee_count: values.employee_count?.[0]?.value,
+            estimated_arr: values.estimated_arr?.[0]?.value,
+            updated_at: values.updated_at || new Date().toISOString(),
+          }
+
+          const indexResult = await upsertCompanyIndex({
+            supabase: svc,
+            orgId: integration.org_id,
+            crmSource: 'attio',
+            crmRecordId: recordId,
+            properties: indexProperties,
+          })
+
+          if (indexResult.success) {
+            syncedToCrmIndex = true
+            console.log(`[attio-webhook] Indexed company ${recordId} in CRM index`)
+          }
+        }
+      } catch (indexErr) {
+        // Log but don't fail the webhook - CRM index is non-critical
+        console.error(`[attio-webhook] CRM index upsert failed for ${entityType} ${recordId}:`, indexErr)
+      }
+    }
+
     // Log inbound webhook event
     await svc
       .from('integration_sync_logs')
@@ -127,12 +220,18 @@ serve(async (req) => {
           event_type: eventType,
           event_id: eventId,
           dedupe_key: dedupeKey,
+          synced_to_standard: syncedToStandard,
+          synced_to_crm_index: syncedToCrmIndex,
         },
       })
       .catch((e: any) => console.warn('[attio-webhook] Sync log insert failed:', e.message))
 
     // Return 200 quickly (Attio expects fast response)
-    return new Response(JSON.stringify({ received: true }), {
+    return new Response(JSON.stringify({
+      received: true,
+      synced_to_standard: syncedToStandard,
+      synced_to_crm_index: syncedToCrmIndex
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
