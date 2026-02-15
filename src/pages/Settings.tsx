@@ -47,6 +47,7 @@ import {
   Zap,
   Eye,
   Wallet,
+  Bot,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -246,6 +247,14 @@ export default function Settings() {
       path: '/settings/smart-listening',
     },
     {
+      id: 'proactive-agent',
+      label: 'Proactive Agent',
+      icon: Bot,
+      description: 'Configure autonomous AI workflows that monitor your pipeline and take action',
+      path: '/settings/proactive-agent',
+      requiresOrgAdmin: true,
+    },
+    {
       id: 'organization-management',
       label: 'Organization Management',
       icon: Building2,
@@ -324,7 +333,7 @@ export default function Settings() {
       ['account', 'appearance'].includes(s.id)
     );
     const aiSections = settingsSections.filter(s =>
-      ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types', 'smart-listening'].includes(s.id)
+      ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types', 'smart-listening', 'proactive-agent'].includes(s.id)
     );
     // Meeting recorder integrations (only shown when connected)
     const integrationSections = settingsSections.filter(s =>

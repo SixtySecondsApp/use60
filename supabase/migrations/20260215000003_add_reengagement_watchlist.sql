@@ -84,7 +84,7 @@ CREATE POLICY "Users can view org reengagement watchlist"
   TO authenticated
   USING (
     org_id IN (
-      SELECT org_id
+      SELECT org_id::text
       FROM organization_memberships
       WHERE user_id = auth.uid()
     )
@@ -301,11 +301,11 @@ AS $$
     rw.contact_ids,
     rw.loss_reason,
     rw.close_date,
-    EXTRACT(DAY FROM (CURRENT_DATE - rw.close_date))::INTEGER as days_since_close,
+    (CURRENT_DATE - rw.close_date)::INTEGER as days_since_close,
     rw.next_check_date,
     rw.last_signal_at,
     rw.last_signal_type,
-    COALESCE(p.full_name, p.email) as owner_name
+    COALESCE(CONCAT_WS(' ', p.first_name, p.last_name), p.email) as owner_name
   FROM reengagement_watchlist rw
   INNER JOIN deals d ON d.id = rw.deal_id
   LEFT JOIN profiles p ON p.id = d.owner_id
@@ -340,24 +340,23 @@ BEGIN
   FOR v_deal IN
     SELECT
       d.id as deal_id,
-      d.closed_date,
-      -- Extract contact IDs from deal relationships
-      COALESCE(
-        ARRAY_AGG(DISTINCT dc.contact_id::TEXT)
-        FILTER (WHERE dc.contact_id IS NOT NULL),
-        '{}'
-      ) as contact_ids
+      d.closed_lost_date,
+      -- Extract primary contact ID if available
+      CASE
+        WHEN d.primary_contact_id IS NOT NULL
+        THEN ARRAY[d.primary_contact_id::TEXT]
+        ELSE '{}'::TEXT[]
+      END as contact_ids
     FROM deals d
-    LEFT JOIN deal_contacts dc ON dc.deal_id = d.id
-    WHERE d.org_id = p_org_id
-      AND d.stage = 'Closed Lost'
-      AND d.closed_date >= CURRENT_DATE - INTERVAL '12 months'
+    LEFT JOIN deal_stages ds ON ds.id = d.stage_id
+    WHERE d.clerk_org_id = p_org_id
+      AND ds.name = 'Closed Lost'
+      AND d.closed_lost_date >= CURRENT_DATE - INTERVAL '12 months'
       AND NOT EXISTS (
         SELECT 1
         FROM reengagement_watchlist rw
         WHERE rw.deal_id = d.id
       )
-    GROUP BY d.id, d.closed_date
   LOOP
     -- Insert into watchlist
     INSERT INTO reengagement_watchlist (
@@ -371,7 +370,7 @@ BEGIN
       p_org_id,
       v_deal.deal_id,
       v_deal.contact_ids,
-      v_deal.closed_date,
+      v_deal.closed_lost_date,
       CURRENT_DATE + INTERVAL '7 days',
       'active'
     );

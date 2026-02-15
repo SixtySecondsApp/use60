@@ -5,7 +5,7 @@
  * Allows enabling/disabling the proactive agent and configuring individual sequences.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,9 +38,9 @@ import {
 import { PageContainer } from '@/components/layout/PageContainer';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
-import { useAuth } from '@/lib/contexts/AuthContext';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
-import { isUserAdmin } from '@/lib/utils/adminUtils';
+import { useOrg } from '@/lib/contexts/OrgContext';
+import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { ProactiveAgentSetup } from '@/components/agent/ProactiveAgentSetup';
 
 // Sequence configuration with display info
@@ -196,18 +196,13 @@ function SequenceCard({
 }
 
 export default function ProactiveAgentSettings() {
-  const { user } = useAuth();
   const activeOrgId = useActiveOrgId();
+  const { permissions } = useOrg();
+  const { isPlatformAdmin } = useUserPermissions();
   const queryClient = useQueryClient();
-  const [isAdmin, setIsAdmin] = useState(false);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
 
-  // Check admin status
-  useEffect(() => {
-    if (user && activeOrgId) {
-      isUserAdmin(user.id, activeOrgId, supabase).then(setIsAdmin);
-    }
-  }, [user, activeOrgId]);
+  const isAdmin = permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin;
 
   // Fetch current config
   const { data: config, isLoading } = useQuery({

@@ -63,7 +63,7 @@ CREATE POLICY "Users can view org deal risk scores"
   TO authenticated
   USING (
     org_id IN (
-      SELECT org_id
+      SELECT org_id::text
       FROM organization_memberships
       WHERE user_id = auth.uid()
     )
@@ -212,7 +212,7 @@ AS $$
     drs.signals,
     drs.scanned_at,
     drs.alert_sent_at,
-    COALESCE(p.full_name, p.email) as owner_name
+    COALESCE(CONCAT_WS(' ', p.first_name, p.last_name), p.email) as owner_name
   FROM deal_risk_scores drs
   INNER JOIN deals d ON d.id = drs.deal_id
   LEFT JOIN profiles p ON p.id = d.owner_id
@@ -222,9 +222,9 @@ AS $$
   LIMIT p_limit;
 $$;
 
-COMMENT ON FUNCTION get_high_risk_deals IS 'Returns high-risk deals for an org with owner info';
+COMMENT ON FUNCTION get_high_risk_deals(TEXT, INTEGER, INT) IS 'Returns high-risk deals for an org with owner info';
 
-GRANT EXECUTE ON FUNCTION get_high_risk_deals TO authenticated;
+GRANT EXECUTE ON FUNCTION get_high_risk_deals(TEXT, INTEGER, INT) TO authenticated;
 
 -- =============================================================================
 -- RPC: Get deals needing risk scan
@@ -248,12 +248,13 @@ AS $$
   SELECT
     d.id as deal_id,
     d.name as deal_name,
-    d.stage as deal_stage,
+    COALESCE(ds.name, 'Unknown') as deal_stage,
     drs.scanned_at as last_scanned_at
   FROM deals d
+  LEFT JOIN deal_stages ds ON ds.id = d.stage_id
   LEFT JOIN deal_risk_scores drs ON drs.deal_id = d.id
-  WHERE d.org_id = p_org_id
-    AND d.stage NOT IN ('Closed Won', 'Closed Lost')
+  WHERE d.clerk_org_id = p_org_id
+    AND d.status = 'active'
     AND (
       drs.scanned_at IS NULL
       OR drs.scanned_at < NOW() - (p_stale_hours || ' hours')::INTERVAL

@@ -96,7 +96,7 @@ CREATE POLICY "Users can view org CRM field updates"
   TO authenticated
   USING (
     org_id IN (
-      SELECT org_id
+      SELECT org_id::text
       FROM organization_memberships
       WHERE user_id = auth.uid()
     )
@@ -222,7 +222,7 @@ BEGIN
     SELECT 1
     FROM organization_memberships
     WHERE user_id = p_user_id
-      AND org_id = v_update.org_id
+      AND org_id::text = v_update.org_id
   ) THEN
     RAISE EXCEPTION 'User does not have access to this organization';
   END IF;
@@ -282,7 +282,7 @@ AS $$
     cfu.reasoning,
     cfu.undone_at,
     cfu.created_at,
-    COALESCE(p.full_name, p.email) as user_name
+    COALESCE(CONCAT_WS(' ', p.first_name, p.last_name), p.email) as user_name
   FROM crm_field_updates cfu
   LEFT JOIN profiles p ON p.id = cfu.user_id
   WHERE cfu.deal_id = p_deal_id
@@ -313,31 +313,41 @@ STABLE
 SECURITY DEFINER
 AS $$
   SELECT
-    COUNT(*) as total_updates,
-    jsonb_object_agg(
-      confidence::TEXT,
-      count
-    ) FILTER (WHERE confidence IS NOT NULL) as updates_by_confidence,
-    jsonb_object_agg(
-      field_name,
-      count
-    ) FILTER (WHERE field_name IS NOT NULL) as updates_by_field,
-    ROUND(
-      COUNT(*) FILTER (WHERE undone_at IS NOT NULL)::NUMERIC /
-      NULLIF(COUNT(*)::NUMERIC, 0) * 100,
-      2
-    ) as undo_rate
+    t.total_updates,
+    COALESCE(c.updates_by_confidence, '{}'::jsonb),
+    COALESCE(f.updates_by_field, '{}'::jsonb),
+    t.undo_rate
   FROM (
     SELECT
-      confidence,
-      field_name,
-      undone_at,
-      COUNT(*) OVER (PARTITION BY confidence) as count
+      COUNT(*)::bigint as total_updates,
+      ROUND(
+        COUNT(*) FILTER (WHERE undone_at IS NOT NULL)::NUMERIC /
+        NULLIF(COUNT(*)::NUMERIC, 0) * 100, 2
+      ) as undo_rate
     FROM crm_field_updates
     WHERE user_id = p_user_id
       AND created_at >= NOW() - (p_days || ' days')::INTERVAL
-  ) subq
-  GROUP BY total_updates;
+  ) t
+  LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(confidence::text, cnt) as updates_by_confidence
+    FROM (
+      SELECT confidence, COUNT(*) as cnt
+      FROM crm_field_updates
+      WHERE user_id = p_user_id
+        AND created_at >= NOW() - (p_days || ' days')::INTERVAL
+      GROUP BY confidence
+    ) sub
+  ) c ON true
+  LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(field_name, cnt) as updates_by_field
+    FROM (
+      SELECT field_name, COUNT(*) as cnt
+      FROM crm_field_updates
+      WHERE user_id = p_user_id
+        AND created_at >= NOW() - (p_days || ' days')::INTERVAL
+      GROUP BY field_name
+    ) sub
+  ) f ON true;
 $$;
 
 COMMENT ON FUNCTION get_user_crm_update_stats IS 'Returns CRM update statistics for a user over the last N days';

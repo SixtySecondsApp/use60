@@ -60,7 +60,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM organization_memberships
-    WHERE org_id = proactive_agent_config.org_id
+    WHERE org_id::text = proactive_agent_config.org_id
       AND user_id = auth.uid()
       AND role IN ('owner', 'admin')
   )
@@ -69,7 +69,7 @@ WITH CHECK (
   EXISTS (
     SELECT 1
     FROM organization_memberships
-    WHERE org_id = proactive_agent_config.org_id
+    WHERE org_id::text = proactive_agent_config.org_id
       AND user_id = auth.uid()
       AND role IN ('owner', 'admin')
   )
@@ -83,7 +83,7 @@ USING (
   EXISTS (
     SELECT 1
     FROM organization_memberships
-    WHERE org_id = proactive_agent_config.org_id
+    WHERE org_id::text = proactive_agent_config.org_id
       AND user_id = auth.uid()
   )
 );

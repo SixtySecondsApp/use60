@@ -652,7 +652,7 @@ async function checkSlackOrgConnected(orgId: string): Promise<PrerequisiteCheck>
         name: 'Slack Workspace',
         status: 'fail',
         message: 'Slack workspace is not connected. Connect Slack to enable notifications.',
-        fixUrl: '/settings/slack',
+        fixUrl: '/settings/integrations/slack',
       };
     }
 
@@ -666,7 +666,7 @@ async function checkSlackOrgConnected(orgId: string): Promise<PrerequisiteCheck>
       name: 'Slack Workspace',
       status: 'fail',
       message: 'Error checking Slack connection',
-      fixUrl: '/settings/slack',
+      fixUrl: '/settings/integrations/slack',
     };
   }
 }
@@ -685,7 +685,7 @@ async function checkSlackUserMapped(orgId: string, userId: string): Promise<Prer
         name: 'Slack User Mapping',
         status: 'fail',
         message: 'Your Slack account is not mapped. Link your Slack user to receive notifications.',
-        fixUrl: '/settings/slack',
+        fixUrl: '/settings/integrations/slack',
       };
     }
 
@@ -699,7 +699,7 @@ async function checkSlackUserMapped(orgId: string, userId: string): Promise<Prer
       name: 'Slack User Mapping',
       status: 'fail',
       message: 'Error checking Slack user mapping',
-      fixUrl: '/settings/slack',
+      fixUrl: '/settings/integrations/slack',
     };
   }
 }
@@ -719,7 +719,7 @@ async function checkGoogleCalendar(orgId: string, userId: string): Promise<Prere
         name: 'Google Calendar (Optional)',
         status: 'fail',
         message: 'Google Calendar is not connected (required for pre-meeting briefings)',
-        fixUrl: '/settings/calendar',
+        fixUrl: '/settings/integrations/google-workspace',
       };
     }
 
@@ -735,7 +735,7 @@ async function checkGoogleCalendar(orgId: string, userId: string): Promise<Prere
         name: 'Google Calendar (Optional)',
         status: 'fail',
         message: 'Google Calendar scope is missing',
-        fixUrl: '/settings/calendar',
+        fixUrl: '/settings/integrations/google-workspace',
       };
     }
 
@@ -749,7 +749,7 @@ async function checkGoogleCalendar(orgId: string, userId: string): Promise<Prere
       name: 'Google Calendar (Optional)',
       status: 'fail',
       message: 'Error checking Google Calendar connection',
-      fixUrl: '/settings/calendar',
+      fixUrl: '/settings/integrations/google-workspace',
     };
   }
 }
