@@ -9,6 +9,8 @@
  */
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
+import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // =============================================================================
 // Types
@@ -182,6 +184,26 @@ export const crmFieldExtractorAdapter: SkillAdapter = {
       }
 
       const result = await response.json();
+
+      // Cost tracking
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (supabaseUrl && serviceKey) {
+        const supabase = createClient(supabaseUrl, serviceKey);
+        const usage = extractAnthropicUsage(result);
+        await logAICostEvent(
+          supabase,
+          state.event.user_id,
+          state.event.org_id,
+          'anthropic',
+          'claude-haiku-4-5-20251001',
+          usage.inputTokens,
+          usage.outputTokens,
+          'extract-crm-fields',
+          { meeting_id: meetingId },
+        );
+      }
+
       const textContent = result.content?.[0]?.text;
 
       if (!textContent) {

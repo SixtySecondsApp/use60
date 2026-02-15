@@ -36,6 +36,14 @@ export type BackendType =
 
 export type DeliveryChannel = 'slack' | 'email' | 'in-app';
 
+// Integration requirement for marketplace gating
+export interface IntegrationRequirement {
+  integrationId: string;   // e.g. 'google-workspace', 'slack', 'instantly', 'fathom'
+  name: string;            // Display name e.g. 'Google Calendar'
+  reason: string;          // Why it's needed e.g. 'Calendar access for meeting detection'
+  connectUrl: string;      // Navigation path e.g. '/settings/integrations/google-workspace'
+}
+
 export interface AbilityDefinition {
   id: string;
   name: string;
@@ -51,6 +59,7 @@ export interface AbilityDefinition {
   status: 'active' | 'beta' | 'planned';
   skillKey?: string;           // Links to a skill in skills/atomic/ for richer output
   defaultChannels: DeliveryChannel[];  // Default delivery channels
+  requiredIntegrations?: IntegrationRequirement[];  // Integration requirements for marketplace gating
 }
 
 // =============================================================================
@@ -73,6 +82,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'google-workspace', name: 'Google Calendar', reason: 'Calendar access for meeting detection', connectUrl: '/settings/integrations/google-workspace' },
+    ],
   },
 
   // ── Post-Meeting ─────────────────────────────────────────────────────────
@@ -90,6 +103,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'fathom', name: 'Meeting Recording', reason: 'Recording access for transcription', connectUrl: '/settings/integrations' },
+    ],
   },
   {
     id: 'call-type-classification',
@@ -105,6 +122,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'fathom', name: 'Meeting Recording', reason: 'Recording access for transcription', connectUrl: '/settings/integrations' },
+    ],
   },
   {
     id: 'coaching-micro-feedback',
@@ -120,6 +141,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'fathom', name: 'Meeting Recording', reason: 'Recording access for transcription', connectUrl: '/settings/integrations' },
+    ],
   },
 
   // ── Pipeline ─────────────────────────────────────────────────────────────
@@ -137,6 +162,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: true,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'google-workspace', name: 'Google Calendar', reason: 'Calendar access for meeting detection', connectUrl: '/settings/integrations/google-workspace' },
+    ],
   },
   {
     id: 'deal-risk-scorer',
@@ -152,6 +181,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'stale-deal-revival',
@@ -167,6 +199,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: true,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'detect-intents',
@@ -182,6 +217,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'fathom', name: 'Meeting Recording', reason: 'Recording access for transcription', connectUrl: '/settings/integrations' },
+    ],
   },
 
   // ── Outreach ─────────────────────────────────────────────────────────────
@@ -199,6 +238,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: true,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'google-workspace', name: 'Gmail', reason: 'Email access for sending messages', connectUrl: '/settings/integrations/google-workspace' },
+    ],
   },
   {
     id: 'proposal-generation',
@@ -214,6 +257,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: true,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'campaign-monitoring',
@@ -229,6 +275,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'instantly', name: 'Instantly', reason: 'Campaign access for metrics', connectUrl: '/settings/integrations/instantly' },
+    ],
   },
   {
     id: 'email-classification',
@@ -244,6 +294,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'google-workspace', name: 'Gmail', reason: 'Email access for incoming messages', connectUrl: '/settings/integrations/google-workspace' },
+    ],
   },
 
   // ── Coaching ─────────────────────────────────────────────────────────────
@@ -261,6 +315,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'fathom', name: 'Meeting Recording', reason: 'Recording access for transcription', connectUrl: '/settings/integrations' },
+    ],
   },
   {
     id: 'coaching-analysis',
@@ -276,6 +334,10 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'fathom', name: 'Meeting Recording', reason: 'Recording access for transcription', connectUrl: '/settings/integrations' },
+    ],
   },
 
   // ── V1 Proactive Notifications (Slack + In-App, real data) ──────────────
@@ -294,6 +356,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     status: 'active',
     skillKey: 'daily-brief-planner',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'sales-assistant-digest',
@@ -310,6 +375,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     status: 'active',
     skillKey: 'daily-focus-planner',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'pre-meeting-nudge',
@@ -326,6 +394,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     status: 'active',
     skillKey: 'meeting-prep-brief',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'post-call-summary',
@@ -342,6 +413,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     status: 'active',
     skillKey: 'post-meeting-followup-pack-builder',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'hitl-followup-email',
@@ -358,6 +432,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     status: 'active',
     skillKey: 'followup-reply-drafter',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'stale-deal-alert',
@@ -374,6 +451,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     status: 'active',
     skillKey: 'deal-slippage-diagnosis',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'email-reply-alert',
@@ -390,6 +470,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     status: 'active',
     skillKey: 'followup-triage',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
   {
     id: 'ai-smart-suggestion',
@@ -405,6 +488,9 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     hasApproval: false,
     status: 'active',
     defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
   },
 ];
 

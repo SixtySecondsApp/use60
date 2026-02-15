@@ -13,6 +13,7 @@
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
 
 /** Sales call type names (case-insensitive substring match) */
 const SALES_TYPE_KEYWORDS = ['discovery', 'demo', 'close'];
@@ -226,6 +227,21 @@ export const callTypeClassifierAdapter: SkillAdapter = {
 
         if (aiResponse.ok) {
           const aiResult = await aiResponse.json();
+
+          // Cost tracking
+          const usage = extractAnthropicUsage(aiResult);
+          await logAICostEvent(
+            supabase,
+            state.event.user_id,
+            state.event.org_id,
+            'anthropic',
+            'claude-haiku-4-5-20251001',
+            usage.inputTokens,
+            usage.outputTokens,
+            'classify-call-type',
+            { meeting_id: meetingId },
+          );
+
           const aiText = aiResult.content?.[0]?.text || '';
           const jsonMatch = aiText.match(/\{[\s\S]*\}/);
 

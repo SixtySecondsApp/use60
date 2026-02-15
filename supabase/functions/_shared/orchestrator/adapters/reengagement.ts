@@ -9,6 +9,7 @@
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient } from './contextEnrichment.ts';
+import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
 
 // =============================================================================
 // Types
@@ -459,9 +460,12 @@ async function analyseSingleOpportunity(
     deal_value: number | null;
   }
 ): Promise<{
-  signal_strength: 'strong' | 'moderate' | 'weak';
-  relationship_health: 'multiple_contacts' | 'single_contact' | 'champion_left';
-  recommended_approach: string;
+  analysis: {
+    signal_strength: 'strong' | 'moderate' | 'weak';
+    relationship_health: 'multiple_contacts' | 'single_contact' | 'champion_left';
+    recommended_approach: string;
+  };
+  usage: any;
 }> {
   const prompt = [
     '# RE-ENGAGEMENT OPPORTUNITY ANALYSIS',
@@ -532,7 +536,10 @@ async function analyseSingleOpportunity(
     throw new Error('No JSON found in Claude response');
   }
 
-  return JSON.parse(jsonMatch[0]);
+  return {
+    analysis: JSON.parse(jsonMatch[0]),
+    usage: result.usage, // Return usage metadata for cost tracking
+  };
 }
 
 /**
@@ -677,9 +684,28 @@ export const analyseStallReasonAdapter: SkillAdapter = {
           relationship_health: 'multiple_contacts' | 'single_contact' | 'champion_left';
           recommended_approach: string;
         };
+        let claudeUsage: any = null;
 
         try {
-          analysis = await analyseSingleOpportunity(apiKey, opportunity);
+          const result = await analyseSingleOpportunity(apiKey, opportunity);
+          analysis = result.analysis;
+          claudeUsage = result.usage;
+
+          // Track cost for Claude synthesis call
+          if (claudeUsage) {
+            const usage = extractAnthropicUsage({ usage: claudeUsage });
+            await logAICostEvent(
+              supabase,
+              state.event.user_id,
+              state.event.org_id,
+              'anthropic',
+              'claude-haiku-4-5-20251001',
+              usage.inputTokens,
+              usage.outputTokens,
+              'reengagement-analysis',
+              { deal_id: item.deal_id }
+            );
+          }
         } catch (err) {
           console.warn(`[analyse-stall-reason] Claude analysis failed for ${item.deal_id}:`, err);
           // Fallback to basic heuristics
@@ -783,7 +809,7 @@ async function draftReengagementEmail(
   contact: { name: string; email: string },
   orgTone: string,
   orgName: string
-): Promise<{ subject: string; body: string; signal_summary: string } | null> {
+): Promise<{ subject: string; body: string; signal_summary: string; usage: any } | null> {
   // Build signal context
   const signalContext = opportunity.signals.length > 0
     ? opportunity.signals
@@ -865,7 +891,10 @@ async function draftReengagementEmail(
       throw new Error('No JSON found in Claude response');
     }
 
-    return JSON.parse(jsonMatch[0]);
+    return {
+      ...JSON.parse(jsonMatch[0]),
+      usage: result.usage, // Return usage metadata for cost tracking
+    };
   } catch (err) {
     console.error(`[draft-reengagement] Failed to draft email for ${opportunity.deal_name}:`, err);
     return null;
@@ -983,6 +1012,22 @@ export const draftReengagementAdapter: SkillAdapter = {
         if (!draft) {
           console.warn(`[draft-reengagement] Failed to generate draft for ${opp.deal_name}`);
           continue;
+        }
+
+        // Track cost for Claude email draft call
+        if (draft.usage) {
+          const usage = extractAnthropicUsage({ usage: draft.usage });
+          await logAICostEvent(
+            supabase,
+            state.event.user_id,
+            state.event.org_id,
+            'anthropic',
+            'claude-haiku-4-5-20251001',
+            usage.inputTokens,
+            usage.outputTokens,
+            'reengagement-email-draft',
+            { deal_id: opp.deal_id }
+          );
         }
 
         drafts.push({

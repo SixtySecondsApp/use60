@@ -3,6 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -124,6 +125,19 @@ serve(async (req) => {
 
     // Gemini 3 Flash pricing: $0.10 per 1M input, $0.30 per 1M output
     const cost = (inputTokens / 1_000_000) * 0.10 + (outputTokens / 1_000_000) * 0.30;
+
+    // Log cost to ai_cost_events + deduct credits
+    await logAICostEvent(
+      supabase,
+      user.id,
+      null, // orgId will be looked up from user's membership
+      'gemini',
+      'gemini-3-flash-preview',
+      inputTokens,
+      outputTokens,
+      'gemini-research',
+      { query: query.substring(0, 100) }
+    );
 
     console.log(`[gemini-research] Completed in ${duration}ms, ${totalTokens} tokens, $${cost.toFixed(6)}, ${sources.length} sources`);
 

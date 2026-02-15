@@ -404,6 +404,41 @@ async function executeStepsParallel(
 
   // All steps complete
   await processFollowups(supabase, jobId, state);
+
+  // Per-sequence cost rollup
+  try {
+    const { data: costEvents } = await supabase
+      .from('ai_cost_events')
+      .select('total_cost')
+      .eq('user_id', state.event.user_id)
+      .gte('created_at', state.started_at)
+      .lte('created_at', new Date().toISOString());
+
+    const totalCost = (costEvents || []).reduce((sum, e) => sum + (e.total_cost || 0), 0);
+
+    if (totalCost > 0) {
+      await supabase.from('agent_activity').insert({
+        user_id: state.event.user_id,
+        org_id: state.event.org_id,
+        activity_type: 'sequence_cost_rollup',
+        sequence_type: state.event.type,
+        title: `Sequence ${state.event.type} completed`,
+        description: `Total AI cost: $${totalCost.toFixed(4)} across ${state.steps_completed.length} steps`,
+        metadata: {
+          job_id: jobId,
+          sequence_type: state.event.type,
+          total_cost: totalCost,
+          steps_completed: state.steps_completed.length,
+          step_names: state.steps_completed,
+        },
+      });
+
+      console.log(`[orchestrator] Sequence ${state.event.type} cost rollup: $${totalCost.toFixed(4)}`);
+    }
+  } catch (costErr) {
+    console.warn('[orchestrator] Cost rollup failed (non-fatal):', costErr);
+  }
+
   await rpcCompleteJob(supabase, jobId, {
     steps_completed: state.steps_completed,
     outputs: state.outputs,
@@ -508,6 +543,41 @@ async function executeStepsSequential(
   }
 
   await processFollowups(supabase, jobId, state);
+
+  // Per-sequence cost rollup
+  try {
+    const { data: costEvents } = await supabase
+      .from('ai_cost_events')
+      .select('total_cost')
+      .eq('user_id', state.event.user_id)
+      .gte('created_at', state.started_at)
+      .lte('created_at', new Date().toISOString());
+
+    const totalCost = (costEvents || []).reduce((sum, e) => sum + (e.total_cost || 0), 0);
+
+    if (totalCost > 0) {
+      await supabase.from('agent_activity').insert({
+        user_id: state.event.user_id,
+        org_id: state.event.org_id,
+        activity_type: 'sequence_cost_rollup',
+        sequence_type: state.event.type,
+        title: `Sequence ${state.event.type} completed`,
+        description: `Total AI cost: $${totalCost.toFixed(4)} across ${state.steps_completed.length} steps`,
+        metadata: {
+          job_id: jobId,
+          sequence_type: state.event.type,
+          total_cost: totalCost,
+          steps_completed: state.steps_completed.length,
+          step_names: state.steps_completed,
+        },
+      });
+
+      console.log(`[orchestrator] Sequence ${state.event.type} cost rollup: $${totalCost.toFixed(4)}`);
+    }
+  } catch (costErr) {
+    console.warn('[orchestrator] Cost rollup failed (non-fatal):', costErr);
+  }
+
   await rpcCompleteJob(supabase, jobId, {
     steps_completed: state.steps_completed,
     outputs: state.outputs,

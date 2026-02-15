@@ -9,6 +9,8 @@
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient } from './contextEnrichment.ts';
+import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 // =============================================================================
 // Adapter 1: Scan Active Deals (Wave 1)
@@ -587,7 +589,10 @@ interface DigestItem {
  */
 async function generateSuggestedAction(
   deal: ScoredDeal,
-  topSignals: RiskSignal[]
+  topSignals: RiskSignal[],
+  supabase: SupabaseClient,
+  userId: string,
+  orgId: string
 ): Promise<string> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) {
@@ -640,6 +645,20 @@ async function generateSuggestedAction(
     if (!suggestion) {
       throw new Error('No text content in Claude response');
     }
+
+    // Track AI cost
+    const usage = extractAnthropicUsage(result);
+    await logAICostEvent(
+      supabase,
+      userId,
+      orgId,
+      'anthropic',
+      'claude-haiku-4-5-20251001',
+      usage.inputTokens,
+      usage.outputTokens,
+      'deal-risk-scoring',
+      { deal_id: deal.deal_id },
+    );
 
     return suggestion;
   } catch (err) {
@@ -741,7 +760,13 @@ export const generateRiskAlertsAdapter: SkillAdapter = {
             `[generate-risk-alerts] Generating alert for high-risk deal: ${deal.deal_name} (score: ${deal.score})`
           );
 
-          const suggestedAction = await generateSuggestedAction(deal, topSignals);
+          const suggestedAction = await generateSuggestedAction(
+            deal,
+            topSignals,
+            supabase,
+            state.event.user_id,
+            orgId
+          );
 
           alerts.push({
             deal_id: deal.deal_id,

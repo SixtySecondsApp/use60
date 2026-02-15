@@ -2,11 +2,13 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { MessageSquare, Mail, Bell, Clock } from 'lucide-react';
+import { MessageSquare, Mail, Bell, Clock, Lock, ExternalLink } from 'lucide-react';
 import type { AbilityDefinition, DeliveryChannel } from '@/lib/agent/abilityRegistry';
 import { getSequenceTypeForEventType } from '@/lib/agent/abilityRegistry';
 import type { AbilityStats } from '@/pages/platform/AgentAbilitiesPage';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAbilityPrerequisites } from '@/hooks/useAbilityPrerequisites';
 
 interface AbilityCardProps {
   ability: AbilityDefinition;
@@ -41,6 +43,11 @@ export function AbilityCard({
   onBackendEnabledToggle,
 }: AbilityCardProps) {
   const Icon = ability.icon;
+  const navigate = useNavigate();
+
+  // Check if ability has required integrations (locked state)
+  const { isReady, missingIntegrations, isLoading } = useAbilityPrerequisites(ability.id);
+  const isLocked = !isReady && !isLoading;
 
   // Determine if this ability has an orchestrator backend mapping
   const sequenceType = getSequenceTypeForEventType(ability.eventType);
@@ -158,7 +165,8 @@ export function AbilityCard({
       onClick={onClick}
       className={cn(
         'relative p-4 space-y-2 cursor-pointer transition-all',
-        !isEnabled && 'opacity-60',
+        isLocked && 'opacity-60',
+        !isEnabled && !isLocked && 'opacity-60',
         isSelected
           ? 'border-indigo-500 dark:border-indigo-400 bg-indigo-50/50 dark:bg-indigo-500/10 shadow-md'
           : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50'
@@ -171,6 +179,7 @@ export function AbilityCard({
           onCheckedChange={handleEnabledToggle}
           onClick={(e) => e.stopPropagation()}
           className="data-[state=checked]:bg-green-500"
+          disabled={isLocked}
         />
         {ability.hasApproval && (
           <Badge
@@ -191,13 +200,20 @@ export function AbilityCard({
       </div>
 
       {/* Icon with gradient background */}
-      <div
-        className={cn(
-          'w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-br',
-          ability.gradient
+      <div className="relative">
+        <div
+          className={cn(
+            'w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-br',
+            ability.gradient
+          )}
+        >
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+        {isLocked && (
+          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center">
+            <Lock className="w-3 h-3 text-white" />
+          </div>
         )}
-      >
-        <Icon className="w-5 h-5 text-white" />
       </div>
 
       {/* Name */}
@@ -211,45 +227,67 @@ export function AbilityCard({
         {ability.description}
       </p>
 
-      {/* Channel toggles */}
-      <div className="flex items-center gap-2 pt-2">
-        <button
-          onClick={(e) => toggleChannel('slack', e)}
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all',
-            selectedChannels.includes('slack')
-              ? 'bg-purple-500 text-white dark:bg-purple-600'
-              : 'border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-purple-400'
-          )}
-        >
-          <MessageSquare className="w-3 h-3" />
-          Slack
-        </button>
-        <button
-          onClick={(e) => toggleChannel('email', e)}
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all',
-            selectedChannels.includes('email')
-              ? 'bg-blue-500 text-white dark:bg-blue-600'
-              : 'border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400'
-          )}
-        >
-          <Mail className="w-3 h-3" />
-          Email
-        </button>
-        <button
-          onClick={(e) => toggleChannel('in-app', e)}
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all',
-            selectedChannels.includes('in-app')
-              ? 'bg-green-500 text-white dark:bg-green-600'
-              : 'border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-green-400'
-          )}
-        >
-          <Bell className="w-3 h-3" />
-          In-App
-        </button>
-      </div>
+      {/* Locked state message - show missing integrations */}
+      {isLocked && missingIntegrations.length > 0 && (
+        <div className="flex flex-col gap-1 pt-1">
+          {missingIntegrations.map((integration) => (
+            <button
+              key={integration.integrationId}
+              onClick={(e) => {
+                e.stopPropagation(); // Don't trigger card click
+                navigate(integration.connectUrl);
+              }}
+              className="flex items-center gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors text-left"
+            >
+              <Lock className="w-3 h-3 flex-shrink-0" />
+              <span>Connect {integration.name} to unlock</span>
+              <ExternalLink className="w-3 h-3 flex-shrink-0 ml-auto" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Channel toggles - hide when locked */}
+      {!isLocked && (
+        <div className="flex items-center gap-2 pt-2">
+          <button
+            onClick={(e) => toggleChannel('slack', e)}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all',
+              selectedChannels.includes('slack')
+                ? 'bg-purple-500 text-white dark:bg-purple-600'
+                : 'border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-purple-400'
+            )}
+          >
+            <MessageSquare className="w-3 h-3" />
+            Slack
+          </button>
+          <button
+            onClick={(e) => toggleChannel('email', e)}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all',
+              selectedChannels.includes('email')
+                ? 'bg-blue-500 text-white dark:bg-blue-600'
+                : 'border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400'
+            )}
+          >
+            <Mail className="w-3 h-3" />
+            Email
+          </button>
+          <button
+            onClick={(e) => toggleChannel('in-app', e)}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all',
+              selectedChannels.includes('in-app')
+                ? 'bg-green-500 text-white dark:bg-green-600'
+                : 'border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-green-400'
+            )}
+          >
+            <Bell className="w-3 h-3" />
+            In-App
+          </button>
+        </div>
+      )}
 
       {/* Quick stats */}
       {stats && stats.totalRuns > 0 && (
@@ -271,7 +309,15 @@ export function AbilityCard({
           {ability.triggerType}
         </Badge>
         <Badge {...statusBadge}>{ability.status}</Badge>
-        {!isEnabled && (
+        {isLocked && (
+          <Badge
+            variant="outline"
+            className="text-[10px] border-amber-500 text-amber-600 dark:text-amber-400"
+          >
+            Locked
+          </Badge>
+        )}
+        {!isEnabled && !isLocked && (
           <Badge
             variant="outline"
             className="text-[10px] border-amber-500 text-amber-600 dark:text-amber-400"

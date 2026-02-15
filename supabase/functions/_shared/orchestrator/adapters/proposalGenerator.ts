@@ -6,6 +6,8 @@
  */
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
+import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export const proposalGeneratorAdapter: SkillAdapter = {
   name: 'select-proposal-template',
@@ -264,6 +266,26 @@ Return ONLY valid JSON with this structure:
       }
 
       const result = await response.json();
+
+      // Cost tracking
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (supabaseUrl && serviceKey) {
+        const supabase = createClient(supabaseUrl, serviceKey);
+        const usage = extractAnthropicUsage(result);
+        await logAICostEvent(
+          supabase,
+          state.event.user_id,
+          state.event.org_id,
+          'anthropic',
+          'claude-haiku-4-5-20251001',
+          usage.inputTokens,
+          usage.outputTokens,
+          'generate-proposal',
+          { deal_id: state.context.tier2?.deal?.id },
+        );
+      }
+
       const textContent = result.content?.[0]?.text || '';
 
       // Parse JSON from response

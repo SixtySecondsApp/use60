@@ -11,6 +11,7 @@
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient, enrichContactContext } from './contextEnrichment.ts';
+import { logAICostEvent, extractAnthropicUsage, extractGeminiUsage } from '../../costTracking.ts';
 
 // =============================================================================
 // Adapter 1: Enrich Attendees
@@ -467,7 +468,7 @@ async function geminiSearchQuery(
   query: string,
   responseSchema?: Record<string, any>,
   timeoutMs = 30_000
-): Promise<{ result: any; sources: Array<{ title?: string; uri?: string }>; duration_ms: number }> {
+): Promise<{ result: any; sources: Array<{ title?: string; uri?: string }>; duration_ms: number; rawResponse: any }> {
   const startTime = performance.now();
 
   let prompt = query;
@@ -527,7 +528,7 @@ async function geminiSearchQuery(
       result = text;
     }
 
-    return { result, sources, duration_ms: Math.round(performance.now() - startTime) };
+    return { result, sources, duration_ms: Math.round(performance.now() - startTime), rawResponse: data };
   } finally {
     clearTimeout(timeout);
   }
@@ -752,15 +753,34 @@ export const researchCompanyNewsAdapter: SkillAdapter = {
       let successCount = 0;
 
       const leadQueryNames = new Set(LEAD_RESEARCH_QUERIES.map(q => q.name));
+      const supabase = getServiceClient();
+      const userId = state.event.user_id;
+      const orgId = state.event.org_id;
+
       for (const result of queryResults) {
         if (result.status === 'fulfilled') {
-          if (leadQueryNames.has(result.value.name)) {
+          const isLeadQuery = leadQueryNames.has(result.value.name);
+          if (isLeadQuery) {
             leadResearchData[result.value.name] = result.value.result;
           } else {
             researchData[result.value.name] = result.value.result;
           }
           allSources.push(...result.value.sources);
           successCount++;
+
+          // Track cost for this Gemini query
+          const usage = extractGeminiUsage(result.value.rawResponse);
+          await logAICostEvent(
+            supabase,
+            userId,
+            orgId,
+            'gemini',
+            'gemini-3-flash-preview',
+            usage.inputTokens,
+            usage.outputTokens,
+            isLeadQuery ? 'pre-meeting-person-research' : 'pre-meeting-company-research',
+            { query_name: result.value.name }
+          );
         } else {
           console.warn(`[research-company-news] Query failed:`, result.reason);
         }
@@ -836,6 +856,20 @@ export const researchCompanyNewsAdapter: SkillAdapter = {
                 console.log('[research-company-news] Synthesis complete');
               }
             }
+
+            // Track cost for company synthesis
+            const usage = extractAnthropicUsage(synthesisResult);
+            await logAICostEvent(
+              supabase,
+              userId,
+              orgId,
+              'anthropic',
+              'claude-haiku-4-5-20251001',
+              usage.inputTokens,
+              usage.outputTokens,
+              'pre-meeting-company-synthesis',
+              { domain }
+            );
           } else {
             console.warn(`[research-company-news] Synthesis API returned ${synthesisResponse.status}`);
           }
@@ -936,6 +970,20 @@ export const researchCompanyNewsAdapter: SkillAdapter = {
                 console.log('[research-company-news] Lead profile synthesis complete');
               }
             }
+
+            // Track cost for lead profile synthesis
+            const usage = extractAnthropicUsage(leadResult);
+            await logAICostEvent(
+              supabase,
+              userId,
+              orgId,
+              'anthropic',
+              'claude-haiku-4-5-20251001',
+              usage.inputTokens,
+              usage.outputTokens,
+              'pre-meeting-lead-synthesis',
+              { person_name: personName, person_email: personEmail }
+            );
           }
         } catch (err) {
           console.warn('[research-company-news] Lead profile synthesis failed:', err);
@@ -1275,6 +1323,21 @@ export const generateBriefingAdapter: SkillAdapter = {
 
           briefing = JSON.parse(jsonMatch[0]);
           console.log('[generate-briefing] AI briefing generated successfully');
+
+          // Track cost for briefing generation
+          const supabase = getServiceClient();
+          const usage = extractAnthropicUsage(result);
+          await logAICostEvent(
+            supabase,
+            state.event.user_id,
+            state.event.org_id,
+            'anthropic',
+            'claude-haiku-4-5-20251001',
+            usage.inputTokens,
+            usage.outputTokens,
+            'pre-meeting-briefing',
+            { meeting_id: state.event.payload.meeting_id, meeting_title: meetingTitle }
+          );
         } catch (err) {
           console.warn('[generate-briefing] AI generation failed, using fallback:', err);
           briefing = generateFallbackBriefing(

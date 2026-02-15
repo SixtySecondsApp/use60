@@ -1,0 +1,257 @@
+{
+  "project": {
+    "name": "Proactive Agent Growth",
+    "branch": "feat/proactive-agent-v2",
+    "createdAt": "2026-02-15T13:00:00Z",
+    "consultReport": ".sixty/consult/proactive-agent-user-journey.md"
+  },
+  "features": [
+    {
+      "id": "credit-metering",
+      "name": "Credit Metering — Wire All Adapters",
+      "status": "complete",
+      "priority": 1,
+      "estimate": "3-4 hours"
+    },
+    {
+      "id": "marketplace",
+      "name": "Integration-Gated Abilities Marketplace",
+      "status": "complete",
+      "priority": 2,
+      "estimate": "1-2 days"
+    }
+  ],
+  "stories": [
+    {
+      "id": "CRED-001",
+      "feature": "credit-metering",
+      "title": "Wire credit tracking in 3 simple adapters",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CRED-005"],
+      "parallelWith": ["CRED-002", "CRED-003", "CRED-004"],
+      "acceptance": [
+        "callTypeClassifier.ts calls logAICostEvent after successful AI response",
+        "crmFieldExtractor.ts calls logAICostEvent after successful AI response",
+        "proposalGenerator.ts calls logAICostEvent after successful AI response",
+        "Feature tag matches adapter name for cost breakdown"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/callTypeClassifier.ts",
+        "supabase/functions/_shared/orchestrator/adapters/crmFieldExtractor.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ]
+    },
+    {
+      "id": "CRED-002",
+      "feature": "credit-metering",
+      "title": "Wire credit tracking in dealRisk adapter",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CRED-005"],
+      "parallelWith": ["CRED-001", "CRED-003", "CRED-004"],
+      "acceptance": [
+        "dealRisk.ts calls logAICostEvent inside generateSuggestedAction loop",
+        "Tracks per-deal AI cost with deal_id in metadata",
+        "Handles N-deal iteration without double-counting"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts"
+      ]
+    },
+    {
+      "id": "CRED-003",
+      "feature": "credit-metering",
+      "title": "Wire credit tracking in preMeeting adapter (10+ parallel calls)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CRED-005"],
+      "parallelWith": ["CRED-001", "CRED-002", "CRED-004"],
+      "acceptance": [
+        "All 5-7 parallel Gemini company research queries tracked with extractGeminiUsage",
+        "All 2 parallel Gemini person research queries tracked",
+        "All 3 Claude Haiku synthesis calls tracked with extractAnthropicUsage",
+        "Feature tag distinguishes research vs synthesis calls",
+        "Parallel tracking doesn't block execution performance"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ]
+    },
+    {
+      "id": "CRED-004",
+      "feature": "credit-metering",
+      "title": "Wire credit tracking in reengagement adapter + gemini-research edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CRED-005"],
+      "parallelWith": ["CRED-001", "CRED-002", "CRED-003"],
+      "acceptance": [
+        "reengagement.ts tracks 3 parallel Gemini research calls",
+        "reengagement.ts tracks 2 Claude synthesis calls",
+        "gemini-research/index.ts calls logAICostEvent (currently calculates but doesn't log)",
+        "No double-counting between adapter and edge function"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/reengagement.ts",
+        "supabase/functions/gemini-research/index.ts"
+      ]
+    },
+    {
+      "id": "CRED-005",
+      "feature": "credit-metering",
+      "title": "Audit detect-intents + extract-action-items cost tracking and add per-sequence rollup",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["CRED-001", "CRED-002", "CRED-003", "CRED-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "detect-intents edge function confirmed tracking costs (or fixed if not)",
+        "extract-action-items edge function confirmed tracking costs (or fixed if not)",
+        "Runner logs total sequence cost after all steps complete",
+        "Per-sequence cost visible in agent_activity entries"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/detect-intents/index.ts",
+        "supabase/functions/extract-action-items/index.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ]
+    },
+    {
+      "id": "MKTPL-001",
+      "feature": "marketplace",
+      "title": "Add requiredIntegrations metadata to ability registry",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["MKTPL-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "AbilityDefinition type extended with requiredIntegrations field",
+        "All 9 orchestrator abilities have correct requiredIntegrations mapped",
+        "All 8 V1 abilities have requiredIntegrations (Slack for all, calendar for pre-meeting, etc.)",
+        "Integration requirements match prerequisites.ts mappings"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "MKTPL-002",
+      "feature": "marketplace",
+      "title": "Create useAbilityPrerequisites hook",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["MKTPL-001"], "files": [], "schema": [] },
+      "blocks": ["MKTPL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "useAbilityPrerequisites(abilityId) returns { isReady, missingIntegrations, checks }",
+        "Checks integration status using existing hooks (useSlackSettings, useGoogleIntegration, etc.)",
+        "Returns missing integration names with connect URLs",
+        "Memoized to prevent unnecessary re-renders"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/hooks/useAbilityPrerequisites.ts"
+      ]
+    },
+    {
+      "id": "MKTPL-003",
+      "feature": "marketplace",
+      "title": "Update AbilityCard with locked state + Connect X to unlock UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": { "stories": ["MKTPL-002"], "files": [], "schema": [] },
+      "blocks": ["MKTPL-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "AbilityCard shows lock icon overlay when missing integrations",
+        "Locked card displays 'Connect X to unlock' with integration names",
+        "Enable/pause toggle disabled when locked",
+        "Click on locked card shows missing integrations list",
+        "Lock styling uses muted/opacity treatment without hiding content"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/AbilityCard.tsx"
+      ]
+    },
+    {
+      "id": "MKTPL-004",
+      "feature": "marketplace",
+      "title": "Add locked/unlocked filter + integration badges to abilities page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": { "stories": ["MKTPL-003"], "files": [], "schema": [] },
+      "blocks": ["MKTPL-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "AgentAbilitiesPage has filter tabs: All | Unlocked | Locked",
+        "Locked count badge on filter tab",
+        "Integration requirement badges visible on ability cards",
+        "Unlocked abilities sorted first in default view"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/AgentAbilitiesPage.tsx"
+      ]
+    },
+    {
+      "id": "MKTPL-005",
+      "feature": "marketplace",
+      "title": "Wire Connect X deep links from locked ability cards",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": { "stories": ["MKTPL-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Click 'Connect Google Calendar' navigates to /settings/integrations/google-workspace",
+        "Click 'Connect Slack' navigates to /settings/integrations/slack",
+        "Click 'Connect Instantly' navigates to /settings/integrations/instantly",
+        "After connecting, returning to abilities page shows ability as unlocked",
+        "Connect button uses primary CTA styling"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/agent/AbilityCard.tsx",
+        "src/pages/platform/AgentAbilitiesPage.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 10,
+    "lastUpdated": "2026-02-15T15:30:00Z"
+  },
+  "decisions": {
+    "Q1_credit_granularity": "per-sequence (start simple)",
+    "Q2_marketplace_audience": "admin-only config page",
+    "Q3_locked_behavior": "shown but locked with Connect X to unlock",
+    "Q4_builder_access": "org admins only",
+    "Q5_copilot_routing": "yes, copilot-routable",
+    "Q6_credit_visibility": "transparent — leverage existing credit page for usage and cost"
+  }
+}
