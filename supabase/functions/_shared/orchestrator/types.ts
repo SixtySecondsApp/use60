@@ -17,7 +17,8 @@ export type EventType =
   | 'calendar_find_times'
   | 'stale_deal_revival'
   | 'campaign_daily_check'
-  | 'coaching_weekly';
+  | 'coaching_weekly'
+  | 'deal_risk_scan';
 
 export type EventSource =
   | 'webhook:meetingbaas'
@@ -25,6 +26,7 @@ export type EventSource =
   | 'edge:fathom-sync'
   | 'edge:fireflies-sync'
   | 'cron:morning'
+  | 'cron:daily'
   | 'cron:weekly'
   | 'slack:button'
   | 'slack:approval'

@@ -1,0 +1,145 @@
+{
+  "feature": "ability-upgrades",
+  "name": "Agent Abilities Page — Channel Parity + 3 Enhancements",
+  "status": "complete",
+  "createdAt": "2026-02-14T22:00:00Z",
+  "description": "Make all abilities support all 3 channels (Slack/Email/In-App) with meeting selection, then add: per-ability stats, rich output preview, and bulk stage controls. Also includes pending createTask() bugfix.",
+
+  "stories": [
+    {
+      "id": "ABU-001",
+      "title": "Fix createTask() org_id → clerk_org_id in slack-interactive",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 5,
+      "dependencies": { "stories": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "createTask() at line 308 uses clerk_org_id instead of org_id",
+        "Clicking 'Add' on a Slack debrief task item succeeds",
+        "slack-interactive redeployed to staging"
+      ],
+      "files": [
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    {
+      "id": "ABU-002",
+      "title": "Default all abilities to all 3 delivery channels",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 10,
+      "dependencies": { "stories": [] },
+      "blocks": [],
+      "parallelWith": ["ABU-001"],
+      "acceptance": [
+        "All 24 abilities in abilityRegistry.ts have defaultChannels: ['slack', 'email', 'in-app']",
+        "Every ability card shows all 3 channel toggles active by default",
+        "Channels still togglable per-ability"
+      ],
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "ABU-003",
+      "title": "Add meeting selector to V1-simulate abilities in run panel",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["ABU-002"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "V1-simulate abilities show a meeting picker dropdown above the data mode toggle",
+        "Meeting picker reuses the same query as orchestrator (meetings with transcripts, last 30 days)",
+        "Selected meeting_id is passed in the proactive-simulate payload",
+        "If no meeting selected, existing live/demo flow still works"
+      ],
+      "files": [
+        "src/components/agent/AbilityRunPanel.tsx"
+      ]
+    },
+    {
+      "id": "ABU-004",
+      "title": "Add per-ability quick stats to AbilityCard",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": [] },
+      "blocks": [],
+      "parallelWith": ["ABU-002", "ABU-003"],
+      "acceptance": [
+        "Each AbilityCard shows 'Last run: X ago' if the ability has been run",
+        "Shows run count and success rate (e.g. '3 runs · 100%')",
+        "Stats fetched from sequence_jobs filtered by event_type matching ability.eventType",
+        "Cards with no history show no stats (no empty state clutter)"
+      ],
+      "files": [
+        "src/components/agent/AbilityCard.tsx",
+        "src/pages/platform/AgentAbilitiesPage.tsx"
+      ]
+    },
+    {
+      "id": "ABU-005",
+      "title": "Rich output preview panel for completed runs",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["ABU-003"] },
+      "blocks": [],
+      "parallelWith": ["ABU-004"],
+      "acceptance": [
+        "After orchestrator run completes, output shows formatted result instead of raw JSON",
+        "Slack channel results show Block Kit-style preview (mrkdwn rendered, sections visible)",
+        "Email results show subject + body preview",
+        "In-app results show structured card preview",
+        "Raw JSON still available via 'Show Raw' toggle"
+      ],
+      "files": [
+        "src/components/agent/AbilityRunPanel.tsx"
+      ]
+    },
+    {
+      "id": "ABU-006",
+      "title": "Bulk stage controls — enable/disable all + channel presets",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["ABU-002"] },
+      "blocks": [],
+      "parallelWith": ["ABU-005"],
+      "acceptance": [
+        "Each lifecycle stage header has 'Enable All' / 'Pause All' toggle",
+        "Channel preset buttons: 'All Slack', 'All Email', 'All Channels' apply to all abilities in stage",
+        "Bulk changes update individual ability state (localStorage keys preserved)"
+      ],
+      "files": [
+        "src/pages/platform/AgentAbilitiesPage.tsx",
+        "src/components/agent/AbilityCard.tsx"
+      ]
+    }
+  ],
+
+  "deployment": {
+    "target": "staging",
+    "projectRef": "caerqjzvuerejfrdtygb",
+    "functions": [
+      { "name": "slack-interactive", "flags": "--no-verify-jwt", "reason": "ABU-001 createTask bugfix" }
+    ]
+  },
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 0,
+    "estimatedMinutes": 90,
+    "lastUpdated": "2026-02-14T22:00:00Z"
+  }
+}

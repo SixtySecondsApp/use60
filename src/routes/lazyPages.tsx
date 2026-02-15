@@ -186,6 +186,7 @@ export const FollowUpSettings = lazyWithRetry(() => import('@/pages/settings/Fol
 export const OrganizationSettingsPage = lazyWithRetry(() => import('@/pages/settings/OrganizationSettingsPage'));
 export const LogoSettings = lazyWithRetry(() => import('@/pages/settings/LogoSettings'));
 export const SlackSettings = lazyWithRetry(() => import('@/pages/settings/SlackSettings'));
+export const ProactiveAgentSettings = lazyWithRetry(() => import('@/pages/settings/ProactiveAgentSettings'));
 export const JustCallSettings = lazyWithRetry(() => import('@/pages/settings/JustCallSettings'));
 export const HubSpotSettings = lazyWithRetry(() => import('@/pages/settings/HubSpotSettings'));
 export const AttioSettings = lazyWithRetry(() => import('@/pages/settings/AttioSettings'));

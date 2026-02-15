@@ -23,7 +23,9 @@ export interface Company {
   created_at: string;
   updated_at: string;
   status?: 'active' | 'prospect' | 'client' | 'churned';
-  
+  enrichment_data?: any;
+  enriched_at?: string;
+
   // Computed/joined fields
   contacts?: Contact[];
   deals?: Deal[];

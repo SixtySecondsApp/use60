@@ -1,0 +1,328 @@
+{
+  "feature": "agent-abilities",
+  "name": "Agent Abilities — Unified Showcase Page",
+  "description": "Combine V2 orchestrator demo, V1 agent simulator, and cron job monitoring into a single Agent Abilities page organized by sales lifecycle stage. Extract reusable components from V2 demo, build new page with heartbeat status, lifecycle timeline, ability cards, run panel, and activity feed.",
+  "createdAt": "2026-02-14T17:00:00Z",
+  "consultReport": "/Users/andrewbryce/.claude/plans/tender-shimmying-dijkstra.md",
+  "status": "complete",
+  "completedAt": "2026-02-14T19:00:00Z",
+
+  "stories": [
+    {
+      "id": "ABIL-001",
+      "title": "Create Ability Registry with types, constants, and helpers",
+      "type": "data",
+      "status": "complete",
+      "priority": 1,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["ABIL-002", "ABIL-003", "ABIL-004", "ABIL-005", "ABIL-006", "ABIL-007", "ABIL-008", "ABIL-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "AbilityDefinition, LifecycleStage, TriggerType, BackendType types defined",
+        "ABILITY_REGISTRY constant with ~16 abilities across 5 lifecycle stages",
+        "SKILL_DISPLAY_NAMES and SEQUENCE_STEPS maps moved from V2 demo",
+        "Helper functions: getAbilitiesByStage(), getAbilityById() exported"
+      ],
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "ABIL-002",
+      "title": "Extract SlackBlockKitRenderer from V2 demo",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 2,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["ABIL-001"], "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"], "schema": [] },
+      "blocks": ["ABIL-014"],
+      "parallelWith": ["ABIL-003", "ABIL-006"],
+      "acceptance": [
+        "SlackBlock interface, SlackMessage, SlackBlockRenderer, renderMrkdwn extracted",
+        "New file src/components/agent/SlackBlockKitRenderer.tsx compiles",
+        "V2 demo updated to import from new location"
+      ],
+      "files": [
+        "src/components/agent/SlackBlockKitRenderer.tsx",
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-003",
+      "title": "Extract EmailPreview component from V2 demo",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 2,
+      "estimatedMinutes": 10,
+      "dependencies": { "stories": ["ABIL-001"], "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"], "schema": [] },
+      "blocks": ["ABIL-005", "ABIL-014"],
+      "parallelWith": ["ABIL-002", "ABIL-006"],
+      "acceptance": [
+        "EmailPreview component with props interface extracted",
+        "New file src/components/agent/EmailPreview.tsx compiles",
+        "V2 demo updated to import from new location"
+      ],
+      "files": [
+        "src/components/agent/EmailPreview.tsx",
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-004",
+      "title": "Extract StepVisualizer and LiveStepVisualizer from V2 demo",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 3,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["ABIL-001"], "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"], "schema": [] },
+      "blocks": ["ABIL-005", "ABIL-010", "ABIL-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "StepVisualizer component extracted to src/components/agent/StepVisualizer.tsx",
+        "LiveStepVisualizer extracted to src/components/agent/LiveStepVisualizer.tsx",
+        "SKILL_DISPLAY_NAMES imported from abilityRegistry",
+        "V2 demo updated to import from new locations"
+      ],
+      "files": [
+        "src/components/agent/StepVisualizer.tsx",
+        "src/components/agent/LiveStepVisualizer.tsx",
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-005",
+      "title": "Extract LiveOutputPanel from V2 demo",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 4,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["ABIL-003", "ABIL-004"], "files": [], "schema": [] },
+      "blocks": ["ABIL-010", "ABIL-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "LiveOutputPanel with all sub-renderers extracted",
+        "Imports EmailPreview from ABIL-003",
+        "New file src/components/agent/LiveOutputPanel.tsx compiles",
+        "V2 demo updated to import from new location"
+      ],
+      "files": [
+        "src/components/agent/LiveOutputPanel.tsx",
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-006",
+      "title": "Extract useOrchestratorJob hook from V2 demo",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 2,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["ABIL-001"], "files": ["src/pages/platform/ProactiveAgentV2Demo.tsx"], "schema": [] },
+      "blocks": ["ABIL-010", "ABIL-014"],
+      "parallelWith": ["ABIL-002", "ABIL-003"],
+      "acceptance": [
+        "useOrchestratorJob(jobId) hook returns { stepResults, jobStatus, isRunning, reset }",
+        "Realtime subscription + 3s poll fallback preserved",
+        "V2 demo updated to use hook instead of inline effect"
+      ],
+      "files": [
+        "src/hooks/useOrchestratorJob.ts",
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-007",
+      "title": "Create HeartbeatStatusBar component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["ABIL-001"], "files": [], "schema": [] },
+      "blocks": ["ABIL-012"],
+      "parallelWith": ["ABIL-008", "ABIL-009"],
+      "acceptance": [
+        "Pulse animation with green dot",
+        "Last run time from sequence_jobs query",
+        "24h stats (runs/failures count)",
+        "Auto-refreshes every 30s via useQuery"
+      ],
+      "files": [
+        "src/components/agent/HeartbeatStatusBar.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-008",
+      "title": "Create LifecycleTimeline horizontal stage navigator",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["ABIL-001"], "files": [], "schema": [] },
+      "blocks": ["ABIL-012"],
+      "parallelWith": ["ABIL-007", "ABIL-009"],
+      "acceptance": [
+        "5 stages rendered as horizontal pills",
+        "Ability counts from registry displayed per stage",
+        "Active stage highlighted with indigo styling",
+        "Framer Motion transitions on stage change"
+      ],
+      "files": [
+        "src/components/agent/LifecycleTimeline.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-009",
+      "title": "Create AbilityCard component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["ABIL-001"], "files": [], "schema": [] },
+      "blocks": ["ABIL-012"],
+      "parallelWith": ["ABIL-007", "ABIL-008"],
+      "acceptance": [
+        "Icon with gradient background from registry",
+        "Name, description, trigger type badge, status badge",
+        "Selected state visually distinct",
+        "Click handler for selection"
+      ],
+      "files": [
+        "src/components/agent/AbilityCard.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-010",
+      "title": "Create AbilityRunPanel with orchestrator, simulate, and cron backends",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["ABIL-004", "ABIL-005", "ABIL-006"], "files": [], "schema": [] },
+      "blocks": ["ABIL-012"],
+      "parallelWith": ["ABIL-011"],
+      "acceptance": [
+        "Orchestrator abilities: meeting picker, run button, live step + output panels",
+        "V1-simulate abilities: run simulation button, result display",
+        "Cron abilities: schedule info, run-now button, toggle",
+        "Uses extracted components from ABIL-004/005/006"
+      ],
+      "files": [
+        "src/components/agent/AbilityRunPanel.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-011",
+      "title": "Create ActivityFeed component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["ABIL-001"], "files": [], "schema": [] },
+      "blocks": ["ABIL-012"],
+      "parallelWith": ["ABIL-010"],
+      "acceptance": [
+        "Collapsible section showing last 20 sequence_jobs",
+        "Event type icon, status badge, timestamp, step count, duration per row",
+        "Auto-refreshes every 30s",
+        "Expandable rows show step details"
+      ],
+      "files": [
+        "src/components/agent/ActivityFeed.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-012",
+      "title": "Assemble AgentAbilitiesPage with all components",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["ABIL-007", "ABIL-008", "ABIL-009", "ABIL-010", "ABIL-011"], "files": [], "schema": [] },
+      "blocks": ["ABIL-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "Page renders Header + HeartbeatStatusBar + LifecycleTimeline + Grid + ActivityFeed",
+        "Stage switching updates ability cards",
+        "Ability selection shows run panel",
+        "Auto-selects first ability when stage changes"
+      ],
+      "files": [
+        "src/pages/platform/AgentAbilitiesPage.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-013",
+      "title": "Add route and lazy import for Agent Abilities page",
+      "type": "config",
+      "status": "complete",
+      "priority": 8,
+      "estimatedMinutes": 10,
+      "dependencies": { "stories": ["ABIL-012"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ABIL-014"],
+      "acceptance": [
+        "AgentAbilitiesPage lazy import added to lazyPages.tsx",
+        "Route at /platform/agent-abilities with PlatformAdminRouteGuard + AppLayout",
+        "Page loads correctly at the URL"
+      ],
+      "files": [
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "ABIL-014",
+      "title": "Refactor V2 demo to use all extracted components",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 8,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["ABIL-002", "ABIL-003", "ABIL-004", "ABIL-005", "ABIL-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ABIL-013"],
+      "acceptance": [
+        "All inline components replaced with imports from extracted files",
+        "V2 demo at /platform/proactive-v2-demo renders identically",
+        "File reduced from ~2400 lines to ~1200 lines"
+      ],
+      "files": [
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 14,
+    "implementationOrder": [
+      "ABIL-001",
+      "ABIL-002", "ABIL-003", "ABIL-006",
+      "ABIL-004",
+      "ABIL-005",
+      "ABIL-007", "ABIL-008", "ABIL-009",
+      "ABIL-010", "ABIL-011",
+      "ABIL-012",
+      "ABIL-013", "ABIL-014"
+    ],
+    "parallelGroups": [
+      ["ABIL-002", "ABIL-003", "ABIL-006"],
+      ["ABIL-007", "ABIL-008", "ABIL-009"],
+      ["ABIL-010", "ABIL-011"],
+      ["ABIL-013", "ABIL-014"]
+    ],
+    "estimatedTotalMinutes": 295
+  },
+
+  "verification": [
+    "Route loads: /platform/agent-abilities renders with all sections",
+    "Stage switching: each lifecycle stage shows correct ability cards",
+    "Ability selection: run panel shows with correct backend controls",
+    "Live execution: select meeting, run orchestrator, step progress animates",
+    "V1 execution: run simulation, Slack message sends / notification creates",
+    "Heartbeat: status bar shows real data from sequence_jobs",
+    "Activity feed: shows recent executions, auto-refreshes",
+    "V2 demo intact: /platform/proactive-v2-demo works identically after extraction",
+    "No regressions: /platform/agent-simulator still works"
+  ]
+}

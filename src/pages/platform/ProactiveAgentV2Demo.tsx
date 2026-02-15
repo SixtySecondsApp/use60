@@ -23,934 +23,17 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
-
-// =============================================================================
-// Slack Block Kit Renderer
-// =============================================================================
-
-interface SlackBlock {
-  type: string;
-  text?: { type: string; text: string; emoji?: boolean };
-  fields?: Array<{ type: string; text: string }>;
-  elements?: Array<{
-    type: string;
-    text?: { type: string; text: string; emoji?: boolean };
-    action_id?: string;
-    value?: string;
-    style?: string;
-    options?: Array<{ text: { type: string; text: string }; value: string }>;
-  }>;
-  accessory?: {
-    type: string;
-    action_id?: string;
-    options?: Array<{ text: { type: string; text: string }; value: string }>;
-  };
-}
-
-function SlackMessage({
-  blocks,
-  botName,
-  timestamp,
-  visibleBlocks,
-}: {
-  blocks: SlackBlock[];
-  botName: string;
-  timestamp: string;
-  visibleBlocks?: number;
-}) {
-  const blocksToShow = visibleBlocks !== undefined ? blocks.slice(0, visibleBlocks) : blocks;
-  const isEmpty = visibleBlocks === 0;
-
-  return (
-    <div className="bg-white dark:bg-[#1a1d21] border border-gray-200 dark:border-[#383a3f] rounded-lg overflow-hidden">
-      {/* Slack message header */}
-      <div className="flex items-center gap-2 px-4 pt-3 pb-1">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0">
-          <Sparkles className="w-5 h-5 text-white" />
-        </div>
-        <div className="flex items-baseline gap-2">
-          <span className="font-bold text-[15px] text-gray-900 dark:text-white">{botName}</span>
-          <span className="text-[11px] text-gray-500 dark:text-gray-400">{timestamp}</span>
-        </div>
-      </div>
-      {/* Slack message body */}
-      <div className="px-4 pb-3 pl-[60px]">
-        {isEmpty && (
-          <div className="text-sm text-gray-400 dark:text-gray-500 italic py-4">
-            Waiting for orchestrator...
-          </div>
-        )}
-        <AnimatePresence mode="popLayout">
-          {blocksToShow.map((block, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.3, delay: i * 0.05 }}
-            >
-              <SlackBlockRenderer block={block} />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-}
-
-function SlackBlockRenderer({ block }: { block: SlackBlock }) {
-  switch (block.type) {
-    case 'header':
-      return (
-        <div className="text-[18px] font-bold text-gray-900 dark:text-white mt-1 mb-1">
-          {renderMrkdwn(block.text?.text || '')}
-        </div>
-      );
-
-    case 'divider':
-      return <hr className="border-gray-200 dark:border-gray-700 my-2" />;
-
-    case 'section':
-      return (
-        <div className="my-1.5">
-          {block.text && (
-            <div className="text-[15px] text-gray-900 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
-              {renderMrkdwn(block.text.text)}
-            </div>
-          )}
-          {block.fields && (
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-1">
-              {block.fields.map((field, i) => (
-                <div key={i} className="text-[15px] text-gray-900 dark:text-gray-200 leading-relaxed">
-                  {renderMrkdwn(field.text)}
-                </div>
-              ))}
-            </div>
-          )}
-          {block.accessory?.type === 'radio_buttons' && block.accessory.options && (
-            <div className="mt-2 space-y-1.5">
-              {block.accessory.options.map((opt, i) => (
-                <label key={i} className="flex items-center gap-2 text-[14px] text-gray-800 dark:text-gray-300 cursor-pointer">
-                  <span className={cn(
-                    'w-4 h-4 rounded-full border-2 flex items-center justify-center',
-                    i === 0
-                      ? 'border-blue-500 bg-blue-500'
-                      : 'border-gray-400 dark:border-gray-500'
-                  )}>
-                    {i === 0 && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                  </span>
-                  {opt.text.text}
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-
-    case 'context':
-      return (
-        <div className="text-[12px] text-gray-500 dark:text-gray-400 my-1">
-          {block.elements?.map((el, i) => (
-            <span key={i}>{renderMrkdwn(el.text?.text || '')}</span>
-          ))}
-        </div>
-      );
-
-    case 'actions':
-      return (
-        <div className="flex flex-wrap gap-2 mt-2.5 mb-1">
-          {block.elements?.map((btn, i) => (
-            <button
-              key={i}
-              className={cn(
-                'px-3 py-1.5 text-[13px] font-medium rounded-md border transition-colors',
-                btn.style === 'primary'
-                  ? 'bg-[#007a5a] text-white border-[#007a5a] hover:bg-[#006b4f]'
-                  : btn.style === 'danger'
-                  ? 'bg-[#e01e5a] text-white border-[#e01e5a] hover:bg-[#c91652]'
-                  : 'bg-white dark:bg-[#2c2d30] text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-[#3a3b3e]'
-              )}
-            >
-              {renderMrkdwn(btn.text?.text || '')}
-            </button>
-          ))}
-        </div>
-      );
-
-    default:
-      return null;
-  }
-}
-
-function renderMrkdwn(text: string): string {
-  // Simple markdown-like rendering for Slack mrkdwn — return as-is for now
-  // Bold: *text* -> keep as visual (CSS handles)
-  return text;
-}
-
-// =============================================================================
-// Email Preview Renderer
-// =============================================================================
-
-function EmailPreview({ from, to, subject, body, timestamp }: {
-  from: string; to: string; subject: string; body: string; timestamp: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      {/* Email toolbar */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-        <Mail className="w-4 h-4 text-gray-400" />
-        <span className="text-[13px] font-medium text-gray-600 dark:text-gray-300">Email Preview</span>
-        <span className="ml-auto text-[11px] text-gray-400">{timestamp}</span>
-      </div>
-      {/* Email header */}
-      <div className="px-4 py-3 space-y-1 border-b border-gray-100 dark:border-gray-800">
-        <div className="flex gap-2 text-[13px]">
-          <span className="text-gray-500 dark:text-gray-400 w-16 shrink-0">From:</span>
-          <span className="text-gray-900 dark:text-gray-100 font-medium">{from}</span>
-        </div>
-        <div className="flex gap-2 text-[13px]">
-          <span className="text-gray-500 dark:text-gray-400 w-16 shrink-0">To:</span>
-          <span className="text-gray-900 dark:text-gray-100">{to}</span>
-        </div>
-        <div className="flex gap-2 text-[13px]">
-          <span className="text-gray-500 dark:text-gray-400 w-16 shrink-0">Subject:</span>
-          <span className="text-gray-900 dark:text-gray-100 font-medium">{subject}</span>
-        </div>
-      </div>
-      {/* Email body */}
-      <div className="px-4 py-3 text-[14px] text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
-        {body}
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// Orchestrator Step Visualizer
-// =============================================================================
-
-type StepStatus = 'pending' | 'running' | 'complete' | 'skipped' | 'approval';
-
-function getStepStatus(
-  stepIndex: number,
-  runningStepIndex: number,
-  completedStepIndex: number,
-  step: SimStep,
-  scenario: DemoScenario
-): StepStatus {
-  // Check if step should be skipped
-  const shouldSkip =
-    (step.gated === 'sales-only' && !scenario.callType?.isSales) ||
-    (step.gated === 'coaching' && !scenario.callType?.isSales);
-
-  if (shouldSkip && stepIndex <= completedStepIndex) {
-    return 'skipped';
-  }
-
-  if (stepIndex < runningStepIndex) {
-    // Approval steps that completed
-    if (step.delayMs === 0 && step.name.includes('HITL')) {
-      return 'approval';
-    }
-    return 'complete';
-  }
-
-  if (stepIndex === runningStepIndex) {
-    // Currently running or awaiting approval
-    if (step.delayMs === 0 && step.name.includes('HITL')) {
-      return 'approval';
-    }
-    return 'running';
-  }
-
-  return 'pending';
-}
-
-function StepVisualizer({
-  steps,
-  runningStepIndex = -1,
-  completedStepIndex = -1,
-  stepTimers = {},
-  scenario,
-}: {
-  steps: SimStep[];
-  runningStepIndex?: number;
-  completedStepIndex?: number;
-  stepTimers?: Record<number, number>;
-  scenario: DemoScenario;
-}) {
-  return (
-    <div className="space-y-0">
-      {steps.map((step, i) => {
-        const status = getStepStatus(i, runningStepIndex, completedStepIndex, step, scenario);
-        const elapsed = stepTimers[i] || 0;
-        const duration = status === 'complete' && step.delayMs > 0
-          ? `${(step.delayMs / 1000).toFixed(1)}s`
-          : status === 'running' && elapsed > 0
-          ? `${(elapsed / 1000).toFixed(1)}s...`
-          : undefined;
-
-        const isSkipped = status === 'skipped';
-        const skipReason = step.gated === 'sales-only' ? 'Non-sales' : step.gated === 'coaching' ? 'Coaching disabled' : '';
-
-        return (
-          <div key={i} className="flex items-start gap-3">
-            {/* Connector */}
-            <div className="flex flex-col items-center">
-              <div
-                className={cn(
-                  'w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold',
-                  status === 'complete'
-                    ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                    : status === 'running'
-                    ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
-                    : status === 'approval'
-                    ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                    : status === 'skipped'
-                    ? 'bg-gray-100 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
-                )}
-              >
-                {status === 'complete' ? (
-                  <CheckCircle2 className="w-4 h-4" />
-                ) : status === 'running' ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : status === 'approval' ? (
-                  <Clock className="w-3.5 h-3.5" />
-                ) : status === 'skipped' ? (
-                  <SkipForward className="w-3.5 h-3.5" />
-                ) : (
-                  i + 1
-                )}
-              </div>
-              {i < steps.length - 1 && (
-                <div
-                  className={cn(
-                    'w-0.5 h-6',
-                    status === 'complete'
-                      ? 'bg-emerald-300 dark:bg-emerald-600'
-                      : status === 'skipped'
-                      ? 'bg-gray-200 dark:bg-gray-700/50'
-                      : 'bg-gray-200 dark:bg-gray-700'
-                  )}
-                />
-              )}
-            </div>
-            {/* Label */}
-            <div className="pt-1 pb-3">
-              <div
-                className={cn(
-                  'text-[13px] font-medium',
-                  status === 'complete'
-                    ? 'text-gray-900 dark:text-gray-200'
-                    : status === 'running'
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : status === 'approval'
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : status === 'skipped'
-                    ? 'text-gray-400 dark:text-gray-500 line-through'
-                    : 'text-gray-400 dark:text-gray-500'
-                )}
-              >
-                {step.name}
-              </div>
-              {duration && (
-                <div
-                  className={cn(
-                    'text-[11px]',
-                    status === 'skipped' ? 'text-gray-400 dark:text-gray-500 italic' : 'text-gray-400'
-                  )}
-                >
-                  {duration}
-                </div>
-              )}
-              {isSkipped && skipReason && (
-                <div className="text-[11px] text-gray-400 dark:text-gray-500 italic mt-0.5">
-                  {skipReason}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// =============================================================================
-// Live Step Visualizer (driven by real orchestrator step_results)
-// =============================================================================
-
-const SKILL_DISPLAY_NAMES: Record<string, string> = {
-  // meeting_ended
-  'classify-call-type': 'Classify Call Type',
-  'extract-action-items': 'Extract Action Items',
-  'detect-intents': 'Detect Intents & Buying Signals',
-  'suggest-next-actions': 'Generate Next Best Actions',
-  'draft-followup-email': 'Draft Follow-up Email',
-  'update-crm-from-meeting': 'Update CRM Records',
-  'create-tasks-from-actions': 'Create CRM Tasks',
-  'notify-slack-summary': 'Send Slack Summary',
-  'coaching-micro-feedback': 'Coaching Micro-Feedback',
-  // pre_meeting_90min
-  'enrich-attendees': 'Enrich Attendees',
-  'pull-crm-history': 'Pull CRM History',
-  'check-previous-action-items': 'Check Previous Action Items',
-  'research-company-news': 'Research Company News',
-  'generate-briefing': 'Generate Briefing',
-  'deliver-slack-briefing': 'Deliver Slack Briefing',
-  // email_received
-  'classify-email-intent': 'Classify Email Intent',
-  'match-to-crm-contact': 'Match to CRM Contact',
-  // proposal_generation
-  'select-proposal-template': 'Select Proposal Template',
-  'populate-proposal': 'Populate Proposal',
-  'generate-custom-sections': 'Generate Custom Sections',
-  'present-for-review': 'Present for Review',
-  // calendar_find_times
-  'parse-scheduling-request': 'Parse Scheduling Request',
-  'find-available-slots': 'Find Available Slots',
-  'present-time-options': 'Present Time Options',
-  // stale_deal_revival
-  'research-trigger-events': 'Research Trigger Events',
-  'analyse-stall-reason': 'Analyse Stall Reason',
-  'draft-reengagement': 'Draft Re-engagement',
-  // campaign_daily_check
-  'pull-campaign-metrics': 'Pull Campaign Metrics',
-  'classify-replies': 'Classify Replies',
-  'generate-campaign-report': 'Generate Campaign Report',
-  'deliver-campaign-slack': 'Deliver Campaign Slack',
-  // coaching_weekly
-  'aggregate-weekly-metrics': 'Aggregate Weekly Metrics',
-  'correlate-win-loss': 'Correlate Win/Loss',
-  'generate-coaching-digest': 'Generate Coaching Digest',
-  'deliver-coaching-slack': 'Deliver Coaching Slack',
-};
-
-/** Step order per event type — mirrors EVENT_SEQUENCES in eventSequences.ts */
-const SEQUENCE_STEPS: Record<string, string[]> = {
-  meeting_ended: [
-    'classify-call-type', 'extract-action-items', 'detect-intents',
-    'suggest-next-actions', 'draft-followup-email', 'update-crm-from-meeting',
-    'create-tasks-from-actions', 'notify-slack-summary', 'coaching-micro-feedback',
-  ],
-  pre_meeting_90min: [
-    'enrich-attendees', 'pull-crm-history', 'check-previous-action-items',
-    'research-company-news', 'generate-briefing', 'deliver-slack-briefing',
-  ],
-  email_received: [
-    'classify-email-intent', 'match-to-crm-contact',
-  ],
-  proposal_generation: [
-    'select-proposal-template', 'populate-proposal',
-    'generate-custom-sections', 'present-for-review',
-  ],
-  calendar_find_times: [
-    'parse-scheduling-request', 'find-available-slots', 'present-time-options',
-  ],
-  stale_deal_revival: [
-    'research-trigger-events', 'analyse-stall-reason', 'draft-reengagement',
-  ],
-  campaign_daily_check: [
-    'pull-campaign-metrics', 'classify-replies',
-    'generate-campaign-report', 'deliver-campaign-slack',
-  ],
-  coaching_weekly: [
-    'aggregate-weekly-metrics', 'correlate-win-loss',
-    'generate-coaching-digest', 'deliver-coaching-slack',
-  ],
-};
-
-function LiveStepVisualizer({ stepResults, jobStatus, eventType }: { stepResults: any[]; jobStatus: string | null; eventType?: string }) {
-  // Merge step results by skill_key, keeping the latest status
-  const stepMap = new Map<string, { status: string; output?: any; duration?: number }>();
-  for (const r of stepResults) {
-    const key = r.skill_key;
-    const existing = stepMap.get(key);
-    if (!existing || r.status === 'completed' || (r.status === 'running' && !existing)) {
-      stepMap.set(key, { status: r.status, output: r.output, duration: r.duration_ms });
-    }
-  }
-
-  // Build ordered list from the event type's sequence
-  const orderedSkills = SEQUENCE_STEPS[eventType || 'meeting_ended'] || SEQUENCE_STEPS.meeting_ended;
-
-  return (
-    <div className="space-y-0">
-      {orderedSkills.map((skill, i) => {
-        const data = stepMap.get(skill);
-        const status = data?.status || (jobStatus === 'completed' ? 'skipped' : 'pending');
-        const displayName = SKILL_DISPLAY_NAMES[skill] || skill;
-        const isSkipped = data?.output?.skipped;
-        const isError = data?.output?.error && !data?.output?.skipped;
-
-        return (
-          <div key={skill} className="flex items-start gap-3">
-            <div className="flex flex-col items-center">
-              <div
-                className={cn(
-                  'w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold',
-                  status === 'completed' && !isSkipped && !isError
-                    ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                    : status === 'running'
-                    ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
-                    : isSkipped
-                    ? 'bg-gray-100 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500'
-                    : isError
-                    ? 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
-                )}
-              >
-                {status === 'completed' && !isSkipped && !isError ? (
-                  <CheckCircle2 className="w-4 h-4" />
-                ) : status === 'running' ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : isSkipped ? (
-                  <SkipForward className="w-3.5 h-3.5" />
-                ) : (
-                  i + 1
-                )}
-              </div>
-              {i < orderedSkills.length - 1 && (
-                <div
-                  className={cn(
-                    'w-0.5 h-6',
-                    status === 'completed' && !isSkipped
-                      ? 'bg-emerald-300 dark:bg-emerald-600'
-                      : isSkipped
-                      ? 'bg-gray-200 dark:bg-gray-700/50'
-                      : 'bg-gray-200 dark:bg-gray-700'
-                  )}
-                />
-              )}
-            </div>
-            <div className="pt-1 pb-3">
-              <div
-                className={cn(
-                  'text-[13px] font-medium',
-                  status === 'completed' && !isSkipped
-                    ? 'text-gray-900 dark:text-gray-200'
-                    : status === 'running'
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : isSkipped
-                    ? 'text-gray-400 dark:text-gray-500 line-through'
-                    : 'text-gray-400 dark:text-gray-500'
-                )}
-              >
-                {displayName}
-              </div>
-              {isSkipped && data?.output?.reason && (
-                <div className="text-[11px] text-gray-400 dark:text-gray-500 italic mt-0.5">
-                  {data.output.reason === 'no_contact_email' ? 'No contact email'
-                    : data.output.reason === 'no_transcript' ? 'No transcript'
-                    : data.output.reason}
-                </div>
-              )}
-              {status === 'completed' && !isSkipped && data?.output && (
-                <div className="text-[11px] text-gray-400 mt-0.5">
-                  {data.output.itemsCreated != null ? `${data.output.itemsCreated} items` : ''}
-                  {data.output.commitments ? `${data.output.commitments.length} commitments` : ''}
-                  {data.output.tasks_created != null ? `${data.output.tasks_created} tasks` : ''}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// =============================================================================
-// Live Output Panel (shows real orchestrator results in right column)
-// =============================================================================
-
-function LiveOutputPanel({
-  stepResults,
-  jobStatus,
-  jobId,
-  eventType,
-}: {
-  stepResults: any[];
-  jobStatus: string | null;
-  jobId: string | null;
-  eventType?: string;
-}) {
-  // Build a map of step outputs
-  const outputMap = new Map<string, any>();
-  for (const r of stepResults) {
-    if (r.status === 'completed' && r.output && !r.output?.skipped) {
-      outputMap.set(r.skill_key, r.output);
-    }
-  }
-
-  // Find specific step outputs (used across sequences)
-  const classifyOutput = outputMap.get('classify-call-type');
-  const actionItemsOutput = outputMap.get('extract-action-items');
-  const intentsOutput = outputMap.get('detect-intents');
-  const emailDraftOutput = outputMap.get('draft-followup-email');
-  const coachingOutput = outputMap.get('coaching-micro-feedback');
-  const nextActionsOutput = outputMap.get('suggest-next-actions');
-
-  // Check if email was skipped
-  const emailStep = stepResults.find(r => r.skill_key === 'draft-followup-email');
-  const emailSkipped = emailStep?.output?.skipped;
-  const emailSkipReason = emailStep?.output?.reason;
-
-  // Collect outputs that don't have dedicated renderers (for generic display)
-  const knownKeys = new Set([
-    'classify-call-type', 'extract-action-items', 'detect-intents',
-    'suggest-next-actions', 'draft-followup-email', 'coaching-micro-feedback',
-  ]);
-  const genericOutputs: Array<{ key: string; output: any }> = [];
-  for (const [key, output] of outputMap) {
-    if (!knownKeys.has(key) && !output.stub) {
-      genericOutputs.push({ key, output });
-    }
-  }
-
-  // Nothing yet — show waiting state
-  if (stepResults.length === 0 && !jobId) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="py-12 text-center">
-          <Zap className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Select a meeting and run the orchestrator to see live results here
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (stepResults.length === 0 && jobId) {
-    return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Waiting for orchestrator results...
-          </p>
-          <p className="text-xs text-gray-400 mt-1">Job: {jobId.slice(0, 8)}...</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-[13px] text-gray-500 dark:text-gray-400">
-        <Zap className="w-4 h-4" />
-        <span>Live Orchestrator Output</span>
-        {jobStatus && (
-          <Badge
-            variant={jobStatus === 'completed' ? 'default' : jobStatus === 'failed' ? 'destructive' : 'secondary'}
-            className="text-[10px] ml-auto"
-          >
-            {jobStatus}
-          </Badge>
-        )}
-      </div>
-
-      {/* Call Type Classification */}
-      {classifyOutput && (
-        <AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className={cn(
-              'flex items-center gap-3 px-4 py-3 rounded-lg border',
-              classifyOutput.is_sales
-                ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30'
-                : 'bg-gray-50 dark:bg-gray-500/10 border-gray-200 dark:border-gray-500/30'
-            )}>
-              <div className={cn(
-                'w-2 h-2 rounded-full',
-                classifyOutput.is_sales ? 'bg-emerald-500' : 'bg-gray-400'
-              )} />
-              <span className={cn(
-                'font-semibold text-sm',
-                classifyOutput.is_sales
-                  ? 'text-emerald-700 dark:text-emerald-400'
-                  : 'text-gray-600 dark:text-gray-400'
-              )}>
-                {classifyOutput.call_type_name || 'Unknown'}
-              </span>
-              {classifyOutput.confidence && (
-                <span className="text-[11px] text-gray-400">
-                  {(classifyOutput.confidence * 100).toFixed(0)}% confident
-                </span>
-              )}
-              {!classifyOutput.is_sales && (
-                <Badge variant="secondary" className="text-[9px] ml-auto">Non-sales</Badge>
-              )}
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      )}
-
-      {/* Action Items */}
-      {actionItemsOutput && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
-        >
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Action Items ({actionItemsOutput.itemsCreated || actionItemsOutput.items?.length || 0})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {actionItemsOutput.items ? (
-                actionItemsOutput.items.map((item: any, i: number) => (
-                  <div key={i} className="flex gap-2 text-[13px]">
-                    <span className="text-gray-400 shrink-0">{i + 1}.</span>
-                    <div>
-                      <span className="text-gray-900 dark:text-gray-200">
-                        {item.description || item.action || item.text || JSON.stringify(item)}
-                      </span>
-                      {item.assignee && (
-                        <span className="text-gray-400 ml-1">({item.assignee})</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-[13px] text-gray-500">
-                  {actionItemsOutput.itemsCreated || 0} action items extracted
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Intents & Buying Signals */}
-      {intentsOutput && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
-        >
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Brain className="w-4 h-4 text-purple-500" />
-                Intents & Signals
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {intentsOutput.commitments?.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                    Commitments ({intentsOutput.commitments.length})
-                  </div>
-                  {intentsOutput.commitments.map((c: any, i: number) => (
-                    <div key={i} className="text-[13px] text-gray-700 dark:text-gray-300 flex gap-2 mb-1">
-                      <span className="text-purple-500 shrink-0">-</span>
-                      <span>{c.phrase || c.text || c.description || JSON.stringify(c)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {intentsOutput.buying_signals?.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                    Buying Signals ({intentsOutput.buying_signals.length})
-                  </div>
-                  {intentsOutput.buying_signals.slice(0, 5).map((s: any, i: number) => (
-                    <div key={i} className="text-[13px] text-gray-700 dark:text-gray-300 flex gap-2 mb-1">
-                      <span className="text-amber-500 shrink-0">-</span>
-                      <span>{s.phrase || s.text || s.signal || JSON.stringify(s)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {intentsOutput.follow_up_items?.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                    Follow-up Items ({intentsOutput.follow_up_items.length})
-                  </div>
-                  {intentsOutput.follow_up_items.slice(0, 3).map((f: any, i: number) => (
-                    <div key={i} className="text-[13px] text-gray-700 dark:text-gray-300 flex gap-2 mb-1">
-                      <span className="text-blue-500 shrink-0">-</span>
-                      <span>{f.description || f.text || f.action || JSON.stringify(f)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Next Best Actions */}
-      {nextActionsOutput && nextActionsOutput.suggestions?.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.25 }}
-        >
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <ArrowRight className="w-4 h-4 text-blue-500" />
-                Next Best Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {nextActionsOutput.suggestions.map((s: any, i: number) => (
-                <div key={i} className="text-[13px] text-gray-700 dark:text-gray-300 flex gap-2 mb-1">
-                  <span className="text-blue-500 shrink-0">{i + 1}.</span>
-                  <span>{s.action || s.description || s.text || JSON.stringify(s)}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Email Draft or Skip */}
-      {emailDraftOutput?.email_draft ? (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.3 }}
-        >
-          <div className="flex items-center gap-2 text-[13px] text-gray-500 dark:text-gray-400">
-            <Mail className="w-4 h-4" />
-            <span>Draft email (awaiting approval)</span>
-          </div>
-          <EmailPreview
-            from="You"
-            to={emailDraftOutput.email_draft.to || 'Unknown'}
-            subject={emailDraftOutput.email_draft.subject || 'Follow-up'}
-            body={emailDraftOutput.email_draft.body || ''}
-            timestamp={new Date().toLocaleString()}
-          />
-        </motion.div>
-      ) : emailSkipped ? (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.3 }}
-        >
-          <Card className="border-dashed border-gray-200 dark:border-gray-700">
-            <CardContent className="py-4 flex items-center gap-3">
-              <SkipForward className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Email draft skipped</p>
-                <p className="text-[11px] text-gray-400">
-                  {emailSkipReason === 'no_contact_email'
-                    ? 'No contact email linked to this meeting. Link a contact in CRM to enable email drafting.'
-                    : emailSkipReason || 'Step was skipped'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      ) : null}
-
-      {/* Coaching Feedback */}
-      {coachingOutput && !coachingOutput.skipped && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.35 }}
-        >
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-violet-500" />
-                Coaching Feedback
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-[13px] text-gray-700 dark:text-gray-300 space-y-2">
-              {coachingOutput.talk_ratio != null && (
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500">Talk Ratio:</span>
-                  <span className="font-medium">{coachingOutput.talk_ratio}%</span>
-                </div>
-              )}
-              {coachingOutput.strengths?.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">Strengths</div>
-                  {coachingOutput.strengths.map((s: any, i: number) => (
-                    <div key={i} className="flex gap-2 mb-0.5">
-                      <span className="text-emerald-500 shrink-0">+</span>
-                      <span>{typeof s === 'string' ? s : s.text || s.description || JSON.stringify(s)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {coachingOutput.improvements?.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">Areas to Improve</div>
-                  {coachingOutput.improvements.map((s: any, i: number) => (
-                    <div key={i} className="flex gap-2 mb-0.5">
-                      <span className="text-amber-500 shrink-0">-</span>
-                      <span>{typeof s === 'string' ? s : s.text || s.description || JSON.stringify(s)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {!coachingOutput.talk_ratio && !coachingOutput.strengths && (
-                <p className="text-gray-500 italic">Coaching analysis completed</p>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Generic output cards for steps without dedicated renderers */}
-      {genericOutputs.map(({ key, output }, idx) => (
-        <motion.div
-          key={key}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.4 + idx * 0.05 }}
-        >
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Zap className="w-4 h-4 text-indigo-500" />
-                {SKILL_DISPLAY_NAMES[key] || key}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-[13px] text-gray-700 dark:text-gray-300">
-              {typeof output === 'string' ? (
-                <p>{output}</p>
-              ) : output.summary || output.executive_summary || output.text || output.message ? (
-                <p>{output.summary || output.executive_summary || output.text || output.message}</p>
-              ) : (
-                <pre className="text-[11px] text-gray-500 whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {JSON.stringify(output, null, 2)}
-                </pre>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
+import { SlackBlock, SlackMessage, SlackBlockRenderer, renderMrkdwn } from '@/components/agent/SlackBlockKitRenderer';
+import { EmailPreview } from '@/components/agent/EmailPreview';
+import { StepVisualizer, type SimStep, type DemoScenarioLike } from '@/components/agent/StepVisualizer';
+import { LiveStepVisualizer } from '@/components/agent/LiveStepVisualizer';
+import { LiveOutputPanel } from '@/components/agent/LiveOutputPanel';
+import { useOrchestratorJob } from '@/hooks/useOrchestratorJob';
+import { SKILL_DISPLAY_NAMES, SEQUENCE_STEPS } from '@/lib/agent/abilityRegistry';
 
 // =============================================================================
 // Demo Scenario Definitions
 // =============================================================================
-
-interface SimStep {
-  name: string;
-  delayMs: number; // Realistic execution time
-  blocksRevealed: number; // Cumulative Slack blocks visible after this step completes
-  gated?: 'sales-only' | 'coaching'; // For gating visualization
-}
 
 interface DemoScenario {
   id: string;
@@ -1674,6 +757,82 @@ Jordan`,
       },
     ],
   },
+
+  // 9. Re-engagement Trigger
+  {
+    id: 'reengagement',
+    title: 'Re-engagement Trigger',
+    subtitle: 'Monitors closed-lost deals for buying signals',
+    icon: Clock,
+    gradient: 'from-amber-500 to-orange-600',
+    eventType: 'stale_deal_revival',
+    eventSource: 'cron:daily',
+    trigger: 'Cron: Daily re-engagement scan — 3 closed-lost deals checked',
+    steps: [
+      { name: 'Research Trigger Events', delayMs: 4500, blocksRevealed: 3 },
+      { name: 'Analyse Stall Reason', delayMs: 3200, blocksRevealed: 5 },
+      { name: 'Draft Re-engagement (HITL)', delayMs: 3800, blocksRevealed: 8 },
+    ],
+    botName: '60 Agent',
+    timestamp: '7:15 AM',
+    slackBlocks: [
+      { type: 'header', text: { type: 'plain_text', text: '🔄 Re-engagement Opportunity Detected', emoji: true } },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: 'Job Change Signal • Feb 14, 2026 7:15 AM' }],
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Signal:*\nSarah Chen (your former champion at Acme Corp) just started as VP Revenue at TechFlow Inc.',
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: '*Contact:*\nSarah Chen' },
+          { type: 'mrkdwn', text: '*New Company:*\nTechFlow Inc.' },
+          { type: 'mrkdwn', text: '*Original Deal:*\nAcme Corp — $85,000' },
+          { type: 'mrkdwn', text: '*Lost Reason:*\nBudget — closed Sept 2025' },
+        ],
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Score:* 78/100 — Strong signal + Budget was the blocker, not fit',
+        },
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Draft Outreach:*',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: 'Hey Sarah, congrats on the new role at TechFlow — that\'s a brilliant move. Given what you saw with us at Acme, I\'d love to show you what\'s changed since September. Worth a quick 15 mins?',
+        },
+      },
+      { type: 'divider' },
+      {
+        type: 'actions',
+        elements: [
+          { type: 'button', text: { type: 'plain_text', text: 'Send Email', emoji: true }, action_id: 'reeng_send_email_demo', style: 'primary' },
+          { type: 'button', text: { type: 'plain_text', text: 'Edit', emoji: true }, action_id: 'reeng_edit_demo' },
+          { type: 'button', text: { type: 'plain_text', text: 'Snooze 2 Weeks', emoji: true }, action_id: 'reeng_snooze_demo' },
+          { type: 'button', text: { type: 'plain_text', text: 'Remove from Watchlist', emoji: true }, action_id: 'reeng_remove_demo', style: 'danger' },
+        ],
+      },
+    ],
+  },
 ];
 
 // =============================================================================
@@ -1721,9 +880,10 @@ export default function ProactiveAgentV2Demo() {
   // Live mode state
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+
+  // Use the orchestrator job hook for tracking
+  const { stepResults: liveStepResults, jobStatus: liveJobStatus, isRunning: isOrchestratorRunning, reset: resetOrchestrator } = useOrchestratorJob(jobId);
   const [isRunningOrchestrator, setIsRunningOrchestrator] = useState(false);
-  const [liveStepResults, setLiveStepResults] = useState<any[]>([]);
-  const [liveJobStatus, setLiveJobStatus] = useState<string | null>(null);
 
   const scenario = SCENARIOS.find(s => s.id === selectedScenario)!;
 
@@ -1776,8 +936,7 @@ export default function ProactiveAgentV2Demo() {
     }
 
     setIsRunningOrchestrator(true);
-    setLiveStepResults([]);
-    setLiveJobStatus('starting');
+    resetOrchestrator();
     setJobId(null);
 
     try {
@@ -1829,7 +988,7 @@ export default function ProactiveAgentV2Demo() {
     } finally {
       setIsRunningOrchestrator(false);
     }
-  }, [selectedMeetingId, userId, recentMeetings]);
+  }, [selectedMeetingId, userId, recentMeetings, resetOrchestrator, scenario.eventType, scenario.eventSource]);
 
   // Stop playing when simulation completes
   useEffect(() => {
@@ -1879,69 +1038,18 @@ export default function ProactiveAgentV2Demo() {
   const displayTrigger = mode === 'live' && selectedMeeting ? liveTrigger : scenario.trigger;
   const displayCallType = mode === 'live' ? liveCallType : scenario.callType;
 
-  // Realtime subscription + poll fallback for live orchestrator updates
+  // Show toast notifications when orchestrator completes/fails
   useEffect(() => {
-    if (!jobId || mode !== 'live') return;
-
-    let pollInterval: ReturnType<typeof setInterval> | null = null;
-
-    const updateFromJob = (job: any) => {
-      if (job.step_results) {
-        setLiveStepResults(job.step_results);
-      }
-      if (job.status && job.status !== liveJobStatus) {
-        setLiveJobStatus(job.status);
-        if (job.status === 'completed') {
-          setIsRunningOrchestrator(false);
-          toast.success('Orchestrator completed!', {
-            description: `${(job.step_results || []).filter((s: any) => s.status === 'completed').length} steps completed`,
-          });
-        } else if (job.status === 'failed') {
-          setIsRunningOrchestrator(false);
-          toast.error('Orchestrator failed', {
-            description: job.error_message || 'Unknown error',
-          });
-        }
-      }
-    };
-
-    // Realtime channel
-    const channel = supabase
-      .channel(`orchestrator-job-${jobId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'sequence_jobs',
-          filter: `id=eq.${jobId}`,
-        },
-        (payload) => {
-          updateFromJob(payload.new);
-        }
-      )
-      .subscribe();
-
-    // Poll fallback every 3s (realtime may miss rapid updates)
-    pollInterval = setInterval(async () => {
-      const { data } = await supabase
-        .from('sequence_jobs')
-        .select('id, status, step_results, error_message, current_step, current_skill_key')
-        .eq('id', jobId)
-        .maybeSingle();
-      if (data) updateFromJob(data);
-      // Stop polling once terminal state reached
-      if (data?.status === 'completed' || data?.status === 'failed') {
-        if (pollInterval) clearInterval(pollInterval);
-      }
-    }, 3000);
-
-    return () => {
-      supabase.removeChannel(channel);
-      if (pollInterval) clearInterval(pollInterval);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId, mode]);
+    if (liveJobStatus === 'completed') {
+      setIsRunningOrchestrator(false);
+      toast.success('Orchestrator completed!', {
+        description: `${liveStepResults.filter(s => s.status === 'completed').length} steps completed`,
+      });
+    } else if (liveJobStatus === 'failed') {
+      setIsRunningOrchestrator(false);
+      toast.error('Orchestrator failed');
+    }
+  }, [liveJobStatus, liveStepResults]);
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-6">

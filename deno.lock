@@ -1,5 +1,5 @@
 {
-  "version": "4",
+  "version": "5",
   "redirects": {
     "https://esm.sh/@supabase/functions-js@^2.1.5?target=denonext": "https://esm.sh/@supabase/functions-js@2.93.1?target=denonext",
     "https://esm.sh/@supabase/gotrue-js@^2.60.0?target=denonext": "https://esm.sh/@supabase/gotrue-js@2.93.0?target=denonext",
@@ -45,6 +45,7 @@
     "https://esm.sh/@supabase/storage-js@2.93.0?target=denonext": "b91eea03c470febd96d9c52c83754b615b3acb372446888cd409ee7cadd7437a",
     "https://esm.sh/@supabase/supabase-js@2.39.3": "832d7714491bd1c8a9008a332b35cb099f24b451ad79e755ecf4d71985fd6610",
     "https://esm.sh/@supabase/supabase-js@2.39.3/denonext/supabase-js.mjs": "054f4cd1560fa814cdc10d06c0809b00d0817dc06a072fa983e4c023e4346439",
+    "https://esm.sh/@supabase/supabase-js@2.43.4": "ed6952bb6d04f4abd86e80a0dde37f35798d483d2603cc8408baf310a21a0b36",
     "https://esm.sh/@supabase/supabase-js@2.76.1": "99f07a2597a0be25436c7520104699b5570de0c91d8e42b1679359dba7716324",
     "https://esm.sh/@supabase/supabase-js@2.76.1/denonext/supabase-js.mjs": "2f5357f9c5cbef8b66035f8c287b00891c5214832e937118105f926bd0e6ae0d",
     "https://esm.sh/iceberg-js@0.8.1/denonext/iceberg-js.mjs": "d839d81a2e3966500ca2cdd0c1cb458e9608bacfc91f7bb67a69b2e878dcdb4f",
@@ -60,6 +61,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@anthropic-ai/sdk@~0.72.1",
         "npm:@apollo/server@5",
         "npm:@aws-sdk/client-s3@^3.975.0",
         "npm:@aws-sdk/client-ses@^3.883.0",
@@ -99,6 +101,7 @@
         "npm:@sentry/react@^10.30.0",
         "npm:@sentry/vite-plugin@^4.6.1",
         "npm:@supabase/supabase-js@^2.56.1",
+        "npm:@tailwindcss/typography@~0.5.19",
         "npm:@tanstack/query-core@^5.90.12",
         "npm:@tanstack/react-query@^5.90.12",
         "npm:@tanstack/react-table@^8.21.3",
@@ -129,6 +132,7 @@
         "npm:@vitejs/plugin-react@^4.2.1",
         "npm:@vitest/coverage-v8@^3.2.4",
         "npm:@vitest/ui@^3.2.4",
+        "npm:assemblyai@^4.22.1",
         "npm:autoprefixer@^10.4.16",
         "npm:baseline-browser-mapping@^2.9.17",
         "npm:bull@^4.16.5",
@@ -154,6 +158,7 @@
         "npm:google-auth-library@^10.3.0",
         "npm:googleapis@159",
         "npm:graphql@^16.11.0",
+        "npm:gray-matter@^4.0.3",
         "npm:helmet@^8.1.0",
         "npm:i18next-browser-languagedetector@^8.2.0",
         "npm:i18next@^25.7.1",

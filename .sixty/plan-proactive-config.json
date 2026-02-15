@@ -1,0 +1,383 @@
+{
+  "feature": "proactive-config",
+  "name": "Proactive Agent — User Journey, Configuration & Delivery",
+  "status": "complete",
+  "createdAt": "2026-02-15T14:00:00Z",
+  "consultReport": ".sixty/consult/proactive-agent-user-journey.md",
+  "description": "Add org-level master switch, per-user sequence preferences, enforcement in orchestrator runner, delivery hardening (quiet hours, rate limits, in-app mirroring), Agent Activity feed, and onboarding wizard. Config model: hybrid (admin enables, users fine-tune). Defaults: core sequences ON, advanced OFF.",
+
+  "stories": [
+    {
+      "id": "CONF-001",
+      "title": "Create proactive_agent_config table with org-level master switch",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "phase": "A",
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["CONF-003", "CONF-004", "CONF-006"],
+      "parallelWith": ["CONF-002"],
+      "acceptance": [
+        "New table proactive_agent_config with org_id (TEXT, PK), is_enabled (BOOLEAN, default false), enabled_sequences (JSONB), default_delivery (TEXT, default 'slack'), created_at, updated_at",
+        "enabled_sequences JSONB stores per-sequence config: { sequence_type: { enabled: bool, delivery_channel: 'slack'|'in_app'|'both' } }",
+        "Default enabled_sequences: meeting_ended/pre_meeting_90min/deal_risk_scan ON, remaining 6 OFF",
+        "RLS: org admins can read/write own org row, regular users can read"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260216000003_add_proactive_agent_config.sql"
+      ],
+      "notes": "Master switch for the proactive agent at org level. is_enabled defaults to false so existing orgs aren't suddenly opted in. The enabled_sequences JSONB allows flexible per-sequence control without schema changes for new sequences. delivery_channel defaults are per-org but overridable per-user."
+    },
+    {
+      "id": "CONF-002",
+      "title": "Create user_sequence_preferences table for per-user opt-in/out",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "phase": "A",
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["CONF-003", "CONF-004", "CONF-007", "CONF-008"],
+      "parallelWith": ["CONF-001"],
+      "acceptance": [
+        "New table user_sequence_preferences with user_id, org_id, sequence_type (TEXT), is_enabled (BOOLEAN), delivery_channel (TEXT, nullable — inherits org default when null)",
+        "Unique constraint on (user_id, org_id, sequence_type)",
+        "RLS: users can read/write own rows only",
+        "No rows = inherit org defaults (absence means default)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260216000004_add_user_sequence_preferences.sql"
+      ],
+      "notes": "Per-user overrides. When a row exists, it overrides the org default. When absent, the org default applies. This avoids pre-populating rows for every user×sequence combination. The sequence_type values match orchestrator event types: meeting_ended, pre_meeting_90min, deal_risk_scan, stale_deal_revival, coaching_weekly, campaign_daily_check, email_received, proposal_generation, calendar_find_times."
+    },
+    {
+      "id": "CONF-003",
+      "title": "Create RPCs for proactive agent settings CRUD",
+      "type": "schema",
+      "status": "complete",
+      "priority": 3,
+      "phase": "A",
+      "dependencies": { "stories": ["CONF-001", "CONF-002"] },
+      "blocks": ["CONF-006", "CONF-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "get_proactive_agent_config(p_org_id) returns org config with is_enabled, enabled_sequences, default_delivery",
+        "upsert_proactive_agent_config(p_org_id, p_is_enabled, p_enabled_sequences, p_default_delivery) creates or updates org config",
+        "get_user_sequence_preferences(p_user_id, p_org_id) returns user prefs merged with org defaults (COALESCE logic)",
+        "upsert_user_sequence_preference(p_user_id, p_org_id, p_sequence_type, p_is_enabled, p_delivery_channel) upserts single preference"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260216000005_add_proactive_agent_rpcs.sql"
+      ],
+      "notes": "The get_user_sequence_preferences RPC is the key one — it returns a merged view: for each of the 9 sequence types, it returns the effective setting (user override if exists, else org default, else system default). This is what the UI and runner will both call."
+    },
+    {
+      "id": "CONF-004",
+      "title": "Add org + user preference gate to orchestrator runner",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "phase": "B",
+      "dependencies": { "stories": ["CONF-001", "CONF-002"] },
+      "blocks": [],
+      "parallelWith": ["CONF-005"],
+      "acceptance": [
+        "After cost budget check (runner.ts line 89), query proactive_agent_config for event.org_id",
+        "If org config missing or is_enabled=false, return { status: 'feature_disabled' }",
+        "If enabled_sequences[event.type] is disabled at org level, return { status: 'sequence_disabled' }",
+        "Query user_sequence_preferences for user — if is_enabled=false, return { status: 'user_opted_out' }",
+        "All gates logged with console.log for observability"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ],
+      "notes": "Insert between line 89 (cost budget gate) and line 92 (create sequence job). Uses direct table queries (not RPCs) to avoid circular dependencies. The check is: (1) org enabled? (2) sequence enabled for org? (3) user opted out? If any gate fails, return early without creating a sequence_jobs row — no wasted compute. For user check, absence of a row in user_sequence_preferences means 'use org default' (which was already checked in step 2)."
+    },
+    {
+      "id": "CONF-005",
+      "title": "Extend delivery policy feature map for all 9 orchestrator sequences",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "phase": "B",
+      "dependencies": { "stories": [] },
+      "blocks": ["CONF-010"],
+      "parallelWith": ["CONF-004"],
+      "acceptance": [
+        "featureMap in deliverySlack.ts covers all 9 orchestrator event types",
+        "Fix morning_brief key mismatch (currently maps to daily_digest in some places)",
+        "New mappings: coaching_weekly→coaching_weekly, campaign_daily_check→campaign_alerts, email_received→email_received, proposal_generation→proposal_generation, calendar_find_times→calendar_find_times, stale_deal_revival→deal_risk, deal_risk_scan→deal_risk",
+        "Unmapped types now log a warning instead of silently allowing"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/proactive/deliverySlack.ts"
+      ],
+      "notes": "The current featureMap (lines 127-134) only covers 6 types. Unknown types fall through to 'allow' which means orchestrator sequences bypass user preferences entirely. Extend to cover all 9 orchestrator event types. Also fix the morning_brief/daily_digest mismatch: the slack_user_preferences table uses 'morning_brief' as the feature key, but the admin settings UI shows 'daily_digest' — normalize to 'morning_brief' everywhere."
+    },
+    {
+      "id": "CONF-006",
+      "title": "Build admin Proactive Agent settings page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "phase": "C",
+      "dependencies": { "stories": ["CONF-003"] },
+      "blocks": [],
+      "parallelWith": ["CONF-007", "CONF-008"],
+      "acceptance": [
+        "New page at /settings/proactive-agent accessible from settings nav",
+        "Master toggle: Enable/Disable Proactive Agent for this organization",
+        "Per-sequence grid: 9 sequence cards with enable/disable toggle and delivery channel selector",
+        "Core sequences (meeting_ended, pre_meeting_90min, deal_risk_scan) marked as 'Recommended'",
+        "Advanced sequences (coaching, campaigns, email, proposal, calendar, stale deal) marked as 'Advanced'",
+        "Saves via upsert_proactive_agent_config RPC"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/settings/ProactiveAgentSettings.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ],
+      "notes": "Follow existing settings page patterns (SlackSettings.tsx). Use Card grid for sequences with Switch toggles. Group by 'Core' and 'Advanced'. Each card shows: sequence name, description, toggle, delivery channel dropdown. Master toggle at top with warning that disabling stops ALL proactive sequences. Use Lucide icons per sequence type. Add lazy route and settings nav link."
+    },
+    {
+      "id": "CONF-007",
+      "title": "Build user Proactive Agent preferences panel",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "phase": "C",
+      "dependencies": { "stories": ["CONF-003"] },
+      "blocks": [],
+      "parallelWith": ["CONF-006", "CONF-008"],
+      "acceptance": [
+        "New section in user notification preferences (or standalone page)",
+        "Shows all 9 sequences with toggle and delivery channel selector",
+        "Disabled sequences show 'Disabled by admin' badge and cannot be toggled on",
+        "Delivery channel options: Slack DM, In-App, Both",
+        "Reads merged preferences via get_user_sequence_preferences RPC",
+        "Saves via upsert_user_sequence_preference RPC"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "notes": "Add as a new section in SlackSettings.tsx (after existing NotificationPreferences component, around line 911). Each sequence shows: name, description, toggle (grayed out if admin-disabled), delivery channel selector. Use the merged preferences from get_user_sequence_preferences to show effective state. When user has no override, show org default with 'Using org default' text."
+    },
+    {
+      "id": "CONF-008",
+      "title": "Wire Agent Abilities page to backend preferences",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "phase": "C",
+      "dependencies": { "stories": ["CONF-002"] },
+      "blocks": [],
+      "parallelWith": ["CONF-006", "CONF-007"],
+      "acceptance": [
+        "AbilityCard.tsx reads enabled state from user_sequence_preferences via React Query, not localStorage",
+        "Toggle changes call upsert_user_sequence_preference RPC",
+        "Remove localStorage fallback for ability-enabled-{id} keys",
+        "Abilities with no matching sequence (planned/beta) remain localStorage-only with 'Coming Soon' badge",
+        "Mapping from ability eventType to sequence_type is explicit in abilityRegistry.ts"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/agent/AbilityCard.tsx",
+        "src/lib/agent/abilityRegistry.ts",
+        "src/pages/platform/AgentAbilitiesPage.tsx"
+      ],
+      "notes": "The abilityRegistry.ts already has eventType per ability which maps to orchestrator event types. Use this to bridge between the abilities UI and the new user_sequence_preferences table. Add a React Query hook (useAgentAbilityPreferences) that fetches all user preferences and provides toggle callbacks. The Agent Abilities page currently renders 16 abilities but only 9 map to orchestrator sequences — the rest stay as cosmetic/planned."
+    },
+    {
+      "id": "CONF-009",
+      "title": "Create agent_activity table and insert helper for in-app mirroring",
+      "type": "schema",
+      "status": "complete",
+      "priority": 9,
+      "phase": "D",
+      "dependencies": { "stories": [] },
+      "blocks": ["CONF-010", "CONF-011"],
+      "parallelWith": ["CONF-001", "CONF-002"],
+      "acceptance": [
+        "New table agent_activity with id (UUID), user_id, org_id, sequence_type (TEXT), job_id (UUID, nullable FK to sequence_jobs), title (TEXT), summary (TEXT), metadata (JSONB), is_read (BOOLEAN, default false), created_at",
+        "RLS: users can read/update own rows (mark as read), system can insert",
+        "Index on (user_id, org_id, created_at DESC) for feed queries",
+        "get_agent_activity_feed(p_user_id, p_org_id, p_limit, p_offset) RPC for paginated feed"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260216000006_add_agent_activity.sql"
+      ],
+      "notes": "This is the data layer for the new Agent Activity feed. Each orchestrator delivery step will insert a row here in addition to (or instead of) sending a Slack DM. The metadata JSONB stores sequence-specific data (deal name, meeting title, risk score, etc.) for rendering in the feed. job_id links back to sequence_jobs for drill-down."
+    },
+    {
+      "id": "CONF-010",
+      "title": "Route orchestrator delivery adapters through proactive layer",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "phase": "D",
+      "dependencies": { "stories": ["CONF-005", "CONF-009"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "notifySlackSummary adapter uses deliverToSlack() from proactive/deliverySlack.ts instead of direct Slack API calls",
+        "All 5 Slack-only delivery adapters insert into agent_activity table for in-app mirroring",
+        "deliverToSlack handles quiet hours, rate limiting, and notification recording for orchestrator notifications",
+        "Delivery channel from user preferences determines: slack only, in-app only, or both",
+        "agent_activity rows created with correct title, summary, and metadata for each sequence type"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/notifySlackSummary.ts",
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts",
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts",
+        "supabase/functions/_shared/orchestrator/adapters/campaignMonitor.ts",
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts"
+      ],
+      "notes": "Currently these adapters call send-slack-message or Slack API directly, bypassing quiet hours, rate limits, and dedup. Refactor delivery steps to: (1) check user delivery preference, (2) if slack: call deliverToSlack, (3) always: insert agent_activity row. The proactive delivery layer already has all the infrastructure (quiet hours, rate limiting, notification recording) — we just need to route through it. This is the biggest story but touches only delivery adapter code, not core logic."
+    },
+    {
+      "id": "CONF-011",
+      "title": "Build Agent Activity feed UI panel",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "phase": "D",
+      "dependencies": { "stories": ["CONF-009"] },
+      "blocks": [],
+      "parallelWith": ["CONF-010"],
+      "acceptance": [
+        "New AgentActivityFeed component accessible from main app navigation",
+        "Shows chronological feed of proactive agent actions with sequence type icons",
+        "Each card shows: title, summary, time ago, sequence type badge, read/unread indicator",
+        "Mark as read on click, mark all read button",
+        "Click-through to relevant entity (deal, meeting, contact) via onActionClick pattern",
+        "Paginated with infinite scroll via React Query useInfiniteQuery",
+        "Unread count badge in navigation"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/agent/AgentActivityFeed.tsx",
+        "src/lib/hooks/useAgentActivity.ts"
+      ],
+      "notes": "Separate from NotificationCenter.tsx (which is the general notification bell). This is a dedicated panel for proactive agent output. Follow the pattern from NotificationCenter but with agent-specific UI: sequence type icons from Lucide, color-coded badges per sequence type, metadata-driven drill-down links. useAgentActivity hook wraps the get_agent_activity_feed RPC. Unread count via supabase count query. Consider adding to the left sidebar or as a slide-over panel."
+    },
+    {
+      "id": "CONF-012",
+      "title": "Create prerequisites check service",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+      "phase": "E",
+      "dependencies": { "stories": [] },
+      "blocks": ["CONF-013"],
+      "parallelWith": ["CONF-009"],
+      "acceptance": [
+        "New checkProactivePrerequisites(supabase, orgId, userId) function in _shared/proactive/",
+        "Returns { ready: boolean, checks: Array<{ name, status: 'pass'|'fail'|'warning', message }> }",
+        "Checks: Slack org connected, Slack user mapped, credit balance > 0, ANTHROPIC_API_KEY set",
+        "Per-sequence checks: calendar connected (pre_meeting), Instantly connected (campaigns), Gmail connected (email)",
+        "Frontend-callable via new edge function or existing API"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/proactive/prerequisites.ts"
+      ],
+      "notes": "This service runs the minimum viability checks that the gap analysis identified. The checks are: (1) org-level: Slack connected (slack_org_settings.is_connected), credit balance (checkCreditBalance from costTracking.ts), ANTHROPIC_API_KEY (user_settings or org-level). (2) user-level: Slack user mapping exists (slack_user_mappings), preferred timezone set. (3) per-sequence: Google Calendar connected (google_integrations for pre_meeting), Instantly API key (for campaigns). Returns a structured checklist that the frontend can render."
+    },
+    {
+      "id": "CONF-013",
+      "title": "Build proactive agent onboarding wizard",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 13,
+      "phase": "E",
+      "dependencies": { "stories": ["CONF-012", "CONF-006"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New ProactiveAgentSetup component shown when admin enables proactive agent for first time",
+        "Step 1: Prerequisites checklist with pass/fail/warning badges and fix-it links",
+        "Step 2: Choose which sequences to enable (pre-populated with recommended defaults)",
+        "Step 3: Review and activate",
+        "Links to Slack settings, calendar settings, etc. for fixing prerequisites",
+        "Dismissible — can come back later via settings page"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/ProactiveAgentSetup.tsx",
+        "src/pages/settings/ProactiveAgentSettings.tsx"
+      ],
+      "notes": "Triggered when admin flips the master switch for the first time. Uses checkProactivePrerequisites to populate the checklist. If all checks pass, shows a success state. If some fail, shows warnings with links to the relevant settings page (e.g., 'Connect Slack' links to /settings/slack). After completing setup, redirects to the ProactiveAgentSettings page for fine-tuning."
+    }
+  ],
+
+  "phases": {
+    "A": {
+      "name": "Settings Backend",
+      "stories": ["CONF-001", "CONF-002", "CONF-003"],
+      "estimatedMinutes": 50,
+      "status": "pending",
+      "description": "Create proactive_agent_config (org-level master switch + per-sequence defaults) and user_sequence_preferences (per-user opt-in/out) tables, plus CRUD RPCs with merged preference resolution."
+    },
+    "B": {
+      "name": "Enforcement Layer",
+      "stories": ["CONF-004", "CONF-005"],
+      "estimatedMinutes": 35,
+      "status": "pending",
+      "description": "Wire settings into orchestrator runner.ts (gate before sequence execution) and extend deliverySlack.ts feature map to cover all 9 orchestrator sequences with quiet hours + rate limiting."
+    },
+    "C": {
+      "name": "Settings UI",
+      "stories": ["CONF-006", "CONF-007", "CONF-008"],
+      "estimatedMinutes": 70,
+      "status": "pending",
+      "description": "Admin ProactiveAgentSettings page (master switch + per-sequence defaults), user preferences panel in SlackSettings, and wire Agent Abilities page to real backend state (replace localStorage)."
+    },
+    "D": {
+      "name": "Delivery Hardening",
+      "stories": ["CONF-009", "CONF-010", "CONF-011"],
+      "estimatedMinutes": 75,
+      "status": "pending",
+      "description": "Create agent_activity table for in-app mirroring, route all orchestrator delivery adapters through proactive layer (quiet hours, rate limits), and build the dedicated Agent Activity feed UI."
+    },
+    "E": {
+      "name": "Onboarding",
+      "stories": ["CONF-012", "CONF-013"],
+      "estimatedMinutes": 45,
+      "status": "pending",
+      "description": "Prerequisites check service (Slack, calendar, credits, API key) and setup wizard for first-time proactive agent activation."
+    }
+  },
+
+  "execution": {
+    "totalStories": 13,
+    "completedStories": 13,
+    "estimatedTotalMinutes": 275,
+    "parallelOpportunities": [
+      { "group": ["CONF-001", "CONF-002"], "reason": "Independent tables, no file overlap" },
+      { "group": ["CONF-004", "CONF-005"], "reason": "Different files — runner.ts vs deliverySlack.ts" },
+      { "group": ["CONF-006", "CONF-007", "CONF-008"], "reason": "Different pages — ProactiveAgentSettings vs SlackSettings vs AgentAbilities" },
+      { "group": ["CONF-009", "CONF-001"], "reason": "Independent tables, no overlap — agent_activity can be created in parallel with Phase A" },
+      { "group": ["CONF-010", "CONF-011"], "reason": "Backend delivery routing vs frontend feed — different layers" },
+      { "group": ["CONF-012", "CONF-009"], "reason": "Independent — prerequisites service vs agent_activity table" }
+    ],
+    "sequenceReadinessAfter": {
+      "phaseA": "Settings tables and RPCs ready — no runtime behavior change yet",
+      "phaseB": "Orchestrator respects org + user preferences — sequences gated before execution",
+      "phaseC": "Admins and users can configure proactive agent through UI",
+      "phaseD": "All delivery goes through policy layer (quiet hours, rate limits) + in-app mirroring",
+      "phaseE": "New orgs have guided setup with prerequisites validation"
+    },
+    "defaultSequenceConfig": {
+      "core_on": ["meeting_ended", "pre_meeting_90min", "deal_risk_scan"],
+      "advanced_off": ["stale_deal_revival", "coaching_weekly", "campaign_daily_check", "email_received", "proposal_generation", "calendar_find_times"]
+    }
+  }
+}

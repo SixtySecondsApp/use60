@@ -9,6 +9,7 @@ import { ImpersonationBanner } from '@/components/ImpersonationBanner';
 import { IntegrationReconnectBanner, useHasIntegrationAlerts } from '@/components/IntegrationReconnectBanner';
 import { ExternalViewToggle } from '@/components/ExternalViewToggle';
 import { NotificationBell } from '@/components/NotificationBell';
+import { AgentActivityBell } from '@/components/AgentActivityBell';
 import { HITLIndicator } from '@/components/HITLIndicator';
 import { EmailIcon } from '@/components/EmailIcon';
 import { CalendarIcon } from '@/components/CalendarIcon';
@@ -366,6 +367,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <EmailIcon />
               <CalendarIcon />
               <HITLIndicator />
+              <AgentActivityBell />
               <NotificationBell />
             </>
           )}
@@ -706,6 +708,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <EmailIcon />
               <CalendarIcon />
               <HITLIndicator />
+              <AgentActivityBell />
               <NotificationBell />
             </>
           )}

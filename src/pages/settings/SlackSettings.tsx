@@ -37,6 +37,13 @@ import {
   Building2,
   Info,
   Clock,
+  Video,
+  AlertTriangle,
+  GraduationCap,
+  Mail,
+  Inbox,
+  FileText,
+  Zap,
 } from 'lucide-react';
 
 import { SlackChannelSelector } from '@/components/settings/SlackChannelSelector';
@@ -746,6 +753,67 @@ const NOTIFICATION_FEATURES = [
   { key: 'deal_momentum', label: 'Deal Momentum', description: 'Momentum nudges for qualifying deals' },
 ] as const;
 
+/**
+ * CONF-007: Proactive Agent Sequence Preferences
+ * 9 orchestrator event sequences with icons and display names
+ */
+const SEQUENCE_TYPES = [
+  {
+    key: 'meeting_ended' as const,
+    label: 'Post-Meeting Debrief',
+    description: 'AI-generated summary and follow-ups after meetings',
+    icon: Video
+  },
+  {
+    key: 'pre_meeting_90min' as const,
+    label: 'Pre-Meeting Briefing',
+    description: 'Context and talking points before meetings',
+    icon: Clock
+  },
+  {
+    key: 'deal_risk_scan' as const,
+    label: 'Deal Risk Scanner',
+    description: 'Daily scan for at-risk deals',
+    icon: AlertTriangle
+  },
+  {
+    key: 'stale_deal_revival' as const,
+    label: 'Stale Deal Revival',
+    description: 'Suggestions to re-engage cold deals',
+    icon: RefreshCw
+  },
+  {
+    key: 'coaching_weekly' as const,
+    label: 'Weekly Coaching',
+    description: 'Performance insights and coaching tips',
+    icon: GraduationCap
+  },
+  {
+    key: 'campaign_daily_check' as const,
+    label: 'Campaign Monitor',
+    description: 'Daily campaign health check',
+    icon: Mail
+  },
+  {
+    key: 'email_received' as const,
+    label: 'Email Handler',
+    description: 'Smart triage and response suggestions',
+    icon: Inbox
+  },
+  {
+    key: 'proposal_generation' as const,
+    label: 'Proposal Generator',
+    description: 'AI-assisted proposal creation',
+    icon: FileText
+  },
+  {
+    key: 'calendar_find_times' as const,
+    label: 'Calendar Scheduler',
+    description: 'Smart meeting scheduling assistant',
+    icon: Calendar
+  },
+] as const;
+
 function NotificationPreferences() {
   const { activeOrgId } = useOrg();
   const queryClient = useQueryClient();
@@ -905,6 +973,215 @@ function NotificationPreferences() {
             {updateQuietHours.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * CONF-007: Proactive Agent Preferences
+ * User-level preferences for orchestrator event sequences
+ */
+function ProactiveAgentPreferences() {
+  const { activeOrgId } = useOrg();
+  const queryClient = useQueryClient();
+
+  // Fetch org config to check if proactive agent is enabled
+  const { data: orgConfig, isLoading: orgConfigLoading } = useQuery({
+    queryKey: ['proactive-agent-config', activeOrgId],
+    queryFn: async () => {
+      if (!activeOrgId) return null;
+
+      const { data, error } = await supabase.rpc('get_proactive_agent_config', {
+        p_org_id: activeOrgId,
+      });
+
+      if (error) throw error;
+      return data?.[0] ?? null;
+    },
+    enabled: !!activeOrgId,
+  });
+
+  // Fetch merged preferences (user overrides + org defaults)
+  const { data: mergedPrefs, isLoading: prefsLoading } = useQuery({
+    queryKey: ['merged-sequence-preferences', activeOrgId],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !activeOrgId) return [];
+
+      const { data, error } = await supabase.rpc('get_merged_sequence_preferences', {
+        p_user_id: user.id,
+        p_org_id: activeOrgId,
+      });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!activeOrgId,
+  });
+
+  // Update user preference mutation
+  const updatePref = useMutation({
+    mutationFn: async ({
+      sequenceType,
+      isEnabled,
+      deliveryChannel,
+    }: {
+      sequenceType: string;
+      isEnabled: boolean;
+      deliveryChannel: string;
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !activeOrgId) throw new Error('Not authenticated');
+
+      const { error } = await supabase.rpc('update_user_sequence_preference', {
+        p_user_id: user.id,
+        p_org_id: activeOrgId,
+        p_sequence_type: sequenceType,
+        p_is_enabled: isEnabled,
+        p_delivery_channel: deliveryChannel,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['merged-sequence-preferences'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to update preference');
+    },
+  });
+
+  if (orgConfigLoading || prefsLoading) return null;
+
+  // Build a map of merged preferences for fast lookup
+  const prefsBySequence = new Map(
+    (mergedPrefs || []).map((p: any) => [p.sequence_type, p])
+  );
+
+  // Check if org has proactive agent enabled at all
+  const isOrgEnabled = orgConfig?.is_enabled ?? false;
+
+  // If org proactive agent is disabled, show a global message
+  if (!isOrgEnabled) {
+    return (
+      <div className="space-y-3 pt-2">
+        <Separator />
+        <div className="flex items-center gap-2">
+          <Zap className="h-4 w-4 text-muted-foreground" />
+          <Label className="text-sm font-medium">Proactive Agent Notifications</Label>
+        </div>
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Proactive Agent is currently disabled for your organization. Contact your org admin to enable it.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Helper: check if a sequence is enabled at org level
+  const isOrgSequenceEnabled = (sequenceType: string) => {
+    if (!orgConfig?.enabled_sequences) return false;
+    const seq = (orgConfig.enabled_sequences as any)[sequenceType];
+    return seq?.enabled ?? false;
+  };
+
+  return (
+    <div className="space-y-3 pt-2">
+      <Separator />
+      <div className="flex items-center gap-2">
+        <Zap className="h-4 w-4 text-muted-foreground" />
+        <Label className="text-sm font-medium">Proactive Agent Notifications</Label>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Control which AI agent sequences send you notifications.
+      </p>
+
+      <div className="space-y-3">
+        {SEQUENCE_TYPES.map((seq) => {
+          const pref = prefsBySequence.get(seq.key);
+          const isEnabled = pref?.is_enabled ?? false;
+          const deliveryChannel = pref?.delivery_channel ?? 'slack';
+          const source = pref?.source ?? 'org';
+          const isOrgDisabled = !isOrgSequenceEnabled(seq.key);
+
+          const Icon = seq.icon;
+
+          return (
+            <div
+              key={seq.key}
+              className="flex items-start gap-3 p-3 border rounded-md bg-muted/20"
+            >
+              <div className="p-2 bg-primary/10 rounded-lg mt-0.5">
+                <Icon className="h-4 w-4 text-primary" />
+              </div>
+
+              <div className="flex-1 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{seq.label}</span>
+                      {source === 'org' && !isOrgDisabled && (
+                        <Badge variant="outline" className="text-xs">
+                          Using org default
+                        </Badge>
+                      )}
+                      {isOrgDisabled && (
+                        <Badge variant="secondary" className="text-xs">
+                          Disabled by admin
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {seq.description}
+                    </p>
+                  </div>
+
+                  <Switch
+                    checked={isEnabled}
+                    onCheckedChange={(checked) => {
+                      updatePref.mutate({
+                        sequenceType: seq.key,
+                        isEnabled: checked,
+                        deliveryChannel,
+                      });
+                    }}
+                    disabled={isOrgDisabled || updatePref.isPending}
+                  />
+                </div>
+
+                {/* Delivery channel selector - only show if enabled */}
+                {isEnabled && !isOrgDisabled && (
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground">Deliver via:</Label>
+                    <Select
+                      value={deliveryChannel}
+                      onValueChange={(value) => {
+                        updatePref.mutate({
+                          sequenceType: seq.key,
+                          isEnabled,
+                          deliveryChannel: value,
+                        });
+                      }}
+                      disabled={updatePref.isPending}
+                    >
+                      <SelectTrigger className="w-[140px] h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="slack">Slack DM</SelectItem>
+                        <SelectItem value="in_app">In-App</SelectItem>
+                        <SelectItem value="both">Both</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1140,6 +1417,9 @@ export default function SlackSettings() {
 
           {/* SLACK-019: Notification Preferences */}
           <NotificationPreferences />
+
+          {/* CONF-007: Proactive Agent Preferences */}
+          <ProactiveAgentPreferences />
 
           {/* Read-only org summary for regular users */}
           {!isAdmin && (

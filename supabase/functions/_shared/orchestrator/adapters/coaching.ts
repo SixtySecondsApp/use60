@@ -23,6 +23,8 @@ import {
   formatAttendeesSection,
   formatCoachingHistory,
 } from './contextEnrichment.ts';
+import { deliverToSlack } from '../../proactive/deliverySlack.ts';
+import type { ProactiveNotificationPayload } from '../../proactive/types.ts';
 
 export const coachingMicroFeedbackAdapter: SkillAdapter = {
   name: 'coaching-micro-feedback',
@@ -226,31 +228,115 @@ export const deliverCoachingSlackAdapter: SkillAdapter = {
   async execute(state: SequenceState, step: SequenceStep): Promise<StepResult> {
     const start = Date.now();
     try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = getServiceClient();
+      const digest = state.outputs['generate-coaching-digest'] as any;
 
-      const digest = state.outputs['generate-coaching-digest'];
+      // Get bot token and Slack user ID for delivery
+      const { data: slackIntegration } = await supabase
+        .from('slack_integrations')
+        .select('access_token')
+        .eq('user_id', state.event.user_id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/send-slack-message`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          org_id: state.event.org_id,
-          user_id: state.event.user_id,
-          message_type: 'coaching_digest',
-          data: digest,
-        }),
-      });
+      const { data: slackMapping } = await supabase
+        .from('slack_user_mappings')
+        .select('slack_user_id')
+        .eq('org_id', state.event.org_id)
+        .eq('sixty_user_id', state.event.user_id)
+        .maybeSingle();
 
-      if (!response.ok) {
-        throw new Error(`send-slack-message returned ${response.status}: ${await response.text()}`);
+      const botToken = slackIntegration?.access_token;
+      const recipientSlackUserId = slackMapping?.slack_user_id;
+
+      let slackDelivered = false;
+      let deliveryError: string | undefined;
+
+      if (!botToken) {
+        console.warn('[deliver-coaching-slack] No Slack bot token found for user');
+        deliveryError = 'No Slack integration';
+      } else if (!recipientSlackUserId) {
+        console.warn('[deliver-coaching-slack] No Slack user mapping found');
+        deliveryError = 'No Slack user mapping';
+      } else {
+        // Build Slack blocks from coaching digest
+        const blocks = digest.blocks || [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*Weekly Coaching Digest*\n${digest.summary || 'Your weekly coaching insights'}`,
+            },
+          },
+        ];
+
+        // Route through proactive delivery layer (handles quiet hours + rate limiting)
+        const payload: ProactiveNotificationPayload = {
+          type: 'coaching_weekly',
+          orgId: state.event.org_id,
+          recipientUserId: state.event.user_id,
+          recipientSlackUserId,
+          entityType: 'coaching',
+          entityId: `coaching_${state.event.user_id}`,
+          title: 'Weekly Coaching Digest',
+          message: digest.summary || 'Your weekly coaching insights',
+          blocks,
+          metadata: {
+            overall_score: digest.overall_score,
+            metrics: digest.metrics,
+            recommendations_count: digest.recommendations?.length || 0,
+          },
+          priority: 'medium',
+        };
+
+        const deliveryResult = await deliverToSlack(supabase, payload, botToken);
+        slackDelivered = deliveryResult.sent;
+        deliveryError = deliveryResult.error;
+
+        if (!slackDelivered) {
+          console.warn(
+            `[deliver-coaching-slack] Slack delivery blocked/failed: ${deliveryError}`
+          );
+        }
       }
 
-      const output = await response.json();
-      return { success: true, output, duration_ms: Date.now() - start };
+      // Insert agent_activity record (in-app mirroring)
+      try {
+        const { error: activityError } = await supabase.rpc('insert_agent_activity', {
+          p_user_id: state.event.user_id,
+          p_org_id: state.event.org_id,
+          p_sequence_type: 'coaching_weekly',
+          p_title: 'Weekly Coaching Digest',
+          p_summary: digest.summary || 'Your weekly coaching insights',
+          p_metadata: {
+            overall_score: digest.overall_score,
+            metrics: digest.metrics,
+            recommendations_count: digest.recommendations?.length || 0,
+            delivery_method: slackDelivered ? 'slack' : 'in_app_only',
+            delivery_error: deliveryError,
+          },
+          p_job_id: null,
+        });
+
+        if (activityError) {
+          console.error('[deliver-coaching-slack] Failed to insert agent_activity:', activityError);
+        } else {
+          console.log('[deliver-coaching-slack] Agent activity recorded');
+        }
+      } catch (actErr) {
+        console.error('[deliver-coaching-slack] Error inserting agent_activity:', actErr);
+      }
+
+      return {
+        success: true,
+        output: {
+          delivered: slackDelivered,
+          delivery_method: slackDelivered ? 'slack' : 'in_app_only',
+          delivery_error: deliveryError,
+        },
+        duration_ms: Date.now() - start,
+      };
     } catch (err) {
       return { success: false, error: String(err), duration_ms: Date.now() - start };
     }

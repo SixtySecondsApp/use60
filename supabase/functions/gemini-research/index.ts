@@ -51,7 +51,7 @@ serve(async (req) => {
 
     // Call Gemini 3 Flash with Google Search grounding
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,7 +134,7 @@ serve(async (req) => {
         duration_ms: duration,
         tokens: { input: inputTokens, output: outputTokens, total: totalTokens },
         cost,
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         grounded: sources.length > 0
       }
     }), {

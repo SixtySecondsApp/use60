@@ -814,6 +814,8 @@ export const generateRiskAlertsAdapter: SkillAdapter = {
 // =============================================================================
 
 import { buildDealRiskAlertMessage, type DealRiskAlertData } from '../../slackBlocks.ts';
+import { deliverToSlack } from '../../proactive/deliverySlack.ts';
+import type { ProactiveNotificationPayload } from '../../proactive/types.ts';
 
 export const deliverRiskSlackAdapter: SkillAdapter = {
   name: 'deliver-risk-slack',
@@ -874,29 +876,63 @@ export const deliverRiskSlackAdapter: SkillAdapter = {
         );
       }
 
+      // Get bot token for Slack delivery
+      const { data: slackIntegration } = await supabase
+        .from('slack_integrations')
+        .select('access_token')
+        .eq('org_id', state.event.org_id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      const botToken = slackIntegration?.access_token;
+
+      if (!botToken) {
+        console.warn('[deliver-risk-slack] No Slack bot token found, skipping Slack delivery');
+        return {
+          success: true,
+          output: {
+            delivered_count: 0,
+            failed_count: 0,
+            owners_notified: [],
+            digest_sent: false,
+            digest_item_count: digest_items?.length || 0,
+            delivery_error: 'No Slack integration',
+          },
+          duration_ms: Date.now() - start,
+        };
+      }
+
       // 3. Send high-risk alerts to individual owners (if any)
       let deliveredCount = 0;
       let failedCount = 0;
       const ownersNotified: string[] = [];
 
       if (alertsByOwner.size > 0) {
-        // Fetch slack_user_id for all owners in one query
+        // Fetch Slack user mappings for all owners in one query
         const ownerIds = Array.from(alertsByOwner.keys());
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, slack_user_id')
-          .in('id', ownerIds);
+        const { data: mappings } = await supabase
+          .from('slack_user_mappings')
+          .select('sixty_user_id, slack_user_id')
+          .eq('org_id', state.event.org_id)
+          .in('sixty_user_id', ownerIds);
 
         const ownerIdToSlackUserId = new Map<string, string | null>();
-        if (profiles) {
-          for (const profile of profiles) {
-            ownerIdToSlackUserId.set(profile.id, profile.slack_user_id);
+        if (mappings) {
+          for (const mapping of mappings) {
+            ownerIdToSlackUserId.set(mapping.sixty_user_id, mapping.slack_user_id);
           }
         }
 
         // 4. Send alerts to each owner
         for (const [ownerId, ownerAlerts] of alertsByOwner.entries()) {
           const slackUserId = ownerIdToSlackUserId.get(ownerId);
+
+          if (!slackUserId) {
+            console.warn(`[deliver-risk-slack] No Slack mapping for owner ${ownerId}, skipping`);
+            failedCount += ownerAlerts.length;
+            continue;
+          }
 
           // Send each alert as a separate Slack message
           for (const alert of ownerAlerts) {
@@ -923,24 +959,32 @@ export const deliverRiskSlackAdapter: SkillAdapter = {
 
             const slackMessage = buildDealRiskAlertMessage(alertData);
 
+            // Route through proactive delivery layer
+            const payload: ProactiveNotificationPayload = {
+              type: 'deal_risk_scan',
+              orgId: state.event.org_id,
+              recipientUserId: ownerId,
+              recipientSlackUserId: slackUserId,
+              entityType: 'deal',
+              entityId: alert.deal_id,
+              title: `Deal at Risk: ${alert.deal_name}`,
+              message: slackMessage.text,
+              blocks: slackMessage.blocks,
+              metadata: {
+                deal_id: alert.deal_id,
+                risk_score: alert.score,
+                previous_score: alert.previous_score,
+                score_delta: alert.score_delta,
+                trend: alert.trend,
+                top_signal: alert.top_signals[0]?.type,
+              },
+              priority: alert.score >= 80 ? 'urgent' : alert.score >= 60 ? 'high' : 'medium',
+            };
+
             try {
-              const response = await fetch(`${supabaseUrl}/functions/v1/send-slack-message`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${serviceKey}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  org_id: state.event.org_id,
-                  user_id: ownerId,
-                  message: slackMessage.text,
-                  blocks: slackMessage.blocks,
-                }),
-              });
+              const deliveryResult = await deliverToSlack(supabase, payload, botToken);
 
-              const result = await response.json().catch(() => ({ success: false }));
-
-              if (response.ok && result.success) {
+              if (deliveryResult.sent) {
                 deliveredCount++;
                 if (!ownersNotified.includes(ownerId)) {
                   ownersNotified.push(ownerId);
@@ -948,11 +992,25 @@ export const deliverRiskSlackAdapter: SkillAdapter = {
                 console.log(
                   `[deliver-risk-slack] Delivered alert for deal ${alert.deal_name} to owner ${ownerId}`
                 );
+
+                // Insert agent_activity record
+                try {
+                  await supabase.rpc('insert_agent_activity', {
+                    p_user_id: ownerId,
+                    p_org_id: state.event.org_id,
+                    p_sequence_type: 'deal_risk_scan',
+                    p_title: `Deal at Risk: ${alert.deal_name}`,
+                    p_summary: `Risk score: ${alert.score}/100. ${alert.top_signals[0]?.description || 'Multiple risk signals detected.'}`,
+                    p_metadata: payload.metadata,
+                    p_job_id: null,
+                  });
+                } catch (actErr) {
+                  console.error('[deliver-risk-slack] Failed to insert agent_activity:', actErr);
+                }
               } else {
                 failedCount++;
                 console.warn(
-                  `[deliver-risk-slack] Failed to deliver alert for deal ${alert.deal_name}: ` +
-                  `${result.error || response.status}`
+                  `[deliver-risk-slack] Failed to deliver alert for deal ${alert.deal_name}: ${deliveryResult.error}`
                 );
               }
             } catch (err) {
@@ -1008,37 +1066,11 @@ export const deliverRiskSlackAdapter: SkillAdapter = {
 
         const digestText = `Pipeline Risk Digest — ${digest_items.length} medium-risk deals need attention`;
 
-        try {
-          const response = await fetch(`${supabaseUrl}/functions/v1/send-slack-message`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${serviceKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              org_id: state.event.org_id,
-              channel: 'deals',
-              message: digestText,
-              blocks: digestBlocks,
-            }),
-          });
-
-          const result = await response.json().catch(() => ({ success: false }));
-
-          if (response.ok && result.success) {
-            digestSent = true;
-            deliveredCount++; // Count digest as one delivery
-            console.log('[deliver-risk-slack] Digest message sent successfully');
-          } else {
-            failedCount++;
-            console.warn(
-              `[deliver-risk-slack] Failed to send digest message: ${result.error || response.status}`
-            );
-          }
-        } catch (err) {
-          failedCount++;
-          console.error('[deliver-risk-slack] Error sending digest message:', err);
-        }
+        // Note: Digest messages would typically go to a channel, but deliverToSlack is DM-only.
+        // For now, we'll skip digest Slack delivery since it requires channel posting.
+        // Future: Extend deliverToSlack to support channel posting or call Slack API directly for channels.
+        console.warn('[deliver-risk-slack] Digest delivery to channels not yet supported via proactive layer, skipping');
+        digestSent = false;
       }
 
       console.log(

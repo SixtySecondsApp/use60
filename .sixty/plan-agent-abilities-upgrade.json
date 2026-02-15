@@ -1,0 +1,193 @@
+{
+  "feature": {
+    "id": "agent-abilities-upgrade",
+    "name": "Agent Abilities Page — Full Channel Options, Toggles, History, Waves, HITL Queue",
+    "status": "complete",
+    "prd": null,
+    "consultReport": ".sixty/consult/agent-abilities-upgrade.md",
+    "createdAt": "2026-02-14T22:30:00Z",
+    "description": "Upgrade the Agent Abilities page with unified channel delivery options (Slack/Email/In-App) on all abilities, enable/pause toggles, execution history logs, dependency wave visualizer, and HITL approval queue."
+  },
+
+  "stories": [
+    {
+      "id": "AAU-001",
+      "feature": "agent-abilities-upgrade",
+      "title": "Add unified channel toggles (Slack/Email/In-App) to AbilityCard",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AAU-003"],
+      "parallelWith": ["AAU-002"],
+      "acceptance": [
+        "Every AbilityCard shows 3 channel toggle chips: Slack, Email, In-App",
+        "Default channels pre-selected based on ability's current hardcoded delivery",
+        "Toggling a channel updates localStorage preference keyed by ability id",
+        "Visual: active chip is colored, inactive is muted outline",
+        "Channel state passed to AbilityRunPanel for execution"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/agent/AbilityCard.tsx",
+        "src/lib/agent/abilityRegistry.ts"
+      ],
+      "activeForm": "Adding unified channel toggles to ability cards"
+    },
+    {
+      "id": "AAU-002",
+      "feature": "agent-abilities-upgrade",
+      "title": "Add enable/pause toggle to AbilityCard with visual states",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AAU-003"],
+      "parallelWith": ["AAU-001"],
+      "acceptance": [
+        "Switch component in top-right of each AbilityCard",
+        "Enabled: green switch, normal card appearance",
+        "Paused: amber switch, dimmed card with 'Paused' badge, muted opacity",
+        "Toggle state persisted to localStorage keyed by ability id",
+        "Paused abilities cannot be run (Run button disabled)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/agent/AbilityCard.tsx"
+      ],
+      "activeForm": "Adding enable/pause toggles to ability cards"
+    },
+    {
+      "id": "AAU-003",
+      "feature": "agent-abilities-upgrade",
+      "title": "Wire channel + toggle state into AbilityRunPanel execution",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["AAU-001", "AAU-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AAU-004"],
+      "acceptance": [
+        "AbilityRunPanel receives selected channels from card state",
+        "Run panel shows which channels will receive output",
+        "Orchestrator-backed abilities pass channel config to trigger payload",
+        "V1-simulate abilities use channel toggles for delivery target",
+        "Disabled abilities show 'Enable this ability to run' message"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/agent/AbilityRunPanel.tsx"
+      ],
+      "activeForm": "Wiring channel and toggle state into run panel"
+    },
+    {
+      "id": "AAU-004",
+      "feature": "agent-abilities-upgrade",
+      "title": "Build Execution History panel with sequence_jobs query",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AAU-007"],
+      "parallelWith": ["AAU-001", "AAU-002"],
+      "acceptance": [
+        "New ExecutionHistoryPanel component on the page (tabbed or collapsible section)",
+        "Queries sequence_jobs table ordered by created_at DESC, limit 50",
+        "Columns: event type, status badge, steps completed, duration, timestamp",
+        "Filterable by event type and status (success/failed/running)",
+        "Expandable rows showing step-by-step results with individual timing",
+        "Auto-refresh every 15s for running jobs"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/platform/AgentAbilitiesPage.tsx",
+        "src/components/agent/ExecutionHistoryPanel.tsx"
+      ],
+      "activeForm": "Building execution history panel"
+    },
+    {
+      "id": "AAU-005",
+      "feature": "agent-abilities-upgrade",
+      "title": "Build Wave Visualizer for dependency chains",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AAU-007"],
+      "parallelWith": ["AAU-001", "AAU-002", "AAU-004"],
+      "acceptance": [
+        "New WaveVisualizer component shows steps in horizontal swim-lanes by wave",
+        "Parallel steps rendered vertically within the same wave column",
+        "Connecting lines show dependencies between waves",
+        "Color-coded step nodes: pending (gray), running (blue pulse), complete (green), failed (red), skipped (strikethrough)",
+        "Call-type gating shown as conditional branch indicator (sales-only badge)",
+        "Renders for all 8 event sequences from eventSequences data"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/agent/WaveVisualizer.tsx"
+      ],
+      "activeForm": "Building dependency wave visualizer"
+    },
+    {
+      "id": "AAU-006",
+      "feature": "agent-abilities-upgrade",
+      "title": "Build HITL Approval Queue with approve/reject actions",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AAU-007"],
+      "parallelWith": ["AAU-004", "AAU-005"],
+      "acceptance": [
+        "New ApprovalQueue component showing pending HITL items",
+        "Queries sequence_jobs where status = 'awaiting_approval'",
+        "Each item shows: ability name, trigger context, preview of pending action, timestamp",
+        "Approve/Reject buttons with confirmation dialog",
+        "History tab showing past approvals with timestamp and outcome",
+        "Empty state when no pending approvals"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/ApprovalQueue.tsx"
+      ],
+      "activeForm": "Building HITL approval queue"
+    },
+    {
+      "id": "AAU-007",
+      "feature": "agent-abilities-upgrade",
+      "title": "Wire all new components into page layout + verify build",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["AAU-003", "AAU-004", "AAU-005", "AAU-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Page has tabbed layout: Abilities | History | Waves | Approvals",
+        "Or: History, Waves, Approvals as sections below the ability grid",
+        "Wave visualizer appears when an ability card is selected (shows its sequence)",
+        "Execution history shows runs for the selected ability or all",
+        "Build succeeds with zero errors",
+        "All new components render correctly with empty/loading states"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/AgentAbilitiesPage.tsx"
+      ],
+      "activeForm": "Wiring components into page layout and verifying build"
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 7,
+    "currentFeature": "agent-abilities-upgrade",
+    "estimatedTotal": "~150 minutes (~2.5 hours)",
+    "parallelGroups": [
+      ["AAU-001", "AAU-002", "AAU-004", "AAU-005", "AAU-006"]
+    ],
+    "criticalPath": "AAU-001 + AAU-002 → AAU-003 → AAU-007",
+    "notes": "AAU-004, AAU-005, AAU-006 are independent of each other and of AAU-001/002 — maximum parallelism possible. Wave visualizer (AAU-005) is the largest story at 30min."
+  }
+}

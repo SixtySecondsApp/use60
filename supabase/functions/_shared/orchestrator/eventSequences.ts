@@ -100,8 +100,8 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
    * Pre-Meeting Briefing
    * Triggered 90 minutes before a meeting (cron:morning)
    *
-   * Wave 1: enrich-attendees + pull-crm-history (parallel)
-   * Wave 2: research-company-news (needs company from Wave 1)
+   * Wave 1: enrich-attendees (resolve contacts, company, deal)
+   * Wave 2: pull-crm-history + research-company-news (parallel, both use enrich output)
    * Wave 3: generate-briefing (AI synthesis from all upstream)
    * Wave 4: deliver-slack-briefing (Slack Block Kit delivery)
    */
@@ -121,7 +121,7 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
-      depends_on: [],
+      depends_on: ['enrich-attendees'],
     },
     // Wave 2: Company research (needs company from enrich-attendees)
     {
@@ -241,6 +241,10 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
   /**
    * Stale Deal Re-engagement
    * Triggered by cron or manual nudge
+   *
+   * Wave 1: research-trigger-events (starts immediately)
+   * Wave 2: analyse-stall-reason (needs research output)
+   * Wave 3: draft-reengagement (needs scored opportunities)
    */
   stale_deal_revival: [
     {
@@ -249,6 +253,7 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
+      depends_on: [],  // Wave 1: starts immediately
     },
     {
       skill: 'analyse-stall-reason',
@@ -256,6 +261,7 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: false,
       criticality: 'critical',
       available: true,
+      depends_on: ['research-trigger-events'],  // Wave 2: needs research output
     },
     {
       skill: 'draft-reengagement',
@@ -263,6 +269,7 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: true,
       criticality: 'critical',
       available: true,
+      depends_on: ['analyse-stall-reason'],  // Wave 3: needs scored opportunities
     },
   ],
 
@@ -333,6 +340,54 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: false,
       criticality: 'critical',
       available: true,
+    },
+  ],
+
+  /**
+   * Deal Risk Scan
+   * Triggered by cron:daily
+   *
+   * Wave 1: scan-active-deals (identify at-risk deals)
+   * Wave 2: score-deal-risks (calculate risk scores)
+   * Wave 3: generate-risk-alerts (create actionable alerts)
+   * Wave 4: deliver-risk-slack (Slack delivery)
+   */
+  deal_risk_scan: [
+    // Wave 1: Scan active deals for risk indicators
+    {
+      skill: 'scan-active-deals',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    // Wave 2: Score deal risks based on scan results
+    {
+      skill: 'score-deal-risks',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['scan-active-deals'],
+    },
+    // Wave 3: Generate risk alerts
+    {
+      skill: 'generate-risk-alerts',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['score-deal-risks'],
+    },
+    // Wave 4: Deliver to Slack
+    {
+      skill: 'deliver-risk-slack',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['generate-risk-alerts'],
     },
   ],
 };

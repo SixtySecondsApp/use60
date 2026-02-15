@@ -1,0 +1,81 @@
+{
+  "feature": "slack-debrief-fixes",
+  "name": "Fix Slack Meeting Debrief Bugs",
+  "status": "pending",
+  "createdAt": "2026-02-14T21:30:00Z",
+  "description": "Three bugs in the Slack meeting debrief: sentiment score shows 0.71% instead of 71%, summary markdown **bold** renders literally, and task Add buttons fail on non-existent org_id column.",
+
+  "stories": [
+    {
+      "id": "SDF-001",
+      "title": "Fix sentiment score normalization (0-1 → 0-100)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 5,
+      "dependencies": { "stories": [] },
+      "blocks": ["SDF-003"],
+      "parallelWith": ["SDF-002"],
+      "acceptance": [
+        "Coaching overall_score of 0.71 displays as 'Positive (71%)' not 'Challenging (0.71%)'",
+        "Score of 0 is handled (not skipped by falsy check)",
+        "Scores already in 0-100 range pass through unchanged"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/notifySlackSummary.ts"
+      ]
+    },
+    {
+      "id": "SDF-002",
+      "title": "Fix markdown bold rendering in Slack summary",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 5,
+      "dependencies": { "stories": [] },
+      "blocks": ["SDF-003"],
+      "parallelWith": ["SDF-001"],
+      "acceptance": [
+        "Markdown **bold** converts to Slack mrkdwn *bold*",
+        "Summary text no longer shows literal ** markers"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/notifySlackSummary.ts"
+      ]
+    },
+    {
+      "id": "SDF-003",
+      "title": "Fix task creation column names in Slack interactive handler",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "estimatedMinutes": 10,
+      "dependencies": { "stories": ["SDF-001", "SDF-002"] },
+      "blocks": [],
+      "acceptance": [
+        "Single 'Add' task button creates task without error",
+        "'Add All Tasks' bulk button creates all tasks without error",
+        "Tasks appear in the app with correct assignee and org"
+      ],
+      "files": [
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    }
+  ],
+
+  "deployment": {
+    "target": "staging",
+    "projectRef": "caerqjzvuerejfrdtygb",
+    "functions": [
+      { "name": "agent-orchestrator", "flags": "--no-verify-jwt", "reason": "Bundles notifySlackSummary.ts fixes" },
+      { "name": "slack-interactive", "flags": "--no-verify-jwt", "reason": "Task creation column fixes" }
+    ]
+  },
+
+  "execution": {
+    "totalStories": 3,
+    "completedStories": 0,
+    "estimatedMinutes": 20,
+    "lastUpdated": "2026-02-14T21:30:00Z"
+  }
+}

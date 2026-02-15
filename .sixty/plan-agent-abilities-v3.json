@@ -1,0 +1,817 @@
+{
+  "feature": "agent-abilities-v3",
+  "name": "Agent Abilities V3 — Auto CRM Update + Deal Risk Scorer + Re-engagement Trigger",
+  "description": "Implement the 3 core agent abilities from product briefs: (1) Auto CRM Update after every meeting, (2) Deal Risk Scorer with behavioural signals, (3) Re-engagement Trigger for closed-lost deals. Builds on existing orchestrator, adapter registry, and Slack Block Kit infrastructure.",
+  "createdAt": "2026-02-14T23:00:00Z",
+  "consultReport": ".sixty/consult/agent-abilities-v3.md",
+  "status": "pending",
+  "targetPage": "http://localhost:5175/platform/agent-abilities",
+  "features": [
+    {
+      "id": "crm-update",
+      "name": "Auto CRM Update",
+      "priority": 1,
+      "status": "pending",
+      "rationale": "Table stakes for a post-call copilot. Immediate daily value. Stub already exists in meeting_ended sequence."
+    },
+    {
+      "id": "deal-risk",
+      "name": "Deal Risk Scorer",
+      "priority": 2,
+      "status": "pending",
+      "rationale": "Builds on CRM data accuracy from Feature 1. New event type + sequence. Differentiates from basic transcription tools."
+    },
+    {
+      "id": "reengagement",
+      "name": "Re-engagement Trigger",
+      "priority": 3,
+      "status": "pending",
+      "rationale": "Highest revenue impact. Stub adapters exist in stale_deal_revival. Requires external signal research."
+    }
+  ],
+  "stories": [
+    {
+      "id": "CRM-001",
+      "feature": "crm-update",
+      "title": "Create crm_field_updates table for change tracking and undo",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "estimatedMinutes": 15,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "deals"
+        ]
+      },
+      "blocks": [
+        "CRM-003",
+        "CRM-005"
+      ],
+      "parallelWith": [
+        "CRM-002"
+      ],
+      "acceptance": [
+        "crm_field_updates table: id, org_id, deal_id, user_id, field_name, old_value (jsonb), new_value (jsonb), confidence, reasoning, source_job_id, undone_at, created_at",
+        "RLS policy: users see own org's updates only",
+        "Index on (deal_id, created_at DESC) for quick lookups",
+        "Migration runs without errors on dev environment"
+      ],
+      "files": [
+        "supabase/migrations/20260215000001_add_crm_field_updates.sql"
+      ],
+      "completedAt": "2026-02-14T22:46:02.317Z"
+    },
+    {
+      "id": "CRM-002",
+      "feature": "crm-update",
+      "title": "Build AI field extraction utility for transcript → deal field changes",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/orchestrator/types.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CRM-003"
+      ],
+      "parallelWith": [
+        "CRM-001"
+      ],
+      "acceptance": [
+        "extractDealFieldChanges(transcript, actionItems, intents, currentDeal) → { fields_changed[], no_change_reason? }",
+        "Each field_changed has: field_name, old_value, new_value, confidence ('high'|'medium'|'low'), reasoning",
+        "Fields extracted: stage, next_steps, close_date, deal_value, stakeholders_mentioned, blockers, summary",
+        "Uses Claude Haiku via existing Anthropic client pattern",
+        "Returns empty changeset with no_change_reason when nothing moved"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/crmFieldExtractor.ts"
+      ],
+      "completedAt": "2026-02-14T22:46:02.318Z"
+    },
+    {
+      "id": "CRM-003",
+      "feature": "crm-update",
+      "title": "Implement update-crm-from-meeting adapter (replace stub)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "CRM-001",
+          "CRM-002"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/adapters/index.ts"
+        ],
+        "schema": [
+          "crm_field_updates"
+        ]
+      },
+      "blocks": [
+        "CRM-006"
+      ],
+      "parallelWith": [
+        "CRM-004"
+      ],
+      "acceptance": [
+        "Replaces stub in ADAPTER_REGISTRY with real implementation",
+        "Reads transcript + action items + intents from upstream state.outputs",
+        "Calls extractDealFieldChanges() from CRM-002",
+        "Writes changes to deals table + records each change in crm_field_updates",
+        "Returns { fields_updated: number, changes: [...], deal_id } for downstream Slack notification"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/crmUpdate.ts",
+        "supabase/functions/_shared/orchestrator/adapters/index.ts"
+      ],
+      "completedAt": "2026-02-14T22:46:02.318Z"
+    },
+    {
+      "id": "CRM-004",
+      "feature": "crm-update",
+      "title": "Build CRM update Slack Block Kit message builder",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/slackBlocks.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CRM-006"
+      ],
+      "parallelWith": [
+        "CRM-003"
+      ],
+      "acceptance": [
+        "buildCrmUpdateMessage() in slackBlocks.ts",
+        "Shows deal name, field changes with before→after values, confidence badges",
+        "Undo button per field change (action_id: 'undo_crm_update::{update_id}')",
+        "Reasoning text shown as context block per field",
+        "Truncates safely within Slack Block Kit limits"
+      ],
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts"
+      ],
+      "completedAt": "2026-02-14T22:46:02.318Z"
+    },
+    {
+      "id": "CRM-005",
+      "feature": "crm-update",
+      "title": "Add CRM undo handler to slack-interactive",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "estimatedMinutes": 20,
+      "dependencies": {
+        "stories": [
+          "CRM-001"
+        ],
+        "files": [
+          "supabase/functions/slack-interactive/index.ts"
+        ],
+        "schema": [
+          "crm_field_updates"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRM-006"
+      ],
+      "acceptance": [
+        "Handles action_id prefix 'undo_crm_update::' in slack-interactive",
+        "Reads original value from crm_field_updates, writes back to deals table",
+        "Sets undone_at timestamp on the update record",
+        "Updates Slack message with strikethrough on undone field + confirmation"
+      ],
+      "files": [
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "completedAt": "2026-02-14T22:50:06.004Z"
+    },
+    {
+      "id": "CRM-006",
+      "feature": "crm-update",
+      "title": "Integrate CRM update output into post-meeting Slack summary",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "estimatedMinutes": 20,
+      "dependencies": {
+        "stories": [
+          "CRM-003",
+          "CRM-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/adapters/notifySlackSummary.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "notifySlackSummary reads state.outputs['update-crm-from-meeting']",
+        "If fields were updated, appends CRM Update section to debrief message",
+        "Shows field count + high-confidence changes inline",
+        "Links to undo via 'View CRM Changes' button"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/notifySlackSummary.ts"
+      ],
+      "completedAt": "2026-02-14T22:50:06.005Z"
+    },
+    {
+      "id": "DRS-001",
+      "feature": "deal-risk",
+      "title": "Create deal_risk_scores table for persistent risk tracking",
+      "type": "schema",
+      "status": "complete",
+      "priority": 5,
+      "estimatedMinutes": 15,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "deals"
+        ]
+      },
+      "blocks": [
+        "DRS-004",
+        "DRS-005"
+      ],
+      "parallelWith": [
+        "DRS-002"
+      ],
+      "acceptance": [
+        "deal_risk_scores table: id, org_id, deal_id, score (0-100), signals (jsonb array), previous_score, scanned_at, alert_sent_at",
+        "RLS policy: users see own org's scores",
+        "Unique constraint on (deal_id) for upsert pattern",
+        "Index on (org_id, score DESC) for threshold queries"
+      ],
+      "files": [
+        "supabase/migrations/20260215000002_add_deal_risk_scores.sql"
+      ],
+      "completedAt": "2026-02-14T22:46:02.318Z"
+    },
+    {
+      "id": "DRS-002",
+      "feature": "deal-risk",
+      "title": "Add deal_risk_scan event type to orchestrator types + event sequences",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "estimatedMinutes": 20,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/orchestrator/types.ts",
+          "supabase/functions/_shared/orchestrator/eventSequences.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DRS-003",
+        "DRS-004",
+        "DRS-005",
+        "DRS-006"
+      ],
+      "parallelWith": [
+        "DRS-001"
+      ],
+      "acceptance": [
+        "'deal_risk_scan' added to EventType union in types.ts",
+        "'cron:daily' added to EventSource union",
+        "EVENT_SEQUENCES['deal_risk_scan'] defined with 4 steps: scan-active-deals → score-deal-risks + generate-risk-alerts (parallel) → deliver-risk-slack",
+        "SEQUENCE_STEPS updated in abilityRegistry.ts with new step order"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/types.ts",
+        "supabase/functions/_shared/orchestrator/eventSequences.ts",
+        "src/lib/agent/abilityRegistry.ts"
+      ],
+      "completedAt": "2026-02-14T22:50:06.005Z"
+    },
+    {
+      "id": "DRS-003",
+      "feature": "deal-risk",
+      "title": "Implement scan-active-deals adapter — pull deals with engagement signals",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "DRS-002"
+        ],
+        "files": [],
+        "schema": [
+          "deals"
+        ]
+      },
+      "blocks": [
+        "DRS-004"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Queries deals table for org: stage NOT in ('Closed Won', 'Closed Lost'), ordered by value DESC",
+        "For each deal (max 50): fetches last_activity_at, contact count, recent meeting count (30d), recent email count (30d)",
+        "Returns { deals: [...] } with engagement metrics per deal",
+        "Handles empty pipeline gracefully (returns deals: [])"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts",
+        "supabase/functions/_shared/orchestrator/adapters/index.ts"
+      ]
+    },
+    {
+      "id": "DRS-004",
+      "feature": "deal-risk",
+      "title": "Implement score-deal-risks adapter — AI risk analysis per deal",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "DRS-001",
+          "DRS-003"
+        ],
+        "files": [],
+        "schema": [
+          "deal_risk_scores"
+        ]
+      },
+      "blocks": [
+        "DRS-005"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "For each deal from scan output: calculates risk score (0-100) from weighted signals",
+        "7 signal types scored: engagement_drop (25), champion_quiet (20), timeline_slipping (15), single_threaded (15), competitor_mentioned (10), budget_objection (10), ghost_pattern (5)",
+        "Upserts scores into deal_risk_scores table with signal breakdown",
+        "Returns { scored_deals: [...], high_risk_count, medium_risk_count }"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts"
+      ]
+    },
+    {
+      "id": "DRS-005",
+      "feature": "deal-risk",
+      "title": "Implement generate-risk-alerts adapter — threshold detection + suggested actions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "DRS-001",
+          "DRS-004"
+        ],
+        "files": [],
+        "schema": [
+          "deal_risk_scores"
+        ]
+      },
+      "blocks": [
+        "DRS-006"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Filters scored deals: score >= 60 for immediate alerts, 40-59 for digest inclusion",
+        "Uses Claude Haiku to generate suggested rescue action per high-risk deal",
+        "Compares current score to previous_score for delta/trend",
+        "Returns { alerts: [...], digest_items: [...] } with suggested actions per deal"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts"
+      ]
+    },
+    {
+      "id": "DRS-006",
+      "feature": "deal-risk",
+      "title": "Implement deliver-risk-slack adapter + Slack Block Kit builder",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "DRS-005"
+        ],
+        "files": [
+          "supabase/functions/_shared/slackBlocks.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DRS-008"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "buildDealRiskAlertMessage() in slackBlocks.ts — shows risk score, delta, top signals, suggested action, View Deal button",
+        "Groups alerts: high-risk (individual messages), medium-risk (digest format)",
+        "deliver-risk-slack adapter calls send-slack-message with built blocks",
+        "Handles empty alerts gracefully (no message sent)"
+      ],
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts",
+        "supabase/functions/_shared/orchestrator/adapters/index.ts"
+      ]
+    },
+    {
+      "id": "DRS-007",
+      "feature": "deal-risk",
+      "title": "Register deal-risk-scorer ability + add demo scenario",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "estimatedMinutes": 20,
+      "dependencies": {
+        "stories": [
+          "DRS-006"
+        ],
+        "files": [
+          "src/lib/agent/abilityRegistry.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New ability 'deal-risk-scorer' added to ABILITY_REGISTRY in pipeline stage",
+        "SKILL_DISPLAY_NAMES updated for all 4 deal risk steps",
+        "SEQUENCE_STEPS['deal_risk_scan'] entry added",
+        "Ability card appears on Agent Abilities page under Pipeline stage"
+      ],
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "RET-001",
+      "feature": "reengagement",
+      "title": "Create reengagement_watchlist table for closed-lost tracking",
+      "type": "schema",
+      "status": "complete",
+      "priority": 11,
+      "estimatedMinutes": 15,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "deals",
+          "contacts"
+        ]
+      },
+      "blocks": [
+        "RET-002",
+        "RET-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "reengagement_watchlist table: id, org_id, deal_id, contact_ids (text[]), loss_reason, close_date, next_check_date, status ('active'|'snoozed'|'removed'|'converted'), last_signal_at, created_at",
+        "RLS policy: org-scoped access",
+        "Index on (org_id, status, next_check_date) for daily scan queries",
+        "Trigger or function to auto-populate from deals going closed-lost (last 12 months)"
+      ],
+      "files": [
+        "supabase/migrations/20260215000003_add_reengagement_watchlist.sql"
+      ],
+      "completedAt": "2026-02-14T22:46:02.318Z"
+    },
+    {
+      "id": "RET-002",
+      "feature": "reengagement",
+      "title": "Implement research-trigger-events adapter (replace stub)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "RET-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/adapters/index.ts"
+        ],
+        "schema": [
+          "reengagement_watchlist"
+        ]
+      },
+      "blocks": [
+        "RET-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Replaces stub adapter with real implementation",
+        "For each watchlist item where next_check_date <= today: runs 3 parallel Gemini grounded searches (company news, champion job changes, competitor churn signals)",
+        "Caches results in companies.enrichment_data to avoid redundant API calls",
+        "Returns { watchlist_items: [...], signals_found: number } with signal details per item"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/reengagement.ts",
+        "supabase/functions/_shared/orchestrator/adapters/index.ts"
+      ],
+      "completedAt": "2026-02-14T22:50:06.005Z"
+    },
+    {
+      "id": "RET-003",
+      "feature": "reengagement",
+      "title": "Implement analyse-stall-reason adapter (replace stub)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 13,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "RET-001",
+          "RET-002"
+        ],
+        "files": [],
+        "schema": [
+          "reengagement_watchlist"
+        ]
+      },
+      "blocks": [
+        "RET-004"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Classifies loss reason: budget, timing, champion_left, competitor_won, bad_fit, went_dark",
+        "Assesses re-engagement opportunity: signal strength + time since close + relationship health",
+        "Scores each opportunity 0-100 for prioritization",
+        "Returns { scored_opportunities: [...] } sorted by score DESC"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/reengagement.ts"
+      ]
+    },
+    {
+      "id": "RET-004",
+      "feature": "reengagement",
+      "title": "Implement draft-reengagement adapter with HITL approval (replace stub)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 14,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "RET-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RET-005"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "For top-scored opportunities: drafts personalized re-engagement email using org tone_of_voice",
+        "Email includes: signal context, relationship history, specific hook, clear CTA",
+        "Returns pending_approval with Slack HITL: [Send] [Edit] [Snooze 2 weeks] [Remove from watchlist]",
+        "Snooze updates next_check_date; Remove sets status='removed'"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/reengagement.ts"
+      ]
+    },
+    {
+      "id": "RET-005",
+      "feature": "reengagement",
+      "title": "Build re-engagement Slack Block Kit message + HITL buttons",
+      "type": "backend",
+      "status": "complete",
+      "priority": 15,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "RET-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/slackBlocks.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "RET-006"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "buildReengagementAlertMessage() in slackBlocks.ts",
+        "Shows: signal type + description, original deal context (company, value, close date, loss reason), relationship history summary, draft email preview",
+        "HITL buttons: Send, Edit, Snooze 2 Weeks, Remove from Watchlist",
+        "Handles HITL button actions in slack-interactive (send → email, snooze → update watchlist, remove → update watchlist)"
+      ],
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    {
+      "id": "RET-006",
+      "feature": "reengagement",
+      "title": "Update stale_deal_revival sequence with depends_on + register adapters",
+      "type": "backend",
+      "status": "complete",
+      "priority": 16,
+      "estimatedMinutes": 15,
+      "dependencies": {
+        "stories": [
+          "RET-005"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/eventSequences.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "RET-007"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "stale_deal_revival steps updated with depends_on declarations for parallel Wave 1 (research + analyse)",
+        "All 3 adapters registered in ADAPTER_REGISTRY (replacing stubs)",
+        "SKILL_DISPLAY_NAMES updated for re-engagement steps",
+        "Existing stale-deal-revival ability in registry updated: status → 'active', description enhanced"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/eventSequences.ts",
+        "supabase/functions/_shared/orchestrator/adapters/index.ts",
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "RET-007",
+      "feature": "reengagement",
+      "title": "Add re-engagement demo scenario to ProactiveAgentV2Demo",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 17,
+      "estimatedMinutes": 20,
+      "dependencies": {
+        "stories": [
+          "RET-006"
+        ],
+        "files": [
+          "src/pages/platform/ProactiveAgentV2Demo.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New 'reengagement' scenario added to DEMO_SCENARIOS in V2 demo",
+        "Simulated steps: research-trigger-events → analyse-stall-reason → draft-reengagement",
+        "Demo Slack blocks show: signal alert, deal context, draft email, HITL buttons",
+        "Scenario selectable from dropdown on demo page"
+      ],
+      "files": [
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 19,
+    "completedStories": 19,
+    "estimatedTotalMinutes": 420,
+    "implementationOrder": [
+      "CRM-001",
+      "CRM-002",
+      "CRM-003",
+      "CRM-004",
+      "CRM-005",
+      "CRM-006",
+      "DRS-001",
+      "DRS-002",
+      "DRS-003",
+      "DRS-004",
+      "DRS-005",
+      "DRS-006",
+      "DRS-007",
+      "RET-001",
+      "RET-002",
+      "RET-003",
+      "RET-004",
+      "RET-005",
+      "RET-006",
+      "RET-007"
+    ],
+    "parallelGroups": [
+      [
+        "CRM-001",
+        "CRM-002"
+      ],
+      [
+        "CRM-003",
+        "CRM-004"
+      ],
+      [
+        "CRM-005",
+        "CRM-006"
+      ],
+      [
+        "DRS-001",
+        "DRS-002"
+      ],
+      [
+        "DRS-004",
+        "DRS-005"
+      ]
+    ],
+    "featureBreakdown": {
+      "crm-update": {
+        "stories": 6,
+        "estimatedMinutes": 135,
+        "storyIds": [
+          "CRM-001",
+          "CRM-002",
+          "CRM-003",
+          "CRM-004",
+          "CRM-005",
+          "CRM-006"
+        ]
+      },
+      "deal-risk": {
+        "stories": 7,
+        "estimatedMinutes": 160,
+        "storyIds": [
+          "DRS-001",
+          "DRS-002",
+          "DRS-003",
+          "DRS-004",
+          "DRS-005",
+          "DRS-006",
+          "DRS-007"
+        ]
+      },
+      "reengagement": {
+        "stories": 7,
+        "estimatedMinutes": 160,
+        "storyIds": [
+          "RET-001",
+          "RET-002",
+          "RET-003",
+          "RET-004",
+          "RET-005",
+          "RET-006",
+          "RET-007"
+        ]
+      }
+    }
+  },
+  "deployment": {
+    "target": "staging",
+    "projectRef": "caerqjzvuerejfrdtygb",
+    "migrations": [
+      "20260215000001_add_crm_field_updates.sql",
+      "20260215000002_add_deal_risk_scores.sql",
+      "20260215000003_add_reengagement_watchlist.sql"
+    ],
+    "functions": [
+      {
+        "name": "agent-orchestrator",
+        "flags": "--no-verify-jwt",
+        "reason": "Updated adapters for all 3 features"
+      },
+      {
+        "name": "slack-interactive",
+        "flags": "--no-verify-jwt",
+        "reason": "CRM undo + re-engagement HITL handlers"
+      },
+      {
+        "name": "send-slack-message",
+        "flags": "",
+        "reason": "New message types: crm_update, deal_risk_alert, reengagement_alert"
+      }
+    ]
+  },
+  "verification": [
+    "CRM Update: meeting_ended sequence completes with real field updates written to deals table",
+    "CRM Update: Slack debrief includes CRM changes section with undo buttons",
+    "CRM Update: Clicking undo reverts field and updates Slack message",
+    "CRM Update: No-change meetings produce no CRM spam",
+    "Deal Risk: deal_risk_scan sequence runs, scores deals, sends alerts for score >= 60",
+    "Deal Risk: Slack alert shows risk score, signals, suggested action, View Deal button",
+    "Deal Risk: New ability card visible on Agent Abilities page under Pipeline stage",
+    "Re-engagement: stale_deal_revival sequence runs with real signal research",
+    "Re-engagement: Slack HITL shows draft email with Send/Edit/Snooze/Remove buttons",
+    "Re-engagement: Snooze button updates next_check_date, Remove updates status",
+    "Re-engagement: Demo scenario works in ProactiveAgentV2Demo simulate mode",
+    "All 3 features: No regressions in existing meeting_ended or pre_meeting_90min sequences"
+  ]
+}

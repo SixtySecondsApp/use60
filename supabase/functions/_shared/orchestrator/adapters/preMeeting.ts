@@ -59,9 +59,32 @@ export const enrichAttendeesAdapter: SkillAdapter = {
           .maybeSingle();
 
         if (!contact) {
+          // Try to resolve company from email domain for unknown contacts
+          let unknownCompany: string | undefined;
+          const emailDomain = att.email?.split('@')[1]?.toLowerCase();
+          if (emailDomain && !['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'live.com', 'me.com', 'protonmail.com', 'proton.me'].includes(emailDomain)) {
+            const { data: domainCompany } = await supabase
+              .from('companies')
+              .select('id, name, domain, industry, size, website')
+              .eq('domain', emailDomain)
+              .limit(1)
+              .maybeSingle();
+
+            if (domainCompany) {
+              unknownCompany = domainCompany.name;
+              if (!primaryCompany) primaryCompany = domainCompany;
+            } else {
+              unknownCompany = emailDomain.split('.')[0].charAt(0).toUpperCase() + emailDomain.split('.')[0].slice(1);
+              if (!primaryCompany) {
+                primaryCompany = { name: unknownCompany, domain: emailDomain };
+              }
+            }
+          }
+
           enrichedAttendees.push({
             name: att.name,
             email: att.email,
+            company: unknownCompany,
             is_known_contact: false,
           });
           continue;
@@ -99,6 +122,54 @@ export const enrichAttendeesAdapter: SkillAdapter = {
 
           if (companyData) {
             company = companyData;
+          }
+        }
+
+        // Validate company name isn't just the person's name (bad data)
+        if (company && company.name) {
+          const companyLower = company.name.toLowerCase().trim();
+          const personLower = contactName.toLowerCase().trim();
+          if (companyLower === personLower || companyLower === att.name.toLowerCase().trim()) {
+            console.log(`[enrich-attendees] Company name "${company.name}" matches person name`);
+            // If the company record has a domain, use domain-derived name
+            if (company.domain) {
+              const domainName = company.domain.split('.')[0];
+              company = { ...company, name: domainName.charAt(0).toUpperCase() + domainName.slice(1) };
+              console.log(`[enrich-attendees] Using domain-derived name: ${company.name} (${company.domain})`);
+            } else {
+              company = null;
+            }
+          }
+        }
+
+        // Fallback: extract domain from email when no company at all
+        if (!company && contact.email) {
+          const emailDomain = contact.email.split('@')[1]?.toLowerCase();
+          if (emailDomain && !['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'live.com', 'me.com', 'protonmail.com', 'proton.me'].includes(emailDomain)) {
+            console.log(`[enrich-attendees] No company found, trying domain: ${emailDomain}`);
+            const { data: domainCompany } = await supabase
+              .from('companies')
+              .select('id, name, domain, industry, size, website')
+              .eq('domain', emailDomain)
+              .limit(1)
+              .maybeSingle();
+
+            if (domainCompany) {
+              // Also validate this result isn't the person's name
+              const dcLower = domainCompany.name?.toLowerCase().trim();
+              if (dcLower === contactName.toLowerCase().trim() || dcLower === att.name.toLowerCase().trim()) {
+                const dn = emailDomain.split('.')[0];
+                company = { ...domainCompany, name: dn.charAt(0).toUpperCase() + dn.slice(1) };
+              } else {
+                company = domainCompany;
+              }
+              console.log(`[enrich-attendees] Found company by domain: ${company.name}`);
+            } else {
+              // No company in DB — create a lightweight object from the domain
+              const dn = emailDomain.split('.')[0];
+              company = { name: dn.charAt(0).toUpperCase() + dn.slice(1), domain: emailDomain };
+              console.log(`[enrich-attendees] Using domain-derived company: ${company.name} (${emailDomain})`);
+            }
           }
         }
 
@@ -217,7 +288,6 @@ export const pullCrmHistoryAdapter: SkillAdapter = {
     try {
       console.log('[pull-crm-history] Starting CRM history pull...');
       const supabase = getServiceClient();
-      const contactData = state.context.tier2?.contact;
       const meetingId = state.event.payload.meeting_id as string;
 
       let enrichment: any = {
@@ -230,8 +300,29 @@ export const pullCrmHistoryAdapter: SkillAdapter = {
         meeting_count: 0,
       };
 
+      // Use contact from enrich-attendees output first, then fall back to tier2
+      const enrichAttendeesOutput = state.outputs['enrich-attendees'] as any;
+      let contactData = state.context.tier2?.contact;
+
+      // If enrich-attendees resolved a real contact, look it up by email
+      if (!contactData && enrichAttendeesOutput?.attendees?.length > 0) {
+        const knownAttendee = enrichAttendeesOutput.attendees.find((a: any) => a.is_known_contact);
+        if (knownAttendee?.email) {
+          console.log(`[pull-crm-history] Using contact from enrich-attendees: ${knownAttendee.email}`);
+          const { data: contact } = await supabase
+            .from('contacts')
+            .select('id, first_name, last_name, full_name, email, company, title, company_id')
+            .eq('email', knownAttendee.email.toLowerCase())
+            .maybeSingle();
+
+          if (contact) {
+            contactData = contact;
+          }
+        }
+      }
+
       if (!contactData) {
-        console.log('[pull-crm-history] No contact in tier2, returning empty history');
+        console.log('[pull-crm-history] No contact resolved, returning empty history');
         return { success: true, output: enrichment, duration_ms: Date.now() - start };
       }
 
@@ -252,7 +343,7 @@ export const pullCrmHistoryAdapter: SkillAdapter = {
         supabase,
         contactData,
         meetingId,
-        30 // 30 days lookback
+        180 // 180 days lookback — pull full history for briefings
       );
 
       // Get total meeting count
@@ -364,17 +455,217 @@ export const pullCrmHistoryAdapter: SkillAdapter = {
 };
 
 // =============================================================================
-// Adapter 3: Research Company News
+// Adapter 3: Research Company News — 5 Parallel Gemini Queries + AI Synthesis
 // =============================================================================
+
+/**
+ * Helper: Call Gemini 3 Flash with Google Search grounding directly.
+ * Runs inside the orchestrator edge function — no inter-function HTTP overhead.
+ */
+async function geminiSearchQuery(
+  apiKey: string,
+  query: string,
+  responseSchema?: Record<string, any>,
+  timeoutMs = 30_000
+): Promise<{ result: any; sources: Array<{ title?: string; uri?: string }>; duration_ms: number }> {
+  const startTime = performance.now();
+
+  let prompt = query;
+  if (responseSchema) {
+    prompt += `\n\nReturn JSON matching this schema:\n${JSON.stringify(responseSchema, null, 2)}\n\nReturn ONLY valid JSON, no markdown formatting.`;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 4096,
+            responseMimeType: responseSchema ? 'application/json' : undefined,
+          },
+          tools: [{ googleSearch: {} }],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const groundingMetadata = data.candidates?.[0]?.groundingMetadata;
+    const sources: Array<{ title?: string; uri?: string }> = [];
+
+    if (groundingMetadata?.groundingChunks) {
+      for (const chunk of groundingMetadata.groundingChunks) {
+        if (chunk.web) {
+          sources.push({ title: chunk.web.title, uri: chunk.web.uri });
+        }
+      }
+    }
+
+    let result: any;
+    if (responseSchema) {
+      try {
+        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
+        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : text;
+        result = JSON.parse(jsonStr);
+      } catch {
+        result = { raw_text: text };
+      }
+    } else {
+      result = text;
+    }
+
+    return { result, sources, duration_ms: Math.round(performance.now() - startTime) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Person-focused research queries (lead-research skill methodology) */
+const LEAD_RESEARCH_QUERIES = [
+  {
+    name: 'person_profile',
+    buildQuery: (personName: string, companyName?: string, email?: string) => {
+      const domain = email?.split('@')[1];
+      return (
+        `Research "${personName}"${companyName ? ` at "${companyName}"` : ''}${domain ? ` (${domain})` : ''}. ` +
+        `Find their LinkedIn profile, current job title, role seniority (C-level/VP/Director/Manager/IC), ` +
+        `approximate tenure in current role, career background (2-3 previous roles), ` +
+        `and any decision-making authority signals. Focus on professional background, not personal.`
+      );
+    },
+    schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        linkedin_url: { type: 'string' },
+        role_seniority: { type: 'string' },
+        tenure_current_role: { type: 'string' },
+        background: { type: 'string' },
+        previous_roles: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, company: { type: 'string' }, dates: { type: 'string' } } } },
+        decision_authority: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'person_activity',
+    buildQuery: (personName: string, companyName?: string) =>
+      `Find recent professional activity for "${personName}"${companyName ? ` at "${companyName}"` : ''}. ` +
+      `Look for LinkedIn posts, conference talks, podcast appearances, blog posts, published articles, ` +
+      `or industry commentary. What topics do they talk about or care about? ` +
+      `Also note any mutual connections, shared interests, or conversation starters.`,
+    schema: {
+      type: 'object',
+      properties: {
+        recent_activity: { type: 'array', items: { type: 'object', properties: { type: { type: 'string' }, title: { type: 'string' }, date: { type: 'string' }, url: { type: 'string' } } } },
+        content_topics: { type: 'array', items: { type: 'string' } },
+        connection_points: { type: 'array', items: { type: 'object', properties: { point: { type: 'string' }, tier: { type: 'string' }, suggested_use: { type: 'string' } } } },
+      },
+    },
+  },
+];
+
+/** Research query definitions for parallel execution */
+const RESEARCH_QUERIES = [
+  {
+    name: 'company_overview',
+    buildQuery: (domain: string, companyName?: string) =>
+      `Research the company at ${domain}${companyName ? ` (${companyName})` : ''}. ` +
+      `Provide a comprehensive company overview including what they do, their industry, approximate employee count, headquarters location, founding year, and website.`,
+    schema: {
+      type: 'object',
+      properties: {
+        description: { type: 'string' },
+        industry: { type: 'string' },
+        employee_count: { type: 'string' },
+        headquarters: { type: 'string' },
+        founded_year: { type: 'string' },
+        website: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'products_market',
+    buildQuery: (domain: string, companyName?: string) =>
+      `What products or services does the company at ${domain}${companyName ? ` (${companyName})` : ''} offer? ` +
+      `Who is their target market? What is their pricing model? How are they positioned in their market?`,
+    schema: {
+      type: 'object',
+      properties: {
+        products: { type: 'array', items: { type: 'string' } },
+        target_market: { type: 'string' },
+        pricing_model: { type: 'string' },
+        market_position: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'funding_growth',
+    buildQuery: (domain: string, companyName?: string) =>
+      `What is the funding history and growth trajectory of the company at ${domain}${companyName ? ` (${companyName})` : ''}? ` +
+      `Include funding rounds, total funding raised, key investors, any revenue signals, and growth indicators like hiring or expansion.`,
+    schema: {
+      type: 'object',
+      properties: {
+        funding_rounds: { type: 'array', items: { type: 'object', properties: { round: { type: 'string' }, amount: { type: 'string' }, date: { type: 'string' } } } },
+        total_funding: { type: 'string' },
+        investors: { type: 'array', items: { type: 'string' } },
+        revenue_signals: { type: 'string' },
+        growth_indicators: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  },
+  {
+    name: 'leadership_team',
+    buildQuery: (domain: string, companyName?: string) =>
+      `Who are the key leaders and executives at the company at ${domain}${companyName ? ` (${companyName})` : ''}? ` +
+      `Include their names, titles, and relevant background. Also note any recent hiring signals or organizational changes.`,
+    schema: {
+      type: 'object',
+      properties: {
+        key_people: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, title: { type: 'string' }, background: { type: 'string' } } } },
+        org_structure_notes: { type: 'string' },
+        hiring_signals: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  },
+  {
+    name: 'competition_news',
+    buildQuery: (domain: string, companyName?: string) =>
+      `Who are the main competitors of the company at ${domain}${companyName ? ` (${companyName})` : ''}? ` +
+      `What recent news, partnerships, or press mentions are there about them? Include any awards or notable achievements.`,
+    schema: {
+      type: 'object',
+      properties: {
+        competitors: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' } } } },
+        recent_news: { type: 'array', items: { type: 'object', properties: { headline: { type: 'string' }, date: { type: 'string' }, summary: { type: 'string' } } } },
+        partnerships: { type: 'array', items: { type: 'string' } },
+        awards: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  },
+];
 
 export const researchCompanyNewsAdapter: SkillAdapter = {
   name: 'research-company-news',
   async execute(state: SequenceState, step: SequenceStep): Promise<StepResult> {
     const start = Date.now();
     try {
-      console.log('[research-company-news] Starting company research...');
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      console.log('[research-company-news] Starting parallel company research...');
+
+      const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 
       // Get company from enrich-attendees output
       const enrichAttendeesOutput = state.outputs['enrich-attendees'] as any;
@@ -389,103 +680,327 @@ export const researchCompanyNewsAdapter: SkillAdapter = {
         }
       }
 
+      const emptyProfile = {
+        description: null,
+        industry: company?.industry || null,
+        funding_status: null,
+        tech_stack: [],
+        competitors: [],
+        recent_news: [],
+        key_people: [],
+        products: [],
+        growth_indicators: [],
+        partnerships: [],
+      };
+
       if (!domain) {
         console.log('[research-company-news] No domain available, skipping enrichment');
         return {
           success: true,
-          output: {
-            enrichment: null,
-            company_profile: {
-              description: null,
-              industry: company?.industry,
-              funding_status: null,
-              tech_stack: [],
-              competitors: [],
-              recent_news: [],
-            },
-          },
+          output: { enrichment: null, company_profile: emptyProfile },
           duration_ms: Date.now() - start,
         };
       }
 
-      console.log(`[research-company-news] Enriching domain: ${domain}`);
+      if (!GEMINI_API_KEY) {
+        console.warn('[research-company-news] No GEMINI_API_KEY, skipping enrichment');
+        return {
+          success: true,
+          output: { enrichment: null, company_profile: emptyProfile },
+          duration_ms: Date.now() - start,
+        };
+      }
 
-      // Call deep-enrich-organization (non-fatal if it fails)
-      try {
-        const response = await fetch(`${supabaseUrl}/functions/v1/deep-enrich-organization`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${serviceKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'start',
-            website: domain,
-            org_id: state.event.org_id,
-          }),
-        });
+      // Get primary attendee name for person research
+      const primaryAttendee = enrichAttendeesOutput?.attendees?.find((a: any) => a.is_known_contact) ||
+        enrichAttendeesOutput?.attendees?.[0];
+      const personName = primaryAttendee?.name;
+      const personEmail = primaryAttendee?.email;
 
-        if (!response.ok) {
-          console.warn(
-            `[research-company-news] deep-enrich-organization returned ${response.status}, ` +
-            `continuing with partial data`
-          );
-          return {
-            success: true,
-            output: {
-              enrichment: null,
-              company_profile: {
-                description: null,
-                industry: company?.industry,
-                funding_status: null,
-                tech_stack: [],
-                competitors: [],
-                recent_news: [],
-              },
-            },
-            duration_ms: Date.now() - start,
-          };
+      const totalQueries = 5 + (personName ? LEAD_RESEARCH_QUERIES.length : 0);
+      console.log(`[research-company-news] Running ${totalQueries} parallel Gemini queries for: ${domain}${personName ? ` + ${personName}` : ''}`);
+
+      // Run company queries + person queries in parallel
+      const companyQueryPromises = RESEARCH_QUERIES.map(async (q) => {
+        const queryStart = Date.now();
+        console.log(`[research-company-news] Starting query: ${q.name}`);
+        const res = await geminiSearchQuery(GEMINI_API_KEY, q.buildQuery(domain!, company?.name), q.schema);
+        console.log(`[research-company-news] Query ${q.name} complete in ${Date.now() - queryStart}ms (${res.sources.length} sources)`);
+        return { name: q.name, ...res };
+      });
+
+      const personQueryPromises = personName
+        ? LEAD_RESEARCH_QUERIES.map(async (q) => {
+            const queryStart = Date.now();
+            console.log(`[research-company-news] Starting lead query: ${q.name}`);
+            const res = await geminiSearchQuery(
+              GEMINI_API_KEY,
+              q.buildQuery(personName, company?.name, personEmail),
+              q.schema
+            );
+            console.log(`[research-company-news] Lead query ${q.name} complete in ${Date.now() - queryStart}ms (${res.sources.length} sources)`);
+            return { name: q.name, ...res };
+          })
+        : [];
+
+      const queryResults = await Promise.allSettled([...companyQueryPromises, ...personQueryPromises]);
+
+      // Collect results (fault-tolerant — use partial data from successful queries)
+      const researchData: Record<string, any> = {};
+      const leadResearchData: Record<string, any> = {};
+      const allSources: Array<{ title?: string; uri?: string }> = [];
+      let successCount = 0;
+
+      const leadQueryNames = new Set(LEAD_RESEARCH_QUERIES.map(q => q.name));
+      for (const result of queryResults) {
+        if (result.status === 'fulfilled') {
+          if (leadQueryNames.has(result.value.name)) {
+            leadResearchData[result.value.name] = result.value.result;
+          } else {
+            researchData[result.value.name] = result.value.result;
+          }
+          allSources.push(...result.value.sources);
+          successCount++;
+        } else {
+          console.warn(`[research-company-news] Query failed:`, result.reason);
         }
+      }
 
-        const enrichmentData = await response.json();
+      console.log(`[research-company-news] ${successCount}/${totalQueries} queries succeeded, ${allSources.length} total sources`);
 
-        const companyProfile = {
-          description: enrichmentData.description || null,
-          industry: enrichmentData.industry || company?.industry || null,
-          funding_status: enrichmentData.funding_status || null,
-          tech_stack: enrichmentData.tech_stack || [],
-          competitors: enrichmentData.competitors || [],
-          recent_news: enrichmentData.recent_news || [],
-        };
+      // Synthesize with Claude Haiku if we have results
+      let companyProfile: any = emptyProfile;
+      const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
 
-        console.log('[research-company-news] Enrichment complete');
+      if (successCount > 0 && apiKey) {
+        try {
+          console.log('[research-company-news] Synthesizing with Claude Haiku...');
+          const synthesisPrompt = [
+            '# COMPANY RESEARCH SYNTHESIS',
+            '',
+            `Domain: ${domain}`,
+            company?.name ? `Known as: ${company.name}` : '',
+            '',
+            '## Raw Research Data',
+            '',
+            ...Object.entries(researchData).map(([name, data]) =>
+              `### ${name}\n${JSON.stringify(data, null, 2)}`
+            ),
+            '',
+            '---',
+            '',
+            'Synthesize the above research into a unified company profile JSON with these fields:',
+            '- description: 2-3 sentence company overview',
+            '- industry: primary industry',
+            '- employee_count: approximate headcount as string',
+            '- headquarters: location',
+            '- founded_year: year as string',
+            '- funding_status: summary of funding (e.g. "Series B, $50M raised")',
+            '- products: array of product/service names',
+            '- target_market: who they sell to',
+            '- key_people: array of {name, title, background} for top 5 leaders',
+            '- competitors: array of {name, description} for top 5 competitors',
+            '- recent_news: array of {headline, date, summary} for top 5 news items',
+            '- growth_indicators: array of growth signals',
+            '- tech_stack: array of known technologies',
+            '- partnerships: array of partner names',
+            '- hiring_signals: array of hiring-related signals',
+            '',
+            'Deduplicate and cross-reference data. Prefer specific facts over vague claims.',
+            'Return ONLY valid JSON.',
+          ].join('\n');
 
-        return {
-          success: true,
-          output: {
-            enrichment: enrichmentData,
-            company_profile: companyProfile,
-          },
-          duration_ms: Date.now() - start,
-        };
-      } catch (err) {
-        console.warn('[research-company-news] Enrichment failed (non-fatal):', err);
-        return {
-          success: true,
-          output: {
-            enrichment: null,
-            company_profile: {
-              description: null,
-              industry: company?.industry,
-              funding_status: null,
-              tech_stack: [],
-              competitors: [],
-              recent_news: [],
+          const synthesisResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
             },
-          },
-          duration_ms: Date.now() - start,
+            body: JSON.stringify({
+              model: 'claude-haiku-4-5-20251001',
+              max_tokens: 2048,
+              temperature: 0.2,
+              system: 'You are a company research analyst. Synthesize multiple research sources into a single structured company profile. Return ONLY valid JSON.',
+              messages: [{ role: 'user', content: synthesisPrompt }],
+            }),
+          });
+
+          if (synthesisResponse.ok) {
+            const synthesisResult = await synthesisResponse.json();
+            const textContent = synthesisResult.content?.[0]?.text;
+            if (textContent) {
+              const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                companyProfile = JSON.parse(jsonMatch[0]);
+                console.log('[research-company-news] Synthesis complete');
+              }
+            }
+          } else {
+            console.warn(`[research-company-news] Synthesis API returned ${synthesisResponse.status}`);
+          }
+        } catch (err) {
+          console.warn('[research-company-news] Synthesis failed, using raw data:', err);
+        }
+      }
+
+      // Fallback: if synthesis failed, build profile from raw query results
+      if (companyProfile === emptyProfile && successCount > 0) {
+        const overview = researchData.company_overview || {};
+        const products = researchData.products_market || {};
+        const funding = researchData.funding_growth || {};
+        const leadership = researchData.leadership_team || {};
+        const competition = researchData.competition_news || {};
+
+        companyProfile = {
+          description: overview.description || null,
+          industry: overview.industry || company?.industry || null,
+          employee_count: overview.employee_count || null,
+          headquarters: overview.headquarters || null,
+          founded_year: overview.founded_year || null,
+          funding_status: funding.total_funding || null,
+          products: products.products || [],
+          target_market: products.target_market || null,
+          key_people: leadership.key_people || [],
+          competitors: competition.competitors || [],
+          recent_news: competition.recent_news || [],
+          growth_indicators: funding.growth_indicators || [],
+          tech_stack: [],
+          partnerships: competition.partnerships || [],
+          hiring_signals: leadership.hiring_signals || [],
         };
       }
+
+      // Synthesize lead profile from person research
+      let leadProfile: any = null;
+      if (Object.keys(leadResearchData).length > 0 && apiKey) {
+        try {
+          console.log('[research-company-news] Synthesizing lead profile with Claude Haiku...');
+          const leadSynthesisPrompt = [
+            '# LEAD RESEARCH SYNTHESIS',
+            '',
+            `Person: ${personName}`,
+            personEmail ? `Email: ${personEmail}` : '',
+            company?.name ? `Company: ${company.name}` : '',
+            '',
+            '## Raw Person Research',
+            '',
+            ...Object.entries(leadResearchData).map(([name, data]) =>
+              `### ${name}\n${JSON.stringify(data, null, 2)}`
+            ),
+            '',
+            '---',
+            '',
+            'Synthesize the above into a lead profile JSON with these fields:',
+            '- name: full name',
+            '- title: current job title',
+            '- linkedin_url: LinkedIn profile URL if found',
+            '- role_seniority: C-level/VP/Director/Manager/IC',
+            '- tenure_current_role: how long in current role',
+            '- background: 2-3 sentence career arc',
+            '- previous_roles: array of {title, company, dates} for last 2-3 roles',
+            '- decision_authority: inferred from title + company size (e.g. "Final decision maker", "Key influencer", "Champion/evaluator")',
+            '- recent_activity: array of {type, title, date} for recent posts/talks/articles',
+            '- content_topics: array of topics they care about',
+            '- connection_points: array of {point, tier, suggested_use} ranked by effectiveness:',
+            '  - tier 1: Direct relevance (shared experience, referenced their content)',
+            '  - tier 2: Contextual (industry trend, company event)',
+            '  - tier 3: Light personalization (alma mater, geography)',
+            '',
+            'If data is missing for a field, omit it or set to null. Return ONLY valid JSON.',
+          ].join('\n');
+
+          const leadResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: 'claude-haiku-4-5-20251001',
+              max_tokens: 1024,
+              temperature: 0.2,
+              system: 'You are a sales intelligence analyst. Synthesize person research into a structured lead profile for pre-meeting preparation. Return ONLY valid JSON.',
+              messages: [{ role: 'user', content: leadSynthesisPrompt }],
+            }),
+          });
+
+          if (leadResponse.ok) {
+            const leadResult = await leadResponse.json();
+            const textContent = leadResult.content?.[0]?.text;
+            if (textContent) {
+              const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                leadProfile = JSON.parse(jsonMatch[0]);
+                console.log('[research-company-news] Lead profile synthesis complete');
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[research-company-news] Lead profile synthesis failed:', err);
+        }
+      }
+
+      // Build full enrichment payload (raw data + synthesized profile + sources)
+      const enrichment = {
+        raw_queries: { ...researchData, ...leadResearchData },
+        sources: allSources,
+        queries_succeeded: successCount,
+        queries_total: totalQueries,
+        researched_at: new Date().toISOString(),
+      };
+
+      // Save enrichment data to companies table if we have a company ID
+      if (company?.id && successCount > 0) {
+        try {
+          console.log(`[research-company-news] Saving enrichment to companies.${company.id}`);
+          const supabase = getServiceClient();
+
+          const updateFields: Record<string, any> = {
+            enrichment_data: { ...companyProfile, _meta: { sources: allSources.length, queries: successCount, researched_at: new Date().toISOString() } },
+            enriched_at: new Date().toISOString(),
+          };
+
+          // Backfill empty flat fields from enrichment
+          if (!company.description && companyProfile.description) {
+            updateFields.description = companyProfile.description.slice(0, 1000);
+          }
+          if (!company.industry && companyProfile.industry) {
+            updateFields.industry = companyProfile.industry;
+          }
+
+          const { error: updateError } = await supabase
+            .from('companies')
+            .update(updateFields)
+            .eq('id', company.id);
+
+          if (updateError) {
+            console.warn('[research-company-news] Failed to save enrichment to companies:', updateError.message);
+          } else {
+            console.log('[research-company-news] Enrichment saved to companies table');
+          }
+        } catch (saveErr) {
+          console.warn('[research-company-news] Non-fatal: failed to save enrichment:', saveErr);
+        }
+      }
+
+      console.log(
+        `[research-company-news] Complete: ${successCount}/${totalQueries} queries, ` +
+        `${allSources.length} sources, profile keys=${Object.keys(companyProfile).length}` +
+        (leadProfile ? `, lead_profile=yes` : '')
+      );
+
+      return {
+        success: true,
+        output: {
+          enrichment,
+          company_profile: companyProfile,
+          lead_profile: leadProfile,
+          company_id: company?.id,
+        },
+        duration_ms: Date.now() - start,
+      };
     } catch (err) {
       console.error('[research-company-news] Error:', err);
       return { success: false, error: String(err), duration_ms: Date.now() - start };
@@ -585,6 +1100,41 @@ export const generateBriefingAdapter: SkillAdapter = {
         promptSections.push('');
       }
 
+      // Lead profile (person-level intel from research)
+      const leadProfile = companyNewsOutput?.lead_profile;
+      if (leadProfile) {
+        promptSections.push('## Key Attendee Deep Profile');
+        if (leadProfile.name) promptSections.push(`Name: ${leadProfile.name}`);
+        if (leadProfile.title) promptSections.push(`Title: ${leadProfile.title}`);
+        if (leadProfile.role_seniority) promptSections.push(`Seniority: ${leadProfile.role_seniority}`);
+        if (leadProfile.tenure_current_role) promptSections.push(`Tenure: ${leadProfile.tenure_current_role}`);
+        if (leadProfile.decision_authority) promptSections.push(`Decision Authority: ${leadProfile.decision_authority}`);
+        if (leadProfile.background) promptSections.push(`Background: ${leadProfile.background}`);
+        if (leadProfile.linkedin_url) promptSections.push(`LinkedIn: ${leadProfile.linkedin_url}`);
+        if (leadProfile.previous_roles?.length > 0) {
+          promptSections.push('Previous Roles:');
+          for (const role of leadProfile.previous_roles.slice(0, 3)) {
+            promptSections.push(`- ${role.title} at ${role.company}${role.dates ? ` (${role.dates})` : ''}`);
+          }
+        }
+        if (leadProfile.content_topics?.length > 0) {
+          promptSections.push(`Topics They Care About: ${leadProfile.content_topics.join(', ')}`);
+        }
+        if (leadProfile.recent_activity?.length > 0) {
+          promptSections.push('Recent Professional Activity:');
+          for (const activity of leadProfile.recent_activity.slice(0, 3)) {
+            promptSections.push(`- [${activity.type}] ${activity.title}${activity.date ? ` (${activity.date})` : ''}`);
+          }
+        }
+        if (leadProfile.connection_points?.length > 0) {
+          promptSections.push('Connection Points (conversation starters):');
+          for (const cp of leadProfile.connection_points.slice(0, 5)) {
+            promptSections.push(`- [Tier ${cp.tier}] ${cp.point} → ${cp.suggested_use || 'Use as icebreaker'}`);
+          }
+        }
+        promptSections.push('');
+      }
+
       // Deal context
       if (enrichAttendeesOutput?.deal) {
         promptSections.push('## Active Deal');
@@ -666,6 +1216,11 @@ export const generateBriefingAdapter: SkillAdapter = {
       promptSections.push('- action_item_followups: array of action items to reference');
       promptSections.push('- company_snapshot: 2-3 sentence company overview');
       promptSections.push('- attendee_notes: key points about attendees');
+      if (leadProfile) {
+        promptSections.push('- attendee_deep_profile: object with {name, title, seniority, decision_authority, background, linkedin_url}');
+        promptSections.push('- connection_points: array of {point, tier, suggested_opener} — the best conversation starters ranked by tier (1=direct relevance, 2=contextual, 3=light personalization)');
+        promptSections.push('- personalization_hooks: array of 2-3 specific things to reference that show you did your homework (their content, recent activity, career moves)');
+      }
       promptSections.push('');
       promptSections.push('Return ONLY valid JSON. No markdown, no explanations.');
 
@@ -751,6 +1306,7 @@ function generateFallbackBriefing(
   const classification = attendeesOutput?.classification || {};
   const company = attendeesOutput?.company;
   const deal = attendeesOutput?.deal;
+  const leadProfile = newsOutput?.lead_profile;
 
   const talkingPoints: string[] = [];
   if (crmOutput?.open_action_items?.length > 0) {
@@ -776,7 +1332,7 @@ function generateFallbackBriefing(
     questions.push('Are there any concerns we should address?');
   }
 
-  return {
+  const briefing: any = {
     meeting_type_label: classification.meeting_type || 'General Meeting',
     relationship_label: classification.relationship || 'Prospect',
     executive_summary: `${meetingTitle} with ${company?.name || 'prospect'}. ` +
@@ -793,11 +1349,30 @@ function generateFallbackBriefing(
       ?.map((a: any) => `${a.name}${a.title ? ` (${a.title})` : ''}`)
       .join(', ') || 'No attendee information.',
   };
+
+  // Add lead profile data if available
+  if (leadProfile) {
+    briefing.attendee_deep_profile = {
+      name: leadProfile.name,
+      title: leadProfile.title,
+      seniority: leadProfile.role_seniority,
+      decision_authority: leadProfile.decision_authority,
+      background: leadProfile.background,
+      linkedin_url: leadProfile.linkedin_url,
+    };
+    briefing.connection_points = leadProfile.connection_points || [];
+    briefing.personalization_hooks = leadProfile.content_topics?.slice(0, 3) || [];
+  }
+
+  return briefing;
 }
 
 // =============================================================================
 // Adapter 5: Deliver Slack Briefing
 // =============================================================================
+
+import { deliverToSlack } from '../../proactive/deliverySlack.ts';
+import type { ProactiveNotificationPayload } from '../../proactive/types.ts';
 
 export const deliverSlackBriefingAdapter: SkillAdapter = {
   name: 'deliver-slack-briefing',
@@ -805,62 +1380,162 @@ export const deliverSlackBriefingAdapter: SkillAdapter = {
     const start = Date.now();
     try {
       console.log('[deliver-slack-briefing] Starting delivery...');
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = getServiceClient();
 
       const briefingOutput = state.outputs['generate-briefing'] as any;
       const enrichAttendeesOutput = state.outputs['enrich-attendees'] as any;
+      const companyNewsOutput = state.outputs['research-company-news'] as any;
 
       if (!briefingOutput?.briefing) {
         throw new Error('No briefing data available');
       }
 
       const briefing = briefingOutput.briefing;
+      const meetingTitle = state.event.payload.title as string || 'Upcoming Meeting';
+      const meetingId = state.event.payload.meeting_id as string;
 
-      // Call send-slack-message edge function
-      const response = await fetch(`${supabaseUrl}/functions/v1/send-slack-message`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          org_id: state.event.org_id,
-          user_id: state.event.user_id,
-          message_type: 'meeting_briefing',
-          data: {
-            briefing,
-            meeting_title: state.event.payload.title,
-            meeting_start: state.event.payload.start_time,
-            attendees: enrichAttendeesOutput?.attendees,
-            company: enrichAttendeesOutput?.company,
-            deal: enrichAttendeesOutput?.deal,
-            classification: enrichAttendeesOutput?.classification,
+      // Get bot token and Slack user ID for delivery
+      const { data: slackIntegration } = await supabase
+        .from('slack_integrations')
+        .select('access_token')
+        .eq('user_id', state.event.user_id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      const { data: slackMapping } = await supabase
+        .from('slack_user_mappings')
+        .select('slack_user_id')
+        .eq('org_id', state.event.org_id)
+        .eq('sixty_user_id', state.event.user_id)
+        .maybeSingle();
+
+      const botToken = slackIntegration?.access_token;
+      const recipientSlackUserId = slackMapping?.slack_user_id;
+
+      let slackDelivered = false;
+      let deliveryError: string | undefined;
+
+      if (!botToken) {
+        console.warn('[deliver-slack-briefing] No Slack bot token found for user');
+        deliveryError = 'No Slack integration';
+      } else if (!recipientSlackUserId) {
+        console.warn('[deliver-slack-briefing] No Slack user mapping found');
+        deliveryError = 'No Slack user mapping';
+      } else {
+        // Build Slack blocks from briefing data
+        // Note: This would ideally use a proper block builder, but for now we'll create a simple message
+        const blocks = [
+          {
+            type: 'header',
+            text: {
+              type: 'plain_text',
+              text: `📋 Meeting Briefing: ${meetingTitle}`,
+            },
           },
-        }),
-      });
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: briefing.executive_summary || 'Upcoming meeting briefing prepared.',
+            },
+          },
+        ];
 
-      if (!response.ok) {
-        console.warn(
-          `[deliver-slack-briefing] Slack delivery failed (${response.status}), ` +
-          `will attempt in-app fallback`
-        );
+        if (briefing.talking_points?.length > 0) {
+          blocks.push({ type: 'divider' });
+          blocks.push({
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*Key Topics:*\n${briefing.talking_points.map((p: string) => `• ${p}`).join('\n')}`,
+            },
+          });
+        }
+
+        if (briefing.questions_to_ask?.length > 0) {
+          blocks.push({ type: 'divider' });
+          blocks.push({
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*Questions to Ask:*\n${briefing.questions_to_ask.map((q: string) => `• ${q}`).join('\n')}`,
+            },
+          });
+        }
+
+        const payload: ProactiveNotificationPayload = {
+          type: 'pre_meeting_90min',
+          orgId: state.event.org_id,
+          recipientUserId: state.event.user_id,
+          recipientSlackUserId,
+          entityType: 'meeting',
+          entityId: meetingId,
+          title: `Meeting Briefing: ${meetingTitle}`,
+          message: briefing.executive_summary || 'Meeting briefing prepared.',
+          blocks,
+          metadata: {
+            meeting_id: meetingId,
+            meeting_title: meetingTitle,
+            meeting_type: briefing.meeting_type_label,
+            relationship: briefing.relationship_label,
+            company_name: enrichAttendeesOutput?.company?.name,
+            deal_id: enrichAttendeesOutput?.deal?.id,
+          },
+          priority: 'medium',
+        };
+
+        const deliveryResult = await deliverToSlack(supabase, payload, botToken);
+        slackDelivered = deliveryResult.sent;
+        deliveryError = deliveryResult.error;
+
+        if (!slackDelivered) {
+          console.warn(
+            `[deliver-slack-briefing] Slack delivery blocked/failed: ${deliveryError}`
+          );
+        }
       }
 
-      const result = await response.json();
-      const slackDelivered = response.ok && result.success;
+      // Insert agent_activity record (in-app mirroring)
+      try {
+        const { error: activityError } = await supabase.rpc('insert_agent_activity', {
+          p_user_id: state.event.user_id,
+          p_org_id: state.event.org_id,
+          p_sequence_type: 'pre_meeting_90min',
+          p_title: `Meeting Briefing: ${meetingTitle}`,
+          p_summary: briefing.executive_summary?.slice(0, 500) || 'Pre-meeting briefing prepared.',
+          p_metadata: {
+            meeting_id: meetingId,
+            meeting_type: briefing.meeting_type_label,
+            relationship: briefing.relationship_label,
+            talking_points_count: briefing.talking_points?.length || 0,
+            questions_count: briefing.questions_to_ask?.length || 0,
+            delivery_method: slackDelivered ? 'slack' : 'in_app_only',
+            delivery_error: deliveryError,
+          },
+          p_job_id: null,
+        });
+
+        if (activityError) {
+          console.error('[deliver-slack-briefing] Failed to insert agent_activity:', activityError);
+        } else {
+          console.log('[deliver-slack-briefing] Agent activity recorded');
+        }
+      } catch (actErr) {
+        console.error('[deliver-slack-briefing] Error inserting agent_activity:', actErr);
+      }
 
       console.log(
         `[deliver-slack-briefing] Delivery complete: ` +
-        `slack=${slackDelivered}, method=${result.delivery_method || 'unknown'}`
+        `slack=${slackDelivered}, method=${slackDelivered ? 'slack' : 'in_app_only'}`
       );
 
       return {
         success: true,
         output: {
           delivered: slackDelivered,
-          delivery_method: result.delivery_method || (slackDelivered ? 'slack' : 'in_app_only'),
-          slack_ts: result.slack_ts,
+          delivery_method: slackDelivered ? 'slack' : 'in_app_only',
+          delivery_error: deliveryError,
         },
         duration_ms: Date.now() - start,
       };

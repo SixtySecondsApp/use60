@@ -1,0 +1,203 @@
+{
+  "feature": {
+    "id": "parallel-research",
+    "name": "Parallel Research Upgrade + Company Profiles + Gemini 3 Flash",
+    "status": "complete",
+    "prd": null,
+    "createdAt": "2026-02-14T19:00:00Z",
+    "description": "Upgrade researchCompanyNewsAdapter from single deep-enrich-organization call to 5 parallel Gemini web-grounded research queries with AI synthesis. Save enrichment to companies table for profile display. Upgrade Gemini model. Fix Slack Block Kit for meeting briefings."
+  },
+
+  "stories": [
+    {
+      "id": "RES-001",
+      "feature": "parallel-research",
+      "title": "Add enrichment_data JSONB + enriched_at columns to companies table",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["RES-004", "RES-006"],
+      "parallelWith": ["RES-002", "RES-003"],
+      "acceptance": [
+        "Migration adds enrichment_data JSONB DEFAULT NULL to companies table",
+        "Migration adds enriched_at TIMESTAMPTZ DEFAULT NULL to companies table",
+        "Migration runs on staging without errors",
+        "Existing company records unaffected (columns nullable)"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260214190000_add_company_enrichment_data.sql"
+      ],
+      "activeForm": "Adding enrichment columns to companies table"
+    },
+    {
+      "id": "RES-002",
+      "feature": "parallel-research",
+      "title": "Upgrade gemini-research to Gemini 3 Flash model",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["RES-007"],
+      "parallelWith": ["RES-001", "RES-003"],
+      "acceptance": [
+        "Model string updated in API URL (line 54)",
+        "Model string updated in metadata response (line 137)",
+        "gemini-research deployed to staging and returns results"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/gemini-research/index.ts"
+      ],
+      "activeForm": "Upgrading Gemini model to 3 Flash"
+    },
+    {
+      "id": "RES-003",
+      "feature": "parallel-research",
+      "title": "Rewrite researchCompanyNewsAdapter — 5 parallel Gemini queries + Claude synthesis",
+      "type": "feature",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["RES-004", "RES-005", "RES-007"],
+      "parallelWith": ["RES-001", "RES-002"],
+      "acceptance": [
+        "5 parallel Gemini API calls with Google Search grounding (Company Overview, Products & Market, Funding & Growth, Leadership & Team, Competition & News)",
+        "Each query uses responseSchema for structured JSON extraction",
+        "Promise.allSettled for fault tolerance (partial results OK)",
+        "Claude Haiku synthesis merges 5 results into structured CompanyEnrichmentProfile",
+        "Non-fatal: returns partial data if some queries fail"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "activeForm": "Building parallel Gemini research adapter"
+    },
+    {
+      "id": "RES-004",
+      "feature": "parallel-research",
+      "title": "Save enrichment results to companies table after research",
+      "type": "feature",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["RES-001", "RES-003"], "files": [], "schema": ["companies"] },
+      "blocks": ["RES-007"],
+      "parallelWith": ["RES-005", "RES-006"],
+      "acceptance": [
+        "After synthesis, updates companies.enrichment_data with full structured profile",
+        "Sets companies.enriched_at to current timestamp",
+        "Backfills empty flat fields (description, industry, size) from enrichment data",
+        "Uses company ID from enrich-attendees output, skips if no company_id"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "activeForm": "Wiring enrichment save to companies table"
+    },
+    {
+      "id": "RES-005",
+      "feature": "parallel-research",
+      "title": "Add meeting_briefing handler to send-slack-message with Block Kit",
+      "type": "feature",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["RES-003"], "files": [], "schema": [] },
+      "blocks": ["RES-007"],
+      "parallelWith": ["RES-004", "RES-006"],
+      "acceptance": [
+        "meeting_briefing case added to switch statement in send-slack-message",
+        "Maps briefing data to MeetingPrepData interface from slackBlocks.ts",
+        "Calls buildMeetingPrepMessage() for rich Block Kit output",
+        "Sets resolvedBlocks for formatted Slack message, resolvedMessage as text fallback"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/send-slack-message/index.ts"
+      ],
+      "activeForm": "Adding Block Kit handler for meeting briefings"
+    },
+    {
+      "id": "RES-006",
+      "feature": "parallel-research",
+      "title": "Surface enrichment data on CompanyProfile page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["RES-001"], "files": [], "schema": ["companies"] },
+      "blocks": ["RES-007"],
+      "parallelWith": ["RES-004", "RES-005"],
+      "acceptance": [
+        "useContactCompanyGraph includes enrichment_data and enriched_at in select",
+        "CompanyProfile Overview tab shows enrichment card when data available",
+        "Displays: company snapshot, key people, funding, competitors, recent news",
+        "Shows 'Last enriched' timestamp, graceful empty state when no enrichment"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/companies/CompanyProfile.tsx",
+        "src/lib/hooks/useContactCompanyGraph.ts"
+      ],
+      "activeForm": "Building enrichment display on CompanyProfile"
+    },
+    {
+      "id": "RES-007",
+      "feature": "parallel-research",
+      "title": "Deploy all functions, run migration, e2e test with live data",
+      "type": "test",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["RES-001", "RES-002", "RES-003", "RES-004", "RES-005", "RES-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration applied to staging",
+        "agent-orchestrator, gemini-research, send-slack-message deployed to staging",
+        "curl test pre_meeting_90min executes 5 parallel Gemini queries (check logs)",
+        "companies.enrichment_data populated for test company",
+        "Slack message uses Block Kit (not truncated JSON)"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts",
+        "supabase/functions/gemini-research/index.ts",
+        "supabase/functions/send-slack-message/index.ts"
+      ],
+      "activeForm": "Deploying and running e2e tests"
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 7,
+    "currentFeature": "parallel-research",
+    "estimatedTotal": "~90 minutes",
+    "parallelGroups": [
+      ["RES-001", "RES-002", "RES-003"],
+      ["RES-004", "RES-005", "RES-006"]
+    ],
+    "criticalPath": "RES-003 -> RES-004 -> RES-007",
+    "notes": "Wave 1: RES-001 + RES-002 + RES-003 (all independent). Wave 2: RES-004 + RES-005 + RES-006 (depend on wave 1). Wave 3: RES-007 (deploy + test). Gemini API called directly from adapter (not via gemini-research function) to avoid auth complexity and HTTP overhead. Claude Haiku synthesizes 5 research results into structured profile."
+  },
+
+  "keyFiles": {
+    "modifyAdapter": "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts",
+    "modifyGeminiResearch": "supabase/functions/gemini-research/index.ts",
+    "modifySlackMessage": "supabase/functions/send-slack-message/index.ts",
+    "modifyCompanyProfile": "src/pages/companies/CompanyProfile.tsx",
+    "modifyCompanyGraph": "src/lib/hooks/useContactCompanyGraph.ts",
+    "createMigration": "supabase/migrations/20260214190000_add_company_enrichment_data.sql",
+    "reuseSlackBlocks": "supabase/functions/_shared/slackBlocks.ts",
+    "reuseGeminiPattern": "supabase/functions/gemini-research/index.ts",
+    "referenceDemo": "supabase/functions/demo-enrichment-comparison/index.ts"
+  }
+}

@@ -125,15 +125,29 @@ async function checkUserDeliveryPolicy(
   try {
     // Map notification type to feature name for preferences lookup
     const featureMap: Record<string, string> = {
+      // Existing proactive notification types
       morning_brief: 'morning_brief',
       stale_deal_alert: 'deal_risk',
       deal_momentum_nudge: 'deal_momentum',
       post_call_summary: 'post_meeting',
       meeting_prep: 'post_meeting',
       meeting_debrief: 'post_meeting',
+      // Orchestrator event types (maps to slack_user_preferences feature keys)
+      meeting_ended: 'post_meeting',
+      pre_meeting_90min: 'post_meeting',
+      deal_risk_scan: 'deal_risk',
+      stale_deal_revival: 'deal_risk',
+      coaching_weekly: 'morning_brief',
+      campaign_daily_check: 'campaign_alerts',
+      email_received: 'post_meeting',
+      proposal_generation: 'post_meeting',
+      calendar_find_times: 'post_meeting',
     };
     const feature = featureMap[payload.type];
-    if (!feature) return { allowed: true }; // Unknown type, allow
+    if (!feature) {
+      console.warn(`[proactive/deliverySlack] Unknown notification type: ${payload.type}, allowing by default`);
+      return { allowed: true };
+    }
 
     // Check user preferences
     const { data: pref } = await supabase

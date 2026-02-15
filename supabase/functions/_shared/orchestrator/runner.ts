@@ -88,7 +88,59 @@ export async function runSequence(
     return { job_id: '', status: 'budget_exceeded', error: context.tier1.costBudget.reason };
   }
 
-  // 6. Create sequence job record (with RPC fallback)
+  // 6. Settings gate: org and user preferences
+  // 6a. Check org-level proactive agent config
+  const { data: orgConfig, error: orgConfigError } = await supabase
+    .from('proactive_agent_config')
+    .select('is_enabled, enabled_sequences')
+    .eq('org_id', event.org_id)
+    .maybeSingle();
+
+  if (orgConfigError) {
+    console.error('[runner] Settings gate: Error fetching org config:', orgConfigError);
+  }
+
+  // If no config exists or is_enabled is false, reject
+  if (!orgConfig || !orgConfig.is_enabled) {
+    console.log('[runner] Settings gate: Proactive agent disabled for org', event.org_id);
+    return { job_id: '', status: 'feature_disabled', error: 'Proactive agent disabled for org' };
+  }
+
+  // Check if the specific sequence is enabled in org config
+  const sequenceConfig = orgConfig.enabled_sequences?.[event.type];
+  if (!sequenceConfig?.enabled) {
+    console.log('[runner] Settings gate: Sequence disabled by org admin', event.type);
+    return { job_id: '', status: 'sequence_disabled', error: 'Sequence disabled by admin' };
+  }
+
+  console.log('[runner] Settings gate: Org config passed for', event.type);
+
+  // 6b. Check user-level opt-out (if user_id is present)
+  if (event.user_id) {
+    const { data: userPref, error: userPrefError } = await supabase
+      .from('user_sequence_preferences')
+      .select('is_enabled')
+      .eq('user_id', event.user_id)
+      .eq('org_id', event.org_id)
+      .eq('sequence_type', event.type)
+      .maybeSingle();
+
+    if (userPrefError) {
+      console.error('[runner] Settings gate: Error fetching user preferences:', userPrefError);
+    }
+
+    // If user has a preference row and is_enabled is false, reject
+    if (userPref && userPref.is_enabled === false) {
+      console.log('[runner] Settings gate: User opted out of sequence', event.user_id, event.type);
+      return { job_id: '', status: 'user_opted_out', error: 'User opted out of sequence' };
+    }
+
+    console.log('[runner] Settings gate: User preference check passed (or inherited org default)');
+  }
+
+  console.log('[runner] Settings gate: All checks passed, proceeding with sequence', event.type);
+
+  // 7. Create sequence job record (with RPC fallback)
   const { jobId: newJobId, error: jobError } = await rpcStartJob(supabase, event);
 
   if (jobError || !newJobId) {
@@ -109,7 +161,7 @@ export async function runSequence(
     console.warn('[orchestrator] Could not update orchestrator columns on sequence_jobs');
   }
 
-  // 7. Build initial state
+  // 8. Build initial state
   const state: SequenceState = {
     event,
     context,
@@ -121,7 +173,7 @@ export async function runSequence(
     updated_at: new Date().toISOString(),
   };
 
-  // 8. Execute steps
+  // 9. Execute steps
   return await executeSteps(supabase, jobId, state, availableSteps, startTime);
 }
 
@@ -692,7 +744,7 @@ async function rpcStartJob(
   if (!error && data) return { jobId: data as string, error: null };
 
   // Fallback: direct insert (RPC missing, or RPC rejects null skill_id for orchestrator-managed jobs)
-  if (error?.message?.includes('does not exist') || error?.message?.includes('404') || error?.code === '42883'
+  if (error?.message?.includes('does not exist') || error?.message?.includes('Could not find') || error?.message?.includes('404') || error?.code === '42883'
       || error?.message?.includes('Skill not found')) {
     console.warn('[orchestrator] start_sequence_job RPC unavailable or rejected null skill_id, using direct insert');
     const jobId = crypto.randomUUID();

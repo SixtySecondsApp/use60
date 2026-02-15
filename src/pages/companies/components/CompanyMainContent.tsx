@@ -180,6 +180,136 @@ export function CompanyMainContent({
         </div>
       </div>
 
+      {/* Company Intelligence (from enrichment) */}
+      {company.enrichment_data && (
+        <div className="theme-bg-card backdrop-blur-xl rounded-xl theme-border">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-800/50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Building2 className="w-5 h-5 text-blue-400" />
+              <h3 className="text-lg font-semibold theme-text-primary">Company Intelligence</h3>
+            </div>
+            {company.enriched_at && (
+              <span className="text-xs theme-text-tertiary">
+                Enriched {format(new Date(company.enriched_at), 'MMM d, yyyy')}
+              </span>
+            )}
+          </div>
+          <div className="p-6 space-y-5">
+            {/* Description */}
+            {company.enrichment_data.description && (
+              <div>
+                <p className="text-sm theme-text-secondary leading-relaxed">{company.enrichment_data.description}</p>
+              </div>
+            )}
+
+            {/* Quick Facts */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {company.enrichment_data.employee_count && (
+                <div className="p-3 rounded-lg bg-gray-100/50 dark:bg-gray-800/30">
+                  <span className="text-xs theme-text-tertiary block">Employees</span>
+                  <span className="text-sm font-medium theme-text-primary">{company.enrichment_data.employee_count}</span>
+                </div>
+              )}
+              {company.enrichment_data.headquarters && (
+                <div className="p-3 rounded-lg bg-gray-100/50 dark:bg-gray-800/30">
+                  <span className="text-xs theme-text-tertiary block">Headquarters</span>
+                  <span className="text-sm font-medium theme-text-primary">{company.enrichment_data.headquarters}</span>
+                </div>
+              )}
+              {company.enrichment_data.founded_year && (
+                <div className="p-3 rounded-lg bg-gray-100/50 dark:bg-gray-800/30">
+                  <span className="text-xs theme-text-tertiary block">Founded</span>
+                  <span className="text-sm font-medium theme-text-primary">{company.enrichment_data.founded_year}</span>
+                </div>
+              )}
+              {company.enrichment_data.funding_status && (
+                <div className="p-3 rounded-lg bg-gray-100/50 dark:bg-gray-800/30">
+                  <span className="text-xs theme-text-tertiary block">Funding</span>
+                  <span className="text-sm font-medium theme-text-primary">{company.enrichment_data.funding_status}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Key People */}
+            {company.enrichment_data.key_people?.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium theme-text-primary mb-2">Key People</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {company.enrichment_data.key_people.slice(0, 6).map((person: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-gray-100/50 dark:bg-gray-800/30">
+                      <Users className="w-4 h-4 text-gray-400 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium theme-text-primary block truncate">{person.name}</span>
+                        {person.title && <span className="text-xs theme-text-tertiary block truncate">{person.title}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Competitors */}
+            {company.enrichment_data.competitors?.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium theme-text-primary mb-2">Competitors</h4>
+                <div className="flex flex-wrap gap-2">
+                  {company.enrichment_data.competitors.slice(0, 8).map((comp: any, i: number) => (
+                    <span key={i} className="px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-800 theme-text-secondary">
+                      {typeof comp === 'string' ? comp : comp.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recent News */}
+            {company.enrichment_data.recent_news?.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium theme-text-primary mb-2">Recent News</h4>
+                <div className="space-y-2">
+                  {company.enrichment_data.recent_news.slice(0, 3).map((news: any, i: number) => (
+                    <div key={i} className="p-2 rounded-lg bg-gray-100/50 dark:bg-gray-800/30">
+                      <span className="text-sm font-medium theme-text-primary">{typeof news === 'string' ? news : news.headline}</span>
+                      {news.date && <span className="text-xs theme-text-tertiary ml-2">{news.date}</span>}
+                      {news.summary && <p className="text-xs theme-text-tertiary mt-0.5">{news.summary}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Products & Growth Signals */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {company.enrichment_data.products?.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium theme-text-primary mb-2">Products</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {company.enrichment_data.products.slice(0, 6).map((p: any, i: number) => (
+                      <span key={i} className="px-2 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                        {typeof p === 'string' ? p : p.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {company.enrichment_data.growth_indicators?.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium theme-text-primary mb-2">Growth Signals</h4>
+                  <div className="space-y-1">
+                    {company.enrichment_data.growth_indicators.slice(0, 3).map((g: any, i: number) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <TrendingUp className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span className="text-xs theme-text-secondary">{typeof g === 'string' ? g : g.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Recent Activity */}
       <div className="theme-bg-card backdrop-blur-xl rounded-xl theme-border">
         <div className="p-6 border-b border-gray-200 dark:border-gray-800/50">

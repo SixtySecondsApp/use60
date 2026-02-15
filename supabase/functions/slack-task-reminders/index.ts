@@ -171,7 +171,7 @@ serve(async (req) => {
             const { data: overdueTasks } = await supabase
               .from('tasks')
               .select('id, title, due_date, deals:deal_id (title)')
-              .eq('user_id', recipient.userId)
+              .eq('assigned_to', recipient.userId)
               .eq('completed', false)
               .lt('due_date', today.toISOString())
               .order('due_date', { ascending: true })
@@ -181,7 +181,7 @@ serve(async (req) => {
             const { data: dueTodayTasks } = await supabase
               .from('tasks')
               .select('id, title, deals:deal_id (title)')
-              .eq('user_id', recipient.userId)
+              .eq('assigned_to', recipient.userId)
               .eq('completed', false)
               .gte('due_date', today.toISOString())
               .lt('due_date', tomorrow.toISOString())
