@@ -397,6 +397,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
   // ========== Org Admin Routes ==========
   // Org/team management is now accessed via the main Settings page (role-gated cards).
   // We keep legacy redirects for /team/* paths elsewhere.
+  {
+    path: '/agent/marketplace',
+    access: 'orgAdmin',
+    label: 'Agent Marketplace',
+    icon: Bot,
+    showInNav: true,
+    navSection: 'tools',
+    order: 1.5,
+    displayGroup: 4,
+  },
 
   // ========== Platform Admin Section (Tier 3: Platform Admins Only) ==========
   {

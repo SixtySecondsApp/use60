@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,8 @@ import {
   Calendar,
   Info,
   Sparkles,
+  ArrowRight,
+  Zap,
 } from 'lucide-react';
 
 import { PageContainer } from '@/components/layout/PageContainer';
@@ -361,6 +364,31 @@ export default function ProactiveAgentSettings() {
 
         {isMasterEnabled && (
           <>
+            {/* Marketplace CTA */}
+            <Card className="border-indigo-200 dark:border-indigo-800/30 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg">
+                      <Zap className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">Abilities Marketplace</CardTitle>
+                      <CardDescription>
+                        Discover and configure all available AI abilities organized by sales lifecycle
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Button asChild className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                    <Link to="/agent/marketplace">
+                      Explore Marketplace
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </CardHeader>
+            </Card>
+
             {/* Core Sequences */}
             <div className="space-y-4">
               <div>

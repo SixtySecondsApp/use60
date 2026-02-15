@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { MessageSquare, Mail, Bell, Clock, Lock, ExternalLink } from 'lucide-react';
 import type { AbilityDefinition, DeliveryChannel } from '@/lib/agent/abilityRegistry';
 import { getSequenceTypeForEventType } from '@/lib/agent/abilityRegistry';
-import type { AbilityStats } from '@/pages/platform/AgentAbilitiesPage';
+import type { AbilityStats } from '@/components/agent/AbilityMarketplace';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAbilityPrerequisites } from '@/hooks/useAbilityPrerequisites';

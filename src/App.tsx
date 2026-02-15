@@ -103,6 +103,9 @@ import {
   DebugAuth, AuthDebug, DebugPermissions, DebugMeetings, TestNotifications,
 } from '@/routes/lazyPages';
 
+// Agent Marketplace (org admin accessible)
+const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
+
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
 // ============================================================
@@ -586,6 +589,14 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/organization" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/branding" element={<Navigate to="/settings" replace />} />
+                {/* Agent Marketplace - org admins */}
+                <Route path="/agent/marketplace" element={
+                  <OrgAdminRouteGuard>
+                    <AppLayout>
+                      <AgentMarketplacePage />
+                    </AppLayout>
+                  </OrgAdminRouteGuard>
+                } />
                 <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><OrgBilling /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/credits" element={<AppLayout><CreditsSettingsPage /></AppLayout>} />
                 <Route path="/settings/credits/success" element={<AppLayout><CreditPurchaseSuccess /></AppLayout>} />

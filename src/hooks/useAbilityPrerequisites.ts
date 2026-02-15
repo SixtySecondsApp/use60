@@ -55,10 +55,8 @@ export function useAbilityPrerequisites(abilityId: string): AbilityPrerequisites
   // Hook calls MUST be unconditional (React rules of hooks)
   // We call all integration hooks at the top level, then use their results in the memo
   const slackIntegration = useSlackIntegration();
-  const googleIntegration = useIntegrationStore((state) => ({
-    isConnected: state.google.isConnected,
-    isLoading: state.google.isLoading,
-  }));
+  const googleConnected = useIntegrationStore((state) => state.google.isConnected);
+  const googleLoading = useIntegrationStore((state) => state.google.isLoading);
   const fathomIntegration = useFathomIntegration();
   const instantlyIntegration = useInstantlyIntegration();
 
@@ -84,7 +82,7 @@ export function useAbilityPrerequisites(abilityId: string): AbilityPrerequisites
           break;
 
         case 'google-workspace':
-          isConnected = googleIntegration.isConnected;
+          isConnected = googleConnected;
           break;
 
         case 'fathom':
@@ -115,7 +113,7 @@ export function useAbilityPrerequisites(abilityId: string): AbilityPrerequisites
     // Determine if any integration is still loading
     const isLoading =
       slackIntegration.loading ||
-      googleIntegration.isLoading ||
+      googleLoading ||
       fathomIntegration.loading ||
       instantlyIntegration.loading;
 
@@ -129,8 +127,8 @@ export function useAbilityPrerequisites(abilityId: string): AbilityPrerequisites
     ability,
     slackIntegration.isConnected,
     slackIntegration.loading,
-    googleIntegration.isConnected,
-    googleIntegration.isLoading,
+    googleConnected,
+    googleLoading,
     fathomIntegration.isConnected,
     fathomIntegration.loading,
     instantlyIntegration.isConnected,
