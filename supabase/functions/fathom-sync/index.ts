@@ -972,8 +972,8 @@ serve(async (req) => {
         // Sort by newest first (recording_start_time or created_at descending)
         // This ensures the most recent meetings get priority processing
         calls = calls.sort((a: any, b: any) => {
-          const dateA = new Date(a.recording_start_time || a.created_at || 0).getTime()
-          const dateB = new Date(b.recording_start_time || b.created_at || 0).getTime()
+          const dateA = new Date(a.start_time || a.recording_start_time || a.created_at || 0).getTime()
+          const dateB = new Date(b.start_time || b.recording_start_time || b.created_at || 0).getTime()
           return dateB - dateA // Descending (newest first)
         })
 
@@ -1545,10 +1545,18 @@ async function syncSingleCall(
     const ownerResolved = ownerResult.ownerResolved
     const ownerEmailCandidate = ownerResult.ownerEmail
 
-    // Calculate duration in minutes from recording start/end times
-    const startTime = new Date(call.recording_start_time || call.scheduled_start_time)
-    const endTime = new Date(call.recording_end_time || call.scheduled_end_time)
-    const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60))
+    // Calculate duration — prefer Fathom's native duration field (seconds), fallback to time diff
+    let durationMinutes = 0
+    if (call.duration && typeof call.duration === 'number' && call.duration > 0) {
+      durationMinutes = Math.round(call.duration / 60)
+    } else {
+      const startTime = new Date(call.start_time || call.recording_start_time || call.scheduled_start_time)
+      const endTime = new Date(call.end_time || call.recording_end_time || call.scheduled_end_time)
+      const diff = endTime.getTime() - startTime.getTime()
+      if (!isNaN(diff) && diff > 0) {
+        durationMinutes = Math.round(diff / (1000 * 60))
+      }
+    }
 
     // Compute derived fields prior to DB write
     const embedUrl = buildEmbedUrl(call.share_url, call.recording_id)
@@ -1649,8 +1657,8 @@ async function syncSingleCall(
       fathom_recording_id: recordingIdRaw ? String(recordingIdRaw) : null, // Use recording_id as unique identifier
       fathom_user_id: integration.fathom_user_id,
       title: call.title || call.meeting_title,
-      meeting_start: call.recording_start_time || call.scheduled_start_time,
-      meeting_end: call.recording_end_time || call.scheduled_end_time,
+      meeting_start: call.start_time || call.recording_start_time || call.scheduled_start_time,
+      meeting_end: call.end_time || call.recording_end_time || call.scheduled_end_time,
       duration_minutes: durationMinutes,
       owner_email: ownerEmailCandidate || call.recorded_by?.email || call.host_email || null,
       team_name: call.recorded_by?.team || null,
@@ -1935,6 +1943,29 @@ async function syncSingleCall(
           continue // Skip to next participant
         }
 
+        // Handle external participants without email — still store in meeting_attendees
+        if (invitee.is_external && !invitee.email) {
+          const { data: existingNameAttendee } = await supabase
+            .from('meeting_attendees')
+            .select('id')
+            .eq('meeting_id', meeting.id)
+            .eq('name', invitee.name)
+            .maybeSingle()
+
+          if (!existingNameAttendee) {
+            await supabase
+              .from('meeting_attendees')
+              .insert({
+                meeting_id: meeting.id,
+                name: invitee.name,
+                email: null,
+                is_external: true,
+                role: 'attendee',
+              })
+          }
+          continue
+        }
+
         // Handle external participants (customers/prospects) - create contacts + meeting_contacts
         if (invitee.email && invitee.is_external) {
           // 1. Match or create company from email domain
@@ -1950,7 +1981,7 @@ async function syncSingleCall(
             .single()
 
           // Get the meeting date for last_interaction_at
-          const meetingDate = call.recording_start_time || call.scheduled_start_time
+          const meetingDate = call.start_time || call.recording_start_time || call.scheduled_start_time
 
           if (existingContact) {
             // Build update object - always update last_interaction_at if meeting is newer
@@ -2147,7 +2178,7 @@ async function syncSingleCall(
 
     // Log successful meeting sync
     const meetingTitle = call.title || call.meeting_title || 'Meeting'
-    const meetingDate = call.recording_start_time || call.scheduled_start_time
+    const meetingDate = call.start_time || call.recording_start_time || call.scheduled_start_time
     const formattedDate = meetingDate ? new Date(meetingDate).toLocaleDateString() : ''
     await logSyncOperation(supabase, {
       orgId,

@@ -29,6 +29,8 @@ import { AttioImportWizard } from '@/components/ops/AttioImportWizard';
 import { CrossOpImportWizard } from '@/components/ops/CrossOpImportWizard';
 import { ApolloSearchWizard } from '@/components/ops/ApolloSearchWizard';
 import { CreateTableModal } from '@/components/ops/CreateTableModal';
+import { StandardTablesGallery } from '@/components/ops/StandardTablesGallery';
+import { StandardTablesHealth } from '@/components/ops/StandardTablesHealth';
 import { useWorkflowOrchestrator } from '@/lib/hooks/useWorkflowOrchestrator';
 import { WorkflowProgressStepper } from '@/components/ops/WorkflowProgressStepper';
 import { useSmartPollingInterval } from '@/lib/hooks/useSmartPolling';
@@ -41,6 +43,7 @@ interface OpsTableItem {
   description: string | null;
   row_count: number;
   source_type: string | null;
+  is_standard?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -222,7 +225,7 @@ function OpsPage() {
       if (!activeOrg?.id) return [];
       const { data, error } = await supabase
         .from('dynamic_tables')
-        .select('id, name, description, row_count, source_type, created_at, updated_at')
+        .select('id, name, description, row_count, source_type, is_standard, created_at, updated_at')
         .eq('organization_id', activeOrg.id)
         .order('updated_at', { ascending: false })
         .limit(100);
@@ -288,6 +291,7 @@ function OpsPage() {
   const filteredTables = useMemo(() => {
     if (!tables) return [];
     return tables.filter((t) => {
+      if (t.is_standard) return false;
       const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesSource = sourceFilter === 'all' || (t.source_type ?? 'manual') === sourceFilter;
       const matchesStatus =
@@ -296,19 +300,20 @@ function OpsPage() {
     });
   }, [tables, searchQuery, sourceFilter, statusFilter, enrichmentMap]);
 
-  // --- Aggregate stats ---
-  const totalRows = (tables ?? []).reduce((acc, t) => acc + t.row_count, 0);
-  const totalEnriched = Object.values(enrichmentMap ?? {}).reduce((acc, s) => acc + s.enriched, 0);
-  const runningCount = (tables ?? []).filter(
+  // --- Aggregate stats (custom tables only) ---
+  const customTables = useMemo(() => (tables ?? []).filter((t) => !t.is_standard), [tables]);
+  const totalRows = customTables.reduce((acc, t) => acc + t.row_count, 0);
+  const totalEnriched = customTables.reduce((acc, t) => acc + (enrichmentMap?.[t.id]?.enriched ?? 0), 0);
+  const runningCount = customTables.filter(
     (t) => deriveStatus(enrichmentMap?.[t.id]) === 'running'
   ).length;
 
   // --- Unique source types for filter dropdown ---
   const sourceTypes = useMemo(() => {
     const set = new Set<string>();
-    (tables ?? []).forEach((t) => set.add(t.source_type ?? 'manual'));
+    customTables.forEach((t) => set.add(t.source_type ?? 'manual'));
     return Array.from(set).sort();
-  }, [tables]);
+  }, [customTables]);
 
   if (isLoading) {
     return (
@@ -349,7 +354,7 @@ function OpsPage() {
       {tables && tables.length > 0 && (
         <div className="mb-6 flex items-center gap-6 border-b border-zinc-800/60 pb-6">
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-semibold text-zinc-100">{tables.length}</span>
+            <span className="text-2xl font-semibold text-zinc-100">{customTables.length}</span>
             <span className="text-sm text-zinc-500">tables</span>
           </div>
           <div className="h-6 w-px bg-zinc-800" />
@@ -421,6 +426,37 @@ function OpsPage() {
         </div>
       )}
 
+      {/* Standard Tables Gallery */}
+      {tables && tables.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-100">Standard Tables</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Pre-configured CRM tables with auto-sync and enrichment
+              </p>
+            </div>
+          </div>
+          <StandardTablesGallery
+            onTableClick={(tableId) => navigate(`/ops/${tableId}`)}
+            existingTables={tables}
+          />
+          <div className="mt-4">
+            <StandardTablesHealth />
+          </div>
+        </div>
+      )}
+
+      {/* Custom Tables Section Header */}
+      {tables && tables.length > 0 && (
+        <div className="mb-4 mt-8">
+          <h2 className="text-lg font-semibold text-zinc-100">Custom Tables</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Your imported and custom ops tables
+          </p>
+        </div>
+      )}
+
       {/* Grid */}
       {filteredTables.length > 0 ? (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -475,6 +511,11 @@ function OpsPage() {
         onSelectOpsTable={() => setShowCrossOpImport(true)}
         onSelectBlank={() => createTableMutation.mutate()}
         onSelectWorkflow={() => setShowWorkflowPrompt(true)}
+        existingTables={tables ?? []}
+        onTableClick={(id) => {
+          setShowCreateModal(false);
+          navigate(`/ops/${id}`);
+        }}
       />
 
       <CSVImportOpsTableWizard

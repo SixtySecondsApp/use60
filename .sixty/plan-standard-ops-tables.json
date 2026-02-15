@@ -1,0 +1,143 @@
+{
+  "name": "Standard Ops Tables v2",
+  "version": "2.0",
+  "createdAt": "2026-02-20T00:00:00Z",
+  "description": "Source tracking, meeting intelligence, and Clients table for standard ops tables",
+  "consultReport": ".sixty/consult/standard-ops-tables.md",
+  "feature": {
+    "id": "standard-ops-tables-v2",
+    "name": "Standard Ops Tables: Source Tracking, Meeting Intelligence & Clients Table",
+    "status": "complete"
+  },
+  "stories": [
+    {
+      "id": "OPS-001",
+      "title": "Fix Leads source column + add Meetings lead_source template",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": [],
+      "blocks": ["OPS-002", "OPS-003", "OPS-006"],
+      "parallelWith": ["OPS-004"],
+      "acceptance": [
+        "Leads source column app_source_column changed from 'external_source' to 'booking_link_name'",
+        "Meetings table has new 'lead_source' column at position 12 with width 160",
+        "'lead_source' added to All Meetings view column_config"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/config/standardTableTemplates.ts"
+      ]
+    },
+    {
+      "id": "OPS-002",
+      "title": "Add meeting cross-ref to Leads backfill (meeting_held + recording + source fix)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": ["OPS-001"],
+      "blocks": ["OPS-006"],
+      "parallelWith": ["OPS-003"],
+      "acceptance": [
+        "Leads select() includes booking_link_name, source_channel, utm_source",
+        "Source cell uses fallback chain: booking_link_name || source_channel || utm_source || external_source",
+        "Batch-queries meetings table for meeting_id values in each batch",
+        "Derives meeting_held: Met/No Show/Upcoming/Cancelled based on transcript + dates",
+        "Sets meeting_recording_url from meeting share_url"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/backfill-standard-ops-tables/index.ts"
+      ]
+    },
+    {
+      "id": "OPS-003",
+      "title": "Add lead_source lookup to Meetings backfill",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": ["OPS-001"],
+      "blocks": ["OPS-006"],
+      "parallelWith": ["OPS-002"],
+      "acceptance": [
+        "backfillMeetings queries leads WHERE meeting_id IN batch for source fields",
+        "Builds leadSourceMap with fallback chain: booking_link_name || source_channel || utm_source",
+        "Populates lead_source cell with source or 'Direct' fallback"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/backfill-standard-ops-tables/index.ts"
+      ]
+    },
+    {
+      "id": "OPS-004",
+      "title": "Add Clients standard table template + gallery UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": [],
+      "blocks": ["OPS-005", "OPS-006"],
+      "parallelWith": ["OPS-001"],
+      "acceptance": [
+        "CLIENTS_TABLE exported with 10 columns (company_name through created_at)",
+        "Status dropdown: Active/Signed/Deposit Paid/Paused/Notice Given/Churned",
+        "3 views: All Clients, Active Clients, At Risk",
+        "STANDARD_TABLE_TEMPLATES array includes CLIENTS_TABLE",
+        "StandardTablesGallery has Briefcase icon and 'Clients' nameMap entry"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/config/standardTableTemplates.ts",
+        "src/components/ops/StandardTablesGallery.tsx"
+      ]
+    },
+    {
+      "id": "OPS-005",
+      "title": "Add backfillClients() to backfill edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": ["OPS-004"],
+      "blocks": ["OPS-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "backfillClients() queries clients scoped by owner_id IN memberUserIds",
+        "Batch-resolves deal names + lead_source_channel via deals table",
+        "Resolves owner names via resolveOwnerNames()",
+        "Main handler routes table.name === 'Clients' to backfillClients()"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/backfill-standard-ops-tables/index.ts"
+      ]
+    },
+    {
+      "id": "OPS-006",
+      "title": "Write migration SQL for existing orgs + updated provision RPC",
+      "type": "schema",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": ["OPS-001", "OPS-002", "OPS-003", "OPS-004", "OPS-005"],
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Updates Leads source column app_source_column for existing orgs",
+        "Inserts meeting_held + meeting_recording_url columns for existing Leads tables",
+        "Shifts meeting_outcome to position 11, created_at to position 12",
+        "Inserts lead_source column for existing Meetings tables",
+        "Provisions Clients table + 10 columns + 3 views for existing orgs",
+        "Replaces provision_standard_ops_tables() with all 5 tables"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260220000001_source_tracking_and_clients_table.sql"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 6,
+    "estimatedMinutes": 95,
+    "lastUpdated": "2026-02-20T00:00:00Z"
+  }
+}

@@ -221,6 +221,12 @@ ACTION PARAMETERS:
 - list_standard_tables: {} - List available standard tables (Leads, Meetings, All Contacts, All Companies)
 - query_standard_table: { table_name, filters?, sort_by?, sort_direction?, limit? } - Query data from standard ops tables. table_name must be one of: "Leads", "Meetings", "All Contacts", "All Companies". Use for user queries like "show me my leads", "list contacts", "recent meetings".
 
+## CRM Index Search (Fast search before materialization)
+- search_crm_contacts: { query?, email?, name?, company?, job_title?, lifecycle_stage?, has_active_deal?, limit? } - Fast search across CRM contact index (HubSpot/Attio contacts). Use for finding contacts without materializing full records. Returns: crm_source, crm_record_id, email, first_name, last_name, full_name, company_name, company_domain, job_title, lifecycle_stage, is_materialized, materialized_contact_id.
+- search_crm_companies: { query?, name?, domain?, industry?, limit? } - Fast search across CRM company index. Returns: crm_source, crm_record_id, name, domain, industry, employee_count, annual_revenue, city, state, country, is_materialized.
+- search_crm_deals: { query?, stage?, pipeline?, min_amount?, limit? } - Fast search across CRM deal index. Returns: crm_source, crm_record_id, name, stage, pipeline, amount, close_date, owner_crm_id, company_crm_id, contact_crm_ids, is_materialized.
+- materialize_contact: { crm_source: "hubspot"|"attio", crm_record_id } - Pull full contact from CRM API and create in contacts table. Updates index with materialized_contact_id. Use after search_crm_contacts to get full record.
+
 ## Lead Search & Prospecting (NO confirmation needed — execute immediately)
 - search_leads_create_table: { query, person_titles?, person_locations?, organization_num_employees_ranges?, person_seniorities?, per_page?, source? } - Search for leads and create an ops table with results. query is a plain-English description of the search (e.g. "marketing agencies in Bristol"). source defaults to "apollo". Does NOT require confirm=true.
 - enrich_table_column: { table_id, column_id, row_ids? } - Enrich a column in an ops table. Does NOT require confirm=true.
@@ -279,6 +285,10 @@ Write actions (create_task, create_ops_table, update_crm, etc.) require params.c
             'enrich_table_column',
             'list_standard_tables',
             'query_standard_table',
+            'search_crm_contacts',
+            'search_crm_companies',
+            'search_crm_deals',
+            'materialize_contact',
           ],
           description: 'The action to execute',
         },
@@ -580,20 +590,38 @@ async function executeToolCall(
     }
 
     case 'materialize_contact': {
-      const indexRecordId = input.index_record_id ? String(input.index_record_id) : '';
-      if (!indexRecordId) {
-        return { success: false, error: 'index_record_id is required for materialize_contact' };
+      const crmSource = input.crm_source ? String(input.crm_source) : '';
+      const crmRecordId = input.crm_record_id ? String(input.crm_record_id) : '';
+
+      if (!crmSource || !crmRecordId) {
+        return { success: false, error: 'crm_source and crm_record_id are required for materialize_contact' };
       }
 
-      // Placeholder for Phase 3 implementation
-      return {
-        success: true,
-        data: {
-          message: 'Contact materialization will be available in Phase 3. For now, this contact exists in the CRM index and can be searched.',
-          index_record_id: indexRecordId,
-          materialization_status: 'not_implemented',
-        },
-      };
+      if (!resolvedOrgId) {
+        return { success: false, error: 'Organization ID is required for materialization' };
+      }
+
+      // Fetch the index record first
+      const { data: indexRecord, error: indexError } = await client
+        .from('crm_contact_index')
+        .select('*')
+        .eq('org_id', resolvedOrgId)
+        .eq('crm_source', crmSource)
+        .eq('crm_record_id', crmRecordId)
+        .maybeSingle();
+
+      if (indexError || !indexRecord) {
+        return {
+          success: false,
+          error: `Contact not found in CRM index: ${crmSource}/${crmRecordId}`,
+        };
+      }
+
+      // Import and call materialization service
+      const { materializeContact } = await import('../_shared/materializationService.ts');
+      const result = await materializeContact(client, resolvedOrgId, indexRecord);
+
+      return result;
     }
 
     default:
@@ -1049,6 +1077,22 @@ When users ask for CRM data ("show me my leads", "list contacts", "recent meetin
    - Present results in a structured format with row count
 
 These tables are READ-ONLY — do not attempt to modify them with create/update/delete operations.
+
+### CRM Index Search (Fast Lightweight Search)
+For quick searches across HubSpot/Attio CRM data WITHOUT creating full materialized records:
+- Use execute_action with search_crm_contacts { query?, email?, name?, company?, job_title?, lifecycle_stage?, has_active_deal?, limit? }
+  - Returns: crm_source, crm_record_id, email, first_name, last_name, full_name, company_name, company_domain, job_title, lifecycle_stage, is_materialized, materialized_contact_id
+- Use execute_action with search_crm_companies { query?, name?, domain?, industry?, limit? }
+  - Returns: crm_source, crm_record_id, name, domain, industry, employee_count, annual_revenue, city, state, country, is_materialized
+- Use execute_action with search_crm_deals { query?, stage?, pipeline?, min_amount?, limit? }
+  - Returns: crm_source, crm_record_id, name, stage, pipeline, amount, close_date, owner_crm_id, company_crm_id, contact_crm_ids, is_materialized
+
+**When to use**: Fast searches when you don't need full contact/company records. Results show if record is_materialized (already in our contacts table) or needs materialization.
+
+**Materialization**: If you find a contact in CRM index that needs full data:
+- Use execute_action with materialize_contact { crm_source, crm_record_id }
+- This pulls the full record from CRM API and creates it in the contacts table
+- Updates the index with materialized_contact_id for future lookups
 
 ## Organization Context
 

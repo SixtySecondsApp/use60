@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { checkCreditBalance } from '../_shared/costTracking.ts'
+import { classifyLeads, extractDomainFromEmail } from '../_shared/classifyLeadStatus.ts'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -9,6 +10,8 @@ import { checkCreditBalance } from '../_shared/costTracking.ts'
 
 interface ProspectingSearchRequest {
   icp_profile_id?: string
+  parent_icp_id?: string
+  profile_type?: 'icp' | 'persona'
   provider: 'apollo' | 'ai_ark'
   action?: 'people_search' | 'company_search'
   search_params: Record<string, unknown>
@@ -88,7 +91,7 @@ serve(async (req) => {
     // 3. Parse request body
     // ------------------------------------------------------------------
     const body = (await req.json()) as ProspectingSearchRequest
-    const { icp_profile_id, provider, action, search_params, page = 1, per_page = 25 } = body
+    const { icp_profile_id, parent_icp_id, profile_type, provider, action, search_params, page = 1, per_page = 25 } = body
 
     if (!provider || !['apollo', 'ai_ark'].includes(provider)) {
       return json({ error: 'Invalid provider. Must be "apollo" or "ai_ark".', code: 'INVALID_PARAMS' }, 400)
@@ -291,10 +294,46 @@ serve(async (req) => {
     }
 
     // ------------------------------------------------------------------
-    // 11. Return unified response
+    // 11. Classify leads (net_new, uncontacted, contacted_no_deal, existing_with_deal)
     // ------------------------------------------------------------------
+    let enrichedResults = results;
+    try {
+      const leadsToClassify = results
+        .filter((r: any) => r.email)
+        .map((r: any) => ({
+          email: r.email,
+          company_domain: r.organization?.website_url || r.organization_website_url || extractDomainFromEmail(r.email),
+        }));
+
+      if (leadsToClassify.length > 0) {
+        const classifications = await classifyLeads(serviceClient, orgId, leadsToClassify);
+
+        enrichedResults = results.map((r: any) => {
+          if (!r.email) return r;
+
+          const classification = classifications.get(r.email);
+          return {
+            ...r,
+            classification: classification?.classification || 'net_new',
+            has_active_deal: classification?.has_active_deal || false,
+            contact_id: classification?.contact_id || null,
+          };
+        });
+
+        console.log(`[prospecting-search] Classified ${leadsToClassify.length} leads`);
+      }
+    } catch (classifyError) {
+      console.error('[prospecting-search] Classification error (non-blocking):', classifyError);
+      // If classification fails, return results without classification
+    }
+
+    // ------------------------------------------------------------------
+    // 12. Return unified response
+    // ------------------------------------------------------------------
+    const searchChained = !!(profile_type === 'persona' && parent_icp_id);
+
     return json({
-      results,
+      results: enrichedResults,
       total_results: totalResults,
       credits_consumed: creditsConsumed,
       page,
@@ -304,6 +343,8 @@ serve(async (req) => {
       action: action || (provider === 'apollo' ? 'people_search' : undefined),
       duration_ms: durationMs,
       icp_profile_id: icp_profile_id || null,
+      search_chained: searchChained, // Telemetry: persona with parent_icp_id (chained not yet implemented for external providers)
+      parent_icp_id: searchChained ? parent_icp_id : null,
     })
   } catch (error) {
     console.error('[prospecting-search] Unexpected error:', error)

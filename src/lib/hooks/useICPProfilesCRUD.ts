@@ -24,6 +24,7 @@ export const icpProfileKeys = {
   all: ['icp-profiles'] as const,
   list: (orgId: string) => ['icp-profiles', orgId] as const,
   detail: (id: string) => ['icp-profile', id] as const,
+  children: (parentId: string) => ['icp-profile-children', parentId] as const,
   searchHistory: (profileId: string) => ['icp-search-history', profileId] as const,
 };
 
@@ -52,6 +53,25 @@ export function useICPProfile(id: string | undefined) {
 }
 
 // ---------------------------------------------------------------------------
+// Query: Get child personas for a parent ICP
+// ---------------------------------------------------------------------------
+
+export function useICPProfileChildren(parentId: string | undefined) {
+  return useQuery<ICPProfile[], Error>({
+    queryKey: icpProfileKeys.children(parentId ?? ''),
+    queryFn: async () => {
+      if (!parentId) return [];
+      const allProfiles = await icpProfileService.listProfiles(
+        // We need the org_id - get it from the parent profile
+        (await icpProfileService.getProfile(parentId))?.organization_id ?? ''
+      );
+      return allProfiles.filter(p => p.parent_icp_id === parentId && p.profile_type === 'persona');
+    },
+    enabled: !!parentId,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Mutation: Create ICP profile
 // ---------------------------------------------------------------------------
 
@@ -62,6 +82,10 @@ export function useCreateICPProfile() {
     mutationFn: (payload) => icpProfileService.createProfile(payload),
     onSuccess: (profile) => {
       queryClient.invalidateQueries({ queryKey: icpProfileKeys.list(profile.organization_id) });
+      // If this is a persona with a parent, invalidate the parent's children cache
+      if (profile.parent_icp_id) {
+        queryClient.invalidateQueries({ queryKey: icpProfileKeys.children(profile.parent_icp_id) });
+      }
       toast.success(`ICP profile "${profile.name}" created`);
     },
     onError: (error) => {
@@ -82,6 +106,10 @@ export function useUpdateICPProfile() {
     onSuccess: (profile) => {
       queryClient.invalidateQueries({ queryKey: icpProfileKeys.list(profile.organization_id) });
       queryClient.invalidateQueries({ queryKey: icpProfileKeys.detail(profile.id) });
+      // If this is a persona with a parent, invalidate the parent's children cache
+      if (profile.parent_icp_id) {
+        queryClient.invalidateQueries({ queryKey: icpProfileKeys.children(profile.parent_icp_id) });
+      }
       toast.success(`ICP profile "${profile.name}" updated`);
     },
     onError: (error) => {
@@ -97,7 +125,7 @@ export function useUpdateICPProfile() {
 export function useDeleteICPProfile() {
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, { id: string; orgId: string; name: string }>({
+  return useMutation<void, Error, { id: string; orgId: string; name: string; parentIcpId?: string | null }>({
     mutationFn: ({ id }) => icpProfileService.deleteProfile(id),
     onMutate: async ({ id, orgId }) => {
       // Cancel any in-flight refetches so they don't overwrite our optimistic update
@@ -116,8 +144,12 @@ export function useDeleteICPProfile() {
 
       return { previousProfiles };
     },
-    onSuccess: (_data, { orgId, name }) => {
+    onSuccess: (_data, { orgId, name, parentIcpId }) => {
       queryClient.invalidateQueries({ queryKey: icpProfileKeys.list(orgId) });
+      // If this was a persona with a parent, invalidate the parent's children cache
+      if (parentIcpId) {
+        queryClient.invalidateQueries({ queryKey: icpProfileKeys.children(parentIcpId) });
+      }
       toast.success(`ICP profile "${name}" deleted`);
     },
     onError: (error, { orgId }, context) => {
@@ -141,6 +173,10 @@ export function useDuplicateICPProfile() {
     mutationFn: ({ id, newName }) => icpProfileService.duplicateProfile(id, newName),
     onSuccess: (profile) => {
       queryClient.invalidateQueries({ queryKey: icpProfileKeys.list(profile.organization_id) });
+      // If this is a persona with a parent, invalidate the parent's children cache
+      if (profile.parent_icp_id) {
+        queryClient.invalidateQueries({ queryKey: icpProfileKeys.children(profile.parent_icp_id) });
+      }
       toast.success(`ICP profile duplicated as "${profile.name}"`);
     },
     onError: (error) => {

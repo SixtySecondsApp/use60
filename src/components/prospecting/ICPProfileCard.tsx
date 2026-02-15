@@ -6,8 +6,8 @@ import {
   Play,
   Trash2,
   Clock,
-  AlertCircle,
   CheckCircle,
+  Table,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -34,13 +34,13 @@ import type { ICPProfile, ICPStatus, ICPTargetProvider } from '@/lib/types/prosp
 // Status Badge Config
 // ---------------------------------------------------------------------------
 
-const STATUS_CONFIG: Record<ICPStatus, { label: string; variant: 'default' | 'secondary' | 'success' | 'warning' | 'destructive' | 'outline' }> = {
-  draft: { label: 'Draft', variant: 'secondary' },
-  testing: { label: 'Testing', variant: 'default' },
-  pending_approval: { label: 'Pending', variant: 'warning' },
-  approved: { label: 'Approved', variant: 'success' },
+const STATUS_CONFIG: Partial<Record<ICPStatus, { label: string; variant: 'default' | 'secondary' | 'success' | 'warning' | 'destructive' | 'outline' }>> = {
   active: { label: 'Active', variant: 'success' },
   archived: { label: 'Archived', variant: 'outline' },
+  draft: { label: 'Draft', variant: 'secondary' },
+  testing: { label: 'Testing', variant: 'warning' },
+  pending_approval: { label: 'Pending', variant: 'warning' },
+  approved: { label: 'Approved', variant: 'success' },
 };
 
 // ---------------------------------------------------------------------------
@@ -65,22 +65,33 @@ function ProviderLabel({ provider }: { provider: ICPTargetProvider }) {
 function FilterSummary({ profile }: { profile: ICPProfile }) {
   const parts: string[] = [];
   const c = profile.criteria;
+  if (!c) return null;
 
-  if (c.industries?.length) {
-    parts.push(`${c.industries.length} ${c.industries.length === 1 ? 'industry' : 'industries'}`);
-  }
-  if (c.seniority_levels?.length) {
-    parts.push(c.seniority_levels.join(', '));
-  }
-  if (c.employee_ranges?.length) {
-    const range = c.employee_ranges[0];
-    parts.push(`${range.min}-${range.max} employees`);
-  }
-  if (c.departments?.length) {
-    parts.push(`${c.departments.length} ${c.departments.length === 1 ? 'dept' : 'depts'}`);
-  }
-  if (c.title_keywords?.length) {
-    parts.push(`${c.title_keywords.length} title ${c.title_keywords.length === 1 ? 'keyword' : 'keywords'}`);
+  const isPersona = profile.profile_type === 'persona';
+
+  if (isPersona) {
+    // Persona profiles: show demographic summary (seniority, departments, titles, product_tag)
+    if (c.seniority_levels?.length) {
+      parts.push(c.seniority_levels.join(', '));
+    }
+    if (c.departments?.length) {
+      parts.push(`${c.departments.length} ${c.departments.length === 1 ? 'dept' : 'depts'}`);
+    }
+    if (c.title_keywords?.length) {
+      parts.push(`${c.title_keywords.length} title ${c.title_keywords.length === 1 ? 'keyword' : 'keywords'}`);
+    }
+    if (c.product_tag) {
+      parts.push(`Product: ${c.product_tag}`);
+    }
+  } else {
+    // ICP profiles: show firmographic summary (industries, employee ranges)
+    if (c.industries?.length) {
+      parts.push(`${c.industries.length} ${c.industries.length === 1 ? 'industry' : 'industries'}`);
+    }
+    if (c.employee_ranges?.length) {
+      const range = c.employee_ranges[0];
+      parts.push(`${range.min}-${range.max} employees`);
+    }
   }
 
   if (parts.length === 0) return null;
@@ -104,6 +115,7 @@ interface ICPProfileCardProps {
   onDuplicate: (profile: ICPProfile) => void;
   onDelete: (profile: ICPProfile) => void;
   onTest: (profile: ICPProfile) => void;
+  onOpenTable?: (tableId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,10 +130,11 @@ export function ICPProfileCard({
   onDuplicate,
   onDelete,
   onTest,
+  onOpenTable,
 }: ICPProfileCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const statusConfig = STATUS_CONFIG[profile.status] ?? STATUS_CONFIG.draft;
+  const statusConfig = STATUS_CONFIG[profile.status] ?? STATUS_CONFIG.active;
 
   return (
     <>
@@ -133,17 +146,11 @@ export function ICPProfileCard({
             : 'border-[#E2E8F0] dark:border-gray-700/50 bg-white dark:bg-gray-900/80 hover:border-gray-300 dark:hover:border-gray-600 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none'
           }`}
       >
-        {/* Status banners */}
-        {profile.status === 'pending_approval' && (
-          <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-            <AlertCircle className="h-3 w-3" />
-            Awaiting Approval
-          </div>
-        )}
-        {(profile.status === 'approved' || profile.status === 'active') && (
+        {/* Status banner for active profiles */}
+        {profile.status === 'active' && (
           <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-brand-teal/20 dark:border-brand-teal/30 bg-brand-teal/5 dark:bg-brand-teal/10 px-2.5 py-1.5 text-xs font-medium text-brand-teal dark:text-emerald-300">
             <CheckCircle className="h-3 w-3" />
-            Approved
+            Active
             {profile.updated_at && (
               <span className="opacity-70">
                 {new Date(profile.updated_at).toLocaleDateString()}
@@ -155,9 +162,25 @@ export function ICPProfileCard({
         {/* Header: name + actions */}
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-semibold text-[#1E293B] dark:text-gray-100">
-              {profile.name}
-            </h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="truncate text-sm font-semibold text-[#1E293B] dark:text-gray-100">
+                {profile.name}
+              </h3>
+              <Badge
+                variant="outline"
+                className="shrink-0 text-[10px] border-brand-blue/30 dark:border-brand-blue/30 text-brand-blue dark:text-blue-400"
+              >
+                {(profile.profile_type || 'icp').toUpperCase()}
+              </Badge>
+              {profile.criteria?.product_tag && (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 text-[10px] border-violet-300/50 dark:border-violet-400/50 text-violet-600 dark:text-violet-400 bg-violet-50/50 dark:bg-violet-950/30"
+                >
+                  {profile.criteria.product_tag}
+                </Badge>
+              )}
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -177,6 +200,15 @@ export function ICPProfileCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {profile.linked_table_id && onOpenTable && (
+                  <>
+                    <DropdownMenuItem onClick={() => onOpenTable(profile.linked_table_id!)}>
+                      <Table className="mr-2 h-4 w-4" />
+                      Open Table
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem onClick={() => onEdit(profile)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Edit
@@ -216,7 +248,22 @@ export function ICPProfileCard({
           <FilterSummary profile={profile} />
         </div>
 
-        {/* Footer: last tested + test button */}
+        {/* Linked table indicator */}
+        {profile.linked_table_id && onOpenTable && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenTable(profile.linked_table_id!);
+            }}
+            className="mb-3 flex w-full items-center gap-2 rounded-lg border border-brand-blue/20 dark:border-brand-blue/30 bg-brand-blue/5 dark:bg-brand-blue/10 px-3 py-2 text-xs font-medium text-brand-blue dark:text-blue-400 transition-colors hover:bg-brand-blue/10 dark:hover:bg-brand-blue/20"
+          >
+            <Table className="h-3.5 w-3.5" />
+            Open Leads Table
+            <span className="ml-auto text-brand-blue/60 dark:text-blue-400/60">&rarr;</span>
+          </button>
+        )}
+
+        {/* Footer: last tested + find more button */}
         <div className="flex items-center justify-between">
           {profile.last_tested_at ? (
             <div className="flex items-center gap-1.5 text-xs text-[#64748B] dark:text-gray-400">
@@ -243,7 +290,7 @@ export function ICPProfileCard({
             className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-blue dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-brand-blue/10 dark:hover:bg-blue-500/10"
           >
             <Play className="h-3 w-3" />
-            Test
+            Find Leads
           </button>
         </div>
       </div>
@@ -253,11 +300,11 @@ export function ICPProfileCard({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-red-600 dark:text-red-400">
-              Delete ICP Profile
+              {profile.profile_type === 'persona' ? 'Delete Buyer Persona' : 'Delete Company ICP'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete &quot;{profile.name}&quot;? This action cannot be undone.
-              Any search history linked to this profile will be preserved but unlinked.
+              Any search history linked to this {profile.profile_type === 'persona' ? 'persona' : 'ICP'} will be preserved but unlinked.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

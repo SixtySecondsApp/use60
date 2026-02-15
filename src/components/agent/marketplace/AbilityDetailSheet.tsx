@@ -15,8 +15,10 @@ import { useAbilityPrerequisites } from '@/hooks/useAbilityPrerequisites';
 import { useAgentAbilityPreferences } from '@/hooks/useAgentAbilityPreferences';
 import { getSequenceTypeForEventType, USE_CASE_CATEGORIES, type AbilityDefinition } from '@/lib/agent/abilityRegistry';
 import { cn } from '@/lib/utils';
-import { Check, Lock, MessageSquare, Mail, Bell, Zap, Clock, TrendingUp } from 'lucide-react';
+import { Check, Lock, MessageSquare, Mail, Bell, Zap, Clock, TrendingUp, FlaskConical, ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { AbilityTestPanel } from '@/components/agent/marketplace/AbilityTestPanel';
 
 // =============================================================================
 // Types
@@ -94,6 +96,8 @@ export function AbilityDetailSheet({
     email: true,
     'in-app': true,
   });
+
+  const [testOpen, setTestOpen] = useState(false);
 
   // Load delivery channels from localStorage
   useEffect(() => {
@@ -445,6 +449,31 @@ export function AbilityDetailSheet({
               </div>
             </div>
           )}
+
+          {/* Test This Ability Section */}
+          <Collapsible open={testOpen} onOpenChange={setTestOpen}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full py-3 group">
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-300 uppercase tracking-wide">
+                <FlaskConical className="w-4 h-4 text-gray-400" />
+                Test This Ability
+              </div>
+              <ChevronDown className={cn(
+                'w-4 h-4 text-gray-400 transition-transform duration-200',
+                testOpen && 'rotate-180'
+              )} />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              {ability.status === 'planned' ? (
+                <div className="py-4 text-sm text-gray-500 text-center">
+                  Coming soon
+                </div>
+              ) : (
+                <div className="max-h-[400px] overflow-y-auto">
+                  <AbilityTestPanel ability={ability} />
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </SheetContent>
     </Sheet>

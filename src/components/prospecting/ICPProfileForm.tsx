@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Building2, Users, MapPin, Cpu, ChevronDown, ChevronRight, Link, Package } from 'lucide-react';
+import { X, Plus, Building2, Users, MapPin, Cpu, ChevronDown, ChevronRight, Link, Package, User, UserCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { useCreateICPProfile, useUpdateICPProfile } from '@/lib/hooks/useICPProfilesCRUD';
+import { useCreateICPProfile, useUpdateICPProfile, useICPProfiles } from '@/lib/hooks/useICPProfilesCRUD';
 import { useFactProfiles } from '@/lib/hooks/useFactProfiles';
 import { useProductProfiles, useProductProfilesByFactProfile } from '@/lib/hooks/useProductProfiles';
 import { productProfileToICPCriteria } from '@/lib/utils/productProfileToICP';
@@ -39,6 +39,7 @@ import type {
   ICPTargetProvider,
   ICPStatus,
   ICPVisibility,
+  ICPProfileType,
 } from '@/lib/types/prospecting';
 
 // ---------------------------------------------------------------------------
@@ -107,10 +108,6 @@ const TARGET_PROVIDERS: { value: ICPTargetProvider; label: string }[] = [
 ];
 
 const STATUS_OPTIONS: { value: ICPStatus; label: string }[] = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'testing', label: 'Testing' },
-  { value: 'pending_approval', label: 'Pending Approval' },
-  { value: 'approved', label: 'Approved' },
   { value: 'active', label: 'Active' },
   { value: 'archived', label: 'Archived' },
 ];
@@ -125,6 +122,7 @@ interface ICPProfileFormProps {
   editProfile?: ICPProfile;
   onSaved?: (profile: ICPProfile) => void;
   orgId: string;
+  defaultParentId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +305,7 @@ function EmployeeRangePicker({
 // Component
 // ---------------------------------------------------------------------------
 
-export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }: ICPProfileFormProps) {
+export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId, defaultParentId }: ICPProfileFormProps) {
   const { userId } = useAuth();
   const createMutation = useCreateICPProfile();
   const updateMutation = useUpdateICPProfile();
@@ -317,19 +315,24 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
   // ----- Form state -----
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [profileType, setProfileType] = useState<ICPProfileType>('icp');
   const [targetProvider, setTargetProvider] = useState<ICPTargetProvider>('apollo');
-  const [status, setStatus] = useState<ICPStatus>('draft');
+  const [status, setStatus] = useState<ICPStatus>('active');
   const [visibility, setVisibility] = useState<ICPVisibility>('team_only');
 
   // Profile link state
   const [selectedFactProfileId, setSelectedFactProfileId] = useState<string | null>(null);
   const [selectedProductProfileId, setSelectedProductProfileId] = useState<string | null>(null);
+  const [selectedParentIcpId, setSelectedParentIcpId] = useState<string | null>(null);
 
   // Profile data hooks
   const { data: factProfiles } = useFactProfiles(orgId);
   const { data: filteredProductProfiles } = useProductProfilesByFactProfile(selectedFactProfileId ?? undefined);
   const { data: allProductProfiles } = useProductProfiles(orgId);
   const productProfiles = selectedFactProfileId ? filteredProductProfiles : allProductProfiles;
+  const { data: allIcpProfiles } = useICPProfiles(orgId);
+  const parentIcpOptions = allIcpProfiles?.filter((p) => p.profile_type === 'icp') ?? [];
+  const selectedParentIcp = parentIcpOptions.find((p) => p.id === selectedParentIcpId);
 
   // Criteria state
   const [industries, setIndustries] = useState<string[]>([]);
@@ -347,6 +350,12 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
   const [technologyKeywords, setTechnologyKeywords] = useState<string[]>([]);
   const [customKeywords, setCustomKeywords] = useState<string[]>([]);
 
+  // Persona-specific criteria state
+  const [painPoints, setPainPoints] = useState<string[]>([]);
+  const [buyingTriggers, setBuyingTriggers] = useState<string[]>([]);
+  const [messagingAngle, setMessagingAngle] = useState('');
+  const [productTag, setProductTag] = useState('');
+
   // ----- Reset form on open / editProfile change -----
   useEffect(() => {
     if (!isOpen) return;
@@ -354,13 +363,15 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
     if (editProfile) {
       setName(editProfile.name);
       setDescription(editProfile.description ?? '');
+      setProfileType(editProfile.profile_type || 'icp');
       setTargetProvider(editProfile.target_provider);
       setStatus(editProfile.status);
       setVisibility(editProfile.visibility);
       setSelectedFactProfileId(editProfile.fact_profile_id ?? null);
       setSelectedProductProfileId(editProfile.product_profile_id ?? null);
+      setSelectedParentIcpId(editProfile.parent_icp_id ?? null);
 
-      const c = editProfile.criteria;
+      const c = editProfile.criteria ?? {} as ICPCriteria;
       setIndustries(c.industries ?? []);
       setEmployeeRanges(c.employee_ranges ?? []);
       setFundingStages(c.funding_stages ?? []);
@@ -375,14 +386,20 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
       setCities(c.location_cities ?? []);
       setTechnologyKeywords(c.technology_keywords ?? []);
       setCustomKeywords(c.custom_keywords ?? []);
+      setPainPoints(c.pain_points ?? []);
+      setBuyingTriggers(c.buying_triggers ?? []);
+      setMessagingAngle(c.messaging_angle ?? '');
+      setProductTag(c.product_tag ?? '');
     } else {
       setName('');
       setDescription('');
+      setProfileType('icp');
       setTargetProvider('apollo');
-      setStatus('draft');
+      setStatus('active');
       setVisibility('team_only');
       setSelectedFactProfileId(null);
       setSelectedProductProfileId(null);
+      setSelectedParentIcpId(defaultParentId ?? null);
       setIndustries([]);
       setEmployeeRanges([]);
       setFundingStages([]);
@@ -397,8 +414,35 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
       setCities([]);
       setTechnologyKeywords([]);
       setCustomKeywords([]);
+      setPainPoints([]);
+      setBuyingTriggers([]);
+      setMessagingAngle('');
+      setProductTag('');
     }
-  }, [isOpen, editProfile]);
+  }, [isOpen, editProfile, defaultParentId]);
+
+  // ----- Handle profile type change -----
+  const handleProfileTypeChange = useCallback((newType: ICPProfileType) => {
+    setProfileType(newType);
+
+    // Clear type-specific fields when switching to avoid stale data
+    if (newType === 'icp') {
+      // Switching to ICP - clear persona fields
+      setPainPoints([]);
+      setBuyingTriggers([]);
+      setMessagingAngle('');
+      setProductTag('');
+    } else {
+      // Switching to persona - clear firmographic fields
+      setIndustries([]);
+      setEmployeeRanges([]);
+      setFundingStages([]);
+      setRevenueMin('');
+      setRevenueMax('');
+      setTechnologyKeywords([]);
+      setCustomKeywords([]);
+    }
+  }, []);
 
   // ----- Toggle helpers -----
   const toggleArray = useCallback((arr: string[], value: string): string[] =>
@@ -470,6 +514,12 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
       };
     }
 
+    // Persona-specific fields
+    if (painPoints.length > 0) criteria.pain_points = painPoints;
+    if (buyingTriggers.length > 0) criteria.buying_triggers = buyingTriggers;
+    if (messagingAngle.trim()) criteria.messaging_angle = messagingAngle.trim();
+    if (productTag.trim()) criteria.product_tag = productTag.trim();
+
     return criteria;
   };
 
@@ -488,7 +538,11 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
       technologyKeywords.length > 0 ||
       customKeywords.length > 0 ||
       revenueMin !== '' ||
-      revenueMax !== ''
+      revenueMax !== '' ||
+      painPoints.length > 0 ||
+      buyingTriggers.length > 0 ||
+      messagingAngle.trim() !== '' ||
+      productTag.trim() !== ''
     );
   };
 
@@ -507,12 +561,14 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
           payload: {
             name: name.trim(),
             description: description.trim() || null,
+            profile_type: profileType,
             target_provider: targetProvider,
             status,
             visibility,
             criteria,
             fact_profile_id: selectedFactProfileId,
             product_profile_id: selectedProductProfileId,
+            parent_icp_id: selectedParentIcpId,
           },
         },
         {
@@ -530,11 +586,13 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
           name: name.trim(),
           description: description.trim() || null,
           criteria,
+          profile_type: profileType,
           target_provider: targetProvider,
           status,
           visibility,
           fact_profile_id: selectedFactProfileId,
           product_profile_id: selectedProductProfileId,
+          parent_icp_id: selectedParentIcpId,
         },
         {
           onSuccess: (profile) => {
@@ -550,15 +608,167 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit ICP Profile' : 'Create ICP Profile'}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle>
             {isEditing
-              ? 'Update targeting criteria for this Ideal Customer Profile.'
-              : 'Define your Ideal Customer Profile to target the right prospects.'}
+              ? (profileType === 'icp' ? 'Edit Company ICP' : 'Edit Buyer Persona')
+              : (profileType === 'icp' ? 'Create Company ICP' : 'Create Buyer Persona')}
+          </DialogTitle>
+          <DialogDescription>
+            {profileType === 'icp'
+              ? 'Define your Ideal Customer Profile to target the right companies.'
+              : 'Define your Buyer Persona to target the right decision-makers.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* ---- Profile Type Selector ---- */}
+          <div className="space-y-2 pb-4 border-b border-[#E2E8F0] dark:border-gray-700/50">
+            <Label className="text-sm font-medium text-[#1E293B] dark:text-gray-100">Profile Type *</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => handleProfileTypeChange('icp')}
+                className={`flex items-center gap-3 rounded-xl border p-4 transition-all ${
+                  profileType === 'icp'
+                    ? 'border-brand-blue bg-brand-blue/5 dark:bg-brand-blue/10 ring-2 ring-brand-blue/30'
+                    : 'border-[#E2E8F0] dark:border-gray-700/50 hover:border-brand-blue/30 dark:hover:border-brand-blue/30'
+                }`}
+              >
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                  profileType === 'icp'
+                    ? 'bg-brand-blue/10 dark:bg-brand-blue/20'
+                    : 'bg-gray-100 dark:bg-gray-800'
+                }`}>
+                  <Building2 className={`h-5 w-5 ${
+                    profileType === 'icp'
+                      ? 'text-brand-blue dark:text-blue-400'
+                      : 'text-[#64748B] dark:text-gray-400'
+                  }`} />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className={`text-sm font-medium ${
+                    profileType === 'icp'
+                      ? 'text-brand-blue dark:text-blue-400'
+                      : 'text-[#1E293B] dark:text-gray-100'
+                  }`}>
+                    Ideal Customer Profile
+                  </div>
+                  <div className="text-xs text-[#64748B] dark:text-gray-400">Define the companies you sell to — industry, size, tech stack</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleProfileTypeChange('persona')}
+                className={`flex items-center gap-3 rounded-xl border p-4 transition-all ${
+                  profileType === 'persona'
+                    ? 'border-brand-blue bg-brand-blue/5 dark:bg-brand-blue/10 ring-2 ring-brand-blue/30'
+                    : 'border-[#E2E8F0] dark:border-gray-700/50 hover:border-brand-blue/30 dark:hover:border-brand-blue/30'
+                }`}
+              >
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                  profileType === 'persona'
+                    ? 'bg-brand-blue/10 dark:bg-brand-blue/20'
+                    : 'bg-gray-100 dark:bg-gray-800'
+                }`}>
+                  <UserCircle className={`h-5 w-5 ${
+                    profileType === 'persona'
+                      ? 'text-brand-blue dark:text-blue-400'
+                      : 'text-[#64748B] dark:text-gray-400'
+                  }`} />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className={`text-sm font-medium ${
+                    profileType === 'persona'
+                      ? 'text-brand-blue dark:text-blue-400'
+                      : 'text-[#1E293B] dark:text-gray-100'
+                  }`}>
+                    Buyer Persona
+                  </div>
+                  <div className="text-xs text-[#64748B] dark:text-gray-400">Define the people you sell to — titles, seniority, pain points</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* ---- Parent ICP Selector (Persona only) ---- */}
+          {profileType === 'persona' && (
+            <div className="space-y-3 pb-4 border-b border-[#E2E8F0] dark:border-gray-700/50">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-[#1E293B] dark:text-gray-100">
+                  Parent Company ICP
+                </Label>
+                <Select
+                  value={selectedParentIcpId ?? '__none__'}
+                  onValueChange={(v) => setSelectedParentIcpId(v === '__none__' ? null : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="None (standalone)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None (standalone)</SelectItem>
+                    {parentIcpOptions.map((icp) => (
+                      <SelectItem key={icp.id} value={icp.id}>
+                        {icp.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Parent ICP Summary Card */}
+              {selectedParentIcp && (
+                <div className="rounded-lg bg-[#F8FAFC] dark:bg-gray-800/50 border border-[#E2E8F0] dark:border-gray-700/50 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-[#64748B] dark:text-gray-400" />
+                    <span className="text-sm font-medium text-[#1E293B] dark:text-gray-100">
+                      {selectedParentIcp.name}
+                    </span>
+                  </div>
+
+                  {selectedParentIcp.criteria && (
+                    <div className="space-y-1.5 text-xs text-[#64748B] dark:text-gray-400">
+                      {selectedParentIcp.criteria.industries && selectedParentIcp.criteria.industries.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          <span className="font-medium">Industries:</span>
+                          {selectedParentIcp.criteria.industries.slice(0, 3).map((ind, i) => (
+                            <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">
+                              {ind}
+                            </Badge>
+                          ))}
+                          {selectedParentIcp.criteria.industries.length > 3 && (
+                            <span className="text-[10px]">+{selectedParentIcp.criteria.industries.length - 3} more</span>
+                          )}
+                        </div>
+                      )}
+
+                      {selectedParentIcp.criteria.employee_ranges && selectedParentIcp.criteria.employee_ranges.length > 0 && (
+                        <div>
+                          <span className="font-medium">Company Size:</span>{' '}
+                          {selectedParentIcp.criteria.employee_ranges.map((r) => `${r.min}-${r.max === 1000000 ? '10k+' : r.max}`).join(', ')}
+                        </div>
+                      )}
+
+                      {selectedParentIcp.criteria.location_countries && selectedParentIcp.criteria.location_countries.length > 0 && (
+                        <div>
+                          <span className="font-medium">Locations:</span>{' '}
+                          {selectedParentIcp.criteria.location_countries.slice(0, 2).join(', ')}
+                          {selectedParentIcp.criteria.location_countries.length > 2 && ` +${selectedParentIcp.criteria.location_countries.length - 2} more`}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedParentIcp.description && (
+                    <p className="text-xs text-[#64748B] dark:text-gray-400 italic mt-2">
+                      {selectedParentIcp.description}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ---- Basic Info ---- */}
           <div className="space-y-4">
             <div className="space-y-2">
@@ -720,8 +930,9 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
             </div>
           </div>
 
-          {/* ---- Firmographic Filters ---- */}
-          <FormSection icon={Building2} title="Firmographic Filters">
+          {/* ---- Firmographic Filters (ICP only) ---- */}
+          {profileType === 'icp' && (
+            <FormSection icon={Building2} title="Firmographic Filters">
             <TagInput
               label="Industries"
               tags={industries}
@@ -763,9 +974,11 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
               </div>
             </div>
           </FormSection>
+          )}
 
-          {/* ---- Persona Filters ---- */}
-          <FormSection icon={Users} title="Persona Filters">
+          {/* ---- Persona Filters (Persona only) ---- */}
+          {profileType === 'persona' && (
+            <FormSection icon={Users} title="Persona Filters">
             <MultiChipPicker
               label="Seniority Levels"
               options={SENIORITY_LEVELS}
@@ -802,7 +1015,46 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
                 placeholder="e.g. CTO, VP Engineering, Head of Product..."
               />
             </div>
+
+            <TagInput
+              label="Pain Points"
+              tags={painPoints}
+              onAdd={(t) => setPainPoints((prev) => [...prev, t])}
+              onRemove={(t) => setPainPoints((prev) => prev.filter((v) => v !== t))}
+              placeholder="e.g. Manual processes, scaling challenges, budget constraints..."
+            />
+
+            <TagInput
+              label="Buying Triggers"
+              tags={buyingTriggers}
+              onAdd={(t) => setBuyingTriggers((prev) => [...prev, t])}
+              onRemove={(t) => setBuyingTriggers((prev) => prev.filter((v) => v !== t))}
+              placeholder="e.g. New funding, leadership change, product launch..."
+            />
+
+            <div className="space-y-2">
+              <Label htmlFor="messaging-angle">Messaging Angle</Label>
+              <Textarea
+                id="messaging-angle"
+                value={messagingAngle}
+                onChange={(e) => setMessagingAngle(e.target.value)}
+                placeholder="How should we position our solution to this persona?"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="product-tag">Product/Service Tag</Label>
+              <Input
+                id="product-tag"
+                value={productTag}
+                onChange={(e) => setProductTag(e.target.value)}
+                placeholder="e.g. Enterprise Plan, Professional Services..."
+                maxLength={100}
+              />
+            </div>
           </FormSection>
+          )}
 
           {/* ---- Geography ---- */}
           <FormSection icon={MapPin} title="Geography" defaultOpen={false}>
@@ -831,24 +1083,26 @@ export function ICPProfileForm({ isOpen, onClose, editProfile, onSaved, orgId }:
             />
           </FormSection>
 
-          {/* ---- Technographic ---- */}
-          <FormSection icon={Cpu} title="Technographic" defaultOpen={false}>
-            <TagInput
-              label="Technology Keywords"
-              tags={technologyKeywords}
-              onAdd={(t) => setTechnologyKeywords((prev) => [...prev, t])}
-              onRemove={(t) => setTechnologyKeywords((prev) => prev.filter((v) => v !== t))}
-              placeholder="e.g. React, Salesforce, AWS..."
-            />
+          {/* ---- Technographic (ICP only) ---- */}
+          {profileType === 'icp' && (
+            <FormSection icon={Cpu} title="Technographic" defaultOpen={false}>
+              <TagInput
+                label="Technology Keywords"
+                tags={technologyKeywords}
+                onAdd={(t) => setTechnologyKeywords((prev) => [...prev, t])}
+                onRemove={(t) => setTechnologyKeywords((prev) => prev.filter((v) => v !== t))}
+                placeholder="e.g. React, Salesforce, AWS..."
+              />
 
-            <TagInput
-              label="Custom Keywords"
-              tags={customKeywords}
-              onAdd={(t) => setCustomKeywords((prev) => [...prev, t])}
-              onRemove={(t) => setCustomKeywords((prev) => prev.filter((v) => v !== t))}
-              placeholder="e.g. remote-first, B2B, enterprise..."
-            />
-          </FormSection>
+              <TagInput
+                label="Custom Keywords"
+                tags={customKeywords}
+                onAdd={(t) => setCustomKeywords((prev) => [...prev, t])}
+                onRemove={(t) => setCustomKeywords((prev) => prev.filter((v) => v !== t))}
+                placeholder="e.g. remote-first, B2B, enterprise..."
+              />
+            </FormSection>
+          )}
         </div>
 
         {/* ---- Validation hint ---- */}

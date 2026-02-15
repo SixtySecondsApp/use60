@@ -162,6 +162,7 @@ serve(async (req) => {
             job_title: values.job_title?.[0]?.value,
             lifecycle_stage: values.lifecycle_stage?.[0]?.value,
             lead_status: values.lead_status?.[0]?.value,
+            phone_numbers: values.phone_numbers?.[0]?.phone_number,
             updated_at: values.updated_at || new Date().toISOString(),
           }
 
@@ -176,6 +177,36 @@ serve(async (req) => {
           if (indexResult.success) {
             syncedToCrmIndex = true
             console.log(`[attio-webhook] Indexed contact ${recordId} in CRM index`)
+
+            // If contact is materialized, update the full contacts table
+            if (indexResult.isMaterialized && indexResult.contactId) {
+              try {
+                const { data: indexRecord } = await svc
+                  .from('crm_contact_index')
+                  .select('materialized_contact_id, first_name, last_name, email, phone, company_name, job_title')
+                  .eq('id', indexResult.contactId)
+                  .maybeSingle()
+
+                if (indexRecord?.materialized_contact_id) {
+                  await svc
+                    .from('contacts')
+                    .update({
+                      first_name: indexRecord.first_name || undefined,
+                      last_name: indexRecord.last_name || undefined,
+                      email: indexRecord.email || undefined,
+                      phone: indexRecord.phone || undefined,
+                      title: indexRecord.job_title || undefined,
+                      company: indexRecord.company_name || undefined,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', indexRecord.materialized_contact_id)
+
+                  console.log(`[attio-webhook] Updated materialized contact ${indexRecord.materialized_contact_id}`)
+                }
+              } catch (materializeErr) {
+                console.error(`[attio-webhook] Failed to update materialized contact for ${recordId}:`, materializeErr)
+              }
+            }
           }
         } else if (objectType === 'companies') {
           // Map Attio company fields
@@ -185,6 +216,9 @@ serve(async (req) => {
             industry: values.industry?.[0]?.value,
             employee_count: values.employee_count?.[0]?.value,
             estimated_arr: values.estimated_arr?.[0]?.value,
+            city: values.city?.[0]?.value,
+            state: values.state?.[0]?.value || values.province?.[0]?.value,
+            country: values.country?.[0]?.value,
             updated_at: values.updated_at || new Date().toISOString(),
           }
 
@@ -199,6 +233,45 @@ serve(async (req) => {
           if (indexResult.success) {
             syncedToCrmIndex = true
             console.log(`[attio-webhook] Indexed company ${recordId} in CRM index`)
+
+            // If company is materialized, update the full companies table
+            if (indexResult.isMaterialized && indexResult.companyId) {
+              try {
+                const { data: indexRecord } = await svc
+                  .from('crm_company_index')
+                  .select('materialized_company_id, name, domain, industry, employee_count, city, state, country')
+                  .eq('id', indexResult.companyId)
+                  .maybeSingle()
+
+                if (indexRecord?.materialized_company_id) {
+                  // Map employee count to size enum
+                  let size = null
+                  if (indexRecord.employee_count) {
+                    const count = Number(indexRecord.employee_count)
+                    size = count <= 10 ? 'startup'
+                      : count <= 50 ? 'small'
+                      : count <= 200 ? 'medium'
+                      : count <= 1000 ? 'large'
+                      : 'enterprise'
+                  }
+
+                  await svc
+                    .from('companies')
+                    .update({
+                      name: indexRecord.name || undefined,
+                      domain: indexRecord.domain || undefined,
+                      industry: indexRecord.industry || undefined,
+                      size: size || undefined,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', indexRecord.materialized_company_id)
+
+                  console.log(`[attio-webhook] Updated materialized company ${indexRecord.materialized_company_id}`)
+                }
+              } catch (materializeErr) {
+                console.error(`[attio-webhook] Failed to update materialized company for ${recordId}:`, materializeErr)
+              }
+            }
           }
         }
       } catch (indexErr) {

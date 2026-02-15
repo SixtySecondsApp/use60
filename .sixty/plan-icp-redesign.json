@@ -1,0 +1,304 @@
+{
+  "name": "ICP Redesign + Ops Integration",
+  "version": "1.0",
+  "createdAt": "2026-02-15T16:00:00Z",
+  "description": "Redesign the ICP page: introduce ICP (company) vs IBP (product/service buyer) profile types, simplify lifecycle to active/archived, link each profile to a persistent Ops table, move search to Ops with 'Find More' action, add CRM search, and classify leads as net-new vs uncontacted.",
+  "consultReport": ".sixty/consult/icp-redesign.md",
+  "decisions": {
+    "tableRename": "DO NOT rename icp_profiles table — too risky (213 file refs, 5 migrations, RLS). Add profile_type column instead.",
+    "profileTypes": "icp (company targeting) and ibp (product/service buyer targeting) in same table",
+    "lifecycle": "Simplify from 6-stage to active/archived only",
+    "opsLink": "Each profile gets a persistent Ops table (linked_table_id) that accumulates results",
+    "sourceTagging": "Results tagged with source_icp_id in dynamic_table_rows for provenance tracking",
+    "searchLocation": "ICP page defines criteria, Ops page runs searches via 'Find More' sheet",
+    "crmSearch": "Separate edge function queries internal contacts/companies with ICP criteria",
+    "leadClassification": "Server-side: net_new / uncontacted / contacted_no_deal / existing_with_deal"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Foundation",
+      "description": "Schema changes (profile_type, status simplification) and ICP/IBP rename across types, service, and UI",
+      "priority": "critical",
+      "stories": ["ICP-001", "ICP-002", "ICP-003"]
+    },
+    {
+      "id": "phase-2",
+      "name": "Ops Bridge",
+      "description": "Persistent table per profile, source tagging, auto-create linked Ops table on profile creation",
+      "priority": "critical",
+      "stories": ["ICP-004", "ICP-005"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Search from Ops",
+      "description": "Find More sheet on Ops tables, CRM search endpoint, net-new vs uncontacted classification",
+      "priority": "high",
+      "stories": ["ICP-006", "ICP-007", "ICP-008"]
+    },
+    {
+      "id": "phase-4",
+      "name": "Full Integration",
+      "description": "Replace throwaway import with persistent append, wire end-to-end search from Ops",
+      "priority": "high",
+      "stories": ["ICP-009", "ICP-010"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "ICP-001",
+      "title": "Migration: add profile_type column and simplify status to active/archived",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "estimate": "15min",
+      "description": "Add profile_type TEXT column to icp_profiles (values: 'icp', 'ibp', default 'icp'). Migrate all existing profiles from draft/testing/pending_approval/approved to 'active'. Drop old status constraint and add new CHECK (status IN ('active', 'archived')). Add index on profile_type.",
+      "acceptance_criteria": [
+        "icp_profiles.profile_type column exists with CHECK ('icp', 'ibp'), default 'icp'",
+        "All existing rows have profile_type = 'icp'",
+        "All non-archived rows have status = 'active' (draft/testing/pending_approval/approved migrated)",
+        "New CHECK constraint only allows 'active' and 'archived'",
+        "Migration runs clean without data loss"
+      ],
+      "files": [
+        "supabase/migrations/20260215100001_icp_profile_type_and_status_simplification.sql"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "ICP-002",
+      "title": "Update types, service, and hooks for profile_type and simplified status",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "25min",
+      "description": "Update ICPProfile type to add profile_type: 'icp' | 'ibp'. Change ICPStatus to 'active' | 'archived' only. Update CreateICPProfilePayload to accept profile_type. Update icpProfileService PROFILE_COLUMNS to include profile_type. Update useICPProfilesCRUD hooks — remove status filter tabs for draft/testing/pending_approval/approved (keep All/Active/Archived). Add profile_type to query key. Update all UI label strings: 'Ideal Customer Profile' for icp type, 'Ideal Buyer Profile' for ibp type.",
+      "acceptance_criteria": [
+        "ICPProfile type includes profile_type: 'icp' | 'ibp'",
+        "ICPStatus type is 'active' | 'archived' only",
+        "icpProfileService.createProfile accepts and persists profile_type",
+        "PROFILE_COLUMNS includes profile_type",
+        "useICPProfiles hook returns profile_type in results",
+        "No TypeScript compile errors"
+      ],
+      "files": [
+        "src/lib/types/prospecting.ts",
+        "src/lib/services/icpProfileService.ts",
+        "src/lib/hooks/useICPProfilesCRUD.ts"
+      ],
+      "dependencies": ["ICP-001"],
+      "blockedBy": ["ICP-001"]
+    },
+    {
+      "id": "ICP-003",
+      "title": "Redesign Profiles page UI with ICP/IBP sections and simplified lifecycle",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "30min",
+      "description": "Replace single 'ICPs' tab with two sub-sections or a profile_type filter on the existing grid. ICPProfileGrid: replace 6 status tabs with 3 (All / Active / Archived) + profile_type toggle (All / Customer Profiles / Buyer Profiles). ICPProfileCard: show profile_type badge, remove draft/testing/pending_approval status badges. ICPProfileForm: add profile_type selector (radio: 'Ideal Customer Profile' / 'Ideal Buyer Profile') at top of form. When ibp selected and product_profile linked, auto-fill from product research. Update page header text and descriptions. FilterSummary: already fixed null guard.",
+      "acceptance_criteria": [
+        "Profile grid shows profile_type badge on each card (ICP or IBP)",
+        "Status filter tabs are All / Active / Archived only",
+        "Profile type filter toggle works (All / Customer / Buyer)",
+        "Create form has profile_type selector at top",
+        "IBP type auto-links to product profile and pre-fills criteria",
+        "No approval workflow UI (StatusWorkflow, ApprovalFeedback removed/hidden)",
+        "Page header says 'Profiles' with subtitle explaining ICP vs IBP"
+      ],
+      "files": [
+        "src/pages/ProfilesPage.tsx",
+        "src/components/prospecting/ICPProfileGrid.tsx",
+        "src/components/prospecting/ICPProfileCard.tsx",
+        "src/components/prospecting/ICPProfileForm.tsx",
+        "src/components/prospecting/ProspectingTab.tsx",
+        "src/components/prospecting/ProspectingDashboard.tsx"
+      ],
+      "dependencies": ["ICP-002"],
+      "blockedBy": ["ICP-002"]
+    },
+    {
+      "id": "ICP-004",
+      "title": "Migration: add linked_table_id to icp_profiles + add source_type 'icp' to dynamic_tables",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "schema",
+      "estimate": "10min",
+      "description": "Add linked_table_id UUID column (nullable FK to dynamic_tables) to icp_profiles. Add source_type value 'icp' to the dynamic_tables source_type enum/check. Add source_icp_id UUID column to dynamic_table_rows (nullable, for provenance tracking). Add index on source_icp_id.",
+      "acceptance_criteria": [
+        "icp_profiles.linked_table_id column exists (nullable UUID FK to dynamic_tables)",
+        "dynamic_tables supports source_type = 'icp'",
+        "dynamic_table_rows.source_icp_id column exists (nullable UUID)",
+        "Index on dynamic_table_rows.source_icp_id created",
+        "Migration runs clean"
+      ],
+      "files": [
+        "supabase/migrations/20260215100002_icp_linked_table_and_source_tagging.sql"
+      ],
+      "dependencies": ["ICP-001"],
+      "blockedBy": ["ICP-001"]
+    },
+    {
+      "id": "ICP-005",
+      "title": "Auto-create linked Ops table on profile creation and wire up service",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "30min",
+      "description": "When creating an ICP/IBP profile, auto-create a dynamic_table with source_type='icp', source_query={icp_profile_id}, and columns appropriate to profile_type (ICP: company columns — name, domain, industry, size, website, location, tech stack; IBP: person columns — name, email, title, company, seniority, linkedin, location). Set linked_table_id on the profile. Update icpProfileService.createProfile to call table creation. Update the form to show 'Linked Table: [name]' after creation. Add 'Open Table' link on ICPProfileCard when linked_table_id exists.",
+      "acceptance_criteria": [
+        "Creating an ICP profile auto-creates an Ops table with company columns",
+        "Creating an IBP profile auto-creates an Ops table with person columns",
+        "linked_table_id is set on the profile after table creation",
+        "ICPProfileCard shows 'Open in Ops' link when linked_table_id exists",
+        "Table name defaults to '{Profile Name} Prospects'",
+        "Table source_type is 'icp' with source_query containing profile ID"
+      ],
+      "files": [
+        "src/lib/services/icpProfileService.ts",
+        "src/lib/hooks/useICPProfilesCRUD.ts",
+        "src/components/prospecting/ICPProfileCard.tsx",
+        "src/components/prospecting/ICPProfileForm.tsx"
+      ],
+      "dependencies": ["ICP-002", "ICP-004"],
+      "blockedBy": ["ICP-002", "ICP-004"]
+    },
+    {
+      "id": "ICP-006",
+      "title": "Build 'Find More' sheet on Ops table page",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "frontend",
+      "estimate": "30min",
+      "description": "Create FindMoreSheet.tsx — a side sheet (SheetContent with !top-16 !h-[calc(100vh-4rem)]) that opens from the Ops table toolbar when the table has a linked ICP profile. Shows: ICP criteria summary (read-only), provider selector (Apollo / AI Ark / CRM / All), search button, results preview table with row selection, 'Add N rows to table' button. Add 'Find More' button to OpsTablePage toolbar (only visible when table.source_type === 'icp'). Wire search to useProspectingSearch hook for external providers.",
+      "acceptance_criteria": [
+        "FindMoreSheet.tsx component renders as right-side sheet below top bar",
+        "Shows linked ICP criteria summary (industries, titles, company size, etc.)",
+        "Provider selector with Apollo / AI Ark options",
+        "Search button triggers prospecting-search edge function",
+        "Results table with checkbox selection and ICP fit scores",
+        "'Add to Table' button appends selected rows to the current table",
+        "'Find More' button only appears on tables with source_type='icp'"
+      ],
+      "files": [
+        "src/components/ops/FindMoreSheet.tsx",
+        "src/pages/OpsTablePage.tsx"
+      ],
+      "dependencies": ["ICP-005"],
+      "blockedBy": ["ICP-005"]
+    },
+    {
+      "id": "ICP-007",
+      "title": "Build CRM search edge function",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "estimate": "30min",
+      "description": "Create search-crm-with-icp edge function. Accepts ICP criteria + org_id. Queries contacts table (joined with companies) matching: title keywords (ILIKE), seniority, department, industry (via company), employee count (via company.size mapping), location, tech stack. Queries companies table matching: industry, size, revenue, tech stack, location. Returns unified result set with lead_origin: 'crm'. Add 'CRM' as a provider option in FindMoreSheet.",
+      "acceptance_criteria": [
+        "Edge function accepts ICPCriteria + orgId",
+        "Queries contacts with title/seniority/department matching",
+        "Queries companies with industry/size/revenue matching",
+        "Returns results in same format as prospecting-search",
+        "Results tagged with lead_origin: 'crm'",
+        "JWT-authenticated, uses getCorsHeaders",
+        "FindMoreSheet shows 'CRM' as provider option"
+      ],
+      "files": [
+        "supabase/functions/search-crm-with-icp/index.ts",
+        "supabase/functions/search-crm-with-icp/config.toml",
+        "src/components/ops/FindMoreSheet.tsx"
+      ],
+      "dependencies": ["ICP-006"],
+      "blockedBy": ["ICP-006"]
+    },
+    {
+      "id": "ICP-008",
+      "title": "Net-new vs uncontacted lead classification in search results",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "estimate": "25min",
+      "description": "Add classification logic to both prospecting-search and search-crm-with-icp edge functions. For each result: check email against contacts table, check domain against companies table, check for associated deals. Classify as: net_new (not in CRM), uncontacted (in CRM, no last_interaction_at, no meetings), contacted_no_deal (has interactions, no active deal), existing_with_deal (has active deal). Return lead_classification field per result. Add classification badges and filter controls to FindMoreSheet results table.",
+      "acceptance_criteria": [
+        "Each search result includes lead_classification field",
+        "net_new: email/domain not found in contacts/companies",
+        "uncontacted: exists but last_interaction_at is null and total_meetings_count = 0",
+        "contacted_no_deal: has interactions but no active deal",
+        "existing_with_deal: has active deal associated",
+        "FindMoreSheet shows color-coded classification badges",
+        "Filter dropdown to show only net_new / uncontacted / etc."
+      ],
+      "files": [
+        "supabase/functions/prospecting-search/index.ts",
+        "supabase/functions/search-crm-with-icp/index.ts",
+        "src/components/ops/FindMoreSheet.tsx"
+      ],
+      "dependencies": ["ICP-007"],
+      "blockedBy": ["ICP-007"]
+    },
+    {
+      "id": "ICP-009",
+      "title": "Replace throwaway import with persistent table append + standard table tagging",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "frontend",
+      "estimate": "25min",
+      "description": "Rework the import flow: instead of creating a new table each time (ImportToOpsDialog), append rows to the ICP's linked table. Dedup by email (for people) or domain (for companies) before inserting. Set source_icp_id on each inserted row. Also push to standard Leads/All Contacts tables (for IBP/people results) or All Companies table (for ICP/company results) with source_icp_id tag. Keep AddToExistingTableDialog as an alternative. Update ProspectingTab to use the new append flow when a linked table exists.",
+      "acceptance_criteria": [
+        "Search results append to linked table (not create new)",
+        "Dedup by email/domain — skips existing rows, shows count of new vs skipped",
+        "source_icp_id set on every inserted row",
+        "People results also pushed to standard Leads + All Contacts tables",
+        "Company results also pushed to standard All Companies table",
+        "User sees toast: 'Added N new rows (M duplicates skipped)'"
+      ],
+      "files": [
+        "src/components/prospecting/ImportToOpsDialog.tsx",
+        "src/components/prospecting/ProspectingTab.tsx",
+        "src/components/ops/FindMoreSheet.tsx",
+        "src/lib/services/icpProfileService.ts"
+      ],
+      "dependencies": ["ICP-005", "ICP-006"],
+      "blockedBy": ["ICP-005"]
+    },
+    {
+      "id": "ICP-010",
+      "title": "Wire end-to-end search from Ops with classification filters and batch actions",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "frontend",
+      "estimate": "25min",
+      "description": "Final integration: Ops table toolbar 'Find More' button opens FindMoreSheet with full provider support (Apollo, AI Ark, CRM, All). Results show lead_classification badges. Add filter buttons: 'Net New Only', 'Uncontacted', 'All'. Add batch actions: 'Add all net-new', 'Add uncontacted only'. After adding rows, show count in toast and refresh table data. Ensure the flow works end-to-end: define ICP/IBP on Profiles page -> open linked table in Ops -> Find More -> search -> classify -> add -> rows appear in table.",
+      "acceptance_criteria": [
+        "Full search flow works from Ops table: Find More -> select provider -> search -> results -> add",
+        "Classification filter buttons work (Net New / Uncontacted / All)",
+        "Batch 'Add all net-new' adds only net_new classified rows",
+        "Batch 'Add uncontacted' adds only uncontacted classified rows",
+        "Table refreshes after adding rows, showing new row count",
+        "End-to-end: Profiles -> create ICP -> open in Ops -> Find More -> add results"
+      ],
+      "files": [
+        "src/components/ops/FindMoreSheet.tsx",
+        "src/pages/OpsTablePage.tsx"
+      ],
+      "dependencies": ["ICP-008", "ICP-009"],
+      "blockedBy": ["ICP-008", "ICP-009"]
+    }
+  ],
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 0,
+    "currentPhase": "phase-1",
+    "lastUpdated": "2026-02-15T16:00:00Z",
+    "mvp": {
+      "stories": ["ICP-001", "ICP-002", "ICP-003", "ICP-004", "ICP-005", "ICP-006"],
+      "description": "ICP/IBP distinction, simplified lifecycle, persistent table per profile, Find More from Ops with external providers"
+    },
+    "parallelGroups": [
+      { "group": ["ICP-002", "ICP-004"], "after": "ICP-001", "reason": "Both depend only on schema, no file overlap" },
+      { "group": ["ICP-006", "ICP-007"], "after": "ICP-005", "reason": "Frontend and backend can proceed in parallel" }
+    ]
+  }
+}

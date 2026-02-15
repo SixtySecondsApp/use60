@@ -9,6 +9,7 @@ import type {
   NotificationAdapter,
 } from './types.ts';
 import { enqueueWriteback, mapFieldsToHubSpot, mapFieldsToAttio, type CrmSource } from '../enqueueWriteback.ts';
+import { upsertContactIndex, upsertCompanyIndex } from '../upsertCrmIndex.ts';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -1270,6 +1271,52 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               });
 
               console.log(`[dbAdapter] Enqueued ${params.entity} write-back to ${crmSource}`);
+
+              // Also update the CRM index immediately for fast search
+              try {
+                if (params.entity === 'contact' && entityRecord) {
+                  await upsertContactIndex({
+                    supabase: client,
+                    orgId: ctx.orgId,
+                    crmSource,
+                    crmRecordId: crmRecordId || `local_${entityRecord.id}`,
+                    properties: {
+                      first_name: entityRecord.first_name,
+                      last_name: entityRecord.last_name,
+                      email: entityRecord.email,
+                      phone: entityRecord.phone,
+                      company_name: entityRecord.company,
+                      job_title: entityRecord.job_title,
+                      updated_at: new Date().toISOString(),
+                      ...updates,
+                    },
+                  });
+                  console.log(`[dbAdapter] Updated CRM contact index for ${entityRecord.id}`);
+                } else if (params.entity === 'company' && entityRecord) {
+                  await upsertCompanyIndex({
+                    supabase: client,
+                    orgId: ctx.orgId,
+                    crmSource,
+                    crmRecordId: crmRecordId || `local_${entityRecord.id}`,
+                    properties: {
+                      name: entityRecord.name,
+                      domain: entityRecord.domain,
+                      industry: entityRecord.industry,
+                      employee_count: entityRecord.employee_count,
+                      annual_revenue: entityRecord.annual_revenue,
+                      city: entityRecord.city,
+                      state: entityRecord.state,
+                      country: entityRecord.country,
+                      updated_at: new Date().toISOString(),
+                      ...updates,
+                    },
+                  });
+                  console.log(`[dbAdapter] Updated CRM company index for ${entityRecord.id}`);
+                }
+              } catch (indexErr) {
+                // Log but don't fail the main operation
+                console.error('[dbAdapter] Failed to update CRM index:', indexErr);
+              }
             }
           } catch (writebackErr) {
             // Log but don't fail the main operation

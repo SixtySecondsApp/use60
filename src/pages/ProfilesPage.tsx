@@ -29,7 +29,7 @@ import type { FactProfile } from '@/lib/types/factProfile';
 const TABS = [
   { key: 'business', label: 'Your Business', icon: Shield },
   { key: 'companies', label: 'Companies', icon: Building2 },
-  { key: 'icps', label: 'ICPs', icon: Target },
+  { key: 'icps', label: 'Targeting', icon: Target },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];

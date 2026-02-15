@@ -237,3 +237,100 @@ export async function searchCrmCompanies(
     return fail(`CRM company search failed: ${errMsg}`);
   }
 }
+
+// =============================================================================
+// Deal Index Search
+// =============================================================================
+
+export interface SearchCrmDealsParams {
+  query?: string;     // Full-text search across deal name
+  stage?: string;     // Deal stage filter
+  pipeline?: string;  // Pipeline filter
+  minAmount?: number; // Minimum deal amount
+  limit?: number;     // Default 25, max 100
+}
+
+export interface CrmDealIndexRecord {
+  id: string;
+  name: string | null;
+  stage: string | null;
+  pipeline: string | null;
+  amount: number | null;
+  close_date: string | null;
+  owner_crm_id: string | null;
+  company_crm_id: string | null;
+  contact_crm_ids: string[] | null;
+  is_materialized: boolean;
+  materialized_deal_id: string | null;
+  crm_source: string;
+  crm_record_id: string;
+}
+
+/**
+ * Search CRM deal index
+ * Uses the lightweight crm_deal_index table for fast searches
+ */
+export async function searchCrmDeals(
+  svc: SupabaseClient,
+  orgId: string,
+  params: SearchCrmDealsParams
+): Promise<{ success: true; data: CrmDealIndexRecord[] } | { success: false; error: string }> {
+  try {
+    const limit = Math.min(params.limit || 25, 100);
+
+    // Full-text search
+    if (params.query) {
+      const term = `%${params.query}%`;
+
+      let q = svc
+        .from('crm_deal_index')
+        .select('id, name, stage, pipeline, amount, close_date, owner_crm_id, company_crm_id, contact_crm_ids, is_materialized, materialized_deal_id, crm_source, crm_record_id')
+        .eq('org_id', orgId)
+        .ilike('name', term)
+        .limit(limit)
+        .order('updated_at', { ascending: false });
+
+      const { data, error } = await q;
+
+      if (error) {
+        console.error('[searchCrmDeals] Full-text search error:', error);
+        return fail(`CRM deal search failed: ${error.message}`);
+      }
+
+      return ok(data || []);
+    }
+
+    // Individual field filters
+    let q = svc
+      .from('crm_deal_index')
+      .select('id, name, stage, pipeline, amount, close_date, owner_crm_id, company_crm_id, contact_crm_ids, is_materialized, materialized_deal_id, crm_source, crm_record_id')
+      .eq('org_id', orgId);
+
+    if (params.stage) {
+      q = q.eq('stage', params.stage);
+    }
+
+    if (params.pipeline) {
+      q = q.eq('pipeline', params.pipeline);
+    }
+
+    if (params.minAmount !== undefined) {
+      q = q.gte('amount', params.minAmount);
+    }
+
+    q = q.limit(limit).order('updated_at', { ascending: false });
+
+    const { data, error } = await q;
+
+    if (error) {
+      console.error('[searchCrmDeals] Search error:', error);
+      return fail(`CRM deal search failed: ${error.message}`);
+    }
+
+    return ok(data || []);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('[searchCrmDeals] Exception:', err);
+    return fail(`CRM deal search failed: ${errMsg}`);
+  }
+}

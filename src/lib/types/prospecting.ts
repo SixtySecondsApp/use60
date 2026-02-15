@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 export interface ICPCriteria {
+  // Firmographic criteria (used by both ICP and persona)
   industries?: string[];
   employee_ranges?: { min: number; max: number }[];
   funding_stages?: string[];
@@ -18,6 +19,12 @@ export interface ICPCriteria {
   technology_keywords?: string[];
   revenue_range?: { min: number; max: number };
   custom_keywords?: string[];
+
+  // Persona-specific fields (only used when profile_type = 'persona')
+  pain_points?: string[];
+  buying_triggers?: string[];
+  messaging_angle?: string;
+  product_tag?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -25,6 +32,8 @@ export interface ICPCriteria {
 // ---------------------------------------------------------------------------
 
 export type ICPTargetProvider = 'apollo' | 'ai_ark' | 'both';
+
+export type ICPProfileType = 'icp' | 'persona';
 
 export type ICPStatus =
   | 'draft'
@@ -43,10 +52,13 @@ export interface ICPProfile {
   name: string;
   description: string | null;
   criteria: ICPCriteria;
+  profile_type?: ICPProfileType;
+  parent_icp_id?: string | null;
   target_provider: ICPTargetProvider;
   status: ICPStatus;
   visibility: ICPVisibility;
   is_active: boolean;
+  linked_table_id?: string | null;
   fact_profile_id?: string | null;
   product_profile_id?: string | null;
   last_tested_at: string | null;
@@ -65,6 +77,8 @@ export interface CreateICPProfilePayload {
   name: string;
   description?: string | null;
   criteria: ICPCriteria;
+  profile_type?: ICPProfileType;
+  parent_icp_id?: string | null;
   target_provider?: ICPTargetProvider;
   status?: ICPStatus;
   visibility?: ICPVisibility;
@@ -77,6 +91,8 @@ export interface UpdateICPProfilePayload {
   name?: string;
   description?: string | null;
   criteria?: ICPCriteria;
+  profile_type?: ICPProfileType;
+  parent_icp_id?: string | null;
   target_provider?: ICPTargetProvider;
   status?: ICPStatus;
   visibility?: ICPVisibility;

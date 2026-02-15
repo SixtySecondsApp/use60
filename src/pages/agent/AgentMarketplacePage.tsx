@@ -5,10 +5,11 @@
  * with a hero banner, rich preview cards, and detail sheet.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useIntegrationStore } from '@/lib/stores/integrationStore';
 import { useAgentAbilityPreferences } from '@/hooks/useAgentAbilityPreferences';
 import {
   ABILITY_REGISTRY,
@@ -29,6 +30,13 @@ interface AbilityStats {
 export default function AgentMarketplacePage() {
   const { user } = useAuth();
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null);
+  const checkGoogleConnection = useIntegrationStore((s) => s.checkGoogleConnection);
+
+  // Initialize integration state on mount so cards/hero can detect connected integrations
+  useEffect(() => {
+    void checkGoogleConnection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Backend preferences for orchestrator abilities
   const { isEnabled: isBackendEnabled, toggleEnabled: toggleBackendEnabled } =

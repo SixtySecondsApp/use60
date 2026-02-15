@@ -21,6 +21,8 @@ export type ProspectingAction = 'people_search' | 'company_search'
 
 export interface ProspectingSearchParams {
   icp_profile_id?: string
+  parent_icp_id?: string
+  profile_type?: 'icp' | 'persona'
   provider: ProspectingProvider
   action?: ProspectingAction
   search_params: Record<string, unknown>
@@ -39,6 +41,8 @@ export interface ProspectingSearchResult {
   action?: ProspectingAction
   duration_ms: number
   icp_profile_id: string | null
+  search_chained?: boolean
+  parent_icp_id?: string | null
 }
 
 export interface ProspectingSearchHistoryEntry {

@@ -207,6 +207,37 @@ function calculateTriggerMatch(
 }
 
 /**
+ * Step 0: Check if the user intent matches a standard table query.
+ * This runs BEFORE skill/sequence matching to fast-track ops table queries.
+ */
+function detectStandardTableIntent(
+  userMessage: string
+): { matched: boolean; tableName?: string; filters?: unknown[] } | null {
+  const msg = userMessage.toLowerCase();
+
+  // Table name detection
+  const tablePatterns: Array<{ pattern: RegExp; tableName: string }> = [
+    { pattern: /\b(leads?|prospects?|pipeline)\b/i, tableName: 'Leads' },
+    { pattern: /\b(meetings?|calls?|conversations?)\b/i, tableName: 'Meetings' },
+    { pattern: /\b(contacts?|people)\b/i, tableName: 'All Contacts' },
+    { pattern: /\b(companies|accounts?|organizations?)\b/i, tableName: 'All Companies' },
+  ];
+
+  // Intent verbs that indicate a query
+  const queryVerbs = /\b(show|list|find|get|query|search|display|how many|count|top|recent|active)\b/i;
+
+  if (!queryVerbs.test(msg)) return null;
+
+  for (const { pattern, tableName } of tablePatterns) {
+    if (pattern.test(msg)) {
+      return { matched: true, tableName };
+    }
+  }
+
+  return null;
+}
+
+/**
  * Fetch all active organization skills via the RPC (single call).
  * Returns the raw rows; callers filter by category as needed.
  */
@@ -284,6 +315,18 @@ export async function routeToSkill(
     orgId?: string;
     currentView?: string;
     dataProviderPreference?: DataProviderPreference;
+    icpProfile?: {
+      id: string;
+      name: string;
+      profile_type?: 'icp' | 'persona';
+      parent_icp_id?: string | null;
+      criteria?: Record<string, unknown>;
+    };
+    parentIcpProfile?: {
+      id: string;
+      name: string;
+      criteria?: Record<string, unknown>;
+    };
   }
 ): Promise<RoutingDecision> {
   const candidates: SkillMatch[] = [];
@@ -296,6 +339,28 @@ export async function routeToSkill(
       candidates: [],
       isSequenceMatch: false,
       reason: 'No organization ID provided for skill routing',
+    };
+  }
+
+  // Step 0: Check for standard table query intent FIRST
+  const tableIntent = detectStandardTableIntent(message);
+  if (tableIntent?.matched && tableIntent.tableName) {
+    // Fast-track to query-standard-table skill
+    const standardTableSkill: SkillMatch = {
+      skillId: 'query-standard-table',
+      skillKey: 'query-standard-table',
+      name: 'Query Standard Table',
+      category: 'ops',
+      confidence: 0.85, // High confidence for direct table query intent
+      matchedTrigger: `standard table query: ${tableIntent.tableName}`,
+      isSequence: false,
+    };
+
+    return {
+      selectedSkill: standardTableSkill,
+      candidates: [standardTableSkill],
+      isSequenceMatch: false,
+      reason: `Standard table query detected: ${tableIntent.tableName}`,
     };
   }
 

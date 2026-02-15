@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Upload, FileSpreadsheet, Table2, Search, Wand2 } from 'lucide-react';
+import { StandardTablesGallery } from './StandardTablesGallery';
 
 interface CreateTableModalProps {
   isOpen: boolean;
@@ -11,6 +12,8 @@ interface CreateTableModalProps {
   onSelectOpsTable: () => void;
   onSelectBlank: () => void;
   onSelectWorkflow?: () => void;
+  existingTables?: Array<{ id: string; name: string; row_count: number; is_standard?: boolean }>;
+  onTableClick?: (tableId: string) => void;
 }
 
 // HubSpot logo as inline SVG
@@ -103,6 +106,8 @@ export function CreateTableModal({
   onSelectOpsTable,
   onSelectBlank,
   onSelectWorkflow,
+  existingTables = [],
+  onTableClick,
 }: CreateTableModalProps) {
   if (!isOpen) return null;
 
@@ -133,6 +138,11 @@ export function CreateTableModal({
     }
   };
 
+  const handleTableClick = (tableId: string) => {
+    onClose();
+    onTableClick?.(tableId);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -140,9 +150,9 @@ export function CreateTableModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-700/60 px-6 py-4">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-700/60 bg-zinc-900 px-6 py-4">
           <h2 className="text-lg font-semibold text-white">Create New Table</h2>
           <button
             onClick={onClose}
@@ -152,26 +162,47 @@ export function CreateTableModal({
           </button>
         </div>
 
-        {/* Options Grid */}
-        <div className="grid grid-cols-2 gap-3 p-6">
-          {SOURCE_OPTIONS.map((option) => {
-            const Icon = option.icon;
-            return (
-              <button
-                key={option.id}
-                onClick={() => handleSelect(option.id)}
-                className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all ${option.borderColor} ${option.hoverBorder} hover:bg-zinc-800/50`}
-              >
-                <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${option.bgColor} ${option.color}`}>
-                  <Icon />
-                </div>
-                <h3 className="text-sm font-medium text-white">{option.title}</h3>
-                <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
-                  {option.description}
-                </p>
-              </button>
-            );
-          })}
+        <div className="p-6 space-y-6">
+          {/* Standard Tables Section */}
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-zinc-300">Standard Tables</h3>
+            <StandardTablesGallery
+              onTableClick={handleTableClick}
+              existingTables={existingTables}
+            />
+          </div>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-zinc-700/60"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-zinc-900 px-3 text-xs text-zinc-500">Or create from source</span>
+            </div>
+          </div>
+
+          {/* Source Options Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            {SOURCE_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => handleSelect(option.id)}
+                  className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all ${option.borderColor} ${option.hoverBorder} hover:bg-zinc-800/50`}
+                >
+                  <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${option.bgColor} ${option.color}`}>
+                    <Icon />
+                  </div>
+                  <h3 className="text-sm font-medium text-white">{option.title}</h3>
+                  <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
+                    {option.description}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

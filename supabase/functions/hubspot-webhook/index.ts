@@ -375,8 +375,42 @@ serve(async (req) => {
             crmRecordId: objectId,
             properties: indexProps,
           })
-            .then((result) => {
-              if (result.success) syncedToIndex++
+            .then(async (result) => {
+              if (result.success) {
+                syncedToIndex++
+
+                // If contact is materialized, update the full contacts table
+                if (result.isMaterialized && result.contactId) {
+                  try {
+                    // Find the materialized contact ID
+                    const { data: indexRecord } = await supabase
+                      .from('crm_contact_index')
+                      .select('materialized_contact_id, first_name, last_name, email, phone, company_name, job_title')
+                      .eq('id', result.contactId)
+                      .maybeSingle()
+
+                    if (indexRecord?.materialized_contact_id) {
+                      // Update the materialized contact with latest CRM data
+                      await supabase
+                        .from('contacts')
+                        .update({
+                          first_name: indexRecord.first_name || undefined,
+                          last_name: indexRecord.last_name || undefined,
+                          email: indexRecord.email || undefined,
+                          phone: indexRecord.phone || undefined,
+                          title: indexRecord.job_title || undefined,
+                          company: indexRecord.company_name || undefined,
+                          updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', indexRecord.materialized_contact_id)
+
+                      console.log(`[hubspot-webhook] Updated materialized contact ${indexRecord.materialized_contact_id}`)
+                    }
+                  } catch (materializeErr) {
+                    console.error(`[hubspot-webhook] Failed to update materialized contact for ${objectId}:`, materializeErr)
+                  }
+                }
+              }
             })
             .catch((err) => {
               console.error(`[hubspot-webhook] CRM index upsert failed for contact ${objectId}:`, err)
@@ -389,8 +423,51 @@ serve(async (req) => {
             crmRecordId: objectId,
             properties: indexProps,
           })
-            .then((result) => {
-              if (result.success) syncedToIndex++
+            .then(async (result) => {
+              if (result.success) {
+                syncedToIndex++
+
+                // If company is materialized, update the full companies table
+                if (result.isMaterialized && result.companyId) {
+                  try {
+                    // Find the materialized company ID
+                    const { data: indexRecord } = await supabase
+                      .from('crm_company_index')
+                      .select('materialized_company_id, name, domain, industry, employee_count, city, state, country')
+                      .eq('id', result.companyId)
+                      .maybeSingle()
+
+                    if (indexRecord?.materialized_company_id) {
+                      // Map employee count to size enum
+                      let size = null
+                      if (indexRecord.employee_count) {
+                        const count = Number(indexRecord.employee_count)
+                        size = count <= 10 ? 'startup'
+                          : count <= 50 ? 'small'
+                          : count <= 200 ? 'medium'
+                          : count <= 1000 ? 'large'
+                          : 'enterprise'
+                      }
+
+                      // Update the materialized company with latest CRM data
+                      await supabase
+                        .from('companies')
+                        .update({
+                          name: indexRecord.name || undefined,
+                          domain: indexRecord.domain || undefined,
+                          industry: indexRecord.industry || undefined,
+                          size: size || undefined,
+                          updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', indexRecord.materialized_company_id)
+
+                      console.log(`[hubspot-webhook] Updated materialized company ${indexRecord.materialized_company_id}`)
+                    }
+                  } catch (materializeErr) {
+                    console.error(`[hubspot-webhook] Failed to update materialized company for ${objectId}:`, materializeErr)
+                  }
+                }
+              }
             })
             .catch((err) => {
               console.error(`[hubspot-webhook] CRM index upsert failed for company ${objectId}:`, err)

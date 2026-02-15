@@ -2001,6 +2001,101 @@ export async function executeAction(
       };
     }
 
+    case 'search_crm_contacts': {
+      const { searchCrmContacts } = await import('./crmIndexAdapter.ts');
+      const searchParams = {
+        query: params.query ? String(params.query) : undefined,
+        email: params.email ? String(params.email) : undefined,
+        name: params.name ? String(params.name) : undefined,
+        company: params.company ? String(params.company) : undefined,
+        jobTitle: params.job_title ? String(params.job_title) : undefined,
+        lifecycleStage: params.lifecycle_stage ? String(params.lifecycle_stage) : undefined,
+        hasActiveDeal: params.has_active_deal !== undefined ? Boolean(params.has_active_deal) : undefined,
+        limit: params.limit ? Number(params.limit) : 25,
+      };
+
+      const result = await searchCrmContacts(client, orgId, searchParams);
+      return {
+        ...result,
+        source: 'search_crm_contacts',
+      };
+    }
+
+    case 'search_crm_companies': {
+      const { searchCrmCompanies } = await import('./crmIndexAdapter.ts');
+      const searchParams = {
+        query: params.query ? String(params.query) : undefined,
+        name: params.name ? String(params.name) : undefined,
+        domain: params.domain ? String(params.domain) : undefined,
+        industry: params.industry ? String(params.industry) : undefined,
+        limit: params.limit ? Number(params.limit) : 25,
+      };
+
+      const result = await searchCrmCompanies(client, orgId, searchParams);
+      return {
+        ...result,
+        source: 'search_crm_companies',
+      };
+    }
+
+    case 'search_crm_deals': {
+      const { searchCrmDeals } = await import('./crmIndexAdapter.ts');
+      const searchParams = {
+        query: params.query ? String(params.query) : undefined,
+        stage: params.stage ? String(params.stage) : undefined,
+        pipeline: params.pipeline ? String(params.pipeline) : undefined,
+        minAmount: params.min_amount ? Number(params.min_amount) : undefined,
+        limit: params.limit ? Number(params.limit) : 25,
+      };
+
+      const result = await searchCrmDeals(client, orgId, searchParams);
+      return {
+        ...result,
+        source: 'search_crm_deals',
+      };
+    }
+
+    case 'materialize_contact': {
+      const crmSource = params.crm_source ? String(params.crm_source) : '';
+      const crmRecordId = params.crm_record_id ? String(params.crm_record_id) : '';
+
+      if (!crmSource || !crmRecordId) {
+        return {
+          success: false,
+          data: null,
+          error: 'crm_source and crm_record_id are required for materialize_contact',
+          source: 'materialize_contact',
+        };
+      }
+
+      // Fetch the index record first
+      const { data: indexRecord, error: indexError } = await client
+        .from('crm_contact_index')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('crm_source', crmSource)
+        .eq('crm_record_id', crmRecordId)
+        .maybeSingle();
+
+      if (indexError || !indexRecord) {
+        return {
+          success: false,
+          data: null,
+          error: `Contact not found in CRM index: ${crmSource}/${crmRecordId}`,
+          source: 'materialize_contact',
+        };
+      }
+
+      // Import and call materialization service
+      const { materializeContact } = await import('../materializationService.ts');
+      const result = await materializeContact(client, orgId, indexRecord);
+
+      return {
+        ...result,
+        source: result.source || 'materialize_contact',
+      };
+    }
+
     default:
       return { success: false, data: null, error: `Unknown action: ${String(action)}` };
   }

@@ -721,3 +721,15 @@ export function getAbilityCountByStage(): Record<LifecycleStage, number> {
 export function getSequenceTypeForEventType(eventType: string): string | undefined {
   return EVENT_TYPE_TO_SEQUENCE_TYPE[eventType];
 }
+
+/**
+ * Determines what entity type an ability requires for testing.
+ * Returns 'meeting' for meeting-triggered abilities, 'deal' for deal-triggered, null otherwise.
+ */
+export function getRequiredEntityType(eventType: string): 'meeting' | 'deal' | null {
+  const meetingTypes = new Set(['pre_meeting_90min', 'meeting_ended']);
+  const dealTypes = new Set(['deal_risk_scan', 'stale_deal_revival', 'proposal_generation']);
+  if (meetingTypes.has(eventType)) return 'meeting';
+  if (dealTypes.has(eventType)) return 'deal';
+  return null;
+}

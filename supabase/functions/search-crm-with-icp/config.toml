@@ -1,0 +1,2 @@
+[app]
+verify_jwt = true

@@ -86,24 +86,21 @@ export function MarketplaceHero({ enabledCount, totalCount, onAbilityClick }: Ma
   }, [slackConnected, googleConnected, fathomConnected, isEnabled]);
 
   return (
-    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 p-8">
-      {/* Decorative gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent" />
-
-      <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+    <div className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-8">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
         {/* Left side: Title and stats */}
         <div className="flex items-start gap-4">
           {/* Icon */}
-          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
             <Zap className="w-6 h-6 text-white" />
           </div>
 
           {/* Text */}
           <div>
-            <h2 className="text-2xl font-bold text-white mb-1">
-              Supercharge your sales workflow
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+              Agent Abilities
             </h2>
-            <p className="text-indigo-100">
+            <p className="text-sm text-muted-foreground">
               {enabledCount} of {totalCount} abilities active
             </p>
           </div>
@@ -111,7 +108,7 @@ export function MarketplaceHero({ enabledCount, totalCount, onAbilityClick }: Ma
 
         {/* Right side: Recommendations */}
         <div className="w-full lg:w-auto">
-          <div className="text-xs font-semibold text-indigo-200 uppercase tracking-wide mb-3">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
             Recommended for you
           </div>
 
@@ -122,7 +119,7 @@ export function MarketplaceHero({ enabledCount, totalCount, onAbilityClick }: Ma
                 <button
                   key={ability.id}
                   onClick={() => onAbilityClick(ability.id)}
-                  className="group relative flex items-start gap-3 p-4 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-all text-left"
+                  className="group relative flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm transition-all text-left"
                 >
                   {/* Icon with gradient background */}
                   <div className={`flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br ${ability.gradient} flex items-center justify-center`}>
@@ -131,16 +128,13 @@ export function MarketplaceHero({ enabledCount, totalCount, onAbilityClick }: Ma
 
                   {/* Text */}
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-white text-sm mb-1 line-clamp-1">
+                    <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm mb-0.5 line-clamp-1">
                       {ability.name}
                     </div>
-                    <div className="text-xs text-indigo-100 line-clamp-2">
+                    <div className="text-xs text-muted-foreground line-clamp-2">
                       {ability.description.split('.')[0]}.
                     </div>
                   </div>
-
-                  {/* Hover indicator */}
-                  <div className="absolute inset-0 rounded-lg ring-2 ring-white/0 group-hover:ring-white/30 transition-all pointer-events-none" />
                 </button>
               );
             })}

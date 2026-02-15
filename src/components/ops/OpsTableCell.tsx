@@ -1317,6 +1317,112 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     );
   }
 
+  // Date
+  if (columnType === 'date') {
+    if (!cell.value) {
+      return (
+        <div className="w-full h-full flex items-center cursor-text" onClick={startEditing}>
+          <Clock className="w-3 h-3 text-gray-600 shrink-0 mr-1.5" />
+          <span className="text-gray-600 text-sm">—</span>
+        </div>
+      );
+    }
+    let formatted = cell.value;
+    try {
+      const d = new Date(cell.value);
+      if (!isNaN(d.getTime())) {
+        const hasTime = cell.value.includes('T') && !cell.value.endsWith('T00:00:00');
+        formatted = hasTime
+          ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+          : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+    } catch { /* use raw value */ }
+    return (
+      <div className="w-full h-full flex items-center cursor-text" onClick={startEditing}>
+        <Clock className="w-3 h-3 text-gray-500 shrink-0 mr-1.5" />
+        <span className="truncate text-sm text-gray-200" title={cell.value}>
+          {formatted}
+        </span>
+      </div>
+    );
+  }
+
+  // Status (colored badge, uses dropdownOptions like dropdown)
+  if (columnType === 'status') {
+    const options = dropdownOptions ?? [];
+    const selected = options.find((o) => o.value === cell.value);
+    return (
+      <div className="w-full h-full flex items-center relative" ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => setShowDropdown(!showDropdown)}
+          className="w-full h-full flex items-center gap-1.5 cursor-pointer text-left"
+        >
+          {selected ? (
+            <span
+              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+              style={{ backgroundColor: `${selected.color ?? '#6366f1'}20`, color: selected.color ?? '#6366f1' }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full mr-1.5"
+                style={{ backgroundColor: selected.color ?? '#6366f1' }}
+              />
+              {selected.label}
+            </span>
+          ) : cell.value ? (
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-700/50 text-gray-300">
+              {cell.value}
+            </span>
+          ) : (
+            <span className="text-gray-600 text-sm">Select...</span>
+          )}
+          <ChevronDown className="w-3 h-3 text-gray-500 ml-auto" />
+        </button>
+        {showDropdown && (
+          <div className="absolute top-full left-0 z-20 mt-1 min-w-[140px] rounded-lg border border-gray-700 bg-gray-900 py-1 shadow-xl">
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onEdit?.(opt.value);
+                  setShowDropdown(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-gray-800 ${
+                  opt.value === cell.value ? 'text-violet-300' : 'text-gray-300'
+                }`}
+              >
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: opt.color ?? '#6366f1' }}
+                />
+                {opt.label}
+              </button>
+            ))}
+            {cell.value && (
+              <>
+                <div className="my-1 border-t border-gray-700/60" />
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onEdit?.('');
+                    setShowDropdown(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-800 hover:text-gray-300"
+                >
+                  <X className="w-3 h-3" />
+                  Clear
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Default: text cell — click to type
   return (
     <div className="w-full h-full flex items-center cursor-text" onClick={startEditing}>

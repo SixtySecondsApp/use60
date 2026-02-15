@@ -69,8 +69,8 @@ CREATE POLICY "Users can read org queue items"
   FOR SELECT
   USING (
     org_id IN (
-      SELECT organization_id
-      FROM organization_users
+      SELECT org_id
+      FROM organization_memberships
       WHERE user_id = auth.uid()
     )
   );

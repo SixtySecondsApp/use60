@@ -61,7 +61,29 @@ async function processExternalParticipant(
   userId: string,
   meetingDate: string | null
 ): Promise<string | null> {
-  if (!invitee.email) return null
+  // If no email, still create a meeting_attendees record so the name is captured
+  if (!invitee.email) {
+    const { data: existingAttendee } = await supabase
+      .from('meeting_attendees')
+      .select('id')
+      .eq('meeting_id', meetingId)
+      .eq('name', invitee.name)
+      .maybeSingle()
+
+    if (!existingAttendee) {
+      await supabase
+        .from('meeting_attendees')
+        .insert({
+          meeting_id: meetingId,
+          name: invitee.name,
+          email: null,
+          is_external: true,
+          role: 'attendee',
+        })
+      console.log(`[participant-service] Created meeting_attendees for name-only external: ${invitee.name}`)
+    }
+    return null
+  }
 
   // 1. Match or create company from email domain
   const { company } = await matchOrCreateCompany(supabase, invitee.email, userId, invitee.name)

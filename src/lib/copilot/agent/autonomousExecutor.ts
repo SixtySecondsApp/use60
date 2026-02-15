@@ -47,6 +47,20 @@ export interface ExecutorConfig {
   maxIterations?: number;
   /** System prompt additions */
   systemPromptAdditions?: string;
+  /** ICP profile context (for ICP/persona-related requests) */
+  icpProfile?: {
+    id: string;
+    name: string;
+    profile_type?: 'icp' | 'persona';
+    parent_icp_id?: string | null;
+    criteria?: Record<string, unknown>;
+  };
+  /** Parent ICP profile (when icpProfile is a persona) */
+  parentIcpProfile?: {
+    id: string;
+    name: string;
+    criteria?: Record<string, unknown>;
+  };
 }
 
 export interface ExecutorMessage {
@@ -180,6 +194,8 @@ export class AutonomousExecutor {
       model: config.model || 'claude-haiku-4-5',
       maxIterations: config.maxIterations || 10,
       systemPromptAdditions: config.systemPromptAdditions || '',
+      icpProfile: config.icpProfile,
+      parentIcpProfile: config.parentIcpProfile,
     };
 
     this.anthropic = new Anthropic();
@@ -533,12 +549,27 @@ export class AutonomousExecutor {
     }
 
     // Build context for skill execution
-    const context = {
+    const context: Record<string, unknown> = {
       ...this.config.orgContext,
       ...input,
       user_id: this.config.userId,
       organization_id: this.config.organizationId,
     };
+
+    // Add ICP profile context for ICP/persona-related skills
+    if (this.config.icpProfile) {
+      context.icp_profile_id = this.config.icpProfile.id;
+      context.icp_profile_name = this.config.icpProfile.name;
+      context.profile_type = this.config.icpProfile.profile_type || 'icp';
+      context.criteria = this.config.icpProfile.criteria;
+
+      // If this is a persona with a parent ICP, include parent criteria
+      if (this.config.icpProfile.profile_type === 'persona' && this.config.parentIcpProfile) {
+        context.parent_icp_id = this.config.parentIcpProfile.id;
+        context.parent_icp_name = this.config.parentIcpProfile.name;
+        context.parent_criteria = this.config.parentIcpProfile.criteria;
+      }
+    }
 
     // Execute skill via Claude (skill content as system prompt)
     const response = await this.anthropic.messages.create({
@@ -576,6 +607,52 @@ Respond with a JSON object containing the result. If the skill defines outputs, 
     }
 
     return { result: responseText };
+  }
+
+  /**
+   * Build ICP profile context section for system prompt
+   */
+  private buildIcpProfileContext(): string {
+    if (!this.config.icpProfile) return '';
+
+    const profile = this.config.icpProfile;
+    const isPersona = profile.profile_type === 'persona';
+    const profileTypeLabel = isPersona ? 'Buyer Persona' : 'Company ICP';
+
+    let context = `\n\n## ${profileTypeLabel} Context\n\n`;
+    context += `Working with ${profileTypeLabel}: **${profile.name}**\n`;
+
+    // If persona with parent ICP, add parent information
+    if (isPersona && this.config.parentIcpProfile) {
+      const parent = this.config.parentIcpProfile;
+      const parentCriteria = parent.criteria as any;
+
+      context += `\nThis buyer persona belongs to Company ICP: **${parent.name}**\n`;
+
+      // Extract key firmographic details from parent
+      const details: string[] = [];
+      if (parentCriteria?.industries?.length) {
+        details.push(`targeting ${parentCriteria.industries.join(', ')} industries`);
+      }
+      if (parentCriteria?.employee_ranges?.length) {
+        const range = parentCriteria.employee_ranges[0];
+        details.push(`companies with ${range.min}-${range.max} employees`);
+      }
+      if (parentCriteria?.revenue_range) {
+        details.push(`revenue $${parentCriteria.revenue_range.min}M-$${parentCriteria.revenue_range.max}M`);
+      }
+      if (parentCriteria?.location_countries?.length) {
+        details.push(`in ${parentCriteria.location_countries.join(', ')}`);
+      }
+
+      if (details.length > 0) {
+        context += details.join(', ') + '.\n';
+      }
+
+      context += `\n**Search Strategy**: For persona searches, first filter companies using parent ICP firmographic criteria, then search for contacts matching persona demographic criteria within those companies.\n`;
+    }
+
+    return context;
   }
 
   /**
@@ -619,6 +696,7 @@ ${categoryList}
 
 The user belongs to organization: ${this.config.organizationId}
 ${Object.keys(this.config.orgContext).length > 0 ? `\nAvailable context: ${Object.keys(this.config.orgContext).join(', ')}` : ''}
+${this.buildIcpProfileContext()}
 ${this.apifyConnected ? `
 ## Apify Web Scraping (Connected)
 

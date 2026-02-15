@@ -29,6 +29,7 @@ import {
   Send,
   Building2,
   Shield,
+  Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -48,6 +49,7 @@ import { HubSpotPushModal, type HubSpotPushConfig } from '@/components/ops/HubSp
 import { AttioPushModal } from '@/components/ops/AttioPushModal';
 import { AttioSyncHistory } from '@/components/ops/AttioSyncHistory';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
+import { FindMoreSheet } from '@/components/ops/FindMoreSheet';
 import { ViewSelector } from '@/components/ops/ViewSelector';
 import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
 import { ViewConfigPanel, normalizeSortConfig, type ViewConfigState } from '@/components/ops/ViewConfigPanel';
@@ -238,6 +240,9 @@ function OpsDetailPage() {
   const [showApolloFilters, setShowApolloFilters] = useState(false);
   const [showCollectMore, setShowCollectMore] = useState(false);
 
+  // ---- Find More (ICP) ----
+  const [showFindMore, setShowFindMore] = useState(false);
+
   // ---- Instantly state (moved to column system) ----
 
   // ---- Fullscreen mode ----
@@ -394,6 +399,22 @@ function OpsDetailPage() {
     if (!table?.context_profile_id) return null;
     return factProfiles.find((p) => p.id === table.context_profile_id) ?? null;
   }, [table?.context_profile_id, factProfiles]);
+
+  // ---- ICP profile (for Find More button) ----
+  const { data: linkedIcpProfile } = useQuery({
+    queryKey: ['icp-profile-for-table', tableId],
+    queryFn: async () => {
+      if (!tableId) return null;
+      const { data, error } = await supabase
+        .from('icp_profiles')
+        .select('id, name, description, profile_type, criteria, status')
+        .eq('linked_table_id', tableId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!tableId && table?.source_type === 'icp',
+  });
 
   // ---- Enrichment refresh schedules ----
   const { data: enrichSchedules = [], refetch: refetchSchedules } = useQuery({
@@ -2603,6 +2624,17 @@ function OpsDetailPage() {
                 </button>
               );
             })()}
+            {/* Find More button — visible when table has linked ICP profile */}
+            {linkedIcpProfile && (
+              <button
+                onClick={() => setShowFindMore(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-3 py-1.5 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-200"
+                title="Search for more leads matching this ICP"
+              >
+                <Search className="h-3.5 w-3.5" />
+                Find More
+              </button>
+            )}
             <button
               onClick={() => addRowMutation.mutate()}
               disabled={addRowMutation.isPending}
@@ -3732,6 +3764,20 @@ function OpsDetailPage() {
           queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
         }}
       />
+
+      {/* Find More Sheet (ICP-based lead search) */}
+      {linkedIcpProfile && tableId && (
+        <FindMoreSheet
+          open={showFindMore}
+          onOpenChange={setShowFindMore}
+          icpProfile={linkedIcpProfile}
+          tableId={tableId}
+          onRowsAdded={() => {
+            queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+            queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+          }}
+        />
+      )}
 
       {/* Apollo Filter Sheet & Collect More Modal */}
       {tableId && table?.source_type === 'apollo' && (

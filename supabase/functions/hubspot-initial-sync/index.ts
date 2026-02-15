@@ -215,6 +215,32 @@ async function syncDeals(
   return { indexed, cursor };
 }
 
+/**
+ * Update sync state in database
+ */
+async function updateSyncState(
+  supabase: any,
+  orgId: string,
+  updates: {
+    sync_status?: 'idle' | 'syncing' | 'error';
+    cursors?: Record<string, string | null>;
+    error_message?: string | null;
+    last_sync_started_at?: string;
+    last_sync_completed_at?: string;
+    last_successful_sync?: string;
+  }
+) {
+  await supabase
+    .from('hubspot_org_sync_state')
+    .upsert({
+      org_id: orgId,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'org_id'
+    });
+}
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -314,15 +340,37 @@ serve(async (req) => {
       minDelayMs: RATE_LIMIT_DELAY_MS,
     });
 
+    // Mark sync as started
+    await updateSyncState(supabaseAdmin, org_id, {
+      sync_status: 'syncing',
+      last_sync_started_at: new Date().toISOString(),
+      error_message: null,
+    });
+
     // Sync contacts
     console.log('[hubspot-initial-sync] Syncing contacts...');
     const contactResult = await syncContacts(hubspot, supabaseAdmin, org_id);
     console.log(`[hubspot-initial-sync] Indexed ${contactResult.indexed} contacts`);
 
+    // Update cursors after contacts
+    await updateSyncState(supabaseAdmin, org_id, {
+      cursors: {
+        contacts: contactResult.cursor,
+      },
+    });
+
     // Sync companies
     console.log('[hubspot-initial-sync] Syncing companies...');
     const companyResult = await syncCompanies(hubspot, supabaseAdmin, org_id);
     console.log(`[hubspot-initial-sync] Indexed ${companyResult.indexed} companies`);
+
+    // Update cursors after companies
+    await updateSyncState(supabaseAdmin, org_id, {
+      cursors: {
+        contacts: contactResult.cursor,
+        companies: companyResult.cursor,
+      },
+    });
 
     // Sync deals
     console.log('[hubspot-initial-sync] Syncing deals...');
@@ -330,6 +378,20 @@ serve(async (req) => {
     console.log(`[hubspot-initial-sync] Indexed ${dealResult.indexed} deals`);
 
     const durationMs = Date.now() - startTime;
+    const nowISO = new Date().toISOString();
+
+    // Mark sync as complete
+    await updateSyncState(supabaseAdmin, org_id, {
+      sync_status: 'idle',
+      last_sync_completed_at: nowISO,
+      last_successful_sync: nowISO,
+      cursors: {
+        contacts: contactResult.cursor,
+        companies: companyResult.cursor,
+        deals: dealResult.cursor,
+      },
+      error_message: null,
+    });
 
     return new Response(
       JSON.stringify({
@@ -351,6 +413,25 @@ serve(async (req) => {
     });
 
     console.error('[hubspot-initial-sync] Error:', error);
+
+    // Try to update sync state with error (but don't fail if this fails)
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+      // Extract org_id from request body if available
+      const body = await req.clone().json().catch(() => ({}));
+      if (body.org_id) {
+        await updateSyncState(supabaseAdmin, body.org_id, {
+          sync_status: 'error',
+          error_message: error?.message || 'Initial sync failed',
+          last_error_at: new Date().toISOString(),
+        });
+      }
+    } catch (stateError) {
+      console.error('[hubspot-initial-sync] Failed to update error state:', stateError);
+    }
 
     return new Response(
       JSON.stringify({
