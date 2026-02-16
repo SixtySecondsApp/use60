@@ -1,0 +1,129 @@
+{
+  "feature": {
+    "id": "onboarding-startover-fix",
+    "name": "Fix Onboarding Start Over - Auth Cascade & Premature Org Creation",
+    "type": "bugfix",
+    "status": "pending",
+    "branch": "bugfix/onboarding",
+    "createdAt": "2026-02-16T12:30:00Z",
+    "rootCause": "Two interconnected bugs: (1) resetAndCleanup() deletes org membership causing ProtectedRoute auth cascade -> sign-out, (2) Org created with placeholder 'My Organization' before enrichment completes, leaving broken records on failure"
+  },
+
+  "stories": [
+    {
+      "id": "ONBFIX-001",
+      "title": "Restructure resetAndCleanup to prevent auth cascade",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 1,
+      "description": "The core issue: resetAndCleanup() deletes org membership BEFORE resetting state, creating a window where ProtectedRoute sees no membership and triggers redirect cascades. Fix: (1) Reset onboarding_progress to 'website_input' FIRST so needsOnboarding=true, (2) Set a resetting flag in store so ProtectedRoute/OrgContext can skip membership checks during reset, (3) Only then delete org data, (4) Reset store state last.",
+      "acceptance": [
+        "User can click 'Start over' on EnrichmentResultStep without being signed out",
+        "User lands back on website_input step with clean state",
+        "No console errors about RLS failures during reset",
+        "ProtectedRoute does not redirect during active resetAndCleanup"
+      ],
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/components/ProtectedRoute.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["ONBFIX-003"],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "ONBFIX-002",
+      "title": "Defer org creation until enrichment completes",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 2,
+      "description": "Currently submitWebsite() creates org with placeholder 'My Organization' immediately, then starts enrichment. If enrichment fails or user clicks Start Over, a broken org record exists. Fix: (1) In submitWebsite(), do NOT create org immediately - store domain in Zustand only, (2) Pass domain (not org_id) to deep-enrich-organization for enrichment without needing an org, (3) After enrichment completes successfully, create org with the enriched company_name, (4) Only then create membership and set organizationId. This requires the enrichment edge function to support domain-only mode (no org_id required for initial enrichment).",
+      "acceptance": [
+        "No 'My Organization' placeholder records created during onboarding",
+        "Organization created only after enrichment succeeds with actual company name",
+        "If enrichment fails, no orphaned org records exist",
+        "Enrichment edge function accepts domain-only requests without org_id"
+      ],
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "supabase/functions/deep-enrich-organization/index.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["ONBFIX-003"],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "ONBFIX-003",
+      "title": "Simplify resetAndCleanup for deferred org creation",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 3,
+      "description": "With org creation deferred (ONBFIX-002), resetAndCleanup becomes simpler since no org may exist yet at the enrichment_result step. If the user clicks 'Start over' before enrichment completes (enrichment_loading step), there's no org to delete - just reset Zustand state. If they click after enrichment (enrichment_result step where org now exists), clean up the org. The reset flow should check if organizationId exists before attempting DB cleanup.",
+      "acceptance": [
+        "Start over during enrichment_loading resets state without DB calls",
+        "Start over after enrichment_result properly cleans up the created org",
+        "No race conditions between state reset and ProtectedRoute checks"
+      ],
+      "files": [
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/onboarding/v2/EnrichmentResultStep.tsx",
+        "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx"
+      ],
+      "dependencies": { "stories": ["ONBFIX-001", "ONBFIX-002"], "files": [], "schema": [] },
+      "blocks": ["ONBFIX-004"],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "ONBFIX-004",
+      "title": "Test full Start Over flow end-to-end",
+      "type": "testing",
+      "status": "pending",
+      "priority": 4,
+      "description": "Manual verification of all Start Over scenarios: (1) Start over during enrichment loading, (2) Start over after enrichment result, (3) Start over from skills config step, (4) Start over from resume dialog (handleStartFresh), (5) Verify no broken 'My Organization' records created, (6) Verify user stays authenticated throughout, (7) Verify user can successfully complete onboarding after starting over.",
+      "acceptance": [
+        "All 4 Start Over entry points work without sign-out",
+        "No orphaned org records after any Start Over scenario",
+        "User can complete full onboarding flow after starting over",
+        "Console shows no RLS errors or unexpected auth failures"
+      ],
+      "files": [],
+      "dependencies": { "stories": ["ONBFIX-003"], "files": [], "schema": [] },
+      "blocks": [],
+      "estimatedMinutes": 15
+    }
+  ],
+
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 0,
+    "estimatedTotal": "80 minutes",
+    "approach": "ONBFIX-001 and ONBFIX-002 can be developed in parallel (different concerns). ONBFIX-003 depends on both. ONBFIX-004 is final verification.",
+    "parallelGroups": [
+      ["ONBFIX-001", "ONBFIX-002"],
+      ["ONBFIX-003"],
+      ["ONBFIX-004"]
+    ]
+  },
+
+  "investigation": {
+    "agents": [
+      { "name": "explorer-startover", "finding": "resetAndCleanup deletes org+membership then resets state. No auth side effects directly, but organizationId→null triggers cascading re-renders" },
+      { "name": "explorer-org-creation", "finding": "Org created at submitWebsite() with placeholder 'My Organization' BEFORE enrichment. Takes ~5min for enrichment to update name. Orphaned records on failure." },
+      { "name": "explorer-auth", "finding": "Auth cascade: delete membership → ProtectedRoute sees no membership → RLS failures → interpreted as auth failure → redirect to login. NOT direct signOut." },
+      { "name": "explorer-enrichment", "finding": "Enrichment function handles re-enrichment correctly via upsert. No org_id validation. Accepts any org_id without checking existence." }
+    ],
+    "rootCauses": [
+      "resetAndCleanup() deletes org membership before state is properly guarded, causing ProtectedRoute to detect no membership and trigger redirect cascade",
+      "Organization created with placeholder name at website submission, 5 minutes before enrichment completes, leaving broken records if flow is interrupted"
+    ],
+    "keyFiles": {
+      "onboardingStore": "src/lib/stores/onboardingV2Store.ts (resetAndCleanup: 1826-1888, submitWebsite: 633-850, reset: 1773-1823)",
+      "protectedRoute": "src/components/ProtectedRoute.tsx (checkOrgMembership: 199-237, redirect logic: 412-428)",
+      "enrichmentResult": "src/pages/onboarding/v2/EnrichmentResultStep.tsx (handleStartOver: 20-28)",
+      "enrichmentLoading": "src/pages/onboarding/v2/EnrichmentLoadingStep.tsx (handleStartOver)",
+      "skillsConfig": "src/pages/onboarding/v2/SkillsConfigStep.tsx (handleStartOver)",
+      "onboardingProgress": "src/lib/hooks/useOnboardingProgress.ts (needsOnboarding: 446-451)",
+      "enrichmentEdge": "supabase/functions/deep-enrich-organization/index.ts (startEnrichment: 543-661)"
+    }
+  }
+}

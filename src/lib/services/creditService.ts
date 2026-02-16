@@ -264,7 +264,7 @@ export async function getUsageBreakdown(
 
   const { data, error } = await supabase
     .from('ai_cost_events')
-    .select('feature_key, estimated_cost')
+    .select('feature, estimated_cost')
     .eq('org_id', orgId)
     .gte('created_at', sinceIso);
 
@@ -273,10 +273,10 @@ export async function getUsageBreakdown(
     return [];
   }
 
-  // Aggregate by feature_key
+  // Aggregate by feature
   const featureMap = new Map<string, { totalCost: number; callCount: number }>();
   for (const row of data ?? []) {
-    const key = row.feature_key || 'unknown';
+    const key = row.feature || 'unknown';
     const existing = featureMap.get(key) || { totalCost: 0, callCount: 0 };
     existing.totalCost += row.estimated_cost || 0;
     existing.callCount += 1;

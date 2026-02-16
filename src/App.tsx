@@ -41,6 +41,7 @@ import AuthCallback from '@/pages/auth/AuthCallback';
 import AcceptInvitation from '@/pages/auth/AcceptInvitation';
 import InviteSignup from '@/pages/auth/InviteSignup';
 import PendingApprovalPage from '@/pages/auth/PendingApprovalPage';
+import RequestRejectedPage from '@/pages/auth/RequestRejectedPage';
 import InactiveOrganizationScreen from '@/pages/InactiveOrganizationScreen';
 import TestGoogleTasks from '@/pages/TestGoogleTasks';
 import MeetingThumbnail from '@/pages/MeetingThumbnail';
@@ -301,6 +302,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
         <Route path="/auth/reset-password/*" element={<ResetPassword />} />
         <Route path="/auth/set-password" element={<SetPassword />} />
         <Route path="/auth/pending-approval" element={<PendingApprovalPage />} />
+        <Route path="/auth/request-rejected" element={<RequestRejectedPage />} />
         <Route path="/update-password" element={<UpdatePassword />} />
 
         {/* OAuth callback routes - must be public for external redirects */}

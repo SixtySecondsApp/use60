@@ -149,12 +149,18 @@ export async function grantAccess(
         return { success: false, error: emailResponse.data?.error || 'Email sending failed' };
       }
 
-      // 4. Update status to 'released' if currently pending
-      if (entry.status === 'pending') {
+      // 4. Update status to 'released' (works for pending, converted, or any re-invitation)
+      if (entry.status !== 'released') {
         try {
           await supabase
             .from('meetings_waitlist')
-            .update({ status: 'released', granted_access_at: new Date().toISOString(), granted_by: adminUserId })
+            .update({
+              status: 'released',
+              granted_access_at: new Date().toISOString(),
+              granted_by: adminUserId,
+              // Clear converted fields so user can re-signup cleanly
+              ...(entry.status === 'converted' ? { user_id: null, converted_at: null, invitation_accepted_at: null } : {}),
+            })
             .eq('id', entryId);
         } catch (updateError) {
           console.warn('Failed to update status, but email was sent:', updateError);
