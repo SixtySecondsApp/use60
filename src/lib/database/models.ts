@@ -322,9 +322,9 @@ export interface Task {
   completed: boolean;
   completed_at?: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'overdue';
-  task_type: 'call' | 'email' | 'meeting' | 'follow_up' | 'proposal' | 'demo' | 'general';
-  
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'overdue' | 'pending_review' | 'ai_working' | 'draft_ready' | 'approved' | 'dismissed' | 'expired';
+  task_type: 'call' | 'email' | 'meeting' | 'follow_up' | 'proposal' | 'demo' | 'general' | 'research' | 'meeting_prep' | 'crm_update' | 'slack_message' | 'content' | 'alert' | 'insight';
+
   // Relationships
   assigned_to: string;
   created_by: string;
@@ -340,11 +340,24 @@ export interface Task {
   call_action_item_id?: string; // Link to Call action item
   call_id?: string; // Direct reference to call
 
+  // AI / Command Centre fields
+  source?: 'manual' | 'ai_proactive' | 'meeting_transcript' | 'meeting_ai' | 'email_detected' | 'deal_signal' | 'calendar_trigger' | 'copilot';
+  ai_status?: 'none' | 'queued' | 'working' | 'draft_ready' | 'approved' | 'executed' | 'failed' | 'expired';
+  deliverable_type?: 'email_draft' | 'research_brief' | 'meeting_prep' | 'crm_update' | 'content_draft' | 'action_plan' | 'insight';
+  deliverable_data?: Record<string, unknown>;
+  risk_level?: 'low' | 'medium' | 'high' | 'info';
+  confidence_score?: number;
+  reasoning?: string;
+  trigger_event?: string;
+  expires_at?: string;
+  actioned_at?: string;
+  auto_group?: string;
+
   // Metadata
   metadata?: Record<string, any>; // JSONB metadata field for structured data
   created_at: string;
   updated_at: string;
-  
+
   // Joined relations
   assignee?: UserProfile;
   creator?: UserProfile;

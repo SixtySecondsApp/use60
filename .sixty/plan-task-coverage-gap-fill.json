@@ -1,0 +1,428 @@
+{
+  "project": {
+    "name": "Task Coverage Gap-Fill",
+    "description": "Implement AI worker handlers, new signal types, enhanced post-meeting sequence, new skills, and proactive scanner to cover 60 sales tasks across 6 categories. Currently 22/60 fully wired, 18 partially, 20 not covered.",
+    "createdAt": "2026-02-16T19:30:00Z",
+    "branch": "improve/tasks"
+  },
+
+  "features": [
+    {
+      "id": "ai-worker",
+      "name": "AI Worker Handler Implementation",
+      "status": "pending",
+      "priority": 1,
+      "description": "Implement 5 stub handlers in unified-task-ai-worker with real Claude AI calls. This is the single biggest blocker — unblocks 10+ downstream features."
+    },
+    {
+      "id": "signals",
+      "name": "New Signal Types + Proactive Scanner",
+      "status": "pending",
+      "priority": 2,
+      "description": "Add 6 new signal types to task-signal-processor and create proactive-signal-scanner cron for time-based signals."
+    },
+    {
+      "id": "post-meeting",
+      "name": "Enhanced Post-Meeting Sequence",
+      "status": "pending",
+      "priority": 3,
+      "description": "Add conditional steps to meeting_ended sequence for scheduling intent, new stakeholders, pricing extraction, verbal commitments, and colleague task assignment."
+    },
+    {
+      "id": "new-skills",
+      "name": "New Atomic Skills",
+      "status": "pending",
+      "priority": 4,
+      "description": "Create 8 new SKILL.md files for share-recording, warm-intro-drafter, deal-handoff-brief, no-show-followup, linkedin-connect-reminder, flag-for-manager, new-deal-from-meeting, deal-auto-tagger."
+    },
+    {
+      "id": "no-show",
+      "name": "Meeting No-Show Detection",
+      "status": "pending",
+      "priority": 5,
+      "description": "Add no-show detection to meetingbaas-webhook (bot left <2min, no transcript) and fire meeting_no_show signal."
+    },
+    {
+      "id": "milestones",
+      "name": "Relationship Milestones Infrastructure",
+      "status": "pending",
+      "priority": 6,
+      "description": "New DB table + milestone scanner cron + 4 relationship skills (renewal, onboarding, QBR, trial conversion)."
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "AIW-001",
+      "feature": "ai-worker",
+      "title": "Implement handleEmailDraft with Claude AI",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/unified-task-ai-worker/index.ts"], "schema": ["tasks"] },
+      "blocks": ["AIW-002", "AIW-003", "AIW-004", "AIW-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "handleEmailDraft calls Claude Haiku with task context (title, description, contact, deal)",
+        "Fetches meeting transcript if meeting_id exists on task",
+        "Generates personalized follow-up email with subject, body, and to field",
+        "Returns structured deliverable_data with to, subject, body, generated_at"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/unified-task-ai-worker/index.ts"]
+    },
+    {
+      "id": "AIW-002",
+      "feature": "ai-worker",
+      "title": "Implement handleCrmUpdate with Claude AI",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["AIW-001"], "files": [], "schema": ["tasks", "deals"] },
+      "blocks": [],
+      "parallelWith": ["AIW-003", "AIW-004", "AIW-005"],
+      "acceptance": [
+        "handleCrmUpdate calls Claude with deal context + meeting transcript",
+        "Suggests deal stage changes, value updates, MEDDICC field fills, and notes",
+        "Returns structured suggestions array with field, old_value, new_value, confidence"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/unified-task-ai-worker/index.ts"]
+    },
+    {
+      "id": "AIW-003",
+      "feature": "ai-worker",
+      "title": "Implement handleMeetingPrep with Claude AI",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AIW-001"], "files": [], "schema": ["tasks", "meetings", "contacts"] },
+      "blocks": [],
+      "parallelWith": ["AIW-002", "AIW-004", "AIW-005"],
+      "acceptance": [
+        "handleMeetingPrep fetches attendee info, deal history, and past meetings",
+        "Generates structured brief with talking_points, risks, attendee_intel",
+        "Returns deliverable with brief, talking_points array, risks array, attendee_intel object"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/unified-task-ai-worker/index.ts"]
+    },
+    {
+      "id": "AIW-004",
+      "feature": "ai-worker",
+      "title": "Implement handleResearchBrief with Claude AI",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["AIW-001"], "files": [], "schema": ["tasks", "contacts", "companies"] },
+      "blocks": [],
+      "parallelWith": ["AIW-002", "AIW-003", "AIW-005"],
+      "acceptance": [
+        "handleResearchBrief fetches contact/company data from DB",
+        "Generates multi-section research brief with overview, key findings, opportunities",
+        "Returns structured sections array with title, content, and sources"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/unified-task-ai-worker/index.ts"]
+    },
+    {
+      "id": "AIW-005",
+      "feature": "ai-worker",
+      "title": "Implement handleContentDraft with Claude AI",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AIW-001"], "files": [], "schema": ["tasks"] },
+      "blocks": [],
+      "parallelWith": ["AIW-002", "AIW-003", "AIW-004"],
+      "acceptance": [
+        "handleContentDraft calls Claude with task context and content requirements",
+        "Generates markdown content draft based on task description and type",
+        "Returns content string, format (markdown), and generated_at timestamp"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/unified-task-ai-worker/index.ts"]
+    },
+    {
+      "id": "SIG-001",
+      "feature": "signals",
+      "title": "Add 6 new signal types to task-signal-processor",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": ["supabase/functions/task-signal-processor/index.ts"], "schema": ["tasks"] },
+      "blocks": ["SIG-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "validSignalTypes includes: close_date_approaching, proposal_stale, thread_dormant, buyer_commitment_due, verbal_commitment_detected, meeting_no_show",
+        "Each signal type creates appropriate task with correct deliverable_type, title, risk_level",
+        "meeting_no_show creates task with deliverable_type email_draft for reschedule"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/task-signal-processor/index.ts"]
+    },
+    {
+      "id": "SIG-002",
+      "feature": "signals",
+      "title": "Create proactive-signal-scanner cron function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["SIG-001"], "files": [], "schema": ["tasks", "deals"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function at supabase/functions/proactive-signal-scanner/index.ts",
+        "Scans deals where close_date is within 7 days, fires close_date_approaching signal",
+        "Scans proposals sent >3 days ago with no reply, fires proposal_stale signal",
+        "Scans active deal email threads quiet >5 days, fires thread_dormant signal",
+        "Scans buyer action items past due date, fires buyer_commitment_due signal"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["supabase/functions/proactive-signal-scanner/index.ts"]
+    },
+    {
+      "id": "PME-001",
+      "feature": "post-meeting",
+      "title": "Add scheduling intent detection to meeting_ended sequence",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/orchestrator/eventSequences.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PME-002", "PME-003"],
+      "acceptance": [
+        "New sequence step detect-scheduling-intent added after detect-intents",
+        "Step depends on detect-intents output",
+        "When scheduling intent found, chains to find-available-slots sequence"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/_shared/orchestrator/eventSequences.ts"]
+    },
+    {
+      "id": "PME-002",
+      "feature": "post-meeting",
+      "title": "Add verbal commitment signal and new stakeholder detection",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/orchestrator/eventSequences.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PME-001", "PME-003"],
+      "acceptance": [
+        "New step detect-verbal-commitment added after detect-intents, fires verbal_commitment_detected signal",
+        "New step detect-new-stakeholders added after extract-action-items, creates contact suggestion tasks",
+        "Both steps are best-effort criticality"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/_shared/orchestrator/eventSequences.ts"]
+    },
+    {
+      "id": "PME-003",
+      "feature": "post-meeting",
+      "title": "Add pricing extraction and colleague task assignment",
+      "type": "backend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/orchestrator/eventSequences.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PME-001", "PME-002"],
+      "acceptance": [
+        "New step extract-pricing-discussion added after detect-intents",
+        "Pricing data attached to follow-up email context",
+        "extract-action-items output includes colleague assignment when names are mentioned"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/_shared/orchestrator/eventSequences.ts"]
+    },
+    {
+      "id": "SKL-001",
+      "feature": "new-skills",
+      "title": "Create share-recording and warm-intro-drafter skills",
+      "type": "skill",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKL-002", "SKL-003", "SKL-004"],
+      "acceptance": [
+        "skills/atomic/share-recording/SKILL.md created with frontmatter, triggers, and full prompt",
+        "skills/atomic/warm-intro-drafter/SKILL.md created with frontmatter, triggers, and full prompt",
+        "Both pass npm run validate-skills"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["skills/atomic/share-recording/SKILL.md", "skills/atomic/warm-intro-drafter/SKILL.md"]
+    },
+    {
+      "id": "SKL-002",
+      "feature": "new-skills",
+      "title": "Create deal-handoff-brief and no-show-followup skills",
+      "type": "skill",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKL-001", "SKL-003", "SKL-004"],
+      "acceptance": [
+        "skills/atomic/deal-handoff-brief/SKILL.md created with frontmatter, triggers, and full prompt",
+        "skills/atomic/no-show-followup/SKILL.md created with frontmatter, triggers, and full prompt",
+        "Both pass npm run validate-skills"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["skills/atomic/deal-handoff-brief/SKILL.md", "skills/atomic/no-show-followup/SKILL.md"]
+    },
+    {
+      "id": "SKL-003",
+      "feature": "new-skills",
+      "title": "Create linkedin-connect-reminder and flag-for-manager skills",
+      "type": "skill",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKL-001", "SKL-002", "SKL-004"],
+      "acceptance": [
+        "skills/atomic/linkedin-connect-reminder/SKILL.md created with frontmatter, triggers, and full prompt",
+        "skills/atomic/flag-for-manager/SKILL.md created with frontmatter, triggers, and full prompt",
+        "Both pass npm run validate-skills"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["skills/atomic/linkedin-connect-reminder/SKILL.md", "skills/atomic/flag-for-manager/SKILL.md"]
+    },
+    {
+      "id": "SKL-004",
+      "feature": "new-skills",
+      "title": "Create new-deal-from-meeting and deal-auto-tagger skills",
+      "type": "skill",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKL-001", "SKL-002", "SKL-003"],
+      "acceptance": [
+        "skills/atomic/new-deal-from-meeting/SKILL.md created with frontmatter, triggers, and full prompt",
+        "skills/atomic/deal-auto-tagger/SKILL.md created with frontmatter, triggers, and full prompt",
+        "Both pass npm run validate-skills"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["skills/atomic/new-deal-from-meeting/SKILL.md", "skills/atomic/deal-auto-tagger/SKILL.md"]
+    },
+    {
+      "id": "NSH-001",
+      "feature": "no-show",
+      "title": "Add no-show detection to meetingbaas-webhook",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["SIG-001"], "files": ["supabase/functions/meetingbaas-webhook/index.ts"], "schema": ["tasks"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "bot.left event with duration_seconds < 120 and no transcript triggers no-show detection",
+        "Fires meeting_no_show signal to task-signal-processor with contact/deal/meeting context",
+        "Does NOT trigger for bot.failed events (those are bot errors, not no-shows)"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/meetingbaas-webhook/index.ts"]
+    },
+    {
+      "id": "MIL-001",
+      "feature": "milestones",
+      "title": "Create relationship_milestones migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["MIL-002", "MIL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration creates relationship_milestones table with id, org_id, contact_id, deal_id, milestone_type, target_date, status, metadata, created_at, updated_at",
+        "milestone_type enum: onboarding_checkin, qbr_due, renewal_reminder, trial_ending, contract_expiring",
+        "RLS policies for org-scoped access"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/migrations/20260217000001_relationship_milestones.sql"]
+    },
+    {
+      "id": "MIL-002",
+      "feature": "milestones",
+      "title": "Create relationship-milestone-scanner cron function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": ["MIL-001", "SIG-001"], "files": [], "schema": ["relationship_milestones"] },
+      "blocks": ["MIL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function at supabase/functions/relationship-milestone-scanner/index.ts",
+        "Daily cron scans milestones where target_date is within configured window",
+        "Fires appropriate signal to task-signal-processor for each due milestone",
+        "Marks milestone as signal_sent to prevent duplicate signals"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/relationship-milestone-scanner/index.ts"]
+    },
+    {
+      "id": "MIL-003",
+      "feature": "milestones",
+      "title": "Create 4 relationship milestone skills",
+      "type": "skill",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": { "stories": ["MIL-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "skills/atomic/renewal-reminder-drafter/SKILL.md — triggers 60 days before contract end",
+        "skills/atomic/onboarding-checkin-drafter/SKILL.md — triggers at 7/14/30 days after deal won",
+        "skills/atomic/qbr-scheduler/SKILL.md — triggers 90 days after last QBR activity",
+        "skills/atomic/trial-conversion-drafter/SKILL.md — triggers at day 7 and day 12 of trial"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "skills/atomic/renewal-reminder-drafter/SKILL.md",
+        "skills/atomic/onboarding-checkin-drafter/SKILL.md",
+        "skills/atomic/qbr-scheduler/SKILL.md",
+        "skills/atomic/trial-conversion-drafter/SKILL.md"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 18,
+    "completedStories": 0,
+    "currentFeature": "ai-worker",
+    "lastUpdated": "2026-02-16T19:30:00Z",
+    "parallelGroups": [
+      {
+        "name": "Phase 1: AI Worker Handlers",
+        "stories": ["AIW-001"],
+        "note": "AIW-001 first (sets up shared AI call pattern), then AIW-002-005 in parallel"
+      },
+      {
+        "name": "Phase 1b: Remaining AI Workers (parallel after AIW-001)",
+        "stories": ["AIW-002", "AIW-003", "AIW-004", "AIW-005"]
+      },
+      {
+        "name": "Phase 2: Signals (parallel with Phase 1b)",
+        "stories": ["SIG-001", "SIG-002"]
+      },
+      {
+        "name": "Phase 3: Post-Meeting Enhancements (parallel)",
+        "stories": ["PME-001", "PME-002", "PME-003"]
+      },
+      {
+        "name": "Phase 4: New Skills (all parallel)",
+        "stories": ["SKL-001", "SKL-002", "SKL-003", "SKL-004"]
+      },
+      {
+        "name": "Phase 5: No-Show Detection (after SIG-001)",
+        "stories": ["NSH-001"]
+      },
+      {
+        "name": "Phase 6: Milestones (sequential)",
+        "stories": ["MIL-001", "MIL-002", "MIL-003"]
+      }
+    ]
+  }
+}

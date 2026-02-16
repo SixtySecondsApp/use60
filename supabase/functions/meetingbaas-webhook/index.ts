@@ -20,6 +20,7 @@ import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import { handleCorsPreflightRequest, getCorsHeaders, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 import { captureException, addBreadcrumb } from '../_shared/sentryEdge.ts';
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/use60Signing.ts';
+import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
 
 // =============================================================================
 // Types
@@ -954,6 +955,49 @@ async function handleBotCompleted(
     duration_minutes: duration_seconds ? Math.round(duration_seconds / 60) : null,
   });
 
+  // No-show detection: bot was in call < 2 minutes and no transcript
+  // (bot.failed events are handled separately — those are bot errors, not no-shows)
+  if (duration_seconds != null && duration_seconds < 120 && !data.transcript?.text) {
+    console.log(`[MeetingBaaS Webhook] No-show detected for bot ${bot_id} — duration: ${duration_seconds}s, no transcript`);
+
+    // Fetch meeting context for the signal
+    const { data: meeting } = await supabase
+      .from('meetings')
+      .select('id, title, owner_user_id, contact_id, deal_id, company_id, start_time')
+      .eq('bot_id', bot_id)
+      .eq('source_type', '60_notetaker')
+      .maybeSingle();
+
+    if (meeting?.owner_user_id) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+      const signalProcessorUrl = `${supabaseUrl}/functions/v1/task-signal-processor`;
+
+      fetch(signalProcessorUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({
+          signal_type: 'meeting_no_show',
+          user_id: meeting.owner_user_id,
+          data: {
+            meeting_id: meeting.id,
+            meeting_title: meeting.title,
+            contact_id: meeting.contact_id,
+            deal_id: meeting.deal_id,
+            company_id: meeting.company_id,
+            original_start_time: meeting.start_time,
+            bot_duration_seconds: duration_seconds,
+          },
+        }),
+      }).catch((err) => {
+        console.error('[MeetingBaaS Webhook] Failed to fire meeting_no_show signal:', err);
+      });
+    }
+  }
+
   // Check if MeetingBaaS transcription is enabled
   const transcriptionProvider = data.transcription_provider;
 
@@ -1292,6 +1336,20 @@ async function handleCalendarEvent(
     }
 
     console.log(`[MeetingBaaS Webhook] ${eventType === 'calendar_event.created' ? 'Created' : 'Updated'} calendar event (legacy): ${eventData.summary}`);
+
+    // Fire pre-meeting brief if this event is starting soon
+    if ((calendarEvent.attendees_count || 0) > 1 && meetingUrl) {
+      triggerPreMeetingIfSoon({
+        start_time: calendarEvent.start_time,
+        user_id: user_id,
+        org_id: org_id,
+        meeting_id: externalId,
+        title: calendarEvent.title,
+        attendees: eventData.attendees,
+        attendees_count: calendarEvent.attendees_count,
+        meeting_url: meetingUrl,
+      });
+    }
   }
 
   // Process instances/affected_instances array (actual MeetingBaaS format)
@@ -1338,6 +1396,20 @@ async function handleCalendarEvent(
     }
 
     console.log(`[MeetingBaaS Webhook] ${eventType === 'calendar_event.created' ? 'Created' : 'Updated'} calendar event: ${instance.title} (${externalId})`);
+
+    // Fire pre-meeting brief if this event is starting soon
+    if ((calendarEvent.attendees_count || 0) > 1 && meetingUrl) {
+      triggerPreMeetingIfSoon({
+        start_time: calendarEvent.start_time,
+        user_id: user_id,
+        org_id: org_id,
+        meeting_id: externalId,
+        title: calendarEvent.title,
+        attendees: instance.attendees,
+        attendees_count: calendarEvent.attendees_count,
+        meeting_url: meetingUrl,
+      });
+    }
   }
 
   // Update the MeetingBaaS calendar last_sync_at

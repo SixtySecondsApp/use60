@@ -173,7 +173,9 @@ export type CopilotResponseType =
   | 'deal_slippage_guardrails'
   | 'daily_brief'
   | 'dynamic_table'
-  | 'pipeline_outreach';
+  | 'pipeline_outreach'
+  | 'unified_task_list'
+  | 'task_deliverable';
 
 export interface CopilotResponse {
   type: CopilotResponseType;

@@ -26,13 +26,28 @@ export const enrichAttendeesAdapter: SkillAdapter = {
       const supabase = getServiceClient();
 
       // Get attendees from payload or fall back to tier2 contact
-      const attendees: Array<{ email: string; name: string }> =
-        state.event.payload.attendees as any || [];
+      // Normalize Google Calendar format (displayName) to our internal format (name)
+      // Exclude the meeting owner and internal org members so enrichment focuses on external attendees
+      const rawAttendees: any[] = state.event.payload.attendees as any || [];
+      const ownerEmail = state.context.tier1?.user?.email?.toLowerCase();
+      const ownerDomain = ownerEmail?.split('@')[1]?.toLowerCase();
+      const attendees: Array<{ email: string; name: string; is_internal: boolean }> = rawAttendees
+        .filter((a: any) => a?.email && !a.self && a.email.toLowerCase() !== ownerEmail)
+        .map((a: any) => {
+          const attendeeDomain = a.email?.split('@')[1]?.toLowerCase();
+          return {
+            email: a.email,
+            name: a.name || a.displayName || a.email,
+            is_internal: !!(ownerDomain && attendeeDomain === ownerDomain),
+          };
+        });
 
       if (attendees.length === 0 && state.context.tier2?.contact?.email) {
+        const fallbackDomain = state.context.tier2.contact.email.split('@')[1]?.toLowerCase();
         attendees.push({
           email: state.context.tier2.contact.email,
           name: state.context.tier2.contact.name || state.context.tier2.contact.email,
+          is_internal: !!(ownerDomain && fallbackDomain === ownerDomain),
         });
       }
 
@@ -42,15 +57,18 @@ export const enrichAttendeesAdapter: SkillAdapter = {
         title?: string;
         company?: string;
         is_known_contact: boolean;
+        is_internal: boolean;
       }> = [];
 
       let primaryContact: any = null;
       let primaryCompany: any = null;
       let primaryDeal: any = null;
 
+      console.log(`[enrich-attendees] Owner domain: ${ownerDomain}, attendees: ${attendees.map(a => `${a.email} (internal=${a.is_internal})`).join(', ')}`);
+
       // Enrich each attendee
       for (const att of attendees) {
-        console.log(`[enrich-attendees] Processing attendee: ${att.email}`);
+        console.log(`[enrich-attendees] Processing attendee: ${att.email} (internal=${att.is_internal})`);
 
         // Query contact by email
         const { data: contact } = await supabase
@@ -73,11 +91,13 @@ export const enrichAttendeesAdapter: SkillAdapter = {
 
             if (domainCompany) {
               unknownCompany = domainCompany.name;
-              if (!primaryCompany) primaryCompany = domainCompany;
+              if (!primaryCompany || (primaryCompany._is_internal && !att.is_internal)) {
+                primaryCompany = { ...domainCompany, _is_internal: att.is_internal };
+              }
             } else {
               unknownCompany = emailDomain.split('.')[0].charAt(0).toUpperCase() + emailDomain.split('.')[0].slice(1);
-              if (!primaryCompany) {
-                primaryCompany = { name: unknownCompany, domain: emailDomain };
+              if (!primaryCompany || (primaryCompany._is_internal && !att.is_internal)) {
+                primaryCompany = { name: unknownCompany, domain: emailDomain, _is_internal: att.is_internal };
               }
             }
           }
@@ -87,6 +107,7 @@ export const enrichAttendeesAdapter: SkillAdapter = {
             email: att.email,
             company: unknownCompany,
             is_known_contact: false,
+            is_internal: att.is_internal,
           });
           continue;
         }
@@ -95,9 +116,9 @@ export const enrichAttendeesAdapter: SkillAdapter = {
           [contact.first_name, contact.last_name].filter(Boolean).join(' ') ||
           contact.email;
 
-        // Store first known contact as primary
-        if (!primaryContact) {
-          primaryContact = contact;
+        // Store first external known contact as primary (skip internal org members)
+        if (!primaryContact || (primaryContact._is_internal && !att.is_internal)) {
+          primaryContact = { ...contact, _is_internal: att.is_internal };
         }
 
         // Get company details
@@ -174,8 +195,9 @@ export const enrichAttendeesAdapter: SkillAdapter = {
           }
         }
 
-        if (company && !primaryCompany) {
-          primaryCompany = company;
+        // Prefer external attendee's company over internal
+        if (company && (!primaryCompany || (primaryCompany._is_internal && !att.is_internal))) {
+          primaryCompany = { ...company, _is_internal: att.is_internal };
         }
 
         enrichedAttendees.push({
@@ -184,10 +206,11 @@ export const enrichAttendeesAdapter: SkillAdapter = {
           title: contact.title,
           company: company?.name || contact.company,
           is_known_contact: true,
+          is_internal: att.is_internal,
         });
 
-        // Look up deals for the primary contact
-        if (primaryContact && !primaryDeal && contact.id === primaryContact.id) {
+        // Look up deals for external contacts (or any contact if no external found yet)
+        if (!att.is_internal && !primaryDeal) {
           const { data: deals } = await supabase
             .from('deals')
             .select('id, name, stage_id, value, close_date, status')
@@ -267,7 +290,8 @@ export const enrichAttendeesAdapter: SkillAdapter = {
 
       console.log(
         `[enrich-attendees] Complete: ${enrichedAttendees.length} attendees, ` +
-        `company=${!!primaryCompany}, relationship=${relationship}, type=${meetingType}`
+        `company=${primaryCompany?.name || 'none'} (domain=${primaryCompany?.domain || 'none'}), ` +
+        `relationship=${relationship}, type=${meetingType}`
       );
 
       return { success: true, output, duration_ms: Date.now() - start };
@@ -713,10 +737,16 @@ export const researchCompanyNewsAdapter: SkillAdapter = {
       }
 
       // Get primary attendee name for person research
-      const primaryAttendee = enrichAttendeesOutput?.attendees?.find((a: any) => a.is_known_contact) ||
-        enrichAttendeesOutput?.attendees?.[0];
+      // Prioritize external attendees (is_internal=false) so we research the prospect, not our own team
+      const allAttendees = enrichAttendeesOutput?.attendees || [];
+      const externalAttendees = allAttendees.filter((a: any) => !a.is_internal);
+      // Prefer external known contacts, then any external, then fall back to first attendee
+      const primaryAttendee = externalAttendees.find((a: any) => a.is_known_contact) ||
+        externalAttendees[0] ||
+        allAttendees[0];
       const personName = primaryAttendee?.name;
       const personEmail = primaryAttendee?.email;
+      console.log(`[research-company-news] Selected person: ${personName} (${personEmail}), external candidates: ${externalAttendees.length}/${allAttendees.length}`);
 
       const totalQueries = 5 + (personName ? LEAD_RESEARCH_QUERIES.length : 0);
       console.log(`[research-company-news] Running ${totalQueries} parallel Gemini queries for: ${domain}${personName ? ` + ${personName}` : ''}`);

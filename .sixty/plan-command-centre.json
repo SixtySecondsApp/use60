@@ -1,0 +1,816 @@
+{
+  "project": {
+    "name": "Unified Task System — Command Centre",
+    "description": "Consolidate Tasks, Action Centre, Next Action Suggestions, and Meeting Action Items into a single AI-powered Command Centre with full-screen master-detail Notion-style UI (Design V2).",
+    "createdAt": "2026-02-16T12:00:00Z",
+    "prd": "docs/product/PRD_UNIFIED_TASK_SYSTEM.md",
+    "designRef": {
+      "v1": "src/pages/platform/CommandCentreDemo.tsx (archived)",
+      "v2": "src/pages/platform/CommandCentreV2Demo.tsx (selected)"
+    }
+  },
+
+  "features": [
+    {
+      "id": "schema",
+      "name": "Schema Extension & Migration",
+      "status": "pending",
+      "priority": 1,
+      "description": "Extend tasks table with AI columns, update enums, migrate data from deprecated tables"
+    },
+    {
+      "id": "ui-core",
+      "name": "Command Centre UI — Core Layout",
+      "status": "pending",
+      "priority": 2,
+      "description": "Master-detail full-screen layout with sidebar, detail panel, and Notion-style editor"
+    },
+    {
+      "id": "ui-detail",
+      "name": "Command Centre UI — Detail Panel & Editor",
+      "status": "pending",
+      "priority": 3,
+      "description": "Detail panel with tabs, deliverable editor, comments, activity timeline"
+    },
+    {
+      "id": "data-layer",
+      "name": "Data Layer — Hooks & Services",
+      "status": "pending",
+      "priority": 4,
+      "description": "React Query hooks, Zustand store, and service layer for unified tasks"
+    },
+    {
+      "id": "ai-worker",
+      "name": "AI Worker Edge Function",
+      "status": "pending",
+      "priority": 5,
+      "description": "Edge function that executes AI work on tasks (drafts, research, proposals)"
+    },
+    {
+      "id": "signals",
+      "name": "Signal Processor & Triggers",
+      "status": "pending",
+      "priority": 6,
+      "description": "Signal processing to auto-create tasks from meetings, deals, emails, calendar"
+    },
+    {
+      "id": "copilot",
+      "name": "Copilot Integration",
+      "status": "pending",
+      "priority": 7,
+      "description": "Bidirectional copilot integration with new response components"
+    },
+    {
+      "id": "cleanup",
+      "name": "Cleanup & Navigation",
+      "status": "pending",
+      "priority": 8,
+      "description": "Remove deprecated pages/components, update navigation, final polish"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "SCH-001",
+      "feature": "schema",
+      "title": "Add AI columns to tasks table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["tasks"] },
+      "blocks": ["SCH-002", "SCH-003", "DL-001"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration adds: source, ai_status, deliverable_type, deliverable_data, risk_level, confidence_score, reasoning, trigger_event, expires_at, actioned_at, auto_group columns",
+        "All columns have sensible defaults (source='manual', ai_status='none', risk_level='low')",
+        "Indexes created for: (assigned_to, ai_status), (assigned_to, source), (expires_at WHERE ai_status != 'expired')",
+        "Migration runs cleanly on development database"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/YYYYMMDD_unified_task_ai_columns.sql"
+      ]
+    },
+    {
+      "id": "SCH-002",
+      "feature": "schema",
+      "title": "Update task status and type enums",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["SCH-001"], "files": [], "schema": ["tasks"] },
+      "blocks": ["SCH-003", "DL-001"],
+      "parallelWith": [],
+      "acceptance": [
+        "Status enum extended: pending_review, ai_working, draft_ready, approved, dismissed, expired added",
+        "Task type enum extended: research, meeting_prep, crm_update, slack_message, content, alert, insight added",
+        "Existing data is not affected (current values remain valid)",
+        "RLS policies updated if needed for new statuses"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/YYYYMMDD_unified_task_enums.sql"
+      ]
+    },
+    {
+      "id": "SCH-003",
+      "feature": "schema",
+      "title": "Migrate action_centre_items to tasks",
+      "type": "migration",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["SCH-002"], "files": [], "schema": ["tasks", "action_centre_items"] },
+      "blocks": ["SCH-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "SQL migration maps action_centre_items fields to unified task columns",
+        "source set to 'ai_proactive', ai_status mapped from action_centre status",
+        "risk_level, confidence_score, reasoning preserved",
+        "Historical data preserved, no data loss",
+        "action_centre_items table NOT dropped (kept for 90 days)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_migrate_action_centre.sql"
+      ]
+    },
+    {
+      "id": "SCH-004",
+      "feature": "schema",
+      "title": "Migrate next_action_suggestions and meeting_action_items to tasks",
+      "type": "migration",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["SCH-003"], "files": [], "schema": ["tasks", "next_action_suggestions", "meeting_action_items"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "next_action_suggestions mapped with source='meeting_ai', status='pending_review'",
+        "meeting_action_items mapped with source='meeting_transcript'",
+        "Meeting IDs preserved for linking",
+        "Original tables NOT dropped (kept for 90 days)",
+        "Migration is idempotent (safe to re-run)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_migrate_suggestions_and_action_items.sql"
+      ]
+    },
+
+    {
+      "id": "DL-001",
+      "feature": "data-layer",
+      "title": "Update Task TypeScript interface with AI fields",
+      "type": "types",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["SCH-002"], "files": ["src/lib/database/models.ts"], "schema": [] },
+      "blocks": ["DL-002", "DL-003", "UI-001"],
+      "parallelWith": [],
+      "acceptance": [
+        "Task interface extended with: source, ai_status, deliverable_type, deliverable_data, risk_level, confidence_score, reasoning, trigger_event, expires_at, actioned_at, auto_group",
+        "New type unions: TaskSource, TaskAIStatus, DeliverableType, RiskLevel, TriggerEvent",
+        "DeliverableData generic type with variants per deliverable_type",
+        "TaskComment and TaskActivity interfaces defined"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/database/models.ts",
+        "src/components/command-centre/types.ts"
+      ]
+    },
+    {
+      "id": "DL-002",
+      "feature": "data-layer",
+      "title": "Create useCommandCentreTasks React Query hook",
+      "type": "hook",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["DL-001"], "files": ["src/lib/hooks/useTasks.ts"], "schema": [] },
+      "blocks": ["UI-001", "UI-003"],
+      "parallelWith": ["DL-003"],
+      "acceptance": [
+        "useCommandCentreTasks hook fetches tasks with AI fields included",
+        "Supports filter params: status, type, source, priority, ai_status, company, due date range",
+        "Returns grouped counts for sidebar filter pills",
+        "Pagination support with React Query infinite query or offset",
+        "Realtime subscription for task updates (Supabase Realtime)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useCommandCentreTasks.ts"
+      ]
+    },
+    {
+      "id": "DL-003",
+      "feature": "data-layer",
+      "title": "Create useTaskActions mutation hooks",
+      "type": "hook",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["DL-001"], "files": [], "schema": [] },
+      "blocks": ["UI-004"],
+      "parallelWith": ["DL-002"],
+      "acceptance": [
+        "useApproveTask mutation: sets status to 'approved', triggers execution",
+        "useDismissTask mutation: sets status to 'dismissed'",
+        "useUpdateDeliverable mutation: updates deliverable_data JSONB",
+        "useCreateTask mutation: creates task with proper defaults",
+        "useAddComment mutation: adds comment to task_comments",
+        "All mutations invalidate relevant React Query caches"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+    {
+      "id": "DL-004",
+      "feature": "data-layer",
+      "title": "Create Command Centre Zustand store for UI state",
+      "type": "store",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["DL-001"], "files": [], "schema": [] },
+      "blocks": ["UI-001"],
+      "parallelWith": ["DL-002", "DL-003"],
+      "acceptance": [
+        "Store manages: selectedTaskId, activeFilter, sidebarCollapsed, searchQuery",
+        "Filter state: status filter, type filter, source filter, sort order",
+        "Persists sidebar collapsed state to localStorage",
+        "Keyboard navigation state: focusedTaskIndex"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/stores/commandCentreStore.ts"
+      ]
+    },
+
+    {
+      "id": "UI-001",
+      "feature": "ui-core",
+      "title": "Build CommandCentre page shell with master-detail layout",
+      "type": "page",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["DL-001", "DL-002", "DL-004"], "files": [], "schema": [] },
+      "blocks": ["UI-002", "UI-003", "UI-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Full-screen page component with flex row layout",
+        "Left sidebar (340px) + right detail panel (flex-1)",
+        "Sidebar collapsible to 48px with toggle button",
+        "Responsive: sidebar overlay on mobile, side-by-side on desktop",
+        "Route registered at /command-centre in App.tsx and lazyPages.tsx",
+        "Wrapped in AppLayout with InternalRouteGuard"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/platform/CommandCentre.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "UI-002",
+      "feature": "ui-core",
+      "title": "Build TaskSidebar with filter pills and search",
+      "type": "component",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["UI-001"], "files": [], "schema": [] },
+      "blocks": ["UI-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "SidebarFilterPills component: All / Review / Drafts / Working / Done with live counts",
+        "Search input with debounced full-text search",
+        "Collapsed state shows toggle + badge counts only",
+        "Header with Zap icon + 'Command Centre' title + collapse toggle",
+        "Quick-add bar at bottom with keyboard shortcut hint (N)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-centre/TaskSidebar.tsx",
+        "src/components/command-centre/SidebarFilterPills.tsx",
+        "src/components/command-centre/SidebarQuickAdd.tsx"
+      ]
+    },
+    {
+      "id": "UI-003",
+      "feature": "ui-core",
+      "title": "Build SidebarTaskItem component",
+      "type": "component",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["UI-002", "DL-002"], "files": [], "schema": [] },
+      "blocks": ["UI-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Status icon: Circle (pending), Sparkles (draft_ready), Loader (ai_working), Check (completed)",
+        "Title with 2-line clamp, company name, due date",
+        "Priority dot (colored left-edge bar on hover/selection)",
+        "AI status tag: 'Draft ready' (green) or 'Working X/Y' (violet spinner)",
+        "Selected state with background highlight",
+        "Overdue state: red due date + 'Xd overdue' label"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/SidebarTaskItem.tsx",
+        "src/components/command-centre/AIStatusPill.tsx",
+        "src/components/command-centre/PriorityDot.tsx"
+      ]
+    },
+
+    {
+      "id": "UI-004",
+      "feature": "ui-detail",
+      "title": "Build TaskDetailPanel with header and action bar",
+      "type": "component",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": ["DL-003", "UI-001"], "files": [], "schema": [] },
+      "blocks": ["UI-006", "UI-007", "UI-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "TaskDetailHeader: type badge + AI Generated indicator + confidence score",
+        "Editable task title (large, bold) and description",
+        "Meta row: Company, Contact, Deal (with value), Due date, Priority",
+        "TaskActionBar: context-aware buttons based on ai_status",
+        "Email drafts: 'Approve & Send' / 'Revise with AI' / 'Dismiss'",
+        "Pending review: 'Accept' / 'Let AI Draft' / 'Dismiss'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-centre/TaskDetailPanel.tsx",
+        "src/components/command-centre/TaskDetailHeader.tsx",
+        "src/components/command-centre/TaskActionBar.tsx"
+      ]
+    },
+    {
+      "id": "UI-005",
+      "feature": "ui-detail",
+      "title": "Build three-tab content area (Content / Comments / Activity)",
+      "type": "component",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["UI-004", "UI-003"], "files": [], "schema": [] },
+      "blocks": ["UI-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Tab navigation: Content / Comments (count) / Activity",
+        "Content tab renders DeliverableEditor component",
+        "Comments tab renders CommentThread component",
+        "Activity tab renders ActivityTimeline component",
+        "Tabs preserve state when switching between them"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/command-centre/DetailTabNav.tsx"
+      ]
+    },
+    {
+      "id": "UI-006",
+      "feature": "ui-detail",
+      "title": "Build DeliverableEditor with Notion-style prose rendering",
+      "type": "component",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["UI-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-007", "UI-008"],
+      "acceptance": [
+        "Renders markdown deliverables as styled HTML (headers, tables, blockquotes, lists, bold/italic, links)",
+        "EditorToolbar: Bold, Italic, Link, Lists, Mention, Attach",
+        "Email deliverables show To/Subject/Body in structured layout",
+        "Research briefs render sections with loading spinners for in-progress sections",
+        "CRM updates show field/old_value/new_value preview",
+        "Dirty state indicator when content has been edited"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/command-centre/DeliverableEditor.tsx",
+        "src/components/command-centre/EditorToolbar.tsx"
+      ]
+    },
+    {
+      "id": "UI-007",
+      "feature": "ui-detail",
+      "title": "Build CommentThread component",
+      "type": "component",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["UI-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-006", "UI-008"],
+      "acceptance": [
+        "Threaded comment list with AI (violet gradient avatar) and human (blue avatar) distinction",
+        "Comment input: 'Add a comment or instruction for AI...' with Enter to submit",
+        "Timestamps with relative formatting",
+        "Auto-scroll to newest comment",
+        "Comments stored via useAddComment mutation"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/CommentThread.tsx"
+      ]
+    },
+    {
+      "id": "UI-008",
+      "feature": "ui-detail",
+      "title": "Build ActivityTimeline and AIReasoningFooter",
+      "type": "component",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["UI-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-006", "UI-007"],
+      "acceptance": [
+        "Vertical timeline with actor-colored icons (violet=AI, blue=human)",
+        "Connecting lines between timeline items",
+        "Shows full history: created, draft generated, edited, approved, executed",
+        "AIReasoningFooter: persistent bar at bottom with Brain icon + reasoning text",
+        "ConfidenceBar: mini progress bar showing AI confidence score"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/ActivityTimeline.tsx",
+        "src/components/command-centre/AIReasoningFooter.tsx",
+        "src/components/command-centre/ConfidenceBar.tsx"
+      ]
+    },
+    {
+      "id": "UI-009",
+      "feature": "ui-core",
+      "title": "Add keyboard navigation and shortcuts",
+      "type": "feature",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": ["UI-003", "UI-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Up/Down arrows navigate task list in sidebar",
+        "Enter opens selected task in detail panel",
+        "N focuses quick-add input",
+        "Escape clears selection or closes expanded views",
+        "Keyboard shortcuts don't conflict with editor when editing content"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/command-centre/useKeyboardNav.ts"
+      ]
+    },
+
+    {
+      "id": "AI-001",
+      "feature": "ai-worker",
+      "title": "Build unified-task-ai-worker edge function scaffold",
+      "type": "backend",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": { "stories": ["SCH-002"], "files": [], "schema": ["tasks"] },
+      "blocks": ["AI-002", "AI-003", "AI-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function created at supabase/functions/unified-task-ai-worker/",
+        "Accepts task_id, validates JWT, fetches task with user context",
+        "Dispatches to handler based on deliverable_type",
+        "Updates ai_status through lifecycle: queued → working → draft_ready (or failed)",
+        "Uses getCorsHeaders(req) from corsHelper.ts",
+        "Pinned @supabase/supabase-js@2.43.4"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/unified-task-ai-worker/index.ts"
+      ]
+    },
+    {
+      "id": "AI-002",
+      "feature": "ai-worker",
+      "title": "Implement email draft deliverable handler",
+      "type": "backend",
+      "status": "pending",
+      "priority": 19,
+      "dependencies": { "stories": ["AI-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AI-003", "AI-004"],
+      "acceptance": [
+        "Assembles context: contact info, deal data, meeting transcripts, email history",
+        "Calls AI model to generate email draft with to, cc, subject, body",
+        "Stores result in deliverable_data JSONB",
+        "Includes current date context in prompt",
+        "Sets ai_status to 'draft_ready' on success"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/unified-task-ai-worker/handlers/emailDraft.ts"
+      ]
+    },
+    {
+      "id": "AI-003",
+      "feature": "ai-worker",
+      "title": "Implement research brief and meeting prep deliverable handlers",
+      "type": "backend",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": { "stories": ["AI-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AI-002", "AI-004"],
+      "acceptance": [
+        "Research handler: assembles company data, contact history, deal pipeline info",
+        "Generates structured brief with sections, key findings, recommended talking points",
+        "Meeting prep handler: pulls attendee intel, related deals, recent activity",
+        "Generates brief, talking points, risks, agenda suggestions",
+        "Both set ai_status to 'draft_ready' on success"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/unified-task-ai-worker/handlers/researchBrief.ts",
+        "supabase/functions/unified-task-ai-worker/handlers/meetingPrep.ts"
+      ]
+    },
+    {
+      "id": "AI-004",
+      "feature": "ai-worker",
+      "title": "Implement CRM update and content draft deliverable handlers",
+      "type": "backend",
+      "status": "pending",
+      "priority": 21,
+      "dependencies": { "stories": ["AI-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AI-002", "AI-003"],
+      "acceptance": [
+        "CRM update handler: generates field change preview with old/new values",
+        "On approval, executes the actual CRM update via service layer",
+        "Content draft handler: generates content based on type (LinkedIn, email sequence, etc.)",
+        "Both store results in deliverable_data JSONB",
+        "Both set ai_status to 'draft_ready' on success"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/unified-task-ai-worker/handlers/crmUpdate.ts",
+        "supabase/functions/unified-task-ai-worker/handlers/contentDraft.ts"
+      ]
+    },
+
+    {
+      "id": "SIG-001",
+      "feature": "signals",
+      "title": "Build task-signal-processor edge function scaffold",
+      "type": "backend",
+      "status": "pending",
+      "priority": 22,
+      "dependencies": { "stories": ["SCH-002", "AI-001"], "files": [], "schema": ["tasks"] },
+      "blocks": ["SIG-002", "SIG-003", "SIG-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function created at supabase/functions/task-signal-processor/",
+        "Accepts signal payload: { type, data, user_id }",
+        "Applies confidence-based routing logic",
+        "Creates task with appropriate source, type, risk_level, confidence_score",
+        "Optionally triggers AI worker for auto-draft tasks",
+        "Uses getCorsHeaders(req) from corsHelper.ts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/task-signal-processor/index.ts"
+      ]
+    },
+    {
+      "id": "SIG-002",
+      "feature": "signals",
+      "title": "Wire meeting-end signal to task creation",
+      "type": "backend",
+      "status": "pending",
+      "priority": 23,
+      "dependencies": { "stories": ["SIG-001"], "files": ["supabase/functions/meetingbaas-webhook/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SIG-003", "SIG-004"],
+      "acceptance": [
+        "meetingbaas-webhook calls task-signal-processor after transcript processed",
+        "Creates follow-up tasks from transcript action items",
+        "Sets source='meeting_transcript', deliverable_type='email' for follow-ups",
+        "Confidence score based on action item clarity",
+        "Does not break existing webhook processing"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/meetingbaas-webhook/index.ts"
+      ]
+    },
+    {
+      "id": "SIG-003",
+      "feature": "signals",
+      "title": "Wire deal-stale and calendar signals to task creation",
+      "type": "backend",
+      "status": "pending",
+      "priority": 24,
+      "dependencies": { "stories": ["SIG-001"], "files": ["supabase/functions/proactive-pipeline-analysis/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SIG-002", "SIG-004"],
+      "acceptance": [
+        "proactive-pipeline-analysis writes to tasks table (not action_centre_items)",
+        "Calendar event approaching (24h before) creates meeting_prep task",
+        "Deal stale signal creates follow_up task with context",
+        "Both use task-signal-processor for consistent routing"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/proactive-pipeline-analysis/index.ts"
+      ]
+    },
+    {
+      "id": "SIG-004",
+      "feature": "signals",
+      "title": "Build task-auto-expire cron function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 25,
+      "dependencies": { "stories": ["SIG-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SIG-002", "SIG-003"],
+      "acceptance": [
+        "Edge function runs on daily cron schedule",
+        "Finds tasks where expires_at < now() and ai_status NOT IN ('approved', 'completed')",
+        "Sets status to 'expired'",
+        "Logs count of expired tasks"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/task-auto-expire/index.ts"
+      ]
+    },
+
+    {
+      "id": "COP-001",
+      "feature": "copilot",
+      "title": "Create UnifiedTaskListResponse copilot component",
+      "type": "component",
+      "status": "pending",
+      "priority": 26,
+      "dependencies": { "stories": ["DL-001"], "files": ["src/components/assistant/AssistantShell.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["COP-002", "COP-003"],
+      "acceptance": [
+        "Replaces TaskResponse.tsx for copilot task list display",
+        "Shows filtered task list with inline actions (approve, dismiss)",
+        "Renders AI status pills and priority indicators",
+        "Links to Command Centre for full detail view",
+        "Follows existing copilot response component patterns"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/copilot/responses/UnifiedTaskListResponse.tsx"
+      ]
+    },
+    {
+      "id": "COP-002",
+      "feature": "copilot",
+      "title": "Create TaskDeliverableResponse copilot component",
+      "type": "component",
+      "status": "pending",
+      "priority": 27,
+      "dependencies": { "stories": ["DL-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["COP-001", "COP-003"],
+      "acceptance": [
+        "Shows AI-produced deliverable inline in copilot chat",
+        "Approve/edit/dismiss buttons matching Command Centre patterns",
+        "Preview of deliverable content (email body, research brief summary)",
+        "Deep link to full view in Command Centre"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/copilot/responses/TaskDeliverableResponse.tsx"
+      ]
+    },
+    {
+      "id": "COP-003",
+      "feature": "copilot",
+      "title": "Update copilot skills to use unified task system",
+      "type": "integration",
+      "status": "pending",
+      "priority": 28,
+      "dependencies": { "stories": ["DL-001", "AI-001"], "files": ["src/lib/contexts/CopilotContext.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["COP-001", "COP-002"],
+      "acceptance": [
+        "Copilot can create tasks with AI fields (source='copilot')",
+        "Copilot can query tasks by AI status and filters",
+        "'What's on my plate?' returns prioritized unified task list",
+        "'Draft follow-up for Sarah' creates task and triggers AI worker",
+        "CopilotContext updated to reference unified task types"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/contexts/CopilotContext.tsx"
+      ],
+      "notes": "Update execute_action tool to handle unified task creation and queries"
+    },
+
+    {
+      "id": "CLN-001",
+      "feature": "cleanup",
+      "title": "Update navigation — replace Tasks + Action Centre + Projects with Command Centre",
+      "type": "integration",
+      "status": "pending",
+      "priority": 29,
+      "dependencies": { "stories": ["UI-001", "UI-003", "UI-004"], "files": [], "schema": [] },
+      "blocks": ["CLN-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "Sidebar navigation shows 'Command Centre' with Zap icon replacing Tasks, Action Centre, Projects",
+        "Badge shows count of pending_review + draft_ready tasks",
+        "Old routes (/tasks, /action-centre, /projects) redirect to /command-centre",
+        "ActionCentreNavBadge removed from nav"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/platform/sidebar/SidebarNav.tsx",
+        "src/App.tsx"
+      ],
+      "notes": "Keep old routes as redirects for bookmarks"
+    },
+    {
+      "id": "CLN-002",
+      "feature": "cleanup",
+      "title": "Remove deprecated Action Centre and Projects components",
+      "type": "cleanup",
+      "status": "pending",
+      "priority": 30,
+      "dependencies": { "stories": ["CLN-001"], "files": [], "schema": [] },
+      "blocks": ["CLN-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "ActionCentre.tsx page and all action-centre/* components removed",
+        "ProjectsHub.tsx and all projects/* components removed",
+        "ActionCentreNavBadge removed",
+        "NextActionSuggestions component removed",
+        "CreateTaskFromSuggestionModal removed",
+        "No broken imports after removal"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/ActionCentre.tsx",
+        "src/components/action-centre/",
+        "src/components/projects/"
+      ]
+    },
+    {
+      "id": "CLN-003",
+      "feature": "cleanup",
+      "title": "Remove demo pages and update edge functions to write to unified tasks",
+      "type": "cleanup",
+      "status": "pending",
+      "priority": 31,
+      "dependencies": { "stories": ["CLN-002", "SIG-002", "SIG-003"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "CommandCentreDemo.tsx (Design V1) removed",
+        "CommandCentreV2Demo.tsx (Design V2) removed",
+        "Demo routes removed from App.tsx and lazyPages.tsx",
+        "suggest-next-actions writes to tasks table (not next_action_suggestions)",
+        "proactive-pipeline-analysis confirmed writing to tasks (done in SIG-003)",
+        "Build passes with no errors"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/CommandCentreDemo.tsx",
+        "src/pages/platform/CommandCentreV2Demo.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx",
+        "supabase/functions/suggest-next-actions/index.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 31,
+    "completedStories": 0,
+    "currentFeature": null,
+    "parallelGroups": [
+      ["DL-002", "DL-003", "DL-004"],
+      ["AI-002", "AI-003", "AI-004"],
+      ["SIG-002", "SIG-003", "SIG-004"],
+      ["COP-001", "COP-002", "COP-003"],
+      ["UI-006", "UI-007", "UI-008"]
+    ],
+    "criticalPath": [
+      "SCH-001 → SCH-002 → DL-001 → DL-002 → UI-001 → UI-002 → UI-003 → UI-004 → UI-005 → UI-006",
+      "SCH-002 → AI-001 → SIG-001 → SIG-002",
+      "UI-001 → CLN-001 → CLN-002 → CLN-003"
+    ],
+    "phases": {
+      "phase1_schema": { "stories": ["SCH-001", "SCH-002", "SCH-003", "SCH-004"], "estimate": "85min" },
+      "phase2_data_layer": { "stories": ["DL-001", "DL-002", "DL-003", "DL-004"], "estimate": "80min" },
+      "phase3_ui_core": { "stories": ["UI-001", "UI-002", "UI-003", "UI-009"], "estimate": "85min" },
+      "phase4_ui_detail": { "stories": ["UI-004", "UI-005", "UI-006", "UI-007", "UI-008"], "estimate": "110min" },
+      "phase5_ai_worker": { "stories": ["AI-001", "AI-002", "AI-003", "AI-004"], "estimate": "105min" },
+      "phase6_signals": { "stories": ["SIG-001", "SIG-002", "SIG-003", "SIG-004"], "estimate": "80min" },
+      "phase7_copilot": { "stories": ["COP-001", "COP-002", "COP-003"], "estimate": "70min" },
+      "phase8_cleanup": { "stories": ["CLN-001", "CLN-002", "CLN-003"], "estimate": "60min" }
+    },
+    "lastUpdated": "2026-02-16T12:00:00Z"
+  }
+}

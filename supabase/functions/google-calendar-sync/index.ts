@@ -20,6 +20,7 @@ import { authenticateRequest, getUserOrgId } from '../_shared/edgeAuth.ts';
 import { getGoogleIntegration } from '../_shared/googleOAuth.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
 import { extractMeetingUrl } from '../_shared/meetingUrlExtractor.ts';
+import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
 
 // Helper for logging sync operations to integration_sync_logs table
 async function logSyncOperation(
@@ -468,6 +469,20 @@ serve(async (req) => {
               attendees_count: Array.isArray(ev.attendees) ? ev.attendees.length : 0,
             },
           })
+
+          // Fire pre-meeting brief if this event is starting soon
+          if (!isCancelled && payload.attendees_count > 1) {
+            triggerPreMeetingIfSoon({
+              start_time: payload.start_time,
+              user_id: userId,
+              org_id: orgId,
+              meeting_id: eventDbId,
+              title: payload.title,
+              attendees: payload.attendees,
+              attendees_count: payload.attendees_count,
+              meeting_url: payload.meeting_url,
+            });
+          }
 
           // Upsert attendees to calendar_attendees table (with proper error handling)
           if (Array.isArray(ev.attendees) && ev.attendees.length > 0) {

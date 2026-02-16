@@ -193,6 +193,23 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       return;
     }
 
+    // Command Centre actions
+    if (actionName === 'navigate' && payload?.path) {
+      navigate(String(payload.path));
+      return;
+    }
+
+    if (actionName === 'approve_deliverable' && payload?.taskId) {
+      // Send confirmation message to copilot
+      sendMessage(`Approve the deliverable for task ${String(payload.taskId)}`);
+      return;
+    }
+
+    if (actionName === 'dismiss_deliverable' && payload?.taskId) {
+      sendMessage(`Dismiss the deliverable for task ${String(payload.taskId)}`);
+      return;
+    }
+
     if (actionName === 'open_contact' && payload?.contactId) {
       navigate(`/crm/contacts/${payload.contactId}`);
       return;

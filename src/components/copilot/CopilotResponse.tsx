@@ -47,6 +47,10 @@ import { FollowupZeroInboxResponse } from './responses/FollowupZeroInboxResponse
 import { DealSlippageGuardrailsResponse } from './responses/DealSlippageGuardrailsResponse';
 import { DailyBriefResponse } from './responses/DailyBriefResponse';
 import { PipelineOutreachResponse } from './responses/PipelineOutreachResponse';
+import { UnifiedTaskListResponse } from './responses/UnifiedTaskListResponse';
+import type { UnifiedTaskListResponseData } from './responses/UnifiedTaskListResponse';
+import { TaskDeliverableResponse } from './responses/TaskDeliverableResponse';
+import type { TaskDeliverableResponseData } from './responses/TaskDeliverableResponse';
 import { MeetingCountResponse } from './responses/MeetingCountResponse';
 import { MeetingBriefingResponse } from './responses/MeetingBriefingResponse';
 import { MeetingListResponse } from './responses/MeetingListResponse';
@@ -291,6 +295,12 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'pipeline_outreach':
       return <PipelineOutreachResponse data={response as PipelineOutreachResponseType} onActionClick={onActionClick} />;
+
+    case 'unified_task_list':
+      return <UnifiedTaskListResponse data={response as any} onActionClick={onActionClick} />;
+
+    case 'task_deliverable':
+      return <TaskDeliverableResponse data={response as any} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown

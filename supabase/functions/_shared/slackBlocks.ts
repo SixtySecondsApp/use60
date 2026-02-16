@@ -3947,3 +3947,52 @@ export function buildCampaignReportMessage(data: CampaignReportData): SlackMessa
     text: `📊 Campaign Report: ${data.campaign_name} — ${statusEmoji} ${data.status}`,
   };
 }
+
+/**
+ * Data for campaign ready notification (sent when orchestrator finishes building a campaign)
+ */
+export interface CampaignReadyData {
+  campaign_name: string;
+  table_id: string;
+  table_name: string;
+  leads_found: number;
+  emails_generated: number;
+  campaign_id?: string;
+  duration_sec: number;
+  conversation_id?: string;
+  app_url?: string;
+}
+
+/**
+ * Build Slack blocks for "campaign ready" notification
+ */
+export function buildCampaignReadyMessage(data: CampaignReadyData): SlackMessage {
+  const appUrl = data.app_url || 'https://app.use60.com';
+  const durationMin = Math.floor(data.duration_sec / 60);
+  const durationSec = data.duration_sec % 60;
+  const durationStr = durationMin > 0 ? `${durationMin}m ${durationSec}s` : `${durationSec}s`;
+
+  const blocks: SlackBlock[] = [
+    header(`Your campaign is ready`),
+    section(`*${truncate(data.campaign_name, 200)}* has been built and is waiting for your review.`),
+    divider(),
+    sectionWithFields([
+      { label: 'Leads Found', value: `${data.leads_found}` },
+      { label: 'Emails Generated', value: `${data.emails_generated}` },
+      { label: 'Build Time', value: durationStr },
+      { label: 'Table', value: truncate(data.table_name, 40) },
+    ]),
+    divider(),
+    actions([
+      { text: 'Open in Ops Table', actionId: `campaign_ready_open_table_${data.table_id}`, value: safeButtonValue(`${appUrl}/ops/${data.table_id}`), style: 'primary' },
+      ...(data.conversation_id
+        ? [{ text: 'Continue in Copilot', actionId: `campaign_ready_continue_${data.conversation_id}`, value: safeButtonValue(`${appUrl}/copilot?conversation=${data.conversation_id}`) }]
+        : []),
+    ]),
+  ];
+
+  return {
+    blocks,
+    text: `Your campaign "${data.campaign_name}" is ready — ${data.leads_found} leads, ${data.emails_generated} emails generated in ${durationStr}`,
+  };
+}
