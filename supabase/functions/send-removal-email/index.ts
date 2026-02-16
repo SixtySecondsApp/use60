@@ -12,15 +12,10 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { verifySecret } from '../_shared/edgeAuth.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-edge-function-secret',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
 
 interface RemovalEmailRequest {
   user_id: string;
@@ -33,13 +28,38 @@ interface RemovalEmailRequest {
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) return preflightResponse;
+
+  const corsHeaders = getCorsHeaders(req);
+
+  // Verify authentication - accept edge function secret OR valid user JWT
+  const auth = verifySecret(req);
+  let isAuthed = auth.authenticated;
+
+  if (!isAuthed) {
+    // Fallback: check if the caller has a valid user JWT (browser call from admin)
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7).trim();
+      const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
+      if (!error && user) {
+        // Verify caller is an admin
+        const { data: profile } = await supabaseAuth
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
+        if (profile?.is_admin) {
+          isAuthed = true;
+          console.log('[send-removal-email] Authenticated via user JWT (admin):', user.id);
+        }
+      }
+    }
   }
 
-  // Verify authentication
-  const auth = verifySecret(req);
-  if (!auth.authenticated) {
+  if (!isAuthed) {
     console.error('[send-removal-email] Authentication failed');
     return new Response(
       JSON.stringify({ success: false, error: 'Unauthorized: invalid credentials' }),
