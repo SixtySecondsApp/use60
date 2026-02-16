@@ -23,7 +23,7 @@ interface UseOnboardingVersionResult {
 }
 
 const SETTING_KEY = 'onboarding_version';
-const DEFAULT_VERSION: OnboardingVersion = 'v1';
+const DEFAULT_VERSION: OnboardingVersion = 'v3';
 
 export function useOnboardingVersion(): UseOnboardingVersionResult {
   const [version, setVersion] = useState<OnboardingVersion>(DEFAULT_VERSION);

@@ -267,8 +267,9 @@ export default function OnboardingPage() {
     );
   }
 
-  // Render V2 onboarding if feature flag is set
-  if (onboardingVersion === 'v2') {
+  // Render V2/V3 onboarding if feature flag is set
+  // V3 uses the same OnboardingV2 component with enhanced enrichment (agent teams)
+  if (onboardingVersion === 'v2' || onboardingVersion === 'v3') {
     const activeOrg = getActiveOrg();
     // Only pass domain if it's from an actual organization
     // For personal email users, let them provide their website or company info

@@ -22,6 +22,7 @@ import { useOnboardingV2Store, SKILLS, SkillId } from '@/lib/stores/onboardingV2
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 import { useInvalidateUserProfile } from '@/lib/hooks/useUserProfile';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { factProfileService } from '@/lib/services/factProfileService';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
@@ -44,6 +45,7 @@ export function CompletionStep() {
   const { enrichment, skillConfigs, setStep, organizationId } = useOnboardingV2Store();
   const { completeStep } = useOnboardingProgress();
   const { user } = useAuth();
+  const { setActiveOrg } = useOrgStore();
   const invalidateProfile = useInvalidateUserProfile();
   const [isNavigating, setIsNavigating] = useState(false);
   const orgProfileCreatedRef = useRef(false);
@@ -111,6 +113,11 @@ export function CompletionStep() {
       // This ensures needsOnboarding state updates before navigation
       await completeStep('complete');
 
+      // Set the active org to the one from onboarding (prevents picking wrong/waitlist org)
+      if (organizationId) {
+        setActiveOrg(organizationId);
+      }
+
       // Auto-create org fact profile (fire-and-forget, non-blocking)
       ensureOrgProfile();
 
@@ -120,8 +127,8 @@ export function CompletionStep() {
         invalidateProfile();
       }
 
-      // Wait a brief moment for real-time subscription to update
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for profile cache invalidation to propagate
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Navigate to dashboard with full page refresh to clear React Query cache
       window.location.href = '/dashboard';
@@ -228,9 +235,13 @@ export function CompletionStep() {
               setIsNavigating(true);
               try {
                 await completeStep('complete');
+                // Set the active org to the one from onboarding
+                if (organizationId) {
+                  setActiveOrg(organizationId);
+                }
                 // Auto-create org fact profile (fire-and-forget, non-blocking)
                 ensureOrgProfile();
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await new Promise(resolve => setTimeout(resolve, 300));
                 // Use full page load to clear React Query cache
                 window.location.href = item.route;
               } finally {
