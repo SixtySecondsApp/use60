@@ -74,7 +74,7 @@ function TrendBadge({ value }: { value: number }) {
     );
   }
   return (
-    <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/20">
+      <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20">
       <Minus className="h-3 w-3 mr-1" />
       0%
     </Badge>
@@ -303,7 +303,7 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={meetingVolumeData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200 dark:stroke-gray-700" />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700/50" />
                   <XAxis dataKey="name" className="text-xs" tick={{ fill: 'currentColor' }} />
                   <YAxis className="text-xs" tick={{ fill: 'currentColor' }} allowDecimals={false} />
                   <Tooltip
@@ -335,7 +335,7 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={performanceTrendData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200 dark:stroke-gray-700" />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700/50" />
                   <XAxis dataKey="name" className="text-xs" tick={{ fill: 'currentColor' }} />
                   <YAxis className="text-xs" tick={{ fill: 'currentColor' }} allowDecimals={false} />
                   <Tooltip
@@ -367,7 +367,7 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-gray-700">
+                  <tr className="border-b border-gray-200 dark:border-gray-700/50">
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Meeting</th>
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Score</th>
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Grade</th>
@@ -376,7 +376,7 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
                 </thead>
                 <tbody>
                   {topPerformers.map((item) => (
-                    <tr key={item.id} className="border-b border-slate-100 dark:border-gray-800 last:border-0">
+                    <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800/50 last:border-0">
                       <td className="py-2.5 pr-4 text-gray-900 dark:text-gray-100 font-medium">
                         {item.title || 'Untitled Meeting'}
                       </td>
@@ -413,7 +413,7 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
               {pipelineHealth.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-lg border border-slate-200 dark:border-gray-700 p-4"
+                  className="rounded-lg border border-gray-200 dark:border-gray-700/50 p-4"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate pr-2">
@@ -453,7 +453,7 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
               {dashboardAlerts.map((alert, index) => (
                 <div
                   key={`${alert.type}-${alert.transcriptId ?? index}`}
-                  className="flex items-start gap-3 rounded-lg border border-slate-200 dark:border-gray-700 p-3"
+                  className="flex items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700/50 p-3"
                 >
                   {getSeverityIcon(alert.severity)}
                   <div className="min-w-0 flex-1">

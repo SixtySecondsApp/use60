@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { BarChart3, FileText, Search, Sparkles } from 'lucide-react';
+import { BarChart3, FileText, Search, Wand2 } from 'lucide-react';
 
 import { OverviewTab } from '@/components/meeting-analytics/OverviewTab';
 import { TranscriptsTab } from '@/components/meeting-analytics/TranscriptsTab';
@@ -21,7 +21,7 @@ const tabs = [
   { value: 'overview', label: 'Overview', icon: BarChart3 },
   { value: 'transcripts', label: 'Transcripts', icon: FileText },
   { value: 'search', label: 'Search', icon: Search },
-  { value: 'insights', label: 'Insights', icon: Sparkles },
+  { value: 'insights', label: 'Insights', icon: Wand2 },
 ] as const;
 
 const timeRangeOptions = [
@@ -51,7 +51,7 @@ export default function MeetingAnalyticsPage() {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="min-h-screen bg-[#F8FAFC] dark:bg-gradient-to-br dark:from-gray-950 dark:to-gray-900 text-gray-900 dark:text-gray-100"
+      className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
@@ -66,7 +66,7 @@ export default function MeetingAnalyticsPage() {
           </div>
 
           <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-[160px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+            <SelectTrigger className="w-[160px] bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700/50">
               <SelectValue placeholder="Select range" />
             </SelectTrigger>
             <SelectContent>

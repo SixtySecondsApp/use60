@@ -25,9 +25,9 @@ function formatDuration(seconds: number | null): string {
 function confidenceColor(confidence: number | null): string {
   if (confidence === null) return 'text-muted-foreground';
   const pct = confidence * 100;
-  if (pct > 90) return 'text-green-600';
-  if (pct > 70) return 'text-yellow-600';
-  return 'text-red-600';
+  if (pct > 90) return 'text-emerald-600 dark:text-emerald-400';
+  if (pct > 70) return 'text-amber-600 dark:text-amber-400';
+  return 'text-red-600 dark:text-red-400';
 }
 
 export function TranscriptsTab({ timeRange }: TranscriptsTabProps) {
@@ -150,11 +150,11 @@ export function TranscriptsTab({ timeRange }: TranscriptsTabProps) {
                     </td>
                     <td className="py-3 text-sm">
                       {transcript.processedAt ? (
-                        <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
                           Processed
                         </Badge>
                       ) : (
-                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
                           Pending
                         </Badge>
                       )}

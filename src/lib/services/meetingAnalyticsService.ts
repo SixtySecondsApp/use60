@@ -27,12 +27,24 @@ import type {
   MaSearchResult,
 } from '@/lib/types/meetingAnalytics';
 
-const BASE_URL = import.meta.env.VITE_MEETING_ANALYTICS_API_URL || 'http://localhost:3000';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const EDGE_FUNCTION_URL = SUPABASE_URL ? `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/meeting-analytics` : '';
+const BASE_URL =
+  import.meta.env.VITE_MEETING_ANALYTICS_API_URL || EDGE_FUNCTION_URL || 'http://localhost:3000';
+
+function getHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (BASE_URL.includes('/functions/v1/') && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    headers['Authorization'] = `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`;
+    headers['apikey'] = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  }
+  return headers;
+}
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...getHeaders(), ...(options?.headers as Record<string, string>) },
     ...options,
   });
 

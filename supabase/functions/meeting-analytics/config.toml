@@ -1,0 +1,3 @@
+[function]
+# Requires Authorization: Bearer <anon_key> or user JWT
+verify_jwt = true
