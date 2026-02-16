@@ -499,7 +499,7 @@ serve(async (req) => {
         break;
 
       case 'status':
-        response = await getEnrichmentStatus(supabase, organization_id);
+        response = await getEnrichmentStatus(supabase, organization_id, domain);
         break;
 
       case 'retry':
@@ -542,29 +542,52 @@ serve(async (req) => {
 async function startEnrichment(
   supabase: any,
   userId: string,
-  organizationId: string,
+  organizationId: string | null, // Allow null for deferred org creation
   domain: string,
   force?: boolean
 ): Promise<{ success: boolean; enrichment_id?: string; error?: string }> {
   try {
-    // Check if enrichment already exists
-    const { data: existing } = await supabase
-      .from('organization_enrichment')
-      .select('id, status, domain')
-      .eq('organization_id', organizationId)
-      .maybeSingle();
+    let existing = null;
 
-    // Only return cached if:
-    // - NOT forcing re-enrichment AND
-    // - Status is completed AND
-    // - Domain matches (same company being enriched)
-    if (existing && existing.status === 'completed' && !force) {
-      if (existing.domain === domain) {
-        console.log('[startEnrichment] Returning cached enrichment for domain:', domain);
-        return { success: true, enrichment_id: existing.id };
+    // Check for cached enrichment by org_id if available
+    if (organizationId) {
+      const { data: existingByOrg } = await supabase
+        .from('organization_enrichment')
+        .select('id, status, domain')
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+
+      existing = existingByOrg;
+
+      // Only return cached if:
+      // - NOT forcing re-enrichment AND
+      // - Status is completed AND
+      // - Domain matches (same company being enriched)
+      if (existing && existing.status === 'completed' && !force) {
+        if (existing.domain === domain) {
+          console.log('[startEnrichment] Returning cached enrichment for domain:', domain);
+          return { success: true, enrichment_id: existing.id };
+        }
+        // Domain mismatch means we need to re-enrich for the new domain
+        console.log('[startEnrichment] Domain mismatch, re-enriching. Old:', existing.domain, 'New:', domain);
       }
-      // Domain mismatch means we need to re-enrich for the new domain
-      console.log('[startEnrichment] Domain mismatch, re-enriching. Old:', existing.domain, 'New:', domain);
+    }
+
+    // Check for existing enrichment by domain (for deferred org creation)
+    if (!organizationId) {
+      const { data: existingByDomain } = await supabase
+        .from('organization_enrichment')
+        .select('id, status, domain, organization_id')
+        .eq('domain', domain)
+        .is('organization_id', null)
+        .maybeSingle();
+
+      if (existingByDomain && existingByDomain.status === 'completed' && !force) {
+        console.log('[startEnrichment] Returning cached domain-only enrichment for:', domain);
+        return { success: true, enrichment_id: existingByDomain.id };
+      }
+
+      existing = existingByDomain;
     }
 
     // If force flag is set or domain changed, log it
@@ -572,53 +595,102 @@ async function startEnrichment(
       console.log('[startEnrichment] Force re-enrichment requested for domain:', domain);
     }
 
-    // Use upsert to handle race conditions - update if exists, insert if not
-    // This prevents "duplicate key" errors when multiple requests come in simultaneously
-    const { data: enrichment, error: upsertError } = await supabase
-      .from('organization_enrichment')
-      .upsert({
-        organization_id: organizationId,
-        domain: domain,
-        status: 'scraping',
-        error_message: null,
-        // Reset all fields for a fresh start
-        company_name: null,
-        logo_url: null,
-        tagline: null,
-        description: null,
-        industry: null,
-        employee_count: null,
-        funding_stage: null,
-        founded_year: null,
-        headquarters: null,
-        products: [],
-        value_propositions: [],
-        use_cases: [],
-        competitors: [],
-        target_market: null,
-        ideal_customer_profile: {},
-        key_people: [],
-        recent_hires: [],
-        open_roles: [],
-        tech_stack: [],
-        customer_logos: [],
-        case_studies: [],
-        reviews_summary: {},
-        pain_points: [],
-        buying_signals: [],
-        recent_news: [],
-        sources_used: [],
-        confidence_score: null,
-        raw_scraped_data: null,
-        generated_skills: {},
-      }, {
-        onConflict: 'organization_id',
-        ignoreDuplicates: false,
-      })
-      .select('id')
-      .single();
+    // Handle upsert differently based on whether we have an org_id
+    let enrichment;
+    if (organizationId) {
+      // Use upsert with onConflict for existing org
+      const { data, error: upsertError } = await supabase
+        .from('organization_enrichment')
+        .upsert({
+          organization_id: organizationId,
+          domain: domain,
+          status: 'scraping',
+          error_message: null,
+          // Reset all fields for a fresh start
+          company_name: null,
+          logo_url: null,
+          tagline: null,
+          description: null,
+          industry: null,
+          employee_count: null,
+          funding_stage: null,
+          founded_year: null,
+          headquarters: null,
+          products: [],
+          value_propositions: [],
+          use_cases: [],
+          competitors: [],
+          target_market: null,
+          ideal_customer_profile: {},
+          key_people: [],
+          recent_hires: [],
+          open_roles: [],
+          tech_stack: [],
+          customer_logos: [],
+          case_studies: [],
+          reviews_summary: {},
+          pain_points: [],
+          buying_signals: [],
+          recent_news: [],
+          sources_used: [],
+          confidence_score: null,
+          raw_scraped_data: null,
+          generated_skills: {},
+        }, {
+          onConflict: 'organization_id',
+          ignoreDuplicates: false,
+        })
+        .select('id')
+        .single();
 
-    if (upsertError) throw upsertError;
+      if (upsertError) throw upsertError;
+      enrichment = data;
+    } else {
+      // Insert without org_id (deferred creation)
+      const { data, error: insertError } = await supabase
+        .from('organization_enrichment')
+        .insert({
+          organization_id: null,
+          domain: domain,
+          status: 'scraping',
+          error_message: null,
+          // Reset all fields for a fresh start
+          company_name: null,
+          logo_url: null,
+          tagline: null,
+          description: null,
+          industry: null,
+          employee_count: null,
+          funding_stage: null,
+          founded_year: null,
+          headquarters: null,
+          products: [],
+          value_propositions: [],
+          use_cases: [],
+          competitors: [],
+          target_market: null,
+          ideal_customer_profile: {},
+          key_people: [],
+          recent_hires: [],
+          open_roles: [],
+          tech_stack: [],
+          customer_logos: [],
+          case_studies: [],
+          reviews_summary: {},
+          pain_points: [],
+          buying_signals: [],
+          recent_news: [],
+          sources_used: [],
+          confidence_score: null,
+          raw_scraped_data: null,
+          generated_skills: {},
+        })
+        .select('id')
+        .single();
+
+      if (insertError) throw insertError;
+      enrichment = data;
+    }
 
     const enrichment_id = enrichment?.id || existing?.id;
     if (!enrichment_id) throw new Error('Failed to get enrichment ID');
@@ -907,7 +979,7 @@ ${userPrompt}`;
 async function runEnrichmentPipeline(
   supabase: any,
   enrichmentId: string,
-  organizationId: string,
+  organizationId: string | null,
   domain: string
 ): Promise<void> {
   try {
@@ -1194,18 +1266,17 @@ async function runEnrichmentPipeline(
 
     console.log(`[Pipeline] Successfully updated enrichment ${enrichmentId} to completed status`);
 
-    // Also save skills to organization_skills table
-    await saveGeneratedSkills(supabase, organizationId, skills);
-
-    // Save to organization_context for platform skills interpolation
-    await saveOrganizationContext(supabase, organizationId, enrichmentData, 'enrichment', 0.85);
-
-    // Save skill-derived context (brand_tone, words_to_avoid, etc.)
-    await saveSkillDerivedContext(supabase, organizationId, skills, 'enrichment', 0.85);
-
-    // AGENT-003: Invalidate persona cache so it regenerates with new data
-    await invalidatePersonaCache(supabase, organizationId);
-    console.log(`[Pipeline] Invalidated persona cache for org ${organizationId}`);
+    // Save org-scoped data only if we have an org_id
+    // For deferred org creation, these are saved later when org is created client-side
+    if (organizationId) {
+      await saveGeneratedSkills(supabase, organizationId, skills);
+      await saveOrganizationContext(supabase, organizationId, enrichmentData, 'enrichment', 0.85);
+      await saveSkillDerivedContext(supabase, organizationId, skills, 'enrichment', 0.85);
+      await invalidatePersonaCache(supabase, organizationId);
+      console.log(`[Pipeline] Saved skills/context and invalidated persona cache for org ${organizationId}`);
+    } else {
+      console.log(`[Pipeline] Skipping org-scoped saves (deferred org creation). Skills stored in enrichment record.`);
+    }
 
     console.log(`[Pipeline] Enrichment complete for ${domain}`);
 
@@ -1432,7 +1503,7 @@ function generateDomainAwareEnrichmentData(domain: string, companyName: string):
 async function executeCompanyResearchSkill(
   supabase: any,
   domain: string,
-  organizationId: string
+  organizationId: string | null
 ): Promise<EnrichmentData> {
   console.log(`[executeCompanyResearchSkill] Researching ${domain} via company-research skill`);
 
@@ -1459,7 +1530,7 @@ async function executeCompanyResearchSkill(
     });
 
     const skillResult = await executeAgentSkillWithContract(supabase, {
-      organizationId,
+      organizationId: organizationId || 'deferred', // Placeholder for deferred org creation
       userId: null, // System execution, no specific user
       skillKey: 'company-research',
       context: skillInput,
@@ -2221,7 +2292,8 @@ async function saveSkillDerivedContext(
 
 async function getEnrichmentStatus(
   supabase: any,
-  organizationId: string
+  organizationId: string | null,
+  domain?: string
 ): Promise<{
   success: boolean;
   status?: string;
@@ -2230,13 +2302,34 @@ async function getEnrichmentStatus(
   error?: string;
 }> {
   try {
-    const { data: enrichment, error } = await supabase
-      .from('organization_enrichment')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .maybeSingle();
+    let enrichment;
 
-    if (error) throw error;
+    if (organizationId) {
+      // Query by organization_id
+      const { data, error } = await supabase
+        .from('organization_enrichment')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+
+      if (error) throw error;
+      enrichment = data;
+    } else if (domain) {
+      // Query by domain for deferred org creation
+      const { data, error } = await supabase
+        .from('organization_enrichment')
+        .select('*')
+        .eq('domain', domain)
+        .is('organization_id', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      enrichment = data;
+    } else {
+      return { success: false, error: 'Either organization_id or domain is required' };
+    }
 
     if (!enrichment) {
       return { success: true, status: 'not_started' };

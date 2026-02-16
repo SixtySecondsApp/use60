@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 import { useOrganizationContext } from '@/lib/hooks/useOrganizationContext';
+import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { logger } from '@/lib/utils/logger';
@@ -71,6 +72,7 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   const { isAuthenticated, loading, user } = useAuth();
   const { needsOnboarding, loading: onboardingLoading } = useOnboardingProgress();
   const { activeOrgId } = useOrganizationContext();
+  const isResettingOnboarding = useOnboardingV2Store((s) => s.isResettingOnboarding);
   const navigate = useNavigate();
   const location = useLocation();
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -354,6 +356,11 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   }, []);
 
   useEffect(() => {
+    // Skip all redirect logic while onboarding is resetting to prevent auth cascade
+    if (isResettingOnboarding) {
+      return;
+    }
+
     // Don't redirect while loading auth, onboarding status, email verification, profile status, org membership, pending requests, or org active status
     if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isCheckingOrgActive) return;
 
@@ -493,7 +500,7 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       });
       return;
     }
-  }, [isAuthenticated, loading, onboardingLoading, isCheckingEmail, isCheckingProfileStatus, isCheckingOrgMembership, isCheckingPendingRequest, isCheckingOrgActive, isOrgActive, profileStatus, hasOrgMembership, hasPendingRequest, emailVerified, needsOnboarding, isPublicRoute, isVerifyEmailRoute, isPasswordRecovery, hasRecoveryTokens, isDevModeBypass, isAuthRequiredRoute, isOnboardingExempt, navigate, redirectTo, location, isRedirecting, user?.email, activeOrgId]);
+  }, [isResettingOnboarding, isAuthenticated, loading, onboardingLoading, isCheckingEmail, isCheckingProfileStatus, isCheckingOrgMembership, isCheckingPendingRequest, isCheckingOrgActive, isOrgActive, profileStatus, hasOrgMembership, hasPendingRequest, emailVerified, needsOnboarding, isPublicRoute, isVerifyEmailRoute, isPasswordRecovery, hasRecoveryTokens, isDevModeBypass, isAuthRequiredRoute, isOnboardingExempt, navigate, redirectTo, location, isRedirecting, user?.email, activeOrgId]);
 
   // Show loading spinner while checking authentication, onboarding status, email verification, profile status, org membership, pending requests, org active status, or during redirect delay
   if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isCheckingOrgActive || isRedirecting) {
