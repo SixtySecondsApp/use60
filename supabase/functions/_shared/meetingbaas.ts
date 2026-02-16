@@ -373,6 +373,7 @@ export function generateWebhookToken(): string {
  * Extract domain from email address
  */
 export function extractDomain(email: string): string | null {
+  if (!email) return null;
   const match = email.match(/@([^@]+)$/);
   return match ? match[1].toLowerCase() : null;
 }

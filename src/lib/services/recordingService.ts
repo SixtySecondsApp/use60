@@ -837,6 +837,121 @@ class RecordingService {
 
     return matches;
   }
+
+  /**
+   * Retry processing for a recording stuck in "processing" status.
+   * Directly invokes the process-recording edge function.
+   */
+  async retryProcessing(recordingId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const response = await fetch(`${supabaseUrl}/functions/v1/process-recording`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ recording_id: recordingId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: result.error || 'Processing failed' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.error('[RecordingService] retryProcessing error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  /**
+   * Poll all stuck bots to check their status via MeetingBaaS API.
+   * Triggers processing for any bots that have completed but whose webhooks were missed.
+   */
+  async pollAllStuckBots(): Promise<{ success: boolean; summary?: Record<string, number>; error?: string }> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const response = await fetch(`${supabaseUrl}/functions/v1/poll-stuck-bots`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ stale_minutes: 0 }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: result.error || 'Poll failed' };
+      }
+
+      return {
+        success: true,
+        summary: result.summary,
+      };
+    } catch (error) {
+      logger.error('[RecordingService] pollAllStuckBots error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  /**
+   * Poll a stuck bot to check its current status via MeetingBaaS API.
+   * Triggers processing if the bot has completed but webhook was missed.
+   */
+  async pollStuckBot(botId: string): Promise<{ success: boolean; action?: string; error?: string }> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const response = await fetch(`${supabaseUrl}/functions/v1/poll-stuck-bots`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ bot_id: botId, stale_minutes: 0 }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: result.error || 'Poll failed' };
+      }
+
+      const firstResult = result.results?.[0];
+      return {
+        success: true,
+        action: firstResult?.action || 'no_change',
+      };
+    } catch (error) {
+      logger.error('[RecordingService] pollStuckBot error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  }
 }
 
 // Export singleton instance
