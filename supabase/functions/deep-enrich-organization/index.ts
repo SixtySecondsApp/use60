@@ -29,6 +29,41 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+/**
+ * Safely parse JSON from AI responses, handling common malformations:
+ * - Trailing commas before } or ]
+ * - Unescaped newlines in strings
+ * - Smart quotes
+ */
+function safeParseJSON(jsonStr: string): any {
+  // First try direct parse
+  try {
+    return JSON.parse(jsonStr);
+  } catch (_) {
+    // Attempt repairs
+  }
+
+  let repaired = jsonStr;
+
+  // Fix trailing commas: ,} or ,]
+  repaired = repaired.replace(/,\s*([\]}])/g, '$1');
+
+  // Fix smart quotes
+  repaired = repaired.replace(/[\u201C\u201D]/g, '"');
+  repaired = repaired.replace(/[\u2018\u2019]/g, "'");
+
+  // Fix unescaped newlines inside strings
+  repaired = repaired.replace(/(?<=":[ ]*"[^"]*)\n(?=[^"]*")/g, '\\n');
+
+  try {
+    return JSON.parse(repaired);
+  } catch (e) {
+    // Log the problematic JSON for debugging
+    console.error('[safeParseJSON] Failed to parse even after repair. First 800 chars:', repaired.substring(0, 800));
+    throw new Error(`Failed to parse AI response as JSON: ${(e as Error).message}`);
+  }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -862,7 +897,7 @@ ${userPrompt}`;
     throw new Error('Failed to parse skill config as JSON');
   }
 
-  return JSON.parse(jsonMatch[0]) as SkillConfig;
+  return safeParseJSON(jsonMatch[0]) as SkillConfig;
 }
 
 // ============================================================================
@@ -1622,7 +1657,7 @@ async function extractCompanyData(
     throw new Error('Failed to parse AI response as JSON');
   }
 
-  const rawData = JSON.parse(jsonMatch[0]);
+  const rawData = safeParseJSON(jsonMatch[0]);
 
   // Transform nested AI response to flat EnrichmentData structure
   // The AI returns: { company: {...}, classification: {...}, offering: {...}, market: {...}, positioning: {...}, voice: {...} }
@@ -1807,7 +1842,7 @@ async function generateSkillConfigs(
     throw new Error('Failed to parse skill config as JSON');
   }
 
-  return JSON.parse(jsonMatch[0]) as SkillConfig;
+  return safeParseJSON(jsonMatch[0]) as SkillConfig;
 }
 
 // ============================================================================

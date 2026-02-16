@@ -64,7 +64,8 @@ export function CompletionStep() {
 
   /**
    * Auto-create the org's fact profile seeded with onboarding enrichment data.
-   * Fire-and-forget: failures here must not block onboarding completion.
+   * Awaited before navigation to prevent the request being killed by page change.
+   * Failures are non-fatal — user can set up the profile later in Settings.
    */
   const ensureOrgProfile = async () => {
     // Guard: only run once per mount, and only if we have the required IDs
@@ -118,17 +119,13 @@ export function CompletionStep() {
         setActiveOrg(organizationId);
       }
 
-      // Auto-create org fact profile (fire-and-forget, non-blocking)
-      ensureOrgProfile();
+      // Create org fact profile — await so the request isn't killed by navigation
+      await ensureOrgProfile();
 
       // Invalidate profile cache so dashboard fetches fresh data
-      // This ensures the profile is populated immediately after onboarding
       if (user?.id) {
         invalidateProfile();
       }
-
-      // Wait for profile cache invalidation to propagate
-      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Navigate to dashboard with full page refresh to clear React Query cache
       window.location.href = '/dashboard';
@@ -239,9 +236,8 @@ export function CompletionStep() {
                 if (organizationId) {
                   setActiveOrg(organizationId);
                 }
-                // Auto-create org fact profile (fire-and-forget, non-blocking)
-                ensureOrgProfile();
-                await new Promise(resolve => setTimeout(resolve, 300));
+                // Create org fact profile — await before navigating
+                await ensureOrgProfile();
                 // Use full page load to clear React Query cache
                 window.location.href = item.route;
               } finally {
