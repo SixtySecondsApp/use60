@@ -244,14 +244,14 @@ export async function handleAsk(req: Request): Promise<Response> {
         const [sentimentRows, actionItemRows, keyMomentRows, summaryRows] = await Promise.all([
           db.unsafe<Record<string, unknown>>(
             `SELECT sentiment, positive_score AS "positiveScore"
-             FROM transcript_sentiments
-             WHERE transcript_id = $1 AND segment_index IS NULL
+             FROM sentiment_analysis
+             WHERE transcript_id = $1 AND segment_id IS NULL
              LIMIT 1`,
             [tid]
           ),
           db.unsafe<Record<string, unknown>>(
             `SELECT action_text AS "actionText", assignee, priority
-             FROM transcript_action_items
+             FROM action_items
              WHERE transcript_id = $1
              ORDER BY priority ASC NULLS LAST
              LIMIT 8`,
@@ -259,13 +259,13 @@ export async function handleAsk(req: Request): Promise<Response> {
           ),
           db.unsafe<Record<string, unknown>>(
             `SELECT title, description, moment_type AS "momentType"
-             FROM transcript_key_moments
+             FROM key_moments
              WHERE transcript_id = $1`,
             [tid]
           ),
           db.unsafe<Record<string, unknown>>(
             `SELECT summary_text AS "summaryText", summary_type AS "summaryType"
-             FROM transcript_summaries
+             FROM summaries
              WHERE transcript_id = $1`,
             [tid]
           ),
