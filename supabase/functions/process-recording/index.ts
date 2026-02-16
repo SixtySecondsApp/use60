@@ -214,7 +214,7 @@ async function transcribeWithAssemblyAI(audioUrl: string): Promise<TranscriptDat
     },
     body: JSON.stringify({
       audio_url: audioUrl,
-      speech_models: ['universal-3-pro'],
+      speech_models: ['universal-3-pro', 'universal-2'],
       speaker_labels: true,
     }),
   });
@@ -300,7 +300,7 @@ function identifySpeakers(
     // Try to match to attendee by index (naive approach)
     const attendee = attendees[index];
     if (attendee) {
-      const isInternal = internalDomain
+      const isInternal = internalDomain && attendee.email
         ? isInternalEmail(attendee.email, internalDomain)
         : false;
 
@@ -604,21 +604,39 @@ async function processRecording(
       }
     }
 
-    // Priority 3: Try MeetingBaaS bot status API (GET /v2/bots/{botId}) as fallback
+    // Priority 3: Try MeetingBaaS recording endpoint (GET /v2/bots/{botId}/recording)
+    if (!recordingMediaUrl) {
+      console.log('[ProcessRecording] Step 1: Trying MeetingBaaS recording endpoint...');
+      try {
+        const { data: recData, error: recError } = await meetingBaaSClient.getRecording(effectiveBotId);
+        if (recError) {
+          console.warn('[ProcessRecording] Step 1: Recording endpoint error:', recError.message);
+        } else if (recData?.url) {
+          recordingMediaUrl = recData.url;
+          console.log('[ProcessRecording] Step 1: Got URL from recording endpoint');
+        }
+      } catch (err) {
+        console.warn('[ProcessRecording] Step 1: Recording endpoint failed:', err);
+      }
+    }
+
+    // Priority 4: Try MeetingBaaS bot status API (GET /v2/bots/{botId}) as last resort
     if (!recordingMediaUrl) {
       console.log('[ProcessRecording] Step 1: Trying MeetingBaaS bot status API...');
       try {
         const { data: botData } = await meetingBaaSClient.getBotStatus(effectiveBotId);
-        // Bot status response may include video/audio URLs
         const botDataAny = botData as Record<string, unknown> | undefined;
-        const botVideoUrl = botDataAny?.video_url as string || botDataAny?.video as string;
-        const botAudioUrl = botDataAny?.audio_url as string || botDataAny?.audio as string;
-        const botRecordingUrl = botDataAny?.recording_url as string;
-        recordingMediaUrl = botVideoUrl || botAudioUrl || botRecordingUrl || null;
+        console.log('[ProcessRecording] Step 1: Bot status keys:', Object.keys(botDataAny || {}));
+        const botVideoUrl = (botDataAny?.video_url || botDataAny?.video || botDataAny?.mp4) as string | undefined;
+        const botAudioUrl = (botDataAny?.audio_url || botDataAny?.audio) as string | undefined;
+        const botRecordingUrl = botDataAny?.recording_url as string | undefined;
+        const output = botDataAny?.output as Record<string, unknown> | undefined;
+        const outputVideoUrl = (output?.video_url || output?.video || output?.mp4) as string | undefined;
+        recordingMediaUrl = botVideoUrl || botAudioUrl || botRecordingUrl || outputVideoUrl || null;
         if (recordingMediaUrl) {
           console.log('[ProcessRecording] Step 1: Got URL from bot status API');
         } else {
-          console.warn('[ProcessRecording] Step 1: Bot status API returned no recording URL');
+          console.warn('[ProcessRecording] Step 1: No recording URL in bot status. Keys:', Object.keys(botDataAny || {}));
         }
       } catch (err) {
         console.warn('[ProcessRecording] Step 1: Bot status API failed:', err);
@@ -661,16 +679,33 @@ async function processRecording(
     }
 
     // Step 2: Get transcript
+    // Priority: 1) Already saved in DB (from poll-stuck-bots or webhook), 2) AssemblyAI
     console.log('[ProcessRecording] Step 2: Getting transcript...');
     let transcript: TranscriptData;
 
-    // Always use AssemblyAI for transcription
-    console.log('[ProcessRecording] Step 2: Using AssemblyAI for transcription');
-    transcript = await transcribeWithAssemblyAI(recordingData.url);
+    // Priority 1: Check if transcript already exists in DB (pre-fetched by poll-stuck-bots)
+    if (recording.transcript_json && recording.transcript_text) {
+      const savedTranscript = recording.transcript_json as TranscriptData;
+      if (savedTranscript.text && savedTranscript.utterances?.length > 0) {
+        console.log(`[ProcessRecording] Step 2: Using existing transcript from DB (${savedTranscript.text.length} chars, ${savedTranscript.utterances.length} utterances)`);
+        transcript = savedTranscript;
+      } else {
+        console.log('[ProcessRecording] Step 2: DB transcript incomplete, using AssemblyAI');
+        transcript = await transcribeWithAssemblyAI(recordingData.url);
+      }
+    } else {
+      // Priority 2: Transcribe with AssemblyAI
+      console.log('[ProcessRecording] Step 2: No transcript in DB, using AssemblyAI');
+      transcript = await transcribeWithAssemblyAI(recordingData.url);
+    }
 
-    // Get attendees from calendar event if available
+    // Get attendees: Priority 1 = recordings.attendees (stored at deploy time)
+    // Priority 2 = calendar_events.attendees (legacy fallback)
     let attendees: AttendeeInfo[] = [];
-    if (recording.calendar_event_id) {
+    if (recording.attendees && Array.isArray(recording.attendees) && recording.attendees.length > 0) {
+      attendees = recording.attendees;
+      console.log(`[ProcessRecording] Using ${attendees.length} attendees from recording record`);
+    } else if (recording.calendar_event_id) {
       const { data: calendarEvent } = await supabase
         .from('calendar_events')
         .select('attendees')
@@ -679,6 +714,7 @@ async function processRecording(
 
       if (calendarEvent?.attendees) {
         attendees = calendarEvent.attendees;
+        console.log(`[ProcessRecording] Using ${attendees.length} attendees from calendar event`);
       }
     }
 

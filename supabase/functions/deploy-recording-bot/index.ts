@@ -59,6 +59,7 @@ interface RecordingInsert {
   meeting_url: string;
   meeting_title: string | null;
   calendar_event_id: string | null;
+  attendees: Array<{ email: string; name?: string }> | null;
   status: string;
 }
 
@@ -429,6 +430,26 @@ serve(async (req) => {
       );
     }
 
+    // Resolve attendees: from request body, or from calendar event
+    let resolvedAttendees: Array<{ email: string; name?: string }> | null = body.attendees || null;
+
+    if (!resolvedAttendees && body.calendar_event_id) {
+      try {
+        const { data: calendarEvent } = await supabase
+          .from('calendar_events')
+          .select('attendees')
+          .eq('id', body.calendar_event_id)
+          .maybeSingle();
+
+        if (calendarEvent?.attendees && Array.isArray(calendarEvent.attendees)) {
+          resolvedAttendees = calendarEvent.attendees;
+          console.log(`[DeployBot] Resolved ${resolvedAttendees.length} attendees from calendar event`);
+        }
+      } catch (e) {
+        console.warn('[DeployBot] Failed to fetch calendar event attendees:', e);
+      }
+    }
+
     // Create recording record
     const recordingData: RecordingInsert = {
       org_id: orgId,
@@ -437,6 +458,7 @@ serve(async (req) => {
       meeting_url: body.meeting_url,
       meeting_title: body.meeting_title || null,
       calendar_event_id: body.calendar_event_id || null,
+      attendees: resolvedAttendees,
       status: 'pending',
     };
 

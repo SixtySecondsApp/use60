@@ -189,6 +189,9 @@ export interface Recording {
   speakers?: RecordingSpeaker[] | null;
   speaker_identification_method?: SpeakerIdentificationMethod | null;
 
+  // Attendees (stored at deploy time for speaker identification)
+  attendees?: Array<{ email: string; name?: string }> | null;
+
   // CRM links
   crm_contacts?: CRMContactLink[] | null;
   crm_deal_id?: string | null;
@@ -217,6 +220,7 @@ export interface RecordingInsert {
   meeting_url: string;
   meeting_title?: string | null;
   calendar_event_id?: string | null;
+  attendees?: Array<{ email: string; name?: string }> | null;
   status?: RecordingStatus;
 }
 

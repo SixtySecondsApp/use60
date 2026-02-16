@@ -52,7 +52,8 @@ import {
   BarChart3,
   Smile,
   Frown,
-  Meh
+  Meh,
+  RefreshCw
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
@@ -353,6 +354,7 @@ const RecordingsList: React.FC = () => {
   const [platformFilter, setPlatformFilter] = useState<MeetingPlatform | 'all'>('all')
   const [joinModalOpen, setJoinModalOpen] = useState(false)
   const [isJoining, setIsJoining] = useState(false)
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false)
 
   // Fetch recordings with React Query
   const { recordings, total: totalCount, isLoading, error } = useRecordings({
@@ -417,6 +419,34 @@ const RecordingsList: React.FC = () => {
       }
     } finally {
       setIsJoining(false)
+    }
+  }
+
+  // Handle refresh all stuck bots
+  const handleRefreshAll = async () => {
+    setIsRefreshingAll(true)
+    try {
+      const result = await recordingService.pollAllStuckBots()
+      if (!result.success) {
+        toast.error(result.error || 'Failed to refresh')
+        return
+      }
+      const s = result.summary
+      if (s && s.processing_triggered > 0) {
+        toast.success(`${s.processing_triggered} recording${s.processing_triggered > 1 ? 's' : ''} triggered for processing`)
+      } else if (s && s.marked_failed > 0) {
+        toast.info(`${s.marked_failed} recording${s.marked_failed > 1 ? 's' : ''} marked as failed`)
+      } else if (s && s.total_checked === 0) {
+        toast.info('No stuck recordings found')
+      } else if (s && s.still_active > 0) {
+        toast.info(`${s.still_active} recording${s.still_active > 1 ? 's are' : ' is'} still active`)
+      } else {
+        toast.info('Status check complete')
+      }
+    } catch {
+      toast.error('Failed to refresh recordings')
+    } finally {
+      setIsRefreshingAll(false)
     }
   }
 
@@ -588,6 +618,19 @@ const RecordingsList: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Refresh All Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefreshAll}
+            disabled={isRefreshingAll}
+            className="gap-2"
+            title="Check status of all pending recordings"
+          >
+            <RefreshCw className={cn("h-4 w-4", isRefreshingAll && "animate-spin")} />
+            {isRefreshingAll ? 'Checking...' : 'Refresh All'}
+          </Button>
+
           {/* Join Meeting Button */}
           <Button
             size="sm"
