@@ -9,12 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { BarChart3, FileText, Search, Wand2 } from 'lucide-react';
+import { BarChart3, FileText, Search, Wand2, ClipboardList } from 'lucide-react';
 
 import { OverviewTab } from '@/components/meeting-analytics/OverviewTab';
 import { TranscriptsTab } from '@/components/meeting-analytics/TranscriptsTab';
 import { SearchTab } from '@/components/meeting-analytics/SearchTab';
 import { InsightsTab } from '@/components/meeting-analytics/InsightsTab';
+import { ReportsTab } from '@/components/meeting-analytics/ReportsTab';
 import { TranscriptDetailSheet } from '@/components/meeting-analytics/TranscriptDetailSheet';
 
 const tabs = [
@@ -22,6 +23,7 @@ const tabs = [
   { value: 'transcripts', label: 'Transcripts', icon: FileText },
   { value: 'search', label: 'Search', icon: Search },
   { value: 'insights', label: 'Insights', icon: Wand2 },
+  { value: 'reports', label: 'Reports', icon: ClipboardList },
 ] as const;
 
 const timeRangeOptions = [
@@ -111,6 +113,10 @@ export default function MeetingAnalyticsPage() {
 
           <TabsContent value="insights">
             <InsightsTab timeRange={timeRange} />
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <ReportsTab />
           </TabsContent>
         </Tabs>
       </div>

@@ -1,32 +1,52 @@
 /**
  * Railway PostgreSQL connection for Meeting Analytics.
- * Uses postgres.js with prepare: false for serverless/transaction pooler compatibility.
+ * Uses deno-postgres (native Deno driver) for Supabase Edge Runtime compatibility.
  */
 
-import postgres from 'https://esm.sh/postgres@3.4.3';
+import { Pool } from 'https://deno.land/x/postgres@v0.19.3/mod.ts';
 
-let sql: ReturnType<typeof postgres> | null = null;
+let pool: Pool | null = null;
 
-export function getRailwayDb() {
-  if (!sql) {
+function getPool(): Pool {
+  if (!pool) {
     const url = Deno.env.get('RAILWAY_DATABASE_URL');
     if (!url) {
       throw new Error('RAILWAY_DATABASE_URL is required for meeting-analytics');
     }
-    sql = postgres(url, {
-      prepare: false,
-      max: 5,
-      idle_timeout: 20,
-      connect_timeout: 10,
-    });
+    pool = new Pool(url, 5, true);
   }
-  return sql;
+  return pool;
+}
+
+/**
+ * Wrapper that mimics postgresjs `sql.unsafe(query, params)` API.
+ * Returns an array of row objects from deno-postgres queryObject.
+ */
+export function getRailwayDb() {
+  const p = getPool();
+  return {
+    /**
+     * Execute a parameterized query. Matches postgresjs unsafe() signature.
+     */
+    async unsafe<T = Record<string, unknown>>(
+      query: string,
+      params: unknown[] = []
+    ): Promise<T[]> {
+      const client = await p.connect();
+      try {
+        const result = await client.queryObject<T>({ text: query, args: params });
+        return result.rows;
+      } finally {
+        client.release();
+      }
+    },
+  };
 }
 
 export async function checkRailwayConnection(): Promise<boolean> {
   try {
     const db = getRailwayDb();
-    const result = await db`SELECT 1 as connected`;
+    const result = await db.unsafe<{ connected: number }>('SELECT 1 as connected');
     return result[0]?.connected === 1;
   } catch (err) {
     console.error('Railway DB connection check failed:', err);

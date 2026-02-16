@@ -63,6 +63,10 @@ verify_jwt = false
 [functions.api-copilot]
 verify_jwt = false
 
+# Meeting Analytics (called from staging.use60.com; CORS preflight must succeed)
+[functions.meeting-analytics]
+verify_jwt = false
+
 # Gmail (called directly from browser; uses in-function auth + allowlist-based CORS)
 [functions.google-gmail]
 verify_jwt = false
@@ -262,4 +266,8 @@ verify_jwt = false
 # Exa abilities demo - called directly from browser (CORS preflight must pass)
 # Auth is enforced manually inside the function via supabase.auth.getUser()
 [functions.exa-abilities-demo]
+verify_jwt = false
+
+# Meeting Analytics cron - triggered by pg_cron for scheduled reports
+[functions.meeting-analytics-cron]
 verify_jwt = false

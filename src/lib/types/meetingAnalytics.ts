@@ -274,6 +274,122 @@ export interface MaTranscriptInsights {
 }
 
 // ============================================
+// Report Types
+// ============================================
+
+export interface MaReportHighlights {
+  topPerformer: { title: string; score: number; grade: string } | null;
+  hottestDeal: { title: string; conversionScore: number } | null;
+  meetingCount: number;
+  actionItemsCreated: number;
+  actionItemsCompleted: number;
+  needsAttention: string[];
+  recommendations: string[];
+}
+
+export interface MaReport {
+  type: 'daily' | 'weekly';
+  generatedAt: string;
+  period: { start: string; end: string };
+  metrics: MaDashboardMetrics;
+  highlights: MaReportHighlights;
+}
+
+export interface MaReportHistoryEntry {
+  id: string;
+  reportType: 'daily' | 'weekly';
+  channelType: 'slack' | 'email';
+  channelTarget: string;
+  status: 'sent' | 'failed';
+  errorMessage: string | null;
+  reportData: Record<string, unknown> | null;
+  sentAt: string;
+}
+
+// ============================================
+// Notification Settings Types
+// ============================================
+
+export type MaSettingType = 'slack' | 'email';
+export type MaScheduleType = 'daily' | 'weekly';
+
+export interface MaNotificationSetting {
+  id: string;
+  settingType: MaSettingType;
+  channel: string;
+  config: Record<string, unknown>;
+  scheduleType: MaScheduleType | null;
+  scheduleTime: string | null;
+  scheduleDay: number | null;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaNotificationSettingInput {
+  settingType: MaSettingType;
+  channel: string;
+  config?: Record<string, unknown>;
+  scheduleType?: MaScheduleType;
+  scheduleTime?: string;
+  scheduleDay?: number;
+  enabled?: boolean;
+}
+
+// ============================================
+// Analytics Types
+// ============================================
+
+export interface MaTalkTimeSpeaker {
+  name: string;
+  wordCount: number;
+  percentage: number;
+}
+
+export interface MaTalkTimeEntry {
+  id: string;
+  title: string;
+  createdAt: string;
+  speakers: MaTalkTimeSpeaker[];
+  totalWords: number;
+  topSpeakerPercentage: number;
+  isBalanced: boolean;
+}
+
+export interface MaConversionEntry {
+  id: string;
+  title: string;
+  createdAt: string;
+  conversionScore: number;
+  status: 'hot' | 'warm' | 'cold';
+  signals: {
+    agreements: number;
+    decisions: number;
+    milestones: number;
+    blockers: number;
+    actionItems: number;
+  };
+  sentiment: string;
+}
+
+export interface MaSentimentTimelineEntry {
+  transcriptId: string;
+  title: string;
+  date: string;
+  sentiment: string;
+  positiveScore: number | null;
+  negativeScore: number | null;
+  neutralScore: number | null;
+}
+
+export interface MaSentimentTrends {
+  timeline: MaSentimentTimelineEntry[];
+  totals: { positive: number; negative: number; neutral: number; mixed: number };
+  days: number;
+  count: number;
+}
+
+// ============================================
 // API Response Types
 // ============================================
 
