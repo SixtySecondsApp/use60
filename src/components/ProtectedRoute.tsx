@@ -393,11 +393,12 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       return;
     }
 
-    // CRITICAL: If user has a pending join/rejoin request, they must stay on pending-approval page
+    // CRITICAL: If user has a pending join/rejoin request AND no active membership, they must stay on pending-approval page
     // Only block if we've finished checking both org membership AND pending requests
+    // EXCEPTION: Skip if user already has org membership (approved but stale join request remains)
     // EXCEPTION: Skip this check if user just canceled their request (fromCancelRequest flag)
     const fromCancelRequest = location.state?.fromCancelRequest;
-    if (isAuthenticated && emailVerified && !isCheckingOrgMembership && !isCheckingPendingRequest && hasPendingRequest === true && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute && !fromCancelRequest) {
+    if (isAuthenticated && emailVerified && !isCheckingOrgMembership && !isCheckingPendingRequest && hasPendingRequest === true && hasOrgMembership === false && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute && !fromCancelRequest) {
       // Only allow pending-approval page, block everything else including onboarding
       if (location.pathname !== '/auth/pending-approval') {
         navigate('/auth/pending-approval', { replace: true });
