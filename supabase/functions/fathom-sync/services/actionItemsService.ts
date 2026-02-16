@@ -4,7 +4,7 @@
  * Handles processing and storing action items from Fathom meetings.
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 
 export interface FathomActionItem {
   description?: string

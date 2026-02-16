@@ -45,6 +45,7 @@ interface WorkflowConfig {
   num_email_steps?: number
   campaign_angle?: string
   target_table_id?: string
+  skip_search?: boolean
 }
 
 interface WorkflowRequest {
@@ -977,26 +978,40 @@ serve(async (req) => {
           sseEvent(controller, 'step_complete', { step: 'planning', summary: plan.summary })
 
           const steps: StepResult[] = []
+          let tableId: string
 
-          // STEP 2: Apollo search + table creation/population (research agent)
-          sseEvent(controller, 'step_start', { step: 'search', label: 'Searching Apollo for prospects', agent: 'research' })
-          const searchResult = await executeSearch(plan, authHeader, body.config?.target_table_id)
-          steps.push(searchResult)
-          sseEvent(controller, searchResult.status === 'complete' ? 'step_complete' : 'step_error', searchResult)
-
-          // If search failed, we can't continue
-          if (searchResult.status === 'error' || !searchResult.data?.table_id) {
-            sseEvent(controller, 'workflow_complete', {
-              status: 'error',
-              steps,
-              error: 'Search failed — cannot proceed with workflow',
-              duration_ms: steps.reduce((sum, s) => sum + s.duration_ms, 0),
+          // STEP 2: Apollo search (or skip if using existing table contacts)
+          if (body.config?.skip_search && body.config?.target_table_id) {
+            // Existing table — skip Apollo search, use contacts already in table
+            tableId = body.config.target_table_id
+            sseEvent(controller, 'step_start', { step: 'search', label: 'Using existing contacts', agent: 'research' })
+            sseEvent(controller, 'step_complete', {
+              step: 'search',
+              summary: 'Using contacts from current table',
+              data: { table_id: tableId },
+              duration_ms: 0,
             })
-            controller.close()
-            return
-          }
+          } else {
+            // Normal flow — search Apollo for new prospects
+            sseEvent(controller, 'step_start', { step: 'search', label: 'Searching Apollo for prospects', agent: 'research' })
+            const searchResult = await executeSearch(plan, authHeader, body.config?.target_table_id)
+            steps.push(searchResult)
+            sseEvent(controller, searchResult.status === 'complete' ? 'step_complete' : 'step_error', searchResult)
 
-          const tableId = searchResult.data.table_id as string
+            // If search failed, we can't continue
+            if (searchResult.status === 'error' || !searchResult.data?.table_id) {
+              sseEvent(controller, 'workflow_complete', {
+                status: 'error',
+                steps,
+                error: 'Search failed — cannot proceed with workflow',
+                duration_ms: steps.reduce((sum, s) => sum + s.duration_ms, 0),
+              })
+              controller.close()
+              return
+            }
+
+            tableId = searchResult.data.table_id as string
+          }
 
           // STEPS 3+4: Email generation + campaign creation
           // Parallelization strategy:

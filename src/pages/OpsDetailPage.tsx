@@ -29,7 +29,7 @@ import {
   Send,
   Building2,
   Shield,
-  Search,
+  MoreHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -49,7 +49,6 @@ import { HubSpotPushModal, type HubSpotPushConfig } from '@/components/ops/HubSp
 import { AttioPushModal } from '@/components/ops/AttioPushModal';
 import { AttioSyncHistory } from '@/components/ops/AttioSyncHistory';
 import { CSVImportOpsTableWizard } from '@/components/ops/CSVImportOpsTableWizard';
-import { FindMoreSheet } from '@/components/ops/FindMoreSheet';
 import { ViewSelector } from '@/components/ops/ViewSelector';
 import { SaveViewDialog } from '@/components/ops/SaveViewDialog';
 import { ViewConfigPanel, normalizeSortConfig, type ViewConfigState } from '@/components/ops/ViewConfigPanel';
@@ -93,8 +92,11 @@ import { CampaignApprovalBanner } from '@/components/ops/CampaignApprovalBanner'
 import { ApolloEnrichmentBanner } from '@/components/ops/ApolloEnrichmentBanner';
 import { useWorkflowOrchestrator, isWorkflowPrompt } from '@/lib/hooks/useWorkflowOrchestrator';
 import { WorkflowProgressStepper } from '@/components/ops/WorkflowProgressStepper';
+import { isCampaignPrompt, detectTableCampaignMissingInfo, generateCampaignName } from '@/lib/utils/prospectingDetector';
+import { CampaignWorkflowResponse, type CampaignWorkflowData } from '@/components/copilot/responses/CampaignWorkflowResponse';
 // Instantly top-bar UI removed — integration moved to column system
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFactProfiles } from '@/lib/hooks/useFactProfiles';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
@@ -240,9 +242,6 @@ function OpsDetailPage() {
   const [showApolloFilters, setShowApolloFilters] = useState(false);
   const [showCollectMore, setShowCollectMore] = useState(false);
 
-  // ---- Find More (ICP) ----
-  const [showFindMore, setShowFindMore] = useState(false);
-
   // ---- Instantly state (moved to column system) ----
 
   // ---- Fullscreen mode ----
@@ -290,6 +289,7 @@ function OpsDetailPage() {
 
   // ---- Workflow orchestrator (NLT) ----
   const workflow = useWorkflowOrchestrator();
+  const [campaignWorkflowData, setCampaignWorkflowData] = useState<CampaignWorkflowData | null>(null);
 
   // When workflow completes and creates a new table, navigate to it
   useEffect(() => {
@@ -399,22 +399,6 @@ function OpsDetailPage() {
     if (!table?.context_profile_id) return null;
     return factProfiles.find((p) => p.id === table.context_profile_id) ?? null;
   }, [table?.context_profile_id, factProfiles]);
-
-  // ---- ICP profile (for Find More button) ----
-  const { data: linkedIcpProfile } = useQuery({
-    queryKey: ['icp-profile-for-table', tableId],
-    queryFn: async () => {
-      if (!tableId) return null;
-      const { data, error } = await supabase
-        .from('icp_profiles')
-        .select('id, name, description, profile_type, criteria, status')
-        .eq('linked_table_id', tableId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!tableId && table?.source_type === 'icp',
-  });
 
   // ---- Enrichment refresh schedules ----
   const { data: enrichSchedules = [], refetch: refetchSchedules } = useQuery({
@@ -1666,6 +1650,18 @@ function OpsDetailPage() {
 
       const submittedQuery = queryInput.trim();
 
+      // Campaign intent on existing table → show stepped campaign UI
+      if (isCampaignPrompt(submittedQuery)) {
+        const questions = detectTableCampaignMissingInfo(submittedQuery);
+        setCampaignWorkflowData({
+          original_prompt: submittedQuery,
+          questions,
+          suggested_campaign_name: generateCampaignName(submittedQuery),
+        });
+        setQueryInput('');
+        return;
+      }
+
       // NLT: Detect workflow-level prompts and route to orchestrator
       // Uses startWorkflow which shows pre-flight questions before executing
       if (isWorkflowPrompt(submittedQuery)) {
@@ -2399,246 +2395,166 @@ function OpsDetailPage() {
           />
         )}
 
-        {/* Consolidated toolbar */}
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
-          {/* Left: table name + meta badges */}
-          <div className="flex items-center gap-3 min-w-0 shrink-0">
-            {isEditingName ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  ref={nameInputRef}
-                  type="text"
-                  value={editNameValue}
-                  onChange={(e) => setEditNameValue(e.target.value)}
-                  onKeyDown={handleNameKeyDown}
-                  onBlur={handleSaveName}
-                  className="rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1 text-base font-semibold text-white outline-none focus:border-violet-500"
-                />
-                <button
-                  onClick={handleSaveName}
-                  className="rounded p-1 text-green-400 transition-colors hover:bg-gray-800"
-                >
-                  <Check className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setIsEditingName(false)}
-                  className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-800"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="group flex items-center gap-1.5">
-                <h1 className="text-base font-semibold text-white truncate">{table.name}</h1>
-                <button
-                  onClick={handleStartEditName}
-                  className="rounded p-1 text-gray-500 opacity-0 transition-all hover:bg-gray-800 hover:text-gray-300 group-hover:opacity-100"
-                  title="Rename table"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${sourceBadge.className}`}
-            >
-              <SourceIcon className="h-3 w-3" />
-              {sourceBadge.label}
-            </span>
-            <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-              <Rows3 className="h-3 w-3" />
-              {table.row_count.toLocaleString()} {table.row_count === 1 ? 'row' : 'rows'}
-            </span>
-
-            {/* Profile context selector */}
-            {sortedProfiles.length > 0 && (
-              <Select
-                value={table.context_profile_id ?? '__default__'}
-                onValueChange={(val) => {
-                  const profileId = val === '__default__' ? null : val;
-                  const profile = profileId ? factProfiles.find((p) => p.id === profileId) : null;
-                  updateTableMutation.mutate(
-                    { context_profile_id: profileId },
-                    {
-                      onSuccess: () => {
-                        toast.success(
-                          profile
-                            ? `Enrichment context set to "${profile.company_name}"`
-                            : 'Enrichment context reset to default'
-                        );
-                      },
-                    }
-                  );
-                }}
+        {/* Consolidated toolbar — two rows */}
+        <div className="mb-4 space-y-2">
+          {/* Row 1: table name + badges + action buttons */}
+          <div className="flex items-center gap-2">
+            {/* Left: table name + meta badges */}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {isEditingName ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    value={editNameValue}
+                    onChange={(e) => setEditNameValue(e.target.value)}
+                    onKeyDown={handleNameKeyDown}
+                    onBlur={handleSaveName}
+                    className="rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1 text-sm font-semibold text-white outline-none focus:border-violet-500"
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    className="rounded p-1 text-green-400 transition-colors hover:bg-gray-800"
+                  >
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsEditingName(false)}
+                    className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-800"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="group flex items-center gap-1.5 min-w-0">
+                  <h1 className="text-sm font-semibold text-white truncate">{table.name}</h1>
+                  <button
+                    onClick={handleStartEditName}
+                    className="rounded p-1 text-gray-500 opacity-0 transition-all hover:bg-gray-800 hover:text-gray-300 group-hover:opacity-100 shrink-0"
+                    title="Rename table"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium shrink-0 ${sourceBadge.className}`}
               >
-                <SelectTrigger className="h-7 w-auto min-w-[140px] max-w-[200px] gap-1.5 border-gray-700 bg-gray-800/50 px-2 text-xs">
-                  <div className="flex items-center gap-1.5 truncate">
-                    {contextProfile ? (
-                      contextProfile.is_org_profile ? (
-                        <Shield className="h-3 w-3 shrink-0 text-violet-400" />
-                      ) : (
-                        <Building2 className="h-3 w-3 shrink-0 text-blue-400" />
-                      )
-                    ) : (
-                      <Shield className="h-3 w-3 shrink-0 text-gray-500" />
-                    )}
-                    <SelectValue placeholder="Context" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__default__">
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-3.5 w-3.5 text-violet-400" />
-                      <span>Default (Your Business)</span>
-                    </div>
-                  </SelectItem>
-                  <SelectSeparator />
-                  {sortedProfiles.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      <div className="flex items-center gap-2">
-                        {p.is_org_profile ? (
-                          <Shield className="h-3.5 w-3.5 text-violet-400" />
+                <SourceIcon className="h-3 w-3" />
+                {sourceBadge.label}
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs text-gray-500 shrink-0">
+                <Rows3 className="h-3 w-3" />
+                {table.row_count.toLocaleString()} {table.row_count === 1 ? 'row' : 'rows'}
+              </span>
+
+              {/* Profile context selector */}
+              {sortedProfiles.length > 0 && (
+                <Select
+                  value={table.context_profile_id ?? '__default__'}
+                  onValueChange={(val) => {
+                    const profileId = val === '__default__' ? null : val;
+                    const profile = profileId ? factProfiles.find((p) => p.id === profileId) : null;
+                    updateTableMutation.mutate(
+                      { context_profile_id: profileId },
+                      {
+                        onSuccess: () => {
+                          toast.success(
+                            profile
+                              ? `Enrichment context set to "${profile.company_name}"`
+                              : 'Enrichment context reset to default'
+                          );
+                        },
+                      }
+                    );
+                  }}
+                >
+                  <SelectTrigger className="h-7 w-auto min-w-[120px] max-w-[180px] gap-1.5 border-gray-700 bg-gray-800/50 px-2 text-xs shrink-0">
+                    <div className="flex items-center gap-1.5 truncate">
+                      {contextProfile ? (
+                        contextProfile.is_org_profile ? (
+                          <Shield className="h-3 w-3 shrink-0 text-violet-400" />
                         ) : (
-                          <Building2 className="h-3.5 w-3.5 text-blue-400" />
-                        )}
-                        <span className="truncate">{p.company_name}</span>
-                        {p.is_org_profile && (
-                          <span className="ml-1 rounded bg-violet-500/10 px-1 py-0.5 text-[10px] font-medium text-violet-400">
-                            Your Business
-                          </span>
-                        )}
+                          <Building2 className="h-3 w-3 shrink-0 text-blue-400" />
+                        )
+                      ) : (
+                        <Shield className="h-3 w-3 shrink-0 text-gray-500" />
+                      )}
+                      <SelectValue placeholder="Context" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default__">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-3.5 w-3.5 text-violet-400" />
+                        <span>Default (Your Business)</span>
                       </div>
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+                    <SelectSeparator />
+                    {sortedProfiles.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex items-center gap-2">
+                          {p.is_org_profile ? (
+                            <Shield className="h-3.5 w-3.5 text-violet-400" />
+                          ) : (
+                            <Building2 className="h-3.5 w-3.5 text-blue-400" />
+                          )}
+                          <span className="truncate">{p.company_name}</span>
+                          {p.is_org_profile && (
+                            <span className="ml-1 rounded bg-violet-500/10 px-1 py-0.5 text-[10px] font-medium text-violet-400">
+                              Your Business
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
 
-          {/* Center: AI Query Bar */}
-          <div className="flex-1 max-w-xl">
-            <AiQueryBar
-              value={queryInput}
-              onChange={setQueryInput}
-              onSubmit={handleQuerySubmit}
-              isLoading={isAiQueryParsing || workflow.isRunning}
-              columns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
-              tableId={tableId!}
-            />
-          </div>
-
-          {/* Right: action buttons */}
-          <div className="flex shrink-0 items-center gap-2">
-            <AutomationsDropdown
-              onOpenWorkflows={() => setShowWorkflows(true)}
-              onOpenRecipes={() => setShowRecipeLibrary(true)}
-            />
-            {/* Instantly actions moved to column system — see InstantlyColumnWizard */}
-            {/* HubSpot sync buttons (only for hubspot-sourced tables) */}
+            {/* Right: action buttons */}
+            <div className="flex items-center gap-1.5 shrink-0">
+            {/* Source sync — primary action for sourced tables */}
             {table.source_type === 'hubspot' && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={syncHubSpot}
-                  disabled={isHubSpotSyncing}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-orange-700/40 bg-orange-900/20 px-3 py-1.5 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200 disabled:opacity-50"
-                >
-                  {isHubSpotSyncing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  )}
-                  Sync
-                </button>
-                <button
-                  onClick={() => setShowSyncHistory(true)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-orange-700/40 bg-orange-900/20 text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200"
-                  title="Sync history"
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setShowSaveAsHubSpotList(true)}
-                  disabled={createHubSpotListMutation.isPending}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-orange-700/40 bg-orange-900/20 px-3 py-1.5 text-sm font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200 disabled:opacity-50"
-                  title="Save as HubSpot List"
-                >
-                  <List className="h-3.5 w-3.5" />
-                  Save List
-                </button>
-              </div>
-            )}
-            {/* Attio sync buttons (only for attio-sourced tables) */}
-            {table.source_type === 'attio' && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={syncAttio}
-                  disabled={isAttioSyncing}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-3 py-1.5 text-sm font-medium text-violet-300 transition-colors hover:bg-violet-900/40 hover:text-violet-200 disabled:opacity-50"
-                >
-                  {isAttioSyncing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  )}
-                  Sync
-                </button>
-                <button
-                  onClick={() => setShowAttioSyncHistory(true)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-violet-700/40 bg-violet-900/20 text-violet-300 transition-colors hover:bg-violet-900/40 hover:text-violet-200"
-                  title="Sync history"
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-            {table.source_type === 'apollo' && (
-              <ApolloSourceControls
-                onEditFilters={() => setShowApolloFilters(true)}
-                onCollectMore={() => setShowCollectMore(true)}
-                onEnrichAll={handleEnrichAll}
-                isEnriching={isAnyEnriching}
-              />
-            )}
-            {isAnyEnriching && (
-              <div className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-3 py-1.5 text-xs font-medium text-violet-300">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Enrichment in progress
-              </div>
-            )}
-            {/* Create Campaign button — visible when table has email column and rows */}
-            {(() => {
-              const hasEmailColumn = columns.some(
-                (c) => c.column_type === 'email' || c.key.toLowerCase().includes('email')
-              );
-              const hasRows = rows.length > 0;
-              const canCreate = hasEmailColumn && hasRows;
-              return (
-                <button
-                  onClick={() => setShowCampaignWizard(true)}
-                  disabled={!canCreate}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-700/40 bg-blue-900/20 px-3 py-1.5 text-sm font-medium text-blue-300 transition-colors hover:bg-blue-900/40 hover:text-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={canCreate ? 'Create an email campaign from this table' : 'Table needs an email column and at least 1 row'}
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Create Campaign
-                </button>
-              );
-            })()}
-            {/* Find More button — visible when table has linked ICP profile */}
-            {linkedIcpProfile && (
               <button
-                onClick={() => setShowFindMore(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-3 py-1.5 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-200"
-                title="Search for more leads matching this ICP"
+                onClick={syncHubSpot}
+                disabled={isHubSpotSyncing}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-orange-700/40 bg-orange-900/20 px-2.5 py-1.5 text-xs font-medium text-orange-300 transition-colors hover:bg-orange-900/40 hover:text-orange-200 disabled:opacity-50"
               >
-                <Search className="h-3.5 w-3.5" />
-                Find More
+                {isHubSpotSyncing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                Sync
               </button>
             )}
+            {table.source_type === 'attio' && (
+              <button
+                onClick={syncAttio}
+                disabled={isAttioSyncing}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-2.5 py-1.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-900/40 hover:text-violet-200 disabled:opacity-50"
+              >
+                {isAttioSyncing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                Sync
+              </button>
+            )}
+            {isAnyEnriching && (
+              <div className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-900/20 px-2.5 py-1.5 text-xs font-medium text-violet-300">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Enriching
+              </div>
+            )}
+            {/* Add Row */}
             <button
               onClick={() => addRowMutation.mutate()}
               disabled={addRowMutation.isPending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white disabled:opacity-50"
             >
               {addRowMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2647,22 +2563,79 @@ function OpsDetailPage() {
               )}
               Add Row
             </button>
-            <button
-              onClick={() => setShowCSVImport(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              CSV
-            </button>
-            <a
-              href="/docs#ops-intelligence"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-700 bg-gray-800 text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
-              title="Ops Intelligence docs"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-            </a>
+            {/* Automations */}
+            <AutomationsDropdown
+              onOpenWorkflows={() => setShowWorkflows(true)}
+              onOpenRecipes={() => setShowRecipeLibrary(true)}
+            />
+            {/* More actions dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-700 bg-gray-800 text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+                  title="More actions"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[180px]">
+                {table.source_type === 'apollo' && (
+                  <>
+                    <DropdownMenuItem onClick={() => setShowApolloFilters(true)}>
+                      <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />
+                      Edit Apollo Filters
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowCollectMore(true)}>
+                      <Plus className="h-3.5 w-3.5 mr-2" />
+                      Collect More
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleEnrichAll} disabled={isAnyEnriching}>
+                      <Sparkles className="h-3.5 w-3.5 mr-2" />
+                      Enrich All
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem onClick={() => setShowCSVImport(true)}>
+                  <Upload className="h-3.5 w-3.5 mr-2" />
+                  Import CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowCampaignWizard(true)}>
+                  <Send className="h-3.5 w-3.5 mr-2" />
+                  Create Campaign
+                </DropdownMenuItem>
+                {table.source_type === 'hubspot' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setShowSyncHistory(true)}>
+                      <Clock className="h-3.5 w-3.5 mr-2" />
+                      Sync History
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setShowSaveAsHubSpotList(true)}
+                      disabled={createHubSpotListMutation.isPending}
+                    >
+                      <List className="h-3.5 w-3.5 mr-2" />
+                      Save as HubSpot List
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {table.source_type === 'attio' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setShowAttioSyncHistory(true)}>
+                      <Clock className="h-3.5 w-3.5 mr-2" />
+                      Sync History
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => window.open('/docs#ops-intelligence', '_blank')}>
+                  <HelpCircle className="h-3.5 w-3.5 mr-2" />
+                  Docs
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {/* Fullscreen toggle */}
             <button
               onClick={() => setIsFullscreen((prev) => !prev)}
@@ -2676,6 +2649,17 @@ function OpsDetailPage() {
               {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
           </div>
+          </div>
+
+          {/* Row 2: AI Query Bar (full width) */}
+          <AiQueryBar
+            value={queryInput}
+            onChange={setQueryInput}
+            onSubmit={handleQuerySubmit}
+            isLoading={isAiQueryParsing || workflow.isRunning}
+            columns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+            tableId={tableId!}
+          />
         </div>
 
         {/* Save as Recipe bar — shown after successful query, hidden in fullscreen */}
@@ -2792,6 +2776,24 @@ function OpsDetailPage() {
               if (instantlyCol) setEditInstantlyColumn(instantlyCol);
             }}
           />
+        )}
+
+        {/* Campaign stepped UI (new campaign workflow) */}
+        {campaignWorkflowData && (
+          <div className="mx-4 mb-3">
+            <CampaignWorkflowResponse
+              data={campaignWorkflowData}
+              targetTableId={tableId}
+              onDismiss={() => setCampaignWorkflowData(null)}
+              onActionClick={(action) => {
+                if (action.callback === 'start_campaign' && action.params?.table_id) {
+                  queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                }
+                setCampaignWorkflowData(null);
+              }}
+            />
+          </div>
         )}
 
         {/* NLT-010: Workflow Progress Stepper */}
@@ -3764,20 +3766,6 @@ function OpsDetailPage() {
           queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
         }}
       />
-
-      {/* Find More Sheet (ICP-based lead search) */}
-      {linkedIcpProfile && tableId && (
-        <FindMoreSheet
-          open={showFindMore}
-          onOpenChange={setShowFindMore}
-          icpProfile={linkedIcpProfile}
-          tableId={tableId}
-          onRowsAdded={() => {
-            queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
-            queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
-          }}
-        />
-      )}
 
       {/* Apollo Filter Sheet & Collect More Modal */}
       {tableId && table?.source_type === 'apollo' && (

@@ -64,6 +64,7 @@ export interface WorkflowConfig {
   num_email_steps?: number;
   campaign_angle?: string;
   target_table_id?: string;
+  skip_search?: boolean;
 }
 
 // ---------------------------------------------------------------------------

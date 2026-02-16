@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { captureException } from '../_shared/sentryEdge.ts'
 import { matchOrCreateCompany } from '../_shared/companyMatching.ts'
 import { selectPrimaryContact, determineMeetingCompany } from '../_shared/primaryContactSelection.ts'
@@ -1242,33 +1242,41 @@ serve(async (req) => {
       }
     }
 
-    // BULK SYNC: Trigger background transcript processing if fast mode was used
+    // BULK SYNC: Trigger repeated background transcript processing if fast mode was used.
+    // The retry processor runs jobs in parallel (concurrency=5) and each invocation
+    // processes one batch. We trigger it multiple times with staggered delays so the
+    // queue drains progressively instead of sitting idle after a single fire-and-forget.
     if (bulkSyncFastMode && meetingsSynced > 0) {
-      console.log(`📋 Triggering background transcript processor for ${meetingsSynced} queued meetings`)
-      try {
-        // Fire-and-forget: Don't await to avoid blocking the sync response
-        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-transcript-retry`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            batch_size: 10, // Process 10 meetings at a time
-          }),
-        }).then(response => {
-          if (response.ok) {
-            console.log(`✅ Background transcript processor triggered successfully`)
-          } else {
-            console.warn(`⚠️  Background transcript processor returned status ${response.status}`)
-          }
-        }).catch(err => {
-          console.error(`⚠️  Failed to trigger background transcript processor:`, err)
-        })
-      } catch (triggerError) {
-        // Non-fatal - cron job will pick up the queue anyway
-        console.error(`⚠️  Error triggering background transcript processor:`, triggerError)
+      const retryUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-transcript-retry`
+      const retryHeaders = {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        'Content-Type': 'application/json',
+      }
+      const retryBody = JSON.stringify({ batch_size: 50, concurrency: 5 })
+
+      // Calculate how many rounds we need (each round processes up to 50 jobs)
+      const rounds = Math.min(Math.ceil(meetingsSynced / 50), 6) // Cap at 6 rounds
+      console.log(`📋 Scheduling ${rounds} background transcript processor rounds for ${meetingsSynced} queued meetings`)
+
+      // Fire first round immediately, then stagger subsequent rounds
+      // Each round waits for jobs whose next_retry_at has passed, so spacing
+      // them 60s apart gives Fathom time to process recordings.
+      for (let round = 0; round < rounds; round++) {
+        const delayMs = round * 60_000 // 0s, 60s, 120s, 180s, ...
+        setTimeout(() => {
+          fetch(retryUrl, { method: 'POST', headers: retryHeaders, body: retryBody })
+            .then(response => {
+              if (response.ok) {
+                console.log(`✅ Background transcript processor round ${round + 1}/${rounds} triggered successfully`)
+              } else {
+                console.warn(`⚠️  Background transcript processor round ${round + 1} returned status ${response.status}`)
+              }
+            })
+            .catch(err => {
+              console.error(`⚠️  Failed to trigger background transcript processor round ${round + 1}:`, err)
+            })
+        }, delayMs)
       }
     }
 

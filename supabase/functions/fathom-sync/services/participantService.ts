@@ -5,7 +5,7 @@
  * Creates contacts for external participants and meeting_attendees for internal ones.
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { matchOrCreateCompany } from '../../_shared/companyMatching.ts'
 import { selectPrimaryContact, determineMeetingCompany } from '../../_shared/primaryContactSelection.ts'
 

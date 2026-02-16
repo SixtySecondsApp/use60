@@ -5,7 +5,7 @@
  * for Fathom meeting recordings.
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { calculateTranscriptFetchCooldownMinutes } from './helpers.ts'
 import { fetchTranscriptFromFathom, fetchTranscriptStructuredFromFathom, fetchSummaryFromFathom, type TranscriptSegment } from '../../_shared/fathomTranscript.ts'
 import { analyzeTranscriptWithClaude, deduplicateActionItems, type TranscriptAnalysis } from '../aiAnalysis.ts'

@@ -172,6 +172,15 @@ const CAMPAIGN_KEYWORDS = [
   'cold outreach',
   'build a campaign',
   'build campaign',
+  'outreach sequence',
+  'create outreach',
+  'create a sequence',
+  'create sequence',
+  'invite them',
+  'reach out to them',
+  'message them all',
+  'email them',
+  'send them',
 ];
 
 const TARGET_PATTERN =
@@ -276,6 +285,16 @@ export function detectCampaignMissingInfo(prompt: string): ClarifyingQuestion[] 
   }
 
   return questions;
+}
+
+/**
+ * Detect missing campaign info for an EXISTING table context.
+ * Skips search-related questions (target audience, company size, result count)
+ * since contacts already exist in the table. Only asks campaign-specific questions.
+ */
+export function detectTableCampaignMissingInfo(prompt: string): ClarifyingQuestion[] {
+  const SEARCH_KEYS = new Set(['target_audience', 'search_type', 'company_size', 'result_count']);
+  return detectCampaignMissingInfo(prompt).filter(q => !SEARCH_KEYS.has(q.key));
 }
 
 /**

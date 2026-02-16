@@ -12,7 +12,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Copilot } from '@/components/Copilot';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,13 +20,33 @@ import { v4 as uuidv4 } from 'uuid';
 export const CopilotPage: React.FC = () => {
   const { conversationId: urlConversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
-  const { loadConversation, setConversationId, startNewChat } = useCopilot();
+  const location = useLocation();
+  const { loadConversation, setConversationId, startNewChat, sendMessage } = useCopilot();
+  const routeState = location.state as { seedPrompt?: string; forceNewChat?: boolean } | null;
+  const seededPrompt = routeState?.seedPrompt;
+  const forceNewChat = routeState?.forceNewChat === true;
 
   // Track initialization to run only once per URL
   const initializedForUrl = useRef<string | null>(null);
 
   // Handle URL-based routing - runs once per unique URL
   useEffect(() => {
+    // Deterministic seeded prompt flow (used by profile -> copilot builders).
+    // Start a clean conversation for this URL and send the seed message once.
+    if (urlConversationId && seededPrompt && forceNewChat) {
+      if (initializedForUrl.current === `seeded:${urlConversationId}`) {
+        return;
+      }
+      initializedForUrl.current = `seeded:${urlConversationId}`;
+      startNewChat();
+      setConversationId(urlConversationId);
+      setTimeout(() => {
+        void sendMessage(seededPrompt);
+      }, 100);
+      navigate(`/copilot/${urlConversationId}`, { replace: true, state: null });
+      return;
+    }
+
     // Skip if already initialized for this URL
     if (initializedForUrl.current === (urlConversationId ?? 'empty')) {
       return;
@@ -51,7 +71,7 @@ export const CopilotPage: React.FC = () => {
       // This allows new conversations to be created with the URL ID
       setConversationId(urlConversationId);
     });
-  }, [urlConversationId]); // Only depend on URL, not context state
+  }, [urlConversationId, seededPrompt, forceNewChat, startNewChat, setConversationId, sendMessage, navigate]);
 
   return <Copilot />;
 };

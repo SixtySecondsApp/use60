@@ -509,9 +509,19 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
    * Clear all messages
    */
   const clearMessages = useCallback(() => {
+    // Ensure any in-flight generation is fully cancelled when resetting chat.
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setMessages([]);
     setToolsUsed([]);
     setError(null);
+    setIsThinking(false);
+    setIsStreaming(false);
+    setCurrentTool(null);
+    setActiveAgents([]);
+    currentMessageIdRef.current = null;
   }, []);
 
   /**

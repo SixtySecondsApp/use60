@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Calendar, Play, Trash2, Copy, Zap, ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Clock } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, RefreshCw, Calendar, Play, Trash2, Copy, Zap, ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Clock, BrainCircuit } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -49,6 +49,7 @@ export function FathomSettings() {
   const [processingProgress, setProcessingProgress] = useState<{ current: number; total: number; currentMeeting: string } | null>(null);
   const [expandedMeetings, setExpandedMeetings] = useState<Set<string>>(new Set());
   const [retryingMeetingId, setRetryingMeetingId] = useState<string | null>(null);
+  const [runningAiAnalysis, setRunningAiAnalysis] = useState(false);
 
   const copyWebhookUrl = async () => {
     try {
@@ -60,29 +61,34 @@ export function FathomSettings() {
   };
 
   const handleSync = async () => {
-    setSyncing(true);
-    try {
-      await triggerSync({
-        sync_type: syncType,
-        start_date: dateRange.start,
-        end_date: dateRange.end,
-      });
-      setShowSyncModal(false);
-      // Show success message
-    } catch (err) {
-    } finally {
-      setSyncing(false);
-    }
+    // Close modal immediately and run sync in background
+    // The realtime subscription on fathom_sync_state will update the UI
+    setShowSyncModal(false);
+    toast.info('Sync started', { description: 'Your meetings are syncing in the background. You can continue working.' });
+    triggerSync({
+      sync_type: syncType,
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+    }).then((result) => {
+      if (result?.upgrade_required) {
+        toast.warning('Upgrade required', { description: result.limit_warning || 'Free tier limit reached.' });
+      } else if (result?.meetings_synced !== undefined) {
+        toast.success('Sync complete', { description: `${result.meetings_synced} meeting${result.meetings_synced === 1 ? '' : 's'} synced.` });
+      }
+    }).catch(() => {
+      toast.error('Sync failed', { description: 'Check the Fathom settings page for details.' });
+    });
   };
 
   const handleSyncNewMeetings = async () => {
-    setSyncing(true);
-    try {
-      await triggerSync({ sync_type: 'incremental' });
-    } catch (err) {
-    } finally {
-      setSyncing(false);
-    }
+    toast.info('Syncing new meetings...', { description: 'Running in the background.' });
+    triggerSync({ sync_type: 'incremental' }).then((result) => {
+      if (result?.meetings_synced !== undefined) {
+        toast.success('Sync complete', { description: `${result.meetings_synced} new meeting${result.meetings_synced === 1 ? '' : 's'} synced.` });
+      }
+    }).catch(() => {
+      toast.error('Sync failed', { description: 'Check the Fathom settings page for details.' });
+    });
   };
 
   const handleTestSync = async () => {
@@ -254,6 +260,40 @@ export function FathomSettings() {
     } finally {
       setReprocessing(false);
       setProcessingProgress(null);
+    }
+  };
+
+  const handleRunAiAnalysis = async () => {
+    setRunningAiAnalysis(true);
+    toast.info('AI Analysis started', { description: 'Analyzing meetings without coaching insights. This runs in the background.' });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        throw new Error('Not authenticated');
+      }
+
+      const { data, error } = await supabase.functions.invoke('reprocess-meetings-ai', {
+        body: { user_id: session.user.id, force: false },
+      });
+
+      if (error) throw error;
+
+      const processed = data?.meetings_processed ?? 0;
+      const actionItems = data?.action_items_created ?? 0;
+      if (processed === 0) {
+        toast.success('All meetings already have AI analysis');
+      } else {
+        toast.success('AI Analysis complete', {
+          description: `${processed} meeting${processed === 1 ? '' : 's'} analyzed, ${actionItems} action item${actionItems === 1 ? '' : 's'} found.`,
+        });
+      }
+    } catch (err) {
+      toast.error('AI Analysis failed', {
+        description: err instanceof Error ? err.message : 'Check logs for details.',
+      });
+    } finally {
+      setRunningAiAnalysis(false);
     }
   };
 
@@ -639,6 +679,21 @@ export function FathomSettings() {
                   )}
                   {reprocessing ? 'Checking...' : 'Reprocess Pending'}
                 </Button>
+
+                <Button
+                  onClick={handleRunAiAnalysis}
+                  disabled={runningAiAnalysis}
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                >
+                  {runningAiAnalysis ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <BrainCircuit className="h-4 w-4" />
+                  )}
+                  {runningAiAnalysis ? 'Analyzing...' : 'Run AI Analysis'}
+                </Button>
               </div>
             </div>
           )}
@@ -803,12 +858,10 @@ export function FathomSettings() {
             <Button
               variant="outline"
               onClick={() => setShowSyncModal(false)}
-              disabled={syncing}
             >
               Cancel
             </Button>
-            <Button onClick={handleSync} disabled={syncing} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
-              {syncing && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button onClick={handleSync} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
               Start Sync
             </Button>
           </DialogFooter>

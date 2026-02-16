@@ -11,7 +11,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, CheckCircle2, Loader2, Circle, XCircle, ExternalLink, ChevronRight, ChevronDown, Clock } from 'lucide-react';
+import { Send, CheckCircle2, Loader2, Circle, XCircle, ExternalLink, ChevronRight, ChevronDown, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkflowOrchestrator, type WorkflowStep } from '@/lib/hooks/useWorkflowOrchestrator';
 import { enrichPromptWithAnswers, type ClarifyingQuestion } from '@/lib/utils/prospectingDetector';
@@ -27,11 +27,15 @@ export interface CampaignWorkflowData {
 interface CampaignWorkflowResponseProps {
   data: CampaignWorkflowData;
   onActionClick?: (action: QuickActionResponse) => void;
+  targetTableId?: string;
+  onDismiss?: () => void;
 }
 
 export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> = ({
   data,
   onActionClick,
+  targetTableId,
+  onDismiss,
 }) => {
   const { activeICP, icpDefaults, isLoading: icpLoading } = useActiveICP();
   const [icpDismissed, setIcpDismissed] = useState(false);
@@ -87,6 +91,7 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
       skip_campaign_creation: false,
       num_email_steps: answers.email_steps?.includes('3') ? 3 : answers.email_steps?.includes('5') ? 5 : 0,
       table_name: campaignName,
+      ...(targetTableId ? { target_table_id: targetTableId, skip_search: true } : {}),
     };
 
     // Call execute() directly — preflight questions are already answered in this component
@@ -203,9 +208,14 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
         <div className="p-1.5 rounded-lg bg-emerald-500/20">
           <Send className="w-4 h-4 text-emerald-400" />
         </div>
-        <span className="text-sm font-medium text-white">
+        <span className="text-sm font-medium text-white flex-1">
           Let&apos;s set up your campaign
         </span>
+        {onDismiss && (
+          <button type="button" onClick={onDismiss} className="text-gray-400 hover:text-gray-200 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div className="p-4 space-y-4">
