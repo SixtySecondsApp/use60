@@ -20,6 +20,7 @@ import { authenticateRequest, getUserOrgId } from '../_shared/edgeAuth.ts';
 import { getGoogleIntegration } from '../_shared/googleOAuth.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
 import { extractMeetingUrl } from '../_shared/meetingUrlExtractor.ts';
+import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
 
 // Helper for logging sync operations to integration_sync_logs table
 async function logSyncOperation(
@@ -459,6 +460,20 @@ serve(async (req) => {
 
           // NOTE: Per-event logSyncOperation removed to prevent DB flooding
           // (was generating ~13k+ RPC calls/day). A single summary log is written at the end.
+
+          // Fire pre-meeting brief if this event is starting soon
+          if (!isCancelled && payload.attendees_count > 1) {
+            triggerPreMeetingIfSoon({
+              start_time: payload.start_time,
+              user_id: userId,
+              org_id: orgId,
+              meeting_id: eventDbId,
+              title: payload.title,
+              attendees: payload.attendees,
+              attendees_count: payload.attendees_count,
+              meeting_url: payload.meeting_url,
+            });
+          }
 
           // Batch upsert attendees (instead of one-by-one)
           if (Array.isArray(ev.attendees) && ev.attendees.length > 0) {
