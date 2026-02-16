@@ -147,16 +147,15 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 1,
   },
   {
-    path: 'https://meeting-analytics-staging.use60.com/',
+    path: '/meeting-analytics',
     access: 'any',
-    label: 'Meeting Analytics (New)',
-    icon: ExternalLink,
+    label: 'Meeting Analytics',
+    icon: BarChart3,
     showInNav: true,
     navSection: 'main',
     order: 5,
     displayGroup: 1,
     badge: 'New',
-    isExternal: true,
   },
 
   // ========== Internal-Only Main Routes ==========

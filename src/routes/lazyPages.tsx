@@ -212,6 +212,7 @@ export const Heatmap = lazyWithRetry(() => import('@/pages/Heatmap'));
 export const SalesFunnel = lazyWithRetry(() => import('@/pages/SalesFunnel'));
 export const TeamAnalytics = lazyWithRetry(() => import('@/pages/insights/TeamAnalytics'));
 export const ContentTopics = lazyWithRetry(() => import('@/pages/insights/ContentTopics'));
+export const MeetingAnalyticsPage = lazyWithRetry(() => import('@/pages/MeetingAnalyticsPage'));
 
 // ============================================================
 // MISC & UTILITY PAGES

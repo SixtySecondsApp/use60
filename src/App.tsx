@@ -96,7 +96,7 @@ import {
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
   OrgBilling,
   // Insights
-  Insights, Heatmap, SalesFunnel, TeamAnalytics, ContentTopics,
+  Insights, Heatmap, SalesFunnel, TeamAnalytics, ContentTopics, MeetingAnalyticsPage,
   // Misc
   Integrations, PublicFactProfile, GoogleCallback, Roadmap, Releases, ApiTesting, TestFallback,
   // Debug
@@ -633,6 +633,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/follow-ups" element={<AppLayout><FollowUpSettings /></AppLayout>} />
                 <Route path="/settings/proposal-workflows" element={<Navigate to="/settings/follow-ups" replace />} />
                 <Route path="/settings/coaching" element={<AppLayout><CoachingPreferences /></AppLayout>} />
+                <Route path="/meeting-analytics/:transcriptId" element={<AppLayout><MeetingAnalyticsPage /></AppLayout>} />
+                <Route path="/meeting-analytics" element={<AppLayout><MeetingAnalyticsPage /></AppLayout>} />
                 <Route path="/insights/team" element={<AppLayout><TeamAnalytics /></AppLayout>} />
                 <Route path="/insights/content-topics" element={<AppLayout><ContentTopics /></AppLayout>} />
                 <Route path="/roadmap" element={<AppLayout><Roadmap /></AppLayout>} />
