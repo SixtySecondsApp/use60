@@ -199,7 +199,13 @@ export default function SetPassword() {
 
       if (signUpError) {
         console.error('[SetPassword] Sign up error:', signUpError);
-        toast.error(signUpError.message || 'Failed to create account');
+        // Provide a clearer message for "already registered" errors
+        if (signUpError.message?.toLowerCase().includes('already registered') ||
+            signUpError.message?.toLowerCase().includes('already exists')) {
+          toast.error('This email already has an account. If you were recently deleted and re-invited, please contact support or ask the admin to re-delete your account.');
+        } else {
+          toast.error(signUpError.message || 'Failed to create account');
+        }
         setIsLoading(false);
         return;
       }
@@ -207,6 +213,15 @@ export default function SetPassword() {
       if (!signUpData.user) {
         console.error('[SetPassword] No user returned from signup');
         toast.error('Failed to create account');
+        setIsLoading(false);
+        return;
+      }
+
+      // Supabase anti-enumeration: signUp with an existing email returns a "fake" user
+      // with an empty identities array instead of an error. Detect this case.
+      if (signUpData.user.identities && signUpData.user.identities.length === 0) {
+        console.error('[SetPassword] User already exists (empty identities returned)');
+        toast.error('This email already has an account. Please contact support if you were recently re-invited.');
         setIsLoading(false);
         return;
       }

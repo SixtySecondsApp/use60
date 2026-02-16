@@ -112,33 +112,61 @@ serve(async (req) => {
     }
 
     // Delete from auth.users to revoke access (user can sign up again with same email)
-    try {
-      await supabaseAdmin.auth.admin.deleteUser(userId)
-    } catch (authError: any) {
+    // IMPORTANT: auth.admin.deleteUser() returns { data, error } — it does NOT throw.
+    // We must check the returned error object, not rely on try/catch.
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+
+    if (authDeleteError) {
       // Only ignore if auth user truly doesn't exist (404)
-      // For other errors (permission issues, database errors), return failure
-      if (authError?.status === 404 || authError?.code === 'user_not_found') {
-        // It's okay if auth user doesn't exist - profile might have been created without auth
-        console.log('Note: Auth user does not exist (already deleted or never created):', authError.message)
+      const isNotFound = authDeleteError.status === 404 ||
+        (authDeleteError as any)?.code === 'user_not_found' ||
+        authDeleteError.message?.includes('not found')
+
+      if (isNotFound) {
+        console.log('Note: Auth user does not exist (already deleted or never created):', authDeleteError.message)
       } else {
         // Auth deletion failed for a real reason - return error
-        console.error('Error deleting auth user:', authError)
+        console.error('Error deleting auth user:', authDeleteError)
         return new Response(
           JSON.stringify({
-            error: `Failed to delete auth user: ${authError.message || 'Unknown error'}`,
+            error: `Failed to delete auth user: ${authDeleteError.message || 'Unknown error'}`,
             code: 'AUTH_DELETION_FAILED',
-            details: authError
+            details: authDeleteError
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+    } else {
+      console.log('Auth user deleted successfully:', userId)
+    }
+
+    // Reset waitlist entry so user can be re-invited
+    // Find by original email (before anonymization) and reset status to 'pending'
+    if (userProfile.email) {
+      const { error: waitlistError } = await supabaseAdmin
+        .from('meetings_waitlist')
+        .update({
+          status: 'pending',
+          user_id: null,
+          converted_at: null,
+          invitation_accepted_at: null,
+        })
+        .eq('email', userProfile.email.toLowerCase())
+        .in('status', ['converted', 'released'])
+
+      if (waitlistError) {
+        // Non-fatal: log but don't fail the deletion
+        console.warn('Failed to reset waitlist entry (non-fatal):', waitlistError.message)
+      } else {
+        console.log('Waitlist entry reset to pending for:', userProfile.email)
+      }
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: 'User deleted successfully',
-        userId 
+        userId
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
