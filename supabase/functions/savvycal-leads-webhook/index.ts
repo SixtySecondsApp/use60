@@ -665,6 +665,19 @@ async function processSavvyCalEvent(
     }
   }
 
+  // Ensure a company fact profile exists for this lead's domain (non-blocking)
+  if (status !== "cancelled" && businessDomain && explicitOrgId && ownerProfileId) {
+    ensureCompanyFactProfile(
+      supabase,
+      explicitOrgId,
+      ownerProfileId,
+      businessDomain,
+      leadName ? leadName.split(" ").pop() + "'s company" : businessDomain,
+    ).catch((err) => {
+      console.error(`[savvycal-webhook] ensureCompanyFactProfile error (non-fatal):`, err);
+    });
+  }
+
   // Skip enrichment and prep for cancelled leads
   if (status !== "cancelled") {
     // Trigger company enrichment if this is a new company
@@ -1136,6 +1149,7 @@ async function updateLeadCancellationStatus(
     .from("leads")
     .update({
       status: "cancelled",
+      meeting_outcome: "cancelled",
       tags: updatedTags,
       metadata: updatedMetadata,
       updated_at: new Date().toISOString(),
@@ -1201,6 +1215,7 @@ async function updateLeadRescheduledStatus(
     meeting_url: event.payload.conferencing?.join_url ?? event.payload.location ?? null,
     conferencing_type: event.payload.conferencing?.type ?? null,
     conferencing_url: event.payload.conferencing?.join_url ?? null,
+    meeting_outcome: "rescheduled",
     tags: filteredTags,
     metadata: updatedMetadata,
     updated_at: new Date().toISOString(),
@@ -1209,6 +1224,7 @@ async function updateLeadRescheduledStatus(
   // If lead was previously cancelled, change status back to "new"
   if (currentLead?.status === "cancelled") {
     updateData.status = "new";
+    updateData.meeting_outcome = "scheduled";
   }
 
   const { error } = await supabase
@@ -1219,5 +1235,89 @@ async function updateLeadRescheduledStatus(
   if (error) {
     throw error;
   }
+}
+
+/**
+ * Ensure a client_fact_profiles record exists for the lead's company domain.
+ * Uses select-then-insert with race-condition handling via unique constraint.
+ * If a profile already exists, this is a no-op.
+ * Triggers research-fact-profile if the profile is newly created.
+ */
+async function ensureCompanyFactProfile(
+  supabase: SupabaseClient,
+  orgId: string,
+  createdBy: string,
+  domain: string,
+  _fallbackName: string,
+): Promise<void> {
+  // Check if a fact profile already exists for this domain + org
+  const { data: existing } = await supabase
+    .from("client_fact_profiles")
+    .select("id, research_status")
+    .eq("organization_id", orgId)
+    .eq("company_domain", domain)
+    .eq("is_org_profile", false)
+    .maybeSingle();
+
+  if (existing) {
+    console.log(`[savvycal-webhook] Fact profile already exists for ${domain}: ${existing.id}`);
+    return;
+  }
+
+  // Derive company name from domain (capitalize first segment)
+  const companyName = domain.split(".")[0]
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const { data: profile, error } = await supabase
+    .from("client_fact_profiles")
+    .insert({
+      organization_id: orgId,
+      created_by: createdBy,
+      company_name: companyName,
+      company_domain: domain,
+      profile_type: "target_company",
+      is_org_profile: false,
+      linked_company_domain: domain,
+      research_status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    // 23505 = unique violation — profile was created between our check and insert (race)
+    if ((error as any).code === "23505") {
+      console.log(`[savvycal-webhook] Fact profile race: ${domain} already exists`);
+      return;
+    }
+    throw error;
+  }
+
+  console.log(`[savvycal-webhook] Created fact profile ${profile.id} for ${domain}`);
+
+  // Fire-and-forget: trigger research for the new profile
+  const researchUrl = `${SUPABASE_URL}/functions/v1/research-fact-profile`;
+  fetch(researchUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "apikey": SUPABASE_SERVICE_ROLE_KEY,
+    },
+    body: JSON.stringify({
+      action: "research",
+      fact_profile_id: profile.id,
+      domain,
+    }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error(`[research-fact-profile] Failed: ${res.status} - ${text}`);
+    } else {
+      console.log(`[research-fact-profile] Triggered for profile ${profile.id}`);
+    }
+  }).catch((err) => {
+    console.error(`[research-fact-profile] Error:`, err);
+  });
 }
 
