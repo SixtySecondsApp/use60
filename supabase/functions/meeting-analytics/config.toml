@@ -1,3 +1,4 @@
 [function]
-# Requires Authorization: Bearer <anon_key> or user JWT
-verify_jwt = true
+# verify_jwt = false: OPTIONS preflight from staging.use60.com must succeed for CORS.
+# Frontend sends anon key on actual requests; we validate in function if needed.
+verify_jwt = false
