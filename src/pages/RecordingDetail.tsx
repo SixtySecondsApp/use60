@@ -623,7 +623,7 @@ export const RecordingDetail: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             The recording you're looking for doesn't exist or you don't have access to it.
           </p>
-          <Button onClick={() => navigate('/recordings')}>
+          <Button onClick={() => navigate('/meetings/recordings')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Recordings
           </Button>
@@ -648,7 +648,7 @@ export const RecordingDetail: React.FC = () => {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate('/recordings')}
+            onClick={() => navigate('/meetings/recordings')}
             className="shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
