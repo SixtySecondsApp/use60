@@ -14,7 +14,7 @@ import type {
   GenerateReportParams,
   MultiSearchParams,
 } from '@/lib/services/meetingAnalyticsService';
-import type { MaNotificationSettingInput } from '@/lib/types/meetingAnalytics';
+import type { MaNotificationSettingInput, MaAskRequest } from '@/lib/types/meetingAnalytics';
 
 const STALE_TIME = 2 * 60 * 1000; // 2 minutes
 
@@ -227,6 +227,16 @@ export function useMaSentimentTrends(params: DashboardParams & { days?: number }
     queryKey: ['meeting-analytics', 'analytics', 'sentiment-trends', params],
     queryFn: () => maService.getSentimentTrends(params),
     staleTime: STALE_TIME,
+  });
+}
+
+// =====================================================
+// Ask Anything (RAG Q&A)
+// =====================================================
+
+export function useMaAsk() {
+  return useMutation({
+    mutationFn: (params: MaAskRequest) => maService.askMeeting(params),
   });
 }
 

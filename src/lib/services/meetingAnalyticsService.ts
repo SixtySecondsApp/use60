@@ -32,6 +32,8 @@ import type {
   MaTalkTimeEntry,
   MaConversionEntry,
   MaSentimentTrends,
+  MaAskRequest,
+  MaAskResponse,
 } from '@/lib/types/meetingAnalytics';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -345,6 +347,17 @@ export async function getSentimentTrends(params: DashboardParams & { days?: numb
   if (params.days) qs.set('days', String(params.days));
   const query = qs.toString();
   return apiFetch<MaSentimentTrends>(`/api/analytics/sentiment-trends${query ? `?${query}` : ''}`);
+}
+
+// =====================================================
+// Ask Anything (RAG Q&A)
+// =====================================================
+
+export async function askMeeting(params: MaAskRequest) {
+  return apiFetch<MaAskResponse>('/api/search/ask', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
 }
 
 // =====================================================

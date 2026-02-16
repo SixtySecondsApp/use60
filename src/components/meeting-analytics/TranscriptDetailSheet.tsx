@@ -14,8 +14,9 @@ import { Button } from '@/components/ui/button';
 import {
   Clock, Languages, FileText, MessageSquare, Target,
   AlertCircle, CheckSquare, ChevronDown, ChevronRight,
-  Lightbulb, Quote,
+  Lightbulb, Quote, Sparkles,
 } from 'lucide-react';
+import { AskAnythingPanel } from './AskAnythingPanel';
 import { useMaTranscript, useMaInsights } from '@/lib/hooks/useMeetingAnalytics';
 import type { MaMomentType } from '@/lib/types/meetingAnalytics';
 
@@ -91,11 +92,88 @@ const MOMENT_TYPE_COLOR: Record<MaMomentType, string> = {
   other: 'text-gray-500',
 };
 
+const SPEAKER_COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4'];
+
+function parseSpeakerTalkTime(fullText: string) {
+  const lines = (fullText || '').split('\n').filter(l => l.trim());
+  const speakerPattern = /^([A-Za-z\s\-'\.]+):\s*(.*)$/;
+  const stats: Record<string, number> = {};
+
+  for (const line of lines) {
+    const match = line.match(speakerPattern);
+    if (match) {
+      const speaker = match[1].trim();
+      const words = match[2].trim().split(/\s+/).filter(w => w.length > 0).length;
+      stats[speaker] = (stats[speaker] || 0) + words;
+    }
+  }
+
+  const speakers = Object.entries(stats)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, wordCount]) => ({ name, wordCount, percentage: 0 }));
+  const total = speakers.reduce((s, sp) => s + sp.wordCount, 0);
+  speakers.forEach(sp => { sp.percentage = total > 0 ? Math.round(sp.wordCount / total * 100) : 0; });
+
+  return { speakers, totalWords: total };
+}
+
+function SpeakerTranscriptView({ fullText }: { fullText: string }) {
+  const lines = fullText.split('\n').filter(l => l.trim());
+  const speakerPattern = /^([A-Za-z\s\-'\.]+):\s*(.*)$/;
+  const speakerColorMap = new Map<string, string>();
+  let colorIndex = 0;
+
+  const segments = lines.map(line => {
+    const match = line.match(speakerPattern);
+    if (match) {
+      const speaker = match[1].trim();
+      if (!speakerColorMap.has(speaker)) {
+        speakerColorMap.set(speaker, SPEAKER_COLORS[colorIndex % SPEAKER_COLORS.length]);
+        colorIndex++;
+      }
+      return { speaker, text: match[2].trim(), color: speakerColorMap.get(speaker)! };
+    }
+    return { speaker: null, text: line.trim(), color: '#6b7280' };
+  });
+
+  const hasSpeakers = segments.some(s => s.speaker !== null);
+
+  if (!hasSpeakers) {
+    return (
+      <pre className="text-xs whitespace-pre-wrap font-mono leading-relaxed">
+        {fullText}
+      </pre>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {segments.map((seg, i) => (
+        seg.speaker ? (
+          <div key={i} className="flex gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                 style={{ backgroundColor: seg.color }}>
+              {seg.speaker[0].toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-semibold" style={{ color: seg.color }}>{seg.speaker}</span>
+              <p className="text-sm text-muted-foreground leading-relaxed">{seg.text}</p>
+            </div>
+          </div>
+        ) : seg.text ? (
+          <p key={i} className="text-sm text-muted-foreground/60 pl-11">{seg.text}</p>
+        ) : null
+      ))}
+    </div>
+  );
+}
+
 export function TranscriptDetailSheet({ transcriptId, open, onClose }: TranscriptDetailSheetProps) {
   const { data: transcript, isLoading: tLoading } = useMaTranscript(transcriptId);
   const { data: insights, isLoading: iLoading } = useMaInsights(transcriptId);
 
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showAsk, setShowAsk] = useState(false);
   const [expandedQA, setExpandedQA] = useState<Set<string>>(new Set());
 
   const isLoading = tLoading || iLoading;
@@ -179,6 +257,56 @@ export function TranscriptDetailSheet({ transcriptId, open, onClose }: Transcrip
                 ))}
               </section>
             )}
+
+            {/* Talk Time Visualization */}
+            {transcript.fullText && (() => {
+              const { speakers, totalWords } = parseSpeakerTalkTime(transcript.fullText);
+              if (speakers.length === 0) return null;
+              return (
+                <section>
+                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Talk Time ({totalWords.toLocaleString()} words)
+                  </h3>
+                  {/* Stacked bar */}
+                  <div className="flex h-6 rounded-full overflow-hidden">
+                    {speakers.map((sp, i) => (
+                      <div
+                        key={sp.name}
+                        className="h-full transition-all"
+                        style={{
+                          width: `${sp.percentage}%`,
+                          backgroundColor: SPEAKER_COLORS[i % SPEAKER_COLORS.length],
+                          minWidth: sp.percentage > 0 ? '2px' : 0,
+                        }}
+                        title={`${sp.name}: ${sp.percentage}%`}
+                      />
+                    ))}
+                  </div>
+                  {/* Speaker list */}
+                  <div className="mt-2 space-y-1">
+                    {speakers.map((sp, i) => (
+                      <div key={sp.name} className="flex items-center gap-2 text-sm">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }}
+                        />
+                        <span className="font-medium flex-1 min-w-0 truncate">{sp.name}</span>
+                        <span className="text-muted-foreground text-xs">{sp.wordCount.toLocaleString()} words</span>
+                        <span className="text-muted-foreground text-xs w-10 text-right">{sp.percentage}%</span>
+                        <Badge variant="outline" className={`text-xs ${
+                          sp.percentage > 60
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
+                        }`}>
+                          {sp.percentage > 60 ? 'dominant' : 'balanced'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })()}
 
             {/* Sentiment */}
             {insights?.sentiment && (
@@ -381,6 +509,27 @@ export function TranscriptDetailSheet({ transcriptId, open, onClose }: Transcrip
               </section>
             )}
 
+            {/* Ask About This Meeting */}
+            {transcriptId && (
+              <section>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAsk(!showAsk)}
+                  className="flex items-center gap-2 text-sm font-semibold p-0 h-auto"
+                >
+                  {showAsk ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  <Sparkles className="h-4 w-4" />
+                  Ask About This Meeting
+                </Button>
+                {showAsk && (
+                  <div className="mt-2 max-h-[400px] overflow-y-auto">
+                    <AskAnythingPanel transcriptId={transcriptId} compact />
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* Full Transcript */}
             <section>
               <Button
@@ -398,9 +547,7 @@ export function TranscriptDetailSheet({ transcriptId, open, onClose }: Transcrip
               </Button>
               {showTranscript && transcript.fullText && (
                 <div className="mt-2 max-h-96 overflow-y-auto rounded-md border bg-muted/30 p-4">
-                  <pre className="text-xs whitespace-pre-wrap font-mono leading-relaxed">
-                    {transcript.fullText}
-                  </pre>
+                  <SpeakerTranscriptView fullText={transcript.fullText} />
                 </div>
               )}
             </section>

@@ -1,13 +1,24 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, FileText, Clock, ChevronLeft, ChevronRight, Languages } from 'lucide-react';
+import { Search, FileText, Clock, ChevronLeft, ChevronRight, Languages, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useMaTranscripts } from '@/lib/hooks/useMeetingAnalytics';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useMaTranscripts, useMaDeleteTranscript } from '@/lib/hooks/useMeetingAnalytics';
 
 interface TranscriptsTabProps {
   timeRange: string;
@@ -34,6 +45,8 @@ export function TranscriptsTab({ timeRange }: TranscriptsTabProps) {
   const navigate = useNavigate();
   const [searchFilter, setSearchFilter] = useState('');
   const [page, setPage] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const deleteMutation = useMaDeleteTranscript();
 
   const { data: transcripts, isLoading, isError, error } = useMaTranscripts({
     limit: PAGE_SIZE,
@@ -111,6 +124,7 @@ export function TranscriptsTab({ timeRange }: TranscriptsTabProps) {
                   <th className="pb-3 font-medium">Confidence</th>
                   <th className="pb-3 font-medium">Date</th>
                   <th className="pb-3 font-medium">Status</th>
+                  <th className="pb-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -159,6 +173,19 @@ export function TranscriptsTab({ timeRange }: TranscriptsTabProps) {
                         </Badge>
                       )}
                     </td>
+                    <td className="py-3 text-sm">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({ id: transcript.id, title: transcript.title || 'Untitled' });
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -193,6 +220,31 @@ export function TranscriptsTab({ timeRange }: TranscriptsTabProps) {
           </Button>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Transcript</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &quot;{deleteTarget?.title || 'this transcript'}&quot;? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => {
+              if (!deleteTarget) return;
+              try {
+                await deleteMutation.mutateAsync(deleteTarget.id);
+                toast.success('Transcript deleted');
+                setDeleteTarget(null);
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Failed to delete');
+              }
+            }}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -390,6 +390,34 @@ export interface MaSentimentTrends {
 }
 
 // ============================================
+// Ask Anything (RAG Q&A) Types
+// ============================================
+
+export interface MaAskRequest {
+  question: string;
+  transcriptId?: string;
+  maxMeetings?: number;
+  includeDemo?: boolean;
+}
+
+export interface MaAskSource {
+  transcriptId: string;
+  transcriptTitle: string;
+  text: string;
+  similarity: number;
+}
+
+export interface MaAskResponse {
+  answer: string;
+  sources: MaAskSource[];
+  segmentsSearched: number;
+  meetingsAnalyzed: number;
+  totalMeetings: number;
+  isAggregateQuestion: boolean;
+  specificMeeting: string | null;
+}
+
+// ============================================
 // API Response Types
 // ============================================
 

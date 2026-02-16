@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -8,23 +9,32 @@ import {
   AlertCircle,
   Users,
   Activity,
+  Smile,
+  Clock as ClockIcon,
+  Flame,
 } from 'lucide-react';
 import {
   AreaChart,
   Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
   BarChart,
   Bar,
+  Cell,
 } from 'recharts';
+import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useMaDashboard, useMaAlerts } from '@/lib/hooks/useMeetingAnalytics';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useMaDashboard, useMaAlerts, useMaTalkTime, useMaConversion, useMaSentimentTrends } from '@/lib/hooks/useMeetingAnalytics';
 
 interface OverviewTabProps {
   timeRange: string;
@@ -181,6 +191,9 @@ function OverviewSkeleton() {
 export function OverviewTab({ timeRange }: OverviewTabProps) {
   const { data: dashboard, isLoading, error } = useMaDashboard();
   const { data: alerts } = useMaAlerts();
+  const { data: sentimentTrends } = useMaSentimentTrends({ days: 30 });
+  const { data: talkTimeData } = useMaTalkTime({ limit: 20 });
+  const { data: conversionData } = useMaConversion({ limit: 20 });
 
   if (isLoading) {
     return <OverviewSkeleton />;
@@ -482,6 +495,277 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* ---------------------------------------------------------- */}
+      {/* F) Performance Trends (tabbed charts)                       */}
+      {/* ---------------------------------------------------------- */}
+      <PerformanceTrendsSection
+        sentimentTimeline={sentimentTrends?.timeline}
+        talkTimeData={talkTimeData}
+        conversionData={conversionData}
+      />
     </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// Performance Trends Section (tabbed charts)
+// ------------------------------------------------------------------
+
+const TOOLTIP_STYLE = {
+  backgroundColor: 'hsl(var(--card))',
+  borderColor: 'hsl(var(--border))',
+  borderRadius: '8px',
+  color: 'hsl(var(--card-foreground))',
+};
+
+const TAB_TRIGGER_CLASS =
+  'flex items-center gap-2 text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm';
+
+interface PerformanceTrendsSectionProps {
+  sentimentTimeline?: Array<{
+    transcriptId: string;
+    title: string;
+    date: string;
+    sentiment: string;
+    positiveScore: number | null;
+    negativeScore: number | null;
+    neutralScore: number | null;
+  }>;
+  talkTimeData?: Array<{
+    id: string;
+    title: string;
+    topSpeakerPercentage: number;
+  }>;
+  conversionData?: Array<{
+    id: string;
+    title: string;
+    conversionScore: number;
+    status: 'hot' | 'warm' | 'cold';
+  }>;
+}
+
+function PerformanceTrendsSection({
+  sentimentTimeline,
+  talkTimeData,
+  conversionData,
+}: PerformanceTrendsSectionProps) {
+  const hasSentiment = sentimentTimeline && sentimentTimeline.length > 0;
+  const hasTalkTime = talkTimeData && talkTimeData.length > 0;
+  const hasConversion = conversionData && conversionData.length > 0;
+
+  const sentimentChartData = useMemo(() => {
+    if (!sentimentTimeline) return [];
+    return sentimentTimeline
+      .filter((d) => d.positiveScore !== null)
+      .map((d) => ({
+        ...d,
+        dateFormatted: format(parseISO(d.date), 'MMM d'),
+      }));
+  }, [sentimentTimeline]);
+
+  const talkTimeChartData = useMemo(() => {
+    if (!talkTimeData) return [];
+    return talkTimeData.map((d) => ({
+      ...d,
+      label: d.title.length > 15 ? d.title.slice(0, 15) + '...' : d.title,
+    }));
+  }, [talkTimeData]);
+
+  const conversionChartData = useMemo(() => {
+    if (!conversionData) return [];
+    return conversionData.map((d) => ({
+      ...d,
+      label: d.title.length > 15 ? d.title.slice(0, 15) + '...' : d.title,
+    }));
+  }, [conversionData]);
+
+  if (!hasSentiment && !hasTalkTime && !hasConversion) {
+    return null;
+  }
+
+  const defaultTab = hasSentiment ? 'sentiment' : hasTalkTime ? 'talktime' : 'conversion';
+  const BAR_COLORS: Record<string, string> = { hot: '#ef4444', warm: '#f59e0b', cold: '#3b82f6' };
+
+  return (
+    <Card className="mt-6">
+      <div className="p-6">
+        <Tabs defaultValue={defaultTab} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Performance Trends</CardTitle>
+            <TabsList className="bg-gray-100 dark:bg-gray-800/50 p-1 rounded-lg">
+              {hasSentiment && (
+                <TabsTrigger value="sentiment" className={TAB_TRIGGER_CLASS}>
+                  <Smile className="w-3.5 h-3.5" />
+                  Sentiment
+                </TabsTrigger>
+              )}
+              {hasTalkTime && (
+                <TabsTrigger value="talktime" className={TAB_TRIGGER_CLASS}>
+                  <ClockIcon className="w-3.5 h-3.5" />
+                  Talk Time
+                </TabsTrigger>
+              )}
+              {hasConversion && (
+                <TabsTrigger value="conversion" className={TAB_TRIGGER_CLASS}>
+                  <Flame className="w-3.5 h-3.5" />
+                  Conversion
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
+
+          {/* Tab 1: Sentiment (LineChart) */}
+          {hasSentiment && (
+            <TabsContent value="sentiment" className="mt-0">
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={sentimentChartData}>
+                    <defs>
+                      <linearGradient id="sentimentOverviewGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                    <XAxis
+                      dataKey="dateFormatted"
+                      tick={{ fontSize: 12 }}
+                      className="text-gray-600 dark:text-gray-400"
+                    />
+                    <YAxis
+                      domain={[0, 1]}
+                      tick={{ fontSize: 12 }}
+                      className="text-gray-600 dark:text-gray-400"
+                      tickFormatter={(v) => v.toFixed(1)}
+                    />
+                    <Tooltip
+                      contentStyle={TOOLTIP_STYLE}
+                      formatter={(value: number) => [value.toFixed(2), 'Positive Score']}
+                      labelFormatter={(label) => `Date: ${label}`}
+                    />
+                    <ReferenceLine y={0.5} stroke="#6b7280" strokeDasharray="3 3" />
+                    <Line
+                      type="monotone"
+                      dataKey="positiveScore"
+                      name="Positive Score"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, fill: '#10b981' }}
+                      fill="url(#sentimentOverviewGradient)"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </TabsContent>
+          )}
+
+          {/* Tab 2: Talk Time (AreaChart) */}
+          {hasTalkTime && (
+            <TabsContent value="talktime" className="mt-0">
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={talkTimeChartData}>
+                    <defs>
+                      <linearGradient id="talkTimeOverviewGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11 }}
+                      className="text-gray-600 dark:text-gray-400"
+                      interval={0}
+                      angle={-30}
+                      textAnchor="end"
+                      height={50}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fontSize: 12 }}
+                      className="text-gray-600 dark:text-gray-400"
+                      tickFormatter={(v) => `${v}%`}
+                    />
+                    <Tooltip
+                      contentStyle={TOOLTIP_STYLE}
+                      formatter={(value: number) => [`${value.toFixed(1)}%`, 'Top Speaker %']}
+                    />
+                    <ReferenceLine y={45} stroke="#22c55e" strokeDasharray="3 3" opacity={0.5} />
+                    <ReferenceLine y={55} stroke="#22c55e" strokeDasharray="3 3" opacity={0.5} />
+                    <Area
+                      type="monotone"
+                      dataKey="topSpeakerPercentage"
+                      name="Top Speaker %"
+                      stroke="#8b5cf6"
+                      strokeWidth={2}
+                      fill="url(#talkTimeOverviewGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center justify-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-0.5 bg-green-500 opacity-50" />
+                  <span>Ideal Zone (45-55%)</span>
+                </div>
+              </div>
+            </TabsContent>
+          )}
+
+          {/* Tab 3: Conversion (BarChart) */}
+          {hasConversion && (
+            <TabsContent value="conversion" className="mt-0">
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={conversionChartData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11 }}
+                      className="text-gray-600 dark:text-gray-400"
+                      interval={0}
+                      angle={-30}
+                      textAnchor="end"
+                      height={50}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fontSize: 12 }}
+                      className="text-gray-600 dark:text-gray-400"
+                    />
+                    <Tooltip
+                      contentStyle={TOOLTIP_STYLE}
+                      formatter={(value: number) => [value, 'Conversion Score']}
+                    />
+                    <Bar dataKey="conversionScore" name="Conversion Score" radius={[4, 4, 0, 0]}>
+                      {conversionChartData.map((entry) => (
+                        <Cell key={entry.id} fill={BAR_COLORS[entry.status] ?? '#3b82f6'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center justify-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-red-500" />
+                  <span>Hot</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span>Warm</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>Cold</span>
+                </div>
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
+      </div>
+    </Card>
   );
 }

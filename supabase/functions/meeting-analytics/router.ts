@@ -6,6 +6,7 @@ import { handleGetTranscripts, handleGetTranscript } from './handlers/transcript
 import { handleGetDashboardMetrics, handleGetSalesPerformance } from './handlers/dashboard.ts';
 import { handleGetInsights, handleGetInsightSubResource } from './handlers/insights.ts';
 import { handleSearch, handleSearchSimilar, handleSearchMulti } from './handlers/search.ts';
+import { handleAsk } from './handlers/ask.ts';
 import {
   handleGenerateReport,
   handlePreviewReport,
@@ -101,6 +102,9 @@ export async function routeRequest(req: Request): Promise<Response> {
   }
 
   // --- Search ---
+  if (apiPath === 'search/ask' && req.method === 'POST') {
+    return handleAsk(req);
+  }
   if (apiPath === 'search' && req.method === 'POST') {
     return handleSearch(req);
   }

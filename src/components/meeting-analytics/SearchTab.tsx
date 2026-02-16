@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Search, FileText, ArrowRight, Clock } from 'lucide-react';
+import { Search, FileText, ArrowRight, Clock, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMaSearch } from '@/lib/hooks/useMeetingAnalytics';
+import { AskAnythingPanel } from './AskAnythingPanel';
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -20,6 +22,7 @@ function getSimilarityVariant(similarity: number) {
 }
 
 export function SearchTab() {
+  const [mode, setMode] = useState<'search' | 'ask'>('search');
   const [inputValue, setInputValue] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
@@ -36,6 +39,23 @@ export function SearchTab() {
 
   return (
     <div className="space-y-6">
+      <Tabs value={mode} onValueChange={(v) => setMode(v as 'search' | 'ask')}>
+        <TabsList>
+          <TabsTrigger value="search" className="flex items-center gap-1.5">
+            <Search className="h-4 w-4" />
+            Semantic Search
+          </TabsTrigger>
+          <TabsTrigger value="ask" className="flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4" />
+            Ask Anything
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {mode === 'ask' ? (
+        <AskAnythingPanel />
+      ) : (
+      <>
       {/* Search input */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -132,6 +152,8 @@ export function SearchTab() {
             Enter a search query to find relevant meeting segments
           </p>
         </div>
+      )}
+      </>
       )}
     </div>
   );

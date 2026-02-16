@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { FileText, Send, Clock, CheckCircle, XCircle, Loader2, Bell } from 'lucide-react';
+import {
+  FileText, Send, Clock, CheckCircle, XCircle, Loader2, Bell,
+  Video, Target, CheckSquare, Users, Activity, Flame,
+  Trophy, AlertTriangle, Lightbulb, TrendingUp, TrendingDown,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -95,7 +99,7 @@ export function ReportsTab() {
 
       {/* Preview */}
       {previewData && (
-        <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-white dark:bg-gray-900/50 p-6 space-y-4">
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-white dark:bg-gray-900/50 p-6 space-y-6">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               {previewData.type === 'daily' ? 'Daily' : 'Weekly'} Report Preview
@@ -105,43 +109,210 @@ export function ReportsTab() {
             </span>
           </div>
 
-          {/* Highlights */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard label="Meetings" value={previewData.highlights.meetingCount} />
-            <StatCard label="Action Items Created" value={previewData.highlights.actionItemsCreated} />
-            <StatCard label="Action Items Done" value={previewData.highlights.actionItemsCompleted} />
-            <StatCard
-              label="Top Performer"
-              value={previewData.highlights.topPerformer?.title ?? 'N/A'}
-              sub={previewData.highlights.topPerformer ? `${previewData.highlights.topPerformer.score}/100 (${previewData.highlights.topPerformer.grade})` : undefined}
-            />
+          {/* Section A - Metrics Dashboard */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Total Meetings */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-card p-4 relative">
+              <Video className="w-4 h-4 text-gray-400 absolute top-4 right-4" />
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {previewData.highlights.meetingCount}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mt-1">Total Meetings</div>
+              {previewData.metrics.trends && previewData.metrics.trends.meetingsTrend !== 0 && (
+                <div className={`text-xs mt-1.5 flex items-center gap-0.5 ${previewData.metrics.trends.meetingsTrend > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {previewData.metrics.trends.meetingsTrend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                  {previewData.metrics.trends.meetingsTrend > 0 ? '+' : ''}{previewData.metrics.trends.meetingsTrend.toFixed(0)}% from last week
+                </div>
+              )}
+            </div>
+
+            {/* Avg Performance Score */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-card p-4 relative">
+              <Target className="w-4 h-4 text-gray-400 absolute top-4 right-4" />
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {previewData.metrics.summary.avgPerformanceScore.toFixed(0)}
+                <span className="text-sm font-normal text-gray-500 dark:text-gray-400">/100</span>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mt-1">Avg Performance Score</div>
+              <span className={`inline-block mt-1.5 text-xs font-medium px-1.5 py-0.5 rounded ${
+                previewData.metrics.summary.avgPerformanceScore >= 90 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                previewData.metrics.summary.avgPerformanceScore >= 80 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                previewData.metrics.summary.avgPerformanceScore >= 70 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                previewData.metrics.summary.avgPerformanceScore >= 60 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              }`}>
+                Grade {previewData.metrics.summary.avgPerformanceScore >= 90 ? 'A' : previewData.metrics.summary.avgPerformanceScore >= 80 ? 'B' : previewData.metrics.summary.avgPerformanceScore >= 70 ? 'C' : previewData.metrics.summary.avgPerformanceScore >= 60 ? 'D' : 'F'}
+              </span>
+            </div>
+
+            {/* Pipeline Health */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-card p-4 relative">
+              <Activity className="w-4 h-4 text-gray-400 absolute top-4 right-4" />
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {previewData.metrics.summary.avgConversionScore.toFixed(0)}%
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mt-1">Pipeline Health</div>
+              <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                <div
+                  className="h-full rounded-full bg-indigo-500"
+                  style={{ width: `${Math.min(100, previewData.metrics.summary.avgConversionScore)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Action Items */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-card p-4 relative">
+              <CheckSquare className="w-4 h-4 text-gray-400 absolute top-4 right-4" />
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {previewData.highlights.actionItemsCompleted}
+                <span className="text-sm font-normal text-gray-500 dark:text-gray-400">/{previewData.highlights.actionItemsCreated}</span>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mt-1">Action Items</div>
+              <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                <div
+                  className="h-full rounded-full bg-emerald-500"
+                  style={{ width: `${previewData.highlights.actionItemsCreated > 0 ? (previewData.highlights.actionItemsCompleted / previewData.highlights.actionItemsCreated * 100) : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Talk Time Balance */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-card p-4 relative">
+              <Users className="w-4 h-4 text-gray-400 absolute top-4 right-4" />
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {previewData.metrics.summary.avgTalkTimeBalance.toFixed(0)}%
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mt-1">Talk Time Balance</div>
+              <span className={`inline-block mt-1.5 text-xs font-medium px-1.5 py-0.5 rounded ${
+                previewData.metrics.summary.avgTalkTimeBalance >= 40 && previewData.metrics.summary.avgTalkTimeBalance <= 60
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+              }`}>
+                {previewData.metrics.summary.avgTalkTimeBalance >= 40 && previewData.metrics.summary.avgTalkTimeBalance <= 60 ? 'Balanced' : 'Needs improvement'}
+              </span>
+            </div>
+
+            {/* Avg Conversion Score */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-card p-4 relative">
+              <Flame className="w-4 h-4 text-gray-400 absolute top-4 right-4" />
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {previewData.metrics.summary.avgConversionScore.toFixed(0)}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mt-1">Avg Conversion Score</div>
+              <span className={`inline-block mt-1.5 text-xs font-medium px-1.5 py-0.5 rounded ${
+                previewData.metrics.summary.avgConversionScore >= 70 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                previewData.metrics.summary.avgConversionScore >= 40 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+              }`}>
+                {previewData.metrics.summary.avgConversionScore >= 70 ? 'Hot' : previewData.metrics.summary.avgConversionScore >= 40 ? 'Warm' : 'Cold'}
+              </span>
+            </div>
           </div>
 
-          {previewData.highlights.needsAttention.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Needs Attention</h4>
-              <ul className="space-y-1">
-                {previewData.highlights.needsAttention.map((item, i) => (
-                  <li key={i} className="text-sm text-yellow-700 dark:text-yellow-400 flex items-start gap-1.5">
-                    <span className="shrink-0 mt-0.5">&#9888;</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
+          {/* Section B - Top Performer Highlight */}
+          {previewData.highlights.topPerformer && (
+            <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10 p-4 flex items-start gap-3">
+              <Trophy className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Top Performer</div>
+                <div className="text-base font-semibold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                  {previewData.highlights.topPerformer.title}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {previewData.highlights.topPerformer.score}/100
+                  </span>
+                  <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                    Grade {previewData.highlights.topPerformer.grade}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
-          {previewData.highlights.recommendations.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recommendations</h4>
-              <ul className="space-y-1">
-                {previewData.highlights.recommendations.map((item, i) => (
-                  <li key={i} className="text-sm text-blue-700 dark:text-blue-400 flex items-start gap-1.5">
-                    <span className="shrink-0 mt-0.5">&#128161;</span>
-                    {item}
-                  </li>
+          {/* Section C - Hottest Deal Highlight */}
+          {previewData.highlights.hottestDeal && (
+            <div className="rounded-lg border border-orange-200 dark:border-orange-800/50 bg-orange-50/50 dark:bg-orange-900/10 p-4 flex items-start gap-3">
+              <Flame className="w-5 h-5 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Hottest Deal</div>
+                <div className="text-base font-semibold text-orange-700 dark:text-orange-300 mt-0.5">
+                  {previewData.highlights.hottestDeal.title}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    Conversion: {previewData.highlights.hottestDeal.conversionScore}
+                  </span>
+                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                    previewData.highlights.hottestDeal.conversionScore >= 70 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                    previewData.highlights.hottestDeal.conversionScore >= 40 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  }`}>
+                    {previewData.highlights.hottestDeal.conversionScore >= 70 ? 'Hot' : previewData.highlights.hottestDeal.conversionScore >= 40 ? 'Warm' : 'Cold'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Section D - Needs Attention */}
+          {previewData.highlights.needsAttention.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Needs Attention</h4>
+              <div className="grid gap-2">
+                {previewData.highlights.needsAttention.map((item, i) => (
+                  <div key={i} className="rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 p-3 flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{item}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Section E - Recommendations */}
+          {previewData.highlights.recommendations.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Recommendations</h4>
+              <div className="grid gap-2">
+                {previewData.highlights.recommendations.map((item, i) => (
+                  <div key={i} className="rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-900/10 p-3 flex items-start gap-2.5">
+                    <Lightbulb className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section F - Week-over-Week Trends (weekly reports only) */}
+          {previewData.type === 'weekly' && previewData.metrics.trends && (
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700/50 bg-card p-4">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Week-over-Week Trends</h4>
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  {previewData.metrics.trends.meetingsTrend >= 0 ? (
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+                  )}
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Meetings:</span>
+                  <span className={`text-sm font-medium ${previewData.metrics.trends.meetingsTrend >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {previewData.metrics.trends.meetingsTrend >= 0 ? '+' : ''}{previewData.metrics.trends.meetingsTrend.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {previewData.metrics.trends.scoreTrend >= 0 ? (
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+                  )}
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Score:</span>
+                  <span className={`text-sm font-medium ${previewData.metrics.trends.scoreTrend >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {previewData.metrics.trends.scoreTrend >= 0 ? '+' : ''}{previewData.metrics.trends.scoreTrend.toFixed(0)}%
+                  </span>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -207,12 +378,3 @@ export function ReportsTab() {
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="rounded-lg bg-gray-50 dark:bg-gray-800/40 p-3 text-center">
-      <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400 truncate">{value}</div>
-      <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</div>
-      {sub && <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
