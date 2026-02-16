@@ -106,6 +106,35 @@ function extractSummaryText(summary: any): string | null {
   return summary;
 }
 
+// Derive meeting outcome from leads.meeting_outcome + meetings table presence.
+// The meetings table is the source of truth — if no meeting record exists, it didn't happen.
+function deriveMeetingOutcome(lead: any, meeting: any): string | null {
+  const outcome = lead.meeting_outcome;
+
+  // If explicitly set to a terminal state, trust it
+  if (outcome === 'completed' || outcome === 'no_show' || outcome === 'cancelled' || outcome === 'rescheduled') {
+    return outcome;
+  }
+
+  // Lead status cancelled overrides
+  if (lead.status === 'cancelled') return 'cancelled';
+
+  const meetingStart = meeting?.meeting_start || lead.meeting_start;
+
+  // Meeting exists in meetings table — it happened (or is upcoming)
+  if (meeting) {
+    if (meetingStart && new Date(meetingStart) > new Date()) return 'scheduled';
+    return 'completed';
+  }
+
+  // No meeting record — if date has passed, it was a no-show
+  if (meetingStart) {
+    return new Date(meetingStart) > new Date() ? 'scheduled' : 'no_show';
+  }
+
+  return outcome || null;
+}
+
 // ============================================================================
 // Backfill: Leads
 // Scoped by owner_id IN memberUserIds (Supabase Auth, no Clerk)
@@ -126,6 +155,10 @@ async function backfillLeads(
     .eq('source_type', 'app');
 
   const existingIds = new Set(existingRows?.map((r: any) => r.source_id) || []);
+
+  // Note: leads.meeting_id should be backfilled via SQL migration
+  // (matching by owner + meeting_start ±30min). The backfill function
+  // relies on meeting_id FK for meeting presence checks.
 
   while (true) {
     const { data: leads, error } = await svc
@@ -166,7 +199,7 @@ async function backfillLeads(
     const ownerIds = [...new Set(newLeads.map((l: any) => l.owner_id).filter(Boolean))];
     const ownerMap = await resolveOwnerNames(svc, ownerIds);
 
-    // Batch-query meetings for meeting_held and recording_url
+    // Batch-query meetings by direct FK
     const meetingIds = [...new Set(newLeads.map((l: any) => l.meeting_id).filter(Boolean))];
     const meetingMap = new Map<string, any>();
     if (meetingIds.length > 0) {
@@ -176,6 +209,7 @@ async function backfillLeads(
         .in('id', meetingIds);
       meetings?.forEach((m: any) => meetingMap.set(m.id, m));
     }
+
 
     const rows = newLeads.map((l: any) => ({
       source_type: 'app' as const,
@@ -196,33 +230,15 @@ async function backfillLeads(
       if (colMap.owner) {
         cells.push({ column_id: colMap.owner, value: l.owner_id ? (ownerMap.get(l.owner_id) || null) : null });
       }
-      if (colMap.meeting_outcome) cells.push({ column_id: colMap.meeting_outcome, value: l.meeting_outcome });
+      // Resolve meeting via FK
+      const meeting = l.meeting_id ? meetingMap.get(l.meeting_id) : null;
 
-      // Meeting held status (derived from meeting cross-ref)
-      if (colMap.meeting_held) {
-        let meetingHeld: string | null = null;
-        if (l.status === 'cancelled') {
-          meetingHeld = 'Cancelled';
-        } else if (l.meeting_id) {
-          const meeting = meetingMap.get(l.meeting_id);
-          if (meeting) {
-            if (meeting.transcript_text) {
-              meetingHeld = 'Met';
-            } else if (meeting.meeting_start && new Date(meeting.meeting_start) > new Date()) {
-              meetingHeld = 'Upcoming';
-            } else {
-              meetingHeld = 'No Show';
-            }
-          }
-        } else if (l.meeting_start) {
-          meetingHeld = new Date(l.meeting_start) > new Date() ? 'Upcoming' : 'No Show';
-        }
-        cells.push({ column_id: colMap.meeting_held, value: meetingHeld });
-      }
+      const derivedOutcome = deriveMeetingOutcome(l, meeting);
+      if (colMap.meeting_outcome) cells.push({ column_id: colMap.meeting_outcome, value: derivedOutcome });
+      if (colMap.meeting_held) cells.push({ column_id: colMap.meeting_held, value: derivedOutcome });
 
       // Meeting recording URL
       if (colMap.meeting_recording_url) {
-        const meeting = l.meeting_id ? meetingMap.get(l.meeting_id) : null;
         cells.push({ column_id: colMap.meeting_recording_url, value: meeting?.share_url || null });
       }
 
@@ -1056,6 +1072,313 @@ async function backfillClients(
 }
 
 // ============================================================================
+// Backfill: CRM Contacts (crm_contact_index → "All Contacts")
+// Only "active" contacts:
+//   - has_active_deal = true
+//   - OR crm_updated_at within last 90 days
+// Deduplicates against app rows already in the table by email.
+// ============================================================================
+async function backfillCrmContacts(
+  svc: SupabaseClient,
+  orgId: string,
+  tableId: string,
+  colMap: ColumnMap
+): Promise<number> {
+  let totalInserted = 0;
+  let offset = 0;
+
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Clear existing CRM rows for this table
+  await svc
+    .from('dynamic_table_rows')
+    .delete()
+    .eq('table_id', tableId)
+    .in('source_type', ['hubspot', 'attio']);
+
+  // Collect emails already present as app rows to avoid duplicates
+  const appEmails = new Set<string>();
+  if (colMap.email) {
+    const { data: appCells } = await svc
+      .from('dynamic_table_cells')
+      .select('value, row_id')
+      .eq('column_id', colMap.email)
+      .not('value', 'is', null);
+
+    // Only count cells belonging to rows in this table
+    if (appCells?.length) {
+      const { data: tableRows } = await svc
+        .from('dynamic_table_rows')
+        .select('id')
+        .eq('table_id', tableId)
+        .eq('source_type', 'app');
+
+      const tableRowIds = new Set(tableRows?.map((r: any) => r.id) || []);
+      appCells.forEach((c: any) => {
+        if (tableRowIds.has(c.row_id) && c.value) {
+          appEmails.add(String(c.value).toLowerCase());
+        }
+      });
+    }
+  }
+
+  while (true) {
+    const { data: contacts, error } = await svc
+      .from('crm_contact_index')
+      .select(`
+        crm_source,
+        crm_record_id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        company_name,
+        job_title,
+        lifecycle_stage,
+        lead_status,
+        has_active_deal,
+        crm_updated_at
+      `)
+      .eq('org_id', orgId)
+      .or(`has_active_deal.eq.true,crm_updated_at.gte.${cutoff}`)
+      .order('crm_updated_at', { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (error) throw new Error(`Failed to query CRM contacts: ${error.message}`);
+    if (!contacts?.length) break;
+
+    // Skip contacts whose email already exists as an app row
+    const deduped = contacts.filter((c: any) => {
+      if (!c.email) return true; // keep contacts without email (can't dedup)
+      return !appEmails.has(String(c.email).toLowerCase());
+    });
+
+    if (deduped.length > 0) {
+      const rows = deduped.map((c: any) => ({
+        source_type: c.crm_source,
+        source_id: c.crm_record_id,
+      }));
+
+      const cellsData = deduped.map((c: any) => {
+        const cells: Array<{ column_id: string; value: any }> = [];
+
+        if (colMap.first_name) cells.push({ column_id: colMap.first_name, value: c.first_name });
+        if (colMap.last_name) cells.push({ column_id: colMap.last_name, value: c.last_name });
+        if (colMap.email) cells.push({ column_id: colMap.email, value: c.email });
+        if (colMap.title) cells.push({ column_id: colMap.title, value: c.job_title });
+        if (colMap.phone) cells.push({ column_id: colMap.phone, value: c.phone });
+        if (colMap.company_name) cells.push({ column_id: colMap.company_name, value: c.company_name });
+        if (colMap.lifecycle_stage) {
+          cells.push({ column_id: colMap.lifecycle_stage, value: c.lifecycle_stage || c.lead_status || 'lead' });
+        }
+        if (colMap.sync_status) cells.push({ column_id: colMap.sync_status, value: 'synced' });
+
+        return cells;
+      });
+
+      const inserted = await insertRowsAndCells(svc, tableId, rows, cellsData);
+      totalInserted += inserted;
+    }
+
+    if (contacts.length < BATCH_SIZE) break;
+    offset += BATCH_SIZE;
+  }
+
+  return totalInserted;
+}
+
+// ============================================================================
+// Backfill: CRM Companies (crm_company_index → "All Companies")
+// Only "active" companies:
+//   - crm_updated_at within last 90 days
+//   - OR has contacts with active deals (via crm_contact_index)
+// Deduplicates against app rows by domain.
+// ============================================================================
+async function backfillCrmCompanies(
+  svc: SupabaseClient,
+  orgId: string,
+  tableId: string,
+  colMap: ColumnMap
+): Promise<number> {
+  let totalInserted = 0;
+  let offset = 0;
+
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Clear existing CRM rows for this table
+  await svc
+    .from('dynamic_table_rows')
+    .delete()
+    .eq('table_id', tableId)
+    .in('source_type', ['hubspot', 'attio']);
+
+  // Collect domains already present as app rows to avoid duplicates
+  const appDomains = new Set<string>();
+  if (colMap.domain) {
+    const { data: appCells } = await svc
+      .from('dynamic_table_cells')
+      .select('value, row_id')
+      .eq('column_id', colMap.domain)
+      .not('value', 'is', null);
+
+    if (appCells?.length) {
+      const { data: tableRows } = await svc
+        .from('dynamic_table_rows')
+        .select('id')
+        .eq('table_id', tableId)
+        .eq('source_type', 'app');
+
+      const tableRowIds = new Set(tableRows?.map((r: any) => r.id) || []);
+      appCells.forEach((c: any) => {
+        if (tableRowIds.has(c.row_id) && c.value) {
+          appDomains.add(String(c.value).toLowerCase());
+        }
+      });
+    }
+  }
+
+  // Find company domains that have contacts with active deals
+  const { data: activeDealCompanies } = await svc
+    .from('crm_contact_index')
+    .select('company_domain')
+    .eq('org_id', orgId)
+    .eq('has_active_deal', true)
+    .not('company_domain', 'is', null);
+
+  const activeDealDomains = new Set<string>();
+  activeDealCompanies?.forEach((c: any) => {
+    if (c.company_domain) activeDealDomains.add(String(c.company_domain).toLowerCase());
+  });
+
+  while (true) {
+    // Fetch companies updated in last 90 days (we'll also include deal-associated ones below)
+    const { data: companies, error } = await svc
+      .from('crm_company_index')
+      .select(`
+        crm_source,
+        crm_record_id,
+        name,
+        domain,
+        industry,
+        employee_count,
+        annual_revenue,
+        crm_updated_at
+      `)
+      .eq('org_id', orgId)
+      .gte('crm_updated_at', cutoff)
+      .order('crm_updated_at', { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (error) throw new Error(`Failed to query CRM companies: ${error.message}`);
+    if (!companies?.length) break;
+
+    // Include companies with active-deal contacts even if not recently updated
+    // (handled by the gte filter above catching most; we'll do a second pass below)
+
+    // Skip companies whose domain already exists as an app row
+    const deduped = companies.filter((c: any) => {
+      if (!c.domain) return true;
+      return !appDomains.has(String(c.domain).toLowerCase());
+    });
+
+    if (deduped.length > 0) {
+      const rows = deduped.map((c: any) => ({
+        source_type: c.crm_source,
+        source_id: c.crm_record_id,
+      }));
+
+      const cellsData = deduped.map((c: any) => {
+        const cells: Array<{ column_id: string; value: any }> = [];
+
+        if (colMap.name) cells.push({ column_id: colMap.name, value: c.name });
+        if (colMap.domain) cells.push({ column_id: colMap.domain, value: c.domain });
+        if (colMap.industry) cells.push({ column_id: colMap.industry, value: c.industry });
+        if (colMap.company_size) cells.push({ column_id: colMap.company_size, value: c.employee_count });
+        if (colMap.revenue) cells.push({ column_id: colMap.revenue, value: c.annual_revenue });
+
+        return cells;
+      });
+
+      const inserted = await insertRowsAndCells(svc, tableId, rows, cellsData);
+      totalInserted += inserted;
+    }
+
+    if (companies.length < BATCH_SIZE) break;
+    offset += BATCH_SIZE;
+  }
+
+  // Second pass: companies with active-deal contacts that weren't caught by the 90-day filter
+  if (activeDealDomains.size > 0) {
+    const insertedCrmIds = new Set<string>();
+
+    // Collect CRM record IDs already inserted
+    const { data: existingCrmRows } = await svc
+      .from('dynamic_table_rows')
+      .select('source_id')
+      .eq('table_id', tableId)
+      .in('source_type', ['hubspot', 'attio']);
+
+    existingCrmRows?.forEach((r: any) => insertedCrmIds.add(r.source_id));
+
+    // Query companies by active-deal domains, batch by 50
+    const domainBatches: string[][] = [];
+    const allDomains = [...activeDealDomains];
+    for (let i = 0; i < allDomains.length; i += 50) {
+      domainBatches.push(allDomains.slice(i, i + 50));
+    }
+
+    for (const batch of domainBatches) {
+      const { data: dealCompanies, error } = await svc
+        .from('crm_company_index')
+        .select(`
+          crm_source,
+          crm_record_id,
+          name,
+          domain,
+          industry,
+          employee_count,
+          annual_revenue
+        `)
+        .eq('org_id', orgId)
+        .in('domain', batch);
+
+      if (error || !dealCompanies?.length) continue;
+
+      const newCompanies = dealCompanies.filter((c: any) => {
+        if (insertedCrmIds.has(c.crm_record_id)) return false;
+        if (c.domain && appDomains.has(String(c.domain).toLowerCase())) return false;
+        return true;
+      });
+
+      if (newCompanies.length === 0) continue;
+
+      const rows = newCompanies.map((c: any) => ({
+        source_type: c.crm_source,
+        source_id: c.crm_record_id,
+      }));
+
+      const cellsData = newCompanies.map((c: any) => {
+        const cells: Array<{ column_id: string; value: any }> = [];
+
+        if (colMap.name) cells.push({ column_id: colMap.name, value: c.name });
+        if (colMap.domain) cells.push({ column_id: colMap.domain, value: c.domain });
+        if (colMap.industry) cells.push({ column_id: colMap.industry, value: c.industry });
+        if (colMap.company_size) cells.push({ column_id: colMap.company_size, value: c.employee_count });
+        if (colMap.revenue) cells.push({ column_id: colMap.revenue, value: c.annual_revenue });
+
+        return cells;
+      });
+
+      const inserted = await insertRowsAndCells(svc, tableId, rows, cellsData);
+      totalInserted += inserted;
+      newCompanies.forEach((c: any) => insertedCrmIds.add(c.crm_record_id));
+    }
+  }
+
+  return totalInserted;
+}
+
+// ============================================================================
 // Main handler
 // ============================================================================
 Deno.serve(async (req: Request) => {
@@ -1217,10 +1540,18 @@ Deno.serve(async (req: Request) => {
           rowsInserted = await backfillLeads(svc, memberUserIds, table.id, colMap);
         } else if (table.name === 'All Contacts') {
           rowsInserted = await backfillContacts(svc, memberUserIds, table.id, colMap);
+          // Also backfill active CRM contacts (deduped by email)
+          const crmContactRows = await backfillCrmContacts(svc, orgId, table.id, colMap);
+          rowsInserted += crmContactRows;
+          console.log(`  → CRM contacts: ${crmContactRows} active rows`);
         } else if (table.name === 'Meetings') {
           rowsInserted = await backfillMeetings(svc, orgId, memberUserIds, table.id, colMap);
         } else if (table.name === 'All Companies') {
           rowsInserted = await backfillCompanies(svc, memberUserIds, table.id, colMap);
+          // Also backfill active CRM companies (deduped by domain)
+          const crmCompanyRows = await backfillCrmCompanies(svc, orgId, table.id, colMap);
+          rowsInserted += crmCompanyRows;
+          console.log(`  → CRM companies: ${crmCompanyRows} active rows`);
         } else if (table.name === 'Clients') {
           rowsInserted = await backfillClients(svc, memberUserIds, table.id, colMap);
         }

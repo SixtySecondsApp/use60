@@ -220,6 +220,7 @@ This layer synthesizes Layers 1-4 into an actionable plan. It answers: "Given ev
 
 ## Data Gathering (via execute_action)
 
+0. **Check for existing company research profile**: Before doing fresh company research, query the `client_fact_profiles` table for a profile matching the attendee's company domain or name (where `is_org_profile = false` and `research_status = 'complete'`). If a profile exists with `research_completed_at` within the last 7 days, use its `research_data` for Layer 1 (Company Context) instead of gathering from scratch. This avoids redundant research and provides richer data (industry, funding, tech stack, team size, competitors) that was collected during lead enrichment. The fact profile's `research_data` follows this structure: `company_overview` (name, description, founded, headquarters), `market_position` (industry, competitors, differentiators), `team_leadership` (employee count, key people), `financials` (funding, revenue range), `technology` (tech stack, platforms), `recent_activity` (news, milestones).
 1. **Fetch meeting details**: `execute_action("get_meetings", { meeting_id })` -- title, time, attendees, meeting URL
 2. **Fetch primary contact**: `execute_action("get_contact", { id: primary_contact_id })` -- name, title, company, email, phone, notes
 3. **Fetch related deals**: `execute_action("get_deal", { name: company_or_deal_name })` -- stage, amount, MEDDICC, activity

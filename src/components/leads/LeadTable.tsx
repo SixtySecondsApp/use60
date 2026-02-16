@@ -1,7 +1,7 @@
 import type { LeadWithPrep } from '@/lib/services/leadService';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Calendar, Clock, RotateCw, Loader2 } from 'lucide-react';
+import { Calendar, Clock, RotateCw, Loader2, Building2, Tag } from 'lucide-react';
 import { useState, useMemo, useEffect, type MouseEvent } from 'react';
 import { useCompanyLogo } from '@/lib/hooks/useCompanyLogo';
 
@@ -82,15 +82,6 @@ export function LeadTable({
     }
   };
 
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return 'N/A';
-    try {
-      return format(new Date(dateString), 'MMM d, yyyy');
-    } catch {
-      return 'Invalid date';
-    }
-  };
-
   const formatDateTime = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     try {
@@ -100,30 +91,22 @@ export function LeadTable({
     }
   };
 
-  const getCompanyName = (lead: LeadWithPrep) => {
-    const contact = lead.contact as { title: string | null; first_name: string | null; last_name: string | null; email: string | null } | null;
-    if (contact?.title && lead.domain) {
-      return `${contact.title} @ ${lead.domain}`;
-    }
-    return lead.domain || contact?.title || 'Unknown';
-  };
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Contact Name
+              Contact
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
               Company
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Meeting Date
+              Source
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Booked Date
+              Meeting
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
               Status
@@ -144,7 +127,6 @@ export function LeadTable({
               isReprocessing={reprocessingLeadId === lead.id}
               disableReprocess={Boolean(isReprocessing) && reprocessingLeadId !== lead.id}
               getStatusBadge={getStatusBadge}
-              getCompanyName={getCompanyName}
               formatDateTime={formatDateTime}
               handleReprocessClick={handleReprocessClick}
             />
@@ -163,10 +145,18 @@ interface LeadTableRowProps {
   isReprocessing: boolean;
   disableReprocess: boolean;
   getStatusBadge: (lead: LeadWithPrep) => JSX.Element;
-  getCompanyName: (lead: LeadWithPrep) => string;
   formatDateTime: (dateString: string | null | undefined) => string;
   handleReprocessClick: (e: MouseEvent<HTMLButtonElement>, leadId: string) => Promise<void>;
 }
+
+const SOURCE_CHANNEL_COLORS: Record<string, string> = {
+  paid_social: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+  paid_search: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300',
+  email: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300',
+  organic: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300',
+  direct: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+  website: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300',
+};
 
 function LeadTableRow({
   lead,
@@ -176,19 +166,14 @@ function LeadTableRow({
   isReprocessing,
   disableReprocess,
   getStatusBadge,
-  getCompanyName,
   formatDateTime,
   handleReprocessClick,
 }: LeadTableRowProps) {
-  const bookedDate = lead.first_seen_at || lead.external_occured_at || lead.created_at;
   const meetingDate = lead.meeting_start;
 
   // Extract domain from email if domain field is not available
   const domainForLogo = useMemo(() => {
-    if (lead.domain) {
-      return lead.domain;
-    }
-
+    if (lead.domain) return lead.domain;
     if (lead.contact_email) {
       const emailDomain = lead.contact_email.split('@')[1];
       if (emailDomain) {
@@ -196,11 +181,8 @@ function LeadTableRow({
           'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
           'icloud.com', 'proton.me', 'aol.com', 'mail.com', 'live.com'
         ];
-
         const normalizedDomain = emailDomain.toLowerCase();
-        if (!freeEmailProviders.includes(normalizedDomain)) {
-          return normalizedDomain;
-        }
+        if (!freeEmailProviders.includes(normalizedDomain)) return normalizedDomain;
       }
     }
     return null;
@@ -209,12 +191,10 @@ function LeadTableRow({
   const { logoUrl, isLoading } = useCompanyLogo(domainForLogo);
   const [logoError, setLogoError] = useState(false);
 
-  // Reset error state when domain or logoUrl changes
   useEffect(() => {
     setLogoError(false);
   }, [domainForLogo, logoUrl]);
 
-  // Extract initials for fallback
   const initials = useMemo(() => {
     const contactName = lead.contact_name || '';
     if (contactName && contactName.trim()) {
@@ -225,16 +205,23 @@ function LeadTableRow({
         return nameParts[0].substring(0, 2).toUpperCase();
       }
     }
-
     if (domainForLogo) {
       const domainParts = domainForLogo.split('.').filter(p => p.length > 0 && p !== 'www');
-      if (domainParts.length > 0 && domainParts[0].length >= 2) {
-        return domainParts[0].substring(0, 2).toUpperCase();
-      }
+      if (domainParts.length > 0 && domainParts[0].length >= 2) return domainParts[0].substring(0, 2).toUpperCase();
     }
-
     return '?';
   }, [lead.contact_name, domainForLogo]);
+
+  // Extract company data from joined relation
+  const company = lead.company as { id: string; name: string; domain: string | null; industry: string | null; size: string | null; enrichment_data: Record<string, unknown> | null } | null;
+  const companyName = company?.name || lead.domain || 'Unknown';
+  const companyIndustry = company?.industry || null;
+  const companySize = company?.size || null;
+
+  // Extract source data from joined relation
+  const source = lead.source as { id: string; name: string; source_key: string | null; channel: string | null } | null;
+  const sourceLabel = source?.name || lead.source_channel || null;
+  const sourceChannel = source?.channel || lead.source_channel || null;
 
   return (
     <tr
@@ -245,9 +232,9 @@ function LeadTableRow({
         isSelected && 'bg-emerald-100/70 dark:bg-emerald-500/20'
       )}
     >
+      {/* Contact */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          {/* Company Logo */}
           <div className="flex-shrink-0">
             {logoUrl && !logoError && !isLoading ? (
               <img
@@ -271,8 +258,6 @@ function LeadTableRow({
               </div>
             )}
           </div>
-
-          {/* Contact Info */}
           <div className="min-w-0">
             <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
               {lead.contact_name || lead.contact_email || 'Unnamed Lead'}
@@ -285,11 +270,47 @@ function LeadTableRow({
           </div>
         </div>
       </td>
+
+      {/* Company + Industry */}
       <td className="px-4 py-3">
-        <div className="text-sm text-gray-900 dark:text-gray-100">
-          {getCompanyName(lead)}
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+            <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{companyName}</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-1">
+            {companyIndustry && (
+              <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300 truncate max-w-[120px]">
+                {companyIndustry}
+              </span>
+            )}
+            {companySize && (
+              <span className="text-[10px] text-gray-400">{companySize}</span>
+            )}
+          </div>
         </div>
       </td>
+
+      {/* Source */}
+      <td className="px-4 py-3">
+        {sourceLabel ? (
+          <div className="flex items-center gap-1.5">
+            <Tag className="h-3 w-3 text-gray-400 flex-shrink-0" />
+            <span className={cn(
+              'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium truncate max-w-[110px]',
+              sourceChannel && SOURCE_CHANNEL_COLORS[sourceChannel]
+                ? SOURCE_CHANNEL_COLORS[sourceChannel]
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+            )}>
+              {sourceLabel}
+            </span>
+          </div>
+        ) : (
+          <span className="text-xs text-gray-400">-</span>
+        )}
+      </td>
+
+      {/* Meeting Date */}
       <td className="px-4 py-3">
         {meetingDate ? (
           <div className="flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-100">
@@ -300,19 +321,13 @@ function LeadTableRow({
           <span className="text-sm text-gray-400">N/A</span>
         )}
       </td>
-      <td className="px-4 py-3">
-        {bookedDate ? (
-          <div className="flex items-center gap-1.5 text-sm text-gray-900 dark:text-gray-100">
-            <Clock className="h-3.5 w-3.5 text-gray-400" />
-            <span>{formatDateTime(bookedDate)}</span>
-          </div>
-        ) : (
-          <span className="text-sm text-gray-400">N/A</span>
-        )}
-      </td>
+
+      {/* Status */}
       <td className="px-4 py-3">
         {getStatusBadge(lead)}
       </td>
+
+      {/* Actions */}
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-2">
           {onReprocessLead && (
@@ -340,4 +355,3 @@ function LeadTableRow({
     </tr>
   );
 }
-

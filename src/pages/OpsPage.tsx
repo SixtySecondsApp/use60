@@ -202,6 +202,7 @@ function OpsPage() {
   const [showCrossOpImport, setShowCrossOpImport] = useState(false);
   const [showWorkflowPrompt, setShowWorkflowPrompt] = useState(false);
   const [workflowInput, setWorkflowInput] = useState('');
+  const [standardTab, setStandardTab] = useState<'tables' | 'history'>('tables');
 
   const workflow = useWorkflowOrchestrator();
   const enrichmentPolling = useSmartPollingInterval(60000, 'standard');
@@ -436,14 +437,37 @@ function OpsPage() {
                 Pre-configured CRM tables with auto-sync and enrichment
               </p>
             </div>
+            <div className="flex items-center gap-1 rounded-lg border border-zinc-800/60 bg-zinc-900/60 p-0.5">
+              <button
+                onClick={() => setStandardTab('tables')}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  standardTab === 'tables'
+                    ? 'bg-zinc-800 text-white'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Tables
+              </button>
+              <button
+                onClick={() => setStandardTab('history')}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  standardTab === 'history'
+                    ? 'bg-zinc-800 text-white'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Sync Health
+              </button>
+            </div>
           </div>
-          <StandardTablesGallery
-            onTableClick={(tableId) => navigate(`/ops/${tableId}`)}
-            existingTables={tables}
-          />
-          <div className="mt-4">
+          {standardTab === 'tables' ? (
+            <StandardTablesGallery
+              onTableClick={(tableId) => navigate(`/ops/${tableId}`)}
+              existingTables={tables}
+            />
+          ) : (
             <StandardTablesHealth />
-          </div>
+          )}
         </div>
       )}
 
