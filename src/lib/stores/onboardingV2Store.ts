@@ -1235,7 +1235,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     const state = get();
 
     // Guard: Stop polling if organizationId cleared or step changed away from enrichment flow
-    if (!state.organizationId && state.currentStep !== 'enrichment_loading') {
+    if (!state.organizationId || state.currentStep !== 'enrichment_loading') {
       console.log('[pollEnrichmentStatus] Stopping - organizationId cleared or step changed');
       set({
         isEnrichmentLoading: false,

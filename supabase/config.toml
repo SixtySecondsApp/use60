@@ -263,3 +263,28 @@ verify_jwt = false
 # Auth is enforced manually inside the function via supabase.auth.getUser()
 [functions.exa-abilities-demo]
 verify_jwt = false
+
+# Generate waitlist token - called from admin panel with user JWT
+# Admin auth handled manually inside the function (CORS preflight needs to work)
+[functions.generate-waitlist-token]
+verify_jwt = false
+
+# Delete user - called from admin panel with user JWT
+# Admin auth handled manually inside the function (CORS preflight needs to work)
+[functions.delete-user]
+verify_jwt = false
+
+# Send removal email - called from admin panel with user JWT or edge function secret
+# Auth handled manually inside the function (supports both JWT and edge secret)
+[functions.send-removal-email]
+verify_jwt = false
+
+# Invite user - called from browser with user JWT
+# Admin auth handled manually inside the function (CORS preflight needs to work)
+[functions.invite-user]
+verify_jwt = false
+
+# Get invitation by token - public endpoint for invitation signup flow
+# No auth needed - validates invitation token from database
+[functions.get-invitation-by-token]
+verify_jwt = false
