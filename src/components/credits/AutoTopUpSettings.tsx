@@ -206,7 +206,7 @@ export function AutoTopUpSettings() {
       {/* Pack Selector */}
       <div className="space-y-3">
         <p className="text-sm font-medium text-[#1E293B] dark:text-white">Pack to Auto-Purchase</p>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3 pt-1">
           {AUTO_TOPUP_PACKS.map((packType) => {
             const p = CREDIT_PACKS[packType];
             const pricePerCredit = p.credits > 0 ? ((p.priceGBP / p.credits) * 100).toFixed(1) : '—';

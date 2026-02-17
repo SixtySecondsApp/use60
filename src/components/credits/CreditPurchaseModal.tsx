@@ -76,7 +76,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-4 pt-1">
           {/* Pack cards */}
           {STANDARD_PACKS.map((packType) => {
             const pack = CREDIT_PACKS[packType];
