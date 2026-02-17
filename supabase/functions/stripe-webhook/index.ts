@@ -915,6 +915,42 @@ async function handlePaymentIntentFailed(
 // HELPER FUNCTIONS
 // ============================================================================
 
+/**
+ * Extract org_id from a Stripe event's data.object.metadata.
+ * Returns null if not found.
+ */
+function extractOrgIdFromEvent(event: Stripe.Event): string | null {
+  const obj = event.data.object as any;
+  return obj?.metadata?.org_id ?? null;
+}
+
+/**
+ * Log a billing event to billing_event_log for audit trail.
+ * Idempotent via provider + provider_event_id unique constraint.
+ */
+async function logBillingEvent(
+  supabase: SupabaseClient,
+  event: Stripe.Event,
+  orgId: string | null,
+): Promise<void> {
+  const { error } = await supabase.from('billing_event_log').upsert(
+    {
+      provider: 'stripe',
+      provider_event_id: event.id,
+      event_type: event.type,
+      org_id: orgId,
+      payload: event.data.object,
+      received_at: new Date().toISOString(),
+    },
+    { onConflict: 'provider,provider_event_id' },
+  );
+
+  if (error) {
+    console.error('Error logging billing event:', error);
+    throw error;
+  }
+}
+
 async function syncSubscriptionToDatabase(
   supabase: SupabaseClient,
   orgId: string,
@@ -967,7 +1003,7 @@ async function syncSubscriptionToDatabase(
     throw error;
   }
 
-  console.log(`Synced subscription for org ${orgId}: status=${status}, MRR=${recurringAmountCents / 100} ${interval}`);
+  console.log(`Synced subscription for org ${orgId}: status=${status}`);
 }
 
 interface BillingEventData {
