@@ -50,6 +50,54 @@ const PREP_WINDOW_MINUTES = 120; // 2 hours
 // Minimum time before meeting to trigger prep (avoid last-minute preps)
 const MIN_LEAD_TIME_MINUTES = 30;
 
+// Meeting titles that are clearly not business-related — skip prep entirely
+const PERSONAL_TITLE_PATTERNS = [
+  /\b(doctor|dentist|gp|physio|therapist|counsell?or|optician|vet)\b/i,
+  /\b(school run|pickup|drop.?off|childcare|daycare|nursery)\b/i,
+  /\b(haircut|salon|barber|gym|yoga|pilates|massage)\b/i,
+  /\b(lunch with|dinner with|coffee with|drinks with)\b/i,
+  /\b(home visit|house viewing|plumber|electrician|builder)\b/i,
+  /\b(birthday|anniversary|wedding|funeral|ceremony)\b/i,
+  /\b(flight|hotel|holiday|vacation|leave)\b/i,
+  /\bpersonal\b/i,
+  /\bblock(ed)?\s*(time|out|calendar)\b/i,
+  /\b(focus time|do not disturb|busy|out of office)\b/i,
+];
+
+// Meeting titles that are clearly business-related — always prep
+const BUSINESS_TITLE_PATTERNS = [
+  /\b(demo|discovery|proposal|negotiation|pricing|pitch|close|renewal|qbr)\b/i,
+  /\b(pipeline|forecast|deal|revenue|quarter|sprint|standup|retro|planning)\b/i,
+  /\b(onboarding|kickoff|kick-off|implementation|training|review)\b/i,
+  /\b(interview|candidate|hiring)\b/i,
+  /\b(board|investor|advisory|partner)\b/i,
+];
+
+/**
+ * Classify whether a meeting is likely business-related.
+ * Returns: 'business' | 'personal' | 'unknown'
+ */
+function classifyMeetingRelevance(
+  title: string,
+  hasKnownContacts: boolean,
+  hasDeal: boolean
+): 'business' | 'personal' | 'unknown' {
+  // If there's an active deal, it's business
+  if (hasDeal) return 'business';
+
+  // Check title against personal patterns
+  if (PERSONAL_TITLE_PATTERNS.some(p => p.test(title))) return 'personal';
+
+  // Check title against business patterns
+  if (BUSINESS_TITLE_PATTERNS.some(p => p.test(title))) return 'business';
+
+  // If attendees are in our CRM, likely business
+  if (hasKnownContacts) return 'business';
+
+  // Can't tell — ask the user
+  return 'unknown';
+}
+
 // ============================================================================
 // Main Handler
 // ============================================================================
@@ -231,6 +279,33 @@ async function prepMeetingsForUserInternal(
         continue;
       }
 
+      // Check business relevance before generating prep
+      const { hasKnownContacts, hasDeal } = await quickRelevanceCheck(supabase, meeting);
+      const relevance = classifyMeetingRelevance(meeting.title, hasKnownContacts, hasDeal);
+
+      if (relevance === 'personal') {
+        console.log(`[MeetingPrep] Skipping personal meeting: ${meeting.title}`);
+        results.push({
+          meetingId: meeting.id,
+          title: meeting.title,
+          prepGenerated: false,
+          slackNotified: false,
+        });
+        continue;
+      }
+
+      if (relevance === 'unknown') {
+        console.log(`[MeetingPrep] Unknown relevance, asking user: ${meeting.title}`);
+        const asked = await sendRelevanceQuestion(supabase, userId, meeting);
+        results.push({
+          meetingId: meeting.id,
+          title: meeting.title,
+          prepGenerated: false,
+          slackNotified: asked,
+        });
+        continue;
+      }
+
       // Feature flag: use orchestrator if enabled (safe rollout)
       const useOrchestrator = true; // TODO: read from notification_feature_settings
 
@@ -337,6 +412,140 @@ async function prepMeetingsForUserInternal(
   }
 
   return results;
+}
+
+// ============================================================================
+// Business Relevance Check
+// ============================================================================
+
+/**
+ * Quick check: are any attendees known CRM contacts? Is there a deal?
+ * Uses lightweight queries to avoid expensive enrichment for personal meetings.
+ */
+async function quickRelevanceCheck(
+  supabase: any,
+  meeting: UpcomingMeeting
+): Promise<{ hasKnownContacts: boolean; hasDeal: boolean }> {
+  const attendeeEmails = (meeting.attendees || [])
+    .filter((a: any) => a.email && !a.self)
+    .map((a: any) => a.email?.toLowerCase())
+    .filter(Boolean);
+
+  if (attendeeEmails.length === 0) {
+    return { hasKnownContacts: false, hasDeal: false };
+  }
+
+  // Check if any attendee email is in our contacts table
+  const { count: contactCount } = await supabase
+    .from('contacts')
+    .select('id', { count: 'exact', head: true })
+    .in('email', attendeeEmails);
+
+  const hasKnownContacts = (contactCount || 0) > 0;
+
+  // Quick deal check by company name from meeting title or attendee domain
+  let hasDeal = false;
+  if (hasKnownContacts) {
+    const { data: contact } = await supabase
+      .from('contacts')
+      .select('id')
+      .in('email', attendeeEmails)
+      .limit(1)
+      .maybeSingle();
+
+    if (contact?.id) {
+      const { count: dealCount } = await supabase
+        .from('deals')
+        .select('id', { count: 'exact', head: true })
+        .eq('primary_contact_id', contact.id)
+        .not('status', 'in', '("closed_won","closed_lost")');
+
+      hasDeal = (dealCount || 0) > 0;
+    }
+  }
+
+  return { hasKnownContacts, hasDeal };
+}
+
+/**
+ * Send a Slack message asking the user if they want prep for an unclassified meeting.
+ * Returns true if the message was sent successfully.
+ */
+async function sendRelevanceQuestion(
+  supabase: any,
+  userId: string,
+  meeting: UpcomingMeeting
+): Promise<boolean> {
+  try {
+    const { data: slackAuth } = await supabase
+      .from('slack_auth')
+      .select('access_token, channel_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!slackAuth?.access_token) return false;
+
+    const startTime = new Date(meeting.start_time);
+    const timeStr = startTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `You have *${meeting.title}* coming up at ${timeStr}. Would you like me to prepare a brief for this meeting?`,
+        },
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Yes, prep this meeting', emoji: true },
+            style: 'primary',
+            action_id: 'meeting_prep_confirm',
+            value: JSON.stringify({ meeting_id: meeting.id, user_id: userId }),
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'No thanks, skip it', emoji: true },
+            action_id: 'meeting_prep_skip',
+            value: meeting.id,
+          },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: "_I wasn't sure if this is a work meeting. Let me know and I'll remember for next time._",
+        }],
+      },
+    ];
+
+    const response = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${slackAuth.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: slackAuth.channel_id || userId,
+        blocks,
+        text: `Should I prep for "${meeting.title}"?`,
+      }),
+    });
+
+    const result = await response.json();
+    return result.ok === true;
+  } catch (err) {
+    console.error('[MeetingPrep] Failed to send relevance question:', err);
+    return false;
+  }
 }
 
 // ============================================================================

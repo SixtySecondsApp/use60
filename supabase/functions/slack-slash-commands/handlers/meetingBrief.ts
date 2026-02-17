@@ -80,6 +80,26 @@ export async function handleMeetingBrief(ctx: CommandContext, target: string): P
       );
     }
 
+    // Check business relevance before full prep
+    const relevance = await checkMeetingRelevance(ctx, meeting);
+
+    if (relevance === 'personal') {
+      return {
+        blocks: [{
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `This looks like a personal appointment — I'll skip the meeting brief for *${meeting.title}*.`,
+          },
+        }],
+        text: `Skipping personal meeting: ${meeting.title}`,
+      };
+    }
+
+    if (relevance === 'unknown') {
+      return buildRelevanceQuestion(meeting);
+    }
+
     // Build meeting prep data
     const prepData = await buildMeetingPrepData(ctx, meeting);
     return buildMeetingPrepMessage(prepData);
@@ -198,6 +218,83 @@ function buildMeetingPickerResponse(meetings: CalendarEvent[]): SlackMessage {
 }
 
 /**
+ * Quick relevance check: is this meeting business-related?
+ * Uses title patterns + CRM contact lookup to classify.
+ */
+async function checkMeetingRelevance(
+  ctx: CommandContext,
+  meeting: CalendarEvent
+): Promise<'business' | 'personal' | 'unknown'> {
+  // Check title against personal patterns first
+  if (PERSONAL_PATTERNS.some(p => p.test(meeting.title))) return 'personal';
+
+  // Check title against business patterns
+  if (BUSINESS_PATTERNS.some(p => p.test(meeting.title))) return 'business';
+
+  // Check if any attendees are known CRM contacts
+  const attendeeEmails = parseAttendeeEmails(meeting.attendee_emails);
+  const externalEmails = filterExternalAttendees(attendeeEmails);
+
+  if (externalEmails.length > 0) {
+    const contacts = await getContactsByEmail(ctx, externalEmails);
+    if (contacts.length > 0) return 'business';
+  }
+
+  // No deal, no CRM contacts, no recognizable title → ask user
+  return 'unknown';
+}
+
+/**
+ * Build a Slack response asking the user if they need prep for an unclassified meeting.
+ */
+function buildRelevanceQuestion(meeting: CalendarEvent): SlackMessage {
+  const startTime = new Date(meeting.start_time);
+  const timeStr = startTime.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  return {
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `You have *${meeting.title}* at ${timeStr}. Would you like me to prepare a brief for this meeting?`,
+        },
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Yes, prep this meeting', emoji: true },
+            style: 'primary',
+            action_id: 'meeting_prep_confirm',
+            value: meeting.id,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'No thanks, it\'s personal', emoji: true },
+            action_id: 'meeting_prep_skip',
+            value: meeting.id,
+          },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: "_I wasn't sure if this is a work meeting — let me know and I'll prep a brief for you._",
+        }],
+      },
+    ],
+    text: `Should I prep for "${meeting.title}"?`,
+  };
+}
+
+/**
  * Build complete meeting prep data
  */
 async function buildMeetingPrepData(ctx: CommandContext, meeting: CalendarEvent): Promise<MeetingPrepData> {
@@ -278,7 +375,7 @@ async function buildMeetingPrepData(ctx: CommandContext, meeting: CalendarEvent)
     dealProbability: deal?.probability,
     lastMeetingNotes,
     meetingHistory: meetingHistory.slice(0, 3),
-    talkingPoints: generateTalkingPoints(deal, companyName, lastMeetingNotes),
+    talkingPoints: generateTalkingPoints(deal, companyName, lastMeetingNotes, meeting.title, externalAttendees.length > 0, contacts.length > 0),
     riskSignals: [], // Could add risk detection
     stageQuestions: deal ? getStageQuestions(deal.deal_stages?.name || deal.stage_id) : undefined,
     meetingUrl: meeting.meeting_url,
@@ -437,29 +534,122 @@ async function getOrgCurrency(
 }
 
 /**
- * Generate simple talking points based on context
+ * Infer meeting purpose from title, deal association, and attendee signals.
+ * Checks business relevance first — personal meetings are skipped, unknown meetings prompt a question.
+ */
+type MeetingPurpose = 'sales' | 'service' | 'internal' | 'personal' | 'unknown' | 'general';
+
+// Titles that are clearly personal / non-business
+const PERSONAL_PATTERNS = [
+  /\b(doctor|dentist|gp|physio|therapist|counsell?or|optician|vet)\b/i,
+  /\b(school run|pickup|drop.?off|childcare|daycare|nursery)\b/i,
+  /\b(haircut|salon|barber|gym|yoga|pilates|massage)\b/i,
+  /\b(lunch with|dinner with|coffee with|drinks with)\b/i,
+  /\b(home visit|house viewing|plumber|electrician|builder)\b/i,
+  /\b(birthday|anniversary|wedding|funeral|ceremony)\b/i,
+  /\b(flight|hotel|holiday|vacation|leave)\b/i,
+  /\bpersonal\b/i,
+  /\bblock(ed)?\s*(time|out|calendar)\b/i,
+  /\b(focus time|do not disturb|busy|out of office)\b/i,
+];
+
+// Titles that are clearly business-related
+const BUSINESS_PATTERNS = [
+  /\b(demo|discovery|proposal|negotiation|pricing|pitch|close|renewal|qbr)\b/i,
+  /\b(pipeline|forecast|deal|revenue|quarter|sprint|standup|retro|planning)\b/i,
+  /\b(onboarding|kickoff|kick-off|implementation|training|review)\b/i,
+  /\b(interview|candidate|hiring)\b/i,
+  /\b(board|investor|advisory|partner)\b/i,
+];
+
+function inferMeetingPurpose(
+  meetingTitle: string,
+  deal: Deal | null,
+  hasExternalAttendees: boolean,
+  hasKnownContacts?: boolean
+): MeetingPurpose {
+  const title = meetingTitle.toLowerCase();
+
+  // Step 1: Check if clearly personal — skip entirely
+  if (PERSONAL_PATTERNS.some(p => p.test(meetingTitle))) return 'personal';
+
+  // Step 2: Sales signals — deal exists, or title contains sales keywords
+  if (deal) return 'sales';
+  const salesKeywords = ['demo', 'discovery', 'proposal', 'negotiation', 'pricing', 'pitch', 'close', 'pipeline', 'prospect', 'renewal'];
+  if (salesKeywords.some(kw => title.includes(kw))) return 'sales';
+
+  // Step 3: Internal signals — no external attendees, or internal keywords
+  const internalKeywords = ['standup', 'stand-up', 'sync', '1:1', 'one-on-one', 'retro', 'sprint', 'planning', 'team', 'all-hands', 'huddle'];
+  if (!hasExternalAttendees || internalKeywords.some(kw => title.includes(kw))) return 'internal';
+
+  // Step 4: Service / professional keywords
+  const serviceKeywords = ['onboarding', 'kickoff', 'kick-off', 'implementation', 'training', 'support', 'check-in', 'checkin', 'consultation', 'assessment', 'intake', 'welcome', 'introduction', 'orientation'];
+  if (serviceKeywords.some(kw => title.includes(kw))) return 'service';
+
+  // Step 5: Known CRM contacts = probably business even without matching keywords
+  if (hasKnownContacts) return 'general';
+
+  // Step 6: Title matches business patterns
+  if (BUSINESS_PATTERNS.some(p => p.test(meetingTitle))) return 'general';
+
+  // Step 7: Can't determine — ask the user
+  return 'unknown';
+}
+
+/**
+ * Generate talking points adapted to the meeting purpose
  */
 function generateTalkingPoints(
   deal: Deal | null,
   companyName: string | null,
-  lastNotes: string | null
+  lastNotes: string | null,
+  meetingTitle?: string,
+  hasExternalAttendees?: boolean,
+  hasKnownContacts?: boolean
 ): string[] {
+  const purpose = inferMeetingPurpose(meetingTitle || '', deal, hasExternalAttendees ?? true, hasKnownContacts);
   const points: string[] = [];
 
-  if (deal) {
-    points.push(`Review ${deal.name} deal status and next steps`);
-    if (deal.probability && deal.probability < 50) {
-      points.push('Address concerns and obstacles');
+  // Personal and unknown meetings return empty — handled by caller
+  if (purpose === 'personal' || purpose === 'unknown') {
+    return points;
+  }
+
+  if (purpose === 'sales') {
+    if (deal) {
+      points.push(`Review ${deal.name} deal status and next steps`);
+      if (deal.probability && deal.probability < 50) {
+        points.push('Address concerns and obstacles');
+      }
     }
-  }
-
-  if (lastNotes) {
-    points.push('Follow up on action items from last meeting');
-  }
-
-  if (points.length === 0) {
-    points.push('Establish rapport and understand priorities');
-    points.push('Identify key challenges and opportunities');
+    if (lastNotes) {
+      points.push('Follow up on action items from last meeting');
+    }
+    if (points.length === 0) {
+      points.push('Understand their priorities and current challenges');
+      points.push('Identify how we can help and agree on next steps');
+    }
+  } else if (purpose === 'service') {
+    points.push('Understand their needs and current situation');
+    points.push('Explain what to expect and answer any questions');
+    if (lastNotes) {
+      points.push('Follow up on items from last conversation');
+    } else {
+      points.push('Discuss next steps and timeline');
+    }
+  } else if (purpose === 'internal') {
+    points.push('Review progress and any blockers');
+    if (lastNotes) {
+      points.push('Follow up on action items from last session');
+    }
+    points.push('Align on priorities and next steps');
+  } else {
+    // General
+    points.push('Build rapport and understand context');
+    if (lastNotes) {
+      points.push('Follow up on items from last conversation');
+    }
+    points.push('Clarify goals and agree on next steps');
   }
 
   return points.slice(0, 3);

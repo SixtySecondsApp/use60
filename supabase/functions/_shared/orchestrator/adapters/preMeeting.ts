@@ -226,6 +226,9 @@ export const enrichAttendeesAdapter: SkillAdapter = {
           // Active deal stages (SQL, Opportunity, Verbal)
           relationship = 'client';
         }
+      } else if (enrichedAttendees.length > 0 && enrichedAttendees.every(a => !a.is_known_contact)) {
+        // No deal AND no known contacts — not a tracked business relationship
+        relationship = 'unknown';
       }
 
       // Determine meeting type from deal stage name
@@ -243,15 +246,24 @@ export const enrichAttendeesAdapter: SkillAdapter = {
         }
       }
 
-      // Fallback to title keywords
+      // Fallback to title keywords for meeting type classification
       if (meetingType === 'general' && state.event.payload.title) {
         const title = (state.event.payload.title as string).toLowerCase();
+        // Sales-related titles
         if (title.includes('discovery')) {
           meetingType = 'discovery';
         } else if (title.includes('demo')) {
           meetingType = 'demo';
         } else if (title.includes('intro')) {
           meetingType = 'discovery';
+        }
+        // Service/professional titles (no deal, non-sales context)
+        else if (/\b(visit|home visit|onboarding|kickoff|kick-off|consultation|assessment|intake|orientation)\b/.test(title)) {
+          meetingType = 'service';
+        }
+        // Internal titles
+        else if (/\b(standup|stand-up|sync|1:1|retro|sprint|planning|team|huddle|all-hands)\b/.test(title)) {
+          meetingType = 'internal';
         }
       }
 
@@ -1299,7 +1311,7 @@ export const generateBriefingAdapter: SkillAdapter = {
               model: 'claude-haiku-4-5-20251001',
               max_tokens: 1024,
               temperature: 0.3,
-              system: 'You are a sales meeting preparation assistant. Generate a comprehensive but concise pre-meeting briefing. Return ONLY valid JSON.',
+              system: 'You are a meeting preparation assistant. Adapt your tone and language to the meeting context. For sales meetings (with active deals or sales-stage keywords), use sales language. For service, onboarding, or professional meetings, use neutral professional language — do NOT use sales jargon like prospect, pipeline, or close. For internal meetings, focus on progress and alignment. Generate a comprehensive but concise pre-meeting briefing. Return ONLY valid JSON.',
               messages: [{ role: 'user', content: promptText }],
             }),
           });
