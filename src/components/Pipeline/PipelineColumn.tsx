@@ -21,7 +21,7 @@ interface PipelineColumnProps {
     default_probability: number;
   };
   deals: any[];
-  onDealClick: (deal: any) => void;
+  onDealClick: (dealId: string) => void;
   onAddDealClick: (stageId: string) => void;
   onConvertToSubscription?: (deal: any) => void;
   batchedMetadata?: {

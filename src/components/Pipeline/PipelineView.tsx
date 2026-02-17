@@ -7,14 +7,16 @@
  * - Clean kanban/table view toggle
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { PipelineHeader } from './PipelineHeader';
 import { PipelineKanban } from './PipelineKanban';
 import { PipelineTable } from './PipelineTable';
 import { DealIntelligenceSheet } from './DealIntelligenceSheet';
+import { DealForm } from './DealForm';
 import { usePipelineData } from './hooks/usePipelineData';
 import { usePipelineFilters } from './hooks/usePipelineFilters';
 import { supabase } from '@/lib/supabase/clientV2';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
@@ -64,6 +66,7 @@ function PipelineSkeleton() {
 }
 
 export function PipelineView() {
+  const activeOrgId = useOrgStore((state) => state.activeOrgId);
   const filterState = usePipelineFilters();
   const pipelineData = usePipelineData({
     filters: filterState.filters,
@@ -73,6 +76,10 @@ export function PipelineView() {
 
   // Sheet state
   const [selectedDealId, setSelectedDealId] = React.useState<string | null>(null);
+
+  // Deal form state
+  const [showDealForm, setShowDealForm] = useState(false);
+  const [initialStageId, setInitialStageId] = useState<string | null>(null);
 
   // Get selected deal from dealMap
   const selectedDeal = selectedDealId ? pipelineData.data.dealMap[selectedDealId] || null : null;
@@ -96,6 +103,35 @@ export function PipelineView() {
     setSelectedDealId(dealId);
   };
 
+  // Handle add deal click (from header or column)
+  const handleAddDealClick = useCallback((stageId: string | null = null) => {
+    setInitialStageId(stageId);
+    setShowDealForm(true);
+  }, []);
+
+  // Handle save deal
+  const handleSaveDeal = useCallback(async (formData: any) => {
+    try {
+      const { error } = await supabase
+        .from('deals')
+        .insert({
+          ...formData,
+          clerk_org_id: activeOrgId,
+          stage_changed_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      setShowDealForm(false);
+      setInitialStageId(null);
+      pipelineData.refetch().catch((err) => logger.warn('Refetch after deal creation failed:', err));
+      toast.success('Deal created successfully');
+    } catch (err: any) {
+      logger.error('Error creating deal:', err);
+      toast.error(`Failed to create deal: ${err?.message || 'Unknown error'}`);
+    }
+  }, [pipelineData, activeOrgId]);
+
   // Handle deal stage change
   const handleDealStageChange = async (dealId: string, newStageId: string) => {
     try {
@@ -109,11 +145,11 @@ export function PipelineView() {
 
       if (error) throw error;
 
-      await pipelineData.refetch();
+      pipelineData.refetch().catch((err) => logger.warn('Refetch after stage change failed:', err));
       toast.success('Deal moved successfully');
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Error updating deal stage:', err);
-      toast.error('Failed to move deal');
+      toast.error(`Failed to move deal: ${err?.message || 'Unknown error'}`);
       throw err;
     }
   };
@@ -148,6 +184,7 @@ export function PipelineView() {
         onRiskLevelChange={filterState.setRiskLevel}
         onClearFilters={filterState.clearFilters}
         hasActiveFilters={filterState.hasActiveFilters}
+        onAddDeal={() => handleAddDealClick(null)}
       />
 
       {filterState.viewMode === 'kanban' ? (
@@ -156,6 +193,7 @@ export function PipelineView() {
           dealsByStage={dealsByStage}
           onDealClick={handleDealClick}
           onDealStageChange={handleDealStageChange}
+          onAddDealClick={handleAddDealClick}
         />
       ) : (
         <PipelineTable
@@ -183,6 +221,45 @@ export function PipelineView() {
           if (!open) setSelectedDealId(null);
         }}
       />
+
+      {/* New Deal Modal */}
+      {showDealForm && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              (e.currentTarget as HTMLElement).dataset.mouseStartX = e.clientX.toString();
+              (e.currentTarget as HTMLElement).dataset.mouseStartY = e.clientY.toString();
+            }
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              const startX = parseInt((e.currentTarget as HTMLElement).dataset.mouseStartX || '0');
+              const startY = parseInt((e.currentTarget as HTMLElement).dataset.mouseStartY || '0');
+              if (Math.abs(e.clientX - startX) < 5 && Math.abs(e.clientY - startY) < 5) {
+                setShowDealForm(false);
+                setInitialStageId(null);
+              }
+            }
+          }}
+        >
+          <div
+            className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-xl w-full max-w-xl border border-gray-200 dark:border-gray-800 max-h-[90vh] overflow-y-auto scrollbar-none"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <DealForm
+              key={initialStageId || 'new-deal'}
+              onSave={handleSaveDeal}
+              onCancel={() => {
+                setShowDealForm(false);
+                setInitialStageId(null);
+              }}
+              initialStageId={initialStageId}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }

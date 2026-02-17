@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, PoundSterling, Users, Building, FileText, UserPlus, Trash2, PieChart } from 'lucide-react';
+import { X, Calendar, PoundSterling, Users, Building, FileText, UserPlus, Trash2, PieChart, Check } from 'lucide-react';
 import { useDealStages } from '@/lib/hooks/useDealStages';
 import { ContactSearchModal } from '@/components/ContactSearchModal';
 import DealSplitModal from '@/components/DealSplitModal';
@@ -298,12 +298,12 @@ export function DealForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             {deal ? 'Edit Deal' : 'New Deal'}
           </h2>
           {!deal && formData.name && (
-            <p className="text-xs text-green-400 opacity-75 mt-1">
-              ✓ Progress saved automatically
+            <p className="text-xs text-green-400 opacity-75 mt-1 flex items-center gap-1">
+              <Check className="w-3 h-3" /> Progress saved automatically
             </p>
           )}
         </div>
@@ -313,7 +313,7 @@ export function DealForm({
             clearFormDraft();
             onCancel();
           }}
-          className="text-gray-400 hover:text-gray-300"
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
         >
           <X className="w-5 h-5" />
         </button>
@@ -322,11 +322,11 @@ export function DealForm({
       <div className="space-y-4">
         {/* Deal name */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">
+          <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
             Deal Name
           </label>
-          <div className="flex items-center border border-gray-700 rounded-lg
-            bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
+          <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-lg
+            bg-gray-50 dark:bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
           >
             <span className="pl-3 text-gray-500">
               <FileText className="w-5 h-5" />
@@ -339,15 +339,15 @@ export function DealForm({
               required
               placeholder="Enter deal name"
               className="w-full p-2.5 bg-transparent border-none
-                outline-none text-white"
+                outline-none text-gray-900 dark:text-white"
             />
           </div>
         </div>
-        
+
         {/* Contact Selection */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <label className="font-medium text-white flex items-center gap-2">
+            <label className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
               <Users className="w-4 h-4 text-violet-400" />
               Contact Information
               <span className="text-red-500 ml-1">*</span>
@@ -360,7 +360,7 @@ export function DealForm({
           </div>
 
           {!selectedContact ? (
-            <div className="p-4 bg-gray-800/30 border border-gray-700/50 rounded-xl">
+            <div className="p-4 bg-gray-100/50 dark:bg-gray-800/30 border border-gray-300/50 dark:border-gray-700/50 rounded-xl">
               <button
                 type="button"
                 onClick={() => setShowContactModal(true)}
@@ -403,15 +403,15 @@ export function DealForm({
         
         {/* Company Information */}
         <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-300">Company Information</h3>
-          
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Company Information</h3>
+
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
               Company Website
               <span className="text-xs text-gray-500 ml-1">(auto-populated from contact email)</span>
             </label>
-            <div className="flex items-center border border-gray-700 rounded-lg
-              bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
+            <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-lg
+              bg-gray-50 dark:bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
             >
               <span className="pl-3 text-gray-500">
                 <Building className="w-5 h-5" />
@@ -423,7 +423,7 @@ export function DealForm({
                 onChange={handleChange}
                 placeholder="https://company.com (auto-populated from email domain)"
                 className="w-full p-2.5 bg-transparent border-none
-                  outline-none text-white"
+                  outline-none text-gray-900 dark:text-white"
               />
             </div>
             {!formData.company_website && selectedContact?.email && (
@@ -436,15 +436,15 @@ export function DealForm({
         
         {/* Revenue Model */}
         <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-300">Deal Revenue</h3>
+          <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Deal Revenue</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
                 One-off Revenue (£)
               </label>
-              <div className="flex items-center border border-gray-700 rounded-lg
-                bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
+              <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-lg
+                bg-gray-50 dark:bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
               >
                 <span className="pl-3 text-gray-500">
                   <PoundSterling className="w-5 h-5" />
@@ -458,17 +458,17 @@ export function DealForm({
                   step="0.01"
                   placeholder="0"
                   className="w-full p-2.5 bg-transparent border-none
-                    outline-none text-white"
+                    outline-none text-gray-900 dark:text-white"
                 />
               </div>
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
                 Monthly Recurring Revenue (£)
               </label>
-              <div className="flex items-center border border-gray-700 rounded-lg
-                bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
+              <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-lg
+                bg-gray-50 dark:bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
               >
                 <span className="pl-3 text-gray-500">
                   <PoundSterling className="w-5 h-5" />
@@ -482,7 +482,7 @@ export function DealForm({
                   step="0.01"
                   placeholder="0"
                   className="w-full p-2.5 bg-transparent border-none
-                    outline-none text-white"
+                    outline-none text-gray-900 dark:text-white"
                 />
               </div>
             </div>
@@ -512,7 +512,7 @@ export function DealForm({
         
         {/* Pipeline Stage */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">
+          <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
             Pipeline Stage
           </label>
           
@@ -524,8 +524,8 @@ export function DealForm({
                 onClick={() => setFormData(prev => ({ ...prev, stage_id: stage.id }))}
                 className={`p-3 rounded-xl border transition-all ${
                   formData.stage_id === stage.id
-                    ? 'bg-violet-500/20 border-violet-500/50 text-violet-300 ring-2 ring-violet-500/30'
-                    : 'bg-gray-800/30 border-gray-600/30 text-gray-400 hover:bg-gray-700/50'
+                    ? 'bg-violet-500/20 border-violet-500/50 text-violet-700 dark:text-violet-300 ring-2 ring-violet-500/30'
+                    : 'bg-gray-100/50 dark:bg-gray-800/30 border-gray-300/50 dark:border-gray-600/30 text-gray-600 dark:text-gray-400 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -550,11 +550,11 @@ export function DealForm({
         {/* Close Date and Probability side by side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
               Expected Close Date
             </label>
-            <div className="flex items-center border border-gray-700 rounded-lg
-              bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
+            <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-lg
+              bg-gray-50 dark:bg-gray-900/80 focus-within:border-violet-500/50 transition-colors"
             >
               <span className="pl-3 text-gray-500">
                 <Calendar className="w-5 h-5" />
@@ -565,13 +565,13 @@ export function DealForm({
                 value={formData.expected_close_date}
                 onChange={handleChange}
                 className="w-full p-2.5 bg-transparent border-none
-                  outline-none text-white"
+                  outline-none text-gray-900 dark:text-white"
               />
             </div>
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
               Win Probability (%)
             </label>
             <input
@@ -583,8 +583,8 @@ export function DealForm({
               max="100"
               step="1"
               placeholder="Enter probability"
-              className="w-full p-2.5 bg-gray-900/80 border border-gray-700
-                rounded-lg text-white outline-none focus:border-violet-500/50
+              className="w-full p-2.5 bg-gray-50 dark:bg-gray-900/80 border border-gray-300 dark:border-gray-700
+                rounded-lg text-gray-900 dark:text-white outline-none focus:border-violet-500/50
                 transition-colors"
             />
             
@@ -606,7 +606,7 @@ export function DealForm({
         
         {/* Description */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">
+          <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
             Description
           </label>
           <textarea
@@ -615,14 +615,14 @@ export function DealForm({
             onChange={handleChange}
             rows={3}
             placeholder="Enter deal description"
-            className="w-full p-2.5 bg-gray-900/80 border border-gray-700
-              rounded-lg text-white outline-none focus:border-violet-500/50
+            className="w-full p-2.5 bg-gray-50 dark:bg-gray-900/80 border border-gray-300 dark:border-gray-700
+              rounded-lg text-gray-900 dark:text-white outline-none focus:border-violet-500/50
               transition-colors resize-none"
           />
         </div>
       </div>
       
-      <div className="flex justify-between items-center pt-4 border-t border-gray-800">
+      <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-800">
         {/* Left side - Delete and Split buttons (only for existing deals) */}
         <div className="flex items-center gap-3">
           {deal && onDelete && (
@@ -656,8 +656,8 @@ export function DealForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg
-              hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg
+              hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
           >
             Cancel
           </button>
