@@ -148,6 +148,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
   const [isMobileUserMenuOpen, setIsMobileUserMenuOpen] = useState(false);
   const navigate = useNavigate();
+
   // Allow decoupled components (assistant/chat panels/etc) to open Quick Add.
   useEventListener(
     'modal:opened',

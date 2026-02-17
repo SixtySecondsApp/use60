@@ -112,11 +112,59 @@ const COMPANIES_EXPANSION: StandardRuleDef = {
   is_default: true,
 };
 
+// DEALS RULES (2)
+const DEALS_RISK_LEVEL_ALERT: StandardRuleDef = {
+  template_key: 'deals_risk_level_alert',
+  name: 'Alert on High/Critical Risk',
+  target_table: 'standard_deals',
+  trigger_type: 'cell_updated',
+  condition: { column_key: 'risk_level', operator: 'in', value: ['high', 'critical'] },
+  action_type: 'notify',
+  action_config: { channel: 'slack', message: 'Deal at risk: {{deal_name}} ({{company_name}}) — risk level is {{risk_level}}', urgency: 'high' },
+  is_default: true,
+};
+
+const DEALS_STALLED_STAGE_ALERT: StandardRuleDef = {
+  template_key: 'deals_stalled_stage_alert',
+  name: 'Alert on Stalled Deals (14+ days)',
+  target_table: 'standard_deals',
+  trigger_type: 'cell_updated',
+  condition: { column_key: 'days_in_stage', operator: 'greater_than_or_equal', value: 14 },
+  action_type: 'notify',
+  action_config: { channel: 'slack', message: 'Stalled deal: {{deal_name}} has been in {{stage}} for {{days_in_stage}} days', urgency: 'medium' },
+  is_default: true,
+};
+
+// WAITLIST RULES (2)
+const WAITLIST_CONVERSION_ALERT: StandardRuleDef = {
+  template_key: 'waitlist_conversion_alert',
+  name: 'Alert on Waitlist Conversion',
+  target_table: 'standard_waitlist',
+  trigger_type: 'cell_updated',
+  condition: { column_key: 'status', operator: 'equals', value: 'converted' },
+  action_type: 'notify',
+  action_config: { channel: 'slack', message: 'Waitlist conversion: {{full_name}} ({{company_name}}) has converted!' },
+  is_default: true,
+};
+
+const WAITLIST_TOP_REFERRER_ALERT: StandardRuleDef = {
+  template_key: 'waitlist_top_referrer_alert',
+  name: 'Tag Top Referrers (5+ referrals)',
+  target_table: 'standard_waitlist',
+  trigger_type: 'cell_updated',
+  condition: { column_key: 'referral_count', operator: 'greater_than_or_equal', value: 5 },
+  action_type: 'add_tag',
+  action_config: { tag: 'top_referrer', notify_owner: true, message: '{{full_name}} has referred {{referral_count}} signups — top referrer!' },
+  is_default: true,
+};
+
 export const STANDARD_TABLE_AUTOMATIONS: StandardRuleDef[] = [
   LEADS_ESCALATE, LEADS_ENRICH_TITLES, LEADS_FLAG_DUPLICATES,
   MEETINGS_CRM_SYNC, MEETINGS_NEGATIVE_ALERT,
   CONTACTS_BIDI_SYNC, CONTACTS_DEAD_CLEANUP,
   COMPANIES_ENRICH, COMPANIES_EXPANSION,
+  DEALS_RISK_LEVEL_ALERT, DEALS_STALLED_STAGE_ALERT,
+  WAITLIST_CONVERSION_ALERT, WAITLIST_TOP_REFERRER_ALERT,
 ];
 
 export function getAutomationsForTable(tableKey: string): StandardRuleDef[] {

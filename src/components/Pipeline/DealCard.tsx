@@ -1,13 +1,12 @@
 /**
  * DealCard Component (PIPE-008)
  *
- * Premium glass-morphism pipeline card with health indicators,
- * company logos, and smooth DnD states.
+ * Premium glass-morphism pipeline card with health indicators
+ * and company logos. Pure presentational — DnD is handled by
+ * @hello-pangea/dnd Draggable wrapper in PipelineColumn.
  */
 
 import React, { useState } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { CircleDot, Users, Clock, TrendingUp, TrendingDown, Minus, AlertTriangle, ListTodo, Calendar } from 'lucide-react';
 import type { PipelineDeal } from './hooks/usePipelineData';
 
@@ -16,13 +15,14 @@ interface DealCardProps {
   logoUrl?: string;
   onClick?: (dealId: string) => void;
   isDragging?: boolean;
+  isDragOverlay?: boolean;
   index?: number;
   onConvertToSubscription?: (deal: any) => void;
   nextActionsPendingCount?: number;
   highUrgencyCount?: number;
   healthScore?: any;
   sentimentData?: any;
-  isDragOverlay?: boolean;
+  wasDragRecent?: () => boolean;
 }
 
 /**
@@ -87,19 +87,6 @@ function getHealthBarStyles(status: string | null): { width: string; colorClass:
 }
 
 /**
- * Get health status color classes
- */
-function getHealthColor(status: string | null): string {
-  switch (status) {
-    case 'healthy': return 'text-emerald-500';
-    case 'warning': return 'text-amber-500';
-    case 'critical': return 'text-red-500';
-    case 'stalled': return 'text-gray-500';
-    default: return 'text-gray-400';
-  }
-}
-
-/**
  * Get days-in-stage urgency
  */
 function getDaysUrgency(days: number | null): string {
@@ -129,103 +116,10 @@ export const DealCard = React.memo<DealCardProps>(({
   logoUrl,
   onClick,
   isDragging = false,
-  isDragOverlay = false,
 }) => {
   const [logoError, setLogoError] = useState(false);
   const healthBar = getHealthBarStyles(deal.health_status);
   const avatarGradient = getAvatarGradient(deal.company);
-
-  // Set up sortable behavior (skip if drag overlay)
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging: isSortableDragging,
-  } = useSortable({
-    id: deal.id,
-    disabled: isDragOverlay,
-  });
-
-  const style = isDragOverlay ? {} : {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const isBeingDragged = isDragOverlay ? false : isSortableDragging;
-
-  // Ghost placeholder when being dragged
-  if (isBeingDragged) {
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        className="h-[140px] rounded-xl border-2 border-dashed border-gray-300 dark:border-white/[0.1] bg-gray-50/50 dark:bg-white/[0.02]"
-      />
-    );
-  }
-
-  // Overlay card (floating under cursor)
-  if (isDragOverlay) {
-    return (
-      <div className="scale-[1.03] rotate-[1.5deg] shadow-2xl ring-2 ring-blue-500/30 dark:ring-blue-400/20 rounded-xl">
-        <DealCardInner
-          deal={deal}
-          logoUrl={logoUrl}
-          logoError={logoError}
-          setLogoError={setLogoError}
-          healthBar={healthBar}
-          avatarGradient={avatarGradient}
-          onClick={onClick}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      onClick={() => onClick?.(deal.id)}
-    >
-      <DealCardInner
-        deal={deal}
-        logoUrl={logoUrl}
-        logoError={logoError}
-        setLogoError={setLogoError}
-        healthBar={healthBar}
-        avatarGradient={avatarGradient}
-        onClick={onClick}
-      />
-    </div>
-  );
-});
-
-DealCard.displayName = 'DealCard';
-
-/**
- * Inner card rendering - shared between normal and overlay states
- */
-function DealCardInner({
-  deal,
-  logoUrl,
-  logoError,
-  setLogoError,
-  healthBar,
-  avatarGradient,
-  onClick,
-}: {
-  deal: PipelineDeal;
-  logoUrl?: string;
-  logoError: boolean;
-  setLogoError: (v: boolean) => void;
-  healthBar: { width: string; colorClass: string };
-  avatarGradient: string;
-  onClick?: (dealId: string) => void;
-}) {
   const showLogo = logoUrl && !logoError;
   const daysUrgency = getDaysUrgency(deal.days_in_current_stage);
 
@@ -240,6 +134,7 @@ function DealCardInner({
         hover:border-gray-300 dark:hover:border-white/[0.1]
         hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-[0_8px_25px_rgba(0,0,0,0.25)]
         transition-all duration-200
+        ${isDragging ? 'opacity-50' : ''}
       `}
     >
       {/* Subtle gradient overlay */}
@@ -336,4 +231,6 @@ function DealCardInner({
       </div>
     </div>
   );
-}
+});
+
+DealCard.displayName = 'DealCard';

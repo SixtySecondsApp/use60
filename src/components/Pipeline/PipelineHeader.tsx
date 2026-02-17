@@ -38,6 +38,7 @@ interface PipelineHeaderProps {
   onRiskLevelChange: (levels: string[]) => void;
   onClearFilters: () => void;
   hasActiveFilters: boolean;
+  onAddDeal: () => void;
 }
 
 function formatCurrency(value: number): string {
@@ -61,6 +62,7 @@ export function PipelineHeader({
   onRiskLevelChange,
   onClearFilters,
   hasActiveFilters,
+  onAddDeal,
 }: PipelineHeaderProps) {
   const safeSummary = summary ?? {
     total_value: 0,
@@ -147,7 +149,10 @@ export function PipelineHeader({
           </div>
 
           {/* New Deal button */}
-          <button className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-gradient-to-br from-blue-500/20 to-violet-500/20 dark:from-blue-500/25 dark:to-violet-500/25 border border-blue-300/30 dark:border-blue-500/30 text-blue-700 dark:text-white text-[12.5px] font-semibold backdrop-blur-xl hover:from-blue-500/30 hover:to-violet-500/30 dark:hover:from-blue-500/35 dark:hover:to-violet-500/35 shadow-sm hover:shadow-md transition-all hover:-translate-y-[1px]">
+          <button
+            onClick={onAddDeal}
+            className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-gradient-to-br from-blue-500/20 to-violet-500/20 dark:from-blue-500/25 dark:to-violet-500/25 border border-blue-300/30 dark:border-blue-500/30 text-blue-700 dark:text-white text-[12.5px] font-semibold backdrop-blur-xl hover:from-blue-500/30 hover:to-violet-500/30 dark:hover:from-blue-500/35 dark:hover:to-violet-500/35 shadow-sm hover:shadow-md transition-all hover:-translate-y-[1px]"
+          >
             <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
             New Deal
           </button>

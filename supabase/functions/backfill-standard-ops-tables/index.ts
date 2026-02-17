@@ -1379,6 +1379,105 @@ async function backfillCrmCompanies(
 }
 
 // ============================================================================
+// Backfill: Waitlist Signups
+// Global table (not org-scoped) — pulls from meetings_waitlist
+// ============================================================================
+async function backfillWaitlist(
+  svc: SupabaseClient,
+  tableId: string,
+  colMap: ColumnMap
+): Promise<number> {
+  let totalInserted = 0;
+  let offset = 0;
+
+  const { data: existingRows } = await svc
+    .from('dynamic_table_rows')
+    .select('source_id')
+    .eq('table_id', tableId)
+    .eq('source_type', 'app');
+
+  const existingIds = new Set(existingRows?.map((r: any) => r.source_id) || []);
+
+  while (true) {
+    const { data: signups, error } = await svc
+      .from('meetings_waitlist')
+      .select(`
+        id,
+        full_name,
+        email,
+        company_name,
+        status,
+        signup_position,
+        total_points,
+        referral_code,
+        referral_count,
+        referred_by_code,
+        crm_tool,
+        meeting_recorder_tool,
+        task_manager_tool,
+        signup_source,
+        utm_source,
+        utm_campaign,
+        registration_url,
+        granted_access_at,
+        converted_at,
+        created_at
+      `)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (error) throw new Error(`Failed to query meetings_waitlist: ${error.message}`);
+    if (!signups?.length) break;
+
+    const newSignups = signups.filter((s: any) => !existingIds.has(s.id));
+    if (newSignups.length === 0) {
+      offset += BATCH_SIZE;
+      continue;
+    }
+
+    const rows = newSignups.map((s: any) => ({
+      source_type: 'app' as const,
+      source_id: s.id
+    }));
+
+    const cellsData = newSignups.map((s: any) => {
+      const cells: Array<{ column_id: string; value: any }> = [];
+
+      if (colMap.full_name) cells.push({ column_id: colMap.full_name, value: s.full_name });
+      if (colMap.email) cells.push({ column_id: colMap.email, value: s.email });
+      if (colMap.company_name) cells.push({ column_id: colMap.company_name, value: s.company_name });
+      if (colMap.status) cells.push({ column_id: colMap.status, value: s.status });
+      if (colMap.signup_position) cells.push({ column_id: colMap.signup_position, value: s.signup_position });
+      if (colMap.total_points) cells.push({ column_id: colMap.total_points, value: s.total_points });
+      if (colMap.referral_code) cells.push({ column_id: colMap.referral_code, value: s.referral_code });
+      if (colMap.referral_count) cells.push({ column_id: colMap.referral_count, value: s.referral_count });
+      if (colMap.referred_by) cells.push({ column_id: colMap.referred_by, value: s.referred_by_code });
+      if (colMap.crm_tool) cells.push({ column_id: colMap.crm_tool, value: s.crm_tool });
+      if (colMap.meeting_recorder_tool) cells.push({ column_id: colMap.meeting_recorder_tool, value: s.meeting_recorder_tool });
+      if (colMap.task_manager_tool) cells.push({ column_id: colMap.task_manager_tool, value: s.task_manager_tool });
+      if (colMap.signup_source) cells.push({ column_id: colMap.signup_source, value: s.signup_source });
+      if (colMap.utm_source) cells.push({ column_id: colMap.utm_source, value: s.utm_source });
+      if (colMap.utm_campaign) cells.push({ column_id: colMap.utm_campaign, value: s.utm_campaign });
+      if (colMap.registration_url) cells.push({ column_id: colMap.registration_url, value: s.registration_url });
+      if (colMap.granted_access_at) cells.push({ column_id: colMap.granted_access_at, value: s.granted_access_at });
+      if (colMap.converted_at) cells.push({ column_id: colMap.converted_at, value: s.converted_at });
+      if (colMap.created_at) cells.push({ column_id: colMap.created_at, value: s.created_at });
+
+      return cells;
+    });
+
+    const inserted = await insertRowsAndCells(svc, tableId, rows, cellsData);
+    totalInserted += inserted;
+    newSignups.forEach((s: any) => existingIds.add(s.id));
+
+    if (signups.length < BATCH_SIZE) break;
+    offset += BATCH_SIZE;
+  }
+
+  return totalInserted;
+}
+
+// ============================================================================
 // Main handler
 // ============================================================================
 Deno.serve(async (req: Request) => {
@@ -1554,6 +1653,15 @@ Deno.serve(async (req: Request) => {
           console.log(`  → CRM companies: ${crmCompanyRows} active rows`);
         } else if (table.name === 'Clients') {
           rowsInserted = await backfillClients(svc, memberUserIds, table.id, colMap);
+        } else if (table.name === 'Deals') {
+          // Deals use a dedicated sync RPC that handles health scores + relationship intelligence
+          const { data: syncResult, error: syncError } = await svc.rpc('sync_deals_to_ops_table', {
+            p_org_id: orgId,
+          });
+          if (syncError) throw new Error(`sync_deals_to_ops_table failed: ${syncError.message}`);
+          rowsInserted = syncResult?.synced_count || 0;
+        } else if (table.name === 'Waitlist Signups') {
+          rowsInserted = await backfillWaitlist(svc, table.id, colMap);
         }
 
         results[table.name] = rowsInserted;

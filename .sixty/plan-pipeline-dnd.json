@@ -1,0 +1,110 @@
+{
+  "feature": {
+    "id": "pipeline-dnd",
+    "name": "Pipeline Kanban DnD — Replace @dnd-kit with @hello-pangea/dnd",
+    "status": "pending",
+    "prd": null,
+    "consultReport": ".sixty/consult/pipeline-intelligence-redesign.md",
+    "createdAt": "2026-02-17T00:00:00Z"
+  },
+
+  "stories": [
+    {
+      "id": "DND-001",
+      "feature": "pipeline-dnd",
+      "title": "Replace DnD infrastructure: @dnd-kit → @hello-pangea/dnd across 3 pipeline files",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/Pipeline/PipelineKanban.tsx",
+          "src/components/Pipeline/PipelineColumn.tsx",
+          "src/components/Pipeline/DealCard.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Drag a card between columns — card moves, toast confirms, DB persists",
+        "Drop outside columns or on same column — card snaps back, no-op",
+        "Click card without dragging — deal intelligence sheet opens",
+        "Vite build passes with zero errors"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/Pipeline/PipelineKanban.tsx",
+        "src/components/Pipeline/PipelineColumn.tsx",
+        "src/components/Pipeline/DealCard.tsx"
+      ],
+
+      "implementation": {
+        "approach": "Replace @dnd-kit hooks with @hello-pangea/dnd render-function components. The library is already installed (v16.6.0) but unused.",
+
+        "PipelineKanban.tsx": {
+          "remove": [
+            "All @dnd-kit/core imports (DndContext, closestCorners, sensors, DragOverlay, MeasuringStrategy)",
+            "All drag state (activeDeal, draggedFromStage, isDraggingRef, dragEndTimeRef, wasDragRecent)",
+            "DragOverlay component — library renders floating clone automatically",
+            "Sensor configuration — library has built-in mouse/touch/keyboard"
+          ],
+          "add": [
+            "Import { DragDropContext, DropResult } from '@hello-pangea/dnd'",
+            "Wrap kanban columns in <DragDropContext onDragEnd={handleDragEnd}>",
+            "handleDragEnd(result: DropResult) — result.source.droppableId = old stage, result.destination.droppableId = new stage",
+            "Optimistic localDealsByStage update + onDealStageChange() with rollback on error"
+          ]
+        },
+
+        "PipelineColumn.tsx": {
+          "remove": [
+            "useDroppable hook and @dnd-kit/core import",
+            "wasDragRecent prop"
+          ],
+          "add": [
+            "Import { Droppable, Draggable } from '@hello-pangea/dnd'",
+            "<Droppable droppableId={stage.id}>{(provided, snapshot) => ...}</Droppable>",
+            "snapshot.isDraggingOver for column highlight styling",
+            "{provided.placeholder} inside droppable — built-in animated space holder",
+            "<Draggable draggableId={deal.id} index={index}> wrapping each DealCard",
+            "provided.innerRef + provided.draggableProps + provided.dragHandleProps on card wrapper"
+          ]
+        },
+
+        "DealCard.tsx": {
+          "remove": [
+            "useDraggable hook and @dnd-kit/core import",
+            "wasDragRecent prop and click suppression logic",
+            "isDragOverlay prop and overlay rendering branch",
+            "Ghost placeholder rendering branch",
+            "setNodeRef, attributes, listeners from useDraggable"
+          ],
+          "add": [
+            "isDragging?: boolean prop (passed from Draggable snapshot in PipelineColumn)",
+            "When isDragging, apply opacity-40 styling (library renders clone that follows cursor)",
+            "Card becomes a pure presentational component — just renders DealCardInner with optional drag styling"
+          ]
+        }
+      },
+
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 1,
+    "completedStories": 0,
+    "currentFeature": "pipeline-dnd",
+    "lastUpdated": "2026-02-17T00:00:00Z"
+  }
+}

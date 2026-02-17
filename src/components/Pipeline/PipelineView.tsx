@@ -80,6 +80,7 @@ export function PipelineView() {
   // Deal form state
   const [showDealForm, setShowDealForm] = useState(false);
   const [initialStageId, setInitialStageId] = useState<string | null>(null);
+  const [editingDeal, setEditingDeal] = useState<any>(null);
 
   // Get selected deal from dealMap
   const selectedDeal = selectedDealId ? pipelineData.data.dealMap[selectedDealId] || null : null;
@@ -105,32 +106,59 @@ export function PipelineView() {
 
   // Handle add deal click (from header or column)
   const handleAddDealClick = useCallback((stageId: string | null = null) => {
+    setEditingDeal(null);
     setInitialStageId(stageId);
     setShowDealForm(true);
   }, []);
 
-  // Handle save deal
+  // Handle edit deal click (from intelligence sheet)
+  const handleEditDeal = useCallback((deal: any) => {
+    setEditingDeal(deal);
+    setInitialStageId(null);
+    setShowDealForm(true);
+  }, []);
+
+  // Handle save deal (create or update)
   const handleSaveDeal = useCallback(async (formData: any) => {
     try {
-      const { error } = await supabase
-        .from('deals')
-        .insert({
-          ...formData,
-          clerk_org_id: activeOrgId,
-          stage_changed_at: new Date().toISOString(),
-        });
+      if (editingDeal) {
+        // Update existing deal
+        const { error } = await supabase
+          .from('deals')
+          .update({
+            ...formData,
+            ...(formData.stage_id !== editingDeal.stage_id ? { stage_changed_at: new Date().toISOString() } : {}),
+          })
+          .eq('id', editingDeal.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setShowDealForm(false);
-      setInitialStageId(null);
-      pipelineData.refetch().catch((err) => logger.warn('Refetch after deal creation failed:', err));
-      toast.success('Deal created successfully');
+        setShowDealForm(false);
+        setEditingDeal(null);
+        pipelineData.refetch().catch((err) => logger.warn('Refetch after deal update failed:', err));
+        toast.success('Deal updated successfully');
+      } else {
+        // Create new deal
+        const { error } = await supabase
+          .from('deals')
+          .insert({
+            ...formData,
+            clerk_org_id: activeOrgId,
+            stage_changed_at: new Date().toISOString(),
+          });
+
+        if (error) throw error;
+
+        setShowDealForm(false);
+        setInitialStageId(null);
+        pipelineData.refetch().catch((err) => logger.warn('Refetch after deal creation failed:', err));
+        toast.success('Deal created successfully');
+      }
     } catch (err: any) {
-      logger.error('Error creating deal:', err);
-      toast.error(`Failed to create deal: ${err?.message || 'Unknown error'}`);
+      logger.error('Error saving deal:', err);
+      toast.error(`Failed to save deal: ${err?.message || 'Unknown error'}`);
     }
-  }, [pipelineData, activeOrgId]);
+  }, [pipelineData, activeOrgId, editingDeal]);
 
   // Handle deal stage change
   const handleDealStageChange = async (dealId: string, newStageId: string) => {
@@ -220,9 +248,10 @@ export function PipelineView() {
         onOpenChange={(open) => {
           if (!open) setSelectedDealId(null);
         }}
+        onEditDeal={handleEditDeal}
       />
 
-      {/* New Deal Modal */}
+      {/* Deal Form Modal (New + Edit) */}
       {showDealForm && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -239,21 +268,24 @@ export function PipelineView() {
               if (Math.abs(e.clientX - startX) < 5 && Math.abs(e.clientY - startY) < 5) {
                 setShowDealForm(false);
                 setInitialStageId(null);
+                setEditingDeal(null);
               }
             }
           }}
         >
           <div
-            className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-xl w-full max-w-xl border border-gray-200 dark:border-gray-800 max-h-[90vh] overflow-y-auto scrollbar-none"
+            className="bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-2xl shadow-black/50 w-full max-w-lg max-h-[85vh] overflow-y-auto scrollbar-none"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <DealForm
-              key={initialStageId || 'new-deal'}
+              key={editingDeal?.id || initialStageId || 'new-deal'}
+              deal={editingDeal}
               onSave={handleSaveDeal}
               onCancel={() => {
                 setShowDealForm(false);
                 setInitialStageId(null);
+                setEditingDeal(null);
               }}
               initialStageId={initialStageId}
             />

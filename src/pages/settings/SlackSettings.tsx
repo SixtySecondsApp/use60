@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Loader2,
   CheckCircle2,
@@ -683,8 +684,7 @@ function MorningBriefPreferences() {
   if (!prefs) return null;
 
   return (
-    <div className="space-y-3 pt-2">
-      <Separator />
+    <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Clock className="h-4 w-4 text-muted-foreground" />
         <Label className="text-sm font-medium">Morning Brief</Label>
@@ -905,8 +905,7 @@ function NotificationPreferences() {
   };
 
   return (
-    <div className="space-y-3 pt-2">
-      <Separator />
+    <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Bell className="h-4 w-4 text-muted-foreground" />
         <Label className="text-sm font-medium">Notification Preferences</Label>
@@ -1089,8 +1088,7 @@ function ProactiveAgentPreferences() {
   };
 
   return (
-    <div className="space-y-3 pt-2">
-      <Separator />
+    <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Zap className="h-4 w-4 text-muted-foreground" />
         <Label className="text-sm font-medium">Proactive Agent Notifications</Label>
@@ -1237,7 +1235,7 @@ export default function SlackSettings() {
 
   if (settingsLoading || notificationsLoading) {
     return (
-      <PageContainer maxWidth="4xl" className="py-8">
+      <PageContainer maxWidth="6xl" className="py-6">
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -1285,7 +1283,6 @@ export default function SlackSettings() {
       // Build success message based on delivery method and audience
       let successMessage = 'Test notification sent!';
       if (sendToDm && sendToChannel && settings?.channel_name) {
-        // Both channel and DM
         if (dmAudience === 'both') {
           successMessage = `Test notification sent to #${settings.channel_name}, your DM, and stakeholder DMs!`;
         } else if (dmAudience === 'stakeholders') {
@@ -1294,7 +1291,6 @@ export default function SlackSettings() {
           successMessage = `Test notification sent to #${settings.channel_name} and your DM!`;
         }
       } else if (sendToDm) {
-        // DM only
         if (dmAudience === 'both') {
           successMessage = 'Test notification sent to your DM and stakeholder DMs!';
         } else if (dmAudience === 'stakeholders') {
@@ -1303,7 +1299,6 @@ export default function SlackSettings() {
           successMessage = 'Test notification sent to your DM!';
         }
       } else if (settings?.channel_name) {
-        // Channel only
         successMessage = `Test notification sent to #${settings.channel_name}!`;
       }
 
@@ -1335,187 +1330,168 @@ export default function SlackSettings() {
   };
 
   return (
-    <PageContainer maxWidth="4xl" className="py-8">
-      <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Slack Integration</h1>
-        <p className="text-muted-foreground mt-1">
-          Configure how Sixty sends notifications to your Slack workspace.
-        </p>
-      </div>
-
-      {/* Connection Status (read-only) */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CardTitle className="text-lg">Slack Connection</CardTitle>
-              {isConnected ? (
-                <Badge variant="default" className="bg-green-600">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Connected
-                </Badge>
-              ) : (
-                <Badge variant="secondary">
-                  <XCircle className="h-3 w-3 mr-1" />
-                  Not Connected
-                </Badge>
-              )}
-            </div>
+    <PageContainer maxWidth="6xl" className="py-6">
+      <div className="space-y-5">
+        {/* Compact header with connection status inline */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">Slack Integration</h1>
+            {isConnected ? (
+              <Badge variant="default" className="bg-green-600">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                {orgSettings?.slack_team_name || 'Connected'}
+              </Badge>
+            ) : (
+              <Badge variant="secondary">
+                <XCircle className="h-3 w-3 mr-1" />
+                Not Connected
+              </Badge>
+            )}
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">{orgSettings?.slack_team_name || 'Slack Workspace'}</p>
-                {orgSettings?.connected_at && (
-                  <p className="text-sm text-muted-foreground">
-                    Connected on {new Date(orgSettings.connected_at).toLocaleDateString()}
-                  </p>
-                )}
+          <Button variant="outline" size="sm" onClick={handleTestConnection} disabled={testingConnection}>
+            {testingConnection ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Test Connection
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Tabbed layout */}
+        <Tabs defaultValue="features">
+          <TabsList>
+            {isAdmin && <TabsTrigger value="features">Features</TabsTrigger>}
+            <TabsTrigger value="personal">Personal</TabsTrigger>
+            {isAdmin && <TabsTrigger value="team">Team Mapping</TabsTrigger>}
+          </TabsList>
+
+          {/* Features tab — 2-col grid of feature cards (admin only) */}
+          {isAdmin && (
+            <TabsContent value="features">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+                {FEATURES.map((feature) => (
+                  <FeatureSettingsCard
+                    key={feature.key}
+                    feature={feature}
+                    settings={getSettingsForFeature(feature.key)}
+                    onUpdate={(updates) => handleUpdateSettings(feature.key, updates)}
+                    onTest={() => handleTestNotification(feature.key)}
+                    isUpdating={updateSettings.isPending}
+                    isTesting={testingFeature === feature.key}
+                    stakeholderOptions={
+                      feature.key === 'deal_rooms' || feature.key === 'meeting_debrief'
+                        ? slackUserOptions
+                        : []
+                    }
+                  />
+                ))}
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={handleTestConnection} disabled={testingConnection}>
-                  {testingConnection ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Testing…
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Send test
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      {/* Personal Slack (all users) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Personal Slack
-          </CardTitle>
-          <CardDescription>
-            Link your Slack account so you can receive DMs and be @mentioned in notifications.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <SlackSelfMapping />
-
-          {/* SLACK-013: Morning Brief Time Preference */}
-          <MorningBriefPreferences />
-
-          {/* SLACK-019: Notification Preferences */}
-          <NotificationPreferences />
-
-          {/* CONF-007: Proactive Agent Preferences */}
-          <ProactiveAgentPreferences />
-
-          {/* Read-only org summary for regular users */}
-          {!isAdmin && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Org Slack settings are managed by your org owner/admin. Below is a read-only summary of the key settings.
-                {userRole ? ` Your role: ${userRole}.` : ''}
-              </AlertDescription>
-            </Alert>
+            </TabsContent>
           )}
 
-          <div className="grid gap-3">
-            <div className="text-sm">
-              <span className="font-medium">Org Daily Digest:</span>{' '}
-              <span className="text-muted-foreground">
-                {dailyDigestSettings?.is_enabled ? 'Enabled' : 'Disabled'}
-                {dailyDigestSettings?.delivery_method === 'both'
-                  ? ` • #${dailyDigestSettings?.channel_name || 'channel'} + DM`
-                  : dailyDigestSettings?.delivery_method === 'channel' && dailyDigestSettings?.channel_name
-                    ? ` • #${dailyDigestSettings.channel_name}`
-                    : dailyDigestSettings?.delivery_method === 'dm'
-                      ? ' • DM'
-                      : ''}
-              </span>
+          {/* Personal tab — your Slack link, preferences, proactive agent */}
+          <TabsContent value="personal">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+              {/* Left column: Slack link + morning brief */}
+              <div className="space-y-4">
+                <SlackSelfMapping />
+                <Card>
+                  <CardContent className="pt-5">
+                    <MorningBriefPreferences />
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Right column: notification + proactive agent prefs */}
+              <div className="space-y-4">
+                <Card>
+                  <CardContent className="pt-5">
+                    <NotificationPreferences />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-5">
+                    <ProactiveAgentPreferences />
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-            <div className="text-sm">
-              <span className="font-medium">Deal Rooms:</span>{' '}
-              <span className="text-muted-foreground">
-                {dealRoomSettings?.is_enabled ? 'Enabled' : 'Disabled'}
-                {dealRoomSettings?.deal_value_threshold
-                  ? ` • ${formatOrgMoney(dealRoomSettings.deal_value_threshold, { maximumFractionDigits: 0 })}+`
-                  : ''}
-                {dealRoomSettings?.deal_stage_threshold ? ` • ${dealRoomSettings.deal_stage_threshold}` : ''}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Org settings (admins only) */}
-      {isAdmin && (
-        <>
-          <Separator />
+            {/* Read-only org summary for regular users */}
+            {!isAdmin && (
+              <div className="mt-4 space-y-3">
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Org Slack settings are managed by your org owner/admin.
+                    {userRole ? ` Your role: ${userRole}.` : ''}
+                  </AlertDescription>
+                </Alert>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="text-sm">
+                    <span className="font-medium">Org Daily Digest:</span>{' '}
+                    <span className="text-muted-foreground">
+                      {dailyDigestSettings?.is_enabled ? 'Enabled' : 'Disabled'}
+                      {dailyDigestSettings?.delivery_method === 'both'
+                        ? ` | #${dailyDigestSettings?.channel_name || 'channel'} + DM`
+                        : dailyDigestSettings?.delivery_method === 'channel' && dailyDigestSettings?.channel_name
+                          ? ` | #${dailyDigestSettings.channel_name}`
+                          : dailyDigestSettings?.delivery_method === 'dm'
+                            ? ' | DM'
+                            : ''}
+                    </span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Deal Rooms:</span>{' '}
+                    <span className="text-muted-foreground">
+                      {dealRoomSettings?.is_enabled ? 'Enabled' : 'Disabled'}
+                      {dealRoomSettings?.deal_value_threshold
+                        ? ` | ${formatOrgMoney(dealRoomSettings.deal_value_threshold, { maximumFractionDigits: 0 })}+`
+                        : ''}
+                      {dealRoomSettings?.deal_stage_threshold ? ` | ${dealRoomSettings.deal_stage_threshold}` : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </TabsContent>
 
-          {/* Notification Settings */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Org Slack Settings</h2>
-            <div className="grid gap-4">
-              {FEATURES.map((feature) => (
-                <FeatureSettingsCard
-                  key={feature.key}
-                  feature={feature}
-                  settings={getSettingsForFeature(feature.key)}
-                  onUpdate={(updates) => handleUpdateSettings(feature.key, updates)}
-                  onTest={() => handleTestNotification(feature.key)}
-                  isUpdating={updateSettings.isPending}
-                  isTesting={testingFeature === feature.key}
-                  stakeholderOptions={
-                    feature.key === 'deal_rooms' || feature.key === 'meeting_debrief'
-                      ? slackUserOptions
-                      : []
-                  }
-                />
-              ))}
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* User Mapping (admin) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                User Mapping (Org)
-              </CardTitle>
-              <CardDescription>
-                Map Slack users to Sixty users for @mentions and direct messages.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SlackUserMapping />
-            </CardContent>
-          </Card>
-
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              Make sure to invite the Sixty bot to channels where you want to receive notifications.
-              For private channels, you'll need to manually invite the bot using{' '}
-              <code className="text-xs bg-muted px-1 py-0.5 rounded">/invite @Sixty</code>
-            </AlertDescription>
-          </Alert>
-        </>
-      )}
+          {/* Team Mapping tab (admin only) */}
+          {isAdmin && (
+            <TabsContent value="team">
+              <div className="mt-2 space-y-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      User Mapping
+                    </CardTitle>
+                    <CardDescription>
+                      Map Slack users to Sixty users for @mentions and direct messages.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <SlackUserMapping />
+                  </CardContent>
+                </Card>
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Invite the Sixty bot to channels where you want notifications.
+                    For private channels, use{' '}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">/invite @Sixty</code>
+                  </AlertDescription>
+                </Alert>
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
     </PageContainer>
   );

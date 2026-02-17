@@ -39,6 +39,7 @@ export interface StandardTableTemplate {
   source_type: 'standard';
   columns: StandardColumnDef[];
   views: StandardViewDef[];
+  platform_only?: boolean; // If true, only visible to platform org admins
 }
 
 // ============================================================================
@@ -1053,6 +1054,564 @@ export const CLIENTS_TABLE: StandardTableTemplate = {
 };
 
 // ============================================================================
+// 6. DEALS TABLE
+// ============================================================================
+
+export const DEALS_TABLE: StandardTableTemplate = {
+  key: 'standard_deals',
+  name: 'Deals',
+  description: 'Pipeline deals with health scores, risk signals, and relationship intelligence',
+  source_type: 'standard',
+  columns: [
+    {
+      key: 'deal_name',
+      label: 'Deal Name',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 0,
+      width: 250,
+      is_visible: true,
+      app_source_table: 'deals',
+      app_source_column: 'name'
+    },
+    {
+      key: 'company_name',
+      label: 'Company',
+      column_type: 'company',
+      is_system: true,
+      is_locked: true,
+      position: 1,
+      width: 200,
+      is_visible: true,
+      app_source_table: 'deals',
+      app_source_column: 'company'
+    },
+    {
+      key: 'value',
+      label: 'Deal Value',
+      column_type: 'number',
+      is_system: true,
+      is_locked: true,
+      position: 2,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'deals',
+      app_source_column: 'value'
+    },
+    {
+      key: 'stage',
+      label: 'Stage',
+      column_type: 'status',
+      is_system: true,
+      is_locked: true,
+      position: 3,
+      width: 160,
+      is_visible: true,
+      app_source_table: 'deals',
+      app_source_column: 'stage_id'
+    },
+    {
+      key: 'close_date',
+      label: 'Close Date',
+      column_type: 'date',
+      is_system: true,
+      is_locked: true,
+      position: 4,
+      width: 160,
+      is_visible: true,
+      app_source_table: 'deals',
+      app_source_column: 'expected_close_date'
+    },
+    {
+      key: 'owner',
+      label: 'Owner',
+      column_type: 'person',
+      is_system: true,
+      is_locked: true,
+      position: 5,
+      width: 160,
+      is_visible: true,
+      app_source_table: 'deals',
+      app_source_column: 'owner_id'
+    },
+    {
+      key: 'deal_health_score',
+      label: 'Health Score',
+      column_type: 'number',
+      is_system: true,
+      is_locked: true,
+      position: 6,
+      width: 120,
+      is_visible: true,
+      app_source_table: 'deal_health_scores',
+      app_source_column: 'overall_health_score'
+    },
+    {
+      key: 'health_status',
+      label: 'Health Status',
+      column_type: 'status',
+      is_system: true,
+      is_locked: true,
+      position: 7,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'deal_health_scores',
+      app_source_column: 'health_status',
+      dropdown_options: [
+        { value: 'healthy', label: 'Healthy', color: 'green' },
+        { value: 'warning', label: 'Warning', color: 'yellow' },
+        { value: 'critical', label: 'Critical', color: 'red' },
+        { value: 'stalled', label: 'Stalled', color: 'gray' }
+      ]
+    },
+    {
+      key: 'relationship_health_score',
+      label: 'Rel. Health',
+      column_type: 'number',
+      is_system: true,
+      is_locked: true,
+      position: 8,
+      width: 120,
+      is_visible: true,
+      app_source_table: 'relationship_health_scores',
+      app_source_column: 'overall_health_score'
+    },
+    {
+      key: 'relationship_health_status',
+      label: 'Rel. Status',
+      column_type: 'status',
+      is_system: true,
+      is_locked: true,
+      position: 9,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'relationship_health_scores',
+      app_source_column: 'health_status',
+      dropdown_options: [
+        { value: 'healthy', label: 'Healthy', color: 'green' },
+        { value: 'at_risk', label: 'At Risk', color: 'yellow' },
+        { value: 'critical', label: 'Critical', color: 'red' },
+        { value: 'ghost', label: 'Ghost', color: 'gray' }
+      ]
+    },
+    {
+      key: 'risk_level',
+      label: 'Risk Level',
+      column_type: 'status',
+      is_system: true,
+      is_locked: true,
+      position: 10,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'deal_health_scores',
+      app_source_column: 'risk_level',
+      dropdown_options: [
+        { value: 'low', label: 'Low', color: 'green' },
+        { value: 'medium', label: 'Medium', color: 'yellow' },
+        { value: 'high', label: 'High', color: 'orange' },
+        { value: 'critical', label: 'Critical', color: 'red' }
+      ]
+    },
+    {
+      key: 'risk_factors',
+      label: 'Risk Factors',
+      column_type: 'tags',
+      is_system: true,
+      is_locked: true,
+      position: 11,
+      width: 200,
+      is_visible: true,
+      app_source_table: 'deal_health_scores',
+      app_source_column: 'risk_factors'
+    },
+    {
+      key: 'days_in_stage',
+      label: 'Days in Stage',
+      column_type: 'number',
+      is_system: true,
+      is_locked: true,
+      position: 12,
+      width: 100,
+      is_visible: true
+    },
+    {
+      key: 'ghost_probability',
+      label: 'Ghost Risk %',
+      column_type: 'number',
+      is_system: true,
+      is_locked: true,
+      position: 13,
+      width: 100,
+      is_visible: true,
+      app_source_table: 'relationship_health_scores',
+      app_source_column: 'ghost_probability_percent'
+    },
+    {
+      key: 'sentiment_trend',
+      label: 'Sentiment',
+      column_type: 'status',
+      is_system: true,
+      is_locked: true,
+      position: 14,
+      width: 130,
+      is_visible: true,
+      app_source_table: 'deal_health_scores',
+      app_source_column: 'sentiment_trend',
+      dropdown_options: [
+        { value: 'improving', label: 'Improving', color: 'green' },
+        { value: 'stable', label: 'Stable', color: 'gray' },
+        { value: 'declining', label: 'Declining', color: 'red' }
+      ]
+    },
+    {
+      key: 'last_meeting_date',
+      label: 'Last Meeting',
+      column_type: 'date',
+      is_system: true,
+      is_locked: true,
+      position: 15,
+      width: 140,
+      is_visible: true
+    },
+    {
+      key: 'last_activity_date',
+      label: 'Last Activity',
+      column_type: 'date',
+      is_system: true,
+      is_locked: true,
+      position: 16,
+      width: 140,
+      is_visible: true
+    },
+    {
+      key: 'next_action',
+      label: 'Next Action',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 17,
+      width: 250,
+      is_visible: true,
+      app_source_table: 'next_action_suggestions',
+      app_source_column: 'title'
+    }
+  ],
+  views: [
+    {
+      name: 'All Deals',
+      is_default: true,
+      column_config: ['deal_name', 'company_name', 'value', 'stage', 'close_date', 'owner', 'deal_health_score', 'health_status', 'risk_level', 'days_in_stage', 'ghost_probability', 'sentiment_trend', 'last_meeting_date', 'last_activity_date', 'next_action'],
+      sort_config: { column: 'value', direction: 'desc' }
+    },
+    {
+      name: 'Pipeline Health',
+      is_default: false,
+      column_config: ['deal_name', 'company_name', 'value', 'stage', 'deal_health_score', 'health_status', 'risk_level', 'days_in_stage', 'ghost_probability'],
+      sort_config: { column: 'deal_health_score', direction: 'asc' }
+    },
+    {
+      name: 'At Risk',
+      is_default: false,
+      column_config: ['deal_name', 'company_name', 'value', 'stage', 'deal_health_score', 'health_status', 'risk_level', 'risk_factors', 'days_in_stage', 'last_meeting_date', 'next_action'],
+      filter_config: [
+        { column: 'health_status', operator: 'in', value: ['critical', 'warning'] }
+      ],
+      sort_config: { column: 'deal_health_score', direction: 'asc' }
+    },
+    {
+      name: 'High Value',
+      is_default: false,
+      column_config: ['deal_name', 'company_name', 'value', 'stage', 'close_date', 'owner', 'deal_health_score'],
+      sort_config: { column: 'value', direction: 'desc' }
+    }
+  ]
+};
+
+// ============================================================================
+// 7. WAITLIST SIGNUPS TABLE (Platform Only)
+// ============================================================================
+
+export const WAITLIST_TABLE: StandardTableTemplate = {
+  key: 'standard_waitlist',
+  name: 'Waitlist Signups',
+  description: 'Live-syncing waitlist signups with referral tracking, tool preferences, and conversion status',
+  source_type: 'standard',
+  platform_only: true,
+  columns: [
+    {
+      key: 'full_name',
+      label: 'Full Name',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 0,
+      width: 200,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'full_name'
+    },
+    {
+      key: 'email',
+      label: 'Email',
+      column_type: 'email',
+      is_system: true,
+      is_locked: true,
+      position: 1,
+      width: 220,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'email'
+    },
+    {
+      key: 'company_name',
+      label: 'Company',
+      column_type: 'company',
+      is_system: true,
+      is_locked: true,
+      position: 2,
+      width: 200,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'company_name'
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      column_type: 'status',
+      is_system: true,
+      is_locked: true,
+      position: 3,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'status',
+      dropdown_options: [
+        { value: 'pending', label: 'Pending', color: 'yellow' },
+        { value: 'released', label: 'Released', color: 'blue' },
+        { value: 'converted', label: 'Converted', color: 'green' },
+        { value: 'rejected', label: 'Rejected', color: 'red' }
+      ]
+    },
+    {
+      key: 'signup_position',
+      label: 'Position',
+      column_type: 'number',
+      is_system: true,
+      is_locked: true,
+      position: 4,
+      width: 100,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'signup_position'
+    },
+    {
+      key: 'total_points',
+      label: 'Points',
+      column_type: 'number',
+      is_system: true,
+      is_locked: true,
+      position: 5,
+      width: 100,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'total_points'
+    },
+    {
+      key: 'referral_code',
+      label: 'Referral Code',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 6,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'referral_code'
+    },
+    {
+      key: 'referral_count',
+      label: 'Referrals',
+      column_type: 'number',
+      is_system: true,
+      is_locked: true,
+      position: 7,
+      width: 100,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'referral_count'
+    },
+    {
+      key: 'referred_by',
+      label: 'Referred By',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 8,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'referred_by_code'
+    },
+    {
+      key: 'crm_tool',
+      label: 'CRM Tool',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 9,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'crm_tool'
+    },
+    {
+      key: 'meeting_recorder_tool',
+      label: 'Meeting Recorder',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 10,
+      width: 160,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'meeting_recorder_tool'
+    },
+    {
+      key: 'task_manager_tool',
+      label: 'Task Manager',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 11,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'task_manager_tool'
+    },
+    {
+      key: 'signup_source',
+      label: 'Signup Source',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 12,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'signup_source'
+    },
+    {
+      key: 'utm_source',
+      label: 'UTM Source',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 13,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'utm_source'
+    },
+    {
+      key: 'utm_campaign',
+      label: 'UTM Campaign',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 14,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'utm_campaign'
+    },
+    {
+      key: 'registration_url',
+      label: 'Registration URL',
+      column_type: 'url',
+      is_system: true,
+      is_locked: true,
+      position: 15,
+      width: 200,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'registration_url'
+    },
+    {
+      key: 'granted_access_at',
+      label: 'Access Granted',
+      column_type: 'date',
+      is_system: true,
+      is_locked: true,
+      position: 16,
+      width: 160,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'granted_access_at'
+    },
+    {
+      key: 'converted_at',
+      label: 'Converted At',
+      column_type: 'date',
+      is_system: true,
+      is_locked: true,
+      position: 17,
+      width: 160,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'converted_at'
+    },
+    {
+      key: 'created_at',
+      label: 'Signed Up',
+      column_type: 'date',
+      is_system: true,
+      is_locked: true,
+      position: 18,
+      width: 160,
+      is_visible: true,
+      app_source_table: 'meetings_waitlist',
+      app_source_column: 'created_at'
+    }
+  ],
+  views: [
+    {
+      name: 'All Signups',
+      is_default: true,
+      column_config: ['full_name', 'email', 'company_name', 'status', 'signup_position', 'total_points', 'referral_count', 'crm_tool', 'signup_source', 'created_at'],
+      sort_config: { column: 'created_at', direction: 'desc' }
+    },
+    {
+      name: 'Pending Review',
+      is_default: false,
+      column_config: ['full_name', 'email', 'company_name', 'signup_position', 'total_points', 'referral_count', 'crm_tool', 'meeting_recorder_tool', 'created_at'],
+      filter_config: [
+        { column: 'status', operator: 'equals', value: 'pending' }
+      ],
+      sort_config: { column: 'signup_position', direction: 'asc' }
+    },
+    {
+      name: 'Converted',
+      is_default: false,
+      column_config: ['full_name', 'email', 'company_name', 'referral_count', 'total_points', 'granted_access_at', 'converted_at'],
+      filter_config: [
+        { column: 'status', operator: 'equals', value: 'converted' }
+      ],
+      sort_config: { column: 'converted_at', direction: 'desc' }
+    },
+    {
+      name: 'Top Referrers',
+      is_default: false,
+      column_config: ['full_name', 'email', 'company_name', 'referral_code', 'referral_count', 'total_points', 'status'],
+      filter_config: [
+        { column: 'referral_count', operator: 'greater_than_or_equal', value: 1 }
+      ],
+      sort_config: { column: 'referral_count', direction: 'desc' }
+    }
+  ]
+};
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -1061,7 +1620,9 @@ export const STANDARD_TABLE_TEMPLATES: StandardTableTemplate[] = [
   MEETINGS_TABLE,
   CONTACTS_TABLE,
   COMPANIES_TABLE,
-  CLIENTS_TABLE
+  CLIENTS_TABLE,
+  DEALS_TABLE,
+  WAITLIST_TABLE
 ];
 
 export function getStandardTableByKey(key: string): StandardTableTemplate | undefined {

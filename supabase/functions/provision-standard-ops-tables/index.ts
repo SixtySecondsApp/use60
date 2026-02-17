@@ -108,12 +108,40 @@ Deno.serve(async (req: Request) => {
       // Don't fail the whole operation — Deals table is additive
     }
 
+    // Provision Waitlist Signups table for the platform org only
+    let waitlistResult = null;
+    let waitlistError = null;
+    try {
+      const { data: org } = await serviceClient
+        .from('organizations')
+        .select('name')
+        .eq('id', membership.org_id)
+        .maybeSingle();
+
+      if (org?.name?.toLowerCase().includes('sixty')) {
+        const { data: wlResult, error: wlError } = await serviceClient.rpc('provision_waitlist_ops_table', {
+          p_org_id: membership.org_id,
+          p_user_id: user.id
+        });
+        waitlistResult = wlResult;
+        if (wlError) {
+          waitlistError = wlError;
+          console.error('Failed to provision Waitlist ops table:', wlError.message);
+        }
+      }
+    } catch (err) {
+      console.error('Waitlist provisioning check failed:', err);
+      // Non-blocking — don't fail the whole request
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         data: {
           ...data,
-          deals: dealsResult || { error: dealsError?.message }
+          deals: dealsResult || { error: dealsError?.message },
+          ...(waitlistResult ? { waitlist: waitlistResult } : {}),
+          ...(waitlistError ? { waitlist: { error: waitlistError.message } } : {})
         }
       }),
       {

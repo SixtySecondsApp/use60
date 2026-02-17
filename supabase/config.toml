@@ -67,8 +67,33 @@ verify_jwt = false
 [functions.google-gmail]
 verify_jwt = false
 
+# Slack OAuth callback - redirect from Slack, no auth header
+[functions.slack-oauth-callback]
+verify_jwt = false
+
+# Slack event subscriptions - webhook from Slack, uses Slack signing secret
+[functions.slack-events]
+verify_jwt = false
+
+# Slack slash commands - webhook from Slack, uses Slack signing secret
+[functions.slack-slash-commands]
+verify_jwt = false
+
 # Slack interactive webhooks (buttons, modals) - uses Slack signature verification
 [functions.slack-interactive]
+verify_jwt = false
+
+# Slack channel listing & test message - handle auth internally via getAuthContext
+[functions.slack-list-channels]
+verify_jwt = false
+
+[functions.slack-test-message]
+verify_jwt = false
+
+[functions.slack-self-map]
+verify_jwt = false
+
+[functions.slack-refresh-user-channels]
 verify_jwt = false
 
 # HITL test endpoint - for testing approval flows

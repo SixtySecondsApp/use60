@@ -5,7 +5,7 @@
  * risk signals, and quick actions. Premium glass-morphism design.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,16 +20,21 @@ import {
   Shield,
   Ghost,
   ChevronRight,
+  ChevronLeft,
   X,
   DollarSign,
   Layers,
   Calendar,
   Timer,
+  Send,
+  Sparkles,
+  StopCircle,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
 import type { PipelineDeal } from './hooks/usePipelineData';
 import { DealRiskFactors } from './DealRiskFactors';
-import { useCopilot } from '@/lib/contexts/CopilotContext';
+import { useDealCopilotChat } from './hooks/useDealCopilotChat';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
@@ -39,6 +44,7 @@ interface DealIntelligenceSheetProps {
   deal: PipelineDeal | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onEditDeal?: (deal: PipelineDeal) => void;
 }
 
 // =============================================================================
@@ -162,9 +168,36 @@ export function DealIntelligenceSheet({
   deal,
   open,
   onOpenChange,
+  onEditDeal,
 }: DealIntelligenceSheetProps) {
-  const { openCopilot, setContext } = useCopilot();
+  const dealChat = useDealCopilotChat(deal);
   const activeOrgId = useOrgStore((state) => state.activeOrgId);
+  const [chatMode, setChatMode] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const chatEndRef = React.useRef<HTMLDivElement>(null);
+  const chatInputRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Reset chat mode when sheet closes or deal changes
+  useEffect(() => {
+    if (!open) {
+      setChatMode(false);
+      dealChat.reset();
+    }
+  }, [open, _dealId, dealChat]);
+
+  // Auto-scroll chat on new messages
+  useEffect(() => {
+    if (chatMode) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [dealChat.messages, dealChat.isLoading, chatMode]);
+
+  // Focus input when entering chat mode
+  useEffect(() => {
+    if (chatMode) {
+      setTimeout(() => chatInputRef.current?.focus(), 300);
+    }
+  }, [chatMode]);
   const [crmSyncStatus, setCrmSyncStatus] = useState<{
     hasHubSpot: boolean;
     hasAttio: boolean;
@@ -257,61 +290,30 @@ export function DealIntelligenceSheet({
     }
   };
 
+  // Handle "Ask Copilot" button click — switch to inline chat mode
+  const handleAskCopilot = useCallback(() => {
+    if (!deal) return;
+    dealChat.activate();
+    setChatMode(true);
+  }, [deal, dealChat]);
+
+  // Handle sending a chat message
+  const handleChatSend = useCallback(() => {
+    if (!chatInput.trim() || dealChat.isLoading) return;
+    dealChat.sendMessage(chatInput);
+    setChatInput('');
+  }, [chatInput, dealChat]);
+
+  const handleChatKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleChatSend();
+    }
+  }, [handleChatSend]);
+
   if (!deal) {
     return null;
   }
-
-  // Handle "Ask Copilot" button click
-  const handleAskCopilot = () => {
-    // Build a comprehensive context message about the deal
-    const contextParts = [];
-
-    // Basic deal info
-    contextParts.push(`Deal: ${deal.name}`);
-    contextParts.push(`Company: ${deal.company || 'Unknown'}`);
-    contextParts.push(`Value: ${formatCurrency(deal.value)}`);
-    contextParts.push(`Stage: ${deal.stage_name || 'Unknown'}`);
-
-    // Health scores
-    if (deal.health_score !== null) {
-      contextParts.push(`Deal Health: ${deal.health_score}/100 (${deal.health_status || 'unknown'})`);
-    }
-    if (deal.relationship_health_score !== null) {
-      contextParts.push(`Relationship Health: ${deal.relationship_health_score}/100 (${deal.relationship_health_status || 'unknown'})`);
-    }
-    if (deal.ghost_probability !== null && deal.ghost_probability > 0) {
-      contextParts.push(`Ghost Risk: ${deal.ghost_probability}%`);
-    }
-
-    // Risk factors
-    const allRiskFactors = [
-      ...(deal.risk_factors || []),
-      ...(deal.relationship_risk_factors || []),
-    ];
-    if (allRiskFactors.length > 0) {
-      contextParts.push(`Risk Signals: ${allRiskFactors.join(', ')}`);
-    }
-
-    // Activity context
-    if (deal.days_in_current_stage !== null) {
-      contextParts.push(`Days in current stage: ${deal.days_in_current_stage}`);
-    }
-    if (deal.pending_actions_count > 0) {
-      contextParts.push(`Pending actions: ${deal.pending_actions_count}${deal.high_urgency_actions_count > 0 ? ` (${deal.high_urgency_actions_count} high urgency)` : ''}`);
-    }
-
-    // Build the initial message
-    const contextMessage = `Analyzing deal: ${deal.company || deal.name}\n\n${contextParts.join('\n')}\n\nWhat would you like to know about this deal?`;
-
-    // Set deal context in copilot
-    setContext({
-      dealIds: [deal.id],
-      currentView: 'pipeline',
-    });
-
-    // Open copilot with pre-loaded context
-    openCopilot(contextMessage, true);
-  };
 
   const companyInitial = (deal.company || deal.name || '?').charAt(0).toUpperCase();
   const winProbability = deal.predicted_close_probability ?? deal.probability;
@@ -319,9 +321,133 @@ export function DealIntelligenceSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        hideClose
         className="md:!top-16 md:!h-[calc(100vh-4rem)] !top-0 !h-screen w-full md:w-[500px] md:max-w-[600px] p-0 border-l border-gray-200/80 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] backdrop-blur-xl overflow-hidden"
       >
-        {/* Scrollable content area */}
+        {/* ============================================================= */}
+        {/* CHAT MODE                                                      */}
+        {/* ============================================================= */}
+        {chatMode ? (
+          <div className="h-full flex flex-col bg-gray-900">
+            {/* Chat header */}
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-800/50 bg-gray-900/80 backdrop-blur-sm flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setChatMode(false)}
+                className="p-1.5 -ml-1 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-all"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md shadow-violet-500/20">
+                <Brain className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-100 leading-tight truncate">
+                  {deal.company || deal.name}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[11px] text-gray-400">Deal Copilot</span>
+                </div>
+              </div>
+              <button
+                onClick={() => onOpenChange(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Chat messages */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+              {dealChat.messages.map((m) =>
+                m.role === 'assistant' ? (
+                  <div key={m.id} className="flex gap-3">
+                    <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mt-0.5">
+                      <Sparkles className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="bg-gray-800/60 rounded-2xl rounded-tl-md px-4 py-3 text-sm text-gray-300 leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5 prose-headings:text-gray-200 prose-strong:text-gray-200">
+                        {m.isStreaming && !m.content ? (
+                          <span className="inline-flex gap-1 items-center text-gray-500">
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse [animation-delay:150ms]" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse [animation-delay:300ms]" />
+                          </span>
+                        ) : (
+                          <ReactMarkdown>{m.content}</ReactMarkdown>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : m.role === 'user' ? (
+                  <div key={m.id} className="flex justify-end">
+                    <div className="max-w-[85%] bg-blue-500/10 border border-blue-500/20 rounded-2xl rounded-tr-md px-4 py-3 text-sm text-gray-100">
+                      {m.content}
+                    </div>
+                  </div>
+                ) : null,
+              )}
+              {dealChat.isLoading && dealChat.messages.at(-1)?.role !== 'assistant' && (
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="bg-gray-800/60 rounded-2xl rounded-tl-md px-4 py-3">
+                      <span className="inline-flex gap-1 items-center text-gray-500">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse [animation-delay:150ms]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse [animation-delay:300ms]" />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Chat input */}
+            <div className="flex-shrink-0 px-4 py-3 border-t border-gray-800/50 bg-gray-900/80 backdrop-blur-sm">
+              <div className="flex items-end gap-2 bg-gray-800/60 border border-gray-700/40 rounded-xl px-3 py-2.5 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
+                <textarea
+                  ref={chatInputRef}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={handleChatKeyDown}
+                  placeholder="Ask about this deal..."
+                  rows={1}
+                  className="flex-1 bg-transparent resize-none text-sm text-gray-100 placeholder-gray-500 focus:outline-none max-h-24"
+                  style={{ minHeight: '22px' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleChatSend}
+                  disabled={!chatInput.trim() || dealChat.isLoading}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    chatInput.trim() && !dealChat.isLoading
+                      ? 'bg-violet-500 text-white hover:bg-violet-600'
+                      : 'text-gray-600 cursor-not-allowed'
+                  }`}
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+              {dealChat.isLoading && (
+                <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
+                  Working...{' '}
+                  <button className="underline hover:text-gray-300 transition-colors flex items-center gap-1" onClick={dealChat.stopGeneration}>
+                    <StopCircle className="w-3 h-3" />
+                    Stop
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+        /* ============================================================= */
+        /* DEAL INFO MODE (default)                                       */
+        /* ============================================================= */
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">
             {/* ---------------------------------------------------------------- */}
@@ -689,6 +815,12 @@ export function DealIntelligenceSheet({
               <Button
                 variant="ghost"
                 className="flex-1 border border-gray-200/80 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.04] text-gray-700 dark:text-gray-300 font-semibold text-[13px] h-10 rounded-xl transition-all duration-200"
+                onClick={() => {
+                  if (deal && onEditDeal) {
+                    onEditDeal(deal);
+                    onOpenChange(false);
+                  }
+                }}
               >
                 <Edit className="w-4 h-4 mr-1.5" />
                 Edit Deal
@@ -696,6 +828,7 @@ export function DealIntelligenceSheet({
             </div>
           </div>
         </div>
+        )}
       </SheetContent>
     </Sheet>
   );

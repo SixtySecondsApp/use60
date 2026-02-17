@@ -1,30 +1,17 @@
 /**
  * PipelineKanban Component (PIPE-011)
  *
- * Kanban board view with DnD-kit drag-and-drop.
- * Fixed: DragOverlay passes isDragOverlay, TouchSensor for mobile,
- * dropAnimation with spring physics, styled floating card.
+ * Kanban board view with @hello-pangea/dnd drag-and-drop.
+ * Cross-column moves only (no in-column reordering).
  */
 
 import React, { useState, useRef, useMemo } from 'react';
-import {
-  DndContext,
-  closestCorners,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  DragOverlay,
-  DragEndEvent,
-  MeasuringStrategy,
-  DragOverEvent,
-  DragStartEvent,
-} from '@dnd-kit/core';
+import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 import { PipelineColumn } from './PipelineColumn';
-import { DealCard } from './DealCard';
 import type { PipelineDeal, StageMetric } from './hooks/usePipelineData';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { extractDomain } from './hooks/useCompanyLogoBatch';
+import { DealCard } from './DealCard';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
@@ -33,117 +20,55 @@ interface PipelineKanbanProps {
   dealsByStage: Record<string, PipelineDeal[]>;
   onDealClick: (dealId: string) => void;
   onDealStageChange: (dealId: string, newStageId: string) => Promise<void>;
+  onAddDealClick: (stageId: string | null) => void;
 }
-
-// Custom drop animation with spring physics
-const dropAnimationConfig = {
-  duration: 250,
-  easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-};
 
 export function PipelineKanban({
   stageMetrics,
   dealsByStage,
   onDealClick,
   onDealStageChange,
+  onAddDealClick,
 }: PipelineKanbanProps) {
   const [localDealsByStage, setLocalDealsByStage] = useState(dealsByStage);
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [draggedFromStage, setDraggedFromStage] = useState<string | null>(null);
-  const [activeDeal, setActiveDeal] = useState<PipelineDeal | null>(null);
-  const lastValidOverStageRef = useRef<string | null>(null);
+  const isDraggingRef = useRef(false);
 
-  // Update local state when prop changes (but not during drag)
-  React.useEffect(() => {
-    if (!draggedId) {
-      setLocalDealsByStage(dealsByStage);
-    }
-  }, [dealsByStage, draggedId]);
-
-  // Configure sensors - PointerSensor for desktop, TouchSensor for mobile
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 200,
-        tolerance: 5,
-      },
-    })
+  // Build a set of valid stage IDs for O(1) lookup
+  const stageIdSet = useMemo(
+    () => new Set(stageMetrics.map((s) => s.stage_id)),
+    [stageMetrics]
   );
 
-  // Compute logo URL for the overlay deal
-  const overlayLogoUrl = useMemo(() => {
-    if (!activeDeal) return undefined;
-    const domain = extractDomain(activeDeal.company);
-    return domain ? getLogoDevUrl(domain, { size: 64, format: 'png' }) || undefined : undefined;
-  }, [activeDeal]);
-
-  // Find stage for a given ID (deal or stage)
-  const findStageForId = (id: string): string | undefined => {
-    if (id in localDealsByStage) return id;
-    return Object.keys(localDealsByStage).find(stageId =>
-      localDealsByStage[stageId].some(deal => deal.id === id)
-    );
-  };
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    const id = String(active.id);
-    setDraggedId(id);
-    const fromStage = findStageForId(id);
-    setDraggedFromStage(fromStage || null);
-
-    // Set activeDeal for overlay
-    let deal = null;
-    for (const stageId in localDealsByStage) {
-      deal = localDealsByStage[stageId].find(d => d.id === id);
-      if (deal) break;
+  // Sync local state when server data changes — only when not dragging
+  React.useEffect(() => {
+    if (!isDraggingRef.current) {
+      setLocalDealsByStage(dealsByStage);
     }
-    setActiveDeal(deal);
-  };
+  }, [dealsByStage]);
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over) return;
-    const activeId = String(active.id);
-    const overId = String(over.id);
+  const handleDragEnd = async (result: DropResult) => {
+    isDraggingRef.current = false;
+    const { source, destination, draggableId } = result;
 
-    const fromStage = findStageForId(activeId);
-    let toStage = findStageForId(overId);
+    // Dropped outside any droppable
+    if (!destination) return;
 
-    // If overId is a stageId (column), use it directly
-    if (!toStage && stageMetrics.find(s => s.stage_id === overId)) {
-      toStage = overId;
-    }
-    if (!fromStage || !toStage) return;
+    const fromStage = source.droppableId;
+    const toStage = destination.droppableId;
 
-    // If dropped on the same stage and same position, do nothing
-    if (fromStage === toStage && overId === activeId) return;
+    // Same column — no-op
+    if (fromStage === toStage) return;
 
-    // Find the index in the target stage
-    let toIndex = localDealsByStage[toStage].findIndex(d => d.id === overId);
-    if (toIndex === -1 || overId === toStage) {
-      toIndex = localDealsByStage[toStage].length;
-    }
+    // Validate target is a real stage
+    if (!stageIdSet.has(toStage)) return;
 
-    // Store last valid over stage for drop fallback
-    lastValidOverStageRef.current = toStage;
+    // Optimistic update: move the deal to the target column
+    setLocalDealsByStage((prev) => {
+      const fromDeals = prev[fromStage]?.filter((d) => d.id !== draggableId) || [];
+      const movedDeal = prev[fromStage]?.find((d) => d.id === draggableId);
+      if (!movedDeal) return prev;
 
-    // Optimistically update localDealsByStage for visual feedback
-    setLocalDealsByStage(prev => {
-      const fromDeals = [...prev[fromStage]];
-      const dealIdx = fromDeals.findIndex(d => d.id === activeId);
-      if (dealIdx === -1) return prev;
-      const [deal] = fromDeals.splice(dealIdx, 1);
-
-      const toDeals = [...prev[toStage]];
-      if (!toDeals.some(d => d.id === activeId)) {
-        toDeals.splice(toIndex, 0, { ...deal, stage_id: toStage });
-      }
+      const toDeals = [...(prev[toStage] || []), { ...movedDeal, stage_id: toStage }];
 
       return {
         ...prev,
@@ -151,60 +76,22 @@ export function PipelineKanban({
         [toStage]: toDeals,
       };
     });
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    const activeId = String(active.id);
-
-    let toStage = over ? findStageForId(String(over.id)) : null;
-    if (!toStage && over && stageMetrics.find(s => s.stage_id === String(over.id))) {
-      toStage = String(over.id);
-    }
-    if (!toStage) {
-      toStage = lastValidOverStageRef.current;
-    }
-    const fromStage = draggedFromStage;
-
-    // Cleanup drag state
-    setDraggedId(null);
-    setDraggedFromStage(null);
-    setActiveDeal(null);
-    lastValidOverStageRef.current = null;
-
-    if (!fromStage || !toStage || fromStage === toStage) {
-      return;
-    }
 
     // Persist to DB
     try {
-      await onDealStageChange(activeId, toStage);
+      await onDealStageChange(draggableId, toStage);
     } catch (err) {
       toast.error('Failed to move deal. Please try again.');
       logger.error('Error updating deal stage:', err);
+      // Revert optimistic update
       setLocalDealsByStage(dealsByStage);
     }
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
+    <DragDropContext
+      onDragStart={() => { isDraggingRef.current = true; }}
       onDragEnd={handleDragEnd}
-      measuring={{
-        droppable: {
-          strategy: MeasuringStrategy.Always,
-        },
-      }}
-      autoScroll={{
-        threshold: {
-          x: 0.2,
-          y: 0.2,
-        },
-        interval: 10,
-      }}
     >
       {/* Desktop: Horizontal kanban columns */}
       <div
@@ -225,9 +112,7 @@ export function PipelineKanban({
             }}
             deals={localDealsByStage[stage.stage_id] || []}
             onDealClick={onDealClick}
-            onAddDealClick={() => {
-              logger.log('Add deal clicked for stage:', stage.stage_id);
-            }}
+            onAddDealClick={(stageId) => onAddDealClick(stageId)}
             batchedMetadata={{ nextActions: {}, healthScores: {}, sentimentData: {} }}
           />
         ))}
@@ -284,19 +169,6 @@ export function PipelineKanban({
           Scroll horizontally to see all pipeline stages
         </div>
       )}
-
-      {/* DragOverlay - floating card that follows cursor */}
-      <DragOverlay dropAnimation={dropAnimationConfig}>
-        {activeDeal && (
-          <DealCard
-            key={`overlay-${activeDeal.id}`}
-            deal={activeDeal}
-            logoUrl={overlayLogoUrl}
-            onClick={() => {}}
-            isDragOverlay={true}
-          />
-        )}
-      </DragOverlay>
-    </DndContext>
+    </DragDropContext>
   );
 }

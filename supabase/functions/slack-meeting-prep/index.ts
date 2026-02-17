@@ -61,6 +61,18 @@ interface CalendarEvent {
   org_id: string;
 }
 
+/**
+ * Extract email addresses from the JSONB attendees array.
+ * calendar_events stores attendees as [{email, responseStatus, ...}]
+ * but the rest of the code expects a flat string[] of emails.
+ */
+function extractAttendeeEmails(attendees: Array<{ email?: string }> | null): string[] {
+  if (!attendees || !Array.isArray(attendees)) return [];
+  return attendees
+    .map((a) => a.email)
+    .filter((e): e is string => !!e);
+}
+
 interface Contact {
   id: string;
   full_name?: string;
@@ -103,7 +115,7 @@ async function getUpcomingMeetings(
 
   let query = supabase
     .from('calendar_events')
-    .select('id, title, start_time, user_id, attendee_emails, meeting_url, org_id')
+    .select('id, title, start_time, user_id, attendees, meeting_url, org_id')
     .gte('start_time', windowStart.toISOString())
     .lte('start_time', windowEnd.toISOString());
 
@@ -118,7 +130,11 @@ async function getUpcomingMeetings(
     return [];
   }
 
-  return data || [];
+  // Convert attendees JSONB array to flat email list
+  return (data || []).map((row: any) => ({
+    ...row,
+    attendee_emails: extractAttendeeEmails(row.attendees),
+  }));
 }
 
 /**
@@ -574,11 +590,13 @@ async function getUserProfile(
 ): Promise<{ fullName: string; email: string } | null> {
   const { data } = await supabase
     .from('profiles')
-    .select('full_name, email')
+    .select('first_name, last_name, email')
     .eq('id', userId)
     .single();
 
-  return data ? { fullName: data.full_name || data.email || 'User', email: data.email || '' } : null;
+  if (!data) return null;
+  const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.email || 'User';
+  return { fullName, email: data.email || '' };
 }
 
 /**
@@ -911,11 +929,14 @@ serve(async (req) => {
       // Process specific calendar event
       const { data } = await supabase
         .from('calendar_events')
-        .select('id, title, start_time, user_id, attendee_emails, meeting_url, org_id')
+        .select('id, title, start_time, user_id, attendees, meeting_url, org_id')
         .eq('id', targetEventId)
         .single();
 
-      meetings = data ? [data] : [];
+      meetings = data ? [{
+        ...data,
+        attendee_emails: extractAttendeeEmails((data as any).attendees),
+      }] : [];
     } else if (targetMeetingId && isTest) {
       // Test mode: Look up meeting from meetings table and create a virtual calendar event
       // This allows testing with meetings that don't have corresponding calendar events

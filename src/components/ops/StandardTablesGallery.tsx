@@ -12,6 +12,8 @@ import {
   Loader2,
   ArrowRight,
   Briefcase,
+  TrendingUp,
+  ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -21,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
 import { useUser } from '@/lib/hooks/useUser';
+import { useActiveOrg } from '@/lib/stores/orgStore';
 
 interface StandardTablesGalleryProps {
   onTableClick: (tableId: string) => void;
@@ -33,6 +36,8 @@ const TABLE_ICONS: Record<string, any> = {
   'standard_all_contacts': Users,
   'standard_all_companies': Building2,
   'standard_clients': Briefcase,
+  'standard_deals': TrendingUp,
+  'standard_waitlist': ClipboardList,
 };
 
 interface StandardTableCardData {
@@ -47,11 +52,13 @@ interface StandardTableCardData {
 export function StandardTablesGallery({ onTableClick, existingTables }: StandardTablesGalleryProps) {
   const queryClient = useQueryClient();
   const { userData: user } = useUser();
+  const activeOrg = useActiveOrg();
   const [provisioning, setProvisioning] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [restoringKey, setRestoringKey] = useState<string | null>(null);
 
   const isAdmin = isUserAdmin(user);
+  const isPlatformOrg = isAdmin && activeOrg?.name?.toLowerCase().includes('sixty');
 
   // Last synced timestamp (persisted in localStorage)
   const SYNC_TS_KEY = 'sixty:standard-tables:last-synced';
@@ -78,8 +85,12 @@ export function StandardTablesGallery({ onTableClick, existingTables }: Standard
     return `${days}d ago`;
   }, []);
 
-  // Build card data from templates
-  const standardCards: StandardTableCardData[] = STANDARD_TABLE_TEMPLATES.map((template) => {
+  // Build card data from templates (filter platform_only unless in platform org)
+  const visibleTemplates = STANDARD_TABLE_TEMPLATES.filter(
+    (t) => !t.platform_only || isPlatformOrg
+  );
+
+  const standardCards: StandardTableCardData[] = visibleTemplates.map((template) => {
     const automationCount = STANDARD_TABLE_AUTOMATIONS.filter(
       (a) => a.target_table === template.key
     ).length;
@@ -103,13 +114,15 @@ export function StandardTablesGallery({ onTableClick, existingTables }: Standard
       'standard_all_contacts': 'All Contacts',
       'standard_all_companies': 'All Companies',
       'standard_clients': 'Clients',
+      'standard_deals': 'Deals',
+      'standard_waitlist': 'Waitlist Signups',
     };
     const expectedName = nameMap[templateKey];
     return existingTables.find((t) => t.name === expectedName && (t.is_standard === true || t.is_standard === undefined));
   };
 
   const missingTables = standardCards.filter((card) => !getExistingTable(card.key));
-  const hasNoStandardTables = missingTables.length === STANDARD_TABLE_TEMPLATES.length;
+  const hasNoStandardTables = missingTables.length === visibleTemplates.length;
   const activeTables = standardCards.filter((card) => getExistingTable(card.key));
   const hasEmptyTables = activeTables.some((card) => {
     const existing = getExistingTable(card.key);
@@ -265,7 +278,7 @@ export function StandardTablesGallery({ onTableClick, existingTables }: Standard
       )}
 
       {/* Cards Grid */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {standardCards.map((card) => {
           const IconComponent = TABLE_ICONS[card.key] || Database;
           const existing = getExistingTable(card.key);
@@ -278,7 +291,7 @@ export function StandardTablesGallery({ onTableClick, existingTables }: Standard
               key={card.key}
               onClick={isActive ? () => onTableClick(existing.id) : undefined}
               className={`
-                group relative overflow-hidden rounded-lg border bg-gradient-to-br p-5 transition-all duration-300
+                group relative overflow-hidden rounded-lg border bg-gradient-to-br p-4 transition-all duration-300
                 ${
                   isActive
                     ? 'cursor-pointer border-gray-800/50 from-gray-900/80 to-gray-900/40 backdrop-blur-xl hover:border-emerald-500/20 hover:shadow-lg hover:shadow-emerald-500/10'

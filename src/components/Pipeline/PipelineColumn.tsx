@@ -2,12 +2,11 @@
  * PipelineColumn Component (PIPE-010)
  *
  * Premium glass-morphism column with stage color gradient stripe,
- * colored count badges, and polished drop zone feedback.
+ * colored count badges, and @hello-pangea/dnd drop zone.
  */
 
 import React, { useMemo } from 'react';
-import { useDroppable } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { DealCard } from './DealCard';
 import { Plus, Inbox } from 'lucide-react';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
@@ -37,16 +36,8 @@ export function PipelineColumn({
   onDealClick,
   onAddDealClick,
   onConvertToSubscription,
-  batchedMetadata = { nextActions: {}, healthScores: {}, sentimentData: {} }
+  batchedMetadata = { nextActions: {}, healthScores: {}, sentimentData: {} },
 }: PipelineColumnProps) {
-  // Set up droppable behavior
-  const { setNodeRef, isOver } = useDroppable({
-    id: stage.id
-  });
-
-  // Get deal IDs for sortable context
-  const dealIds = deals.map(deal => String(deal.id));
-
   // Calculate total value of deals in this stage
   const totalValue = useMemo(() => {
     return deals.reduce((sum, deal) => sum + parseFloat(deal.value || 0), 0);
@@ -89,7 +80,6 @@ export function PipelineColumn({
         border border-gray-200/80 dark:border-white/[0.06]
         max-h-[calc(100vh-250px)]
         transition-all duration-200
-        ${isOver ? 'border-blue-400/50 dark:border-blue-400/30 shadow-[0_0_30px_rgba(59,130,246,0.1)]' : ''}
       `}
     >
       {/* Stage color gradient stripe at top */}
@@ -141,47 +131,57 @@ export function PipelineColumn({
       </div>
 
       {/* Droppable Deal Container */}
-      <div
-        ref={setNodeRef}
-        className={`
-          flex-1 overflow-y-auto p-2 flex flex-col gap-[7px]
-          transition-all duration-150
-          scrollbar-thin
-          ${isOver ? 'bg-blue-50/30 dark:bg-blue-500/[0.03]' : ''}
-        `}
-        style={{
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'rgba(255,255,255,0.06) transparent',
-        }}
-      >
-        {/* Empty state */}
-        {deals.length === 0 && !isOver && (
-          <div className="flex-1 flex flex-col items-center justify-center py-8 text-gray-400 dark:text-gray-500">
-            <Inbox className="w-9 h-9 mb-2.5 opacity-20" />
-            <p className="text-xs font-medium opacity-70">No deals</p>
+      <Droppable droppableId={stage.id}>
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            className={`
+              flex-1 overflow-y-auto p-2 flex flex-col gap-[7px]
+              min-h-[120px]
+              transition-all duration-150
+              scrollbar-thin
+              ${snapshot.isDraggingOver ? 'bg-blue-50/50 dark:bg-blue-500/[0.05] ring-1 ring-inset ring-blue-400/20' : ''}
+            `}
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgba(255,255,255,0.06) transparent',
+            }}
+          >
+            {/* Empty state */}
+            {deals.length === 0 && !snapshot.isDraggingOver && (
+              <div className="flex-1 flex flex-col items-center justify-center py-8 text-gray-400 dark:text-gray-500">
+                <Inbox className="w-9 h-9 mb-2.5 opacity-20" />
+                <p className="text-xs font-medium opacity-70">No deals</p>
+              </div>
+            )}
+
+            {deals.map((deal, index) => {
+              const dealId = String(deal.id);
+              return (
+                <Draggable key={dealId} draggableId={dealId} index={index}>
+                  {(dragProvided, dragSnapshot) => (
+                    <div
+                      ref={dragProvided.innerRef}
+                      {...dragProvided.draggableProps}
+                      {...dragProvided.dragHandleProps}
+                      onClick={() => onDealClick(deal.id)}
+                    >
+                      <DealCard
+                        deal={deal}
+                        logoUrl={logoUrls[dealId] || undefined}
+                        isDragging={dragSnapshot.isDragging}
+                      />
+                    </div>
+                  )}
+                </Draggable>
+              );
+            })}
+
+            {provided.placeholder}
           </div>
         )}
-
-        <SortableContext items={dealIds} strategy={verticalListSortingStrategy}>
-          {deals.map((deal, index) => {
-            const dealId = String(deal.id);
-            return (
-              <DealCard
-                key={deal.id}
-                deal={deal}
-                logoUrl={logoUrls[dealId] || undefined}
-                index={index}
-                onClick={onDealClick}
-                onConvertToSubscription={onConvertToSubscription}
-                nextActionsPendingCount={batchedMetadata.nextActions[dealId]?.pendingCount || 0}
-                highUrgencyCount={batchedMetadata.nextActions[dealId]?.highUrgencyCount || 0}
-                healthScore={batchedMetadata.healthScores[dealId] || null}
-                sentimentData={batchedMetadata.sentimentData[dealId] || null}
-              />
-            );
-          })}
-        </SortableContext>
-      </div>
+      </Droppable>
 
       {/* Add Deal Button */}
       <div className="px-2 pb-2.5 pt-1">
