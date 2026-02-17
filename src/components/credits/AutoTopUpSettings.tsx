@@ -190,9 +190,9 @@ export function AutoTopUpSettings() {
           </div>
           <p className="text-xs text-[#64748B] dark:text-gray-400">
             Automatically purchase credits when your balance runs low.
-            {!settings?.paymentMethodLast4 && (
+            {enabled && !settings?.paymentMethodLast4 && (
               <span className="ml-1 text-amber-600 dark:text-amber-400">
-                A saved payment method is required.
+                Add a payment method in billing settings for charges to process.
               </span>
             )}
           </p>
@@ -200,7 +200,6 @@ export function AutoTopUpSettings() {
         <Switch
           checked={enabled}
           onCheckedChange={setEnabled}
-          disabled={!settings?.paymentMethodLast4}
         />
       </div>
 

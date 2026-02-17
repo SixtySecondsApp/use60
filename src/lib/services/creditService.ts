@@ -409,7 +409,15 @@ export async function getAutoTopUpSettings(orgId: string): Promise<AutoTopUpSett
   }
 
   if (!data) {
-    return null;
+    // Return defaults so the UI renders the form for first-time setup
+    return {
+      enabled: false,
+      packType: 'starter' as PackType,
+      threshold: 10,
+      monthlyCap: 3,
+      topUpsThisMonth: 0,
+      paymentMethodLast4: null,
+    };
   }
 
   // Count top-ups this calendar month from the log
