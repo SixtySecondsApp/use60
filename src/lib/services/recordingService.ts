@@ -347,6 +347,51 @@ class RecordingService {
     }
   }
 
+  /**
+   * Get fresh signed URLs for multiple recordings in a single batch call.
+   * Returns video URLs and thumbnail URLs (if available) for each recording.
+   */
+  async getBatchSignedUrls(
+    recordingIds: string[]
+  ): Promise<Record<string, { video_url: string; thumbnail_url?: string }>> {
+    if (recordingIds.length === 0) return {};
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        logger.error('[RecordingService] getBatchSignedUrls: Not authenticated');
+        return {};
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/get-batch-signed-urls`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ recording_ids: recordingIds }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.urls) {
+        logger.error('[RecordingService] getBatchSignedUrls failed:', result);
+        return {};
+      }
+
+      return result.urls;
+    } catch (error) {
+      logger.error('[RecordingService] getBatchSignedUrls error:', error);
+      return {};
+    }
+  }
+
   // ===========================================================================
   // Recording Rules
   // ===========================================================================

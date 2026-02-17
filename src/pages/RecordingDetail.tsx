@@ -145,6 +145,7 @@ export const RecordingDetail: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [resolvedThumbnailUrl, setResolvedThumbnailUrl] = useState<string | null>(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const [showProposalWizard, setShowProposalWizard] = useState(false)
   const [linkedMeetingId, setLinkedMeetingId] = useState<string | null>(null)
@@ -490,22 +491,33 @@ export const RecordingDetail: React.FC = () => {
     }
   }, [])
 
-  // Fetch signed video URL when recording is ready
+  // Fetch signed video URL and resolved thumbnail URL when recording is ready
   useEffect(() => {
     if (!id || !recording?.recording_s3_key || recording.status !== 'ready') {
       setVideoUrl(null)
+      setResolvedThumbnailUrl(null)
       return
     }
 
     let cancelled = false
     setIsLoadingVideo(true)
 
+    // Fetch video URL
     recordingService.getRecordingUrl(id).then((result) => {
       if (cancelled) return
       if (result.success && result.url) {
         setVideoUrl(result.url)
       }
       setIsLoadingVideo(false)
+    })
+
+    // Fetch fresh thumbnail URL via batch endpoint
+    recordingService.getBatchSignedUrls([id]).then((urls) => {
+      if (cancelled) return
+      const entry = urls[id]
+      if (entry?.thumbnail_url) {
+        setResolvedThumbnailUrl(entry.thumbnail_url)
+      }
     })
 
     return () => { cancelled = true }
@@ -779,7 +791,7 @@ export const RecordingDetail: React.FC = () => {
                     controls
                     className="w-full h-full"
                     src={videoUrl}
-                    poster={recording.thumbnail_url || undefined}
+                    poster={resolvedThumbnailUrl || recording.thumbnail_url || undefined}
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
