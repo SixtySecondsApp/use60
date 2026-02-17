@@ -11,7 +11,7 @@ import { getTransactions, type CreditTransaction } from '@/lib/services/creditSe
 import { creditKeys } from '@/lib/hooks/useCreditBalance';
 import {
   Loader2, ChevronLeft, ChevronRight, Inbox,
-  BotMessageSquare, Cpu, CreditCard, RefreshCw, Gift, RotateCcw,
+  Bot, Cpu, CreditCard, RefreshCw, Gift, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +42,7 @@ const TYPE_CONFIG: Record<CreditTransaction['type'], {
   iconClass: string;
 }> = {
   purchase: { label: 'Purchase', variant: 'default', icon: CreditCard, iconClass: 'text-emerald-500' },
-  deduction: { label: 'AI Action', variant: 'destructive', icon: BotMessageSquare, iconClass: 'text-red-400' },
+  deduction: { label: 'AI Action', variant: 'destructive', icon: Bot, iconClass: 'text-red-400' },
   refund: { label: 'Refund', variant: 'secondary', icon: RotateCcw, iconClass: 'text-blue-400' },
   adjustment: { label: 'Adjustment', variant: 'outline', icon: Cpu, iconClass: 'text-gray-400' },
   bonus: { label: 'Bonus', variant: 'default', icon: Gift, iconClass: 'text-amber-500' },
