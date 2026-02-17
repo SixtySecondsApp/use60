@@ -149,12 +149,14 @@ serve(async (req) => {
     // Determine sync parameters
     const calendarId = 'primary'; // Default to primary calendar
     let currentSyncToken = syncToken || syncStatus?.calendar_sync_token || undefined;
+    // Reduced initial sync window: 14 days back + 30 days forward (was 90+180)
+    // to prevent 504 timeouts on first sync when no sync token exists.
     let timeMin =
       startDate ||
-      (currentSyncToken ? undefined : new Date(Date.now() - 90 * 86400000).toISOString());
+      (currentSyncToken ? undefined : new Date(Date.now() - 14 * 86400000).toISOString());
     let timeMax =
       endDate ||
-      (currentSyncToken ? undefined : new Date(Date.now() + 180 * 86400000).toISOString());
+      (currentSyncToken ? undefined : new Date(Date.now() + 30 * 86400000).toISOString());
 
     // Get user's organization ID - NO DEFAULT FALLBACK
     // Users without org membership will have null org_id
@@ -290,6 +292,8 @@ serve(async (req) => {
     const now = new Date().toISOString();
     const syncStartTime = Date.now();
     const MAX_SYNC_TIME_MS = 120000; // 120s hard limit (edge function timeout is 150s)
+    const MAX_EVENTS_PER_SYNC = 500; // Hard cap to prevent timeouts on initial sync
+    let totalEventsProcessed = 0;
 
     // Fetch events from Google Calendar API
     for (let page = 0; page < 50; page++) {
@@ -324,8 +328,8 @@ serve(async (req) => {
         console.warn('[CALENDAR-SYNC] Sync token expired (410). Falling back to time-based sync.');
         nextPageToken = undefined;
         currentSyncToken = undefined;
-        timeMin = new Date(Date.now() - 90 * 86400000).toISOString();
-        timeMax = new Date(Date.now() + 180 * 86400000).toISOString();
+        timeMin = new Date(Date.now() - 14 * 86400000).toISOString();
+        timeMax = new Date(Date.now() + 30 * 86400000).toISOString();
         continue;
       }
 
@@ -348,8 +352,8 @@ serve(async (req) => {
           console.warn('[CALENDAR-SYNC] Invalid sync token detected (400). Resetting token.');
           currentSyncToken = undefined;
           nextPageToken = undefined;
-          timeMin = new Date(Date.now() - 90 * 86400000).toISOString();
-          timeMax = new Date(Date.now() + 180 * 86400000).toISOString();
+          timeMin = new Date(Date.now() - 14 * 86400000).toISOString();
+          timeMax = new Date(Date.now() + 30 * 86400000).toISOString();
           continue;
         }
 
@@ -503,10 +507,32 @@ serve(async (req) => {
           console.error('Error processing event:', err);
           stats.skipped++;
         }
+
+        totalEventsProcessed++;
+      }
+
+      // Save sync token after each page so retries are incremental (not full resync)
+      if (nextSyncToken) {
+        await supabase
+          .from('user_sync_status')
+          .update({
+            calendar_sync_token: nextSyncToken,
+            calendar_last_synced_at: now,
+            updated_at: now,
+          })
+          .eq('user_id', userId);
+      }
+
+      // Hard cap: stop early if we've processed enough events (prevents timeouts on initial sync)
+      if (!currentSyncToken && totalEventsProcessed >= MAX_EVENTS_PER_SYNC) {
+        console.log(`[CALENDAR-SYNC] Reached event cap (${totalEventsProcessed}/${MAX_EVENTS_PER_SYNC}). Stopping early — next sync will be incremental.`);
+        break;
       }
 
       if (!nextPageToken) break;
     }
+
+    console.log(`[CALENDAR-SYNC] Synced ${totalEventsProcessed} total events`, stats);
 
     // Update user_sync_status with new sync token and timestamp
     const updatePayload: any = {
