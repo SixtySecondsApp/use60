@@ -1,5 +1,6 @@
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Video, Link2, RefreshCw, Loader2 } from 'lucide-react';
+import { Video, Link2, RefreshCw, Loader2, Bot, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
 
@@ -9,6 +10,7 @@ interface MeetingsEmptyStateProps {
 }
 
 export function MeetingsEmptyState({ meetingCount = 0, isSyncing: propIsSyncing = false }: MeetingsEmptyStateProps) {
+  const navigate = useNavigate();
   const { integration, connectFathom, triggerSync, loading: fathomLoading, isSyncing: hookIsSyncing } = useFathomIntegration();
 
   const isConnected = integration?.is_active === true;
@@ -44,28 +46,37 @@ export function MeetingsEmptyState({ meetingCount = 0, isSyncing: propIsSyncing 
           <Video className="w-12 h-12 text-gray-400" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 text-center">
-          Connect Fathom to Get Started
+          No Meetings Yet
         </h2>
         <p className="text-gray-600 dark:text-gray-400 mb-8 text-center max-w-md">
-          Connect your Fathom account to automatically sync your meeting recordings and transcripts.
+          Connect Fathom to sync your recordings, or use 60 Notetaker to record meetings automatically.
         </p>
-        <Button
-          onClick={handleConnectFathom}
-          disabled={fathomLoading}
-          className="bg-[#37bd7e] hover:bg-[#2da76c] text-white"
-        >
-          {fathomLoading ? (
-            <>
-              <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-              Connecting...
-            </>
-          ) : (
-            <>
-              <Link2 className="mr-2 w-5 h-5" />
-              Connect Fathom
-            </>
-          )}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button
+            onClick={handleConnectFathom}
+            disabled={fathomLoading}
+            className="bg-[#37bd7e] hover:bg-[#2da76c] text-white"
+          >
+            {fathomLoading ? (
+              <>
+                <Loader2 className="mr-2 w-5 h-5 animate-spin" />
+                Connecting...
+              </>
+            ) : (
+              <>
+                <Link2 className="mr-2 w-5 h-5" />
+                Connect Fathom
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/meetings/recordings/settings')}
+          >
+            <Bot className="mr-2 w-5 h-5" />
+            Set Up 60 Notetaker
+          </Button>
+        </div>
       </motion.div>
     );
   }
