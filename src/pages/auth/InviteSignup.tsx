@@ -116,9 +116,10 @@ export default function InviteSignup() {
         useOrgStore.getState().setActiveOrg(result.org_id);
       }
 
-      // Invalidate auth user cache so dashboard queries have a valid userId on mount
+      // Invalidate auth user cache AND profile cache so dashboard loads fresh data
       await queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
       await queryClient.invalidateQueries({ queryKey: ['auth'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
 
       setStatus('complete');
       toast.success(`Welcome to ${result.org_name}!`);
@@ -247,15 +248,17 @@ export default function InviteSignup() {
         return;
       }
 
-      // Step 4: Set the invited org as the active organization
-      // This ensures the dashboard loads the correct org, not an auto-created one
+      // Step 4: Load org memberships and set the invited org as active
+      // Must load orgs first so the store has membership data for the dashboard
+      await useOrgStore.getState().loadOrganizations();
       if (result.org_id) {
         useOrgStore.getState().setActiveOrg(result.org_id);
       }
 
-      // Invalidate auth user cache so dashboard queries have a valid userId on mount
+      // Invalidate auth user cache AND profile cache so dashboard loads fresh data
       await queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
       await queryClient.invalidateQueries({ queryKey: ['auth'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
 
       // Success! Redirect straight to dashboard
       setStatus('complete');

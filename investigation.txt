@@ -1,0 +1,352 @@
+=============================================================================
+REALTIME SUBSCRIPTION PERFORMANCE INVESTIGATION
+=============================================================================
+Date: 2026-02-17
+Issue: realtime.list_changes query called 700,000+ times
+Impact: Excessive database load, API costs, potential performance degradation
+
+=============================================================================
+ROOT CAUSE ANALYSIS
+=============================================================================
+
+The application has a centralized Realtime hub (useRealtimeHub.ts) designed to
+consolidate all subscriptions, but 23 OTHER HOOKS are bypassing it and creating
+their own individual subscriptions.
+
+CRITICAL FINDING:
+- Expected: 3-5 consolidated channels via useRealtimeHub
+- Reality: 24+ hooks creating independent subscriptions
+- Impact: Each hook creates 1-3 channels PER USER, multiplied by active users
+
+=============================================================================
+HOOKS CREATING DIRECT SUBSCRIPTIONS (Bypassing Centralized Hub)
+=============================================================================
+
+1. useAgentRunsRealtime.ts ⚠️ HIGHEST RISK
+   - Creates 1 channel PER AGENT COLUMN
+   - useMultipleAgentRunsRealtime creates N channels for N columns
+   - Used in: OpsTable.tsx
+   - Potential: 10-50+ channels per user viewing ops tables
+
+2. useHITLRequests.ts
+   - Creates 1 channel per organization
+   - Subscribes to: hitl_requests (filtered by org_id)
+   - Risk: Medium (1 channel per org)
+
+3. useTaskNotifications.ts
+   - Creates 1 channel per user
+   - Subscribes to: task_notifications (filtered by user_id)
+   - Listens to: INSERT and UPDATE events
+   - Risk: Medium (1 channel per logged-in user)
+
+4. useBrandingSettings.ts
+   - Creates channel for branding_settings
+   - Risk: Low (1 channel per org)
+
+5. useCalendarEvents.ts
+   - Creates channel for calendar_events
+   - Risk: Low (1 channel per user)
+
+6. useCoachingScorecard.ts
+   - Creates channel for coaching scorecards
+   - Risk: Low (1 channel per user)
+
+7. useCompanyNotes.ts
+   - Creates channel for company_notes
+   - Risk: Low (1 channel per company view)
+
+8. useDealHealth.ts
+   - Creates channel for deal_health_scores
+   - Risk: Medium (1 channel per deal)
+
+9. useDealRiskSignals.ts
+   - Creates channel for deal risk signals
+   - Risk: Low (1 channel per deal)
+
+10. useEmailActions.ts
+    - Creates channel for email actions
+    - Risk: Low (1 channel per user)
+
+11. useFathomIntegration.ts
+    - Creates channel for Fathom sync state
+    - Risk: Low (1 channel per user)
+
+12. useGmailSync.ts
+    - Creates channel for Gmail sync state
+    - Risk: Low (1 channel per user)
+
+13. useIntegrationReconnectNeeded.ts
+    - Creates channel for integration status
+    - Risk: Low (1 channel per user)
+
+14. useMeetingIntelligence.ts
+    - Creates channel for meeting intelligence
+    - Risk: Low (1 channel per meeting)
+
+15. useNextActions.ts
+    - Creates channel for next_actions
+    - Risk: Low (1 channel per user)
+
+16. useNextActionSuggestions.ts
+    - Creates channel for next_action_suggestions
+    - Risk: Low (1 channel per user)
+
+17. useOnboardingProgress.ts
+    - Creates channel for onboarding_progress
+    - Risk: Low (1 channel per user during onboarding)
+
+18. useOriginalActivities.ts
+    - Creates channel for activities
+    - Risk: Medium (1 channel per user)
+
+19. useRecordings.ts
+    - Creates channel for recordings
+    - Risk: Low (1 channel per meeting)
+
+20. useRelationshipHealth.ts
+    - Creates channel for relationship_health_scores
+    - Risk: Low (1 channel per contact)
+
+21. useRoadmap.ts
+    - Creates channel for roadmap_suggestions
+    - Risk: Low (1 channel per org)
+
+22. useStructuredSummary.ts
+    - Creates channel for structured summaries
+    - Risk: Low (1 channel per meeting)
+
+23. useWorkflowResults.ts
+    - Creates channel for workflow_execution_results
+    - Risk: Medium (1 channel per workflow execution)
+
+24. useWaitlistOnboarding.ts
+    - Creates channel for waitlist updates
+    - Risk: Low (1 channel per waitlist user)
+
+=============================================================================
+SUBSCRIPTION EXPLOSION CALCULATION
+=============================================================================
+
+Scenario: 10 active users browsing the application
+
+WITHOUT OPTIMIZATION (Current State):
+- Each user loads: Dashboard, Pipeline, Meetings, Tasks, etc.
+- Average hooks per page: 5-10 subscription hooks
+- Pages visited per session: 3-5 pages
+- Subscriptions per user: 15-50 channels
+- Total for 10 users: 150-500 active channels
+- Each channel polls realtime.list_changes continuously
+
+WITH OPS TABLES (Worst Case):
+- OpsTable with 20 agent columns → 20 channels
+- 5 users viewing ops tables → 100 additional channels
+- TOTAL: 250-600 active channels
+
+=============================================================================
+THE CENTRALIZED HUB (Currently Underutilized)
+=============================================================================
+
+Location: src/lib/hooks/useRealtimeHub.ts
+
+DESIGN:
+- Consolidates subscriptions into 3-5 channels total
+- Uses working hours awareness (full vs minimal mode)
+- During working hours: High + Medium priority tables
+- During off-hours: Notifications only
+- Reduces connections by 60-80%
+
+COVERED TABLES (by useRealtimeHub):
+✅ activities
+✅ deals
+✅ tasks
+✅ user_notifications
+✅ deal_health_scores
+✅ deal_health_alerts
+✅ relationship_health_scores
+✅ next_action_suggestions
+✅ meetings
+
+SHOULD BE USING HUB (but aren't):
+❌ task_notifications (useTaskNotifications)
+❌ activities (useOriginalActivities - duplicate!)
+❌ hitl_requests (useHITLRequests)
+❌ agent_runs (useAgentRunsRealtime - CRITICAL)
+❌ workflow_execution_results (useWorkflowResults)
+
+=============================================================================
+RECOMMENDED FIXES (Prioritized by Impact)
+=============================================================================
+
+PRIORITY 1 - CRITICAL (Immediate Fix Required):
+
+1. useAgentRunsRealtime.ts → Migrate to useRealtimeHub
+   - Impact: Reduces 10-50 channels to 1
+   - Current: Creates channel per agent column
+   - Solution: Add agent_runs to useRealtimeHub medium priority
+   - Estimated reduction: 200-400 subscriptions across all users
+
+PRIORITY 2 - HIGH (Fix This Week):
+
+2. useTaskNotifications.ts → Use existing user_notifications in hub
+   - Impact: Reduces 1 channel per user to 0 (already in hub)
+   - Current: Duplicate subscription for notifications
+   - Solution: Migrate to useTableSubscription('user_notifications')
+   - Estimated reduction: 1 channel per logged-in user
+
+3. useOriginalActivities.ts → Use existing activities in hub
+   - Impact: Reduces 1 channel per user to 0 (already in hub)
+   - Current: Duplicate subscription for activities
+   - Solution: Migrate to useTableSubscription('activities')
+   - Estimated reduction: 1 channel per logged-in user
+
+4. useHITLRequests.ts → Migrate to useRealtimeHub
+   - Impact: Reduces 1 channel per org to consolidated hub
+   - Solution: Add hitl_requests to useRealtimeHub high priority
+   - Estimated reduction: 1 channel per org
+
+PRIORITY 3 - MEDIUM (Fix This Sprint):
+
+5. Migrate these hooks to useRealtimeHub:
+   - useWorkflowResults → Add workflow_execution_results to hub
+   - useDealHealth → Already covered by deal_health_scores in hub
+   - useNextActions → Already covered by next_action_suggestions in hub
+   - useMeetingIntelligence → Already covered by meetings in hub
+
+PRIORITY 4 - LOW (Optimize Later):
+
+6. Evaluate if these really need Realtime:
+   - useBrandingSettings → Can use polling (changes infrequently)
+   - useOnboardingProgress → Can use polling (only during onboarding)
+   - useRoadmap → Can use polling (low priority data)
+   - useWaitlistOnboarding → Already has throttled version
+
+=============================================================================
+IMMEDIATE ACTION ITEMS
+=============================================================================
+
+1. ✅ DISABLE Realtime for high-volume background tables:
+   Run in Supabase SQL Editor:
+
+   ALTER PUBLICATION supabase_realtime DROP TABLE public.ai_search_index_queue;
+   ALTER PUBLICATION supabase_realtime DROP TABLE public.email_sync_queue;
+   ALTER PUBLICATION supabase_realtime DROP TABLE public.workflow_execution_logs;
+   ALTER PUBLICATION supabase_realtime DROP TABLE public.communication_events;
+   ALTER PUBLICATION supabase_realtime DROP TABLE public.cost_tracking;
+
+2. ⚠️ FIX useAgentRunsRealtime (CRITICAL):
+   - Add agent_runs to useRealtimeHub
+   - Refactor useMultipleAgentRunsRealtime to use hub
+   - Update OpsTable.tsx to use new pattern
+
+3. 🔄 MIGRATE duplicate subscriptions:
+   - useTaskNotifications → useTableSubscription('user_notifications')
+   - useOriginalActivities → useTableSubscription('activities')
+
+4. 📊 AUDIT which tables are actually subscribed to:
+   SELECT schemaname, tablename
+   FROM pg_publication_tables
+   WHERE pubname = 'supabase_realtime';
+
+5. 📝 UPDATE documentation:
+   - Document which hooks MUST use useRealtimeHub
+   - Add lint rule to prevent direct supabase.channel() calls
+   - Add migration guide for existing hooks
+
+=============================================================================
+EXPECTED RESULTS
+=============================================================================
+
+Current State:
+- 150-600 active channels across 10 users
+- realtime.list_changes called 700,000+ times
+- High database load (87.9% of query time)
+
+After Priority 1 Fix (useAgentRunsRealtime):
+- Reduction: 200-400 channels
+- New total: 50-200 channels
+- Estimated query reduction: 50-60%
+
+After All Fixes:
+- Target: 3-5 channels per user (via centralized hub)
+- New total: 30-50 channels for 10 users
+- Estimated query reduction: 90-95%
+- Query count target: <50,000 per day
+
+=============================================================================
+MIGRATION PATTERN (Reference Implementation)
+=============================================================================
+
+BEFORE (Direct Subscription):
+```typescript
+useEffect(() => {
+  const channel = supabase
+    .channel('my-table')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'my_table',
+      filter: `user_id=eq.${userId}`,
+    }, callback)
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [userId]);
+```
+
+AFTER (Using Centralized Hub):
+```typescript
+import { useTableSubscription } from '@/lib/hooks/useRealtimeHub';
+
+// Option 1: Direct hook usage
+useTableSubscription('my_table', callback, {
+  event: 'INSERT',
+  enabled: !!userId
+});
+
+// Option 2: Use the hub's subscribe function
+const { subscribe } = useRealtimeHub();
+
+useEffect(() => {
+  const unsubscribe = subscribe('my_table', callback, { event: '*' });
+  return unsubscribe;
+}, [subscribe]);
+```
+
+=============================================================================
+TECHNICAL NOTES
+=============================================================================
+
+1. useRealtimeHub uses a ref-counting singleton pattern:
+   - First mount creates channels
+   - Subsequent mounts reuse existing channels
+   - Last unmount cleans up channels
+
+2. Working hours awareness:
+   - Full mode: High + Medium priority (8 AM - 6 PM, weekdays)
+   - Minimal mode: Notifications only (off-hours, weekends)
+   - Reduces connections by ~67% during off-hours
+
+3. Channel modes:
+   - high-priority: activities, deals, tasks, user_notifications
+   - medium-priority: meetings, health scores, suggestions
+   - notifications-only: user_notifications, critical alerts
+
+4. Tables that should use POLLING instead of Realtime:
+   - fathom_integrations (low priority)
+   - fathom_sync_state (low priority)
+   - google_integrations (low priority)
+   - branding_settings (infrequent changes)
+   - onboarding_progress (only during onboarding)
+
+=============================================================================
+NEXT STEPS
+=============================================================================
+
+1. Review this investigation with the team
+2. Prioritize fixes based on impact
+3. Create tickets for Priority 1 and 2 fixes
+4. Run the SQL commands to disable Realtime on background tables
+5. Monitor realtime.list_changes query count after each fix
+6. Update CLAUDE.md with Realtime subscription guidelines

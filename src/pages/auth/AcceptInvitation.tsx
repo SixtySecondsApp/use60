@@ -126,9 +126,10 @@ export default function AcceptInvitation() {
       setStatus('accepted');
       toast.success(`Welcome to ${result.org_name}!`);
 
-      // Invalidate auth user cache so dashboard queries have a valid userId on mount
+      // Invalidate auth user cache AND profile cache so dashboard loads fresh data
       await queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
       await queryClient.invalidateQueries({ queryKey: ['auth'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
 
       // Redirect to dashboard after a short delay
       setTimeout(() => {
