@@ -468,7 +468,7 @@ export default function PendingApprovalPage() {
               onClick={checkApprovalStatus}
               disabled={checking || isLoadingDashboard}
               variant="outline"
-              className="w-full border-violet-600 text-violet-600 hover:bg-violet-600/10 dark:border-violet-500 dark:text-violet-400 dark:hover:bg-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full !bg-transparent border-violet-500 text-violet-400 hover:!bg-violet-500/10 shadow-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {checking ? (
                 <>
@@ -485,7 +485,7 @@ export default function PendingApprovalPage() {
                   onClick={() => setShowCancelDialog(true)}
                   disabled={canceling || isLoadingDashboard}
                   variant="outline"
-                  className="w-full border-gray-600 text-gray-600 hover:bg-gray-600/10 dark:border-gray-500 dark:text-gray-400 dark:hover:bg-gray-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full !bg-transparent border-gray-500 text-gray-400 hover:!bg-gray-500/10 shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {canceling ? (
                     <>
@@ -514,7 +514,7 @@ export default function PendingApprovalPage() {
                     navigate('/onboarding?step=website_input', { replace: true });
                   }}
                   variant="outline"
-                  className="w-full border-violet-600 text-violet-600 hover:bg-violet-600/10 dark:border-violet-500 dark:text-violet-400 dark:hover:bg-violet-500/10"
+                  className="w-full !bg-transparent border-violet-500 text-violet-400 hover:!bg-violet-500/10 shadow-none"
                 >
                   Restart Onboarding
                 </Button>
@@ -526,7 +526,7 @@ export default function PendingApprovalPage() {
             <Button
               onClick={handleLogout}
               variant="outline"
-              className="w-full border-red-600 text-red-600 hover:bg-red-600/10 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-500/10"
+              className="w-full !bg-transparent border-red-500 text-red-400 hover:!bg-red-500/10 shadow-none"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Log Out

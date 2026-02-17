@@ -64,6 +64,7 @@ export async function approveJoinRequest(
     // Call RPC function - auth is handled automatically via session
     const { data, error } = await supabase.rpc('approve_join_request', {
       p_request_id: requestId,
+      p_actioned_by_user_id: adminUserId,
     });
 
     if (error) {
@@ -124,6 +125,7 @@ export async function rejectJoinRequest(
     // Call RPC function - auth is handled automatically via session
     const { data, error } = await supabase.rpc('reject_join_request', {
       p_request_id: requestId,
+      p_actioned_by_user_id: adminUserId,
       p_reason: reason || null,
     });
 

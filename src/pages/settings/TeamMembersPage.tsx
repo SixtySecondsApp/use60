@@ -71,6 +71,9 @@ export default function TeamMembersPage() {
   // Join requests section collapse state
   const [isJoinRequestsExpanded, setIsJoinRequestsExpanded] = useState(true);
 
+  // Counter to trigger members refetch after approval/rejoin
+  const [membersRefetchKey, setMembersRefetchKey] = useState(0);
+
   // Filter state for showing removed members (ORGREM-016)
   const [showRemovedMembers, setShowRemovedMembers] = useState(true);
 
@@ -217,6 +220,7 @@ export default function TeamMembersPage() {
         toast.success('Join request approved and email sent');
         queryClient.invalidateQueries({ queryKey: ['join-requests'] });
         queryClient.invalidateQueries({ queryKey: ['organization-members'] });
+        setMembersRefetchKey((k) => k + 1);
       } else {
         toast.error(result.error || 'Failed to approve request');
       }
@@ -266,8 +270,7 @@ export default function TeamMembersPage() {
       toast.success('Rejoin request approved! User has been re-added to the organization.');
       queryClient.invalidateQueries({ queryKey: ['rejoin-requests'] });
       queryClient.invalidateQueries({ queryKey: ['organization-members'] });
-      // Refresh members list
-      window.location.reload();
+      setMembersRefetchKey((k) => k + 1);
     },
     onError: (error: any) => {
       toast.error(error?.message || 'Failed to approve rejoin request');
@@ -434,7 +437,7 @@ export default function TeamMembersPage() {
     };
 
     loadMembers();
-  }, [activeOrgId]);
+  }, [activeOrgId, membersRefetchKey]);
 
   // Load invitations
   useEffect(() => {
@@ -581,7 +584,9 @@ export default function TeamMembersPage() {
       // Update UI - mark member as removed instead of filtering out
       setMembers(
         members.map((m) =>
-          m.user_id === memberToRemove.user_id ? { ...m, member_status: 'removed' as const } : m
+          m.user_id === memberToRemove.user_id
+            ? { ...m, member_status: 'removed' as const, removed_at: new Date().toISOString(), removed_by: user?.id || null }
+            : m
         )
       );
 
