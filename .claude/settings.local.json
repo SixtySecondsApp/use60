@@ -44,7 +44,8 @@
       "Bash(wc:*)",
       "Bash(npx tsc:*)",
       "Bash(npx vite build)",
-      "Bash(npx vite build:*)"
+      "Bash(npx vite build:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

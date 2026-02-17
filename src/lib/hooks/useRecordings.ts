@@ -6,7 +6,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { recordingService } from '@/lib/services/recordingService';
@@ -667,4 +667,33 @@ export function useRecordingsRequiringAttention() {
     isLoading,
     refetch,
   };
+}
+
+// =============================================================================
+// useBatchVideoUrls - Batch fetch signed video/thumbnail URLs
+// =============================================================================
+
+export function useBatchVideoUrls(recordings: Recording[]) {
+  // Only fetch URLs for ready recordings that have video in S3
+  const readyIds = useMemo(
+    () =>
+      recordings
+        .filter((r) => r.status === 'ready' && r.recording_s3_key)
+        .map((r) => r.id),
+    [recordings]
+  );
+
+  // Stable query key based on sorted IDs
+  const queryKey = useMemo(
+    () => [...recordingKeys.all, 'batch-urls', ...readyIds.slice().sort()],
+    [readyIds]
+  );
+
+  return useQuery<Record<string, { video_url: string; thumbnail_url?: string }>>({
+    queryKey,
+    queryFn: () => recordingService.getBatchSignedUrls(readyIds),
+    enabled: readyIds.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+  });
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useOrg } from '@/lib/contexts/OrgContext'
@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { useRecordings, useRecordingUsage, useActiveRecordings, useRecordingsRequiringAttention } from '@/lib/hooks/useRecordings'
+import { useRecordings, useRecordingUsage, useActiveRecordings, useRecordingsRequiringAttention, useBatchVideoUrls } from '@/lib/hooks/useRecordings'
 import { recordingService } from '@/lib/services/recordingService'
 import { JoinMeetingModal } from './JoinMeetingModal'
 import { toast } from 'sonner'
@@ -155,31 +155,106 @@ const TalkTimeBadge: React.FC<{ repPct: number | null | undefined; judgement: 'g
   )
 }
 
-// Thumbnail Component
-const RecordingThumbnail: React.FC<{ url?: string | null; title?: string; className?: string }> = ({ url, title, className }) => {
-  if (!url) {
-    // Placeholder thumbnail
-    const initial = (title || 'M')[0].toUpperCase()
+// Placeholder Thumbnail Component
+const PlaceholderThumbnail: React.FC<{ title?: string; className?: string }> = ({ title, className }) => {
+  const initial = (title || 'M')[0].toUpperCase()
+  return (
+    <div className={cn("bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center", className)}>
+      <span className="text-white text-xl font-bold">{initial}</span>
+    </div>
+  )
+}
+
+// Video Thumbnail Component - shows a real video frame or falls back to placeholder
+const VideoThumbnail: React.FC<{
+  videoUrl?: string | null
+  thumbnailUrl?: string | null
+  title?: string
+  className?: string
+}> = ({ videoUrl, thumbnailUrl, title, className }) => {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [isVisible, setIsVisible] = useState(false)
+  const [frameReady, setFrameReady] = useState(false)
+  const [imgError, setImgError] = useState(false)
+  const [videoError, setVideoError] = useState(false)
+
+  // Determine which render path we'll take
+  const showThumbnailImg = !!(thumbnailUrl && !imgError)
+  const showVideo = !!(videoUrl && !videoError && !showThumbnailImg)
+
+  // IntersectionObserver: only load video when visible (with 100px preload margin)
+  // Re-run when showVideo changes (videoUrl arrives async from batch fetch)
+  useEffect(() => {
+    if (!showVideo || isVisible) return
+    const el = containerRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [showVideo, isVisible])
+
+  // Thumbnail image path
+  if (showThumbnailImg) {
     return (
-      <div className={cn("bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center", className)}>
-        <span className="text-white text-xl font-bold">{initial}</span>
+      <div className={cn("relative rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800", className)}>
+        <img
+          src={thumbnailUrl!}
+          alt={title || 'Recording thumbnail'}
+          className="w-full h-full object-cover"
+          onError={() => setImgError(true)}
+        />
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity">
+          <Play className="h-5 w-5 text-white/90 drop-shadow-lg" />
+        </div>
       </div>
     )
   }
 
-  return (
-    <div className={cn("rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800", className)}>
-      <img
-        src={url}
-        alt={title || 'Recording thumbnail'}
-        className="w-full h-full object-cover"
-        onError={(e) => {
-          // Hide image on error, show placeholder
-          e.currentTarget.style.display = 'none'
-        }}
-      />
-    </div>
-  )
+  // Video frame path
+  if (showVideo) {
+    return (
+      <div ref={containerRef} className={cn("relative rounded-lg overflow-hidden bg-gray-900", className)}>
+        {isVisible && (
+          <video
+            ref={videoRef}
+            src={videoUrl!}
+            muted
+            playsInline
+            preload="metadata"
+            onLoadedMetadata={() => {
+              if (videoRef.current) {
+                // Seek to 15% of duration or 10s, whichever is smaller
+                videoRef.current.currentTime = Math.min(10, videoRef.current.duration * 0.15)
+              }
+            }}
+            onSeeked={() => setFrameReady(true)}
+            onError={() => setVideoError(true)}
+            className={cn("w-full h-full object-cover", !frameReady && "opacity-0")}
+          />
+        )}
+        {/* Play overlay on hover */}
+        {frameReady && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity">
+            <Play className="h-5 w-5 text-white/90 drop-shadow-lg" />
+          </div>
+        )}
+        {/* Show placeholder while video frame is loading */}
+        {!frameReady && <PlaceholderThumbnail title={title} className="absolute inset-0" />}
+      </div>
+    )
+  }
+
+  // Fallback placeholder (no video URL yet or video error)
+  return <PlaceholderThumbnail title={title} className={className} />
 }
 
 // Stats Card Component
@@ -362,6 +437,9 @@ const RecordingsList: React.FC = () => {
     offset: (currentPage - 1) * ITEMS_PER_PAGE,
     status: statusFilter !== 'all' ? statusFilter : undefined,
   })
+
+  // Batch fetch signed video/thumbnail URLs for all ready recordings
+  const { data: signedUrls } = useBatchVideoUrls(recordings)
 
   // Fetch usage data
   const { data: usageData } = useRecordingUsage()
@@ -795,10 +873,11 @@ const RecordingsList: React.FC = () => {
                     >
                       <TableCell className="font-medium text-gray-900 dark:text-gray-200">
                         <div className="flex items-center gap-3">
-                          <RecordingThumbnail
-                            url={recording.thumbnail_url}
+                          <VideoThumbnail
+                            videoUrl={signedUrls?.[recording.id]?.video_url}
+                            thumbnailUrl={signedUrls?.[recording.id]?.thumbnail_url || recording.thumbnail_url}
                             title={recording.meeting_title}
-                            className="w-12 h-8 flex-shrink-0"
+                            className="w-16 h-10 flex-shrink-0"
                           />
                           <span className="line-clamp-1">{recording.meeting_title || 'Untitled Recording'}</span>
                         </div>
@@ -876,8 +955,9 @@ const RecordingsList: React.FC = () => {
                   onClick={() => openRecording(recording.id)}
                 >
                   {/* Thumbnail */}
-                  <RecordingThumbnail
-                    url={recording.thumbnail_url}
+                  <VideoThumbnail
+                    videoUrl={signedUrls?.[recording.id]?.video_url}
+                    thumbnailUrl={signedUrls?.[recording.id]?.thumbnail_url || recording.thumbnail_url}
                     title={recording.meeting_title}
                     className="w-full h-32"
                   />
