@@ -43,6 +43,7 @@ import InviteSignup from '@/pages/auth/InviteSignup';
 import PendingApprovalPage from '@/pages/auth/PendingApprovalPage';
 import RequestRejectedPage from '@/pages/auth/RequestRejectedPage';
 import InactiveOrganizationScreen from '@/pages/InactiveOrganizationScreen';
+import RemovedUserStep from '@/pages/onboarding/v2/RemovedUserStep';
 import TestGoogleTasks from '@/pages/TestGoogleTasks';
 import MeetingThumbnail from '@/pages/MeetingThumbnail';
 import BrowserlessTest from '@/pages/BrowserlessTest';
@@ -319,6 +320,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
             <Suspense fallback={<RouteLoader />}>
               <Routes>
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/onboarding/removed-user" element={<RemovedUserStep />} />
                 <Route path="/inactive-organization" element={<InactiveOrganizationScreen />} />
                 <Route path="/debug-auth" element={<DebugAuth />} />
                 <Route path="/debug/auth" element={<AuthDebug />} />

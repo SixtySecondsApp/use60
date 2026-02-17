@@ -34,7 +34,7 @@ function getAppliedTheme(): ResolvedTheme {
  * Gets the stored theme preference from localStorage
  */
 function getStoredTheme(): ThemeMode {
-  if (typeof window === 'undefined') return 'system'
+  if (typeof window === 'undefined') return 'dark'
 
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -45,7 +45,8 @@ function getStoredTheme(): ThemeMode {
     // localStorage not available
   }
 
-  return 'system'
+  // Default to dark theme for new users
+  return 'dark'
 }
 
 /**
@@ -203,7 +204,7 @@ export function useTheme() {
           setResolvedTheme(profileResolved)
           applyTheme(profileResolved)
           window.dispatchEvent(new CustomEvent('theme-changed', { detail: { mode: profileTheme, resolved: profileResolved } }))
-        } else if (!profileTheme && stored !== 'system') {
+        } else if (!profileTheme && stored !== 'dark') {
           // No profile preference yet but user has a localStorage preference - seed it
           saveThemeToProfile(stored)
         }
