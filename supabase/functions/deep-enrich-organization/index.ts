@@ -29,6 +29,41 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+/**
+ * Safely parse JSON from AI responses, handling common malformations:
+ * - Trailing commas before } or ]
+ * - Unescaped newlines in strings
+ * - Smart quotes
+ */
+function safeParseJSON(jsonStr: string): any {
+  // First try direct parse
+  try {
+    return JSON.parse(jsonStr);
+  } catch (_) {
+    // Attempt repairs
+  }
+
+  let repaired = jsonStr;
+
+  // Fix trailing commas: ,} or ,]
+  repaired = repaired.replace(/,\s*([\]}])/g, '$1');
+
+  // Fix smart quotes
+  repaired = repaired.replace(/[\u201C\u201D]/g, '"');
+  repaired = repaired.replace(/[\u2018\u2019]/g, "'");
+
+  // Fix unescaped newlines inside strings
+  repaired = repaired.replace(/(?<=":[ ]*"[^"]*)\n(?=[^"]*")/g, '\\n');
+
+  try {
+    return JSON.parse(repaired);
+  } catch (e) {
+    // Log the problematic JSON for debugging
+    console.error('[safeParseJSON] Failed to parse even after repair. First 800 chars:', repaired.substring(0, 800));
+    throw new Error(`Failed to parse AI response as JSON: ${(e as Error).message}`);
+  }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -512,12 +547,15 @@ async function startEnrichment(
   force?: boolean
 ): Promise<{ success: boolean; enrichment_id?: string; error?: string }> {
   try {
-    // Check if enrichment already exists
-    const { data: existing } = await supabase
+    let existing = null;
+
+    const { data: existingByOrg } = await supabase
       .from('organization_enrichment')
       .select('id, status, domain')
       .eq('organization_id', organizationId)
       .maybeSingle();
+
+    existing = existingByOrg;
 
     // Only return cached if:
     // - NOT forcing re-enrichment AND
@@ -537,9 +575,9 @@ async function startEnrichment(
       console.log('[startEnrichment] Force re-enrichment requested for domain:', domain);
     }
 
-    // Use upsert to handle race conditions - update if exists, insert if not
-    // This prevents "duplicate key" errors when multiple requests come in simultaneously
-    const { data: enrichment, error: upsertError } = await supabase
+    // Upsert enrichment record for this organization
+    let enrichment;
+    const { data, error: upsertError } = await supabase
       .from('organization_enrichment')
       .upsert({
         organization_id: organizationId,
@@ -584,6 +622,7 @@ async function startEnrichment(
       .single();
 
     if (upsertError) throw upsertError;
+    enrichment = data;
 
     const enrichment_id = enrichment?.id || existing?.id;
     if (!enrichment_id) throw new Error('Failed to get enrichment ID');
@@ -862,7 +901,7 @@ ${userPrompt}`;
     throw new Error('Failed to parse skill config as JSON');
   }
 
-  return JSON.parse(jsonMatch[0]) as SkillConfig;
+  return safeParseJSON(jsonMatch[0]) as SkillConfig;
 }
 
 // ============================================================================
@@ -1159,18 +1198,12 @@ async function runEnrichmentPipeline(
 
     console.log(`[Pipeline] Successfully updated enrichment ${enrichmentId} to completed status`);
 
-    // Also save skills to organization_skills table
+    // Save org-scoped data (skills, context, persona cache)
     await saveGeneratedSkills(supabase, organizationId, skills);
-
-    // Save to organization_context for platform skills interpolation
     await saveOrganizationContext(supabase, organizationId, enrichmentData, 'enrichment', 0.85);
-
-    // Save skill-derived context (brand_tone, words_to_avoid, etc.)
     await saveSkillDerivedContext(supabase, organizationId, skills, 'enrichment', 0.85);
-
-    // AGENT-003: Invalidate persona cache so it regenerates with new data
     await invalidatePersonaCache(supabase, organizationId);
-    console.log(`[Pipeline] Invalidated persona cache for org ${organizationId}`);
+    console.log(`[Pipeline] Saved skills/context and invalidated persona cache for org ${organizationId}`);
 
     console.log(`[Pipeline] Enrichment complete for ${domain}`);
 
@@ -1424,7 +1457,7 @@ async function executeCompanyResearchSkill(
     });
 
     const skillResult = await executeAgentSkillWithContract(supabase, {
-      organizationId,
+      organizationId: organizationId,
       userId: null, // System execution, no specific user
       skillKey: 'company-research',
       context: skillInput,
@@ -1622,7 +1655,7 @@ async function extractCompanyData(
     throw new Error('Failed to parse AI response as JSON');
   }
 
-  const rawData = JSON.parse(jsonMatch[0]);
+  const rawData = safeParseJSON(jsonMatch[0]);
 
   // Transform nested AI response to flat EnrichmentData structure
   // The AI returns: { company: {...}, classification: {...}, offering: {...}, market: {...}, positioning: {...}, voice: {...} }
@@ -1807,7 +1840,7 @@ async function generateSkillConfigs(
     throw new Error('Failed to parse skill config as JSON');
   }
 
-  return JSON.parse(jsonMatch[0]) as SkillConfig;
+  return safeParseJSON(jsonMatch[0]) as SkillConfig;
 }
 
 // ============================================================================

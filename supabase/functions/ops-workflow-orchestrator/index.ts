@@ -45,12 +45,14 @@ interface WorkflowConfig {
   num_email_steps?: number
   campaign_angle?: string
   target_table_id?: string
+  skip_search?: boolean
 }
 
 interface WorkflowRequest {
   prompt: string
   config?: WorkflowConfig
   clarification_answers?: Record<string, string>
+  conversation_id?: string
 }
 
 interface SkillPlan {
@@ -665,6 +667,34 @@ async function buildSequencesFromTable(
   }
 }
 
+/**
+ * Ensure the campaign name is unique across existing Instantly campaigns.
+ * If a duplicate is found, appends ` (2)`, ` (3)`, etc.
+ */
+async function ensureUniqueCampaignName(
+  serviceClient: ReturnType<typeof createClient>,
+  orgId: string,
+  name: string,
+): Promise<{ name: string; wasAdjusted: boolean }> {
+  // Fetch all existing campaign names for the org
+  const { data: links } = await serviceClient
+    .from('instantly_campaign_links')
+    .select('campaign_name')
+    .eq('org_id', orgId)
+
+  if (!links || links.length === 0) return { name, wasAdjusted: false }
+
+  const existing = new Set(links.map(l => l.campaign_name?.toLowerCase()).filter(Boolean))
+  if (!existing.has(name.toLowerCase())) return { name, wasAdjusted: false }
+
+  // Find the next available suffix
+  let suffix = 2
+  while (existing.has(`${name} (${suffix})`.toLowerCase())) {
+    suffix++
+  }
+  return { name: `${name} (${suffix})`, wasAdjusted: true }
+}
+
 async function executeCampaignCreation(
   tableId: string,
   plan: SkillPlan,
@@ -695,7 +725,11 @@ async function executeCampaignCreation(
     }
 
     // Create campaign in PAUSED state via instantly-admin
-    const campaignName = plan.campaign.campaign_name || plan.table_name
+    const rawCampaignName = plan.campaign.campaign_name || plan.table_name
+    const { name: campaignName, wasAdjusted } = await ensureUniqueCampaignName(serviceClient, orgId, rawCampaignName)
+    if (wasAdjusted) {
+      sseEvent(controller, 'step_progress', { step: 'campaign_creation', message: `Campaign name adjusted to "${campaignName}" to avoid duplicates` })
+    }
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/instantly-admin`, {
       method: 'POST',
@@ -861,8 +895,12 @@ async function executeCampaignCreation(
         }, { onConflict: 'table_id,campaign_id' })
 
       console.log(`${LOG} Created Instantly columns and campaign link for table=${tableId} campaign=${campaignId}`)
+      sseEvent(controller, 'step_progress', { step: 'campaign_creation', message: 'Instantly columns created successfully' })
     } catch (colErr) {
-      console.error(`${LOG} Post-push column/link creation warning:`, (colErr as Error).message)
+      console.error(`${LOG} Post-push column/link creation failed: table=${tableId} campaign=${campaignId}`, {
+        error: (colErr as Error).message,
+        stack: (colErr as Error).stack,
+      })
       // Non-fatal — campaign and leads are created, columns are optional
     }
 
@@ -948,7 +986,43 @@ serve(async (req) => {
     // --- SSE Stream ---
     const stream = new ReadableStream({
       async start(controller) {
+        let taskId: string | undefined
+
         try {
+          // Create task for tracking workflow progress
+          try {
+            const { data: workflowTask } = await serviceClient
+              .from('tasks')
+              .insert({
+                title: `Campaign: ${body.config?.table_name || 'New Outreach'}`,
+                description: `AI is building your outreach campaign`,
+                status: 'in_progress',
+                priority: 'medium',
+                task_type: 'email',
+                source: 'copilot',
+                ai_status: 'working',
+                assigned_to: user.id,
+                created_by: user.id,
+                trigger_event: 'copilot_request',
+                deliverable_type: 'campaign_workflow',
+                deliverable_data: {
+                  type: 'campaign_workflow',
+                  prompt: body.prompt.slice(0, 500),
+                  conversation_id: body.conversation_id || null,
+                  started_at: new Date().toISOString(),
+                },
+              })
+              .select('id')
+              .maybeSingle()
+
+            taskId = workflowTask?.id
+            if (taskId) {
+              console.log(`${LOG} Created workflow task id=${taskId}`)
+            }
+          } catch (taskErr) {
+            console.error(`${LOG} Failed to create workflow task (non-fatal):`, (taskErr as Error).message)
+          }
+
           // STEP 0: Load business context
           sseEvent(controller, 'step_start', { step: 'context', label: 'Loading business context' })
           const ctx = await loadBusinessContext(serviceClient, orgId, user.id)
@@ -977,26 +1051,40 @@ serve(async (req) => {
           sseEvent(controller, 'step_complete', { step: 'planning', summary: plan.summary })
 
           const steps: StepResult[] = []
+          let tableId: string
 
-          // STEP 2: Apollo search + table creation/population (research agent)
-          sseEvent(controller, 'step_start', { step: 'search', label: 'Searching Apollo for prospects', agent: 'research' })
-          const searchResult = await executeSearch(plan, authHeader, body.config?.target_table_id)
-          steps.push(searchResult)
-          sseEvent(controller, searchResult.status === 'complete' ? 'step_complete' : 'step_error', searchResult)
-
-          // If search failed, we can't continue
-          if (searchResult.status === 'error' || !searchResult.data?.table_id) {
-            sseEvent(controller, 'workflow_complete', {
-              status: 'error',
-              steps,
-              error: 'Search failed — cannot proceed with workflow',
-              duration_ms: steps.reduce((sum, s) => sum + s.duration_ms, 0),
+          // STEP 2: Apollo search (or skip if using existing table contacts)
+          if (body.config?.skip_search && body.config?.target_table_id) {
+            // Existing table — skip Apollo search, use contacts already in table
+            tableId = body.config.target_table_id
+            sseEvent(controller, 'step_start', { step: 'search', label: 'Using existing contacts', agent: 'research' })
+            sseEvent(controller, 'step_complete', {
+              step: 'search',
+              summary: 'Using contacts from current table',
+              data: { table_id: tableId },
+              duration_ms: 0,
             })
-            controller.close()
-            return
-          }
+          } else {
+            // Normal flow — search Apollo for new prospects
+            sseEvent(controller, 'step_start', { step: 'search', label: 'Searching Apollo for prospects', agent: 'research' })
+            const searchResult = await executeSearch(plan, authHeader, body.config?.target_table_id)
+            steps.push(searchResult)
+            sseEvent(controller, searchResult.status === 'complete' ? 'step_complete' : 'step_error', searchResult)
 
-          const tableId = searchResult.data.table_id as string
+            // If search failed, we can't continue
+            if (searchResult.status === 'error' || !searchResult.data?.table_id) {
+              sseEvent(controller, 'workflow_complete', {
+                status: 'error',
+                steps,
+                error: 'Search failed — cannot proceed with workflow',
+                duration_ms: steps.reduce((sum, s) => sum + s.duration_ms, 0),
+              })
+              controller.close()
+              return
+            }
+
+            tableId = searchResult.data.table_id as string
+          }
 
           // STEPS 3+4: Email generation + campaign creation
           // Parallelization strategy:
@@ -1035,6 +1123,74 @@ serve(async (req) => {
               .eq('id', tableId)
           }
 
+          // Update task with workflow results
+          if (taskId) {
+            try {
+              const campaignStep = steps.find(s => s.step === 'campaign_creation' && s.status === 'complete')
+              const searchStep = steps.find(s => s.step === 'search' && s.status === 'complete')
+              const emailStep = steps.find(s => s.step === 'email_generation' && s.status === 'complete')
+
+              await serviceClient
+                .from('tasks')
+                .update({
+                  status: errors.length === 0 ? 'completed' : 'pending_review',
+                  ai_status: errors.length === 0 ? 'draft_ready' : 'failed',
+                  completed_at: new Date().toISOString(),
+                  deliverable_data: {
+                    type: 'campaign_workflow',
+                    prompt: body.prompt.slice(0, 500),
+                    conversation_id: body.conversation_id || null,
+                    table_id: tableId,
+                    table_name: plan.table_name,
+                    campaign_name: campaignStep?.data?.campaign_name || plan.campaign?.campaign_name || plan.table_name,
+                    leads_found: searchStep?.data?.row_count || 0,
+                    emails_generated: emailStep?.data?.generated_count || 0,
+                    steps: steps.map(s => ({ step: s.step, status: s.status, summary: s.summary })),
+                    duration_ms: totalDuration,
+                  },
+                })
+                .eq('id', taskId)
+
+              console.log(`${LOG} Updated workflow task id=${taskId} status=${errors.length === 0 ? 'completed' : 'pending_review'}`)
+            } catch (taskErr) {
+              console.error(`${LOG} Failed to update workflow task (non-fatal):`, (taskErr as Error).message)
+            }
+          }
+
+          // Send Slack notification (non-blocking — Slack failure must never fail the workflow)
+          try {
+            const searchStep = steps.find(s => s.step === 'search' && s.status === 'complete')
+            const emailStep = steps.find(s => s.step === 'email_generation' && s.status === 'complete')
+            const campaignStep = steps.find(s => s.step === 'campaign_creation' && s.status === 'complete')
+
+            await fetch(`${SUPABASE_URL}/functions/v1/send-slack-message`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                apikey: SUPABASE_ANON_KEY,
+              },
+              body: JSON.stringify({
+                user_id: user.id,
+                org_id: orgId,
+                message_type: 'campaign_ready',
+                data: {
+                  campaign_name: campaignStep?.data?.campaign_name || plan.campaign?.campaign_name || plan.table_name,
+                  table_id: tableId,
+                  table_name: plan.table_name,
+                  leads_found: searchStep?.data?.row_count || 0,
+                  emails_generated: emailStep?.data?.generated_count || 0,
+                  campaign_id: campaignStep?.data?.campaign_id,
+                  duration_sec: Math.round(totalDuration / 1000),
+                  conversation_id: body.conversation_id || null,
+                },
+              }),
+            })
+            console.log(`${LOG} Slack campaign_ready notification sent for user=${user.id}`)
+          } catch (slackErr) {
+            console.error(`${LOG} Slack notification failed (non-fatal):`, (slackErr as Error).message)
+          }
+
           sseEvent(controller, 'workflow_complete', {
             status: errors.length === 0 ? 'complete' : 'partial',
             table_id: tableId,
@@ -1042,16 +1198,42 @@ serve(async (req) => {
             steps,
             errors: errors.map(e => ({ step: e.step, error: e.error })),
             duration_ms: totalDuration,
+            task_id: taskId,
           })
 
           controller.close()
         } catch (err) {
           console.error(`${LOG} Workflow error:`, err)
+
+          // Update task on error
+          if (taskId) {
+            try {
+              await serviceClient
+                .from('tasks')
+                .update({
+                  status: 'pending_review',
+                  ai_status: 'failed',
+                  deliverable_data: {
+                    type: 'campaign_workflow',
+                    prompt: body.prompt.slice(0, 500),
+                    conversation_id: body.conversation_id || null,
+                    error: (err as Error).message,
+                  },
+                })
+                .eq('id', taskId)
+
+              console.log(`${LOG} Updated workflow task id=${taskId} to failed`)
+            } catch (taskErr) {
+              console.error(`${LOG} Failed to update workflow task on error (non-fatal):`, (taskErr as Error).message)
+            }
+          }
+
           sseEvent(controller, 'workflow_complete', {
             status: 'error',
             error: (err as Error).message,
             steps: [],
             duration_ms: 0,
+            task_id: taskId,
           })
           controller.close()
         }

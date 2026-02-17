@@ -40,6 +40,9 @@ export const CopilotConsolePage = lazyWithRetry(() => import('@/pages/platform/C
 export const NotetakerBranding = lazyWithRetry(() => import('@/pages/platform/NotetakerBranding'));
 export const NotetakerVideoQuality = lazyWithRetry(() => import('@/pages/platform/NotetakerVideoQuality'));
 export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionCentre'));
+export const CommandCentre = lazyWithRetry(() => import('@/pages/platform/CommandCentre'));
+export const CommandCentreDemo = lazyWithRetry(() => import('@/pages/platform/CommandCentreDemo'));
+export const CommandCentreV2Demo = lazyWithRetry(() => import('@/pages/platform/CommandCentreV2Demo'));
 export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
@@ -210,6 +213,7 @@ export const Heatmap = lazyWithRetry(() => import('@/pages/Heatmap'));
 export const SalesFunnel = lazyWithRetry(() => import('@/pages/SalesFunnel'));
 export const TeamAnalytics = lazyWithRetry(() => import('@/pages/insights/TeamAnalytics'));
 export const ContentTopics = lazyWithRetry(() => import('@/pages/insights/ContentTopics'));
+export const MeetingAnalyticsPage = lazyWithRetry(() => import('@/pages/MeetingAnalyticsPage'));
 
 // ============================================================
 // MISC & UTILITY PAGES

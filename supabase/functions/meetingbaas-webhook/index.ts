@@ -20,6 +20,7 @@ import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import { handleCorsPreflightRequest, getCorsHeaders, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 import { captureException, addBreadcrumb } from '../_shared/sentryEdge.ts';
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/use60Signing.ts';
+import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
 
 // =============================================================================
 // Types
@@ -831,17 +832,31 @@ async function handleTranscriptReady(
     return { success: false, error: `Recording not found for bot_id: ${bot_id}` };
   }
 
-  // Update recording end time
+  // Save transcript data + update recording end time
+  // Persisting the transcript here means process-recording can use it directly
+  // instead of re-fetching from MeetingBaaS API or Gladia
+  const updateData: Record<string, unknown> = {
+    meeting_end_time: timestamp || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (transcript && transcript.text) {
+    updateData.transcript_text = transcript.text;
+    updateData.transcript_json = {
+      text: transcript.text,
+      utterances: transcript.utterances || [],
+    };
+    console.log(`[MeetingBaaS Webhook] Saving transcript (${transcript.text.length} chars, ${transcript.utterances?.length || 0} utterances) for recording: ${deployment.recording_id}`);
+  }
+
   await supabase
     .from('recordings')
-    .update({
-      meeting_end_time: timestamp || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', deployment.recording_id);
 
   // Trigger the process-recording function for full analysis
-  // Pass the transcript data so process-recording doesn't need to call MeetingBaaS API
+  // This handles speaker identification, AI summary, etc.
+  // Transcript is already saved above — process-recording will read it from the DB
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -884,9 +899,19 @@ async function handleBotCompleted(
 ): Promise<{ success: boolean; error?: string }> {
   const { bot_id, audio, video, duration_seconds, joined_at, exited_at } = data;
 
+  // MeetingBaaS bot.completed may include participants and speakers arrays
+  const mbParticipants = (data as Record<string, unknown>).participants as Array<Record<string, unknown>> | undefined;
+  const mbSpeakers = (data as Record<string, unknown>).speakers as Array<Record<string, unknown>> | undefined;
+
   addBreadcrumb(`Processing bot.completed for bot: ${bot_id}`, 'meetingbaas');
 
   console.log(`[MeetingBaaS Webhook] handleBotCompleted - bot_id: ${bot_id}, orgId: ${orgId}`);
+  if (mbParticipants?.length) {
+    console.log(`[MeetingBaaS Webhook] Received ${mbParticipants.length} participants from MeetingBaaS:`, JSON.stringify(mbParticipants));
+  }
+  if (mbSpeakers?.length) {
+    console.log(`[MeetingBaaS Webhook] Received ${mbSpeakers.length} speakers from MeetingBaaS:`, JSON.stringify(mbSpeakers));
+  }
 
   // Find deployment and recording
   const { data: deployment, error: deploymentError } = await supabase
@@ -906,10 +931,10 @@ async function handleBotCompleted(
     return { success: false, error: `Recording not found for bot_id: ${bot_id}` };
   }
 
-  // Get recording details for user_id
+  // Get recording details for user_id and existing attendees
   const { data: recording } = await supabase
     .from('recordings')
-    .select('user_id')
+    .select('user_id, attendees')
     .eq('id', deployment.recording_id)
     .maybeSingle();
 
@@ -917,25 +942,92 @@ async function handleBotCompleted(
     return { success: false, error: `Recording record not found: ${deployment.recording_id}` };
   }
 
-  // Skip S3 upload in webhook to avoid memory limits (284MB+ for long recordings)
-  // MeetingBaaS URLs are valid for 4 hours and used directly by Gladia for transcription
-  // S3 upload can be added back as a background job later if needed for permanent storage
+  // Extract attendee data from MeetingBaaS participants/speakers
+  // Only if no attendees were already provided at deploy time
+  let resolvedAttendees: Array<{ email?: string; name?: string }> | null = null;
+  const existingAttendees = recording.attendees as Array<Record<string, unknown>> | null;
 
-  console.log('[MeetingBaaS Webhook] Storing recording metadata and queueing S3 upload (async)...');
-  await supabase
-    .from('recordings')
-    .update({
-      meeting_start_time: joined_at,
-      meeting_end_time: exited_at,
-      meeting_duration_seconds: duration_seconds,
-      status: 'processing',
-      s3_upload_status: 'pending', // Queue for S3 upload by poll-s3-upload-queue cron
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', deployment.recording_id);
+  if (!existingAttendees || existingAttendees.length === 0) {
+    // Try participants first (actual meeting participants with display names)
+    if (mbParticipants && mbParticipants.length > 0) {
+      resolvedAttendees = mbParticipants.map((p) => ({
+        name: (p.name || p.display_name || p.displayName || p.user_name || p.username) as string | undefined,
+        email: (p.email || p.email_address) as string | undefined,
+      })).filter(a => a.name || a.email);
+      console.log(`[MeetingBaaS Webhook] Extracted ${resolvedAttendees.length} attendees from participants`);
+    }
 
-  // Update deployment status and store MeetingBaaS URLs for S3 upload
-  // URLs are valid for 4 hours - poll-s3-upload-queue will process them
+    // Fallback to speakers if no participants
+    if ((!resolvedAttendees || resolvedAttendees.length === 0) && mbSpeakers && mbSpeakers.length > 0) {
+      resolvedAttendees = mbSpeakers.map((s) => ({
+        name: (s.name || s.display_name || s.displayName || s.speaker_name) as string | undefined,
+        email: (s.email || s.email_address) as string | undefined,
+      })).filter(a => a.name || a.email);
+      console.log(`[MeetingBaaS Webhook] Extracted ${resolvedAttendees.length} attendees from speakers`);
+    }
+  } else {
+    console.log(`[MeetingBaaS Webhook] Recording already has ${existingAttendees.length} attendees from deploy time, skipping MeetingBaaS participants`);
+  }
+
+  // Download and upload video to S3 (prefer video over audio)
+  const mediaUrl = video || audio;
+  if (mediaUrl) {
+    console.log('[MeetingBaaS Webhook] Uploading recording to S3...');
+    const uploadResult = await uploadRecordingToS3(
+      mediaUrl,
+      orgId,
+      recording.user_id,
+      deployment.recording_id
+    );
+
+    if (uploadResult.success) {
+      // Update recording with S3 details + attendees from MeetingBaaS
+      const updateData: Record<string, unknown> = {
+        recording_s3_key: uploadResult.storagePath,
+        recording_s3_url: uploadResult.storageUrl,
+        meeting_start_time: joined_at,
+        meeting_end_time: exited_at,
+        meeting_duration_seconds: duration_seconds,
+        status: 'processing',
+        updated_at: new Date().toISOString(),
+      };
+      if (resolvedAttendees && resolvedAttendees.length > 0) {
+        updateData.attendees = resolvedAttendees;
+      }
+      await supabase
+        .from('recordings')
+        .update(updateData)
+        .eq('id', deployment.recording_id);
+    } else {
+      console.warn('[MeetingBaaS Webhook] S3 upload failed:', uploadResult.error);
+      // Store MeetingBaaS URL as fallback + attendees
+      const updateData: Record<string, unknown> = {
+        meeting_start_time: joined_at,
+        meeting_end_time: exited_at,
+        meeting_duration_seconds: duration_seconds,
+        status: 'processing',
+        updated_at: new Date().toISOString(),
+      };
+      if (resolvedAttendees && resolvedAttendees.length > 0) {
+        updateData.attendees = resolvedAttendees;
+      }
+      await supabase
+        .from('recordings')
+        .update(updateData)
+        .eq('id', deployment.recording_id);
+    }
+  } else if (resolvedAttendees && resolvedAttendees.length > 0) {
+    // No media URL, but we still have attendees to save
+    await supabase
+      .from('recordings')
+      .update({
+        attendees: resolvedAttendees,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', deployment.recording_id);
+  }
+
+  // Update deployment status
   await supabase
     .from('bot_deployments')
     .update({
@@ -953,6 +1045,49 @@ async function handleBotCompleted(
     meeting_end: exited_at,
     duration_minutes: duration_seconds ? Math.round(duration_seconds / 60) : null,
   });
+
+  // No-show detection: bot was in call < 2 minutes and no transcript
+  // (bot.failed events are handled separately — those are bot errors, not no-shows)
+  if (duration_seconds != null && duration_seconds < 120 && !data.transcript?.text) {
+    console.log(`[MeetingBaaS Webhook] No-show detected for bot ${bot_id} — duration: ${duration_seconds}s, no transcript`);
+
+    // Fetch meeting context for the signal
+    const { data: meeting } = await supabase
+      .from('meetings')
+      .select('id, title, owner_user_id, contact_id, deal_id, company_id, start_time')
+      .eq('bot_id', bot_id)
+      .eq('source_type', '60_notetaker')
+      .maybeSingle();
+
+    if (meeting?.owner_user_id) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+      const signalProcessorUrl = `${supabaseUrl}/functions/v1/task-signal-processor`;
+
+      fetch(signalProcessorUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({
+          signal_type: 'meeting_no_show',
+          user_id: meeting.owner_user_id,
+          data: {
+            meeting_id: meeting.id,
+            meeting_title: meeting.title,
+            contact_id: meeting.contact_id,
+            deal_id: meeting.deal_id,
+            company_id: meeting.company_id,
+            original_start_time: meeting.start_time,
+            bot_duration_seconds: duration_seconds,
+          },
+        }),
+      }).catch((err) => {
+        console.error('[MeetingBaaS Webhook] Failed to fire meeting_no_show signal:', err);
+      });
+    }
+  }
 
   // Check if MeetingBaaS transcription is enabled
   const transcriptionProvider = data.transcription_provider;
@@ -1292,6 +1427,20 @@ async function handleCalendarEvent(
     }
 
     console.log(`[MeetingBaaS Webhook] ${eventType === 'calendar_event.created' ? 'Created' : 'Updated'} calendar event (legacy): ${eventData.summary}`);
+
+    // Fire pre-meeting brief if this event is starting soon
+    if ((calendarEvent.attendees_count || 0) > 1 && meetingUrl) {
+      triggerPreMeetingIfSoon({
+        start_time: calendarEvent.start_time,
+        user_id: user_id,
+        org_id: org_id,
+        meeting_id: externalId,
+        title: calendarEvent.title,
+        attendees: eventData.attendees,
+        attendees_count: calendarEvent.attendees_count,
+        meeting_url: meetingUrl,
+      });
+    }
   }
 
   // Process instances/affected_instances array (actual MeetingBaaS format)
@@ -1338,6 +1487,20 @@ async function handleCalendarEvent(
     }
 
     console.log(`[MeetingBaaS Webhook] ${eventType === 'calendar_event.created' ? 'Created' : 'Updated'} calendar event: ${instance.title} (${externalId})`);
+
+    // Fire pre-meeting brief if this event is starting soon
+    if ((calendarEvent.attendees_count || 0) > 1 && meetingUrl) {
+      triggerPreMeetingIfSoon({
+        start_time: calendarEvent.start_time,
+        user_id: user_id,
+        org_id: org_id,
+        meeting_id: externalId,
+        title: calendarEvent.title,
+        attendees: instance.attendees,
+        attendees_count: calendarEvent.attendees_count,
+        meeting_url: meetingUrl,
+      });
+    }
   }
 
   // Update the MeetingBaaS calendar last_sync_at

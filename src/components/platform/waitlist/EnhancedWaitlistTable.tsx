@@ -765,6 +765,21 @@ function WaitlistTableRow({
               <RotateCw className="w-3.5 h-3.5" />
             </button>
           )}
+          {entry.status === 'converted' && (
+            <button
+              onClick={() => onRelease(entry.id)}
+              className="
+                p-1 flex-shrink-0
+                text-blue-600 dark:text-blue-400
+                hover:bg-blue-50 dark:hover:bg-blue-900/20
+                rounded
+                transition-colors duration-200
+              "
+              title="Re-invite user (reset and send new invitation)"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={() => {
               if (confirm('Are you sure you want to delete this entry?')) {

@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { buildMeetingPrepMessage, buildWeeklyCoachingDigestMessage, buildCoachingMicroFeedbackMessage, buildMeetingDebriefMessage, buildCampaignReportMessage } from '../_shared/slackBlocks.ts';
-import type { MeetingPrepData, WeeklyCoachingDigestData, CoachingMicroFeedbackData, MeetingDebriefData, CampaignReportData } from '../_shared/slackBlocks.ts';
+import { buildMeetingPrepMessage, buildWeeklyCoachingDigestMessage, buildCoachingMicroFeedbackMessage, buildMeetingDebriefMessage, buildCampaignReportMessage, buildCampaignReadyMessage } from '../_shared/slackBlocks.ts';
+import type { MeetingPrepData, WeeklyCoachingDigestData, CoachingMicroFeedbackData, MeetingDebriefData, CampaignReportData, CampaignReadyData } from '../_shared/slackBlocks.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -223,6 +223,24 @@ serve(async (req) => {
           const campaignMsg = buildCampaignReportMessage(campaignData);
           resolvedMessage = campaignMsg.text;
           resolvedBlocks = campaignMsg.blocks;
+          break;
+        }
+        case 'campaign_ready': {
+          const appUrl = Deno.env.get('APP_URL') || 'https://app.use60.com';
+          const readyData: CampaignReadyData = {
+            campaign_name: data.campaign_name || 'Campaign',
+            table_id: data.table_id || '',
+            table_name: data.table_name || '',
+            leads_found: data.leads_found || 0,
+            emails_generated: data.emails_generated || 0,
+            campaign_id: data.campaign_id,
+            duration_sec: data.duration_sec || 0,
+            conversation_id: data.conversation_id,
+            app_url: appUrl,
+          };
+          const readyMsg = buildCampaignReadyMessage(readyData);
+          resolvedMessage = readyMsg.text;
+          resolvedBlocks = readyMsg.blocks;
           break;
         }
         case 'meeting_debrief': {

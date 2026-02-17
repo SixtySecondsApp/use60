@@ -22,6 +22,7 @@ import { useOnboardingV2Store, SKILLS, SkillId } from '@/lib/stores/onboardingV2
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 import { useInvalidateUserProfile } from '@/lib/hooks/useUserProfile';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { factProfileService } from '@/lib/services/factProfileService';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
@@ -44,6 +45,7 @@ export function CompletionStep() {
   const { enrichment, skillConfigs, setStep, organizationId } = useOnboardingV2Store();
   const { completeStep } = useOnboardingProgress();
   const { user } = useAuth();
+  const { setActiveOrg } = useOrgStore();
   const invalidateProfile = useInvalidateUserProfile();
   const [isNavigating, setIsNavigating] = useState(false);
   const orgProfileCreatedRef = useRef(false);
@@ -62,7 +64,8 @@ export function CompletionStep() {
 
   /**
    * Auto-create the org's fact profile seeded with onboarding enrichment data.
-   * Fire-and-forget: failures here must not block onboarding completion.
+   * Awaited before navigation to prevent the request being killed by page change.
+   * Failures are non-fatal — user can set up the profile later in Settings.
    */
   const ensureOrgProfile = async () => {
     // Guard: only run once per mount, and only if we have the required IDs
@@ -111,17 +114,18 @@ export function CompletionStep() {
       // This ensures needsOnboarding state updates before navigation
       await completeStep('complete');
 
-      // Auto-create org fact profile (fire-and-forget, non-blocking)
-      ensureOrgProfile();
+      // Set the active org to the one from onboarding (prevents picking wrong/waitlist org)
+      if (organizationId) {
+        setActiveOrg(organizationId);
+      }
+
+      // Create org fact profile — await so the request isn't killed by navigation
+      await ensureOrgProfile();
 
       // Invalidate profile cache so dashboard fetches fresh data
-      // This ensures the profile is populated immediately after onboarding
       if (user?.id) {
         invalidateProfile();
       }
-
-      // Wait a brief moment for real-time subscription to update
-      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Navigate to dashboard with full page refresh to clear React Query cache
       window.location.href = '/dashboard';
@@ -228,9 +232,12 @@ export function CompletionStep() {
               setIsNavigating(true);
               try {
                 await completeStep('complete');
-                // Auto-create org fact profile (fire-and-forget, non-blocking)
-                ensureOrgProfile();
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // Set the active org to the one from onboarding
+                if (organizationId) {
+                  setActiveOrg(organizationId);
+                }
+                // Create org fact profile — await before navigating
+                await ensureOrgProfile();
                 // Use full page load to clear React Query cache
                 window.location.href = item.route;
               } finally {

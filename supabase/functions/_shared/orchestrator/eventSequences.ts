@@ -52,6 +52,42 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['classify-call-type'],
     },
+    // Wave 2b: Check for scheduling intent from detect-intents output
+    {
+      skill: 'detect-scheduling-intent',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['detect-intents'],
+    },
+    // Wave 2b: Detect verbal commitment / buying signals
+    {
+      skill: 'detect-verbal-commitment',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['detect-intents'],
+    },
+    // Wave 2b: Extract pricing discussion details
+    {
+      skill: 'extract-pricing-discussion',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['detect-intents'],
+    },
+    // Wave 2b: Detect new stakeholders mentioned but not in CRM
+    {
+      skill: 'detect-new-stakeholders',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['extract-action-items'],
+    },
     // Wave 3: These depend on extract/detect outputs
     {
       skill: 'suggest-next-actions',
@@ -67,7 +103,7 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
-      depends_on: ['extract-action-items', 'detect-intents'],
+      depends_on: ['extract-action-items', 'detect-intents', 'extract-pricing-discussion'],
     },
     {
       skill: 'update-crm-from-meeting',
@@ -83,16 +119,25 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
+      depends_on: ['extract-action-items', 'detect-new-stakeholders'],
+    },
+    // Wave 4: Create unified Command Centre task from meeting signals
+    {
+      skill: 'signal-task-processor',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
       depends_on: ['extract-action-items'],
     },
-    // Wave 4: Slack summary after all substantive steps complete
+    // Wave 5: Slack summary after all substantive steps complete
     {
       skill: 'notify-slack-summary',
       requires_context: ['tier1'],
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
-      depends_on: ['suggest-next-actions', 'draft-followup-email', 'create-tasks-from-actions'],
+      depends_on: ['suggest-next-actions', 'draft-followup-email', 'create-tasks-from-actions', 'signal-task-processor'],
     },
   ],
 
@@ -271,6 +316,15 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['analyse-stall-reason'],  // Wave 3: needs scored opportunities
     },
+    // Wave 4: Create unified Command Centre task for stale deal re-engagement
+    {
+      skill: 'signal-task-processor',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['analyse-stall-reason'],
+    },
   ],
 
   /**
@@ -380,7 +434,7 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['score-deal-risks'],
     },
-    // Wave 4: Deliver to Slack
+    // Wave 4: Deliver to Slack + create Command Centre tasks
     {
       skill: 'deliver-risk-slack',
       requires_context: ['tier1'],
@@ -388,6 +442,14 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       criticality: 'best-effort',
       available: true,
       depends_on: ['generate-risk-alerts'],
+    },
+    {
+      skill: 'signal-task-processor',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['score-deal-risks'],
     },
   ],
 };

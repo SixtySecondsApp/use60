@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, RefreshCw, LogOut, Clock, Calendar, Mail, UserX } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,23 +21,14 @@ export default function InactiveOrganizationScreen() {
   const { user, signOut } = useAuth();
   const [isRequesting, setIsRequesting] = useState(false);
   const [existingRequest, setExistingRequest] = useState<OrganizationReactivationRequest | null>(null);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
   const [isOverdue, setIsOverdue] = useState(false);
   const [isLeavingOrg, setIsLeavingOrg] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
-  useEffect(() => {
-    // Check if there's already a pending request
-    if (activeOrg?.id) {
-      checkExistingRequest();
-      calculateDaysRemaining();
-      checkOwnerStatus();
-    }
-  }, [activeOrg?.id, user?.id]);
-
-  const calculateDaysRemaining = () => {
+  const calculateDaysRemaining = useCallback(() => {
     if (!activeOrg?.deletion_scheduled_at) {
       setDaysRemaining(null);
       return;
@@ -50,9 +41,9 @@ export default function InactiveOrganizationScreen() {
 
     setDaysRemaining(Math.max(0, daysLeft));
     setIsOverdue(daysLeft <= 0);
-  };
+  }, [activeOrg?.deletion_scheduled_at]);
 
-  const checkOwnerStatus = async () => {
+  const checkOwnerStatus = useCallback(async () => {
     if (!activeOrg?.id || !user?.id) return;
 
     try {
@@ -74,9 +65,9 @@ export default function InactiveOrganizationScreen() {
       logger.error('[InactiveOrganizationScreen] Error checking owner status:', error);
       setIsOwner(false);
     }
-  };
+  }, [activeOrg?.id, user?.id]);
 
-  const checkExistingRequest = async () => {
+  const checkExistingRequest = useCallback(async () => {
     if (!activeOrg?.id) return;
 
     try {
@@ -88,14 +79,36 @@ export default function InactiveOrganizationScreen() {
     } finally {
       setIsCheckingStatus(false);
     }
-  };
+  }, [activeOrg?.id]);
+
+  useEffect(() => {
+    // Check if there's already a pending request
+    if (activeOrg?.id) {
+      checkExistingRequest();
+      calculateDaysRemaining();
+      checkOwnerStatus();
+    }
+  }, [activeOrg?.id, checkExistingRequest, calculateDaysRemaining, checkOwnerStatus]);
 
   const handleRequestReactivation = async () => {
-    if (!activeOrg?.id) return;
+    logger.log('[InactiveOrganizationScreen] handleRequestReactivation called', {
+      activeOrgId: activeOrg?.id,
+      activeOrgName: activeOrg?.name
+    });
+
+    if (!activeOrg?.id) {
+      logger.error('[InactiveOrganizationScreen] No active org ID available');
+      toast.error('Organization information not available', {
+        description: 'Please try refreshing the page.'
+      });
+      return;
+    }
 
     try {
       setIsRequesting(true);
+      logger.log('[InactiveOrganizationScreen] Calling requestOrganizationReactivation...');
       const result = await requestOrganizationReactivation(activeOrg.id);
+      logger.log('[InactiveOrganizationScreen] Reactivation result:', result);
 
       if (result.success) {
         toast.success('Reactivation request submitted', {
@@ -124,18 +137,34 @@ export default function InactiveOrganizationScreen() {
   };
 
   const handleLeaveOrganization = async () => {
-    if (!activeOrg?.id || !user?.id) return;
+    logger.log('[InactiveOrganizationScreen] handleLeaveOrganization called', {
+      activeOrgId: activeOrg?.id,
+      userId: user?.id
+    });
+
+    if (!activeOrg?.id || !user?.id) {
+      logger.error('[InactiveOrganizationScreen] Missing org or user ID', {
+        hasActiveOrg: !!activeOrg?.id,
+        hasUser: !!user?.id
+      });
+      toast.error('Unable to leave organization', {
+        description: 'Organization or user information not available. Please try refreshing the page.'
+      });
+      return;
+    }
 
     try {
       setIsLeavingOrg(true);
+      logger.log('[InactiveOrganizationScreen] Calling removeOrganizationMember...');
       const result = await removeOrganizationMember(activeOrg.id, user.id);
+      logger.log('[InactiveOrganizationScreen] Leave organization result:', result);
 
       if (result.success) {
         toast.success('You have left the organization', {
           description: 'You no longer have access to this organization.'
         });
-        // Redirect to organization selection/onboarding
-        navigate('/onboarding');
+        // Redirect to removed-user page with options to rejoin or choose different org
+        navigate('/onboarding/removed-user');
       } else {
         toast.error('Failed to leave organization', {
           description: result.error || 'Please try again or contact support.'
@@ -166,6 +195,16 @@ export default function InactiveOrganizationScreen() {
     }
   };
 
+  // Debug logging on render
+  logger.log('[InactiveOrganizationScreen] Render state:', {
+    activeOrgId: activeOrg?.id,
+    activeOrgName: activeOrg?.name,
+    userId: user?.id,
+    isCheckingStatus,
+    existingRequest: !!existingRequest,
+    isOwner
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <Card className="max-w-2xl w-full">
@@ -179,7 +218,7 @@ export default function InactiveOrganizationScreen() {
               Organization Inactive
             </CardTitle>
             <CardDescription className="mt-2">
-              {activeOrg?.name} has been deactivated and is currently unavailable.
+              {activeOrg?.name || 'This organization'} has been deactivated and is currently unavailable.
             </CardDescription>
           </div>
         </CardHeader>
@@ -193,7 +232,7 @@ export default function InactiveOrganizationScreen() {
                 Organization Deactivated
               </h3>
               <p className="text-sm text-red-800 dark:text-red-200">
-                {activeOrg?.name} has been deactivated. All members have lost access to this organization.
+                {activeOrg?.name || 'This organization'} has been deactivated. All members have lost access to this organization.
               </p>
             </div>
 
@@ -302,7 +341,7 @@ export default function InactiveOrganizationScreen() {
                   Organization Deactivated
                 </h3>
                 <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                  This organization has been deactivated by its owner. Contact the organization owner or administrator to request reactivation.
+                  This organization has been deactivated. You can request reactivation, and an administrator will review your request.
                 </p>
               </div>
 
@@ -311,9 +350,19 @@ export default function InactiveOrganizationScreen() {
                 <ul className="space-y-1 text-xs list-disc list-inside">
                   <li>The organization owner has 30 days to reactivate</li>
                   <li>After 30 days, all data will be permanently deleted</li>
-                  <li>You can request to rejoin once it's reactivated</li>
+                  <li>You can request reactivation to notify the owner</li>
                 </ul>
               </div>
+
+              <Button
+                onClick={handleRequestReactivation}
+                disabled={isRequesting}
+                className="w-full justify-between"
+                size="lg"
+              >
+                <span>Request Reactivation</span>
+                {isRequesting && <RefreshCw className="w-4 h-4 animate-spin" />}
+              </Button>
 
               <Button
                 onClick={handleLeaveOrganization}

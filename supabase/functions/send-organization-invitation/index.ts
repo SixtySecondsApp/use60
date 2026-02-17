@@ -24,6 +24,7 @@ interface SendInvitationRequest {
 
 /**
  * Generate HTML email template for organization invitation
+ * Dark gradient theme matching the 60 brand
  */
 function generateEmailTemplate(
   recipientName: string,
@@ -34,50 +35,77 @@ function generateEmailTemplate(
   return `<!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; }
-        .email-wrapper { background: white; border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        h1 { color: #1f2937; margin-bottom: 16px; font-size: 24px; }
-        p { color: #4b5563; margin-bottom: 16px; }
-        .button { display: inline-block; padding: 12px 24px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-weight: 500; }
-        .footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join ${organizationName} on 60</title>
 </head>
-<body>
-    <div class="container">
-        <div class="email-wrapper">
-            <h1>Join ${organizationName} on 60</h1>
+<body style="margin: 0; padding: 0; background-color: #0a0d14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0d14;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table width="600" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; overflow: hidden;">
 
-            <p>Hi ${recipientName || 'there'},</p>
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center;">
+              <h1 style="margin: 0; font-size: 32px; font-weight: bold; background: linear-gradient(to right, #10b981, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                60
+              </h1>
+            </td>
+          </tr>
 
-            <p>${inviterName} has invited you to join <strong>${organizationName}</strong> on 60.
-            Accept the invitation below to get started collaborating with your team.</p>
+          <!-- Content -->
+          <tr>
+            <td style="padding: 0 40px 40px;">
+              <p style="margin: 0 0 24px; font-size: 18px; color: #ffffff; text-align: center;">
+                <strong>${inviterName}</strong> has invited you to join <strong>${organizationName}</strong>
+              </p>
 
-            <p style="text-align: center; margin-top: 32px;">
-                <a href="${invitationUrl}" class="button">Accept Invitation</a>
-            </p>
+              <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                <p style="margin: 0 0 8px; font-size: 16px; color: #ffffff;">
+                  Hi ${recipientName || 'there'},
+                </p>
+                <p style="margin: 0 0 16px; font-size: 16px; color: #d1d5db; line-height: 1.6;">
+                  You've been invited to collaborate with <strong style="color: #ffffff;">${organizationName}</strong> on 60 — the AI-powered sales intelligence platform.
+                </p>
+                <p style="margin: 0; font-size: 16px; color: #d1d5db; line-height: 1.6;">
+                  Accept the invitation below to get started with your team.
+                </p>
+              </div>
 
-            <p style="font-size: 14px; color: #6b7280;">
-                Or copy and paste this link in your browser:<br>
-                <code style="background: #f3f4f6; padding: 8px; border-radius: 4px; display: block; margin-top: 8px; word-break: break-all;">
-                    ${invitationUrl}
-                </code>
-            </p>
+              <div style="text-align: center; margin-bottom: 24px;">
+                <a href="${invitationUrl}" style="display: inline-block; background: linear-gradient(to right, #10b981, #a855f7); color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-size: 16px; font-weight: 600;">
+                  Accept Invitation
+                </a>
+              </div>
 
-            <p style="font-size: 14px; color: #6b7280;">
+              <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 16px; text-align: center;">
+                <p style="margin: 0; font-size: 13px; color: #93c5fd; word-break: break-all;">
+                  Or copy this link: <a href="${invitationUrl}" style="color: #10b981; text-decoration: none;">${invitationUrl}</a>
+                </p>
+              </div>
+
+              <p style="margin: 16px 0 0; font-size: 13px; color: #6b7280; text-align: center;">
                 This invitation will expire in 7 days.
-            </p>
+              </p>
+            </td>
+          </tr>
 
-            <div class="footer">
-                <p>This is an automated message. If you have any questions, please contact us at support@use60.com</p>
-            </div>
-        </div>
-    </div>
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+              <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.6;">
+                You received this email because ${inviterName} invited you to join ${organizationName} on 60.<br>
+                If you have any questions, contact us at <a href="mailto:support@use60.com" style="color: #10b981; text-decoration: none;">support@use60.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
-</html>`;
+</html>`.trim();
 }
 
 serve(async (req) => {

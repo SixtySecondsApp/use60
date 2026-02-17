@@ -26,7 +26,8 @@ const corsHeaders = {
 };
 
 interface GenerateTokenRequest {
-  waitlist_entry_id: string;
+  waitlist_entry_id?: string; // Optional - for waitlist invites
+  user_id?: string; // Optional - for direct user invites
   email: string;
 }
 
@@ -109,9 +110,10 @@ serve(async (req) => {
 
     const request: GenerateTokenRequest = await req.json();
 
-    if (!request.waitlist_entry_id || !request.email) {
+    // Must have either waitlist_entry_id OR user_id, plus email
+    if ((!request.waitlist_entry_id && !request.user_id) || !request.email) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing waitlist_entry_id or email' }),
+        JSON.stringify({ success: false, error: 'Missing (waitlist_entry_id or user_id) and email' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -144,44 +146,71 @@ serve(async (req) => {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
 
-    // First verify the waitlist entry exists before inserting token
-    const { data: entryExists, error: entryCheckError } = await supabaseAdmin
-      .from('meetings_waitlist')
-      .select('id')
-      .eq('id', request.waitlist_entry_id)
-      .maybeSingle();
+    // Verify the waitlist entry exists if provided
+    if (request.waitlist_entry_id) {
+      const { data: entryExists, error: entryCheckError } = await supabaseAdmin
+        .from('meetings_waitlist')
+        .select('id')
+        .eq('id', request.waitlist_entry_id)
+        .maybeSingle();
 
-    if (entryCheckError) {
-      console.error('Error checking waitlist entry:', entryCheckError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Failed to verify waitlist entry',
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (entryCheckError) {
+        console.error('Error checking waitlist entry:', entryCheckError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Failed to verify waitlist entry',
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!entryExists) {
+        console.error('Waitlist entry not found:', request.waitlist_entry_id);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Waitlist entry not found',
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    if (!entryExists) {
-      console.error('Waitlist entry not found:', request.waitlist_entry_id);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Waitlist entry not found',
-        }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // If user_id provided, verify the user exists
+    if (request.user_id) {
+      const { data: userExists, error: userCheckError } = await supabaseAdmin.auth.admin.getUserById(request.user_id);
+
+      if (userCheckError || !userExists?.user) {
+        console.error('User not found:', request.user_id, userCheckError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'User not found',
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    // Insert token into database
+    // Insert token into database (either with waitlist_entry_id OR user_id)
+    const tokenRecord: any = {
+      token,
+      email: request.email.toLowerCase(),
+      expires_at: expiresAt.toISOString(),
+    };
+
+    // Add the appropriate ID field
+    if (request.waitlist_entry_id) {
+      tokenRecord.waitlist_entry_id = request.waitlist_entry_id;
+    }
+    if (request.user_id) {
+      tokenRecord.user_id = request.user_id;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('waitlist_magic_tokens')
-      .insert({
-        token,
-        waitlist_entry_id: request.waitlist_entry_id,
-        email: request.email.toLowerCase(),
-        expires_at: expiresAt.toISOString(),
-      })
+      .insert(tokenRecord)
       .select()
       .single();
 

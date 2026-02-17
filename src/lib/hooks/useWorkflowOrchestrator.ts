@@ -64,6 +64,7 @@ export interface WorkflowConfig {
   num_email_steps?: number;
   campaign_angle?: string;
   target_table_id?: string;
+  skip_search?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +80,7 @@ export function useWorkflowOrchestrator() {
   const [preflightQuestions, setPreflightQuestions] = useState<ClarifyingQuestion[] | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
   const [pendingConfig, setPendingConfig] = useState<WorkflowConfig | null>(null);
+  const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -92,6 +94,7 @@ export function useWorkflowOrchestrator() {
     setPreflightQuestions(null);
     setPendingPrompt(null);
     setPendingConfig(null);
+    setPendingConversationId(null);
     abortRef.current?.abort();
     abortRef.current = null;
   }, []);
@@ -101,6 +104,7 @@ export function useWorkflowOrchestrator() {
     prompt: string,
     config?: WorkflowConfig,
     clarificationAnswers?: Record<string, string>,
+    conversationId?: string,
   ) => {
     // Reset state
     setIsRunning(true);
@@ -110,6 +114,7 @@ export function useWorkflowOrchestrator() {
     setClarifyingQuestions(null);
     setPendingPrompt(prompt);
     setPendingConfig(config ?? null);
+    setPendingConversationId(conversationId ?? null);
 
     abortRef.current?.abort();
     const abortController = new AbortController();
@@ -138,6 +143,7 @@ export function useWorkflowOrchestrator() {
           prompt,
           config,
           clarification_answers: clarificationAnswers,
+          conversation_id: conversationId,
         }),
         signal: abortController.signal,
       });
@@ -292,15 +298,16 @@ export function useWorkflowOrchestrator() {
   const answerClarifications = useCallback((answers: Record<string, string>) => {
     if (!pendingPrompt) return;
     setClarifyingQuestions(null);
-    execute(pendingPrompt, pendingConfig ?? undefined, answers);
-  }, [pendingPrompt, pendingConfig, execute]);
+    execute(pendingPrompt, pendingConfig ?? undefined, answers, pendingConversationId ?? undefined);
+  }, [pendingPrompt, pendingConfig, pendingConversationId, execute]);
 
   // ---- Start workflow with pre-flight questions ----
-  const startWorkflow = useCallback((prompt: string, config?: WorkflowConfig) => {
+  const startWorkflow = useCallback((prompt: string, config?: WorkflowConfig, conversationId?: string) => {
     // Reset everything
     reset();
     setPendingPrompt(prompt);
     setPendingConfig(config ?? null);
+    setPendingConversationId(conversationId ?? null);
 
     // Check for missing info
     const missing = detectMissingInfo(prompt);
@@ -310,7 +317,7 @@ export function useWorkflowOrchestrator() {
     }
 
     // No questions needed — execute immediately
-    execute(prompt, config);
+    execute(prompt, config, undefined, conversationId);
   }, [reset, execute]);
 
   // ---- Answer pre-flight questions ----
@@ -318,8 +325,8 @@ export function useWorkflowOrchestrator() {
     if (!pendingPrompt) return;
     setPreflightQuestions(null);
     const enrichedPrompt = enrichPromptWithAnswers(pendingPrompt, answers);
-    execute(enrichedPrompt, pendingConfig ?? undefined);
-  }, [pendingPrompt, pendingConfig, execute]);
+    execute(enrichedPrompt, pendingConfig ?? undefined, undefined, pendingConversationId ?? undefined);
+  }, [pendingPrompt, pendingConfig, pendingConversationId, execute]);
 
   // ---- Abort ----
   const abort = useCallback(() => {

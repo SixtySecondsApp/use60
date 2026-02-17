@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Hide scrollbar on tab navigation
 const scrollbarHideStyle = `
@@ -48,6 +49,7 @@ const sanitizeInput = (input: string): string => {
 };
 
 export function SkillsConfigStep() {
+  const queryClient = useQueryClient();
   const { skillConfigs, updateSkillConfig, setStep, saveAllSkills, organizationId, enrichment, resetAndCleanup } =
     useOnboardingV2Store();
   const [isResetting, setIsResetting] = useState(false);
@@ -56,7 +58,7 @@ export function SkillsConfigStep() {
     if (isResetting) return;
     setIsResetting(true);
     try {
-      await resetAndCleanup();
+      await resetAndCleanup(queryClient);
     } finally {
       setIsResetting(false);
     }

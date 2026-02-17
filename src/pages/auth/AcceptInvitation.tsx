@@ -10,6 +10,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Building2, Check, X, Loader2, LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { getInvitationByToken, acceptInvitation, type Invitation } from '@/lib/services/invitationService';
@@ -23,6 +24,7 @@ export default function AcceptInvitation() {
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const { refreshOrgs, switchOrg } = useOrg();
+  const queryClient = useQueryClient();
 
   const [status, setStatus] = useState<InviteStatus>('loading');
   const [invitation, setInvitation] = useState<Invitation | null>(null);
@@ -64,6 +66,15 @@ export default function AcceptInvitation() {
       return;
     }
 
+    // Refresh session to ensure JWT is valid before calling RPC
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      // Session expired/invalid — redirect to signup/signin flow
+      toast.error('Your session has expired. Please sign in to accept the invitation.');
+      navigate(`/auth/invite-signup/${token}`);
+      return;
+    }
+
     // Check if email matches
     if (user?.email?.toLowerCase() !== invitation.email.toLowerCase()) {
       setStatus('error');
@@ -78,6 +89,12 @@ export default function AcceptInvitation() {
     const result = await acceptInvitation(token);
 
     if (!result.success) {
+      // If auth-related failure, redirect to re-authenticate
+      if (result.error_message?.includes('Not authenticated') || result.error_message?.includes('user_not_found')) {
+        toast.error('Please sign in again to accept the invitation.');
+        navigate(`/auth/invite-signup/${token}`);
+        return;
+      }
       setStatus('error');
       setError(result.error_message || 'Failed to accept invitation');
       toast.error(result.error_message || 'Failed to accept invitation');
@@ -108,6 +125,11 @@ export default function AcceptInvitation() {
 
       setStatus('accepted');
       toast.success(`Welcome to ${result.org_name}!`);
+
+      // Invalidate auth user cache AND profile cache so dashboard loads fresh data
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
+      await queryClient.invalidateQueries({ queryKey: ['auth'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
 
       // Redirect to dashboard after a short delay
       setTimeout(() => {

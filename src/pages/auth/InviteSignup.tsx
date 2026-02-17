@@ -14,6 +14,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Building2, Lock, User, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { getInvitationByToken, completeInviteSignup, type Invitation } from '@/lib/services/invitationService';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -27,6 +28,7 @@ export default function InviteSignup() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const { signUp } = useAuth();
+  const queryClient = useQueryClient();
 
   const [status, setStatus] = useState<SignupStatus>('loading');
   const [formMode, setFormMode] = useState<FormMode>('signup');
@@ -89,6 +91,14 @@ export default function InviteSignup() {
         return;
       }
 
+      // Verify session after sign-in
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setStatus('ready');
+        toast.error('Sign-in succeeded but session not established. Please try again.');
+        return;
+      }
+
       // Complete the invite signup (create membership, mark onboarding complete)
       const result = await completeInviteSignup(token);
 
@@ -99,10 +109,17 @@ export default function InviteSignup() {
         return;
       }
 
-      // Set the invited org as the active organization
+      // Load organization memberships and set the invited org as active
+      // Must load orgs first so the store has membership data for the dashboard
+      await useOrgStore.getState().loadOrganizations();
       if (result.org_id) {
         useOrgStore.getState().setActiveOrg(result.org_id);
       }
+
+      // Invalidate auth user cache AND profile cache so dashboard loads fresh data
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
+      await queryClient.invalidateQueries({ queryKey: ['auth'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
 
       setStatus('complete');
       toast.success(`Welcome to ${result.org_name}!`);
@@ -201,6 +218,25 @@ export default function InviteSignup() {
         console.warn('[InviteSignup] Error saving profile names:', profileErr);
       }
 
+      // Step 2.5: Verify session is established before calling RPC
+      // signUp() should auto-create a session, but verify it exists
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Fallback: explicitly sign in with the password we just used
+        console.warn('[InviteSignup] No session after signup, signing in explicitly');
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: invitation.email,
+          password: formData.password,
+        });
+        if (signInError) {
+          console.error('[InviteSignup] Fallback sign-in failed:', signInError);
+          setStatus('error');
+          setError('Account created but sign-in failed. Please try signing in manually.');
+          toast.error('Please sign in with your new password to complete setup.');
+          return;
+        }
+      }
+
       // Step 3: Complete the invite signup (create membership, mark onboarding complete)
       // This doesn't require a session since it's a SECURITY DEFINER RPC
       const result = await completeInviteSignup(token);
@@ -212,11 +248,17 @@ export default function InviteSignup() {
         return;
       }
 
-      // Step 4: Set the invited org as the active organization
-      // This ensures the dashboard loads the correct org, not an auto-created one
+      // Step 4: Load org memberships and set the invited org as active
+      // Must load orgs first so the store has membership data for the dashboard
+      await useOrgStore.getState().loadOrganizations();
       if (result.org_id) {
         useOrgStore.getState().setActiveOrg(result.org_id);
       }
+
+      // Invalidate auth user cache AND profile cache so dashboard loads fresh data
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
+      await queryClient.invalidateQueries({ queryKey: ['auth'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
 
       // Success! Redirect straight to dashboard
       setStatus('complete');

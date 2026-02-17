@@ -20,6 +20,7 @@ import { authenticateRequest, getUserOrgId } from '../_shared/edgeAuth.ts';
 import { getGoogleIntegration } from '../_shared/googleOAuth.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
 import { extractMeetingUrl } from '../_shared/meetingUrlExtractor.ts';
+import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
 
 // Helper for logging sync operations to integration_sync_logs table
 async function logSyncOperation(
@@ -287,14 +288,21 @@ serve(async (req) => {
     let nextPageToken: string | undefined = undefined;
     let nextSyncToken: string | undefined = undefined;
     const now = new Date().toISOString();
+    const syncStartTime = Date.now();
+    const MAX_SYNC_TIME_MS = 120000; // 120s hard limit (edge function timeout is 150s)
 
     // Fetch events from Google Calendar API
     for (let page = 0; page < 50; page++) {
+      // Time-based circuit breaker - stop before edge function timeout
+      if (Date.now() - syncStartTime > MAX_SYNC_TIME_MS) {
+        console.warn(`[CALENDAR-SYNC] Approaching timeout after ${Math.round((Date.now() - syncStartTime) / 1000)}s. Stopping pagination at page ${page}. Stats so far:`, stats);
+        break;
+      }
       // Safety cap to prevent infinite loops
       const params = new URLSearchParams();
       params.set('singleEvents', 'true');
       params.set('orderBy', 'startTime');
-      params.set('maxResults', '2500'); // Google's max per page
+      params.set('maxResults', '250'); // Reduced from 2500 to prevent timeouts and allow circuit breaker checks
 
       if (nextPageToken) {
         params.set('pageToken', nextPageToken);
@@ -450,47 +458,45 @@ serve(async (req) => {
             stats.created++;
           }
 
-          // Log successful event sync
-          const eventTitle = ev.summary || '(No title)'
-          const eventStart = ev.start?.dateTime || ev.start?.date
-          const formattedDate = eventStart ? new Date(eventStart).toLocaleDateString() : ''
-          await logSyncOperation(supabase, {
-            orgId,
-            userId,
-            operation: isCancelled ? 'delete' : 'sync',
-            direction: 'inbound',
-            entityType: 'event',
-            entityId: eventDbId,
-            entityName: `${eventTitle}${formattedDate ? ` (${formattedDate})` : ''}`,
-            metadata: {
-              google_event_id: ev.id,
-              all_day: !ev.start?.dateTime,
-              attendees_count: Array.isArray(ev.attendees) ? ev.attendees.length : 0,
-            },
-          })
+          // NOTE: Per-event logSyncOperation removed to prevent DB flooding
+          // (was generating ~13k+ RPC calls/day). A single summary log is written at the end.
 
-          // Upsert attendees to calendar_attendees table (with proper error handling)
+          // Fire pre-meeting brief if this event is starting soon
+          if (!isCancelled && payload.attendees_count > 1) {
+            triggerPreMeetingIfSoon({
+              start_time: payload.start_time,
+              user_id: userId,
+              org_id: orgId,
+              meeting_id: eventDbId,
+              title: payload.title,
+              attendees: payload.attendees,
+              attendees_count: payload.attendees_count,
+              meeting_url: payload.meeting_url,
+            });
+          }
+
+          // Batch upsert attendees (instead of one-by-one)
           if (Array.isArray(ev.attendees) && ev.attendees.length > 0) {
-            for (const attendee of ev.attendees) {
-              try {
+            try {
+              const attendeeRows = ev.attendees
+                .filter((a: any) => a.email)
+                .map((attendee: any) => ({
+                  event_id: eventDbId,
+                  email: attendee.email,
+                  name: attendee.displayName || null,
+                  is_organizer: attendee.organizer === true,
+                  is_required: attendee.optional !== true,
+                  response_status: attendee.responseStatus || 'needsAction',
+                  responded_at: attendee.responseStatus !== 'needsAction' ? now : null,
+                }));
+              if (attendeeRows.length > 0) {
                 await supabase
                   .from('calendar_attendees')
-                  .upsert(
-                    {
-                      event_id: eventDbId,
-                      email: attendee.email,
-                      name: attendee.displayName || null,
-                      is_organizer: attendee.organizer === true,
-                      is_required: attendee.optional !== true,
-                      response_status: attendee.responseStatus || 'needsAction',
-                      responded_at: attendee.responseStatus !== 'needsAction' ? now : null,
-                    },
-                    { onConflict: 'event_id,email' }
-                  );
-              } catch (attendeeError) {
-                // Silently fail attendee upserts - event is more important
-                console.warn('Failed to upsert attendee:', attendeeError);
+                  .upsert(attendeeRows, { onConflict: 'event_id,email' });
               }
+            } catch (attendeeError) {
+              // Silently fail attendee upserts - event is more important
+              console.warn('Failed to batch upsert attendees:', attendeeError);
             }
           }
         } catch (err) {
@@ -524,6 +530,26 @@ serve(async (req) => {
         last_sync_token: nextSyncToken || undefined,
       })
       .eq('id', calendarRecordId);
+
+    // Log a single summary sync operation (instead of per-event logging)
+    const totalEvents = stats.created + stats.updated + stats.deleted + stats.skipped;
+    const syncDurationMs = Date.now() - syncStartTime;
+    if (totalEvents > 0) {
+      await logSyncOperation(supabase, {
+        orgId,
+        userId,
+        operation: 'sync',
+        direction: 'inbound',
+        entityType: 'calendar_batch',
+        entityName: `Calendar sync: ${stats.created} created, ${stats.deleted} deleted, ${stats.skipped} skipped`,
+        metadata: {
+          ...stats,
+          total_events: totalEvents,
+          duration_ms: syncDurationMs,
+          has_sync_token: !!nextSyncToken,
+        },
+      });
+    }
 
     return jsonResponse({
       success: true,

@@ -1,0 +1,112 @@
+{
+  "project": "Campaign Workflow Improvements",
+  "description": "Fix duplicate campaign names, add Command Centre background tracking, enable chat resumption from tasks, Slack notify on completion, and fix Instantly column visibility",
+  "createdAt": "2026-02-16T14:00:00Z",
+  "features": [
+    {
+      "id": "cwi",
+      "name": "Campaign Workflow Improvements",
+      "status": "pending"
+    }
+  ],
+  "stories": [
+    {
+      "id": "CWI-001",
+      "feature": "cwi",
+      "title": "Add Command Centre task tracking to ops-workflow-orchestrator",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CWI-002", "CWI-003", "CWI-004"],
+      "acceptance": [
+        "Orchestrator creates a tasks row (source='copilot', ai_status='working', deliverable_type='campaign_workflow') at workflow start",
+        "Task deliverable_data stores conversation_id, prompt, and config",
+        "On workflow_complete: task updated to ai_status='draft_ready' with table_id, campaign_name, step summaries, lead count, email count",
+        "On error: task updated to ai_status='failed' with error details",
+        "Migration adds 'campaign_workflow' to tasks_deliverable_type_check constraint"
+      ],
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts",
+        "supabase/migrations/20260216100000_add_campaign_workflow_deliverable.sql"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "CWI-002",
+      "feature": "cwi",
+      "title": "Pass conversation_id from frontend to orchestrator and invalidate queries on completion",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["CWI-001"], "files": [], "schema": [] },
+      "blocks": ["CWI-003"],
+      "acceptance": [
+        "useWorkflowOrchestrator.execute() accepts optional conversationId and sends it in the request body",
+        "CampaignWorkflowResponse reads conversationId from CopilotContext and passes it through",
+        "On workflow_complete, invalidate ops-table query keys so Instantly columns appear immediately",
+        "CompletionCard uses queryClient.invalidateQueries when user clicks 'Open in Ops Table'"
+      ],
+      "files": [
+        "src/lib/hooks/useWorkflowOrchestrator.ts",
+        "src/components/copilot/responses/CampaignWorkflowResponse.tsx"
+      ],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "CWI-003",
+      "feature": "cwi",
+      "title": "Add 'Continue in Copilot' action to Command Centre campaign workflow tasks",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["CWI-001", "CWI-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "DeliverableEditor renders campaign_workflow deliverables with campaign name, metrics summary, and action buttons",
+        "Shows 'Open in Ops Table' button linking to /ops/{table_id}",
+        "Shows 'Continue in Copilot' button that loads the conversation and opens copilot",
+        "TaskDetailPanel shows working/complete status appropriately for campaign_workflow tasks",
+        "Command Centre types updated to include 'campaign_workflow' in DeliverableType"
+      ],
+      "files": [
+        "src/components/command-centre/DeliverableEditor.tsx",
+        "src/components/command-centre/TaskDetailPanel.tsx",
+        "src/components/command-centre/types.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "CWI-004",
+      "feature": "cwi",
+      "title": "Slack notify user when campaign is ready",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["CWI-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "Orchestrator fires a non-blocking send-slack-message call with message_type='campaign_ready' on workflow_complete",
+        "send-slack-message handles 'campaign_ready' case using existing buildCampaignReadyMessage from slackBlocks.ts",
+        "Slack failure never fails the workflow (wrapped in try/catch)",
+        "Message includes campaign name, lead count, email count, build time, and 'Open in Ops Table' + 'Continue in Copilot' buttons"
+      ],
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts",
+        "supabase/functions/send-slack-message/index.ts"
+      ],
+      "estimatedMinutes": 15
+    }
+  ],
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 0,
+    "currentFeature": "cwi",
+    "lastUpdated": "2026-02-16T14:00:00Z"
+  },
+  "notes": {
+    "unique_campaign_names": "ALREADY IMPLEMENTED — ensureUniqueCampaignName() exists at line 676 of the orchestrator. Appends (2), (3), etc. and emits SSE progress event. No work needed.",
+    "instantly_columns": "Column creation code exists and works (lines 800-905). The real issue is React Query cache staleness — fixed in CWI-002 via query invalidation on completion.",
+    "slack_blocks": "buildCampaignReadyMessage() and CampaignReadyData already exist in slackBlocks.ts (line 3954). Just need to wire it up in send-slack-message handler."
+  }
+}

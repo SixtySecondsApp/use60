@@ -11,6 +11,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/clientV2';
 import { Target, Database, MessageSquare, GitBranch, UserCheck, LucideIcon } from 'lucide-react';
+import { toast } from 'sonner';
 
 // ============================================================================
 // LocalStorage Persistence
@@ -243,6 +244,9 @@ interface OnboardingV2State {
   currentStep: OnboardingV2Step;
   currentSkillIndex: number;
 
+  // Resetting flag to prevent auth cascade during "Start over"
+  isResettingOnboarding: boolean;
+
   // Website input (for personal email users)
   websiteUrl: string | null;
   hasNoWebsite: boolean;
@@ -313,7 +317,7 @@ interface OnboardingV2State {
   createOrganizationFromManualData: (userId: string, manualData: ManualEnrichmentData) => Promise<string>;
 
   // Enrichment actions
-  startEnrichment: (organizationId: string, domain: string, force?: boolean) => Promise<void>;
+  startEnrichment: (organizationId: string, domain: string, force?: boolean) => Promise<{ success: boolean; error?: string }>;
   pollEnrichmentStatus: (organizationId: string) => Promise<void>;
   setEnrichment: (data: EnrichmentData) => void;
 
@@ -337,7 +341,7 @@ interface OnboardingV2State {
 
   // Reset
   reset: () => void;
-  resetAndCleanup: () => Promise<void>;
+  resetAndCleanup: (queryClient?: any) => Promise<void>;
 }
 
 // ============================================================================
@@ -408,6 +412,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   // Default to website_input as a safe fallback - will be updated by setUserEmail()
   currentStep: 'website_input',
   currentSkillIndex: 0,
+
+  // Resetting flag
+  isResettingOnboarding: false,
 
   // Website input state
   websiteUrl: null,
@@ -641,6 +648,23 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No session');
 
+      // CRITICAL: Block pending approval users from creating organizations
+      // They must wait for approval before proceeding with onboarding
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('profile_status')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('[onboardingV2] Error checking profile status:', profileError);
+        // Continue anyway - non-critical check
+      } else if (profile?.profile_status === 'pending_approval') {
+        console.log('[onboardingV2] User is pending approval, cannot create organization');
+        toast.error('Account pending approval. Please wait for organization owner to approve your request.');
+        throw new Error('Account pending approval. Please wait for organization owner to approve your request.');
+      }
+
       // ALWAYS check for existing organizations by domain first
       // Even if we have an auto-created org ID, we should check if a real org exists
       console.log('[onboardingV2] Checking for existing organization with domain:', domain);
@@ -787,27 +811,76 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       // No existing org found - check if we need to create one or use the provided one
       if (!finalOrgId || finalOrgId === '') {
-        // No org ID provided - create new one
-        // Use placeholder name - will be updated after enrichment discovers actual company name
-        const organizationName = 'My Organization';
-        const { data: newOrg, error: createError } = await supabase
-          .from('organizations')
-          .insert({
-            name: organizationName,
-            company_domain: domain,
-            created_by: session.user.id,
-            is_active: true,
-          })
-          .select('id')
-          .single();
+        // Create org with domain as name (updated to real name after enrichment completes)
+        const domainLabel = domain.replace(/\.(com|io|ai|co|net|org|app|dev|xyz)$/i, '');
+        const organizationName = domainLabel.charAt(0).toUpperCase() + domainLabel.slice(1);
 
-        if (createError || !newOrg?.id) {
-          throw createError || new Error('Failed to create organization');
+        let newOrg = null;
+        let createError = null;
+
+        try {
+          const result = await supabase
+            .from('organizations')
+            .insert({
+              name: organizationName,
+              company_domain: domain,
+              created_by: session.user.id,
+              is_active: true,
+            })
+            .select('id')
+            .single();
+
+          newOrg = result.data;
+          createError = result.error;
+        } catch (err: any) {
+          createError = err;
         }
 
-        console.log('[onboardingV2] Created new organization:', newOrg.id);
+        // Handle UNIQUE constraint violation (race condition from rapid clicking)
+        if (createError) {
+          // Check if it's a duplicate domain error (23505 is PostgreSQL unique violation code)
+          const isDuplicateDomain = createError.code === '23505' &&
+                                     createError.message?.includes('unique_company_domain');
 
-        // Add user as owner of the new organization
+          if (isDuplicateDomain) {
+            console.log('[onboardingV2] Duplicate domain detected (race condition), fetching existing org');
+
+            // Re-query for the org that was just created by the racing request
+            const { data: existingByDomain, error: fetchError } = await supabase
+              .from('organizations')
+              .select('id, created_by')
+              .eq('company_domain', domain)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            if (fetchError || !existingByDomain) {
+              throw new Error('Organization exists but could not be retrieved');
+            }
+
+            // Check if current user owns this org
+            if (existingByDomain.created_by === session.user.id) {
+              // User owns it - reuse it
+              console.log('[onboardingV2] Reusing user\'s existing org from race condition');
+              newOrg = { id: existingByDomain.id };
+              createError = null;
+            } else {
+              // Someone else owns it - should not happen in onboarding, but handle gracefully
+              console.error('[onboardingV2] Duplicate domain owned by different user');
+              throw new Error('Organization with this domain already exists');
+            }
+          } else {
+            // Other error - throw it
+            throw createError;
+          }
+        }
+
+        if (!newOrg?.id) {
+          throw new Error('Failed to create organization');
+        }
+
+        console.log('[onboardingV2] Organization ready with domain name:', organizationName, newOrg.id);
+
+        // Add user as owner (upsert handles race condition if membership already exists)
         const { error: memberError } = await supabase
           .from('organization_memberships')
           .upsert({
@@ -815,9 +888,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             user_id: session.user.id,
             role: 'owner',
             member_status: 'active',
-          }, {
-            onConflict: 'org_id,user_id'
-          });
+          }, { onConflict: 'org_id,user_id' });
 
         if (memberError) throw memberError;
 
@@ -839,8 +910,43 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         currentStep: 'enrichment_loading',
       });
 
-      // Start enrichment with the provided website
-      get().startEnrichment(finalOrgId, domain);
+      // Start enrichment with org ID
+      // CRITICAL: Await enrichment to catch startup failures
+      const enrichmentResult = await get().startEnrichment(finalOrgId, domain);
+
+      if (!enrichmentResult.success) {
+        // Enrichment failed to start - delete the org we just created
+        console.error('[onboardingV2] Enrichment failed to start, cleaning up organization:', finalOrgId);
+        toast.error('Failed to start organization enrichment. Please try again.');
+
+        try {
+          // Delete membership first (FK dependency)
+          await supabase
+            .from('organization_memberships')
+            .delete()
+            .eq('org_id', finalOrgId)
+            .eq('user_id', session.user.id);
+
+          // Delete the organization
+          await supabase
+            .from('organizations')
+            .delete()
+            .eq('id', finalOrgId);
+
+          console.log('[onboardingV2] Successfully cleaned up failed organization');
+        } catch (cleanupError) {
+          console.error('[onboardingV2] Failed to cleanup org after enrichment failure:', cleanupError);
+          toast.error('Error cleaning up. Please contact support if issue persists.');
+        }
+
+        // Reset state and show error
+        set({
+          organizationId: null,
+          enrichmentError: enrichmentResult.error || 'Failed to start organization enrichment',
+          currentStep: 'website_input',
+        });
+        return;
+      }
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to process website';
@@ -1175,6 +1281,10 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         throw new Error('Cannot start polling without valid organizationId');
       }
 
+      // Get domain for polling (manual enrichment may have company domain)
+      const { domain } = get();
+      const pollDomain = domain || manualData.company_name || '';
+
       // Start polling for status (manual enrichment still runs AI skill generation)
       get().pollEnrichmentStatus(finalOrgId);
 
@@ -1185,7 +1295,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   },
 
   // Start enrichment (website-based)
-  startEnrichment: async (organizationId, domain, force = false) => {
+  startEnrichment: async (organizationId: string, domain: string, force = false) => {
     const currentRetryCount = get().enrichmentRetryCount;
     // If retrying (force=true), reset polling state and increment retry count
     const resetState = force
@@ -1220,23 +1330,28 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // Start polling for status
       get().pollEnrichmentStatus(organizationId);
 
+      // Return success for validation in submitWebsite
+      return { success: true };
+
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start enrichment';
       set({ isEnrichmentLoading: false, enrichmentError: message });
+      // Return failure for validation in submitWebsite
+      return { success: false, error: message };
     }
   },
 
   // Poll enrichment status with timeout protection
-  pollEnrichmentStatus: async (organizationId) => {
+  pollEnrichmentStatus: async (organizationId: string) => {
     const MAX_POLLING_DURATION = 5 * 60 * 1000; // 5 minutes
     const MAX_ATTEMPTS = 150; // 150 * 2s = 5 minutes
     const POLL_INTERVAL = 2000; // 2 seconds
 
     const state = get();
 
-    // Guard: Stop polling if organizationId cleared or step changed away from enrichment flow
-    if (!state.organizationId && state.currentStep !== 'enrichment_loading') {
-      console.log('[pollEnrichmentStatus] Stopping - organizationId cleared or step changed');
+    // Guard: Stop polling if step changed away from enrichment flow
+    if (state.currentStep !== 'enrichment_loading') {
+      console.log('[pollEnrichmentStatus] Stopping - step changed');
       set({
         isEnrichmentLoading: false,
         pollingStartTime: null,
@@ -1306,7 +1421,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         const { status, enrichment, skills } = data;
 
         if (status === 'completed' && enrichment) {
-          // Update organization name with enriched company name
+          // Update org name with enriched company name
           if (enrichment.company_name && organizationId) {
             try {
               await supabase
@@ -1780,6 +1895,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // Steps
       currentStep: 'website_input', // Reset to website_input to allow users to restart onboarding
       currentSkillIndex: 0,
+      // Resetting flag
+      isResettingOnboarding: false,
       // Website input
       websiteUrl: null,
       hasNoWebsite: false,
@@ -1823,67 +1940,69 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   },
 
   // Reset with full database cleanup (deletes org + related records)
-  resetAndCleanup: async () => {
-    const { organizationId, userEmail } = get();
+  resetAndCleanup: async (queryClient?) => {
+    const { organizationId, domain, userEmail } = get();
 
-    if (organizationId) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('No session');
+    // Step 1: Set resetting flag FIRST to prevent ProtectedRoute redirects
+    set({ isResettingOnboarding: true });
 
-        // Delete in dependency order to respect foreign key constraints
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
 
-        // 1. Delete organization_enrichment records
-        await supabase
-          .from('organization_enrichment')
-          .delete()
-          .eq('organization_id', organizationId);
+      // Step 2: Reset onboarding progress FIRST (so needsOnboarding stays correct)
+      await supabase
+        .from('user_onboarding_progress')
+        .update({ onboarding_step: 'website_input', onboarding_completed_at: null })
+        .eq('user_id', session.user.id);
 
-        // 2. Delete organization_skills records
-        await supabase
-          .from('organization_skills')
-          .delete()
-          .eq('organization_id', organizationId);
+      if (organizationId) {
+        // Step 3a: Org exists (post-enrichment) - full cleanup in FK dependency order
+        // Delete child records first, then parent organization (ONBOARD-007)
+        await supabase.from('organization_enrichment').delete().eq('organization_id', organizationId);
+        await supabase.from('organization_join_requests').delete().eq('org_id', organizationId);
+        await supabase.from('organization_skills').delete().eq('organization_id', organizationId);
+        await supabase.from('organization_context').delete().eq('organization_id', organizationId);
+        await supabase.from('organization_memberships').delete().eq('org_id', organizationId).eq('user_id', session.user.id);
+        // Defensive deletion: reengagement_log has NO CASCADE - could block org deletion if records exist
+        await supabase.from('reengagement_log').delete().eq('org_id', organizationId);
+        await supabase.from('organizations').delete().eq('id', organizationId).eq('created_by', session.user.id);
 
-        // 3. Delete organization_context records
-        await supabase
-          .from('organization_context')
-          .delete()
-          .eq('organization_id', organizationId);
+        // Step 3a-verify: Verify cleanup completed successfully (ONBOARD-010)
+        const { data: verificationResult, error: verifyError } = await supabase
+          .rpc('verify_organization_cleanup', { p_org_id: organizationId });
 
-        // 4. Delete membership (only this user's)
-        await supabase
-          .from('organization_memberships')
-          .delete()
-          .eq('org_id', organizationId)
-          .eq('user_id', session.user.id);
+        if (verifyError) {
+          console.error('[onboardingV2] Cleanup verification failed:', verifyError);
+        } else if (verificationResult && !verificationResult.cleanup_complete) {
+          console.error('[onboardingV2] Cleanup incomplete! Remaining records:', verificationResult.remaining_records);
+          throw new Error('Organization cleanup verification failed - some records still exist');
+        } else {
+          console.log('[onboardingV2] Cleanup verified successfully:', organizationId);
+        }
+      } else if (domain) {
+        // Step 3b: No org yet (during enrichment_loading) - cleanup orphaned enrichment by domain
+        await supabase.from('organization_enrichment').delete().eq('domain', domain).is('organization_id', null);
 
-        // 5. Delete the organization itself (only if created by this user)
-        await supabase
-          .from('organizations')
-          .delete()
-          .eq('id', organizationId)
-          .eq('created_by', session.user.id);
-
-        // 6. Reset onboarding progress to initial state
-        await supabase
-          .from('user_onboarding_progress')
-          .update({ onboarding_step: 'website_input', onboarding_completed_at: null })
-          .eq('user_id', session.user.id);
-
-        console.log('[onboardingV2] Successfully cleaned up org during reset:', organizationId);
-      } catch (error) {
-        console.error('[onboardingV2] Failed to cleanup org during reset:', error);
-        // Continue with local reset even if DB cleanup fails
+        console.log('[onboardingV2] Cleaned up domain-only enrichment during reset:', domain);
       }
+    } catch (error) {
+      console.error('[onboardingV2] Failed to cleanup during reset:', error);
+      // Continue with local reset even if DB cleanup fails
     }
 
-    // Clear localStorage
+    // Step 4: Clear localStorage
     if (userEmail) {
       clearOnboardingState(userEmail);
     }
 
-    // Reset Zustand store state
+    // Step 4.5: Clear React Query cache (ONBOARD-008)
+    if (queryClient) {
+      console.log('[onboardingV2] Clearing React Query cache');
+      queryClient.clear();
+    }
+
+    // Step 5: Reset Zustand store state (this sets isResettingOnboarding back to false)
     get().reset();
   },
 }));

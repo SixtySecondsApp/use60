@@ -2165,8 +2165,17 @@ serve(async (req: Request) => {
               continue;
             }
 
-            // Unexpected stop reason
+            // Unexpected stop reason — still send done event so frontend doesn't hang
             console.warn(`[copilot-autonomous] Unexpected stop reason: ${finalMessage.stop_reason}`);
+            if (!finalResponseText) {
+              await sendSSE(writer, encoder, 'token', {
+                text: "I'm sorry, I wasn't able to complete that request. Could you try rephrasing your question?",
+              });
+            }
+            await sendSSE(writer, encoder, 'done', {
+              toolsUsed: [...new Set(toolsUsed)],
+              iterations,
+            });
             break;
           }
 

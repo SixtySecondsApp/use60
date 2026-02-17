@@ -17,14 +17,14 @@ export function ApolloSourceControls({
     <div className="flex items-center gap-1">
       <button
         onClick={onEditFilters}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-purple-700/40 bg-purple-900/20 px-3 py-1.5 text-sm font-medium text-purple-300 transition-colors hover:bg-purple-900/40 hover:text-purple-200"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-purple-700/40 bg-purple-900/20 px-2.5 py-1.5 text-xs font-medium text-purple-300 transition-colors hover:bg-purple-900/40 hover:text-purple-200"
       >
         <SlidersHorizontal className="h-3.5 w-3.5" />
         Filters
       </button>
       <button
         onClick={onCollectMore}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-purple-700/40 bg-purple-900/20 px-3 py-1.5 text-sm font-medium text-purple-300 transition-colors hover:bg-purple-900/40 hover:text-purple-200"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-purple-700/40 bg-purple-900/20 px-2.5 py-1.5 text-xs font-medium text-purple-300 transition-colors hover:bg-purple-900/40 hover:text-purple-200"
       >
         <Plus className="h-3.5 w-3.5" />
         Collect More
@@ -33,7 +33,7 @@ export function ApolloSourceControls({
         <button
           onClick={onEnrichAll}
           disabled={isEnriching}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/40 bg-violet-500/15 px-3 py-1.5 text-sm font-medium text-violet-300 transition-colors hover:bg-violet-500/25 hover:text-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/40 bg-violet-500/15 px-2.5 py-1.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-500/25 hover:text-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isEnriching ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

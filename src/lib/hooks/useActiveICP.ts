@@ -69,7 +69,7 @@ export function useActiveICP(): ActiveICPResult {
     }
 
     const activeICP = profiles.find((p) => p.is_active) ?? profiles[0];
-    const icpDefaults = buildDefaults(activeICP.criteria);
+    const icpDefaults = activeICP.criteria ? buildDefaults(activeICP.criteria) : {};
 
     return { activeICP, icpDefaults, isLoading };
   }, [profiles, isLoading]);

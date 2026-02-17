@@ -207,19 +207,21 @@ export const useOrgStore = create<OrgStore>()(
             .filter((org): org is Organization => org !== undefined);
 
           // Choose active org (priority order):
-          // 1) persisted activeOrgId if valid (even if inactive - user may need to see inactive page)
+          // 1) persisted activeOrgId if valid AND ACTIVE (inactive orgs should not auto-select)
           // 2) VITE_DEFAULT_ORG_ID if it exists and is active
           // 3) org with name matching "Sixty Seconds" (case-insensitive) with most meetings (active only)
           // 4) org with most meetings (active only, fallback)
           // 5) first ACTIVE org
-          // 6) first org (if all are inactive)
+          // 6) null (user will be prompted to select/create org)
           let activeOrgId = get().activeOrgId;
 
-          const isValidPersisted = !!activeOrgId && orgs.some((o) => o.id === activeOrgId);
-          if (!isValidPersisted) activeOrgId = null;
-
-          // If persisted org exists but is inactive, keep it so user can see inactive page
-          // The redirect will happen in OrgContext
+          // Only keep persisted org if it's ACTIVE
+          const persistedOrg = orgs.find((o) => o.id === activeOrgId);
+          const isValidAndActive = !!persistedOrg && persistedOrg.is_active !== false;
+          if (!isValidAndActive) {
+            logger.log('[OrgStore] Persisted org is invalid or inactive, clearing selection');
+            activeOrgId = null;
+          }
 
           const envDefaultOrgId = getDefaultOrgId();
           if (!activeOrgId && envDefaultOrgId && orgs.some((o) => o.id === envDefaultOrgId && o.is_active !== false)) {

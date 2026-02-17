@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -36,7 +37,10 @@ import {
   TrendingUp,
   ListTodo,
   X,
-  Play
+  Play,
+  Pencil,
+  Check,
+  RefreshCw
 } from 'lucide-react'
 import type { RecordingStatus, MeetingPlatform } from '@/lib/types/meetingBaaS'
 
@@ -141,6 +145,7 @@ export const RecordingDetail: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [resolvedThumbnailUrl, setResolvedThumbnailUrl] = useState<string | null>(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const [showProposalWizard, setShowProposalWizard] = useState(false)
   const [linkedMeetingId, setLinkedMeetingId] = useState<string | null>(null)
@@ -151,6 +156,10 @@ export const RecordingDetail: React.FC = () => {
   const [removingFromTasksId, setRemovingFromTasksId] = useState<string | null>(null)
   const [animatingActionItemId, setAnimatingActionItemId] = useState<string | null>(null)
   const [newlyAddedTaskId, setNewlyAddedTaskId] = useState<string | null>(null)
+  const [editingSpeakers, setEditingSpeakers] = useState(false)
+  const [speakerEdits, setSpeakerEdits] = useState<Record<number, string>>({})
+  const [isSavingSpeakers, setIsSavingSpeakers] = useState(false)
+  const [isPollingStatus, setIsPollingStatus] = useState(false)
 
   // Fetch recording data
   const { recording, isLoading, error } = useRecording(id || '')
@@ -381,6 +390,60 @@ export const RecordingDetail: React.FC = () => {
     }
   }, [linkedMeetingId, recording?.meeting_title, refetchTasks])
 
+  // Start editing speaker names
+  const handleStartEditSpeakers = useCallback(() => {
+    const edits: Record<number, string> = {}
+    recording?.speakers?.forEach(s => {
+      edits[s.speaker_id] = s.name || s.email || ''
+    })
+    setSpeakerEdits(edits)
+    setEditingSpeakers(true)
+  }, [recording?.speakers])
+
+  // Save edited speaker names
+  const handleSaveSpeakers = useCallback(async () => {
+    if (!id || !recording?.speakers) return
+    setIsSavingSpeakers(true)
+    try {
+      const updatedSpeakers = recording.speakers.map(s => ({
+        ...s,
+        name: speakerEdits[s.speaker_id]?.trim() || s.name,
+        identification_method: speakerEdits[s.speaker_id]?.trim() ? 'manual' : s.identification_method,
+      }))
+
+      const { error } = await supabase
+        .from('recordings')
+        .update({
+          speakers: updatedSpeakers,
+          speaker_identification_method: 'manual',
+          ...(recording.hitl_type === 'speaker_confirmation' ? {
+            hitl_required: false,
+            hitl_resolved_at: new Date().toISOString(),
+          } : {}),
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Also update linked meeting speakers if available
+      if (linkedMeetingId) {
+        await supabase
+          .from('meetings')
+          .update({ speakers: updatedSpeakers })
+          .eq('id', linkedMeetingId)
+      }
+
+      toast.success('Speaker names updated')
+      setEditingSpeakers(false)
+      // Force page reload to refresh recording data
+      window.location.reload()
+    } catch (e) {
+      toast.error('Failed to save speaker names')
+    } finally {
+      setIsSavingSpeakers(false)
+    }
+  }, [id, recording?.speakers, recording?.hitl_type, speakerEdits, linkedMeetingId])
+
   // Build speaker name map from recording.speakers and transcript_json.speakers
   const speakerMap = useMemo(() => {
     const map: Record<number, { name: string; email?: string; is_internal?: boolean }> = {}
@@ -428,22 +491,33 @@ export const RecordingDetail: React.FC = () => {
     }
   }, [])
 
-  // Fetch signed video URL when recording is ready
+  // Fetch signed video URL and resolved thumbnail URL when recording is ready
   useEffect(() => {
     if (!id || !recording?.recording_s3_key || recording.status !== 'ready') {
       setVideoUrl(null)
+      setResolvedThumbnailUrl(null)
       return
     }
 
     let cancelled = false
     setIsLoadingVideo(true)
 
+    // Fetch video URL
     recordingService.getRecordingUrl(id).then((result) => {
       if (cancelled) return
       if (result.success && result.url) {
         setVideoUrl(result.url)
       }
       setIsLoadingVideo(false)
+    })
+
+    // Fetch fresh thumbnail URL via batch endpoint
+    recordingService.getBatchSignedUrls([id]).then((urls) => {
+      if (cancelled) return
+      const entry = urls[id]
+      if (entry?.thumbnail_url) {
+        setResolvedThumbnailUrl(entry.thumbnail_url)
+      }
     })
 
     return () => { cancelled = true }
@@ -470,6 +544,52 @@ export const RecordingDetail: React.FC = () => {
 
     return () => { cancelled = true }
   }, [id, recording?.status])
+
+  // Handle polling a stuck bot to refresh its status, or retry processing
+  const handlePollStatus = async () => {
+    setIsPollingStatus(true)
+    try {
+      // If recording is stuck in "processing", directly retry process-recording
+      if (recording?.status === 'processing' && id) {
+        const result = await recordingService.retryProcessing(id)
+        if (result.success) {
+          toast.success('Processing re-triggered. The page will update automatically.')
+        } else {
+          toast.error(result.error || 'Failed to retry processing')
+        }
+        return
+      }
+
+      // Otherwise, poll the bot status via MeetingBaaS
+      if (!recording?.bot_id) {
+        toast.error('No bot ID associated with this recording')
+        return
+      }
+
+      const result = await recordingService.pollStuckBot(recording.bot_id)
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to check status')
+        return
+      }
+
+      if (result.action === 'processing_triggered' || result.action === 'processing_triggered_with_error') {
+        toast.success('Bot completed! Processing has been triggered. The page will update automatically.')
+      } else if (result.action === 'marked_failed') {
+        toast.error('The bot encountered an error during the meeting.')
+      } else if (result.action === 'still_active') {
+        toast.info('The bot is still active. Check again later.')
+      } else if (result.action === 'no_change') {
+        toast.info('No stuck bots found for this recording.')
+      } else {
+        toast.info(`Status checked: ${result.action}`)
+      }
+    } catch (err) {
+      toast.error('Failed to check bot status')
+    } finally {
+      setIsPollingStatus(false)
+    }
+  }
 
   // Handle download
   const handleDownload = async () => {
@@ -515,9 +635,9 @@ export const RecordingDetail: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             The recording you're looking for doesn't exist or you don't have access to it.
           </p>
-          <Button onClick={() => navigate('/recordings')}>
+          <Button onClick={() => navigate('/meetings')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Recordings
+            Back to Meetings
           </Button>
         </div>
       </div>
@@ -540,7 +660,7 @@ export const RecordingDetail: React.FC = () => {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate('/recordings')}
+            onClick={() => navigate('/meetings')}
             className="shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -554,6 +674,19 @@ export const RecordingDetail: React.FC = () => {
                 {status.icon}
                 {status.label}
               </Badge>
+              {['pending', 'bot_joining', 'recording', 'processing'].includes(recording.status) && (recording.bot_id || recording.status === 'processing') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handlePollStatus}
+                  disabled={isPollingStatus}
+                  className="h-7 px-2 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 gap-1"
+                  title={recording.status === 'processing' ? 'Retry processing' : 'Check bot status with MeetingBaaS'}
+                >
+                  <RefreshCw className={cn("h-3 w-3", isPollingStatus && "animate-spin")} />
+                  {isPollingStatus ? 'Checking...' : recording.status === 'processing' ? 'Retry' : 'Refresh'}
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
               <Badge variant="outline" className={cn("text-xs", platform?.color)}>
@@ -658,7 +791,7 @@ export const RecordingDetail: React.FC = () => {
                     controls
                     className="w-full h-full"
                     src={videoUrl}
-                    poster={recording.thumbnail_url || undefined}
+                    poster={resolvedThumbnailUrl || recording.thumbnail_url || undefined}
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
@@ -910,8 +1043,47 @@ export const RecordingDetail: React.FC = () => {
         <div className="lg:col-span-4 space-y-3 sm:space-y-4 min-w-0">
           {/* Attendees / Speakers */}
           <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30">
-            <div className="font-semibold mb-3 text-gray-900 dark:text-gray-100">
-              Attendees ({recording.speakers?.length || 0})
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-semibold text-gray-900 dark:text-gray-100">
+                Attendees ({recording.speakers?.length || 0})
+              </div>
+              {recording.speakers && recording.speakers.length > 0 && !editingSpeakers && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleStartEditSpeakers}
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              )}
+              {editingSpeakers && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingSpeakers(false)}
+                    disabled={isSavingSpeakers}
+                    className="h-7 px-2 text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleSaveSpeakers}
+                    disabled={isSavingSpeakers}
+                    className="h-7 px-2 text-xs"
+                  >
+                    {isSavingSpeakers ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <><Check className="h-3 w-3 mr-1" />Save</>
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               {recording.speakers && recording.speakers.length > 0 ? (
@@ -924,17 +1096,31 @@ export const RecordingDetail: React.FC = () => {
                       key={speaker.speaker_id}
                       className="flex items-center justify-between text-sm hover:bg-gray-100 dark:hover:bg-zinc-900/40 rounded-lg px-2 -mx-2 py-1.5 transition-colors"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <div className={cn(
                           "w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0",
                           speaker.is_internal ? 'bg-emerald-500' : 'bg-blue-500'
                         )}>
-                          {displayName.charAt(0).toUpperCase()}
+                          {(editingSpeakers ? speakerEdits[speaker.speaker_id]?.[0] : displayName.charAt(0))?.toUpperCase() || '?'}
                         </div>
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{displayName}</div>
-                          {speaker.email && speaker.name && (
-                            <div className="text-xs text-muted-foreground truncate">{speaker.email}</div>
+                        <div className="min-w-0 flex-1">
+                          {editingSpeakers ? (
+                            <Input
+                              value={speakerEdits[speaker.speaker_id] || ''}
+                              onChange={(e) => setSpeakerEdits(prev => ({
+                                ...prev,
+                                [speaker.speaker_id]: e.target.value
+                              }))}
+                              placeholder={`Speaker ${speaker.speaker_id + 1}`}
+                              className="h-7 text-sm"
+                            />
+                          ) : (
+                            <>
+                              <div className="font-medium truncate">{displayName}</div>
+                              {speaker.email && speaker.name && (
+                                <div className="text-xs text-muted-foreground truncate">{speaker.email}</div>
+                              )}
+                            </>
                           )}
                           {speaker.talk_time_percent != null && (
                             <div className="text-xs text-muted-foreground">
@@ -943,14 +1129,16 @@ export const RecordingDetail: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      {isExternal ? (
-                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 shrink-0 ml-2">
-                          External
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="shrink-0 ml-2">
-                          Internal
-                        </Badge>
+                      {!editingSpeakers && (
+                        isExternal ? (
+                          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 shrink-0 ml-2">
+                            External
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="shrink-0 ml-2">
+                            Internal
+                          </Badge>
+                        )
                       )}
                     </div>
                   )

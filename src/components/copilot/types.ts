@@ -174,7 +174,9 @@ export type CopilotResponseType =
   | 'daily_brief'
   | 'dynamic_table'
   | 'pipeline_outreach'
-  | 'deal_intelligence';
+  | 'deal_intelligence'
+  | 'unified_task_list'
+  | 'task_deliverable';
 
 export interface CopilotResponse {
   type: CopilotResponseType;

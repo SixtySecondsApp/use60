@@ -147,16 +147,15 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 1,
   },
   {
-    path: 'https://meeting-analytics-staging.use60.com/',
+    path: '/meeting-analytics',
     access: 'any',
-    label: 'Meeting Analytics (New)',
-    icon: ExternalLink,
+    label: 'Meeting Analytics',
+    icon: BarChart3,
     showInNav: true,
     navSection: 'main',
     order: 5,
     displayGroup: 1,
     badge: 'New',
-    isExternal: true,
   },
 
   // ========== Internal-Only Main Routes ==========
@@ -308,15 +307,25 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 4,
   },
   {
-    path: '/action-centre',
+    path: '/command-centre',
     access: 'internal',
-    label: 'Action Centre',
-    icon: Inbox,
+    label: 'Command Centre',
+    icon: Crosshair,
     showInNav: true,
     navSection: 'tools',
     order: 3,
     displayGroup: 4,
     badge: 'New',
+  },
+  {
+    path: '/action-centre',
+    access: 'internal',
+    label: 'Action Centre',
+    icon: Inbox,
+    showInNav: false, // Deprecated — replaced by Command Centre
+    navSection: 'tools',
+    order: 3.1,
+    displayGroup: 4,
   },
   {
     path: '/email-actions',

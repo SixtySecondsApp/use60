@@ -319,6 +319,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
 
     // Reset autonomous copilot if in autonomous mode
     if (autonomousModeEnabled) {
+      autonomousCopilot.stopGeneration();
       autonomousCopilot.clearMessages();
     }
   }, [agentModeEnabled, agent, autonomousModeEnabled, autonomousCopilot]);
@@ -485,14 +486,14 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     
     // If starting a new chat, reset the conversation state
     if (startNewChatFlag) {
-      // Reset state first - this will clear messages and conversationId
-      setState({
-        messages: [],
-        conversationId: undefined,
+      // Use canonical reset path to avoid mode-specific state drift/races.
+      startNewChat();
+      // Keep input state in sync for UI affordances while pending query sends.
+      setState(prev => ({
+        ...prev,
         currentInput: initialQuery || '',
         mode: initialQuery ? 'active' : 'empty',
-        isLoading: false
-      });
+      }));
       
       // Set pending query to trigger auto-send after state reset
     if (initialQuery) {
@@ -512,7 +513,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         mode: prev.messages.length > 0 ? 'active' : 'empty'
       }));
     }
-  }, []);
+  }, [startNewChat]);
 
   const closeCopilot = useCallback(() => {
     setIsOpen(false);
@@ -1019,7 +1020,12 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
 
   const sendMessage = useCallback(
     async (message: string, options?: { silent?: boolean }) => {
-      if (!message.trim() || state.isLoading) return;
+      const isModeLoading = autonomousModeEnabled
+        ? autonomousCopilot.isThinking || autonomousCopilot.isStreaming
+        : agentModeEnabled
+          ? agent.isProcessing
+          : state.isLoading;
+      if (!message.trim() || isModeLoading) return;
 
       // Detect relevant context types for the right panel BEFORE routing
       // This enables context data fetching (HubSpot, Fathom, Calendar) in all modes
@@ -1584,7 +1590,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         });
       }
     },
-    [context, state.conversationId, state.isLoading, detectToolType, createToolCall, detectRelevantContextTypes, generateContextualLabel, agentModeEnabled, agent]
+    [context, state.conversationId, state.isLoading, detectToolType, createToolCall, detectRelevantContextTypes, generateContextualLabel, agentModeEnabled, agent, autonomousModeEnabled, autonomousCopilot]
   );
 
   // Handle pending queries from openCopilot

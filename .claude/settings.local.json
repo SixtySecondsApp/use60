@@ -42,6 +42,9 @@
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
       "Bash(wc:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build)",
+      "Bash(npx vite build:*)",
       "Bash(npx tsc:*)"
     ],
     "deny": [],

@@ -31,6 +31,7 @@ interface ValidateTokenResponse {
   success: boolean;
   valid: boolean;
   waitlist_entry_id?: string;
+  user_id?: string; // Added for direct user invitations
   email?: string;
   error?: string;
 }
@@ -63,10 +64,10 @@ serve(async (req) => {
       },
     });
 
-    // Look up token
+    // Look up token (select both waitlist_entry_id and user_id)
     const { data: tokenData, error: lookupError } = await supabaseAdmin
       .from('waitlist_magic_tokens')
-      .select('id, token, waitlist_entry_id, email, expires_at, used_at')
+      .select('id, token, waitlist_entry_id, user_id, email, expires_at, used_at')
       .eq('token', request.token)
       .maybeSingle();
 
@@ -120,12 +121,13 @@ serve(async (req) => {
       );
     }
 
-    // Token is valid
+    // Token is valid (return both waitlist_entry_id and user_id if present)
     return new Response(
       JSON.stringify({
         success: true,
         valid: true,
         waitlist_entry_id: tokenData.waitlist_entry_id,
+        user_id: tokenData.user_id,
         email: tokenData.email
       } as ValidateTokenResponse),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

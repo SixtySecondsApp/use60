@@ -260,7 +260,14 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
               const dataLine = lines[i + 1];
 
               if (dataLine?.startsWith('data: ')) {
-                const data = JSON.parse(dataLine.slice(6));
+                let data: Record<string, unknown>;
+                try {
+                  data = JSON.parse(dataLine.slice(6));
+                } catch (parseErr) {
+                  console.warn('[useCopilotChat] Failed to parse SSE data:', dataLine.slice(6, 200));
+                  i++;
+                  continue;
+                }
 
                 switch (eventType) {
                   case 'token':
@@ -459,6 +466,16 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
             }
           }
         }
+
+        // Ensure message isStreaming is always set to false when stream ends,
+        // even if no 'done' event was received (e.g. unexpected stop reason)
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId && m.isStreaming
+              ? { ...m, isStreaming: false, content: m.content || "I wasn't able to process that request. Please try again." }
+              : m
+          )
+        );
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           // Request was cancelled
@@ -509,9 +526,19 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
    * Clear all messages
    */
   const clearMessages = useCallback(() => {
+    // Ensure any in-flight generation is fully cancelled when resetting chat.
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setMessages([]);
     setToolsUsed([]);
     setError(null);
+    setIsThinking(false);
+    setIsStreaming(false);
+    setCurrentTool(null);
+    setActiveAgents([]);
+    currentMessageIdRef.current = null;
   }, []);
 
   /**

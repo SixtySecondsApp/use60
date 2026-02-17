@@ -169,9 +169,16 @@ export default function PendingApprovalPage() {
       console.log('[PendingApprovalPage] Refreshing organizations');
       await refreshOrgs();
 
-      // 3. Switch to the newly joined organization
-      console.log('[PendingApprovalPage] Switching to organization:', membership.org_id);
-      switchOrg(membership.org_id);
+      // 3. Force-switch to the newly joined organization
+      // This ensures we switch away from any inactive org that might be persisted
+      console.log('[PendingApprovalPage] Force-switching to organization:', membership.org_id);
+
+      // Use the org store directly to force the switch, bypassing the inactive org check
+      const { useOrgStore } = await import('@/lib/stores/orgStore');
+      useOrgStore.getState().setActiveOrg(membership.org_id);
+
+      // Also call switchOrg to trigger any side effects, but it won't redirect since org is active
+      await switchOrg(membership.org_id);
 
       // 4. Mark onboarding as complete to prevent redirect loop
       // Users who went through personal email → join request flow may not have completed enrichment/skills steps
@@ -268,7 +275,52 @@ export default function PendingApprovalPage() {
 
     setChecking(true);
     try {
-      // Check organization_join_requests first
+      // FIRST: Check for approved requests (most important check)
+      let approvedRequests = await supabase
+        .from('organization_join_requests')
+        .select('status, org_id')
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .maybeSingle();
+
+      // If not found in join requests, check rejoin_requests
+      if (!approvedRequests.data) {
+        try {
+          approvedRequests = await supabase
+            .from('rejoin_requests')
+            .select('status, org_id')
+            .eq('user_id', user.id)
+            .eq('status', 'approved')
+            .maybeSingle();
+        } catch (err) {
+          console.error('[PendingApprovalPage] Error checking rejoin_requests approval:', err);
+          approvedRequests = { data: null };
+        }
+      }
+
+      // If approved, check for active membership
+      if (approvedRequests.data) {
+        console.log('[PendingApprovalPage] Found approved request, checking for membership...');
+
+        const { data: membership } = await supabase
+          .from('organization_memberships')
+          .select('org_id, role')
+          .eq('user_id', user.id)
+          .eq('org_id', approvedRequests.data.org_id)
+          .maybeSingle();
+
+        if (membership) {
+          toast.success('Approved! Redirecting to your dashboard...');
+          // Trigger the full approval flow
+          await handleApprovalDetected({ org_id: membership.org_id });
+          return;
+        } else {
+          toast.warning('Approved but membership not found. Please contact support.');
+          return;
+        }
+      }
+
+      // SECOND: Check for pending requests
       let pendingRequests = await supabase
         .from('organization_join_requests')
         .select('status, org_id')
@@ -286,51 +338,26 @@ export default function PendingApprovalPage() {
           .maybeSingle();
       }
 
-      if (!pendingRequests.data) {
-        // Request not found - may have been deleted or org was deleted
-        toast.warning('Join request not found. The organization may have been removed. Please restart onboarding.');
-        // Auto-reset profile status to allow restart
-        await supabase
-          .from('profiles')
-          .update({ profile_status: 'active' })
-          .eq('id', user.id);
-        setTimeout(() => {
-          navigate('/onboarding?step=website_input', { replace: true });
-        }, 2000);
+      if (pendingRequests.data) {
+        // Still pending
+        toast.info('Still waiting for admin approval. We\'ll email you when approved!');
         return;
       }
 
-      // Check organization_join_requests for approval
-      let approvedRequests = await supabase
-        .from('organization_join_requests')
-        .select('status, org_id')
-        .eq('user_id', user.id)
-        .eq('status', 'approved')
-        .maybeSingle();
+      // LAST: No approved and no pending - request was likely cancelled or rejected
+      console.warn('[PendingApprovalPage] No approved or pending request found');
+      toast.warning('Your request was cancelled or the organization was removed. Restarting onboarding...');
 
-      // If not found, check rejoin_requests
-      if (!approvedRequests.data) {
-        try {
-          approvedRequests = await supabase
-            .from('rejoin_requests')
-            .select('status, org_id')
-            .eq('user_id', user.id)
-            .eq('status', 'approved')
-            .maybeSingle();
-        } catch (err) {
-          console.error('[PendingApprovalPage] Error checking rejoin_requests approval:', err);
-          approvedRequests = { data: null };
-        }
-      }
+      // Auto-reset profile status to allow restart
+      await supabase
+        .from('profiles')
+        .update({ profile_status: 'active' })
+        .eq('id', user.id);
 
-      if (approvedRequests.data) {
-        toast.success('Approved! Redirecting to your dashboard...');
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 1000);
-      } else {
-        toast.info('Still waiting for admin approval. We\'ll email you when approved!');
-      }
+      setTimeout(() => {
+        navigate('/onboarding?step=website_input', { replace: true });
+      }, 2000);
+
     } catch (error) {
       console.error('[PendingApprovalPage] Error checking approval status:', error);
       toast.error('Failed to check status. Please try again.');
@@ -468,7 +495,7 @@ export default function PendingApprovalPage() {
               onClick={checkApprovalStatus}
               disabled={checking || isLoadingDashboard}
               variant="outline"
-              className="w-full border-violet-600 text-violet-600 hover:bg-violet-600/10 dark:border-violet-500 dark:text-violet-400 dark:hover:bg-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full !bg-transparent border-violet-500 text-violet-400 hover:!bg-violet-500/10 shadow-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {checking ? (
                 <>
@@ -485,7 +512,7 @@ export default function PendingApprovalPage() {
                   onClick={() => setShowCancelDialog(true)}
                   disabled={canceling || isLoadingDashboard}
                   variant="outline"
-                  className="w-full border-gray-600 text-gray-600 hover:bg-gray-600/10 dark:border-gray-500 dark:text-gray-400 dark:hover:bg-gray-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full !bg-transparent border-gray-500 text-gray-400 hover:!bg-gray-500/10 shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {canceling ? (
                     <>
@@ -514,7 +541,7 @@ export default function PendingApprovalPage() {
                     navigate('/onboarding?step=website_input', { replace: true });
                   }}
                   variant="outline"
-                  className="w-full border-violet-600 text-violet-600 hover:bg-violet-600/10 dark:border-violet-500 dark:text-violet-400 dark:hover:bg-violet-500/10"
+                  className="w-full !bg-transparent border-violet-500 text-violet-400 hover:!bg-violet-500/10 shadow-none"
                 >
                   Restart Onboarding
                 </Button>
@@ -526,7 +553,7 @@ export default function PendingApprovalPage() {
             <Button
               onClick={handleLogout}
               variant="outline"
-              className="w-full border-red-600 text-red-600 hover:bg-red-600/10 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-500/10"
+              className="w-full !bg-transparent border-red-500 text-red-400 hover:!bg-red-500/10 shadow-none"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Log Out

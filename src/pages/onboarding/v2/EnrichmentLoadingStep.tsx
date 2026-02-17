@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Check, Loader } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 
 interface EnrichmentLoadingStepProps {
@@ -25,6 +26,7 @@ const tasks = [
 ];
 
 export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: EnrichmentLoadingStepProps) {
+  const queryClient = useQueryClient();
   const [progress, setProgress] = useState(0);
   const [startTime] = useState(Date.now());
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -47,11 +49,11 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
     if (isResetting) return;
     setIsResetting(true);
     try {
-      await resetAndCleanup();
+      await resetAndCleanup(queryClient);
     } finally {
       setIsResetting(false);
     }
-  }, [isResetting, resetAndCleanup]);
+  }, [isResetting, resetAndCleanup, queryClient]);
 
   // Use organizationId from store (which gets updated when new org is created)
   // Fall back to prop if store is empty

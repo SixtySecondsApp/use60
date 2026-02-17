@@ -11,11 +11,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, CheckCircle2, Loader2, Circle, XCircle, ExternalLink, ChevronRight, ChevronDown, Clock } from 'lucide-react';
+import { Send, CheckCircle2, Loader2, Circle, XCircle, ExternalLink, ChevronRight, ChevronDown, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkflowOrchestrator, type WorkflowStep } from '@/lib/hooks/useWorkflowOrchestrator';
 import { enrichPromptWithAnswers, type ClarifyingQuestion } from '@/lib/utils/prospectingDetector';
 import { useActiveICP } from '@/lib/hooks/useActiveICP';
+import { useCopilot } from '@/lib/contexts/CopilotContext';
+import { useQueryClient } from '@tanstack/react-query';
 import type { QuickActionResponse } from '../types';
 
 export interface CampaignWorkflowData {
@@ -27,13 +29,18 @@ export interface CampaignWorkflowData {
 interface CampaignWorkflowResponseProps {
   data: CampaignWorkflowData;
   onActionClick?: (action: QuickActionResponse) => void;
+  targetTableId?: string;
+  onDismiss?: () => void;
 }
 
 export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> = ({
   data,
   onActionClick,
+  targetTableId,
+  onDismiss,
 }) => {
   const { activeICP, icpDefaults, isLoading: icpLoading } = useActiveICP();
+  const { conversationId } = useCopilot();
   const [icpDismissed, setIcpDismissed] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [campaignName, setCampaignName] = useState(data.suggested_campaign_name);
@@ -87,10 +94,11 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
       skip_campaign_creation: false,
       num_email_steps: answers.email_steps?.includes('3') ? 3 : answers.email_steps?.includes('5') ? 5 : 0,
       table_name: campaignName,
+      ...(targetTableId ? { target_table_id: targetTableId, skip_search: true } : {}),
     };
 
     // Call execute() directly — preflight questions are already answered in this component
-    orchestrator.execute(enrichedPrompt, config);
+    orchestrator.execute(enrichedPrompt, config, undefined, conversationId);
   };
 
   // Phase 3: Complete (or partial success)
@@ -203,9 +211,14 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
         <div className="p-1.5 rounded-lg bg-emerald-500/20">
           <Send className="w-4 h-4 text-emerald-400" />
         </div>
-        <span className="text-sm font-medium text-white">
+        <span className="text-sm font-medium text-white flex-1">
           Let&apos;s set up your campaign
         </span>
+        {onDismiss && (
+          <button type="button" onClick={onDismiss} className="text-gray-400 hover:text-gray-200 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div className="p-4 space-y-4">
@@ -448,6 +461,7 @@ function CompletionCard({
   elapsed: number;
   onActionClick?: (action: QuickActionResponse) => void;
 }) {
+  const queryClient = useQueryClient();
   const [emailExpanded, setEmailExpanded] = useState(false);
   const metrics = extractMetrics(steps);
 
@@ -547,15 +561,21 @@ function CompletionCard({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              // Invalidate ops table queries so new Instantly columns appear
+              if (result.table_id) {
+                queryClient.invalidateQueries({ queryKey: ['ops-table', result.table_id] });
+                queryClient.invalidateQueries({ queryKey: ['ops-table-data', result.table_id] });
+                queryClient.invalidateQueries({ queryKey: ['instantly-campaign-links', result.table_id] });
+              }
               onActionClick?.({
                 id: 'open-ops-table',
                 label: 'Open in Ops Table',
                 type: 'primary',
                 callback: 'start_campaign',
                 params: { table_id: result.table_id },
-              })
-            }
+              });
+            }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors"
           >
             Open in Ops Table
