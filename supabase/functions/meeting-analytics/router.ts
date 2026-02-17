@@ -7,6 +7,7 @@ import { handleGetDashboardMetrics, handleGetSalesPerformance } from './handlers
 import { handleGetInsights, handleGetInsightSubResource } from './handlers/insights.ts';
 import { handleSearch, handleSearchSimilar, handleSearchMulti } from './handlers/search.ts';
 import { handleAsk } from './handlers/ask.ts';
+import { handleSyncMeeting } from './handlers/sync.ts';
 import {
   handleGenerateReport,
   handlePreviewReport,
@@ -153,6 +154,11 @@ export async function routeRequest(req: Request): Promise<Response> {
   if (apiPath.startsWith('notifications/settings/') && req.method === 'DELETE') {
     const id = apiPath.slice('notifications/settings/'.length);
     return handleDeleteNotificationSetting(id, req);
+  }
+
+  // --- Sync (pg_net trigger) ---
+  if (apiPath === 'sync/meeting' && req.method === 'POST') {
+    return handleSyncMeeting(req);
   }
 
   // --- Analytics ---
