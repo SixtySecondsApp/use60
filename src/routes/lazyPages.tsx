@@ -125,8 +125,6 @@ export const LeadsInbox = lazyWithRetry(() => import('@/pages/leads/LeadsInbox')
 export const Clients = lazyWithRetry(() => import('@/pages/Clients'));
 
 // Health Monitoring
-export const DealHealthDashboard = lazyWithRetry(() => import('@/components/DealHealthDashboard').then(m => ({ default: m.DealHealthDashboard })));
-export const RelationshipHealth = lazyWithRetry(() => import('@/pages/RelationshipHealth'));
 export const HealthMonitoring = lazyWithRetry(() => import('@/pages/HealthMonitoring'));
 
 // ============================================================

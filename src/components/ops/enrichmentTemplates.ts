@@ -10,6 +10,9 @@ import {
   MapPin,
   UserCheck,
   Building2,
+  Target,
+  Shield,
+  UserCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -97,5 +100,33 @@ export const EXA_TEMPLATES: EnrichmentTemplate[] = [
     prompt: 'Provide a comprehensive overview of @company_name including what they do, their target market, and recent news',
     icon: Building2,
     description: 'Full company profile with citations',
+  },
+];
+
+/** Deal-specific AI enrichment templates for Deals standard table */
+export const DEAL_ENRICHMENT_TEMPLATES: EnrichmentTemplate[] = [
+  {
+    name: 'Close Probability Reasoning',
+    prompt: 'Analyze the deal health data for @deal_name: Health Score={health_score}, Sentiment Trend={sentiment_trend}, Days in Stage={days_in_current_stage}, Last Meeting={days_since_last_meeting} days ago. Explain the close probability based on these signals and recent activity patterns.',
+    icon: Target,
+    description: 'AI analyzes deal health and velocity to explain close probability',
+  },
+  {
+    name: 'Risk Mitigation Suggestion',
+    prompt: 'Given the risk factors for @deal_name: Risk Level={risk_level}, Risk Factors={risk_factors}, Health Status={health_status}. Generate 3 specific actionable risk mitigation tactics to address these issues and improve deal health.',
+    icon: Shield,
+    description: 'AI generates specific risk mitigation actions based on signals',
+  },
+  {
+    name: 'Competitive Intelligence',
+    prompt: 'Research the competitive landscape for @company_name in the @deal_stage stage. Identify main competitors, their strengths/weaknesses, and how to position our solution against them.',
+    icon: Swords,
+    description: 'AI researches and summarizes competitive landscape for the deal',
+  },
+  {
+    name: 'Stakeholder Analysis',
+    prompt: 'Analyze the stakeholders involved in @deal_name at @company_name. Based on roles, seniority, and engagement patterns (meeting count, responsiveness), assess each stakeholder\'s influence level and alignment with the deal. Provide recommendations for engagement strategy.',
+    icon: UserCircle,
+    description: 'AI analyzes contacts and their roles/influence in the deal',
   },
 ];

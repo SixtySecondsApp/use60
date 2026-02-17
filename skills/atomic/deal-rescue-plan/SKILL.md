@@ -104,11 +104,22 @@ The cost of NOT attempting rescue is also significant: acquiring a new opportuni
 
 Gather all available data before diagnosing. The more context you have, the more accurate the diagnosis:
 
-1. **Deal record**: `execute_action("get_deal", { id: deal_id })` -- stage, value, close date, contacts, health score, days in stage
-2. **Activity history**: `execute_action("get_deal_activities", { deal_id, limit: 30 })` -- all meetings, emails, calls, notes (look for patterns)
-3. **Open tasks**: `execute_action("list_tasks", { deal_id })` -- overdue tasks, incomplete actions
-4. **Contacts on deal**: from deal record -- engagement levels, last contact dates, roles
-5. **Pipeline context**: `execute_action("get_pipeline_summary", {})` -- how this deal fits in the overall pipeline
+1. **Deal record**: `execute_action("get_deal", { id: deal_id, include_health: true })` -- stage, value, close date, contacts, health score, days in stage
+2. **Health score data**: Query `deal_health_scores` table for comprehensive health metrics:
+   - `overall_health_score`, `risk_level`, `risk_factors` (array of detected signals)
+   - `sentiment_trend` (improving/stable/declining), `avg_sentiment_last_3_meetings`
+   - `days_in_current_stage`, `days_since_last_meeting`, `days_since_last_activity`
+   - Component scores: `stage_velocity_score`, `sentiment_score`, `engagement_score`, `activity_score`
+3. **Relationship health**: Query `relationship_health_scores` for all contacts on the deal:
+   - `overall_health_score`, `is_ghost_risk`, `ghost_probability_percent`
+   - `days_since_last_contact`, `days_since_last_response`, `response_rate_percent`
+   - `communication_frequency_score`, `sentiment_score`
+4. **Activity history**: `execute_action("get_deal_activities", { deal_id, limit: 30 })` -- all meetings, emails, calls, notes (look for patterns)
+5. **Open tasks**: `execute_action("list_tasks", { deal_id })` -- overdue tasks, incomplete actions
+6. **Contacts on deal**: from deal record -- engagement levels, last contact dates, roles
+7. **Pipeline context**: `execute_action("get_pipeline_summary", {})` -- how this deal fits in the overall pipeline
+
+**Health data as diagnostic accelerator**: The pre-computed health scores provide immediate visibility into risk factors and trends. Use `deal_health_scores.risk_factors` to shortcut root cause analysis -- if it contains `sentiment_decline` and `no_meetings`, you have high-confidence signals without manual calculation. Similarly, `relationship_health_scores.is_ghost_risk` immediately flags champion ghosting scenarios.
 
 If data calls fail, note what is missing and include "information gathering" as the first rescue action.
 
@@ -125,6 +136,8 @@ Before prescribing a rescue plan, diagnose the root cause. Incorrect diagnosis l
 - Meeting cancelled or rescheduled without rebooking
 - Email open rates dropped (if tracked)
 - Last meaningful interaction was 14+ days ago
+- **Health score indicator**: `relationship_health_scores.is_ghost_risk: true` or `ghost_probability_percent > 50`
+- **Health score indicator**: `relationship_health_scores.days_since_last_response > 14` and `response_rate_percent < 30`
 
 **Why it happens:**
 - Champion is overwhelmed with internal priorities
@@ -133,7 +146,7 @@ Before prescribing a rescue plan, diagnose the root cause. Incorrect diagnosis l
 - Champion is evaluating a competitor and avoiding the awkward conversation
 - Your emails became predictable and ignorable
 
-**Diagnosis confidence:** HIGH if last 3+ messages received no substantive response. MEDIUM if 1-2 messages unanswered (could just be busy).
+**Diagnosis confidence:** HIGH if last 3+ messages received no substantive response OR `relationship_health_scores.ghost_probability_percent > 70`. MEDIUM if 1-2 messages unanswered or ghost probability 40-70% (could just be busy).
 
 ### 2. No Compelling Event / Lack of Urgency (22%)
 

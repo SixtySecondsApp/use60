@@ -79,7 +79,7 @@ import {
   // CRM & Data
   CRM, ElegantCRM, PipelinePage, FormDisplay, CompaniesTable, CompanyProfile,
   ContactsTable, ContactRecord, DealRecord, LeadsInbox, Clients,
-  DealHealthDashboard, RelationshipHealth, HealthMonitoring,
+  HealthMonitoring,
   // Features
   MeetingsPage, MeetingIntelligence, MeetingSentimentAnalytics, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   TasksPage, ProjectsHub, GoogleTasksSettings, Events, ActivityLog,
@@ -566,7 +566,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/crm/contacts/:id" element={<InternalRouteGuard><AppLayout><ContactRecord /></AppLayout></InternalRouteGuard>} />
                 <Route path="/crm/deals/:id" element={<InternalRouteGuard><AppLayout><DealRecord /></AppLayout></InternalRouteGuard>} />
                 <Route path="/crm/health" element={<InternalRouteGuard><AppLayout><HealthMonitoring /></AppLayout></InternalRouteGuard>} />
-                <Route path="/crm/relationship-health" element={<Navigate to="/crm/health?tab=relationships" replace />} />
+                <Route path="/crm/relationship-health" element={<Navigate to="/crm/pipeline?risk=high,critical" replace />} />
+                <Route path="/crm/deal-health" element={<Navigate to="/crm/pipeline?health=critical,warning" replace />} />
 
                 {/* Other internal-only routes */}
                 <Route path="/payments" element={<Navigate to="/clients" replace />} />

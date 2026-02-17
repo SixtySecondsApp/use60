@@ -51,6 +51,8 @@ import { MeetingCountResponse } from './responses/MeetingCountResponse';
 import { MeetingBriefingResponse } from './responses/MeetingBriefingResponse';
 import { MeetingListResponse } from './responses/MeetingListResponse';
 import { TimeBreakdownResponse } from './responses/TimeBreakdownResponse';
+import { DealIntelligenceResponse } from './responses/DealIntelligenceResponse';
+import type { DealIntelligenceData } from './responses/DealIntelligenceResponse';
 import { OpsTableResponse } from './responses/OpsTableResponse';
 import type { OpsTableResponseData } from './responses/OpsTableResponse';
 import { OpsTableListResponse } from './responses/OpsTableListResponse';
@@ -291,6 +293,9 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'pipeline_outreach':
       return <PipelineOutreachResponse data={response as PipelineOutreachResponseType} onActionClick={onActionClick} />;
+
+    case 'deal_intelligence':
+      return <DealIntelligenceResponse data={response as any} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown

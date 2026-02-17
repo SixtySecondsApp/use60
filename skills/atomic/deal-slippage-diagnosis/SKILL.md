@@ -122,15 +122,23 @@ The goal is not to be negative about the pipeline -- it is to be honest. Honest 
 ### Full Pipeline Scan (when deal_id is not provided)
 1. Fetch at-risk deals: `execute_action("get_pipeline_deals", { filter: "at_risk", include_health: true, limit: 10 })`
 2. For each deal, fetch details: `execute_action("get_deal", { id, include_health: true })`
-3. Fetch recent activities per deal: `execute_action("get_deal_activities", { deal_id, limit: 10 })`
-4. Fetch overdue tasks: `execute_action("list_tasks", { status: "overdue" })`
-5. Fetch pipeline summary: `execute_action("get_pipeline_summary", {})` -- for context on overall pipeline health
+3. **Query health scores**: Fetch from `deal_health_scores` table for `overall_health_score`, `risk_factors`, `risk_level`, `days_in_current_stage`, `sentiment_trend`, `meeting_count_last_30_days`, `days_since_last_activity`
+4. **Query relationship health**: Fetch from `relationship_health_scores` for primary contacts -- check `is_ghost_risk`, `ghost_probability_percent`, `days_since_last_contact`, `response_rate_percent`
+5. Fetch recent activities per deal: `execute_action("get_deal_activities", { deal_id, limit: 10 })`
+6. Fetch overdue tasks: `execute_action("list_tasks", { status: "overdue" })`
+7. Fetch pipeline summary: `execute_action("get_pipeline_summary", {})` -- for context on overall pipeline health
+
+**Health data priority**: Use `deal_health_scores.risk_factors` as a primary signal source. This field contains pre-computed risk signals like `stage_stall`, `no_activity`, `sentiment_decline`, `no_meetings`. Cross-reference these with the signal taxonomy to avoid duplicate detection logic.
 
 ### Single Deal Diagnosis (when deal_id is provided)
 1. Fetch the deal: `execute_action("get_deal", { id: deal_id, include_health: true })`
-2. Fetch activities: `execute_action("get_deal_activities", { deal_id, limit: 30 })`
-3. Fetch tasks: `execute_action("list_tasks", { deal_id })`
-4. Fetch contacts on deal: from deal record -- check engagement levels
+2. **Query health score**: Fetch from `deal_health_scores` table -- this provides pre-computed risk factors, component scores, and trend data
+3. **Query relationship health**: Fetch from `relationship_health_scores` for all contacts on the deal -- prioritize by `ghost_probability_percent` descending
+4. Fetch activities: `execute_action("get_deal_activities", { deal_id, limit: 30 })`
+5. Fetch tasks: `execute_action("list_tasks", { deal_id })`
+6. Fetch contacts on deal: from deal record -- check engagement levels
+
+**Health score as diagnostic shortcut**: The `deal_health_scores.risk_factors` array and `sentiment_trend` field provide pre-analyzed signals. Use these to confirm manual signal detection and prioritize diagnosis. For example, if `risk_factors` includes `sentiment_decline` and `sentiment_trend: 'declining'`, you have high-confidence signal detection without recalculating from raw meeting data.
 
 If data calls fail or return empty, note the gap and work with available data. Missing data is itself a risk signal.
 
@@ -206,11 +214,12 @@ These are the 15 most predictive slippage signals, ranked by severity. When anal
 - Detection: Check for future calendar events or tasks with type "meeting" or "call"
 - Common cause: Rep forgot to book the next meeting at the end of the last one, buyer avoided committing to a next step
 
-**Signal 11: Health score below 50 (if available)**
-- What: The deal's computed health score is below the 50% threshold
+**Signal 11: Health score below 50**
+- What: The deal's computed health score (from `deal_health_scores.overall_health_score`) is below the 50% threshold
 - Why medium: Health scores aggregate multiple signals. Below 50 means multiple factors are combining to create risk.
-- Detection: Check health_score field on the deal record
-- Common cause: Multiple contributing factors -- the health score is a composite signal
+- Detection: Query `deal_health_scores` table for `overall_health_score` < 50
+- Common cause: Multiple contributing factors -- the health score is a composite signal from stage velocity, sentiment, engagement, and activity scores
+- **Cross-reference**: Also check `deal_health_scores.risk_factors` array and `risk_level` field for specific diagnosis
 
 **Signal 12: No mutual action plan or defined next steps**
 - What: There is no documented MAP, and the deal has no structured plan for progressing to close

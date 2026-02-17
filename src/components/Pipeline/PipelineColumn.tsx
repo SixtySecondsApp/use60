@@ -1,9 +1,17 @@
+/**
+ * PipelineColumn Component (PIPE-010)
+ *
+ * Premium glass-morphism column with stage color gradient stripe,
+ * colored count badges, and polished drop zone feedback.
+ */
+
 import React, { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { DealCard } from './DealCard';
-import { PlusCircle, PoundSterling } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { Plus, Inbox } from 'lucide-react';
+import { getLogoDevUrl } from '@/lib/utils/logoDev';
+import { extractDomain } from './hooks/useCompanyLogoBatch';
 
 interface PipelineColumnProps {
   stage: {
@@ -16,7 +24,6 @@ interface PipelineColumnProps {
   onDealClick: (deal: any) => void;
   onAddDealClick: (stageId: string) => void;
   onConvertToSubscription?: (deal: any) => void;
-  // Performance optimization: Batched metadata
   batchedMetadata?: {
     nextActions: Record<string, { pendingCount: number; highUrgencyCount: number }>;
     healthScores: Record<string, { overall_health_score: number; health_status: string }>;
@@ -45,69 +52,91 @@ export function PipelineColumn({
     return deals.reduce((sum, deal) => sum + parseFloat(deal.value || 0), 0);
   }, [deals]);
 
-  // Calculate weighted value based on stage probability
-  const weightedValue = useMemo(() => {
-    const probability = stage.default_probability / 100;
-    return totalValue * probability;
-  }, [totalValue, stage.default_probability]);
+  // Format total value
+  const formattedTotal = useMemo(() => {
+    if (totalValue >= 1_000_000) return `$${(totalValue / 1_000_000).toFixed(1)}M`;
+    if (totalValue >= 1_000) return `$${(totalValue / 1_000).toFixed(0)}K`;
+    return `$${totalValue.toFixed(0)}`;
+  }, [totalValue]);
 
-  // Format values for display
-  const formattedWeighted = new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    maximumFractionDigits: 0,
-    notation: weightedValue >= 1000000 ? 'compact' : 'standard'
-  }).format(weightedValue);
-  
-  const formattedTotal = new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    maximumFractionDigits: 0,
-    notation: totalValue >= 1000000 ? 'compact' : 'standard'
-  }).format(totalValue);
+  // Compute logo URLs for deals
+  const logoUrls = useMemo(() => {
+    const urls: Record<string, string | null> = {};
+    deals.forEach((deal) => {
+      const domain = extractDomain(deal.company);
+      urls[deal.id] = domain ? getLogoDevUrl(domain, { size: 64, format: 'png' }) : null;
+    });
+    return urls;
+  }, [deals]);
+
+  // Create hex to rgba helper for stage color
+  const stageColorAlpha = (alpha: number) => {
+    const hex = stage.color || '#3B82F6';
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
 
   return (
     <div
       data-testid={`pipeline-column-${stage.id}`}
-      className="flex-1 min-w-[280px] max-w-[400px] bg-white dark:bg-gray-900/80 backdrop-blur-sm
-        rounded-xl border border-gray-200 dark:border-gray-700/50 flex flex-col max-h-[calc(100vh-250px)]
-        shadow-sm dark:shadow-none"
-      style={{
-        isolation: 'isolate',
-        transition: 'border-color 150ms ease'
-      }}
+      className={`
+        flex-1 min-w-[300px] max-w-[300px] flex flex-col
+        rounded-2xl overflow-hidden
+        bg-white/80 dark:bg-white/[0.03]
+        backdrop-blur-xl dark:backdrop-blur-xl
+        border border-gray-200/80 dark:border-white/[0.06]
+        max-h-[calc(100vh-250px)]
+        transition-all duration-200
+        ${isOver ? 'border-blue-400/50 dark:border-blue-400/30 shadow-[0_0_30px_rgba(59,130,246,0.1)]' : ''}
+      `}
     >
-      {/* Column Header with Stage Metrics */}
+      {/* Stage color gradient stripe at top */}
       <div
-        className="p-4 border-b border-gray-200 dark:border-gray-700/50 sticky top-0 z-10 bg-white dark:bg-gray-900/80 backdrop-blur-sm"
+        className="h-[2.5px] w-full"
         style={{
-          borderBottomColor: isOver ? `${stage.color}80` : undefined
+          background: `linear-gradient(90deg, ${stage.color}, ${stageColorAlpha(0.3)})`,
         }}
-      >
+      />
+
+      {/* Column Header */}
+      <div className="px-4 pt-3.5 pb-3 border-b border-gray-200/80 dark:border-white/[0.06]">
         {/* Stage Name and Count */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-4 h-4 rounded-md"
-              style={{ backgroundColor: stage.color }}
-            />
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-lg">{stage.name}</h3>
-            {deals.length === 0 && (
-              <span className="text-xs text-gray-700 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/30 px-2 py-0.5 rounded-full">
-                Empty
-              </span>
-            )}
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2.5">
+            <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+              {stage.name}
+            </span>
+            <span
+              className="text-[10.5px] font-bold px-2 py-[1px] rounded-full"
+              style={{
+                backgroundColor: stageColorAlpha(0.12),
+                color: stage.color,
+              }}
+            >
+              {deals.length}
+            </span>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-800/30 px-2.5 py-0.5 rounded-full text-xs text-gray-700 dark:text-gray-300 font-semibold">
-            {deals.length}
-          </div>
+
+          <button className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/[0.05] hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="5" r="1" />
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="12" cy="19" r="1" />
+            </svg>
+          </button>
         </div>
 
-        {/* Stage Metrics */}
-        <div className="text-sm text-gray-700 dark:text-gray-300">
-          <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formattedWeighted}</span>
-          <span className="text-gray-500 dark:text-gray-400"> of </span>
-          <span className="text-gray-900 dark:text-gray-100 font-semibold">{formattedTotal}</span>
+        {/* Stage Value */}
+        <div className="flex items-center gap-3">
+          <span className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+            {formattedTotal}
+          </span>
+          <span className="text-[10.5px] font-semibold text-gray-500 dark:text-gray-500 flex items-center gap-1">
+            <span className="text-emerald-500">&#8593;</span>
+            {stage.default_probability}%
+          </span>
         </div>
       </div>
 
@@ -115,26 +144,21 @@ export function PipelineColumn({
       <div
         ref={setNodeRef}
         className={`
-          flex-1 overflow-y-auto p-4 space-y-3
-          ${isOver ? 'bg-gray-50 dark:bg-gray-800/30 ring-1 ring-inset' : ''}
-          scrollbar-none
+          flex-1 overflow-y-auto p-2 flex flex-col gap-[7px]
           transition-all duration-150
+          scrollbar-thin
+          ${isOver ? 'bg-blue-50/30 dark:bg-blue-500/[0.03]' : ''}
         `}
         style={{
-          position: 'relative',
-          zIndex: 1,
-          ...(isOver ? { '--ring-color': `${stage.color}40` } as any : {})
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255,255,255,0.06) transparent',
         }}
       >
-        {/* Empty state when no deals */}
+        {/* Empty state */}
         {deals.length === 0 && !isOver && (
-          <div className="text-gray-700 dark:text-gray-400 text-center text-sm space-y-2">
-            <div className="h-20 flex items-center justify-center border border-dashed border-gray-300 dark:border-gray-700/50 rounded-lg">
-              Drop deals here
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-500">
-              {stage.default_probability}% probability • Included in pipeline total
-            </div>
+          <div className="flex-1 flex flex-col items-center justify-center py-8 text-gray-400 dark:text-gray-500">
+            <Inbox className="w-9 h-9 mb-2.5 opacity-20" />
+            <p className="text-xs font-medium opacity-70">No deals</p>
           </div>
         )}
 
@@ -145,6 +169,7 @@ export function PipelineColumn({
               <DealCard
                 key={deal.id}
                 deal={deal}
+                logoUrl={logoUrls[dealId] || undefined}
                 index={index}
                 onClick={onDealClick}
                 onConvertToSubscription={onConvertToSubscription}
@@ -156,29 +181,27 @@ export function PipelineColumn({
             );
           })}
         </SortableContext>
-
-        {/* Add Deal Button */}
-        <button
-          onClick={() => onAddDealClick(stage.id)}
-          className="w-full h-12 flex items-center justify-center gap-2
-            bg-transparent border border-dashed border-gray-300 dark:border-gray-700/50 rounded-lg
-            text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800/30
-            hover:border-gray-400 dark:hover:border-gray-600 transition-colors mt-3"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span className="text-sm font-medium">Add deal</span>
-        </button>
       </div>
 
-      {/* Bottom Summary (Optional - can be removed if you prefer the header metrics only) */}
-      {deals.length > 0 && (
-        <div className="p-3 border-t border-gray-200 dark:border-gray-700/50 bg-white dark:bg-gray-900/70">
-          <div className="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300">
-            <span>Probability: {stage.default_probability}%</span>
-            <span>Total Deals: {deals.length}</span>
-          </div>
-        </div>
-      )}
+      {/* Add Deal Button */}
+      <div className="px-2 pb-2.5 pt-1">
+        <button
+          onClick={() => onAddDealClick(stage.id)}
+          className="
+            w-full flex items-center justify-center gap-1.5
+            py-2.5 rounded-lg
+            border-[1.5px] border-dashed border-gray-200 dark:border-white/[0.08]
+            text-gray-400 dark:text-gray-500 text-xs font-medium
+            hover:border-blue-400/30 dark:hover:border-blue-400/20
+            hover:text-blue-500 dark:hover:text-blue-400
+            hover:bg-blue-50/30 dark:hover:bg-blue-500/[0.03]
+            transition-all duration-200
+          "
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add deal
+        </button>
+      </div>
     </div>
   );
 }

@@ -160,9 +160,9 @@ ACTION PARAMETERS:
 - get_lead: { email?, full_name?, contact_id?, date_from?, date_to?, date_field? } - Get lead/prospect data with enrichment
 
 ## Deal & Pipeline
-- get_deal: { name?, id?, close_date_from?, close_date_to?, status?, stage_id?, include_health?, limit? } - Search deals
+- get_deal: { name?, id?, close_date_from?, close_date_to?, status?, stage_id?, limit? } - Search deals (health scores always included)
 - get_pipeline_summary: {} - Get aggregated pipeline metrics
-- get_pipeline_deals: { filter?, days?, period?, include_health?, limit? } - Get filtered deal list (filter: "closing_soon"|"at_risk"|"stale"|"needs_attention")
+- get_pipeline_deals: { filter?, days?, period?, limit? } - Get filtered deal list with health scores (filter: "closing_soon"|"at_risk"|"stale"|"needs_attention")
 - get_pipeline_forecast: { period? } - Get quarterly forecast
 
 ## Contacts & Relationships
@@ -1043,6 +1043,8 @@ Don't stop after completing just one step — complete the FULL workflow the use
 - Use execute_action with get_pipeline_deals { filter: "stale", days: 14 }
 - Use execute_action with get_pipeline_summary {} for current pipeline snapshot
 - Use execute_action with get_pipeline_forecast { period: "this_quarter" }
+
+**IMPORTANT: When discussing deals, always reference their health score, risk signals, and relationship health status. Proactively flag deals with critical health (<40 score) or high ghost risk (>50%). Health scores are automatically included in all deal queries.**
 
 ### Meeting Prep
 - Use execute_action with get_next_meeting { include_context: true } for next meeting

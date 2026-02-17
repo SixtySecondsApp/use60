@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { GENERIC_TEMPLATES, EXA_TEMPLATES, type EnrichmentTemplate } from './enrichmentTemplates';
+import { GENERIC_TEMPLATES, EXA_TEMPLATES, DEAL_ENRICHMENT_TEMPLATES, type EnrichmentTemplate } from './enrichmentTemplates';
 import { supabase } from '@/lib/supabase/clientV2';
 import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 import { HubSpotPropertyPicker } from './HubSpotPropertyPicker';
@@ -62,6 +62,7 @@ interface AddColumnModalProps {
   sourceType?: 'manual' | 'csv' | 'hubspot' | null;
   tableId?: string;
   orgId?: string;
+  tableName?: string;
 }
 
 /** Lightweight client-side formula evaluator for preview */
@@ -267,8 +268,9 @@ function getNextAvailableKey(baseKey: string, usedKeys: Set<string>): string {
   return candidate;
 }
 
-export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSuccess, existingColumns = [], sampleRowValues = {}, sourceType, tableId, orgId }: AddColumnModalProps) {
+export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSuccess, existingColumns = [], sampleRowValues = {}, sourceType, tableId, orgId, tableName }: AddColumnModalProps) {
   const isHubSpotTable = sourceType === 'hubspot';
+  const isStandardDealsTable = tableName?.toLowerCase().includes('deals') ?? false;
   const COLUMN_TYPES = useMemo(() => {
     const types = [...BASE_COLUMN_TYPES];
     if (isHubSpotTable) types.push(HUBSPOT_COLUMN_TYPE);
@@ -1876,6 +1878,37 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
                       How many rows to enrich automatically when the column is added
                     </p>
                   </div>
+
+                  {/* Deal-Specific AI Enrichment Presets (only for Deals tables) */}
+                  {isStandardDealsTable && enrichmentProvider !== 'exa' && (
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-500">
+                        AI Enrichment Presets for Deals
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {DEAL_ENRICHMENT_TEMPLATES.map((template) => {
+                          const Icon = template.icon;
+                          return (
+                            <button
+                              key={template.name}
+                              onClick={() => handleTemplateClick(template, false)}
+                              className="flex items-start gap-2.5 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2.5 text-left transition-colors hover:border-blue-500/50 hover:bg-blue-500/10"
+                            >
+                              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-200">
+                                  {template.name}
+                                </p>
+                                <p className="mt-0.5 text-xs leading-snug text-gray-500">
+                                  {template.description}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Templates Grid */}
                   <div>

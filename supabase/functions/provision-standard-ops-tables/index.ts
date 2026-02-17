@@ -1,11 +1,11 @@
 /**
  * Edge Function: provision-standard-ops-tables
  *
- * Provisions the 4 standard ops tables (Leads, Meetings, All Contacts, All Companies)
+ * Provisions the 5 standard ops tables (Leads, Meetings, All Contacts, All Companies, Deals)
  * for the authenticated user's organization.
  *
  * This is a one-time provisioning operation that creates:
- * - 4 standard dynamic tables with predefined schemas
+ * - 5 standard dynamic tables with predefined schemas
  * - All system columns for each table
  * - Default system views for each table
  * - Marks the organization as provisioned
@@ -14,14 +14,16 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { getCorsHeaders } from '../_shared/corsHelper.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 Deno.serve(async (req: Request) => {
-  const corsHeaders = getCorsHeaders(req);
-
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  // Handle CORS preflight
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) {
+    return preflightResponse;
   }
+
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const authHeader = req.headers.get('Authorization');
@@ -85,7 +87,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Call provisioning RPC
+    // Call provisioning RPC for main 4 tables
     const { data, error: rpcError } = await serviceClient.rpc('provision_standard_ops_tables', {
       p_org_id: membership.org_id,
       p_user_id: user.id
@@ -95,10 +97,24 @@ Deno.serve(async (req: Request) => {
       throw new Error(`RPC error: ${rpcError.message}`);
     }
 
+    // Also provision the Deals standard table (separate function for modularity)
+    const { data: dealsResult, error: dealsError } = await serviceClient.rpc('provision_deals_ops_table', {
+      p_org_id: membership.org_id,
+      p_user_id: user.id
+    });
+
+    if (dealsError) {
+      console.error('Failed to provision Deals ops table:', dealsError.message);
+      // Don't fail the whole operation — Deals table is additive
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        data
+        data: {
+          ...data,
+          deals: dealsResult || { error: dealsError?.message }
+        }
       }),
       {
         status: 200,
