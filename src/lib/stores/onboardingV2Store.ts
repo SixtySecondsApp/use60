@@ -316,8 +316,8 @@ interface OnboardingV2State {
   createOrganizationFromManualData: (userId: string, manualData: ManualEnrichmentData) => Promise<string>;
 
   // Enrichment actions
-  startEnrichment: (organizationId: string | null, domain: string, force?: boolean) => Promise<void>;
-  pollEnrichmentStatus: (organizationId: string | null, domain: string) => Promise<void>;
+  startEnrichment: (organizationId: string, domain: string, force?: boolean) => Promise<void>;
+  pollEnrichmentStatus: (organizationId: string) => Promise<void>;
   setEnrichment: (data: EnrichmentData) => void;
 
   // Skill actions
@@ -793,10 +793,40 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       // No existing org found - check if we need to create one or use the provided one
       if (!finalOrgId || finalOrgId === '') {
-        // No org ID provided - defer org creation until enrichment completes
-        console.log('[onboardingV2] Deferring org creation until enrichment completes for domain:', domain);
-        // Don't create org yet - just store domain and start enrichment
-        // Org will be created in pollEnrichmentStatus after enrichment succeeds
+        // Create org with domain as name (updated to real name after enrichment completes)
+        const domainLabel = domain.replace(/\.(com|io|ai|co|net|org|app|dev|xyz)$/i, '');
+        const organizationName = domainLabel.charAt(0).toUpperCase() + domainLabel.slice(1);
+        const { data: newOrg, error: createError } = await supabase
+          .from('organizations')
+          .insert({
+            name: organizationName,
+            company_domain: domain,
+            created_by: session.user.id,
+            is_active: true,
+          })
+          .select('id')
+          .single();
+
+        if (createError || !newOrg?.id) {
+          throw createError || new Error('Failed to create organization');
+        }
+
+        console.log('[onboardingV2] Created organization with domain name:', organizationName, newOrg.id);
+
+        // Add user as owner
+        const { error: memberError } = await supabase
+          .from('organization_memberships')
+          .upsert({
+            org_id: newOrg.id,
+            user_id: session.user.id,
+            role: 'owner',
+            member_status: 'active',
+          }, { onConflict: 'org_id,user_id' });
+
+        if (memberError) throw memberError;
+
+        finalOrgId = newOrg.id;
+        set({ organizationId: finalOrgId });
       } else {
         // Use the provided org ID and update its domain
         console.log('[onboardingV2] Using provided org ID and updating domain:', finalOrgId);
@@ -813,8 +843,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         currentStep: 'enrichment_loading',
       });
 
-      // Start enrichment - pass orgId if available, null if deferring
-      get().startEnrichment(finalOrgId || null, domain);
+      // Start enrichment with org ID
+      get().startEnrichment(finalOrgId, domain);
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to process website';
@@ -1154,7 +1184,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       const pollDomain = domain || manualData.company_name || '';
 
       // Start polling for status (manual enrichment still runs AI skill generation)
-      get().pollEnrichmentStatus(finalOrgId, pollDomain);
+      get().pollEnrichmentStatus(finalOrgId);
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to process your information';
@@ -1163,7 +1193,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   },
 
   // Start enrichment (website-based)
-  startEnrichment: async (organizationId: string | null, domain: string, force = false) => {
+  startEnrichment: async (organizationId: string, domain: string, force = false) => {
     const currentRetryCount = get().enrichmentRetryCount;
     // If retrying (force=true), reset polling state and increment retry count
     const resetState = force
@@ -1182,7 +1212,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
         body: {
           action: 'start',
-          organization_id: organizationId, // Can be null for deferred org creation
+          organization_id: organizationId,
           domain: domain,
           force: force,
         },
@@ -1195,8 +1225,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       if (!data?.success) throw new Error(data?.error || 'Failed to start enrichment');
 
-      // Start polling for status - pass domain for deferred org creation
-      get().pollEnrichmentStatus(organizationId, domain);
+      // Start polling for status
+      get().pollEnrichmentStatus(organizationId);
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start enrichment';
@@ -1205,7 +1235,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   },
 
   // Poll enrichment status with timeout protection
-  pollEnrichmentStatus: async (organizationId: string | null, domain: string) => {
+  pollEnrichmentStatus: async (organizationId: string) => {
     const MAX_POLLING_DURATION = 5 * 60 * 1000; // 5 minutes
     const MAX_ATTEMPTS = 150; // 150 * 2s = 5 minutes
     const POLL_INTERVAL = 2000; // 2 seconds
@@ -1263,12 +1293,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         const expiresAt = session.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'unknown';
         console.log('[pollEnrichmentStatus] Token expires at:', expiresAt);
 
-        // Poll status via Supabase SDK - pass domain for deferred org creation
+        // Poll status via Supabase SDK
         const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
           body: {
             action: 'status',
             organization_id: organizationId,
-            domain: domain,
           },
         });
 
@@ -1285,98 +1314,17 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         const { status, enrichment, skills } = data;
 
         if (status === 'completed' && enrichment) {
-          // If no org exists yet (deferred creation), create it now with enriched name
-          let currentOrgId = organizationId || get().organizationId;
-
-          if (!currentOrgId) {
+          // Update org name with enriched company name
+          if (enrichment.company_name && organizationId) {
             try {
-              const { data: { session: currentSession } } = await supabase.auth.getSession();
-              if (!currentSession) throw new Error('No session for org creation');
-
-              const orgName = enrichment.company_name || domain;
-              const { data: newOrg, error: createError } = await supabase
-                .from('organizations')
-                .insert({
-                  name: orgName,
-                  company_domain: domain,
-                  created_by: currentSession.user.id,
-                  is_active: true,
-                })
-                .select('id')
-                .single();
-
-              if (createError || !newOrg?.id) {
-                throw createError || new Error('Failed to create organization after enrichment');
-              }
-
-              console.log('[pollEnrichmentStatus] Created org after enrichment:', newOrg.id, orgName);
-
-              // Add user as owner
               await supabase
-                .from('organization_memberships')
-                .upsert({
-                  org_id: newOrg.id,
-                  user_id: currentSession.user.id,
-                  role: 'owner',
-                  member_status: 'active',
-                }, { onConflict: 'org_id,user_id' });
-
-              // Link enrichment record to org
-              if (enrichment.id) {
-                await supabase
-                  .from('organization_enrichment')
-                  .update({ organization_id: newOrg.id })
-                  .eq('id', enrichment.id);
-              }
-
-              // Save generated skills to organization_skills (skipped in pipeline due to deferred org)
-              if (enrichment.generated_skills) {
-                const skillMappings = [
-                  { id: 'lead_qualification', name: 'Qualification', config: enrichment.generated_skills.lead_qualification },
-                  { id: 'lead_enrichment', name: 'Enrichment', config: enrichment.generated_skills.lead_enrichment },
-                  { id: 'brand_voice', name: 'Brand Voice', config: enrichment.generated_skills.brand_voice },
-                  { id: 'objection_handling', name: 'Objections', config: enrichment.generated_skills.objection_handling },
-                  { id: 'icp', name: 'ICP', config: enrichment.generated_skills.icp },
-                ];
-                for (const skill of skillMappings) {
-                  if (skill.config) {
-                    await supabase.from('organization_skills').upsert({
-                      organization_id: newOrg.id,
-                      skill_id: skill.id,
-                      skill_name: skill.name,
-                      config: skill.config,
-                      ai_generated: true,
-                      user_modified: false,
-                      is_active: true,
-                    }, { onConflict: 'organization_id,skill_id' });
-                  }
-                }
-                console.log('[pollEnrichmentStatus] Saved generated skills to org:', newOrg.id);
-              }
-
-              currentOrgId = newOrg.id;
-              set({ organizationId: newOrg.id });
-            } catch (orgError) {
-              console.error('[pollEnrichmentStatus] Failed to create org after enrichment:', orgError);
-              set({
-                isEnrichmentLoading: false,
-                enrichmentError: 'Enrichment completed but failed to create organization. Please try again.',
-              });
-              return;
-            }
-          } else {
-            // Existing org - update name with enriched company name
-            if (enrichment.company_name && currentOrgId) {
-              try {
-                await supabase
-                  .from('organizations')
-                  .update({ name: enrichment.company_name })
-                  .eq('id', currentOrgId);
-                console.log('[pollEnrichmentStatus] Updated org name to:', enrichment.company_name);
-              } catch (updateError) {
-                console.error('[pollEnrichmentStatus] Failed to update org name:', updateError);
-                // Continue anyway - not critical
-              }
+                .from('organizations')
+                .update({ name: enrichment.company_name })
+                .eq('id', organizationId);
+              console.log('[pollEnrichmentStatus] Updated org name to:', enrichment.company_name);
+            } catch (updateError) {
+              console.error('[pollEnrichmentStatus] Failed to update org name:', updateError);
+              // Continue anyway - not critical
             }
           }
 
@@ -1410,7 +1358,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         }
 
         // Continue polling (recursive call after delay)
-        setTimeout(() => get().pollEnrichmentStatus(organizationId, domain), POLL_INTERVAL);
+        setTimeout(() => get().pollEnrichmentStatus(organizationId), POLL_INTERVAL);
 
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to get enrichment status';
@@ -1885,7 +1833,6 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   },
 
   // Reset with full database cleanup (deletes org + related records)
-  // With deferred org creation, org may not exist yet during enrichment_loading step
   resetAndCleanup: async () => {
     const { organizationId, domain, userEmail } = get();
 
