@@ -176,6 +176,11 @@ verify_jwt = false
 [functions.get-recording-url]
 verify_jwt = false
 
+# Batch signed URLs - called from browser to fetch signed S3 URLs for video thumbnails
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.get-batch-signed-urls]
+verify_jwt = false
+
 # Password reset email - called from admin panel with user JWT
 # We handle auth verification manually inside the function (CORS preflight needs to work)
 [functions.send-password-reset-email]
