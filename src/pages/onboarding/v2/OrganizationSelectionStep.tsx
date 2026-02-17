@@ -7,7 +7,7 @@
 
 import { motion } from 'framer-motion';
 import { Building2, Users, Plus, Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { toast } from 'sonner';
@@ -24,6 +24,10 @@ export function OrganizationSelectionStep() {
   const [similarOrgs, setSimilarOrgs] = useState<SimilarOrg[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Ref to prevent rapid clicking (synchronous guard before state updates)
+  const isSubmittingRef = useRef(false);
+
   const {
     manualData,
     similarOrganizations: preFetchedOrgs,
@@ -74,6 +78,13 @@ export function OrganizationSelectionStep() {
   };
 
   const handleSelectOrg = async (org: SimilarOrg) => {
+    // Guard against rapid clicking
+    if (isSubmittingRef.current) {
+      console.log('[OrganizationSelectionStep] Blocked rapid click on Select Org');
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setSubmitting(true);
     try {
       // Create join request for selected org
@@ -86,10 +97,18 @@ export function OrganizationSelectionStep() {
       console.error(err);
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
   const handleCreateNew = async () => {
+    // Guard against rapid clicking (ref provides immediate synchronous check)
+    if (isSubmittingRef.current) {
+      console.log('[OrganizationSelectionStep] Blocked rapid click on Create New');
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setSubmitting(true);
     try {
       // Create new organization with the entered name
@@ -100,6 +119,7 @@ export function OrganizationSelectionStep() {
       console.error(err);
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 

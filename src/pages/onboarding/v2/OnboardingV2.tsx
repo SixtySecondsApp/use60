@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOnboardingV2Store, type OnboardingV2Step, isPersonalEmailDomain } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -59,6 +60,7 @@ const RESUMABLE_STEPS: OnboardingV2Step[] = ['enrichment_loading', 'enrichment_r
 export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2Props) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showResumeChoice, setShowResumeChoice] = useState(false);
   const [savedStateForChoice, setSavedStateForChoice] = useState<any>(null);
@@ -397,7 +399,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
       if (savedStateForChoice?.organizationId) {
         setOrganizationId(savedStateForChoice.organizationId);
       }
-      await resetAndCleanup();
+      await resetAndCleanup(queryClient);
     } finally {
       setIsStartingFresh(false);
       setShowResumeChoice(false);
