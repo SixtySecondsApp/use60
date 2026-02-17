@@ -517,6 +517,7 @@ export function useUsers() {
       // Trim and normalize names
       const trimmedFirstName = firstName?.trim() || undefined;
       const trimmedLastName = lastName?.trim() || undefined;
+      const normalizedEmail = email.toLowerCase().trim();
 
       // Get current session for auth token
       const { data: { session } } = await supabase.auth.getSession();
@@ -524,52 +525,91 @@ export function useUsers() {
         throw new Error('Not authenticated');
       }
 
-      // Call app API (same origin) to avoid browser->Supabase Edge CORS issues
-      const response = await fetch('/api/admin/invite-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          email: email.toLowerCase().trim(),
+      // 1. Create auth user using admin API
+      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+        email: normalizedEmail,
+        email_confirm: true,
+        user_metadata: {
           first_name: trimmedFirstName,
           last_name: trimmedLastName,
-        }),
+          full_name: trimmedFirstName && trimmedLastName ? `${trimmedFirstName} ${trimmedLastName}` : null,
+          invited_by_admin: true,
+        },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to invite user (${response.status})`);
+      if (createError || !newUser?.user?.id) {
+        throw new Error(createError?.message || 'Failed to create user');
       }
 
-      const data = await response.json();
-      if (data.error) {
-        throw new Error(data.error);
+      const newUserId = newUser.user.id;
+      logger.log('User created:', newUserId, normalizedEmail);
+
+      // 2. Ensure profile exists
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: newUserId,
+          email: normalizedEmail,
+          first_name: trimmedFirstName || null,
+          last_name: trimmedLastName || null,
+        }, {
+          onConflict: 'id',
+          ignoreDuplicates: false
+        });
+
+      if (profileError) {
+        logger.warn('Failed to create profile (non-blocking):', profileError);
       }
 
-      // Check email delivery status from API
-      if (data.emailSent) {
-        toast.success(`Invitation sent successfully to ${email}`);
+      // 3. Generate waitlist-style token via edge function (same as waitlist flow)
+      const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
+      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-waitlist-token', {
+        body: {
+          email: normalizedEmail,
+          user_id: newUserId, // Pass user_id instead of waitlist_entry_id
+        },
+        headers: edgeFunctionSecret
+          ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+          : {},
+      });
+
+      if (tokenError || !tokenData?.success || !tokenData?.token) {
+        logger.error('Failed to generate token:', tokenError || tokenData?.error);
+        throw new Error(tokenData?.error || 'Failed to generate invitation token');
+      }
+
+      // 4. Build invitation URL (same pattern as waitlist)
+      const origin = window.location.origin;
+      const invitationUrl = `${origin}/auth/set-password?token=${tokenData.token}`;
+
+      // 5. Send welcome email using the same template as waitlist invites
+      const displayName = trimmedFirstName || normalizedEmail.split('@')[0];
+
+      const { data: emailResult, error: emailError } = await supabase.functions.invoke('encharge-send-email', {
+        body: {
+          template_type: 'waitlist_invite',
+          to_email: normalizedEmail,
+          to_name: displayName,
+          variables: {
+            recipient_name: displayName,
+            action_url: invitationUrl,
+            company_name: '',
+            expiry_time: '7 days',
+          },
+        },
+        headers: edgeFunctionSecret
+          ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+          : {},
+      });
+
+      if (emailError || !emailResult?.success) {
+        logger.error('Email sending failed:', emailError || emailResult?.error);
+        toast.warning(
+          `User created, but email failed to send to ${normalizedEmail}. They can use the password reset flow.`,
+          { duration: 8000 }
+        );
       } else {
-        // Email failed - show warning with resend option
-        logger.error('Email delivery failed:', data.emailError);
-
-        // Only show resend button if invitation ID exists and we haven't hit the limit
-        if (data.invitationId) {
-          toast.warning(
-            `User created, but email failed to send to ${email}.`,
-            {
-              duration: 10000,
-              action: {
-                label: 'Resend Email',
-                onClick: () => resendInvitation(data.invitationId)
-              }
-            }
-          );
-        } else {
-          toast.warning(`User created, but email failed to send to ${email}. Error: ${data.emailError || 'Unknown error'}`);
-        }
+        toast.success(`Welcome to early access email sent to ${normalizedEmail}`);
       }
 
       // Refresh user list
