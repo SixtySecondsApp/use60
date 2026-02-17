@@ -9,11 +9,13 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ChevronRight } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 
 export function EnrichmentResultStep() {
   const { enrichment, setStep, organizationId, setEnrichment, resetAndCleanup } = useOnboardingV2Store();
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
@@ -21,7 +23,7 @@ export function EnrichmentResultStep() {
     if (isResetting) return;
     setIsResetting(true);
     try {
-      await resetAndCleanup();
+      await resetAndCleanup(queryClient);
     } finally {
       setIsResetting(false);
     }
