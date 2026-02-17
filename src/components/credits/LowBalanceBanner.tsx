@@ -1,14 +1,14 @@
 /**
  * LowBalanceBanner — Dismissible warning banner when credit balance is low.
  *
- * Shows when projected days remaining < 7 (or balance < $5).
- * Dismisses for the session via local state.
+ * Amber at ~20% remaining, red at ~10% remaining.
+ * If auto top-up is active, shows friendly message about upcoming top-up.
  * Links to the credits settings page.
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, X, CreditCard } from 'lucide-react';
+import { AlertTriangle, X, CreditCard, RefreshCw } from 'lucide-react';
 import { useCreditBalance } from '@/lib/hooks/useCreditBalance';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
@@ -25,14 +25,24 @@ export function LowBalanceBanner() {
 
   if (!orgId || isLoading || !data || dismissed) return null;
 
-  const { balance, projectedDaysRemaining } = data;
+  const { balance, projectedDaysRemaining, autoTopUp } = data;
 
-  // Only show for genuinely low balance (not when there's no usage data)
   const isZero = balance <= 0;
   const hasUsageData = projectedDaysRemaining >= 0;
-  const isLow = balance > 0 && hasUsageData && (projectedDaysRemaining < 7 || balance < 5);
 
-  if (!isZero && !isLow) return null;
+  // Determine low-balance thresholds using projected days
+  // Amber: <14 days remaining (roughly 20% if avg usage),  Red: <7 days (roughly 10%)
+  const isRedLow = balance > 0 && hasUsageData && projectedDaysRemaining < 7;
+  const isAmberLow = balance > 0 && hasUsageData && projectedDaysRemaining >= 7 && projectedDaysRemaining < 14;
+
+  if (!isZero && !isRedLow && !isAmberLow) return null;
+
+  const autoTopUpEnabled = autoTopUp?.enabled ?? false;
+  const autoTopUpPackCredits = autoTopUp?.packType ? `${autoTopUp.packType}` : 'credits';
+
+  const formattedBalance = balance % 1 === 0
+    ? `${Math.round(balance)} cr`
+    : `${balance.toFixed(1)} cr`;
 
   return (
     <div
@@ -40,32 +50,50 @@ export function LowBalanceBanner() {
         'flex items-center gap-3 px-4 py-2 text-sm',
         isZero
           ? 'bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
+          : isRedLow
+          ? 'bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
           : 'bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
       )}
     >
-      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+      {autoTopUpEnabled ? (
+        <RefreshCw className="w-4 h-4 flex-shrink-0" />
+      ) : (
+        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+      )}
       <span className="flex-1">
         {isZero ? (
           <>AI credits depleted. AI features are disabled until credits are added.</>
+        ) : autoTopUpEnabled ? (
+          <>
+            Low credits ({formattedBalance} remaining) — auto top-up will add {autoTopUpPackCredits} pack credits shortly.
+          </>
         ) : (
           <>
-            Low AI credit balance ({balance.toFixed(2)} credits remaining
-            {projectedDaysRemaining < 365 && `, ~${Math.round(projectedDaysRemaining)} days left`}).
+            Low AI credits ({formattedBalance} remaining
+            {hasUsageData && projectedDaysRemaining < 365 && `, ~${Math.round(projectedDaysRemaining)} days left`}).
           </>
         )}
       </span>
-      {isAdmin && (
+      {isAdmin && !autoTopUpEnabled && (
         <button
           onClick={() => navigate('/settings/credits')}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors flex-shrink-0',
-            isZero
+            isZero || isRedLow
               ? 'bg-red-600 hover:bg-red-700 text-white'
               : 'bg-amber-600 hover:bg-amber-700 text-white'
           )}
         >
           <CreditCard className="w-3 h-3" />
           Top Up
+        </button>
+      )}
+      {isAdmin && autoTopUpEnabled && (
+        <button
+          onClick={() => navigate('/settings/credits')}
+          className="text-xs font-medium underline opacity-70 hover:opacity-100 transition-opacity flex-shrink-0"
+        >
+          Manage
         </button>
       )}
       <button

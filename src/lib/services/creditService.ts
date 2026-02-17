@@ -1,23 +1,61 @@
 /**
  * Credit Service
  *
- * Manages org credit balance, purchases, and usage tracking.
- * Credits use a 1:1 ratio with USD (1 credit = $1).
+ * Manages org credit balance, pack inventory, purchases, and usage tracking.
+ * Credits are in credit units (10 credits ≈ $1 USD).
  */
 
 import { supabase } from '@/lib/supabase/clientV2';
+import type { PackType } from '@/lib/config/creditPacks';
 
 // ============================================================================
 // Types
 // ============================================================================
 
+export interface PackInventory {
+  activePacks: number;
+  totalRemaining: number;
+}
+
+export interface OrgCreditPack {
+  id: string;
+  packType: PackType;
+  creditsPurchased: number;
+  creditsRemaining: number;
+  purchasedAt: string;
+  source: 'manual' | 'auto_top_up' | 'bonus' | 'migration';
+  paymentId: string | null;
+  expiresAt: string | null;
+}
+
+export interface AutoTopUpSettings {
+  enabled: boolean;
+  packType: PackType | null;
+  threshold: number;
+  monthlyCap: number;
+  topUpsThisMonth: number;
+  paymentMethodLast4: string | null;
+}
+
+export interface StorageUsage {
+  audioHours: number;
+  transcriptCount: number;
+  documentCount: number;
+  enrichmentRecords: number;
+  projectedMonthlyCostCredits: number;
+  lastStorageDeductionDate: string | null;
+}
+
 export interface CreditBalance {
   balance: number;
+  packInventory: PackInventory;
   dailyBurnRate: number;
   projectedDaysRemaining: number;
   usageByFeature: FeatureUsage[];
   recentTransactions: CreditTransaction[];
   lastPurchaseDate: string | null;
+  autoTopUp: AutoTopUpSettings | null;
+  storage: StorageUsage | null;
 }
 
 export interface FeatureUsage {
@@ -56,6 +94,10 @@ function getUtcStartOfDayDaysAgo(daysAgo: number): string {
 
 interface BalanceResponseDto {
   balance?: number;
+  pack_inventory?: {
+    active_packs: number;
+    total_remaining: number;
+  };
   daily_burn_rate?: number;
   projected_days_remaining?: number;
   usage_by_feature?: Array<{
@@ -74,6 +116,32 @@ interface BalanceResponseDto {
     created_at: string;
   }>;
   last_purchase_date?: string | null;
+  storage?: {
+    audio_hours: number;
+    transcript_count: number;
+    document_count: number;
+    enrichment_records: number;
+    projected_monthly_cost_credits: number;
+    last_storage_deduction_date: string | null;
+  } | null;
+  auto_top_up?: {
+    enabled: boolean;
+    pack_type: string | null;
+    threshold: number;
+    monthly_cap: number;
+    top_ups_this_month: number;
+    payment_method_last4: string | null;
+  } | null;
+  packs?: Array<{
+    id: string;
+    pack_type: string;
+    credits_purchased: number;
+    credits_remaining: number;
+    purchased_at: string;
+    source: string;
+    payment_id: string | null;
+    expires_at: string | null;
+  }>;
 }
 
 // ============================================================================
@@ -84,14 +152,19 @@ interface BalanceResponseDto {
  * Get the full credit balance snapshot for an org (used by the widget).
  */
 export async function getBalance(orgId: string): Promise<CreditBalance> {
-  // Try edge function first (provides full data: burn rate, usage, transactions)
+  // Try edge function first (provides full data: burn rate, usage, transactions, packs)
   const { data, error } = await supabase.functions.invoke<BalanceResponseDto>('get-credit-balance', {
     body: { org_id: orgId },
   });
 
   if (!error && data) {
+    const autoTopUpRaw = data?.auto_top_up;
     return {
       balance: data?.balance ?? 0,
+      packInventory: {
+        activePacks: data?.pack_inventory?.active_packs ?? 0,
+        totalRemaining: data?.pack_inventory?.total_remaining ?? 0,
+      },
       dailyBurnRate: data?.daily_burn_rate ?? 0,
       projectedDaysRemaining: data?.projected_days_remaining ?? 0,
       usageByFeature: (data?.usage_by_feature ?? []).map((f) => ({
@@ -110,6 +183,26 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
         createdAt: t.created_at,
       })),
       lastPurchaseDate: data?.last_purchase_date ?? null,
+      autoTopUp: autoTopUpRaw
+        ? {
+            enabled: autoTopUpRaw.enabled,
+            packType: (autoTopUpRaw.pack_type as PackType) ?? null,
+            threshold: autoTopUpRaw.threshold,
+            monthlyCap: autoTopUpRaw.monthly_cap,
+            topUpsThisMonth: autoTopUpRaw.top_ups_this_month,
+            paymentMethodLast4: autoTopUpRaw.payment_method_last4,
+          }
+        : null,
+      storage: data?.storage
+        ? {
+            audioHours: data.storage.audio_hours,
+            transcriptCount: data.storage.transcript_count,
+            documentCount: data.storage.document_count,
+            enrichmentRecords: data.storage.enrichment_records,
+            projectedMonthlyCostCredits: data.storage.projected_monthly_cost_credits,
+            lastStorageDeductionDate: data.storage.last_storage_deduction_date,
+          }
+        : null,
     };
   }
 
@@ -124,22 +217,67 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
 
     return {
       balance: row?.balance_credits ?? 0,
+      packInventory: { activePacks: 0, totalRemaining: 0 },
       dailyBurnRate: 0,
       projectedDaysRemaining: -1, // no usage data available from fallback
       usageByFeature: [],
       recentTransactions: [],
       lastPurchaseDate: null,
+      autoTopUp: null,
+      storage: null,
     };
   } catch {
     return {
       balance: 0,
+      packInventory: { activePacks: 0, totalRemaining: 0 },
       dailyBurnRate: 0,
       projectedDaysRemaining: -1,
       usageByFeature: [],
       recentTransactions: [],
       lastPurchaseDate: null,
+      autoTopUp: null,
+      storage: null,
     };
   }
+}
+
+// ============================================================================
+// Pack Inventory
+// ============================================================================
+
+/**
+ * Get list of active credit packs for an org (FIFO order: bonus first, then oldest).
+ */
+export async function getPacks(orgId: string): Promise<OrgCreditPack[]> {
+  const { data, error } = await supabase
+    .from('credit_packs')
+    .select('id, pack_type, credits_purchased, credits_remaining, purchased_at, source, payment_id, expires_at')
+    .eq('org_id', orgId)
+    .gt('credits_remaining', 0)
+    .order('purchased_at', { ascending: true });
+
+  if (error) {
+    console.error('[CreditService] Error fetching packs:', error);
+    return [];
+  }
+
+  // Sort: bonus first, then by purchased_at ascending (matches FIFO deduction order)
+  return (data ?? [])
+    .map((p) => ({
+      id: p.id,
+      packType: p.pack_type as PackType,
+      creditsPurchased: p.credits_purchased,
+      creditsRemaining: p.credits_remaining,
+      purchasedAt: p.purchased_at,
+      source: p.source as OrgCreditPack['source'],
+      paymentId: p.payment_id,
+      expiresAt: p.expires_at,
+    }))
+    .sort((a, b) => {
+      if (a.source === 'bonus' && b.source !== 'bonus') return -1;
+      if (a.source !== 'bonus' && b.source === 'bonus') return 1;
+      return new Date(a.purchasedAt).getTime() - new Date(b.purchasedAt).getTime();
+    });
 }
 
 // ============================================================================
@@ -194,8 +332,37 @@ export async function getTransactions(
 // ============================================================================
 
 /**
- * Initiate a credit purchase via Stripe checkout.
+ * Initiate a credit pack purchase via Stripe checkout.
  * Returns the Stripe checkout URL to redirect the user.
+ */
+export async function purchasePack(
+  orgId: string,
+  packType: PackType
+): Promise<CreditPurchaseResult> {
+  const { data, error } = await supabase.functions.invoke('create-credit-checkout', {
+    body: {
+      org_id: orgId,
+      pack_type: packType,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to create checkout session');
+  }
+
+  if (!data?.url) {
+    throw new Error('No checkout URL returned');
+  }
+
+  return {
+    url: data.url,
+    sessionId: data.session_id,
+  };
+}
+
+/**
+ * @deprecated Use purchasePack() instead.
+ * Kept for backward compatibility during transition period.
  */
 export async function purchaseCredits(
   orgId: string,
@@ -223,27 +390,107 @@ export async function purchaseCredits(
 }
 
 // ============================================================================
+// Auto Top-Up Settings
+// ============================================================================
+
+/**
+ * Get auto top-up settings for an org.
+ */
+export async function getAutoTopUpSettings(orgId: string): Promise<AutoTopUpSettings | null> {
+  const { data, error } = await supabase
+    .from('auto_top_up_settings')
+    .select('enabled, pack_type, threshold, monthly_cap, stripe_payment_method_id')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[CreditService] Error fetching auto top-up settings:', error);
+    return null;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  // Count top-ups this calendar month from the log
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const { count: topUpsThisMonth } = await supabase
+    .from('auto_top_up_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('status', 'success')
+    .gte('triggered_at', startOfMonth.toISOString());
+
+  return {
+    enabled: data.enabled,
+    packType: (data.pack_type as PackType) ?? null,
+    threshold: data.threshold,
+    monthlyCap: data.monthly_cap,
+    topUpsThisMonth: topUpsThisMonth ?? 0,
+    paymentMethodLast4: null, // resolved server-side from Stripe if needed
+  };
+}
+
+/**
+ * Update auto top-up settings for an org.
+ */
+export async function updateAutoTopUpSettings(
+  orgId: string,
+  settings: Partial<Pick<AutoTopUpSettings, 'enabled' | 'packType' | 'threshold' | 'monthlyCap'>>
+): Promise<void> {
+  const update: Record<string, unknown> = {};
+  if (settings.enabled !== undefined) update['enabled'] = settings.enabled;
+  if (settings.packType !== undefined) update['pack_type'] = settings.packType;
+  if (settings.threshold !== undefined) update['threshold'] = settings.threshold;
+  if (settings.monthlyCap !== undefined) update['monthly_cap'] = settings.monthlyCap;
+
+  const { error } = await supabase
+    .from('auto_top_up_settings')
+    .upsert({ org_id: orgId, ...update }, { onConflict: 'org_id' });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to update auto top-up settings');
+  }
+}
+
+// ============================================================================
 // Admin Grant Credits (no payment)
 // ============================================================================
 
 /**
  * Admin-only: Grant credits to an org without payment.
- * Uses the add_credits PL/pgSQL function with type 'bonus'.
+ * Uses the add_credits_pack PL/pgSQL function with source 'bonus'.
  */
 export async function grantCredits(
   orgId: string,
   amount: number,
   reason: string
 ): Promise<number> {
-  const { data, error } = await supabase.rpc('add_credits', {
+  const { data, error } = await supabase.rpc('add_credits_pack', {
     p_org_id: orgId,
-    p_amount: amount,
-    p_type: 'bonus',
-    p_description: reason || 'Admin credit grant',
+    p_pack_type: 'custom',
+    p_credits: amount,
+    p_source: 'bonus',
+    p_payment_id: null,
   });
 
   if (error) {
-    throw new Error(error.message || 'Failed to grant credits');
+    // Fallback to legacy add_credits if add_credits_pack doesn't exist yet
+    const { data: legacyData, error: legacyError } = await supabase.rpc('add_credits', {
+      p_org_id: orgId,
+      p_amount: amount,
+      p_type: 'bonus',
+      p_description: reason || 'Admin credit grant',
+    });
+
+    if (legacyError) {
+      throw new Error(legacyError.message || 'Failed to grant credits');
+    }
+
+    return legacyData as number;
   }
 
   return data as number; // new balance

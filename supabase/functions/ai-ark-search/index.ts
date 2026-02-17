@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
-import { checkCreditBalance } from '../_shared/costTracking.ts'
+import { checkCreditBalance, logFlatRateCostEvent } from '../_shared/costTracking.ts'
 
 const AI_ARK_API_BASE = 'https://api.ai-ark.com/api/developer-portal/v1'
 
@@ -65,8 +65,8 @@ interface AIArkSearchParams {
 }
 
 const CREDIT_COSTS = {
-  ai_ark_company: 2.5,
-  ai_ark_people: 12.5,
+  ai_ark_company: 0.25,
+  ai_ark_people: 1.25,
 }
 
 // ---------------------------------------------------------------------------
@@ -469,16 +469,15 @@ serve(async (req) => {
     const aiArkData = await aiArkResponse.json()
 
     if (!_skip_credit_deduction && membership.org_id && creditsConsumed > 0) {
-      try {
-        await supabase.rpc('deduct_credits', {
-          p_org_id: membership.org_id,
-          p_amount: creditsConsumed,
-          p_description: `AI Ark search: ${action}`,
-          p_feature_key: 'ai_ark_search',
-        })
-      } catch (err) {
-        console.warn('[ai-ark-search] Credit deduction error (non-blocking):', err)
-      }
+      await logFlatRateCostEvent(
+        supabase,
+        user.id,
+        membership.org_id,
+        'ai_ark',
+        `ai-ark-${action}`,
+        creditsConsumed,
+        'ai_ark_search',
+      )
     }
 
     // AI Ark uses Spring-style pagination:

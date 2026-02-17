@@ -285,7 +285,7 @@ interface ExtractionResult {
 }
 
 // Credit costs per API call
-const EXA_ENRICHMENT_CREDIT_COST = 0.05
+const EXA_ENRICHMENT_CREDIT_COST = 0.2
 
 /**
  * Determine confidence score based on the AI response content.

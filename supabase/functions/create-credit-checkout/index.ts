@@ -1,21 +1,22 @@
 // supabase/functions/create-credit-checkout/index.ts
-// Creates a Stripe Checkout Session for one-time credit pack purchase
+// Creates a Stripe Checkout Session for one-time credit pack purchase (GBP)
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from "../_shared/corsHelper.ts";
 import { getStripeClient, getOrCreateStripeCustomer, getSiteUrl } from "../_shared/stripe.ts";
 import { captureException } from "../_shared/sentryEdge.ts";
+import { CREDIT_PACKS, type PackType } from "../_shared/creditPacks.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-const VALID_CREDIT_AMOUNTS = [10, 25, 50, 100, 250] as const;
-const MIN_CREDIT_AMOUNT = 5;
+// Only individual packs are purchasable via checkout; agency packs go through sales.
+const PURCHASABLE_PACK_TYPES: PackType[] = ["starter", "growth", "scale"];
 
 interface CreditCheckoutRequest {
   org_id: string;
-  credit_amount: number;
+  pack_type: PackType;
   success_url?: string;
   cancel_url?: string;
 }
@@ -53,23 +54,24 @@ serve(async (req) => {
 
     // Parse request body
     const body: CreditCheckoutRequest = await req.json();
-    const { org_id, credit_amount, success_url, cancel_url } = body;
+    const { org_id, pack_type, success_url, cancel_url } = body;
 
-    if (!org_id || !credit_amount) {
-      return errorResponse("Missing required fields: org_id, credit_amount", req, 400);
+    if (!org_id || !pack_type) {
+      return errorResponse("Missing required fields: org_id, pack_type", req, 400);
     }
 
-    // Validate credit_amount: must be a known pack size or any positive number >= MIN_CREDIT_AMOUNT
-    if (
-      typeof credit_amount !== "number" ||
-      credit_amount < MIN_CREDIT_AMOUNT ||
-      !Number.isFinite(credit_amount)
-    ) {
+    // Validate pack_type: only individual packs are self-serve
+    if (!PURCHASABLE_PACK_TYPES.includes(pack_type)) {
       return errorResponse(
-        `Invalid credit_amount. Must be a number >= ${MIN_CREDIT_AMOUNT}. Standard packs: ${VALID_CREDIT_AMOUNTS.join(", ")}`,
+        `Invalid pack_type "${pack_type}". Must be one of: ${PURCHASABLE_PACK_TYPES.join(", ")}`,
         req,
         400,
       );
+    }
+
+    const pack = CREDIT_PACKS[pack_type];
+    if (!pack) {
+      return errorResponse(`Pack definition not found for type: ${pack_type}`, req, 500);
     }
 
     // Verify user has permission to manage this org's billing (owner or admin)
@@ -118,8 +120,10 @@ serve(async (req) => {
       existingSub?.stripe_customer_id,
     );
 
-    // Build checkout session for one-time credit purchase
     const siteUrl = getSiteUrl();
+
+    // Price in pence (GBP): priceGBP is in whole pounds, convert to pence
+    const unitAmountPence = pack.priceGBP * 100;
 
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
@@ -128,12 +132,12 @@ serve(async (req) => {
       line_items: [
         {
           price_data: {
-            currency: "usd",
+            currency: "gbp",
             product_data: {
-              name: `60 AI Credits — $${credit_amount}`,
-              description: `${credit_amount} AI credits for your organization`,
+              name: `${pack.label} — ${pack.credits} Credits`,
+              description: pack.description,
             },
-            unit_amount: credit_amount * 100, // cents
+            unit_amount: unitAmountPence,
           },
           quantity: 1,
         },
@@ -141,9 +145,10 @@ serve(async (req) => {
       success_url: success_url || `${siteUrl}/settings/credits/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancel_url || `${siteUrl}/settings/credits`,
       metadata: {
-        type: "credit_purchase",
+        type: "credit_pack_purchase",
         org_id,
-        credit_amount: String(credit_amount),
+        pack_type,
+        credits: String(pack.credits),
         user_id: user.id,
       },
       allow_promotion_codes: true,

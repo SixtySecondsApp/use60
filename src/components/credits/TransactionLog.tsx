@@ -9,7 +9,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import { getTransactions, type CreditTransaction } from '@/lib/services/creditService';
 import { creditKeys } from '@/lib/hooks/useCreditBalance';
-import { Loader2, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
+import {
+  Loader2, ChevronLeft, ChevronRight, Inbox,
+  BotMessageSquare, Cpu, CreditCard, RefreshCw, Gift, RotateCcw,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -32,13 +35,45 @@ const PAGE_SIZE = 15;
 
 type FilterType = 'all' | CreditTransaction['type'];
 
-const TYPE_CONFIG: Record<CreditTransaction['type'], { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  purchase: { label: 'Purchase', variant: 'default' },
-  deduction: { label: 'Deduction', variant: 'destructive' },
-  refund: { label: 'Refund', variant: 'secondary' },
-  adjustment: { label: 'Adjustment', variant: 'outline' },
-  bonus: { label: 'Bonus', variant: 'default' },
+const TYPE_CONFIG: Record<CreditTransaction['type'], {
+  label: string;
+  variant: 'default' | 'secondary' | 'destructive' | 'outline';
+  icon: typeof CreditCard;
+  iconClass: string;
+}> = {
+  purchase: { label: 'Purchase', variant: 'default', icon: CreditCard, iconClass: 'text-emerald-500' },
+  deduction: { label: 'AI Action', variant: 'destructive', icon: BotMessageSquare, iconClass: 'text-red-400' },
+  refund: { label: 'Refund', variant: 'secondary', icon: RotateCcw, iconClass: 'text-blue-400' },
+  adjustment: { label: 'Adjustment', variant: 'outline', icon: Cpu, iconClass: 'text-gray-400' },
+  bonus: { label: 'Bonus', variant: 'default', icon: Gift, iconClass: 'text-amber-500' },
 };
+
+/** Detect if a deduction is an auto top-up purchase based on description */
+function isAutoTopUp(tx: CreditTransaction): boolean {
+  return tx.type === 'purchase' && (tx.description?.toLowerCase().includes('auto') ?? false);
+}
+
+/** Detect transaction category from feature_key or description */
+function getCategoryLabel(tx: CreditTransaction): string | null {
+  if (tx.featureKey) {
+    if (tx.featureKey.includes('storage')) return 'Storage';
+    if (tx.featureKey.includes('apollo') || tx.featureKey.includes('ai_ark') || tx.featureKey.includes('exa') || tx.featureKey.includes('email_send')) return 'Integration';
+    if (tx.featureKey.includes('ar_budget') || tx.featureKey.includes('proactive')) return 'AR Budget';
+    return 'AI';
+  }
+  return null;
+}
+
+function formatCreditAmount(amount: number): string {
+  const abs = Math.abs(amount);
+  const formatted = abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1);
+  const prefix = amount >= 0 ? '+' : '-';
+  return `${prefix}${formatted} cr`;
+}
+
+function formatBalance(balance: number): string {
+  return balance % 1 === 0 ? `${Math.round(balance)} cr` : `${balance.toFixed(1)} cr`;
+}
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -137,8 +172,12 @@ export function TransactionLog() {
             </TableHeader>
             <TableBody>
               {transactions.map((tx) => {
-                const config = TYPE_CONFIG[tx.type] ?? { label: tx.type, variant: 'outline' as const };
+                const autoTopUp = isAutoTopUp(tx);
+                const config = TYPE_CONFIG[tx.type] ?? { label: tx.type, variant: 'outline' as const, icon: CreditCard, iconClass: 'text-gray-400' };
+                const TypeIcon = autoTopUp ? RefreshCw : config.icon;
+                const iconClass = autoTopUp ? 'text-indigo-500' : config.iconClass;
                 const isPositive = tx.amount > 0;
+                const categoryLabel = getCategoryLabel(tx);
 
                 return (
                   <TableRow key={tx.id}>
@@ -146,15 +185,24 @@ export function TransactionLog() {
                       {formatDate(tx.createdAt)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={config.variant} className="text-[10px] px-1.5 py-0">
-                        {config.label}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <TypeIcon className={`w-3.5 h-3.5 flex-shrink-0 ${iconClass}`} />
+                        <Badge
+                          variant={autoTopUp ? 'outline' : config.variant}
+                          className={`text-[10px] px-1.5 py-0 ${autoTopUp ? 'border-indigo-300 text-indigo-600 dark:text-indigo-400' : ''}`}
+                        >
+                          {autoTopUp ? 'Auto Top-Up' : config.label}
+                        </Badge>
+                        {categoryLabel && (
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500">{categoryLabel}</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className={`text-right text-sm font-medium tabular-nums ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {isPositive ? '+' : ''}{tx.amount.toFixed(2)}
+                      {formatCreditAmount(tx.amount)}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-gray-700 dark:text-gray-300">
-                      {tx.balanceAfter.toFixed(2)}
+                      {formatBalance(tx.balanceAfter)}
                     </TableCell>
                     <TableCell className="text-xs text-gray-600 dark:text-gray-400 max-w-[200px] truncate">
                       {tx.description || '-'}
