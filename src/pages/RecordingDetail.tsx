@@ -492,8 +492,9 @@ export const RecordingDetail: React.FC = () => {
   }, [])
 
   // Fetch signed video URL and resolved thumbnail URL when recording is ready
+  const hasVideo = !!(recording?.recording_s3_key || recording?.recording_s3_url)
   useEffect(() => {
-    if (!id || !recording?.recording_s3_key || recording.status !== 'ready') {
+    if (!id || !hasVideo || recording?.status !== 'ready') {
       setVideoUrl(null)
       setResolvedThumbnailUrl(null)
       return
@@ -502,26 +503,32 @@ export const RecordingDetail: React.FC = () => {
     let cancelled = false
     setIsLoadingVideo(true)
 
-    // Fetch video URL
-    recordingService.getRecordingUrl(id).then((result) => {
-      if (cancelled) return
-      if (result.success && result.url) {
-        setVideoUrl(result.url)
-      }
-      setIsLoadingVideo(false)
-    })
+    if (recording.recording_s3_key) {
+      // Video is in S3 — fetch signed URL
+      recordingService.getRecordingUrl(id).then((result) => {
+        if (cancelled) return
+        if (result.success && result.url) {
+          setVideoUrl(result.url)
+        }
+        setIsLoadingVideo(false)
+      })
 
-    // Fetch fresh thumbnail URL via batch endpoint
-    recordingService.getBatchSignedUrls([id]).then((urls) => {
-      if (cancelled) return
-      const entry = urls[id]
-      if (entry?.thumbnail_url) {
-        setResolvedThumbnailUrl(entry.thumbnail_url)
-      }
-    })
+      // Fetch fresh thumbnail URL via batch endpoint
+      recordingService.getBatchSignedUrls([id]).then((urls) => {
+        if (cancelled) return
+        const entry = urls[id]
+        if (entry?.thumbnail_url) {
+          setResolvedThumbnailUrl(entry.thumbnail_url)
+        }
+      })
+    } else if (recording.recording_s3_url) {
+      // No S3 key but URL available (e.g., MeetingBaaS URL) — use directly
+      setVideoUrl(recording.recording_s3_url)
+      setIsLoadingVideo(false)
+    }
 
     return () => { cancelled = true }
-  }, [id, recording?.recording_s3_key, recording?.status])
+  }, [id, hasVideo, recording?.recording_s3_key, recording?.recording_s3_url, recording?.status])
 
   // Look up the linked meeting for proposal generation
   useEffect(() => {
@@ -719,7 +726,7 @@ export const RecordingDetail: React.FC = () => {
               Generate Proposal
             </Button>
           )}
-          {recording.recording_s3_key && (
+          {(recording.recording_s3_key || recording.recording_s3_url) && (
             <Button
               variant="outline"
               size="sm"
@@ -775,7 +782,7 @@ export const RecordingDetail: React.FC = () => {
         {/* Left Column - Video & Content */}
         <div className="lg:col-span-8 space-y-4 min-w-0">
           {/* Video Player */}
-          {recording.status === 'ready' && recording.recording_s3_key && (
+          {recording.status === 'ready' && (recording.recording_s3_key || recording.recording_s3_url) && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

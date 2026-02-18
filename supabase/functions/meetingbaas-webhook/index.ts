@@ -15,8 +15,6 @@
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { S3Client, PutObjectCommand, HeadObjectCommand } from 'npm:@aws-sdk/client-s3@3';
-import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import { handleCorsPreflightRequest, getCorsHeaders, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 import { captureException, addBreadcrumb } from '../_shared/sentryEdge.ts';
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/use60Signing.ts';
@@ -334,107 +332,6 @@ async function updateWebhookEventStatus(
 
   if (error) {
     console.error('[MeetingBaaS Webhook] Failed to update event status:', error);
-  }
-}
-
-// =============================================================================
-// S3 Upload Helper
-// =============================================================================
-
-interface UploadRecordingResult {
-  success: boolean;
-  storageUrl?: string;
-  storagePath?: string;
-  error?: string;
-}
-
-/**
- * Download recording from MeetingBaaS and upload to AWS S3
- * Bucket: use60-application (eu-west-2)
- * Folder structure: /meeting-recordings/{org_id}/{user_id}/{recording_id}/recording.mp4
- */
-async function uploadRecordingToS3(
-  recordingUrl: string,
-  orgId: string,
-  userId: string,
-  recordingId: string
-): Promise<UploadRecordingResult> {
-  console.log('[MeetingBaaS Webhook] Downloading recording from MeetingBaaS...');
-
-  try {
-    // Initialize S3 client
-    const s3Client = new S3Client({
-      region: Deno.env.get('AWS_REGION') || 'eu-west-2',
-      credentials: {
-        accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID')!,
-        secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY')!,
-      },
-    });
-
-    const bucketName = Deno.env.get('AWS_S3_BUCKET') || 'use60-application';
-
-    // Download the recording
-    const response = await fetch(recordingUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download recording: ${response.status}`);
-    }
-
-    // Get content type and determine file extension
-    const contentType = response.headers.get('content-type') || 'video/mp4';
-    let fileExtension = 'mp4';
-    if (contentType.includes('webm')) {
-      fileExtension = 'webm';
-    } else if (contentType.includes('audio')) {
-      fileExtension = contentType.includes('wav') ? 'wav' : 'mp3';
-    }
-
-    // Create S3 key: meeting-recordings/{org_id}/{user_id}/{recording_id}/recording.{ext}
-    const s3Key = `meeting-recordings/${orgId}/${userId}/${recordingId}/recording.${fileExtension}`;
-
-    console.log(`[MeetingBaaS Webhook] Uploading to S3: s3://${bucketName}/${s3Key}`);
-
-    // Get the recording data as array buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-
-    // Upload to S3
-    const putCommand = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: s3Key,
-      Body: uint8Array,
-      ContentType: contentType,
-      Metadata: {
-        'org-id': orgId,
-        'user-id': userId,
-        'recording-id': recordingId,
-      },
-    });
-
-    await s3Client.send(putCommand);
-
-    // Generate a signed URL (7 days expiry)
-    const getCommand = new HeadObjectCommand({
-      Bucket: bucketName,
-      Key: s3Key,
-    });
-
-    const signedUrl = await getSignedUrl(s3Client, getCommand, {
-      expiresIn: 60 * 60 * 24 * 7, // 7 days
-    });
-
-    console.log(`[MeetingBaaS Webhook] S3 upload successful: ${s3Key}`);
-
-    return {
-      success: true,
-      storageUrl: signedUrl,
-      storagePath: s3Key,
-    };
-  } catch (error) {
-    console.error('[MeetingBaaS Webhook] S3 upload error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Upload failed',
-    };
   }
 }
 
@@ -863,63 +760,29 @@ async function handleBotCompleted(
     console.log(`[MeetingBaaS Webhook] Recording already has ${existingAttendees.length} attendees from deploy time, skipping MeetingBaaS participants`);
   }
 
-  // Download and upload video to S3 (prefer video over audio)
+  // Store recording metadata + MeetingBaaS video URL directly
+  // NOTE: S3 upload is NOT done here — Edge Functions cannot handle large file transfers
+  // (memory + CPU time limits). S3 upload is handled separately by upload-recording-to-s3.
   const mediaUrl = video || audio;
+  const updateData: Record<string, unknown> = {
+    meeting_start_time: joined_at,
+    meeting_end_time: exited_at,
+    meeting_duration_seconds: duration_seconds,
+    status: 'processing',
+    updated_at: new Date().toISOString(),
+  };
   if (mediaUrl) {
-    console.log('[MeetingBaaS Webhook] Uploading recording to S3...');
-    const uploadResult = await uploadRecordingToS3(
-      mediaUrl,
-      orgId,
-      recording.user_id,
-      deployment.recording_id
-    );
-
-    if (uploadResult.success) {
-      // Update recording with S3 details + attendees from MeetingBaaS
-      const updateData: Record<string, unknown> = {
-        recording_s3_key: uploadResult.storagePath,
-        recording_s3_url: uploadResult.storageUrl,
-        meeting_start_time: joined_at,
-        meeting_end_time: exited_at,
-        meeting_duration_seconds: duration_seconds,
-        status: 'processing',
-        updated_at: new Date().toISOString(),
-      };
-      if (resolvedAttendees && resolvedAttendees.length > 0) {
-        updateData.attendees = resolvedAttendees;
-      }
-      await supabase
-        .from('recordings')
-        .update(updateData)
-        .eq('id', deployment.recording_id);
-    } else {
-      console.warn('[MeetingBaaS Webhook] S3 upload failed:', uploadResult.error);
-      // Store MeetingBaaS URL as fallback + attendees
-      const updateData: Record<string, unknown> = {
-        meeting_start_time: joined_at,
-        meeting_end_time: exited_at,
-        meeting_duration_seconds: duration_seconds,
-        status: 'processing',
-        updated_at: new Date().toISOString(),
-      };
-      if (resolvedAttendees && resolvedAttendees.length > 0) {
-        updateData.attendees = resolvedAttendees;
-      }
-      await supabase
-        .from('recordings')
-        .update(updateData)
-        .eq('id', deployment.recording_id);
-    }
-  } else if (resolvedAttendees && resolvedAttendees.length > 0) {
-    // No media URL, but we still have attendees to save
-    await supabase
-      .from('recordings')
-      .update({
-        attendees: resolvedAttendees,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', deployment.recording_id);
+    // Store the MeetingBaaS URL so process-recording can use it for transcription
+    updateData.recording_s3_url = mediaUrl;
+    console.log('[MeetingBaaS Webhook] Stored MeetingBaaS video URL on recording');
   }
+  if (resolvedAttendees && resolvedAttendees.length > 0) {
+    updateData.attendees = resolvedAttendees;
+  }
+  await supabase
+    .from('recordings')
+    .update(updateData)
+    .eq('id', deployment.recording_id);
 
   // Update deployment status
   await supabase
