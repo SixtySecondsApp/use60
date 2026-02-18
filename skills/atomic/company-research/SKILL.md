@@ -14,6 +14,11 @@ metadata:
   category: enrichment
   skill_type: atomic
   is_active: true
+  command_centre:
+    enabled: true
+    label: "/research"
+    description: "Deep research on a company or contact"
+    icon: "file-search"
   context_profile: research
   agent_affinity:
     - research

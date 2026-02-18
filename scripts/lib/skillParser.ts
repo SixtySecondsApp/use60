@@ -88,6 +88,7 @@ export function parseSkillContent(content: string, sourcePath: string): ParsedSk
     'tags', 'author', 'agent_affinity',
     'context_profile',
     'requires_capabilities', 'priority',
+    'command_centre',
   ] as const;
 
   for (const field of copyFields) {

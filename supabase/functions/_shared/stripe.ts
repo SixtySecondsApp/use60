@@ -15,12 +15,16 @@ export function getStripeClient(): Stripe {
   });
 }
 
-// Verify Stripe webhook signature
+// Verify Stripe webhook signature using native Web Crypto API.
+// The Stripe SDK's constructEvent / constructEventAsync both pull in
+// Node.js crypto polyfills that crash in the Supabase Edge Runtime,
+// so we verify the HMAC-SHA256 signature manually.
+const DEFAULT_TOLERANCE_SECONDS = 300; // 5 minutes
+
 export async function verifyWebhookSignature(
   payload: string,
   signature: string | null,
 ): Promise<Stripe.Event> {
-  const stripe = getStripeClient();
   const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 
   if (!webhookSecret) {
@@ -31,12 +35,68 @@ export async function verifyWebhookSignature(
     throw new Error("Missing Stripe signature header");
   }
 
-  try {
-    return stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    throw new Error(`Webhook signature verification failed: ${message}`);
+  // 1. Parse the signature header: "t=<timestamp>,v1=<sig1>,v1=<sig2>,..."
+  const parts = signature.split(",");
+  let timestamp: string | undefined;
+  const signatures: string[] = [];
+
+  for (const part of parts) {
+    const [key, value] = part.split("=");
+    if (key === "t") {
+      timestamp = value;
+    } else if (key === "v1") {
+      signatures.push(value);
+    }
   }
+
+  if (!timestamp || signatures.length === 0) {
+    throw new Error("Webhook signature verification failed: Invalid signature header format");
+  }
+
+  // 2. Check timestamp tolerance
+  const timestampNum = parseInt(timestamp, 10);
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - timestampNum) > DEFAULT_TOLERANCE_SECONDS) {
+    throw new Error("Webhook signature verification failed: Timestamp outside tolerance zone");
+  }
+
+  // 3. Compute expected signature: HMAC-SHA256(secret, "<timestamp>.<payload>")
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(webhookSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+
+  const signedPayload = `${timestamp}.${payload}`;
+  const signatureBytes = await crypto.subtle.sign("HMAC", key, encoder.encode(signedPayload));
+
+  // Convert to hex string
+  const expectedSig = Array.from(new Uint8Array(signatureBytes))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  // 4. Constant-time comparison against any provided v1 signature
+  const match = signatures.some((sig) => timingSafeEqual(sig, expectedSig));
+
+  if (!match) {
+    throw new Error("Webhook signature verification failed: No matching signature found");
+  }
+
+  // 5. Parse and return the event
+  return JSON.parse(payload) as Stripe.Event;
+}
+
+// Constant-time string comparison to prevent timing attacks
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
 }
 
 // Map Stripe subscription status to our internal status

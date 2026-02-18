@@ -940,7 +940,7 @@ async function logBillingEvent(
       event_type: event.type,
       org_id: orgId,
       payload: event.data.object,
-      received_at: new Date().toISOString(),
+      occurred_at: new Date().toISOString(),
     },
     { onConflict: 'provider,provider_event_id' },
   );

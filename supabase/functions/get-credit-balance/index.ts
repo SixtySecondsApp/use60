@@ -139,6 +139,20 @@ serve(async (req: Request) => {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
+    // Helper: safely run a query that may reference a missing table
+    const safeQuery = async <T>(promise: PromiseLike<{ data: T; error: any; count?: number | null }>): Promise<{ data: T; error: any; count?: number | null }> => {
+      try {
+        const result = await promise;
+        // Treat "table not found" (PGRST205) as empty rather than fatal
+        if (result.error?.code === 'PGRST205') {
+          return { data: (Array.isArray(result.data) ? [] : null) as T, error: null, count: 0 };
+        }
+        return result;
+      } catch {
+        return { data: (null) as T, error: null, count: 0 };
+      }
+    };
+
     const [
       balanceResult,
       burnResult,
@@ -226,20 +240,24 @@ serve(async (req: Request) => {
         .eq('org_id', org_id)
         .not('duration_seconds', 'is', null),
 
-      // 12. Storage: transcript count
-      supabase
-        .from('meeting_transcripts')
-        .select('id', { count: 'exact', head: true })
-        .in(
-          'meeting_id',
-          supabase.from('meetings').select('id').eq('org_id', org_id)
-        ),
+      // 12. Storage: transcript count (table may not exist on all envs)
+      safeQuery(
+        supabase
+          .from('meeting_transcripts')
+          .select('id', { count: 'exact', head: true })
+          .in(
+            'meeting_id',
+            supabase.from('meetings').select('id').eq('org_id', org_id)
+          )
+      ),
 
-      // 13. Storage: document count
-      supabase
-        .from('documents')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', org_id),
+      // 13. Storage: document count (table may not exist on all envs)
+      safeQuery(
+        supabase
+          .from('documents')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', org_id)
+      ),
 
       // 14. Storage: enriched contacts count
       supabase

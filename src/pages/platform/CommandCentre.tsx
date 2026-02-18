@@ -21,6 +21,7 @@ import { ContextPanel } from '@/components/command-centre/ContextPanel';
 import { AIReasoningFooter } from '@/components/command-centre/AIReasoningFooter';
 import { useKeyboardNav } from '@/components/command-centre/useKeyboardNav';
 import { useApproveTask, useDismissTask, useCreateTask } from '@/lib/hooks/useTaskActions';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ import type { Task } from '@/lib/database/models';
 
 export default function CommandCentre() {
   const { user } = useAuth();
+  const organizationId = useActiveOrgId();
   const {
     selectedTaskId,
     setSelectedTaskId,
@@ -176,7 +178,7 @@ export default function CommandCentre() {
               contextOpen={contextOpen}
               onToggleContext={toggleContextPanel}
             />
-            <WritingCanvas task={selectedTask} />
+            <WritingCanvas task={selectedTask} organizationId={organizationId} />
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">

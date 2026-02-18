@@ -125,7 +125,16 @@ serve(async (req) => {
     // Price in pence (GBP): priceGBP is in whole pounds, convert to pence
     const unitAmountPence = pack.priceGBP * 100;
 
-    const session = await stripe.checkout.sessions.create({
+    // Check if Stripe Tax is fully configured before enabling automatic_tax
+    let taxEnabled = false;
+    try {
+      const taxSettings = await stripe.tax.settings.retrieve();
+      taxEnabled = taxSettings.status === "active";
+    } catch {
+      // Tax API not available or not configured — skip
+    }
+
+    const sessionParams: Record<string, unknown> = {
       customer: customer.id,
       mode: "payment",
       payment_method_types: ["card"],
@@ -153,17 +162,18 @@ serve(async (req) => {
       },
       allow_promotion_codes: true,
       billing_address_collection: "required",
-      automatic_tax: {
-        enabled: true,
-      },
-      tax_id_collection: {
-        enabled: true,
-      },
       customer_update: {
         address: "auto",
         name: "auto",
       },
-    });
+    };
+
+    if (taxEnabled) {
+      sessionParams.automatic_tax = { enabled: true };
+      sessionParams.tax_id_collection = { enabled: true };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams as Parameters<typeof stripe.checkout.sessions.create>[0]);
 
     if (!session.url) {
       throw new Error("Failed to create checkout session URL");
