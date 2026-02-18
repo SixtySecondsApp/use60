@@ -115,7 +115,7 @@ export function useBullhornIntegration(enabled: boolean = true) {
     } catch (e: unknown) {
       const err = e as Error;
       console.error('[useBullhornIntegration] status error:', err);
-      toast.error(`Bullhorn status error: ${err.message || 'Unknown error'}`);
+      console.warn(`[useBullhornIntegration] status check failed (silent): ${err.message || 'Unknown error'}`);
       setStatus(null);
     } finally {
       setLoading(false);

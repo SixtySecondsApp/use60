@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { HubSpotClient } from '../_shared/hubspot.ts'
 
 // HubSpot Admin Edge Function - v3 (added update actions)
@@ -112,11 +112,15 @@ async function getValidAccessToken(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
+
+  const cors = getCorsHeaders(req);
+
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ success: false, error: 'Method not allowed' }), {
       status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -127,7 +131,7 @@ serve(async (req) => {
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
     return new Response(JSON.stringify({ success: false, error: 'Server misconfigured' }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -135,7 +139,7 @@ serve(async (req) => {
   if (!userToken) {
     return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
       status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -148,7 +152,7 @@ serve(async (req) => {
   if (!user) {
     return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
       status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -163,7 +167,7 @@ serve(async (req) => {
     console.error('[hubspot-admin] Body parse error:', e.message)
     return new Response(JSON.stringify({ success: false, error: `Invalid JSON body: ${e.message}` }), {
       status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -179,7 +183,7 @@ serve(async (req) => {
       received: { action: body.action, org_id: body.org_id, bodyKeys: Object.keys(body) }
     }), {
       status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -197,7 +201,7 @@ serve(async (req) => {
   if (!isAdmin) {
     return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
       status: 403,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -226,7 +230,7 @@ serve(async (req) => {
         settings: settingsRow?.settings || {},
         webhook_url: webhookUrl,
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -242,14 +246,14 @@ serve(async (req) => {
       console.error('[hubspot-admin] Failed to save settings:', upsertError)
       return new Response(JSON.stringify({ success: false, error: upsertError.message || 'Failed to save settings' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
     console.log('[hubspot-admin] Settings saved successfully')
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -258,7 +262,7 @@ serve(async (req) => {
     if (!jobType) {
       return new Response(JSON.stringify({ success: false, error: 'Missing job_type' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
     const payload = body.payload ?? {}
@@ -296,7 +300,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -310,7 +314,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -335,12 +339,12 @@ serve(async (req) => {
             options: p.options,
           })),
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to fetch properties' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -353,7 +357,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -380,12 +384,12 @@ serve(async (req) => {
             })),
           })),
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to fetch pipelines' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -398,7 +402,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -422,12 +426,12 @@ serve(async (req) => {
             archived: f.archived,
           })),
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to fetch forms' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -439,7 +443,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -495,13 +499,13 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, lists: formattedLists }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] get_lists error:', e.message)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to fetch lists' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -513,7 +517,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -589,13 +593,13 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, totalCount, contacts }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] preview_contacts error:', e.message)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to preview contacts' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -671,7 +675,7 @@ serve(async (req) => {
         console.error('[hubspot-admin] Failed to queue sync job:', insertError)
         return new Response(JSON.stringify({ success: false, error: insertError.message || 'Failed to queue sync' }), {
           status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         })
       }
       console.log('[hubspot-admin] Sync job already queued (duplicate key)')
@@ -684,7 +688,7 @@ serve(async (req) => {
         message: `${syncType} sync queued for ${timePeriod.replace(/_/g, ' ')}`,
         created_after: createdAfter,
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -703,7 +707,7 @@ serve(async (req) => {
         error: 'At least one of email, firstname, or lastname is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -711,7 +715,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -735,13 +739,13 @@ serve(async (req) => {
           properties: contact.properties,
           objectType: 'contact',
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to create contact:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to create contact' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -757,7 +761,7 @@ serve(async (req) => {
         error: 'dealname is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -765,7 +769,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -789,13 +793,13 @@ serve(async (req) => {
           properties: deal.properties,
           objectType: 'deal',
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to create deal:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to create deal' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -813,7 +817,7 @@ serve(async (req) => {
         error: 'hs_task_subject is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -821,7 +825,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -881,13 +885,13 @@ serve(async (req) => {
             deal: dealId || null,
           },
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to create task:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to create task' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -907,7 +911,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -971,13 +975,13 @@ serve(async (req) => {
             deal: dealId || null,
           },
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to create activity/note:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to create activity' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -993,7 +997,7 @@ serve(async (req) => {
         error: 'record_id is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1003,7 +1007,7 @@ serve(async (req) => {
         error: 'At least one property to update is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1011,7 +1015,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1035,13 +1039,13 @@ serve(async (req) => {
           properties: contact.properties,
           objectType: 'contact',
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to update contact:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to update contact' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -1057,7 +1061,7 @@ serve(async (req) => {
         error: 'record_id is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1067,7 +1071,7 @@ serve(async (req) => {
         error: 'At least one property to update is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1075,7 +1079,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1099,13 +1103,13 @@ serve(async (req) => {
           properties: deal.properties,
           objectType: 'deal',
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to update deal:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to update deal' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -1121,7 +1125,7 @@ serve(async (req) => {
         error: 'record_id is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1131,7 +1135,7 @@ serve(async (req) => {
         error: 'At least one property to update is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1139,7 +1143,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1163,13 +1167,13 @@ serve(async (req) => {
           properties: task.properties,
           objectType: 'task',
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to update task:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to update task' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -1184,7 +1188,7 @@ serve(async (req) => {
         error: 'record_id is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1192,7 +1196,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1215,13 +1219,13 @@ serve(async (req) => {
           id: contactId,
           objectType: 'contact',
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to delete contact:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to delete contact' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -1236,7 +1240,7 @@ serve(async (req) => {
         error: 'record_id is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1244,7 +1248,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1267,13 +1271,13 @@ serve(async (req) => {
           id: dealId,
           objectType: 'deal',
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to delete deal:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to delete deal' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
@@ -1288,7 +1292,7 @@ serve(async (req) => {
         error: 'record_id is required'
       }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1296,7 +1300,7 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -1319,27 +1323,27 @@ serve(async (req) => {
           id: taskId,
           objectType: 'task',
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to delete task:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to delete task' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
   }
 
   return new Response(JSON.stringify({ success: false, error: 'Unknown action' }), {
     status: 400,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   })
 
   } catch (e: any) {
     console.error('[hubspot-admin] Unhandled error:', e)
     return new Response(JSON.stringify({ success: false, error: e.message || 'Internal server error' }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 })
