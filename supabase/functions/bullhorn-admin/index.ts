@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import {
   BullhornClient,
   refreshTokens,
@@ -121,11 +121,15 @@ async function getValidBullhornCredentials(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
+
+  const cors = getCorsHeaders(req);
+
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ success: false, error: 'Method not allowed' }), {
       status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -136,7 +140,7 @@ serve(async (req) => {
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       return new Response(JSON.stringify({ success: false, error: 'Server misconfigured' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -144,7 +148,7 @@ serve(async (req) => {
     if (!userToken) {
       return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -157,7 +161,7 @@ serve(async (req) => {
     if (!user) {
       return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -173,7 +177,7 @@ serve(async (req) => {
       console.error('[bullhorn-admin] Body parse error:', errorMessage)
       return new Response(JSON.stringify({ success: false, error: `Invalid JSON body: ${errorMessage}` }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -191,7 +195,7 @@ serve(async (req) => {
         }),
         {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         }
       )
     }
@@ -211,7 +215,7 @@ serve(async (req) => {
     if (!isAdmin) {
       return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
         status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -261,7 +265,7 @@ serve(async (req) => {
           token_valid: tokenValid,
           token_expires_at: tokenExpiresAt,
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -278,7 +282,7 @@ serve(async (req) => {
       if (credsError || !creds?.refresh_token) {
         return new Response(JSON.stringify({ success: false, error: 'No Bullhorn credentials found' }), {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         })
       }
 
@@ -288,7 +292,7 @@ serve(async (req) => {
       if (!clientId || !clientSecret) {
         return new Response(JSON.stringify({ success: false, error: 'Server misconfigured: missing Bullhorn credentials' }), {
           status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         })
       }
 
@@ -324,7 +328,7 @@ serve(async (req) => {
           console.error('[bullhorn-admin] Failed to update refreshed token:', updateError)
           return new Response(JSON.stringify({ success: false, error: 'Failed to save refreshed token' }), {
             status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...cors, 'Content-Type': 'application/json' },
           })
         }
 
@@ -335,7 +339,7 @@ serve(async (req) => {
             message: 'Token refreshed successfully',
             token_expires_at: newExpiresAt,
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       } catch (e) {
         console.error('[bullhorn-admin] Token refresh error:', e)
@@ -348,13 +352,13 @@ serve(async (req) => {
             .eq('org_id', orgId)
           return new Response(
             JSON.stringify({ success: false, error: 'Bullhorn connection expired. Please reconnect.' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } }
           )
         }
 
         return new Response(
           JSON.stringify({ success: false, error: e instanceof Error ? e.message : 'Token refresh failed' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -374,14 +378,14 @@ serve(async (req) => {
         console.error('[bullhorn-admin] Failed to save settings:', upsertError)
         return new Response(JSON.stringify({ success: false, error: upsertError.message || 'Failed to save settings' }), {
           status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         })
       }
 
       console.log('[bullhorn-admin] Settings saved successfully')
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -393,7 +397,7 @@ serve(async (req) => {
       if (!jobType) {
         return new Response(JSON.stringify({ success: false, error: 'Missing job_type' }), {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         })
       }
       const payload = body.payload ?? {}
@@ -422,7 +426,7 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -488,7 +492,7 @@ serve(async (req) => {
           message: `${syncType} sync queued`,
           queued_jobs: queuedJobs,
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -502,7 +506,7 @@ serve(async (req) => {
       if (!entityType || entityId === null || isNaN(entityId)) {
         return new Response(
           JSON.stringify({ success: false, error: 'Missing or invalid entity_type or entity_id' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       }
 
@@ -512,7 +516,7 @@ serve(async (req) => {
       if (!bhRestToken || !restUrl) {
         return new Response(JSON.stringify({ success: false, error: tokenError || 'Bullhorn not connected' }), {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         })
       }
 
@@ -535,13 +539,13 @@ serve(async (req) => {
             entity_id: entityId,
             data: data.data,
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       } catch (e) {
         console.error('[bullhorn-admin] Failed to fetch entity:', e)
         return new Response(
           JSON.stringify({ success: false, error: e instanceof Error ? e.message : 'Failed to fetch entity' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -556,7 +560,7 @@ serve(async (req) => {
       if (!entityType || !query) {
         return new Response(JSON.stringify({ success: false, error: 'Missing entity_type or query' }), {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         })
       }
 
@@ -566,7 +570,7 @@ serve(async (req) => {
       if (!bhRestToken || !restUrl) {
         return new Response(JSON.stringify({ success: false, error: tokenError || 'Bullhorn not connected' }), {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...cors, 'Content-Type': 'application/json' },
         })
       }
 
@@ -594,13 +598,13 @@ serve(async (req) => {
             count: data.count,
             data: data.data,
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       } catch (e) {
         console.error('[bullhorn-admin] Search failed:', e)
         return new Response(
           JSON.stringify({ success: false, error: e instanceof Error ? e.message : 'Search failed' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -619,7 +623,7 @@ serve(async (req) => {
             connected: false,
             error: tokenError || 'Bullhorn not connected',
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       }
 
@@ -645,7 +649,7 @@ serve(async (req) => {
             corporation_id: settings.corporationId,
             user_type: settings.userType,
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       } catch (e) {
         console.error('[bullhorn-admin] Connection test failed:', e)
@@ -655,7 +659,7 @@ serve(async (req) => {
             connected: false,
             error: e instanceof Error ? e.message : 'Connection test failed',
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -665,7 +669,7 @@ serve(async (req) => {
     // =========================================================================
     return new Response(JSON.stringify({ success: false, error: 'Unknown action' }), {
       status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   } catch (e) {
     console.error('[bullhorn-admin] Unhandled error:', e)
@@ -673,7 +677,7 @@ serve(async (req) => {
       JSON.stringify({ success: false, error: e instanceof Error ? e.message : 'Internal server error' }),
       {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       }
     )
   }

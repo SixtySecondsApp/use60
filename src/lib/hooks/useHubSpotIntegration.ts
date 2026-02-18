@@ -88,7 +88,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       setStatus(resp.data as StatusResponse);
     } catch (e: any) {
       console.error('[useHubSpotIntegration] status error:', e);
-      toast.error(`HubSpot status error: ${e.message || 'Unknown error'}`);
+      console.warn(`[useHubSpotIntegration] status check failed (silent): ${e.message || 'Unknown error'}`);
       setStatus(null);
     } finally {
       setLoading(false);
