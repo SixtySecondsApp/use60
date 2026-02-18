@@ -178,15 +178,16 @@ export default function TeamAnalytics() {
             {/* Performance Trends & Team Comparison */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Trend Charts */}
-              <section>
-                <TeamTrendsChart period={period} />
+              <section className="h-full">
+                <TeamTrendsChart period={period} className="h-full" />
               </section>
 
               {/* Team Comparison Matrix */}
-              <section>
+              <section className="h-full">
                 <TeamComparisonMatrix
                   period={period}
                   onRepClick={handleRepClick}
+                  className="h-full"
                 />
               </section>
             </div>

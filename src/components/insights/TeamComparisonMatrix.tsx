@@ -263,7 +263,7 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.3 }}
       className={cn(
-        'bg-white dark:bg-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-700/30 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-lg dark:shadow-black/10 overflow-hidden',
+        'bg-white dark:bg-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-700/30 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-lg dark:shadow-black/10 overflow-hidden flex flex-col',
         className
       )}
     >
@@ -288,7 +288,7 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto flex-1">
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-800/30">
             <tr>
