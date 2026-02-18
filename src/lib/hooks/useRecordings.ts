@@ -674,8 +674,8 @@ export function useRecordingsRequiringAttention() {
 // =============================================================================
 
 export function useBatchVideoUrls(recordings: Recording[]) {
-  // Only fetch URLs for ready recordings that have video in S3
-  const readyIds = useMemo(
+  // Split recordings: those with S3 keys (need signed URLs) vs those with direct URLs
+  const s3Ids = useMemo(
     () =>
       recordings
         .filter((r) => r.status === 'ready' && r.recording_s3_key)
@@ -683,17 +683,39 @@ export function useBatchVideoUrls(recordings: Recording[]) {
     [recordings]
   );
 
-  // Stable query key based on sorted IDs
-  const queryKey = useMemo(
-    () => [...recordingKeys.all, 'batch-urls', ...readyIds.slice().sort()],
-    [readyIds]
+  // Recordings with a direct URL but no S3 key (e.g., MeetingBaaS URLs)
+  const directUrls = useMemo(
+    () => {
+      const result: Record<string, { video_url: string; thumbnail_url?: string }> = {};
+      for (const r of recordings) {
+        if (r.status === 'ready' && !r.recording_s3_key && r.recording_s3_url) {
+          result[r.id] = { video_url: r.recording_s3_url };
+        }
+      }
+      return result;
+    },
+    [recordings]
   );
 
-  return useQuery<Record<string, { video_url: string; thumbnail_url?: string }>>({
+  // Stable query key based on sorted IDs
+  const queryKey = useMemo(
+    () => [...recordingKeys.all, 'batch-urls', ...s3Ids.slice().sort()],
+    [s3Ids]
+  );
+
+  const query = useQuery<Record<string, { video_url: string; thumbnail_url?: string }>>({
     queryKey,
-    queryFn: () => recordingService.getBatchSignedUrls(readyIds),
-    enabled: readyIds.length > 0,
+    queryFn: () => recordingService.getBatchSignedUrls(s3Ids),
+    enabled: s3Ids.length > 0,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
   });
+
+  // Merge S3 signed URLs with direct URLs
+  const mergedData = useMemo(
+    () => ({ ...directUrls, ...(query.data || {}) }),
+    [directUrls, query.data]
+  );
+
+  return { ...query, data: mergedData };
 }

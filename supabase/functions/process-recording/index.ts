@@ -16,7 +16,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { S3Client, PutObjectCommand, GetObjectCommand } from 'npm:@aws-sdk/client-s3@3';
+import { S3Client, GetObjectCommand } from 'npm:@aws-sdk/client-s3@3';
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import { legacyCorsHeaders as corsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { checkCreditBalance } from '../_shared/costTracking.ts';
@@ -29,108 +29,6 @@ import {
 // Import AI analysis function from fathom-sync for sentiment, talk time, and coaching
 import { analyzeTranscriptWithClaude, TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts';
 import { syncRecordingToMeeting } from '../_shared/recordingCompleteSync.ts';
-
-// =============================================================================
-// Storage Upload Helper
-// =============================================================================
-
-interface UploadRecordingResult {
-  success: boolean;
-  storageUrl?: string;
-  storagePath?: string;
-  error?: string;
-}
-
-/**
- * Download recording from MeetingBaaS and upload to AWS S3
- * Bucket: use60-application (eu-west-2)
- * Folder structure: /meeting-recordings/{org_id}/{user_id}/{recording_id}/recording.mp4
- */
-async function uploadRecordingToStorage(
-  supabase: SupabaseClient,
-  recordingUrl: string,
-  orgId: string,
-  userId: string,
-  recordingId: string
-): Promise<UploadRecordingResult> {
-  console.log('[ProcessRecording] Downloading recording from MeetingBaaS...');
-
-  try {
-    // Initialize S3 client
-    const s3Client = new S3Client({
-      region: Deno.env.get('AWS_REGION') || 'eu-west-2',
-      credentials: {
-        accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID')!,
-        secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY')!,
-      },
-    });
-
-    const bucketName = Deno.env.get('AWS_S3_BUCKET') || 'use60-application';
-
-    // Download the recording
-    const response = await fetch(recordingUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download recording: ${response.status}`);
-    }
-
-    // Get content type and determine file extension
-    const contentType = response.headers.get('content-type') || 'video/mp4';
-    let fileExtension = 'mp4';
-    if (contentType.includes('webm')) {
-      fileExtension = 'webm';
-    } else if (contentType.includes('audio')) {
-      fileExtension = contentType.includes('wav') ? 'wav' : 'mp3';
-    }
-
-    // Create S3 key: meeting-recordings/{org_id}/{user_id}/{recording_id}/recording.{ext}
-    const s3Key = `meeting-recordings/${orgId}/${userId}/${recordingId}/recording.${fileExtension}`;
-
-    console.log(`[ProcessRecording] Uploading to S3: s3://${bucketName}/${s3Key}`);
-
-    // Get the recording data as array buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-
-    // Upload to S3
-    const putCommand = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: s3Key,
-      Body: uint8Array,
-      ContentType: contentType,
-      Metadata: {
-        'org-id': orgId,
-        'user-id': userId,
-        'recording-id': recordingId,
-      },
-    });
-
-    await s3Client.send(putCommand);
-
-    // Generate a signed URL (7 days expiry)
-    const getCommand = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: s3Key,
-    });
-
-    const signedUrl = await getSignedUrl(s3Client, getCommand, {
-      expiresIn: 60 * 60 * 24 * 7, // 7 days
-    });
-
-    console.log(`[ProcessRecording] S3 upload successful: ${s3Key}`);
-
-    return {
-      success: true,
-      storageUrl: signedUrl,
-      storagePath: s3Key,
-    };
-  } catch (error) {
-    console.error('[ProcessRecording] S3 upload error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Upload failed',
-    };
-  }
-}
 
 // =============================================================================
 // Types
@@ -581,12 +479,10 @@ async function processRecording(
     const meetingBaaSClient = createMeetingBaaSClient();
 
     let recordingMediaUrl: string | null = null;
-    let alreadyInS3 = false;
 
     // Priority 1: Recording already uploaded to S3 (e.g., by webhook handler)
     if (recording.recording_s3_key) {
       console.log('[ProcessRecording] Step 1: Recording already in S3:', recording.recording_s3_key);
-      alreadyInS3 = true;
       // Generate a fresh signed GET URL so external services (AssemblyAI) can download it
       try {
         const s3Client = new S3Client({
@@ -666,29 +562,19 @@ async function processRecording(
 
     const recordingData = { url: recordingMediaUrl, expires_at: '' };
 
-    // Step 1.5: Upload recording to our storage (skip if already in S3)
-    let uploadResult: { success: boolean; storagePath?: string; storageUrl?: string; error?: string };
-    if (alreadyInS3) {
-      console.log('[ProcessRecording] Step 1.5: Skipping upload — already in S3');
-      uploadResult = {
-        success: true,
-        storagePath: recording.recording_s3_key,
-        storageUrl: recording.recording_s3_url,
-      };
+    // Step 1.5: Resolve S3 storage info
+    // NOTE: S3 upload is NOT done here — Edge Functions cannot handle large file transfers
+    // (memory + CPU time limits). The video URL from MeetingBaaS is used directly for
+    // transcription. S3 upload is handled separately by upload-recording-to-s3 function.
+    const uploadResult = {
+      success: true,
+      storagePath: recording.recording_s3_key || null,
+      storageUrl: recording.recording_s3_url || recordingMediaUrl,
+    };
+    if (recording.recording_s3_key) {
+      console.log('[ProcessRecording] Step 1.5: Recording already in S3:', recording.recording_s3_key);
     } else {
-      console.log('[ProcessRecording] Step 1.5: Uploading to storage...');
-      uploadResult = await uploadRecordingToStorage(
-        supabase,
-        recordingData.url,
-        recording.org_id,
-        recording.user_id,
-        recordingId
-      );
-
-      if (!uploadResult.success) {
-        console.warn('[ProcessRecording] Storage upload failed, using source URL:', uploadResult.error);
-        // Don't fail the whole pipeline - we can still process with source URL
-      }
+      console.log('[ProcessRecording] Step 1.5: No S3 upload — using source URL directly for transcription');
     }
 
     // Step 2: Get transcript
