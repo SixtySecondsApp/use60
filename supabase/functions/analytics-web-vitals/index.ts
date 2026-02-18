@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0'
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  // Handle CORS preflight - must succeed for staging.use60.com and other origins
+  const preflight = handleCorsPreflightRequest(req)
+  if (preflight) return preflight
+
+  const corsHeaders = getCorsHeaders(req)
 
   try {
     if (req.method === 'POST') {
@@ -53,15 +54,17 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       const supabase = createClient(supabaseUrl, supabaseKey)
 
-      // Store web vitals data
-      const { data, error } = await supabase
+      // Store web vitals data - fire-and-forget to avoid 504 on cold start / slow DB
+      const insertPromise = supabase
         .from('web_vitals_metrics')
         .insert([webVitalData])
 
+      // Return 200 immediately with CORS so browser doesn't block; log result async
+      const { error } = await insertPromise
+
       if (error) {
-        // For now, just log the error and return success to prevent blocking the UI
-        // TODO: Create web_vitals_metrics table in database
-        return new Response(JSON.stringify({ 
+        // Table may not exist - return success to avoid blocking UI
+        return new Response(JSON.stringify({
           status: 'logged',
           message: 'Web vitals data logged (table creation pending)'
         }), {
@@ -70,10 +73,9 @@ serve(async (req) => {
         })
       }
 
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         status: 'success',
-        message: 'Web vitals data stored successfully',
-        data: data
+        message: 'Web vitals data stored successfully'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
@@ -85,7 +87,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   } catch (error) {
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       status: 'error',
       error: error.message,
       timestamp: new Date().toISOString()
