@@ -1,476 +1,454 @@
 {
   "project": {
-    "name": "Copilot Excellence Phase 2",
-    "description": "Improve Copilot from 7.5/10 to 9/10 - Claude Cowork level quality",
-    "createdAt": "2026-01-24T14:00:00Z",
-    "previousPhase": "copilot-excellence-upgrade"
-  },
-  "stack": {
-    "framework": "react-vite",
-    "database": "supabase",
-    "auth": "supabase-auth",
-    "styling": "tailwind",
-    "ai": "google-gemini"
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind"
+    }
   },
   "features": [
     {
-      "id": "action-contract",
-      "name": "Action Contract Compliance",
-      "status": "pending",
-      "priority": 1,
-      "description": "Fix all 13 response components that violate the action contract"
+      "id": "meeting-analytics-redesign",
+      "name": "Combined Meeting + Team Analytics Redesign",
+      "status": "complete",
+      "consultReport": ".sixty/consult/meeting-analytics-redesign.md",
+      "createdAt": "2026-02-18T00:00:00Z"
     },
     {
-      "id": "integration",
-      "name": "UI Integration",
-      "status": "pending",
-      "priority": 2,
-      "description": "Wire Action Items Store and ExecutionTelemetry to the live UI"
-    },
-    {
-      "id": "reliability",
-      "name": "Reliability Improvements",
-      "status": "pending",
-      "priority": 3,
-      "description": "Add retry, fallback, and timeout handling to sequence execution"
-    },
-    {
-      "id": "testing",
-      "name": "Test Coverage",
-      "status": "pending",
-      "priority": 4,
-      "description": "Write E2E tests for V1 workflows and integration tests"
-    },
-    {
-      "id": "excellence",
-      "name": "Excellence Features",
-      "status": "pending",
-      "priority": 5,
-      "description": "Pattern matching improvements, mobile polish, HITL integration"
-    },
-    {
-      "id": "exa-ops-websets-integration",
-      "name": "Exa Ops Websets Integration",
-      "status": "pending",
-      "priority": 6,
-      "description": "Make Exa Websets a core ops capability with preview-first workflows, copilot actions, dynamic table materialization, webhooks, and monitor-driven refresh.",
-      "consultReport": ".sixty/consult/exa-ops-websets-integration.md",
-      "planFile": ".sixty/plan-exa-ops-websets-integration.json",
-      "createdAt": "2026-02-11T23:30:00Z"
-    }
-  ],
-  "additionalPlans": [
-    {
-      "featureId": "exa-ops-websets-integration",
-      "title": "Exa Websets as a Core Ops Capability",
-      "path": ".sixty/plan-exa-ops-websets-integration.json",
-      "stories": 14,
-      "estimateWithParallelism": "8-10 hours",
-      "status": "ready"
+      "id": "settings-page-fixes",
+      "name": "Settings Page - TSK-0455 Go-Live Fixes",
+      "status": "in_progress",
+      "prd": null,
+      "taskRef": "TSK-0455",
+      "createdAt": "2026-02-18T14:00:00Z"
     }
   ],
   "stories": [
     {
-      "id": "ACT-001",
-      "feature": "action-contract",
-      "title": "Fix DealRescuePackResponse action contract violations",
-      "type": "fix",
-      "status": "complete",
-      "completedAt": "2026-01-24T13:49:00Z",
+      "id": "MAR-001",
+      "feature": "meeting-analytics-redesign",
+      "title": "Create SearchHero component with Intelligence page design",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["MAR-003"],
+      "parallelWith": ["MAR-002"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "SearchHero.tsx created in src/components/meeting-analytics/",
+        "Glassmorphism card with gradient accent bar (emerald/teal/cyan)",
+        "Large h-14 search input with icon badge, matching Intelligence page",
+        "Mode toggle: Semantic Search | Ask Anything (embeds AskAnythingPanel)",
+        "Filter bar below search: Team Member, Sentiment, Date, Action Items",
+        "Example queries shown when no active query",
+        "Search results display with source cards and similarity scores",
+        "Full light/dark mode support with no color clashes"
+      ],
+      "files": [
+        "src/components/meeting-analytics/SearchHero.tsx",
+        "src/components/meeting-analytics/AskAnythingPanel.tsx"
+      ]
+    },
+    {
+      "id": "MAR-002",
+      "feature": "meeting-analytics-redesign",
+      "title": "Create DashboardTab merging Overview and Team Analytics",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["MAR-003"],
+      "parallelWith": ["MAR-001"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "DashboardTab.tsx created in src/components/meeting-analytics/",
+        "Period selector (7d/30d/90d) at top",
+        "Merged KPI cards from OverviewTab + TeamKPIGrid (6-8 best metrics, no duplicates)",
+        "Side-by-side layout: TeamTrendsChart | TeamComparisonMatrix",
+        "Pipeline Health cards row below",
+        "Active Alerts section (collapsible)",
+        "Imports existing team components (TeamKPIGrid, TeamTrendsChart, TeamComparisonMatrix, MetricDrillDownModal)",
+        "Full light/dark mode glassmorphism styling"
+      ],
+      "files": [
+        "src/components/meeting-analytics/DashboardTab.tsx",
+        "src/components/meeting-analytics/OverviewTab.tsx"
+      ]
+    },
+    {
+      "id": "MAR-003",
+      "feature": "meeting-analytics-redesign",
+      "title": "Restructure MeetingAnalyticsPage with SearchHero and 4 tabs",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["MAR-001", "MAR-002"], "files": [], "schema": [] },
+      "blocks": ["MAR-004", "MAR-005", "MAR-006", "MAR-007"],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Page layout: Header -> SearchHero (always visible) -> Tabs",
+        "4 tabs: Dashboard, Transcripts, Insights, Reports",
+        "SearchHero rendered above tabs (not inside a tab)",
+        "Intelligence page header pattern (icon badge + title + status)",
+        "URL params updated for new tab structure",
+        "TranscriptDetailSheet still opens on transcript click",
+        "Framer Motion animations on page load"
+      ],
+      "files": [
+        "src/pages/MeetingAnalyticsPage.tsx"
+      ]
+    },
+    {
+      "id": "MAR-004",
+      "feature": "meeting-analytics-redesign",
+      "title": "Restyle InsightsTab with glassmorphism and dark mode audit",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["MAR-003"] },
+      "blocks": ["MAR-007"],
+      "parallelWith": ["MAR-005", "MAR-006"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "All cards use glassmorphism pattern (bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl)",
+        "Chart colors consistent in both light and dark mode",
+        "Recharts wrapped in ResponsiveContainer with proper aspect ratios",
+        "Badge colors use standard palette (emerald, red, amber, blue with dark variants)",
+        "No hardcoded colors without dark: counterparts"
+      ],
+      "files": [
+        "src/components/meeting-analytics/InsightsTab.tsx"
+      ]
+    },
+    {
+      "id": "MAR-005",
+      "feature": "meeting-analytics-redesign",
+      "title": "Restyle TranscriptsTab, TranscriptDetailSheet, and ReportsTab",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["MAR-003"] },
+      "blocks": ["MAR-007"],
+      "parallelWith": ["MAR-004", "MAR-006"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "TranscriptsTab uses glassmorphism cards, consistent table styling",
+        "TranscriptDetailSheet has !top-16 !h-[calc(100vh-4rem)] and matching design",
+        "ReportsTab report preview and history table match design system",
+        "NotificationSettingsDialog matches design system",
+        "All components have proper light/dark mode classes"
+      ],
+      "files": [
+        "src/components/meeting-analytics/TranscriptsTab.tsx",
+        "src/components/meeting-analytics/TranscriptDetailSheet.tsx",
+        "src/components/meeting-analytics/ReportsTab.tsx",
+        "src/components/meeting-analytics/NotificationSettingsDialog.tsx"
+      ]
+    },
+    {
+      "id": "MAR-006",
+      "feature": "meeting-analytics-redesign",
+      "title": "Remove standalone Team Analytics page and update routing",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["MAR-003"] },
+      "blocks": ["MAR-007"],
+      "parallelWith": ["MAR-004", "MAR-005"],
+      "estimatedMinutes": 15,
+      "acceptance": [
+        "src/pages/insights/TeamAnalytics.tsx removed or redirects to /meeting-analytics?tab=dashboard",
+        "Route in App.tsx updated (redirect /insights/team -> /meeting-analytics)",
+        "routeConfig.ts updated",
+        "userTypeUtils.ts references updated in both src/ and packages/landing/",
+        "lazyPages.tsx export removed or updated",
+        "No broken imports across codebase"
+      ],
+      "files": [
+        "src/pages/insights/TeamAnalytics.tsx",
+        "src/App.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/routes/lazyPages.tsx",
+        "src/lib/utils/userTypeUtils.ts"
+      ]
+    },
+    {
+      "id": "MAR-007",
+      "feature": "meeting-analytics-redesign",
+      "title": "Chart responsiveness fix and full dark/light mode QA pass",
+      "type": "qa",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["MAR-004", "MAR-005", "MAR-006"] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "All Recharts charts use ResponsiveContainer and render correctly at 320px, 768px, 1024px, 1440px",
+        "Chart grid lines, axes, and tooltips themed for both light and dark",
+        "Toggle between themes shows no clashing colors anywhere",
+        "No light text on light background or dark text on dark background",
+        "All badges use consistent color palette with dark: variants",
+        "Build passes with no TypeScript errors (npm run build)"
+      ],
+      "files": [
+        "src/components/meeting-analytics/DashboardTab.tsx",
+        "src/components/meeting-analytics/InsightsTab.tsx",
+        "src/components/meeting-analytics/SearchHero.tsx"
+      ]
+    }
+  ],
+    {
+      "id": "SET-001",
+      "feature": "settings-page-fixes",
+      "title": "Unify Profile and Settings/Account pages",
+      "type": "frontend",
+      "status": "pending",
       "priority": 1,
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": ["ACT-002", "ACT-003", "ACT-004"],
+      "parallelWith": ["SET-002", "SET-003"],
+      "estimatedMinutes": 20,
       "acceptance": [
-        "Remove direct window.location calls on lines 69 and 138",
-        "Use onActionClick with fallback pattern",
-        "Verify View deal and View tasks buttons work"
+        "Settings > Account renders identical content to Profile page (both use Profile.tsx already via AccountSettings.tsx wrapper)",
+        "Profile page header says 'Account' not 'Profile Settings' to match Settings navigation",
+        "Settings > Account uses SettingsPageWrapper consistently (no duplicate headers)",
+        "Dropdown menu 'Profile' navigates to /settings/account instead of /profile (or /profile redirects to /settings/account)"
       ],
-      "estimatedMinutes": 10,
-      "files": ["src/components/copilot/responses/DealRescuePackResponse.tsx"]
+      "files": [
+        "src/pages/Profile.tsx",
+        "src/pages/settings/AccountSettings.tsx",
+        "src/components/layout/TopBar.tsx"
+      ]
     },
     {
-      "id": "ACT-002",
-      "feature": "action-contract",
-      "title": "Fix DealMapBuilderResponse action contract violations",
-      "type": "fix",
-      "status": "complete",
-      "completedAt": "2026-01-24T13:49:00Z",
-      "priority": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["ACT-001", "ACT-003", "ACT-004"],
-      "acceptance": [
-        "Remove direct window.location calls on lines 73 and 134",
-        "Use onActionClick with fallback pattern",
-        "Verify all navigation buttons work"
-      ],
-      "estimatedMinutes": 10,
-      "files": ["src/components/copilot/responses/DealMapBuilderResponse.tsx"]
-    },
-    {
-      "id": "ACT-003",
-      "feature": "action-contract",
-      "title": "Fix PipelineFocusTasksResponse action contract violations",
-      "type": "fix",
-      "status": "complete",
-      "completedAt": "2026-01-24T13:47:00Z",
-      "notes": "Already compliant - onActionClick was already destructured",
-      "priority": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["ACT-001", "ACT-002", "ACT-004"],
-      "acceptance": [
-        "Remove direct window.location calls on lines 105 and 174",
-        "Use onActionClick with fallback pattern",
-        "Verify deal and task navigation works"
-      ],
-      "estimatedMinutes": 10,
-      "files": ["src/components/copilot/responses/PipelineFocusTasksResponse.tsx"]
-    },
-    {
-      "id": "ACT-004",
-      "feature": "action-contract",
-      "title": "Fix NextMeetingCommandCenterResponse action contract violations",
-      "type": "fix",
-      "status": "complete",
-      "completedAt": "2026-01-24T13:47:00Z",
-      "notes": "Already compliant - onActionClick was already destructured",
-      "priority": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["ACT-001", "ACT-002", "ACT-003"],
-      "acceptance": [
-        "Remove direct window.location calls on lines 107 and 314",
-        "Use onActionClick with fallback pattern",
-        "Verify meeting and task navigation works"
-      ],
-      "estimatedMinutes": 10,
-      "files": ["src/components/copilot/responses/NextMeetingCommandCenterResponse.tsx"]
-    },
-    {
-      "id": "ACT-005",
-      "feature": "action-contract",
-      "title": "Fix remaining 5 response component violations",
-      "type": "fix",
-      "status": "complete",
-      "completedAt": "2026-01-24T13:50:00Z",
-      "notes": "Fixed ActionSummaryResponse and DealDetailsView. CompanyIntelligence, TaskResponse, EntityDisambiguation already compliant.",
+      "id": "SET-002",
+      "feature": "settings-page-fixes",
+      "title": "Make Appearance settings functional (notifications, language, timezone)",
+      "type": "frontend",
+      "status": "pending",
       "priority": 2,
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": [],
+      "parallelWith": ["SET-001", "SET-003"],
+      "estimatedMinutes": 30,
       "acceptance": [
-        "Fix ActionSummaryResponse.tsx line 61",
-        "Fix DealDetailsView.tsx line 402",
-        "Fix CompanyIntelligenceResponse if needed",
-        "Fix TaskResponse if needed",
-        "Fix EntityDisambiguationResponse if needed",
-        "All components use onActionClick pattern"
+        "Notification preferences toggle on/off and persist to user_settings or profiles table",
+        "Language selector is present and saves preference (even if only English for now)",
+        "Timezone selector shows user's current timezone and saves changes",
+        "All preferences persist across page reload"
       ],
-      "estimatedMinutes": 25,
       "files": [
-        "src/components/copilot/responses/ActionSummaryResponse.tsx",
-        "src/components/copilot/responses/DealDetailsView.tsx",
-        "src/components/copilot/responses/CompanyIntelligenceResponse.tsx",
-        "src/components/copilot/responses/TaskResponse.tsx",
-        "src/components/copilot/responses/EntityDisambiguationResponse.tsx"
+        "src/pages/Preferences.tsx",
+        "src/pages/settings/AppearanceSettings.tsx"
       ]
     },
     {
-      "id": "INT-001",
-      "feature": "integration",
-      "title": "Wire Action Items Store to CopilotRightPanel",
+      "id": "SET-003",
+      "feature": "settings-page-fixes",
+      "title": "Hide non-functional settings sections (Task Auto-Sync, Smart Listening, Proactive Agent, Call Type cog)",
       "type": "frontend",
-      "status": "complete",
-      "completedAt": "2026-01-24T13:51:00Z",
-      "notes": "Already implemented - useActionItemStore imported and wired at lines 44, 354-363",
+      "status": "pending",
       "priority": 3,
-      "dependencies": { "stories": ["ACT-005"], "files": ["src/lib/stores/actionItemsStore.ts"], "schema": [] },
-      "blocks": ["INT-002"],
-      "parallelWith": [],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SET-001", "SET-002"],
+      "estimatedMinutes": 15,
       "acceptance": [
-        "Import useActionItemsStore in CopilotRightPanel",
-        "Display pending action items count badge",
-        "Show list of pending items with confirm/reject buttons",
-        "Items update when user confirms or rejects"
+        "Task Auto-Sync entry removed from Settings.tsx allSettingsSections array",
+        "Smart Listening entry removed from Settings.tsx allSettingsSections array",
+        "Proactive Agent entry removed from Settings.tsx allSettingsSections array",
+        "Call Type Settings: cog icon (CallTypeWorkflowEditor trigger) hidden per call type row, edit pen icon remains",
+        "Routes for hidden pages still work if accessed directly (no crash) but Settings hub doesn't show them"
       ],
-      "estimatedMinutes": 25,
       "files": [
-        "src/components/copilot/CopilotRightPanel.tsx"
+        "src/pages/Settings.tsx",
+        "src/pages/settings/CallTypeSettings.tsx"
       ]
     },
     {
-      "id": "INT-002",
-      "feature": "integration",
-      "title": "Connect sequence responses to Action Items Store",
-      "type": "frontend",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:20:00Z",
-      "notes": "Added useActionItemsStore integration in CopilotContext.tsx: imports store and helper, adds items on isSimulation=true responses, confirms items when isSimulation=false, clears expired items on mount via useEffect",
+      "id": "SET-004",
+      "feature": "settings-page-fixes",
+      "title": "Fix AI Personalization - popup centering and writing style save",
+      "type": "bugfix",
+      "status": "pending",
       "priority": 4,
-      "dependencies": { "stories": ["INT-001"], "files": [], "schema": [] },
+      "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": [],
-      "acceptance": [
-        "When sequence returns preview, add to Action Items Store",
-        "When user confirms, update item status to confirmed",
-        "When user rejects, update item status to rejected",
-        "Clear expired items on app load"
-      ],
-      "estimatedMinutes": 30,
-      "files": [
-        "src/lib/contexts/CopilotContext.tsx",
-        "src/components/copilot/ChatMessage.tsx"
-      ]
-    },
-    {
-      "id": "INT-003",
-      "feature": "integration",
-      "title": "Integrate ExecutionTelemetry into CopilotRightPanel",
-      "type": "frontend",
-      "status": "complete",
-      "completedAt": "2026-01-24T13:55:00Z",
-      "notes": "Added ExecutionTelemetry import, telemetryEvents prop, compact toggle state, and conditional rendering with expand/collapse button",
-      "priority": 5,
-      "dependencies": { "stories": ["INT-001"], "files": ["src/components/copilot/ExecutionTelemetry.tsx"], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["INT-002"],
-      "acceptance": [
-        "Import ExecutionTelemetry component",
-        "Display telemetry during tool execution",
-        "Show compact summary after completion",
-        "Toggle between compact and expanded view"
-      ],
-      "estimatedMinutes": 20,
-      "files": [
-        "src/components/copilot/CopilotRightPanel.tsx"
-      ]
-    },
-    {
-      "id": "REL-001",
-      "feature": "reliability",
-      "title": "Add retry mechanism to sequenceExecutor",
-      "type": "backend",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:00:00Z",
-      "notes": "Added max_retries config, exponential backoff (100ms base), transient error detection, retry_attempts logging to step_results",
-      "priority": 6,
-      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/sequenceExecutor.ts"], "schema": [] },
-      "blocks": ["REL-002"],
-      "parallelWith": [],
-      "acceptance": [
-        "Add retry_count and max_retries to step config",
-        "Implement exponential backoff (100ms, 200ms, 400ms)",
-        "Only retry on transient errors (network, timeout)",
-        "Log retry attempts to step_results",
-        "Persist retry state to sequence_executions"
-      ],
-      "estimatedMinutes": 30,
-      "files": [
-        "supabase/functions/_shared/sequenceExecutor.ts"
-      ]
-    },
-    {
-      "id": "REL-002",
-      "feature": "reliability",
-      "title": "Implement fallback to Gemini when V1 router fails",
-      "type": "backend",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:05:00Z",
-      "notes": "Wrapped V1 structured response in try-catch, on failure calls Gemini, logs fallback event with v1_fallback_triggered analytics, graceful error if both fail",
-      "priority": 7,
-      "dependencies": { "stories": ["REL-001"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "acceptance": [
-        "Wrap V1 sequence execution in try-catch",
-        "On failure, fall back to Gemini LLM path",
-        "Log fallback event for monitoring",
-        "Return graceful error message if both fail"
-      ],
+      "parallelWith": ["SET-005"],
       "estimatedMinutes": 25,
+      "acceptance": [
+        "'Train from Sent Emails' popup is centered in viewport (Dialog positioning fix)",
+        "New Writing Style: creating and saving a style persists the description correctly (not empty '')",
+        "Writing style appears in the list with correct name and description after save",
+        "Other settings popups audited for centering issues and fixed"
+      ],
       "files": [
-        "supabase/functions/api-copilot/index.ts"
+        "src/pages/settings/AIPersonalizationSettings.tsx"
       ]
     },
     {
-      "id": "REL-003",
-      "feature": "reliability",
-      "title": "Add timeout handling for long-running steps",
-      "type": "backend",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:00:00Z",
-      "notes": "Added timeout_ms config (default 30000), AbortController-based timeout, timed_out flag and timeout_ms in step_results",
+      "id": "SET-005",
+      "feature": "settings-page-fixes",
+      "title": "Test and fix Follow Up Configuration templates",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SET-004"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Full Proposal workflow tested - generates output correctly",
+        "Quick Followup Email workflow tested - generates output correctly",
+        "Client Summary workflow tested - generates output correctly",
+        "Any broken workflows have errors surfaced to user with toast feedback"
+      ],
+      "files": [
+        "src/pages/settings/FollowUpSettings.tsx"
+      ]
+    },
+    {
+      "id": "SET-006",
+      "feature": "settings-page-fixes",
+      "title": "Fix Google OAuth sign-in and Workspace toggle persistence",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["SET-007"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Google OAuth sign-in does not fail and log user out",
+        "Google Workspace: toggling OFF Gmail/Calendar/Drive and clicking Save persists the changes",
+        "Returning to the page shows toggles in their saved OFF state",
+        "Test Connection returns meaningful status (or error is handled gracefully with toast)",
+        "Service status messages ('Some services have issues') show accurate status"
+      ],
+      "files": [
+        "src/pages/settings/integrations/GoogleWorkspaceIntegrationPage.tsx",
+        "src/lib/stores/integrationStore.ts"
+      ]
+    },
+    {
+      "id": "SET-007",
+      "feature": "settings-page-fixes",
+      "title": "Fix Email Sync functionality",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["SET-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Pressing 'Sync Emails' triggers actual email sync operation",
+        "Progress indicator shown during sync",
+        "Email count updates after sync completes",
+        "Error state shown with toast if sync fails"
+      ],
+      "files": [
+        "src/pages/settings/EmailSyncPage.tsx"
+      ]
+    },
+    {
+      "id": "SET-008",
+      "feature": "settings-page-fixes",
+      "title": "Fix Instantly.AI Dashlane autofill issue",
+      "type": "bugfix",
+      "status": "pending",
       "priority": 8,
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": ["REL-001"],
-      "acceptance": [
-        "Add step_timeout_ms config option (default 30000)",
-        "Implement AbortController for fetch calls",
-        "Mark step as failed on timeout",
-        "Include timeout info in error_details"
-      ],
-      "estimatedMinutes": 25,
-      "files": [
-        "supabase/functions/_shared/sequenceExecutor.ts"
-      ]
-    },
-    {
-      "id": "TEST-001",
-      "feature": "testing",
-      "title": "Create golden path test fixtures",
-      "type": "test",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:10:00Z",
-      "notes": "Created meetings.json, deals.json, contacts.json, sequences.json with TypeScript index.ts for typed access and mock Supabase helper",
-      "priority": 9,
-      "dependencies": { "stories": ["REL-002"], "files": [], "schema": [] },
-      "blocks": ["TEST-002", "TEST-003"],
-      "parallelWith": [],
-      "acceptance": [
-        "Create fixtures for meetings, deals, contacts",
-        "Create mock sequence execution results",
-        "Create mock Gemini responses",
-        "Document fixture usage in tests/README.md"
-      ],
-      "estimatedMinutes": 25,
-      "files": [
-        "tests/fixtures/copilot/meetings.json",
-        "tests/fixtures/copilot/deals.json",
-        "tests/fixtures/copilot/contacts.json",
-        "tests/fixtures/copilot/sequences.json"
-      ]
-    },
-    {
-      "id": "TEST-002",
-      "feature": "testing",
-      "title": "Write E2E tests for V1 workflows",
-      "type": "test",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:15:00Z",
-      "notes": "Created next-meeting.spec.ts, catch-me-up.spec.ts, pipeline-focus.spec.ts with tests for preview, confirm, cancel flows",
-      "priority": 10,
-      "dependencies": { "stories": ["TEST-001"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["TEST-003"],
-      "acceptance": [
-        "Test next-meeting-prep workflow end-to-end",
-        "Test catch-me-up workflow end-to-end",
-        "Test pipeline-focus workflow end-to-end",
-        "Test confirm and cancel flows",
-        "Tests pass in CI"
-      ],
-      "estimatedMinutes": 45,
-      "files": [
-        "tests/e2e/copilot/next-meeting.spec.ts",
-        "tests/e2e/copilot/catch-me-up.spec.ts",
-        "tests/e2e/copilot/pipeline-focus.spec.ts"
-      ]
-    },
-    {
-      "id": "TEST-003",
-      "feature": "testing",
-      "title": "Write sequence execution integration tests",
-      "type": "test",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:15:00Z",
-      "notes": "Created comprehensive sequenceExecutor.test.ts with 15+ tests covering basic execution, error recovery, retry mechanism, timeout handling, input mapping",
-      "priority": 10,
-      "dependencies": { "stories": ["TEST-001"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["TEST-002"],
-      "acceptance": [
-        "Test sequenceExecutor with mock supabase",
-        "Test error recovery flows (stop, continue, fallback)",
-        "Test retry mechanism",
-        "Test timeout handling",
-        "Tests pass in CI"
-      ],
-      "estimatedMinutes": 40,
-      "files": [
-        "supabase/functions/_shared/__tests__/sequenceExecutor.test.ts"
-      ]
-    },
-    {
-      "id": "EXC-001",
-      "feature": "excellence",
-      "title": "Improve V1 router pattern matching",
-      "type": "backend",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:20:00Z",
-      "notes": "Added calculateV1Confidence with synonym support, confidence scoring (high/medium/low), only routes when confidence >= medium, logs confidence scores for monitoring",
-      "priority": 11,
-      "dependencies": { "stories": ["REL-002"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "acceptance": [
-        "Add synonym support for key phrases",
-        "Add confidence scoring (high/medium/low)",
-        "Only route if confidence >= medium",
-        "Log confidence scores for monitoring"
-      ],
-      "estimatedMinutes": 30,
-      "files": [
-        "supabase/functions/api-copilot/index.ts"
-      ]
-    },
-    {
-      "id": "EXC-002",
-      "feature": "excellence",
-      "title": "Mobile responsiveness audit and fixes",
-      "type": "frontend",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:25:00Z",
-      "notes": "Fixed right panel to use 85vw max on mobile, action cards grid to 1-col on tiny screens, responsive padding/spacing throughout CopilotRightPanel",
-      "priority": 12,
-      "dependencies": { "stories": ["INT-003"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "acceptance": [
-        "Audit CopilotLayout on mobile viewports",
-        "Fix any horizontal scroll issues",
-        "Ensure action cards stack properly",
-        "Test on iOS Safari and Android Chrome"
-      ],
-      "estimatedMinutes": 25,
-      "files": [
-        "src/components/copilot/CopilotLayout.tsx",
-        "src/components/copilot/CopilotEmpty.tsx",
-        "src/components/copilot/CopilotRightPanel.tsx"
-      ]
-    },
-    {
-      "id": "EXC-003",
-      "feature": "excellence",
-      "title": "Update documentation with accurate counts",
-      "type": "docs",
-      "status": "complete",
-      "completedAt": "2026-01-24T14:30:00Z",
-      "notes": "Verified 48 response components is correct (not 46). Updated api-copilot/CLAUDE.md key functions table with accurate line numbers and file size (~14,200 lines).",
-      "priority": 13,
-      "dependencies": { "stories": ["ACT-005"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "acceptance": [
-        "Update response count from 48 to 46 in all docs",
-        "Fix SEQUENCE_RESPONSE_MAP reference in api-copilot/CLAUDE.md",
-        "Verify all line number references are accurate"
-      ],
+      "parallelWith": ["SET-009"],
       "estimatedMinutes": 15,
+      "acceptance": [
+        "API Key input field has autocomplete='off' and data-lpignore='true' and data-1p-ignore attributes",
+        "Connect button requires explicit user click (not auto-triggered by input change)",
+        "Dashlane/1Password autofill does not trigger automatic connection attempt"
+      ],
       "files": [
-        "CLAUDE.md",
-        "src/components/copilot/CLAUDE.md",
-        "src/components/copilot/responses/CLAUDE.md",
-        "supabase/functions/api-copilot/CLAUDE.md"
+        "src/pages/settings/InstantlySettings.tsx"
+      ]
+    },
+    {
+      "id": "SET-009",
+      "feature": "settings-page-fixes",
+      "title": "Fix invitation system - role selection, email delivery, and error handling",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SET-008"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Selecting 'Member' role in invite form sends invitation with role='member' (not admin)",
+        "Invitations list shows correct role that was selected",
+        "Admin invites work without 'email delivery failed' error (or error is actionable)",
+        "Member invites actually deliver email to destination mailbox",
+        "Resend functionality works for pending invitations"
+      ],
+      "files": [
+        "src/pages/settings/OrganizationManagementPage.tsx",
+        "src/lib/services/invitationService.ts"
+      ]
+    },
+    {
+      "id": "SET-010",
+      "feature": "settings-page-fixes",
+      "title": "Fix Org Settings - populate Company Website from signup, remove Company Domain",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "Company Domain field removed from Org Settings UI",
+        "Company Website field displays the value set during signup (from organizations.company_website)",
+        "Company Website is editable and saves correctly",
+        "If company_website is null, field shows empty with placeholder"
+      ],
+      "files": [
+        "src/pages/settings/OrganizationSettingsPage.tsx"
+      ]
+    },
+    {
+      "id": "SET-011",
+      "feature": "settings-page-fixes",
+      "title": "Create Billing & Subscription page with Stripe integration placeholder",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "New BillingSettingsPage.tsx created at src/pages/settings/",
+        "Route /settings/billing registered in App.tsx and routeConfig.ts",
+        "Shows current plan (default £29/month) with status indicator",
+        "Stripe Customer Portal link button (uses Stripe billing portal URL or edge function)",
+        "Credit pack top-up section links to existing CreditsSettingsPage or embeds CreditPurchaseModal",
+        "If Stripe not yet connected, shows 'Coming soon' or setup instructions"
+      ],
+      "files": [
+        "src/pages/settings/BillingSettingsPage.tsx",
+        "src/lib/routes/routeConfig.ts"
       ]
     }
   ],
   "execution": {
-    "totalStories": 31,
-    "completedStories": 17,
-    "currentFeature": "exa-ops-websets-integration",
-    "lastUpdated": "2026-02-11T23:30:00Z"
+    "totalStories": 18,
+    "completedStories": 7,
+    "currentFeature": "settings-page-fixes",
+    "lastUpdated": "2026-02-18T14:00:00Z"
   }
 }

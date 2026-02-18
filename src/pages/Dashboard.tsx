@@ -18,8 +18,8 @@ import {
   ArrowDown,
   TrendingUp,
   TrendingDown,
+  BarChart2,
 } from 'lucide-react';
-import { LazySalesActivityChart } from '@/components/LazySalesActivityChart';
 import ReactDOM from 'react-dom';
 import { LazySubscriptionStats } from '@/components/LazySubscriptionStats';
 import { MonthYearPicker } from '@/components/MonthYearPicker';
@@ -28,6 +28,8 @@ import { HelpPanel } from '@/components/docs/HelpPanel';
 import logger from '@/lib/utils/logger';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
+import { TeamKPIGrid } from '@/components/insights/TeamKPIGrid';
+import { TeamComparisonMatrix } from '@/components/insights/TeamComparisonMatrix';
 
 interface MetricCardProps {
   title: string;
@@ -398,12 +400,6 @@ function DashboardSkeleton() {
         ))}
       </div>
 
-      {/* Chart skeleton */}
-      <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none mb-8">
-        <div className="h-6 w-48 bg-slate-200 dark:bg-gray-800 rounded-lg mb-8" />
-        <div className="h-64 w-full bg-slate-200 dark:bg-gray-800 rounded-lg" />
-      </div>
-
       {/* Recent deals skeleton */}
       <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
         <div className="flex justify-between items-center mb-6">
@@ -429,6 +425,42 @@ function DashboardSkeleton() {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamPerformanceSection({ selectedMonth }: { selectedMonth: Date }) {
+  const dateRange = useMemo(() => ({
+    start: startOfMonth(selectedMonth),
+    end: endOfMonth(selectedMonth),
+  }), [selectedMonth]);
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-5 h-5 text-violet-500" />
+            <h2 className="text-xl font-semibold text-[#1E293B] dark:text-white">Team Performance</h2>
+          </div>
+          <p className="text-sm text-[#64748B] dark:text-gray-400 mt-0.5">
+            Meeting analytics and rep performance metrics
+          </p>
+        </div>
+        <span className="text-sm font-medium text-[#64748B] dark:text-gray-400">
+          {format(selectedMonth, 'MMMM yyyy')}
+        </span>
+      </div>
+
+      {/* KPI Grid */}
+      <div className="mb-4">
+        <TeamKPIGrid period={30} dateRange={dateRange} onCardClick={() => {}} />
+      </div>
+
+      {/* Trends Chart */}
+      <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-3xl border border-transparent dark:border-gray-800/50 shadow-sm dark:shadow-none p-6">
+        <TeamComparisonMatrix period={30} dateRange={dateRange} onRepClick={() => {}} />
       </div>
     </div>
   );
@@ -793,10 +825,8 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Sales Activity Chart */}
-      <div className="mb-8">
-        <LazySalesActivityChart selectedMonth={selectedMonth} />
-      </div>
+      {/* Team Performance Section */}
+      <TeamPerformanceSection selectedMonth={selectedMonth} />
 
       {/* MRR Subscription Statistics */}
       <div className="mb-8">

@@ -310,21 +310,32 @@ const TAB_CLASS =
   'flex items-center gap-2 text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm';
 
 export function TeamTrendsChart({ period, className }: TeamTrendsChartProps) {
-  const { data, isLoading, error } = useTeamTrends(period);
+  const { data, isPending, error } = useTeamTrends(period);
 
-  if (isLoading) {
+  // isPending covers both "actively fetching" and "query disabled" — show skeleton instead of error
+  if (isPending) {
     return <TeamTrendsChartSkeleton />;
   }
 
-  if (error || !data) {
+  if (error) {
+    const msg = error instanceof Error
+      ? error.message
+      : (error as { message?: string })?.message ?? JSON.stringify(error);
     return (
       <div className={cn(
         'bg-white dark:bg-gray-900/40 rounded-2xl border border-red-200 dark:border-red-800/30 p-6',
         className
       )}>
-        <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
-          <AlertCircle className="w-5 h-5" />
-          <span>Failed to load trend data</span>
+        <div className="flex flex-col gap-1 text-red-600 dark:text-red-400">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <span className="font-medium">Failed to load trend data</span>
+          </div>
+          {msg && (
+            <p className="text-xs text-red-500/80 dark:text-red-400/70 ml-8 font-mono break-all">
+              {msg}
+            </p>
+          )}
         </div>
       </div>
     );

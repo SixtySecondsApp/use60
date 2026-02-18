@@ -23,6 +23,7 @@ import { useTeamAggregates, type TimePeriod, type DrillDownMetricType } from '@/
 
 interface TeamKPIGridProps {
   period: TimePeriod;
+  dateRange?: { start: Date; end: Date };
   onCardClick?: (metricType: DrillDownMetricType) => void;
   className?: string;
 }
@@ -220,8 +221,8 @@ function KPICard({
   );
 }
 
-export function TeamKPIGrid({ period, onCardClick, className }: TeamKPIGridProps) {
-  const { data, isLoading, error } = useTeamAggregates(period);
+export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamKPIGridProps) {
+  const { data, isLoading, error } = useTeamAggregates(period, dateRange);
 
   if (isLoading) {
     return <TeamKPIGridSkeleton />;
