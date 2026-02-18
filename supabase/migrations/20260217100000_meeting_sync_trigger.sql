@@ -18,7 +18,7 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'public', 'extensions'
 AS $$
 DECLARE
-  supabase_url text;
+  supabase_url text := 'https://caerqjzvuerejfrdtygb.supabase.co';
   service_role_key text;
   request_id bigint;
 BEGIN
@@ -33,11 +33,6 @@ BEGIN
       RETURN NEW;
     END IF;
   END IF;
-
-  -- Build Supabase URL from database name
-  supabase_url := 'https://' ||
-    regexp_replace(current_database(), '^postgres_', '') ||
-    '.supabase.co';
 
   -- Get service role key from vault
   BEGIN
