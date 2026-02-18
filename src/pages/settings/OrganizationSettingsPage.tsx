@@ -27,7 +27,6 @@ export default function OrganizationSettingsPage() {
   const [currencyCode, setCurrencyCode] = useState<CurrencyCode>(
     ((activeOrg?.currency_code as CurrencyCode | undefined) || 'GBP')
   );
-  const [companyDomain, setCompanyDomain] = useState(activeOrg?.company_domain || '');
   const [companyWebsite, setCompanyWebsite] = useState(activeOrg?.company_website || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
@@ -39,9 +38,8 @@ export default function OrganizationSettingsPage() {
   // Update org profile settings when activeOrg changes
   useEffect(() => {
     setCurrencyCode(((activeOrg?.currency_code as CurrencyCode | undefined) || 'GBP'));
-    setCompanyDomain(activeOrg?.company_domain || '');
     setCompanyWebsite(activeOrg?.company_website || '');
-  }, [activeOrg?.currency_code, activeOrg?.company_domain, activeOrg?.company_website]);
+  }, [activeOrg?.currency_code, activeOrg?.company_website]);
 
   // Load member count
   useEffect(() => {
@@ -99,7 +97,6 @@ export default function OrganizationSettingsPage() {
       const payload = {
         currency_code: currencyCode,
         currency_locale: locale,
-        company_domain: companyDomain.trim() ? companyDomain.trim() : null,
         company_website: companyWebsite.trim() ? companyWebsite.trim() : null,
         updated_at: new Date().toISOString(),
       };
