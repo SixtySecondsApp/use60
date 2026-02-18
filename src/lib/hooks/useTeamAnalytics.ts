@@ -11,6 +11,7 @@ import {
   TeamAnalyticsService,
   type TimePeriod,
   type Granularity,
+  type DateRange,
   type TeamAggregatesWithComparison,
   type TimeSeriesDataPoint,
   type RepQualitySignals,
@@ -23,21 +24,27 @@ import {
   type CoachingGuidance,
 } from '@/lib/services/teamAnalyticsService';
 
+// Serialize dateRange for stable query keys
+function dateRangeKey(dateRange?: DateRange): string {
+  if (!dateRange) return 'none';
+  return `${dateRange.start.toISOString()}_${dateRange.end.toISOString()}`;
+}
+
 // Query key factory for consistency
 const teamAnalyticsKeys = {
   all: ['team-analytics'] as const,
-  aggregates: (orgId: string, period: TimePeriod) =>
-    [...teamAnalyticsKeys.all, 'aggregates', orgId, period] as const,
+  aggregates: (orgId: string, period: TimePeriod, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'aggregates', orgId, period, dateRangeKey(dateRange)] as const,
   timeSeries: (orgId: string, period: TimePeriod, granularity: Granularity, userId?: string) =>
     [...teamAnalyticsKeys.all, 'time-series', orgId, period, granularity, userId || 'all'] as const,
   qualitySignals: (orgId: string, period: TimePeriod, userId?: string) =>
     [...teamAnalyticsKeys.all, 'quality-signals', orgId, period, userId || 'all'] as const,
-  comparison: (orgId: string, period: TimePeriod) =>
-    [...teamAnalyticsKeys.all, 'comparison', orgId, period] as const,
+  comparison: (orgId: string, period: TimePeriod, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'comparison', orgId, period, dateRangeKey(dateRange)] as const,
   drillDown: (orgId: string, metricType: DrillDownMetricType, period: TimePeriod, userId?: string) =>
     [...teamAnalyticsKeys.all, 'drill-down', orgId, metricType, period, userId || 'all'] as const,
-  trends: (orgId: string, period: TimePeriod) =>
-    [...teamAnalyticsKeys.all, 'trends', orgId, period] as const,
+  trends: (orgId: string, period: TimePeriod, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'trends', orgId, period, dateRangeKey(dateRange)] as const,
   sentimentExtremes: (orgId: string, period: TimePeriod, userId?: string) =>
     [...teamAnalyticsKeys.all, 'sentiment-extremes', orgId, period, userId || 'all'] as const,
   talkTimeExtremes: (orgId: string, period: TimePeriod, userId?: string) =>
@@ -50,16 +57,16 @@ const teamAnalyticsKeys = {
  * Hook for team aggregates with period-over-period comparison
  * Shows current period metrics vs previous period with % change
  */
-export function useTeamAggregates(period: TimePeriod = 30) {
+export function useTeamAggregates(period: TimePeriod = 30, dateRange?: DateRange) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
 
   return useQuery<TeamAggregatesWithComparison>({
-    queryKey: teamAnalyticsKeys.aggregates(orgId || '', period),
+    queryKey: teamAnalyticsKeys.aggregates(orgId || '', period, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
-      return TeamAnalyticsService.getTeamAggregatesWithComparison(orgId, period);
+      return TeamAnalyticsService.getTeamAggregatesWithComparison(orgId, period, dateRange);
     },
     enabled: Boolean(user && orgId),
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -125,16 +132,16 @@ export function useTeamQualitySignals(period: TimePeriod = 30, userId?: string) 
  * Hook for team comparison matrix
  * All reps with metrics for sortable comparison table
  */
-export function useTeamComparison(period: TimePeriod = 30) {
+export function useTeamComparison(period: TimePeriod = 30, dateRange?: DateRange) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
 
   return useQuery<RepComparisonData[]>({
-    queryKey: teamAnalyticsKeys.comparison(orgId || '', period),
+    queryKey: teamAnalyticsKeys.comparison(orgId || '', period, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
-      return TeamAnalyticsService.getTeamComparisonMatrix(orgId, period);
+      return TeamAnalyticsService.getTeamComparisonMatrix(orgId, period, dateRange);
     },
     enabled: Boolean(user && orgId),
     staleTime: 5 * 60 * 1000,
@@ -174,7 +181,7 @@ export function useMeetingsForDrillDown(
  * Hook for aggregated team trends
  * Meeting volume, sentiment, and talk time over time (aggregated across all reps)
  */
-export function useTeamTrends(period: TimePeriod = 30) {
+export function useTeamTrends(period: TimePeriod = 30, dateRange?: DateRange) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
@@ -184,10 +191,10 @@ export function useTeamTrends(period: TimePeriod = 30) {
     sentimentTrend: Array<{ date: string; avg: number | null }>;
     talkTimeTrend: Array<{ date: string; avg: number | null }>;
   }>({
-    queryKey: teamAnalyticsKeys.trends(orgId || '', period),
+    queryKey: teamAnalyticsKeys.trends(orgId || '', period, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
-      return TeamAnalyticsService.getTeamTrends(orgId, period);
+      return TeamAnalyticsService.getTeamTrends(orgId, period, dateRange);
     },
     enabled: Boolean(user && orgId),
     staleTime: 5 * 60 * 1000,
@@ -305,6 +312,7 @@ export function useInvalidateTeamAnalytics() {
 export type {
   TimePeriod,
   Granularity,
+  DateRange,
   TeamAggregatesWithComparison,
   TimeSeriesDataPoint,
   RepQualitySignals,

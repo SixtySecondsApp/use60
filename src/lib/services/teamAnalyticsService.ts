@@ -49,6 +49,17 @@ export interface LeaderboardEntry {
 export type TimePeriod = 7 | 30 | 90;
 export type Granularity = 'day' | 'week';
 
+/** Optional date range for filtering analytics to a specific window */
+export interface DateRange {
+  start: Date;
+  end: Date;
+}
+
+/** Format a Date to 'yyyy-MM-dd' for RPC parameters */
+function formatDateForRpc(date: Date): string {
+  return format(startOfDay(date), 'yyyy-MM-dd');
+}
+
 /** Team aggregates with period-over-period comparison */
 export interface TeamAggregatesWithComparison {
   current: {
@@ -427,13 +438,17 @@ export class TeamAnalyticsService {
    */
   static async getTeamAggregatesWithComparison(
     orgId: string,
-    periodDays: TimePeriod = 30
+    periodDays: TimePeriod = 30,
+    dateRange?: DateRange
   ): Promise<TeamAggregatesWithComparison> {
     try {
-      const { data, error } = await supabase.rpc('get_team_aggregates_with_comparison', {
+      const rpcParams = {
         p_org_id: orgId,
         p_period_days: periodDays,
-      });
+        p_start_date: dateRange ? formatDateForRpc(dateRange.start) : null,
+        p_end_date: dateRange ? formatDateForRpc(dateRange.end) : null,
+      };
+      const { data, error } = await supabase.rpc('get_team_aggregates_with_comparison', rpcParams);
 
       if (error) throw error;
 
@@ -520,16 +535,20 @@ export class TeamAnalyticsService {
     periodDays: TimePeriod;
     granularity: Granularity;
     userId?: string;
+    dateRange?: DateRange;
   }): Promise<TimeSeriesDataPoint[]> {
     try {
-      const { data, error } = await supabase.rpc('get_team_time_series_metrics', {
+      const rpcParams = {
         p_org_id: params.orgId,
         p_period_days: params.periodDays,
         p_granularity: params.granularity,
         p_user_id: params.userId || null,
-      });
+        p_start_date: params.dateRange ? formatDateForRpc(params.dateRange.start) : null,
+        p_end_date: params.dateRange ? formatDateForRpc(params.dateRange.end) : null,
+      };
+      const { data, error } = await supabase.rpc('get_team_time_series_metrics', rpcParams);
 
-      if (error) throw error;
+      if (error) throw new Error(`get_team_time_series_metrics: ${error.message} (code: ${error.code})`);
 
       return (data || []).map((row: Record<string, unknown>) => ({
         periodStart: row.period_start as string,
@@ -556,14 +575,18 @@ export class TeamAnalyticsService {
   static async getTeamQualitySignals(
     orgId: string,
     periodDays: TimePeriod = 30,
-    userId?: string
+    userId?: string,
+    dateRange?: DateRange
   ): Promise<RepQualitySignals[]> {
     try {
-      const { data, error } = await supabase.rpc('get_team_quality_signals', {
+      const rpcParams = {
         p_org_id: orgId,
         p_period_days: periodDays,
         p_user_id: userId || null,
-      });
+        p_start_date: dateRange ? formatDateForRpc(dateRange.start) : null,
+        p_end_date: dateRange ? formatDateForRpc(dateRange.end) : null,
+      };
+      const { data, error } = await supabase.rpc('get_team_quality_signals', rpcParams);
 
       if (error) throw error;
 
@@ -601,16 +624,20 @@ export class TeamAnalyticsService {
     metricType: DrillDownMetricType = 'all',
     periodDays: TimePeriod = 30,
     userId?: string,
-    limit: number = 50
+    limit: number = 50,
+    dateRange?: DateRange
   ): Promise<MeetingSummary[]> {
     try {
-      const { data, error } = await supabase.rpc('get_meetings_for_drill_down', {
+      const rpcParams = {
         p_org_id: orgId,
         p_metric_type: metricType,
         p_period_days: periodDays,
         p_user_id: userId || null,
         p_limit: limit,
-      });
+        p_start_date: dateRange ? formatDateForRpc(dateRange.start) : null,
+        p_end_date: dateRange ? formatDateForRpc(dateRange.end) : null,
+      };
+      const { data, error } = await supabase.rpc('get_meetings_for_drill_down', rpcParams);
 
       if (error) throw error;
 
@@ -639,13 +666,17 @@ export class TeamAnalyticsService {
    */
   static async getTeamComparisonMatrix(
     orgId: string,
-    periodDays: TimePeriod = 30
+    periodDays: TimePeriod = 30,
+    dateRange?: DateRange
   ): Promise<RepComparisonData[]> {
     try {
-      const { data, error } = await supabase.rpc('get_team_comparison_matrix', {
+      const rpcParams = {
         p_org_id: orgId,
         p_period_days: periodDays,
-      });
+        p_start_date: dateRange ? formatDateForRpc(dateRange.start) : null,
+        p_end_date: dateRange ? formatDateForRpc(dateRange.end) : null,
+      };
+      const { data, error } = await supabase.rpc('get_team_comparison_matrix', rpcParams);
 
       if (error) throw error;
 
@@ -675,7 +706,8 @@ export class TeamAnalyticsService {
    */
   static async getTeamTrends(
     orgId: string,
-    periodDays: TimePeriod = 30
+    periodDays: TimePeriod = 30,
+    dateRange?: DateRange
   ): Promise<{
     meetingVolume: Array<{ date: string; count: number }>;
     sentimentTrend: Array<{ date: string; avg: number | null }>;
@@ -686,6 +718,7 @@ export class TeamAnalyticsService {
         orgId,
         periodDays,
         granularity: 'day',
+        dateRange,
       });
 
       // Aggregate by date (across all users)
@@ -709,46 +742,90 @@ export class TeamAnalyticsService {
       }
 
       // Build the complete date axis with all dates/buckets in the period
-      const today = startOfDay(new Date());
       type DateBucket = { count: number; sentimentSum: number; sentimentCount: number; talkTimeSum: number; talkTimeCount: number };
       const allDates: string[] = [];
 
-      if (periodDays <= 30) {
-        // 7-day or 30-day: one entry per day
-        for (let i = periodDays - 1; i >= 0; i--) {
-          allDates.push(format(subDays(today, i), 'yyyy-MM-dd'));
-        }
-      } else {
-        // 90-day: 30 buckets of 3 days each
-        // Re-aggregate byDate into 3-day buckets
-        const bucketedByDate = new Map<string, DateBucket>();
+      if (dateRange) {
+        // Custom date range: one entry per day from start to end
+        const rangeStart = startOfDay(dateRange.start);
+        const rangeEnd = startOfDay(dateRange.end);
+        const totalDays = Math.round((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-        for (let bucket = 0; bucket < 30; bucket++) {
-          const bucketStartDaysAgo = periodDays - 1 - (bucket * 3);
-          const bucketKey = format(subDays(today, bucketStartDaysAgo), 'yyyy-MM-dd');
-          const accumulated: DateBucket = { count: 0, sentimentSum: 0, sentimentCount: 0, talkTimeSum: 0, talkTimeCount: 0 };
+        if (totalDays <= 45) {
+          // Up to 45 days: one entry per day
+          for (let i = 0; i < totalDays; i++) {
+            allDates.push(format(subDays(rangeEnd, totalDays - 1 - i), 'yyyy-MM-dd'));
+          }
+        } else {
+          // More than 45 days: bucket into ~30 groups
+          const bucketSize = Math.ceil(totalDays / 30);
+          const bucketedByDate = new Map<string, DateBucket>();
 
-          // Aggregate 3 consecutive days into this bucket
-          for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
-            const dayKey = format(subDays(today, bucketStartDaysAgo - dayOffset), 'yyyy-MM-dd');
-            const dayData = byDate.get(dayKey);
-            if (dayData) {
-              accumulated.count += dayData.count;
-              accumulated.sentimentSum += dayData.sentimentSum;
-              accumulated.sentimentCount += dayData.sentimentCount;
-              accumulated.talkTimeSum += dayData.talkTimeSum;
-              accumulated.talkTimeCount += dayData.talkTimeCount;
+          for (let bucket = 0; bucket < 30; bucket++) {
+            const dayOffset = bucket * bucketSize;
+            if (dayOffset >= totalDays) break;
+            const bucketKey = format(subDays(rangeEnd, totalDays - 1 - dayOffset), 'yyyy-MM-dd');
+            const accumulated: DateBucket = { count: 0, sentimentSum: 0, sentimentCount: 0, talkTimeSum: 0, talkTimeCount: 0 };
+
+            for (let d = 0; d < bucketSize && (dayOffset + d) < totalDays; d++) {
+              const dayKey = format(subDays(rangeEnd, totalDays - 1 - dayOffset - d), 'yyyy-MM-dd');
+              const dayData = byDate.get(dayKey);
+              if (dayData) {
+                accumulated.count += dayData.count;
+                accumulated.sentimentSum += dayData.sentimentSum;
+                accumulated.sentimentCount += dayData.sentimentCount;
+                accumulated.talkTimeSum += dayData.talkTimeSum;
+                accumulated.talkTimeCount += dayData.talkTimeCount;
+              }
             }
+
+            bucketedByDate.set(bucketKey, accumulated);
+            allDates.push(bucketKey);
           }
 
-          bucketedByDate.set(bucketKey, accumulated);
-          allDates.push(bucketKey);
+          byDate.clear();
+          for (const [key, value] of bucketedByDate) {
+            byDate.set(key, value);
+          }
         }
+      } else {
+        // Legacy: rolling window from today
+        const today = startOfDay(new Date());
 
-        // Replace byDate with bucketed version for the mapping below
-        byDate.clear();
-        for (const [key, value] of bucketedByDate) {
-          byDate.set(key, value);
+        if (periodDays <= 30) {
+          // 7-day or 30-day: one entry per day
+          for (let i = periodDays - 1; i >= 0; i--) {
+            allDates.push(format(subDays(today, i), 'yyyy-MM-dd'));
+          }
+        } else {
+          // 90-day: 30 buckets of 3 days each
+          const bucketedByDate = new Map<string, DateBucket>();
+
+          for (let bucket = 0; bucket < 30; bucket++) {
+            const bucketStartDaysAgo = periodDays - 1 - (bucket * 3);
+            const bucketKey = format(subDays(today, bucketStartDaysAgo), 'yyyy-MM-dd');
+            const accumulated: DateBucket = { count: 0, sentimentSum: 0, sentimentCount: 0, talkTimeSum: 0, talkTimeCount: 0 };
+
+            for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
+              const dayKey = format(subDays(today, bucketStartDaysAgo - dayOffset), 'yyyy-MM-dd');
+              const dayData = byDate.get(dayKey);
+              if (dayData) {
+                accumulated.count += dayData.count;
+                accumulated.sentimentSum += dayData.sentimentSum;
+                accumulated.sentimentCount += dayData.sentimentCount;
+                accumulated.talkTimeSum += dayData.talkTimeSum;
+                accumulated.talkTimeCount += dayData.talkTimeCount;
+              }
+            }
+
+            bucketedByDate.set(bucketKey, accumulated);
+            allDates.push(bucketKey);
+          }
+
+          byDate.clear();
+          for (const [key, value] of bucketedByDate) {
+            byDate.set(key, value);
+          }
         }
       }
 

@@ -21,6 +21,7 @@ import { useTeamComparison, type TimePeriod, type RepComparisonData } from '@/li
 
 interface TeamComparisonMatrixProps {
   period: TimePeriod;
+  dateRange?: { start: Date; end: Date };
   onRepClick?: (userId: string, userName: string) => void;
   className?: string;
 }
@@ -150,8 +151,8 @@ function MiniSparkline({ data }: { data: Array<{ count: number }> }) {
   );
 }
 
-export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComparisonMatrixProps) {
-  const { data, isLoading, error } = useTeamComparison(period);
+export function TeamComparisonMatrix({ period, dateRange, onRepClick, className }: TeamComparisonMatrixProps) {
+  const { data, isLoading, error } = useTeamComparison(period, dateRange);
   const [sortField, setSortField] = useState<SortField>('meetings');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
@@ -288,7 +289,7 @@ export function TeamComparisonMatrix({ period, onRepClick, className }: TeamComp
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto flex-1">
+      <div className="overflow-x-auto flex-1 scrollbar-custom">
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-800/30">
             <tr>

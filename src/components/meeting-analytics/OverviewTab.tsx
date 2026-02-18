@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import {
   TrendingUp,
   TrendingDown,
@@ -29,7 +30,6 @@ import {
   Cell,
 } from 'recharts';
 import { format, parseISO } from 'date-fns';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -66,6 +66,14 @@ function getPipelineStatusBadge(status: 'hot' | 'warm' | 'cold') {
   }
 }
 
+function getPipelineBorderColor(status: 'hot' | 'warm' | 'cold'): string {
+  switch (status) {
+    case 'hot': return 'border-l-red-500';
+    case 'warm': return 'border-l-amber-500';
+    case 'cold': return 'border-l-blue-500';
+  }
+}
+
 function TrendBadge({ value }: { value: number }) {
   if (value > 0) {
     return (
@@ -84,7 +92,7 @@ function TrendBadge({ value }: { value: number }) {
     );
   }
   return (
-      <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20">
+    <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/20">
       <Minus className="h-3 w-3 mr-1" />
       0%
     </Badge>
@@ -102,6 +110,17 @@ function getSeverityIcon(severity: 'info' | 'warning' | 'critical') {
   }
 }
 
+function getSeverityGradient(severity: 'info' | 'warning' | 'critical'): string {
+  switch (severity) {
+    case 'critical':
+      return 'bg-gradient-to-r from-red-500/10 via-red-600/5 to-transparent border-red-200/50 dark:border-red-500/20';
+    case 'warning':
+      return 'bg-gradient-to-r from-amber-500/10 via-amber-600/5 to-transparent border-amber-200/50 dark:border-amber-500/20';
+    case 'info':
+      return 'bg-gradient-to-r from-blue-500/10 via-blue-600/5 to-transparent border-blue-200/50 dark:border-blue-500/20';
+  }
+}
+
 // ------------------------------------------------------------------
 // Loading skeleton
 // ------------------------------------------------------------------
@@ -112,74 +131,56 @@ function OverviewSkeleton() {
       {/* KPI row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <div key={i} className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-5 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10">
+            <div className="flex items-center justify-between pb-3">
               <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-20 mb-2" />
-              <Skeleton className="h-3 w-32" />
-            </CardContent>
-          </Card>
+              <Skeleton className="h-9 w-9 rounded-xl" />
+            </div>
+            <Skeleton className="h-8 w-20 mb-2" />
+            <Skeleton className="h-3 w-32" />
+          </div>
         ))}
       </div>
 
       {/* Trends row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-5 w-36" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-48 w-full" />
-            </CardContent>
-          </Card>
+          <div key={i} className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10">
+            <Skeleton className="h-5 w-36 mb-4" />
+            <Skeleton className="h-48 w-full rounded-xl" />
+          </div>
         ))}
       </div>
 
       {/* Top performers */}
-      <Card className="mt-6">
-        <CardHeader>
-          <Skeleton className="h-5 w-48" />
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10">
+        <Skeleton className="h-5 w-48 mb-4" />
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-xl" />
+          ))}
+        </div>
+      </div>
 
       {/* Pipeline health */}
-      <Card className="mt-6">
-        <CardHeader>
-          <Skeleton className="h-5 w-36" />
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10">
+        <Skeleton className="h-5 w-36 mb-4" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
+      </div>
 
       {/* Alerts */}
-      <Card className="mt-6">
-        <CardHeader>
-          <Skeleton className="h-5 w-28" />
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10">
+        <Skeleton className="h-5 w-28 mb-4" />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full rounded-xl" />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -212,10 +213,12 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
 
   if (!dashboard) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <Activity className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">No data available</h3>
-        <p className="text-sm text-muted-foreground">
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="p-5 bg-gray-100 dark:bg-gray-800/50 rounded-2xl mb-5">
+          <Activity className="h-14 w-14 text-gray-400 dark:text-gray-500" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">No data available</h3>
+        <p className="text-sm text-muted-foreground max-w-xs">
           Meeting analytics data will appear here once transcripts are processed.
         </p>
       </div>
@@ -235,6 +238,8 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
     { name: 'This Week', value: trends.scoreThisWeek },
   ];
 
+  const GLASS_CARD = 'bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10';
+
   return (
     <div className="space-y-6">
       {/* ---------------------------------------------------------- */}
@@ -242,164 +247,206 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
       {/* ---------------------------------------------------------- */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Meetings */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Meetings</CardTitle>
-            <Video className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary.totalMeetings}</div>
-            <p className="text-xs text-muted-foreground">Analyzed transcripts</p>
-          </CardContent>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0 }}
+          whileHover={{ y: -2 }}
+          className={`${GLASS_CARD} p-5 sm:p-6`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Total Meetings
+            </p>
+            <div className="p-2 bg-emerald-600/10 dark:bg-emerald-500/20 rounded-xl border border-emerald-600/20">
+              <Video className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+            {summary.totalMeetings}
+          </div>
+          <p className="text-xs text-muted-foreground">Analyzed transcripts</p>
+        </motion.div>
 
         {/* Avg Performance */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Performance</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {summary.avgPerformanceScore}/100{' '}
-              <span className="text-base font-semibold text-muted-foreground">
-                ({getGradeLetter(summary.avgPerformanceScore)})
-              </span>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.05 }}
+          whileHover={{ y: -2 }}
+          className={`${GLASS_CARD} p-5 sm:p-6`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Avg Performance
+            </p>
+            <div className="p-2 bg-violet-600/10 dark:bg-violet-500/20 rounded-xl border border-violet-600/20">
+              <Target className="h-4 w-4 text-violet-600 dark:text-violet-400" />
             </div>
-            <p className="text-xs text-muted-foreground">Overall meeting quality</p>
-          </CardContent>
-        </Card>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+            {summary.avgPerformanceScore}/100{' '}
+            <span className="text-base font-semibold text-muted-foreground">
+              ({getGradeLetter(summary.avgPerformanceScore)})
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">Overall meeting quality</p>
+        </motion.div>
 
         {/* Action Items */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Action Items</CardTitle>
-            <CheckSquare className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {summary.completedActionItems}/{summary.totalActionItems}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+          whileHover={{ y: -2 }}
+          className={`${GLASS_CARD} p-5 sm:p-6`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Action Items
+            </p>
+            <div className="p-2 bg-blue-600/10 dark:bg-blue-500/20 rounded-xl border border-blue-600/20">
+              <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
-            <p className="text-xs text-muted-foreground">Completed</p>
-          </CardContent>
-        </Card>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+            {summary.completedActionItems}/{summary.totalActionItems}
+          </div>
+          <p className="text-xs text-muted-foreground">Completed</p>
+        </motion.div>
 
         {/* Talk Time Balance */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Talk Time Balance</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary.avgTalkTimeBalance}%</div>
-            <p className="text-xs text-muted-foreground">Average balance across meetings</p>
-          </CardContent>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.15 }}
+          whileHover={{ y: -2 }}
+          className={`${GLASS_CARD} p-5 sm:p-6`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Talk Time Balance
+            </p>
+            <div className="p-2 bg-amber-600/10 dark:bg-amber-500/20 rounded-xl border border-amber-600/20">
+              <Users className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+            {summary.avgTalkTimeBalance}%
+          </div>
+          <p className="text-xs text-muted-foreground">Average balance across meetings</p>
+        </motion.div>
       </div>
 
       {/* ---------------------------------------------------------- */}
       {/* B) Trends Section                                           */}
       {/* ---------------------------------------------------------- */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Meeting Volume */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          className={GLASS_CARD}
+        >
+          <div className="p-6 pb-2 flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Meeting Volume</CardTitle>
-              <CardDescription>
-                {trends.meetingsThisWeek} meetings this week vs {trends.meetingsLastWeek} last week
-              </CardDescription>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Meeting Volume</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {trends.meetingsThisWeek} this week vs {trends.meetingsLastWeek} last week
+              </p>
             </div>
             <TrendBadge value={trends.meetingsTrend} />
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="p-6 pt-4">
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={meetingVolumeData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700/50" />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200/50 dark:stroke-gray-700/30" />
                   <XAxis dataKey="name" className="text-xs" tick={{ fill: 'currentColor' }} />
                   <YAxis className="text-xs" tick={{ fill: 'currentColor' }} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--tooltip-bg, #fff)',
-                      borderColor: 'var(--tooltip-border, #e2e8f0)',
-                      borderRadius: '8px',
-                    }}
-                  />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} wrapperStyle={TOOLTIP_WRAPPER_STYLE} cursor={{ fill: 'rgba(255, 255, 255, 0.06)' }} />
                   <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </motion.div>
 
         {/* Performance Trend */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.25 }}
+          className={GLASS_CARD}
+        >
+          <div className="p-6 pb-2 flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Performance Trend</CardTitle>
-              <CardDescription>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Performance Trend</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Score: {trends.scoreThisWeek} this week vs {trends.scoreLastWeek} last week
-              </CardDescription>
+              </p>
             </div>
             <TrendBadge value={trends.scoreTrend} />
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="p-6 pt-4">
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={performanceTrendData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700/50" />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200/50 dark:stroke-gray-700/30" />
                   <XAxis dataKey="name" className="text-xs" tick={{ fill: 'currentColor' }} />
                   <YAxis className="text-xs" tick={{ fill: 'currentColor' }} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--tooltip-bg, #fff)',
-                      borderColor: 'var(--tooltip-border, #e2e8f0)',
-                      borderRadius: '8px',
-                    }}
-                  />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} wrapperStyle={TOOLTIP_WRAPPER_STYLE} cursor={{ fill: 'rgba(255, 255, 255, 0.06)' }} />
                   <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </motion.div>
       </div>
 
       {/* ---------------------------------------------------------- */}
       {/* C) Top Performers                                           */}
       {/* ---------------------------------------------------------- */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">Top Performing Meetings</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.3 }}
+        className={GLASS_CARD}
+      >
+        <div className="p-6 pb-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Top Performing Meetings</h3>
+        </div>
+        <div className="px-6 pb-6">
           {topPerformers.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No performer data available yet.</p>
+            <p className="text-sm text-muted-foreground py-8 text-center">No performer data available yet.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700/50">
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Meeting</th>
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Score</th>
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Grade</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Date</th>
+                    <th className="text-left py-2 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Meeting</th>
+                    <th className="text-left py-2 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Score</th>
+                    <th className="text-left py-2 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Grade</th>
+                    <th className="text-left py-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {topPerformers.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800/50 last:border-0">
-                      <td className="py-2.5 pr-4 text-gray-900 dark:text-gray-100 font-medium">
+                    <tr
+                      key={item.id}
+                      className="border-b border-gray-100 dark:border-gray-800/50 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+                    >
+                      <td className="py-3 pr-4 text-gray-900 dark:text-gray-100 font-medium">
                         {item.title || 'Untitled Meeting'}
                       </td>
-                      <td className="py-2.5 pr-4 text-gray-900 dark:text-gray-100">{item.score}</td>
-                      <td className="py-2.5 pr-4">
+                      <td className="py-3 pr-4 text-gray-900 dark:text-gray-100">{item.score}</td>
+                      <td className="py-3 pr-4">
                         <Badge variant="outline" className={getGradeBadgeColor(item.grade)}>
                           {item.grade}
                         </Badge>
                       </td>
-                      <td className="py-2.5 text-muted-foreground">
+                      <td className="py-3 text-muted-foreground">
                         {new Date(item.createdAt).toLocaleDateString()}
                       </td>
                     </tr>
@@ -408,25 +455,33 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </motion.div>
 
       {/* ---------------------------------------------------------- */}
       {/* D) Pipeline Health                                          */}
       {/* ---------------------------------------------------------- */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">Pipeline Health</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.35 }}
+        className={GLASS_CARD}
+      >
+        <div className="p-6 pb-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Pipeline Health</h3>
+        </div>
+        <div className="px-6 pb-6">
           {pipelineHealth.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No pipeline data available yet.</p>
+            <p className="text-sm text-muted-foreground py-8 text-center">No pipeline data available yet.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {pipelineHealth.map((item) => (
-                <div
+              {pipelineHealth.map((item, index) => (
+                <motion.div
                   key={item.id}
-                  className="rounded-lg border border-gray-200 dark:border-gray-700/50 p-4"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                  className={`rounded-2xl border-l-4 border border-gray-200/50 dark:border-gray-700/30 p-4 bg-white/60 dark:bg-gray-800/20 hover:border-gray-300/50 dark:hover:border-gray-600/40 transition-all duration-300 ${getPipelineBorderColor(item.status)}`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate pr-2">
@@ -444,29 +499,34 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
                       {item.blockerCount} blocker{item.blockerCount !== 1 ? 's' : ''}
                     </div>
                   )}
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </motion.div>
 
       {/* ---------------------------------------------------------- */}
       {/* E) Alerts                                                   */}
       {/* ---------------------------------------------------------- */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">Active Alerts</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.4 }}
+        className={GLASS_CARD}
+      >
+        <div className="p-6 pb-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Active Alerts</h3>
+        </div>
+        <div className="px-6 pb-6">
           {dashboardAlerts.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No active alerts.</p>
+            <p className="text-sm text-muted-foreground py-8 text-center">No active alerts.</p>
           ) : (
             <div className="space-y-3">
               {dashboardAlerts.map((alert, index) => (
                 <div
                   key={`${alert.type}-${alert.transcriptId ?? index}`}
-                  className="flex items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700/50 p-3"
+                  className={`flex items-start gap-3 rounded-2xl border p-4 ${getSeverityGradient(alert.severity)}`}
                 >
                   {getSeverityIcon(alert.severity)}
                   <div className="min-w-0 flex-1">
@@ -493,8 +553,8 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </motion.div>
 
       {/* ---------------------------------------------------------- */}
       {/* F) Performance Trends (tabbed charts)                       */}
@@ -513,10 +573,15 @@ export function OverviewTab({ timeRange }: OverviewTabProps) {
 // ------------------------------------------------------------------
 
 const TOOLTIP_STYLE = {
-  backgroundColor: 'hsl(var(--card))',
-  borderColor: 'hsl(var(--border))',
-  borderRadius: '8px',
-  color: 'hsl(var(--card-foreground))',
+  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+  backdropFilter: 'blur(12px)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: '12px',
+  color: '#f1f5f9',
+};
+
+const TOOLTIP_WRAPPER_STYLE = {
+  transition: 'opacity 0.15s ease',
 };
 
 const TAB_TRIGGER_CLASS =
@@ -588,11 +653,16 @@ function PerformanceTrendsSection({
   const BAR_COLORS: Record<string, string> = { hot: '#ef4444', warm: '#f59e0b', cold: '#3b82f6' };
 
   return (
-    <Card className="mt-6">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: 0.45 }}
+      className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10"
+    >
       <div className="p-6">
         <Tabs defaultValue={defaultTab} className="space-y-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Performance Trends</CardTitle>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Performance Trends</h3>
             <TabsList className="bg-gray-100 dark:bg-gray-800/50 p-1 rounded-lg">
               {hasSentiment && (
                 <TabsTrigger value="sentiment" className={TAB_TRIGGER_CLASS}>
@@ -618,7 +688,7 @@ function PerformanceTrendsSection({
           {/* Tab 1: Sentiment (LineChart) */}
           {hasSentiment && (
             <TabsContent value="sentiment" className="mt-0">
-              <div className="h-72">
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={sentimentChartData}>
                     <defs>
@@ -627,7 +697,7 @@ function PerformanceTrendsSection({
                         <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200/50 dark:stroke-gray-700/30" />
                     <XAxis
                       dataKey="dateFormatted"
                       tick={{ fontSize: 12 }}
@@ -641,6 +711,8 @@ function PerformanceTrendsSection({
                     />
                     <Tooltip
                       contentStyle={TOOLTIP_STYLE}
+                      wrapperStyle={TOOLTIP_WRAPPER_STYLE}
+                      cursor={{ stroke: 'rgba(255,255,255,0.15)', strokeWidth: 1 }}
                       formatter={(value: number) => [value.toFixed(2), 'Positive Score']}
                       labelFormatter={(label) => `Date: ${label}`}
                     />
@@ -664,7 +736,7 @@ function PerformanceTrendsSection({
           {/* Tab 2: Talk Time (AreaChart) */}
           {hasTalkTime && (
             <TabsContent value="talktime" className="mt-0">
-              <div className="h-72">
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={talkTimeChartData}>
                     <defs>
@@ -673,7 +745,7 @@ function PerformanceTrendsSection({
                         <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200/50 dark:stroke-gray-700/30" />
                     <XAxis
                       dataKey="label"
                       tick={{ fontSize: 11 }}
@@ -691,6 +763,8 @@ function PerformanceTrendsSection({
                     />
                     <Tooltip
                       contentStyle={TOOLTIP_STYLE}
+                      wrapperStyle={TOOLTIP_WRAPPER_STYLE}
+                      cursor={{ fill: 'rgba(255, 255, 255, 0.06)' }}
                       formatter={(value: number) => [`${value.toFixed(1)}%`, 'Top Speaker %']}
                     />
                     <ReferenceLine y={45} stroke="#22c55e" strokeDasharray="3 3" opacity={0.5} />
@@ -718,10 +792,10 @@ function PerformanceTrendsSection({
           {/* Tab 3: Conversion (BarChart) */}
           {hasConversion && (
             <TabsContent value="conversion" className="mt-0">
-              <div className="h-72">
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={conversionChartData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200/50 dark:stroke-gray-700/30" />
                     <XAxis
                       dataKey="label"
                       tick={{ fontSize: 11 }}
@@ -738,6 +812,8 @@ function PerformanceTrendsSection({
                     />
                     <Tooltip
                       contentStyle={TOOLTIP_STYLE}
+                      wrapperStyle={TOOLTIP_WRAPPER_STYLE}
+                      cursor={{ fill: 'rgba(255, 255, 255, 0.06)' }}
                       formatter={(value: number) => [value, 'Conversion Score']}
                     />
                     <Bar dataKey="conversionScore" name="Conversion Score" radius={[4, 4, 0, 0]}>
@@ -766,6 +842,6 @@ function PerformanceTrendsSection({
           )}
         </Tabs>
       </div>
-    </Card>
+    </motion.div>
   );
 }

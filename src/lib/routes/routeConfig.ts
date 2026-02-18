@@ -141,7 +141,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'any',
     label: 'Team Analytics',
     icon: BarChart3,
-    showInNav: true,
+    showInNav: false,
     navSection: 'main',
     order: 4,
     displayGroup: 1,
