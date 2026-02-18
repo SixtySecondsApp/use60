@@ -49,8 +49,10 @@ function getTransactionIcon(type: CreditTransaction['type']) {
 }
 
 function formatAmount(amount: number) {
-  const prefix = amount >= 0 ? '+' : '';
-  return `${prefix}$${Math.abs(amount).toFixed(2)}`;
+  const prefix = amount >= 0 ? '+' : '-';
+  const abs = Math.abs(amount);
+  const formatted = abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1);
+  return `${prefix}${formatted} cr`;
 }
 
 function timeAgo(dateStr: string) {
@@ -89,7 +91,7 @@ export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
           </span>
         </div>
         <div className="text-2xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">
-          ${balance.toFixed(2)}
+          {balance % 1 === 0 ? `${Math.round(balance)} cr` : `${balance.toFixed(1)} cr`}
         </div>
       </div>
 
@@ -102,7 +104,7 @@ export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
           <TrendingDown className="w-3.5 h-3.5" />
           <span>Burn rate:</span>
           <span className="font-medium text-gray-700 dark:text-gray-200">
-            ${dailyBurnRate.toFixed(2)}/day
+            {dailyBurnRate % 1 === 0 ? dailyBurnRate.toFixed(0) : dailyBurnRate.toFixed(1)} cr/day
           </span>
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -140,8 +142,8 @@ export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
                         style={{ width: `${Math.max(widthPct, 2)}%` }}
                       />
                     </div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums w-12 text-right flex-shrink-0">
-                      ${feature.totalCost.toFixed(2)}
+                    <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums w-14 text-right flex-shrink-0">
+                      {feature.totalCost % 1 === 0 ? feature.totalCost.toFixed(0) : feature.totalCost.toFixed(1)} cr
                     </span>
                   </div>
                 );

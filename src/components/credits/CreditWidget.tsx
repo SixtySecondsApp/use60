@@ -8,7 +8,7 @@
  *   pulsing red = 0 balance
  */
 
-import { CreditCard } from 'lucide-react';
+import { CreditCard, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import { useCreditBalance } from '@/lib/hooks/useCreditBalance';
@@ -52,9 +52,12 @@ export function CreditWidget() {
     );
   }
 
-  const { balance, projectedDaysRemaining } = data;
+  const { balance, projectedDaysRemaining, autoTopUp } = data;
   const colorClass = getBalanceColor(balance, projectedDaysRemaining);
   const dotClass = getDotColor(balance, projectedDaysRemaining);
+
+  // Format: integer if whole, one decimal otherwise, e.g. "342 cr" or "342.5 cr"
+  const formattedBalance = balance % 1 === 0 ? `${Math.round(balance)} cr` : `${balance.toFixed(1)} cr`;
 
   return (
     <DropdownMenu>
@@ -68,11 +71,14 @@ export function CreditWidget() {
         >
           <CreditCard className="w-4 h-4" />
           <span className="hidden sm:inline text-sm font-medium tabular-nums">
-            {balance.toFixed(2)} credits
+            {formattedBalance}
           </span>
           <span className="sm:hidden text-sm font-medium tabular-nums">
-            {balance.toFixed(2)}
+            {formattedBalance}
           </span>
+          {autoTopUp?.enabled && (
+            <RefreshCw className="w-3 h-3 opacity-70 flex-shrink-0" title="Auto top-up enabled" />
+          )}
           <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', dotClass)} />
         </button>
       </DropdownMenuTrigger>

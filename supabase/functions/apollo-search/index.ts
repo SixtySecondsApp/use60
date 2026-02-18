@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
-import { checkCreditBalance } from '../_shared/costTracking.ts'
+import { checkCreditBalance, logFlatRateCostEvent } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,7 +73,7 @@ interface ApolloSearchParams {
   _skip_credit_deduction?: boolean
 }
 
-const APOLLO_SEARCH_CREDIT_COST = 0.10
+const APOLLO_SEARCH_CREDIT_COST = 0.3
 
 interface NormalizedContact {
   apollo_id: string
@@ -333,16 +333,15 @@ serve(async (req) => {
     const totalResults = (apolloData.pagination?.total_entries as number) || 0
 
     if (!_skip_credit_deduction && membership.org_id) {
-      try {
-        await supabase.rpc('deduct_credits', {
-          p_org_id: membership.org_id,
-          p_amount: APOLLO_SEARCH_CREDIT_COST,
-          p_description: 'Apollo people search',
-          p_feature_key: 'apollo_search',
-        })
-      } catch (err) {
-        console.warn('[apollo-search] Credit deduction error (non-blocking):', err)
-      }
+      await logFlatRateCostEvent(
+        supabase,
+        user.id,
+        membership.org_id,
+        'apollo',
+        'apollo-people-search',
+        APOLLO_SEARCH_CREDIT_COST,
+        'apollo_search',
+      )
     }
 
     // Log first result for debugging field names

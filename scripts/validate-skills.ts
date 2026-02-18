@@ -144,6 +144,30 @@ async function main() {
         warns.push('Content template is very short or empty');
       }
 
+      // 7. command_centre validation
+      const commandCentre = fm.command_centre as Record<string, unknown> | undefined;
+      if (commandCentre !== undefined) {
+        if (typeof commandCentre !== 'object' || commandCentre === null) {
+          issues.push('command_centre must be an object');
+        } else {
+          if (commandCentre.enabled !== undefined && typeof commandCentre.enabled !== 'boolean') {
+            issues.push('command_centre.enabled must be a boolean');
+          }
+          if (commandCentre.label !== undefined && typeof commandCentre.label !== 'string') {
+            issues.push('command_centre.label must be a string');
+          }
+          if (commandCentre.label && typeof commandCentre.label === 'string' && !commandCentre.label.startsWith('/')) {
+            warns.push('command_centre.label should start with "/" (e.g. "/email")');
+          }
+          if (commandCentre.description !== undefined && typeof commandCentre.description !== 'string') {
+            issues.push('command_centre.description must be a string');
+          }
+          if (commandCentre.icon !== undefined && typeof commandCentre.icon !== 'string') {
+            issues.push('command_centre.icon must be a string (Lucide icon name)');
+          }
+        }
+      }
+
       if (issues.length > 0) {
         errors.push({ file: relPath, issues });
         console.log(`  ✗ ${relPath}`);

@@ -13,6 +13,11 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  command_centre:
+    enabled: true
+    label: "/call-prep"
+    description: "Generate a call script with objection handling"
+    icon: "phone"
   context_profile: full
   agent_affinity:
     - meetings

@@ -11,6 +11,11 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  command_centre:
+    enabled: true
+    label: "/summarize"
+    description: "Summarize meeting or activity history"
+    icon: "file-edit"
   context_profile: full
   agent_affinity:
     - meetings

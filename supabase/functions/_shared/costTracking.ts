@@ -1,14 +1,166 @@
 /**
  * Cost Tracking Helper for Edge Functions
- * 
- * Use this in edge functions to log AI costs automatically
+ *
+ * Use this in edge functions to log AI costs automatically.
+ * Costs are now stored in credit units (1 credit ≈ $0.10 USD).
+ * Uses FIFO pack deduction via deduct_credits_fifo().
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { getActionCost, type IntelligenceTier } from './creditPacks.ts';
+
+// ---------------------------------------------------------------------------
+// Intelligence tier lookup
+// ---------------------------------------------------------------------------
 
 /**
- * Log AI cost event from an edge function
- * This should be called after every AI API call
+ * Fetches the intelligence tier configured for a specific feature in this org.
+ * Returns 'medium' as the safe default if nothing is configured.
+ */
+async function getOrgIntelligenceTier(
+  supabaseClient: any,
+  orgId: string,
+  featureKey: string,
+): Promise<IntelligenceTier> {
+  try {
+    const { data } = await supabaseClient
+      .from('ai_feature_config')
+      .select('intelligence_tier')
+      .eq('org_id', orgId)
+      .eq('feature_key', featureKey)
+      .maybeSingle();
+
+    const tier = data?.intelligence_tier as IntelligenceTier | undefined;
+    if (tier === 'low' || tier === 'medium' || tier === 'high') return tier;
+  } catch {
+    // Silently fall through to default
+  }
+  return 'medium';
+}
+
+// ---------------------------------------------------------------------------
+// Auto top-up check helper
+// ---------------------------------------------------------------------------
+
+/**
+ * After a credit deduction, checks if the new balance is below the auto top-up
+ * threshold and enqueues a top-up if conditions are met.
+ * Fire-and-forget: does not throw on failure.
+ */
+async function maybeEnqueueAutoTopUp(
+  supabaseClient: any,
+  orgId: string,
+  newBalance: number,
+): Promise<void> {
+  try {
+    const { data: settings } = await supabaseClient
+      .from('auto_top_up_settings')
+      .select('enabled, threshold, pack_type, monthly_cap, stripe_payment_method_id')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (!settings?.enabled || !settings.stripe_payment_method_id) return;
+    if (newBalance > (settings.threshold ?? 10)) return;
+
+    // Check how many top-ups have already occurred this calendar month
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const { count } = await supabaseClient
+      .from('auto_top_up_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('status', 'success')
+      .gte('triggered_at', monthStart.toISOString());
+
+    if ((count ?? 0) >= (settings.monthly_cap ?? 3)) {
+      // Monthly cap reached — insert a 'capped' log entry so admins can see it
+      await supabaseClient.from('auto_top_up_log').insert({
+        org_id: orgId,
+        trigger_balance: newBalance,
+        pack_type: settings.pack_type,
+        status: 'capped',
+        error_message: `Monthly auto top-up cap of ${settings.monthly_cap} reached`,
+      });
+      return;
+    }
+
+    // Invoke the auto top-up edge function asynchronously
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    if (!supabaseUrl || !serviceKey) return;
+
+    // Fire-and-forget: don't await the fetch so we don't block the main path
+    fetch(`${supabaseUrl}/functions/v1/credit-auto-topup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ org_id: orgId, trigger_balance: newBalance }),
+    }).catch((err) => {
+      console.warn('[CostTracking] Auto top-up enqueue failed (non-fatal):', err);
+    });
+  } catch (err) {
+    // Non-fatal — never block the original deduction path
+    if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
+      console.warn('[CostTracking] maybeEnqueueAutoTopUp error:', err);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared deduction helper
+// ---------------------------------------------------------------------------
+
+async function deductAndMaybeTopUp(
+  supabaseClient: any,
+  orgId: string,
+  creditAmount: number,
+  description: string,
+  featureKey: string | null,
+  costEventId: string | null,
+): Promise<void> {
+  if (creditAmount <= 0) return;
+  try {
+    const { data: newBalance, error: deductError } = await supabaseClient.rpc('deduct_credits_fifo', {
+      p_org_id: orgId,
+      p_amount: creditAmount,
+      p_description: description,
+      p_feature_key: featureKey,
+      p_cost_event_id: costEventId,
+    });
+
+    if (deductError) {
+      if (
+        !deductError.message.includes('relation') &&
+        !deductError.message.includes('does not exist') &&
+        !deductError.message.includes('function')
+      ) {
+        console.warn('[CostTracking] FIFO credit deduction error:', deductError);
+      }
+      return;
+    }
+
+    // newBalance is the remaining balance after deduction (or -1 for insufficient)
+    if (typeof newBalance === 'number' && newBalance >= 0) {
+      await maybeEnqueueAutoTopUp(supabaseClient, orgId, newBalance);
+    }
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
+      console.warn('[CostTracking] deductAndMaybeTopUp exception:', err);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// logAICostEvent — token-based AI calls (Anthropic, Gemini, etc.)
+// ---------------------------------------------------------------------------
+
+/**
+ * Log AI cost event from an edge function.
+ * Determines credit cost by feature_key + org intelligence tier from ACTION_CREDIT_COSTS.
+ * Calls deduct_credits_fifo() for FIFO pack consumption.
  */
 export async function logAICostEvent(
   supabaseClient: any,
@@ -31,7 +183,7 @@ export async function logAICostEvent(
         .order('created_at', { ascending: true })
         .limit(1)
         .single();
-      
+
       orgId = membership?.org_id || null;
     }
 
@@ -40,22 +192,11 @@ export async function logAICostEvent(
       return;
     }
 
-    // Calculate cost using database function
-    const { data: costData, error: costError } = await supabaseClient.rpc('calculate_token_cost', {
-      p_provider: provider,
-      p_model: model,
-      p_input_tokens: inputTokens,
-      p_output_tokens: outputTokens,
-    });
+    // Determine credit cost using feature key + org intelligence tier
+    const tier = await getOrgIntelligenceTier(supabaseClient, orgId, feature ?? 'copilot_chat');
+    const creditCost = getActionCost(feature ?? 'copilot_chat', tier);
 
-    if (costError) {
-      console.warn('[CostTracking] Error calculating cost:', costError);
-      return;
-    }
-
-    const estimatedCost = typeof costData === 'number' ? costData : parseFloat(costData || '0');
-
-    // Log to ai_cost_events table
+    // Log to ai_cost_events table (estimated_cost now stores credit units)
     const { data: insertedCostEvent, error: insertError } = await supabaseClient
       .from('ai_cost_events')
       .insert({
@@ -66,45 +207,28 @@ export async function logAICostEvent(
         feature: feature || null,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
-        estimated_cost: estimatedCost,
+        estimated_cost: creditCost,
         metadata: metadata || null,
       })
       .select('id')
       .single();
 
     if (insertError) {
-      // Silently fail if table doesn't exist yet (expected during initial setup)
       if (!insertError.message.includes('relation') && !insertError.message.includes('does not exist')) {
         console.warn('[CostTracking] Error logging cost event:', insertError);
       }
     }
 
-    // Deduct credits from org balance
-    try {
-      if (orgId && estimatedCost > 0) {
-        const { error: deductError } = await supabaseClient.rpc('deduct_credits', {
-          p_org_id: orgId,
-          p_amount: estimatedCost,
-          p_description: `AI usage: ${feature || 'unknown'}`,
-          p_feature_key: feature || null,
-          p_cost_event_id: insertedCostEvent?.id ?? null,
-        });
-
-        if (deductError) {
-          // Silently fail if credit tables don't exist yet (backward compat during rollout)
-          if (!deductError.message.includes('relation') && !deductError.message.includes('does not exist') && !deductError.message.includes('function')) {
-            console.warn('[CostTracking] Credit deduction error:', deductError);
-          }
-        }
-      }
-    } catch (err) {
-      // Silently fail if credit system isn't set up yet
-      if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
-        console.warn('[CostTracking] Credit deduction exception:', err);
-      }
-    }
+    // FIFO credit deduction
+    await deductAndMaybeTopUp(
+      supabaseClient,
+      orgId,
+      creditCost,
+      `AI usage: ${feature || 'unknown'} [${tier}]`,
+      feature || null,
+      insertedCostEvent?.id ?? null,
+    );
   } catch (err) {
-    // Silently fail if cost tracking isn't set up yet
     if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
       console.warn('[CostTracking] Error in cost logging:', err);
     }
@@ -134,7 +258,9 @@ export function extractGeminiUsage(response: any): { inputTokens: number; output
 
 /**
  * Log a flat-rate cost event (non-token-based providers like Exa, Apollo, AI Ark).
- * Inserts into ai_cost_events for analytics and calls deduct_credits for balance.
+ * Inserts into ai_cost_events for analytics and calls deduct_credits_fifo for balance.
+ *
+ * @param creditAmount - Credit units to deduct (e.g. 0.3 for an Apollo search)
  */
 export async function logFlatRateCostEvent(
   supabaseClient: any,
@@ -142,12 +268,12 @@ export async function logFlatRateCostEvent(
   orgId: string,
   provider: string,
   model: string,
-  cost: number,
+  creditAmount: number,
   feature?: string,
   metadata?: Record<string, unknown>
 ): Promise<void> {
   try {
-    // Log to ai_cost_events for usage analytics
+    // Log to ai_cost_events for usage analytics (estimated_cost = credit units)
     const { data: insertedCostEvent, error: insertError } = await supabaseClient
       .from('ai_cost_events')
       .insert({
@@ -158,7 +284,7 @@ export async function logFlatRateCostEvent(
         feature: feature || null,
         input_tokens: 0,
         output_tokens: 0,
-        estimated_cost: cost,
+        estimated_cost: creditAmount,
         metadata: metadata || null,
       })
       .select('id')
@@ -170,22 +296,15 @@ export async function logFlatRateCostEvent(
       }
     }
 
-    // Deduct credits from org balance
-    if (cost > 0) {
-      const { error: deductError } = await supabaseClient.rpc('deduct_credits', {
-        p_org_id: orgId,
-        p_amount: cost,
-        p_description: `${provider} usage: ${feature || 'unknown'}`,
-        p_feature_key: feature || null,
-        p_cost_event_id: insertedCostEvent?.id ?? null,
-      });
-
-      if (deductError) {
-        if (!deductError.message.includes('relation') && !deductError.message.includes('does not exist') && !deductError.message.includes('function')) {
-          console.warn('[CostTracking] Flat rate credit deduction error:', deductError);
-        }
-      }
-    }
+    // FIFO credit deduction
+    await deductAndMaybeTopUp(
+      supabaseClient,
+      orgId,
+      creditAmount,
+      `${provider} usage: ${feature || 'unknown'}`,
+      feature || null,
+      insertedCostEvent?.id ?? null,
+    );
   } catch (err) {
     if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
       console.warn('[CostTracking] Flat rate cost logging exception:', err);
@@ -206,15 +325,16 @@ export interface BudgetCheckResult {
 
 /**
  * Check if an agent call is within the org's daily budget.
+ * budgetLimitCredits is in credit units (e.g. 50 = 50 credits).
  * Returns { allowed: true } if under budget or if tracking isn't set up.
  */
 export async function checkAgentBudget(
   supabaseClient: any,
   orgId: string,
-  budgetLimitUsd: number
+  budgetLimitCredits: number
 ): Promise<BudgetCheckResult> {
   try {
-    // Query today's total AI cost for this org
+    // Query today's total AI cost for this org (in credit units)
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -225,12 +345,11 @@ export async function checkAgentBudget(
       .gte('created_at', todayStart.toISOString());
 
     if (error) {
-      // If table doesn't exist, allow the call
       if (error.message.includes('relation') || error.message.includes('does not exist')) {
-        return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitUsd };
+        return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitCredits };
       }
       console.warn('[CostTracking] Budget check error:', error);
-      return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitUsd };
+      return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitCredits };
     }
 
     const todaySpend = (data || []).reduce(
@@ -239,19 +358,19 @@ export async function checkAgentBudget(
       0
     );
 
-    if (todaySpend >= budgetLimitUsd) {
+    if (todaySpend >= budgetLimitCredits) {
       return {
         allowed: false,
         todaySpend,
-        budgetLimit: budgetLimitUsd,
-        message: `Daily AI budget limit reached ($${todaySpend.toFixed(2)} of $${budgetLimitUsd.toFixed(2)}). Multi-agent mode will resume tomorrow. You can still use single-agent mode.`,
+        budgetLimit: budgetLimitCredits,
+        message: `Daily AI budget limit reached (${todaySpend.toFixed(1)} of ${budgetLimitCredits.toFixed(1)} credits). Multi-agent mode will resume tomorrow. You can still use single-agent mode.`,
       };
     }
 
-    return { allowed: true, todaySpend, budgetLimit: budgetLimitUsd };
+    return { allowed: true, todaySpend, budgetLimit: budgetLimitCredits };
   } catch (err) {
     console.warn('[CostTracking] Budget check exception:', err);
-    return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitUsd };
+    return { allowed: true, todaySpend: 0, budgetLimit: budgetLimitCredits };
   }
 }
 
@@ -311,15 +430,50 @@ export async function checkCreditBalance(
   }
 }
 
+// =============================================================================
+// AR Budget Check (Autonomous Research / Proactive Agents)
+// =============================================================================
 
+export interface ArBudgetCheckResult {
+  allowed: boolean;
+  usedThisMonth: number;
+  cap: number | null;
+  reason?: string;
+}
 
+/**
+ * Pre-flight check for autonomous-research agent runs.
+ * Calls the check_ar_budget() RPC which enforces monthly credit caps.
+ * Returns allowed=true if under budget or if tracking isn't set up.
+ */
+export async function checkArBudget(
+  supabaseClient: any,
+  orgId: string
+): Promise<ArBudgetCheckResult> {
+  try {
+    const { data, error } = await supabaseClient.rpc('check_ar_budget', {
+      p_org_id: orgId,
+    });
 
+    if (error) {
+      if (error.message.includes('relation') || error.message.includes('does not exist') || error.message.includes('function')) {
+        return { allowed: true, usedThisMonth: 0, cap: null };
+      }
+      console.warn('[CostTracking] AR budget check error:', error);
+      return { allowed: true, usedThisMonth: 0, cap: null };
+    }
 
-
-
-
-
-
+    return {
+      allowed: data?.allowed ?? true,
+      usedThisMonth: data?.used_this_month ?? 0,
+      cap: data?.cap ?? null,
+      reason: data?.reason,
+    };
+  } catch (err) {
+    console.warn('[CostTracking] AR budget check exception:', err);
+    return { allowed: true, usedThisMonth: 0, cap: null };
+  }
+}
 
 
 

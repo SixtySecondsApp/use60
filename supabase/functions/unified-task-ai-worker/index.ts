@@ -54,7 +54,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { task_id } = await req.json();
+    const { task_id, skill_key } = await req.json();
 
     if (!task_id) {
       return errorResponse('Missing task_id in request body', req, 400);
@@ -92,32 +92,38 @@ serve(async (req) => {
       console.error('Failed to update ai_status to working:', updateWorkingError);
     }
 
-    // Dispatch to handler based on deliverable_type
+    // Dispatch to handler based on skill_key (if provided) or deliverable_type
     let deliverableData: Record<string, unknown>;
 
     try {
-      switch (task.deliverable_type) {
-        case 'email_draft':
-          deliverableData = await handleEmailDraft(supabase, task);
-          break;
-        case 'research_brief':
-          deliverableData = await handleResearchBrief(supabase, task);
-          break;
-        case 'meeting_prep':
-          deliverableData = await handleMeetingPrep(supabase, task);
-          break;
-        case 'crm_update':
-          deliverableData = await handleCrmUpdate(supabase, task);
-          break;
-        case 'content_draft':
-          deliverableData = await handleContentDraft(supabase, task);
-          break;
-        default:
-          return errorResponse(
-            `Unknown deliverable_type: ${task.deliverable_type}`,
-            req,
-            400
-          );
+      if (skill_key) {
+        // Skill-based execution path
+        deliverableData = await handleSkillExecution(supabase, task, skill_key);
+      } else {
+        // Legacy deliverable_type dispatch
+        switch (task.deliverable_type) {
+          case 'email_draft':
+            deliverableData = await handleEmailDraft(supabase, task);
+            break;
+          case 'research_brief':
+            deliverableData = await handleResearchBrief(supabase, task);
+            break;
+          case 'meeting_prep':
+            deliverableData = await handleMeetingPrep(supabase, task);
+            break;
+          case 'crm_update':
+            deliverableData = await handleCrmUpdate(supabase, task);
+            break;
+          case 'content_draft':
+            deliverableData = await handleContentDraft(supabase, task);
+            break;
+          default:
+            return errorResponse(
+              `Unknown deliverable_type: ${task.deliverable_type}`,
+              req,
+              400
+            );
+        }
       }
 
       // Update task with deliverable data and status
@@ -820,6 +826,90 @@ The content should be professional, engaging, and tailored to the context provid
   return {
     content,
     format: 'markdown',
+    generated_at: new Date().toISOString(),
+  };
+}
+
+// Skill-based execution handler
+
+async function handleSkillExecution(
+  supabase: any,
+  task: any,
+  skillKey: string
+): Promise<Record<string, unknown>> {
+  // Fetch the skill content from organization_skills
+  const { data: skills, error: skillError } = await supabase
+    .from('organization_skills')
+    .select('skill_key, frontmatter, content')
+    .eq('skill_key', skillKey)
+    .eq('is_enabled', true)
+    .limit(1);
+
+  if (skillError) {
+    throw new Error(`Failed to fetch skill "${skillKey}": ${skillError.message}`);
+  }
+
+  const skill = skills?.[0];
+  if (!skill) {
+    throw new Error(`Skill "${skillKey}" not found or not enabled`);
+  }
+
+  // Fetch task context (reuses existing function)
+  const context = await fetchTaskContext(supabase, task);
+
+  // Build the user prompt from task + context
+  let contextDetails = `Task: ${task.title}\n`;
+  if (task.description) {
+    contextDetails += `Description: ${task.description}\n`;
+  }
+
+  if (context.contact) {
+    contextDetails += `\nContact: ${context.contact.first_name} ${context.contact.last_name}`;
+    if (context.contact.title) contextDetails += ` - ${context.contact.title}`;
+    if (context.contact.company) contextDetails += ` at ${context.contact.company}`;
+    if (context.contact.email) contextDetails += `\nEmail: ${context.contact.email}`;
+  }
+
+  if (context.company) {
+    contextDetails += `\n\nCompany: ${context.company.name}`;
+    if (context.company.industry) contextDetails += ` (${context.company.industry})`;
+    if (context.company.description) contextDetails += `\nDescription: ${context.company.description}`;
+  }
+
+  if (context.deal) {
+    contextDetails += `\n\nDeal: ${context.deal.title} (Stage: ${context.deal.stage})`;
+    if (context.deal.value) contextDetails += `\nValue: ${context.deal.value}`;
+    if (context.deal.notes) contextDetails += `\nNotes: ${context.deal.notes}`;
+  }
+
+  if (context.meeting) {
+    contextDetails += `\n\nMeeting: ${context.meeting.title}`;
+    if (context.meeting.summary) contextDetails += `\nSummary: ${context.meeting.summary}`;
+  }
+
+  if (context.transcript) {
+    const truncated = context.transcript.substring(0, 1500);
+    contextDetails += `\n\nTranscript excerpt:\n${truncated}${context.transcript.length > 1500 ? '...' : ''}`;
+  }
+
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  // Use the skill content as system prompt, task context as user prompt
+  const systemPrompt = `${skill.content}\n\nTODAY'S DATE: ${today}`;
+  const userPrompt = `Execute this skill for the following task and context:\n\n${contextDetails}`;
+
+  const response = await callClaude(systemPrompt, userPrompt);
+
+  return {
+    content: response,
+    format: 'markdown',
+    skill_key: skillKey,
+    skill_name: (skill.frontmatter as Record<string, unknown>)?.name || skillKey,
     generated_at: new Date().toISOString(),
   };
 }

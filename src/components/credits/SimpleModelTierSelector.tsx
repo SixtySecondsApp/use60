@@ -17,6 +17,8 @@ import { useUser } from '@/lib/hooks/useUser';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ACTION_CREDIT_COSTS } from '@/lib/config/creditPacks';
+import type { IntelligenceTier } from '@/lib/config/creditPacks';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -190,13 +192,27 @@ export function estimateActionCost(
   return inputCost + outputCost;
 }
 
-/** Format a micro-cost as readable string */
-function formatCostEstimate(cost: number): string {
-  if (cost <= 0) return '--';
-  if (cost < 0.001) return '<$0.001';
-  if (cost < 0.01) return `~$${cost.toFixed(4)}`;
-  if (cost < 1) return `~$${cost.toFixed(3)}`;
-  return `~$${cost.toFixed(2)}`;
+/** Map SimpleCategory key to ACTION_CREDIT_COSTS key */
+const CATEGORY_TO_CREDIT_KEY: Record<string, keyof typeof ACTION_CREDIT_COSTS> = {
+  copilot: 'copilot_chat',
+  meetings: 'meeting_summary',
+  research: 'research_enrichment',
+  content: 'content_generation',
+};
+
+const TIER_TO_CREDIT_TIER: Record<Tier, IntelligenceTier> = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+};
+
+/** Format a credit cost as readable string (e.g. "~0.3 cr/msg") */
+function formatCreditCost(catKey: string, tier: Tier, actionLabel: string): string {
+  const creditKey = CATEGORY_TO_CREDIT_KEY[catKey];
+  if (!creditKey) return '--';
+  const costs = ACTION_CREDIT_COSTS[creditKey];
+  const cost = costs[TIER_TO_CREDIT_TIER[tier]];
+  return `~${cost} cr/${actionLabel}`;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────
@@ -275,19 +291,7 @@ export function SimpleModelTierSelector() {
     );
   }, [selectedTiers, initialTiers]);
 
-  // ─── Pre-compute cost estimates per tier per category ──────────────
-
-  const costEstimates = useMemo(() => {
-    const result: Record<string, Record<Tier, number>> = {};
-    for (const cat of SIMPLE_CATEGORIES) {
-      result[cat.key] = {
-        low: estimateActionCost(cat, getModelForTier(models, 'low')),
-        medium: estimateActionCost(cat, getModelForTier(models, 'medium')),
-        high: estimateActionCost(cat, getModelForTier(models, 'high')),
-      };
-    }
-    return result;
-  }, [models]);
+  // costEstimates removed — cost display now uses ACTION_CREDIT_COSTS from creditPacks config
 
   // ─── Save ──────────────────────────────────────────────────────────
 
@@ -378,7 +382,6 @@ export function SimpleModelTierSelector() {
           );
           if (catFeatures.length === 0) return null;
           const currentTier = selectedTiers[cat.key] ?? 'medium';
-          const catCosts = costEstimates[cat.key];
 
           return (
             <div
@@ -399,7 +402,6 @@ export function SimpleModelTierSelector() {
                   const meta = TIER_META[tier];
                   const Icon = meta.icon;
                   const isSelected = currentTier === tier;
-                  const cost = catCosts?.[tier] ?? 0;
 
                   return (
                     <button
@@ -433,14 +435,12 @@ export function SimpleModelTierSelector() {
                       <span className="text-[10px] text-gray-500 dark:text-gray-500 text-center leading-tight">
                         {meta.description}
                       </span>
-                      {cost > 0 && (
-                        <span className={cn(
-                          'text-[10px] font-medium tabular-nums mt-0.5',
-                          isSelected ? meta.color : 'text-gray-400'
-                        )}>
-                          {formatCostEstimate(cost)}/{cat.actionLabel}
-                        </span>
-                      )}
+                      <span className={cn(
+                        'text-[10px] font-medium tabular-nums mt-0.5',
+                        isSelected ? meta.color : 'text-gray-400'
+                      )}>
+                        {formatCreditCost(cat.key, tier, cat.actionLabel)}
+                      </span>
                     </button>
                   );
                 })}

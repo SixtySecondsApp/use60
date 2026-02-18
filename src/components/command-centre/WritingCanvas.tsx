@@ -16,20 +16,34 @@ import {
 } from 'lucide-react';
 import { Task } from '@/lib/database/models';
 import { Button } from '@/components/ui/button';
-import { SlashCommandDropdown } from './SlashCommandDropdown';
+import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
+import { useCommandCentreSkills, type CommandCentreSkill } from '@/lib/hooks/useCommandCentreSkills';
+import { useExecuteSkillForTask } from '@/lib/hooks/useExecuteSkillForTask';
+
+/** Map deliverable_type to a default skill key for "Do this" */
+const DELIVERABLE_SKILL_MAP: Record<string, string> = {
+  email_draft: 'email-send-as-rep',
+  research_brief: 'company-research',
+  meeting_prep: 'meeting-prep-brief',
+  content_draft: 'post-meeting-followup-drafter',
+};
 
 interface WritingCanvasProps {
   task: Task;
-  onDoThis?: () => void;
+  organizationId?: string | null;
 }
 
-export function WritingCanvas({ task, onDoThis }: WritingCanvasProps) {
+export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
-  const [isAIDoing, setIsAIDoing] = useState(false);
   const [canvasContent, setCanvasContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const canvasRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: skills } = useCommandCentreSkills(organizationId ?? null);
+  const executeSkill = useExecuteSkillForTask();
+
+  const isAIDoing = executeSkill.isPending || task.ai_status === 'working';
 
   // Sync canvas content from task when task changes
   useEffect(() => {
@@ -39,6 +53,10 @@ export function WritingCanvas({ task, onDoThis }: WritingCanvasProps) {
       }
       if (task.metadata?.deliverable_content) {
         return task.metadata.deliverable_content as string;
+      }
+      // Show content_draft markdown content
+      if (task.deliverable_data && (task.deliverable_data as any)?.content) {
+        return (task.deliverable_data as any).content;
       }
       return task.description || '';
     };
@@ -64,19 +82,18 @@ export function WritingCanvas({ task, onDoThis }: WritingCanvasProps) {
     }
   };
 
-  const handleSlashSelect = (cmd: { id: string; label: string; description: string; icon: any }) => {
+  const handleSlashSelect = (cmd: SlashCommand) => {
     setShowSlashMenu(false);
-    // Simulate AI action
-    setIsAIDoing(true);
-    setTimeout(() => setIsAIDoing(false), 2000);
+    executeSkill.mutate({ taskId: task.id, skillKey: cmd.skillKey });
   };
 
   const handleDoThis = () => {
-    setIsAIDoing(true);
-    if (onDoThis) {
-      onDoThis();
-    }
-    setTimeout(() => setIsAIDoing(false), 3000);
+    // Pick the best skill based on deliverable_type or fall back to content draft skill
+    const skillKey =
+      DELIVERABLE_SKILL_MAP[task.deliverable_type || ''] ||
+      'post-meeting-followup-drafter';
+
+    executeSkill.mutate({ taskId: task.id, skillKey });
   };
 
   // Determine if task is completed
@@ -211,8 +228,13 @@ export function WritingCanvas({ task, onDoThis }: WritingCanvasProps) {
                 size="sm"
                 className="h-8 text-xs gap-1.5 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
                 onClick={handleDoThis}
+                disabled={isAIDoing}
               >
-                <Wand2 className="h-3.5 w-3.5" /> Do this for me
+                {isAIDoing ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Working...</>
+                ) : (
+                  <><Wand2 className="h-3.5 w-3.5" /> Do this for me</>
+                )}
               </Button>
             </div>
           )}
@@ -229,6 +251,7 @@ export function WritingCanvas({ task, onDoThis }: WritingCanvasProps) {
                   filter={slashFilter}
                   onSelect={handleSlashSelect}
                   onClose={() => setShowSlashMenu(false)}
+                  commands={skills}
                 />
               )}
             </AnimatePresence>

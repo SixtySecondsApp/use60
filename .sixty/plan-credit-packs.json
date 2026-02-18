@@ -1,0 +1,1083 @@
+{
+  "feature": {
+    "id": "credit-packs",
+    "name": "Universal Credit Pack System",
+    "description": "Replace per-action dollar-based credits with purchasable credit packs (Starter/Growth/Scale). Add FIFO consumption, auto top-up with monthly caps, AR budget controls, storage metering, and full UI overhaul from dollars to credit units.",
+    "prd": "Product Brief provided inline — Universal Credit Pack System by Andrew Bryce, Feb 2026",
+    "status": "complete",
+    "createdAt": "2026-02-16T00:00:00Z",
+    "phases": [
+      {
+        "id": "foundation",
+        "name": "Phase 1 — Foundation",
+        "stories": [
+          "CRED-001",
+          "CRED-002",
+          "CRED-003",
+          "CRED-004",
+          "CRED-005",
+          "CRED-006",
+          "CRED-007"
+        ]
+      },
+      {
+        "id": "ai-actions",
+        "name": "Phase 2 — AI Action Metering",
+        "stories": [
+          "CRED-008",
+          "CRED-009",
+          "CRED-010"
+        ]
+      },
+      {
+        "id": "ar-storage",
+        "name": "Phase 3 — AR + Storage",
+        "stories": [
+          "CRED-011",
+          "CRED-012",
+          "CRED-013"
+        ]
+      },
+      {
+        "id": "ui-overhaul",
+        "name": "Phase 4 — UI Overhaul",
+        "stories": [
+          "CRED-014",
+          "CRED-015",
+          "CRED-016",
+          "CRED-017",
+          "CRED-018",
+          "CRED-019",
+          "CRED-020"
+        ]
+      },
+      {
+        "id": "migration",
+        "name": "Phase 5 — Migration + Launch",
+        "stories": [
+          "CRED-021",
+          "CRED-022",
+          "CRED-023"
+        ]
+      }
+    ]
+  },
+  "stories": [
+    {
+      "id": "CRED-001",
+      "feature": "credit-packs",
+      "phase": "foundation",
+      "title": "Create credit_packs table and FIFO consumption RPCs",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "description": "Create the `credit_packs` table to track individual purchased packs with remaining balances, enabling FIFO consumption (bonus first, then oldest pack). Replace the single-balance deduction model with pack-aware deduction.",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "org_credit_balance",
+          "credit_transactions"
+        ]
+      },
+      "blocks": [
+        "CRED-002",
+        "CRED-003",
+        "CRED-004",
+        "CRED-008"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "credit_packs table created with: id, org_id, pack_type (starter|growth|scale|agency_starter|agency_growth|agency_scale|agency_enterprise|custom), credits_purchased, credits_remaining, purchased_at, payment_id, source (manual|auto_top_up|bonus|migration), expires_at (nullable), created_at",
+        "RLS policies: org members can read their packs, admins can insert/update",
+        "New RPC deduct_credits_fifo(p_org_id, p_amount, p_description, p_feature_key, p_cost_event_id) that deducts from bonus packs first, then oldest purchased pack by purchased_at, updates credits_remaining on each pack, and still updates org_credit_balance.balance_credits for fast reads",
+        "New RPC add_credits_pack(p_org_id, p_pack_type, p_credits, p_source, p_payment_id, p_created_by) that inserts into credit_packs AND updates org_credit_balance",
+        "Migration runs cleanly on staging"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_credit_packs_table.sql"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-002",
+      "feature": "credit-packs",
+      "phase": "foundation",
+      "title": "Create auto_top_up_settings and auto_top_up_log tables",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "description": "Create dedicated auto top-up configuration and logging tables. Move auto-topup settings out of org_credit_balance into their own table with pack selection, threshold, monthly cap, and payment method tracking.",
+      "dependencies": {
+        "stories": [
+          "CRED-001"
+        ],
+        "files": [],
+        "schema": [
+          "credit_packs"
+        ]
+      },
+      "blocks": [
+        "CRED-005",
+        "CRED-006"
+      ],
+      "parallelWith": [
+        "CRED-003",
+        "CRED-004"
+      ],
+      "acceptance": [
+        "auto_top_up_settings table: org_id (PK), enabled (boolean default false), pack_type (text), threshold (integer default 10), monthly_cap (integer default 3), stripe_payment_method_id (text nullable), created_at, updated_at",
+        "auto_top_up_log table: id, org_id, triggered_at, trigger_balance, pack_type, stripe_payment_intent_id, status (success|failed|retrying|capped), credits_added, error_message, created_at",
+        "RLS: org admins/owners can read/write settings, all members can read log",
+        "Migrate existing auto_topup_enabled/auto_topup_amount/auto_topup_threshold from org_credit_balance into auto_top_up_settings for orgs that had it enabled"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/YYYYMMDD_auto_top_up_tables.sql"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-003",
+      "feature": "credit-packs",
+      "phase": "foundation",
+      "title": "Add credit cost constants and pack definitions config",
+      "type": "config",
+      "status": "complete",
+      "priority": 2,
+      "description": "Create a shared configuration module defining all credit pack types, pricing, and per-action credit costs by intelligence tier. This replaces the current dollar-based pricing with the new credit unit costs from the PRD.",
+      "dependencies": {
+        "stories": [
+          "CRED-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "CRED-008",
+        "CRED-009",
+        "CRED-014"
+      ],
+      "parallelWith": [
+        "CRED-002",
+        "CRED-004"
+      ],
+      "acceptance": [
+        "Shared config file defines CREDIT_PACKS: { starter: { credits: 100, priceGBP: 49 }, growth: { credits: 250, priceGBP: 89 }, scale: { credits: 500, priceGBP: 149 } } plus agency packs",
+        "ACTION_CREDIT_COSTS defined per feature_key and tier: e.g. copilot_chat: { low: 0.3, medium: 0.8, high: 4 }",
+        "STORAGE_CREDIT_COSTS defined: audio_per_hour_month: 0.5, transcripts_per_100_month: 0.1, docs_per_100_month: 0.05",
+        "Config importable from both frontend (src/) and edge functions (supabase/functions/_shared/)",
+        "TypeScript types for PackType, ActionCreditCost, StorageCreditCost exported"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/config/creditPacks.ts",
+        "supabase/functions/_shared/creditPacks.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-004",
+      "feature": "credit-packs",
+      "phase": "foundation",
+      "title": "Update creditService.ts for pack-based operations",
+      "type": "service",
+      "status": "complete",
+      "priority": 3,
+      "description": "Update the frontend credit service to support pack-based purchases, FIFO balance display, pack inventory listing, and the new credit unit denomination instead of dollars.",
+      "dependencies": {
+        "stories": [
+          "CRED-001"
+        ],
+        "files": [
+          "src/lib/services/creditService.ts"
+        ],
+        "schema": [
+          "credit_packs"
+        ]
+      },
+      "blocks": [
+        "CRED-014",
+        "CRED-015"
+      ],
+      "parallelWith": [
+        "CRED-002",
+        "CRED-003"
+      ],
+      "acceptance": [
+        "getBalance() returns balance in credit units (not dollars), includes pack inventory summary (count of active packs, total remaining)",
+        "New getPacks(orgId) method returns list of active credit_packs with remaining > 0, sorted by FIFO order (bonus first, then oldest)",
+        "purchaseCredits() renamed to purchasePack(orgId, packType) — sends pack type instead of dollar amount",
+        "getTransactions() returns amounts in credit units with new transaction type icons/labels",
+        "Types updated: CreditBalance includes packInventory, CreditTransaction.amount is in credits not dollars"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/creditService.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-005",
+      "feature": "credit-packs",
+      "phase": "foundation",
+      "title": "Update create-credit-checkout for pack-based Stripe flow",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "description": "Update the Stripe checkout edge function to create sessions for credit packs (Starter/Growth/Scale) with GBP pricing instead of arbitrary USD amounts. Create Stripe Price objects for each pack type.",
+      "dependencies": {
+        "stories": [
+          "CRED-002",
+          "CRED-003"
+        ],
+        "files": [
+          "supabase/functions/create-credit-checkout/index.ts"
+        ],
+        "schema": [
+          "credit_packs"
+        ]
+      },
+      "blocks": [
+        "CRED-007"
+      ],
+      "parallelWith": [
+        "CRED-006"
+      ],
+      "acceptance": [
+        "Edge function accepts pack_type (starter|growth|scale) instead of credit_amount",
+        "Creates Stripe checkout session with correct GBP price per pack type",
+        "Metadata includes: type='credit_pack_purchase', org_id, pack_type, credits (100/250/500), user_id",
+        "Line item shows pack name: 'Starter Pack — 100 Credits', 'Growth Pack — 250 Credits', etc.",
+        "Rejects invalid pack types with 400 error",
+        "Currency is GBP not USD"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/create-credit-checkout/index.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-006",
+      "feature": "credit-packs",
+      "phase": "foundation",
+      "title": "Update stripe-webhook for pack fulfillment and auto top-up logging",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "description": "Update the Stripe webhook handler to fulfill credit pack purchases by inserting into credit_packs table via add_credits_pack RPC, and handle auto top-up PaymentIntent confirmations with proper logging to auto_top_up_log.",
+      "dependencies": {
+        "stories": [
+          "CRED-002",
+          "CRED-003"
+        ],
+        "files": [
+          "supabase/functions/stripe-webhook/index.ts"
+        ],
+        "schema": [
+          "credit_packs",
+          "auto_top_up_log"
+        ]
+      },
+      "blocks": [
+        "CRED-007"
+      ],
+      "parallelWith": [
+        "CRED-005"
+      ],
+      "acceptance": [
+        "checkout.session.completed with metadata.type='credit_pack_purchase' calls add_credits_pack() with pack_type, credits, source='manual'",
+        "PaymentIntent succeeded with metadata.type='auto_top_up' calls add_credits_pack() with source='auto_top_up' AND inserts success record into auto_top_up_log",
+        "PaymentIntent failed with metadata.type='auto_top_up' inserts failed record into auto_top_up_log with error_message",
+        "Idempotency preserved: checks stripe_payment_intent_id before processing",
+        "Existing subscription webhook handling unchanged"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/stripe-webhook/index.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-007",
+      "feature": "credit-packs",
+      "phase": "foundation",
+      "title": "Rebuild credit-auto-topup with pack selection and monthly caps",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "description": "Rewrite the credit-auto-topup edge function to read from auto_top_up_settings, charge for the selected pack type, enforce monthly caps, handle retry logic (1 retry after 1 hour), and disable on second failure with notifications.",
+      "dependencies": {
+        "stories": [
+          "CRED-005",
+          "CRED-006"
+        ],
+        "files": [
+          "supabase/functions/credit-auto-topup/index.ts"
+        ],
+        "schema": [
+          "auto_top_up_settings",
+          "auto_top_up_log"
+        ]
+      },
+      "blocks": [
+        "CRED-019"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Reads config from auto_top_up_settings (not org_credit_balance auto_topup_* fields)",
+        "Charges the selected pack_type at the correct GBP price via Stripe PaymentIntent (off-session)",
+        "Enforces monthly_cap: counts successful auto top-ups this calendar month from auto_top_up_log, skips if cap reached (logs status='capped')",
+        "On first payment failure: sets status='retrying', retries after 1 hour cooldown",
+        "On second failure: disables auto_top_up_settings.enabled=false, notifies org admins via notification system",
+        "Org-level advisory lock prevents concurrent charges for same org"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/credit-auto-topup/index.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-008",
+      "feature": "credit-packs",
+      "phase": "ai-actions",
+      "title": "Update costTracking.ts to use credit-unit costs instead of token-dollar costs",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "description": "Update the shared costTracking helper to deduct credit-unit costs (from the PRD action cost table) instead of raw token-to-dollar costs. logAICostEvent should look up the action's credit cost by feature_key and intelligence tier, and call deduct_credits_fifo instead of deduct_credits.",
+      "dependencies": {
+        "stories": [
+          "CRED-001",
+          "CRED-003"
+        ],
+        "files": [
+          "supabase/functions/_shared/costTracking.ts"
+        ],
+        "schema": [
+          "credit_packs"
+        ]
+      },
+      "blocks": [
+        "CRED-009",
+        "CRED-010"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "logAICostEvent() determines intelligence tier from org's ai_feature_config and looks up credit cost from ACTION_CREDIT_COSTS config",
+        "Calls deduct_credits_fifo() instead of deduct_credits() for FIFO pack consumption",
+        "logFlatRateCostEvent() updated to accept credit amounts (e.g. 0.3 for Apollo search) instead of dollar amounts",
+        "ai_cost_events.estimated_cost now stores credit units, not dollars",
+        "checkCreditBalance() still works (reads org_credit_balance.balance_credits which is kept in sync)",
+        "After deduction, checks if balance <= auto_top_up_settings.threshold and triggers auto top-up if conditions met"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/costTracking.ts",
+        "supabase/functions/_shared/creditPacks.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-009",
+      "feature": "credit-packs",
+      "phase": "ai-actions",
+      "title": "Update get-credit-balance edge function for pack-aware responses",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "description": "Update the get-credit-balance edge function to return pack inventory, FIFO order, auto top-up status, and usage breakdown in credit units instead of dollars.",
+      "dependencies": {
+        "stories": [
+          "CRED-008"
+        ],
+        "files": [
+          "supabase/functions/get-credit-balance/index.ts"
+        ],
+        "schema": [
+          "credit_packs",
+          "auto_top_up_settings"
+        ]
+      },
+      "blocks": [
+        "CRED-014"
+      ],
+      "parallelWith": [
+        "CRED-010"
+      ],
+      "acceptance": [
+        "Response includes packs[] array: active packs with pack_type, credits_remaining, credits_purchased, purchased_at, source",
+        "Response includes auto_top_up: { enabled, pack_type, threshold, monthly_cap, top_ups_this_month, payment_method_last4 }",
+        "usage_by_feature costs are in credit units",
+        "daily_burn_rate calculated in credit units",
+        "projected_days_remaining based on credit-unit burn rate"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/get-credit-balance/index.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-010",
+      "feature": "credit-packs",
+      "phase": "ai-actions",
+      "title": "Update flat-rate integrations to credit-unit costs",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "description": "Update Apollo search, AI Ark, Exa enrichment, and other flat-rate integrations to use credit-unit costs instead of dollar costs. Apollo search becomes 0.3 credits, email sending 0.1 credits, etc.",
+      "dependencies": {
+        "stories": [
+          "CRED-008"
+        ],
+        "files": [
+          "supabase/functions/apollo-search/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-009"
+      ],
+      "acceptance": [
+        "apollo-search/index.ts: APOLLO_SEARCH_CREDIT_COST changed from 0.10 (dollars) to 0.3 (credits)",
+        "enrich-dynamic-table/index.ts: EXA_ENRICHMENT_CREDIT_COST updated to credit-unit equivalent",
+        "ai-ark-search and related functions updated to credit-unit costs",
+        "All flat-rate functions use logFlatRateCostEvent() with credit-unit amounts",
+        "No functional change to search/enrichment behavior — only cost denomination changes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/apollo-search/index.ts",
+        "supabase/functions/enrich-dynamic-table/index.ts",
+        "supabase/functions/ai-ark-search/index.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-011",
+      "feature": "credit-packs",
+      "phase": "ar-storage",
+      "title": "Add AR budget settings table and enforcement in proactive agents",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 8,
+      "description": "Create AR (autonomous research) budget settings per org. Add pre-check in proactive agent runs to verify AR budget hasn't been exceeded before executing. Add monthly AR credit cap with default at 30% of most recent pack purchase.",
+      "dependencies": {
+        "stories": [
+          "CRED-008"
+        ],
+        "files": [],
+        "schema": [
+          "org_credit_balance"
+        ]
+      },
+      "blocks": [
+        "CRED-020"
+      ],
+      "parallelWith": [
+        "CRED-012"
+      ],
+      "acceptance": [
+        "ar_budget_settings table or column added to org_credit_balance: ar_monthly_cap (integer, nullable = unlimited), ar_paused (boolean default false)",
+        "New RPC check_ar_budget(p_org_id) returns { allowed: boolean, used_this_month: number, cap: number } by summing credit_transactions where feature_key starts with 'ar_' and type='deduction' in current calendar month",
+        "Proactive agent edge functions (auto-join-scheduler, daily briefing, deal scoring, etc.) call check_ar_budget before execution — skip with notification if over budget",
+        "RLS: org admins can update AR budget settings"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_ar_budget_settings.sql",
+        "supabase/functions/_shared/costTracking.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-012",
+      "feature": "credit-packs",
+      "phase": "ar-storage",
+      "title": "Create storage metering cron edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "description": "Create a monthly cron edge function that calculates storage footprint per org (recordings, transcripts, documents, enrichment cache) and deducts storage credits on the 1st of each month.",
+      "dependencies": {
+        "stories": [
+          "CRED-008"
+        ],
+        "files": [],
+        "schema": [
+          "credit_packs"
+        ]
+      },
+      "blocks": [
+        "CRED-013"
+      ],
+      "parallelWith": [
+        "CRED-011"
+      ],
+      "acceptance": [
+        "New edge function meter-storage/index.ts runs as monthly cron",
+        "Calculates per-org: total recording hours (from recordings/meeting_recordings table), transcript count, generated document count, enrichment record count",
+        "Deducts credits per storage cost table: 0.5 cr/hour audio/month, 0.1 cr/100 transcripts/month, 0.05 cr/100 docs/month, 0.1 cr/500 records/month",
+        "Creates credit_transactions with type='consumption', feature_key='storage_audio' / 'storage_transcripts' / etc.",
+        "Idempotent: checks if storage deduction already ran for this org+month before processing"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/meter-storage/index.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-013",
+      "feature": "credit-packs",
+      "phase": "ar-storage",
+      "title": "Add storage usage calculation to get-credit-balance",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "description": "Extend the get-credit-balance response to include current storage footprint and projected monthly storage cost in credits, so the UI can show a 'Storage Usage' section.",
+      "dependencies": {
+        "stories": [
+          "CRED-012"
+        ],
+        "files": [
+          "supabase/functions/get-credit-balance/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CRED-017"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Response includes storage: { audio_hours, transcript_count, document_count, enrichment_records, projected_monthly_cost_credits }",
+        "Projected cost calculated using same formula as meter-storage",
+        "Last storage deduction date included for transparency"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/get-credit-balance/index.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-014",
+      "feature": "credit-packs",
+      "phase": "ui-overhaul",
+      "title": "Redesign CreditPurchaseModal for pack selection",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "description": "Replace the current dollar-amount purchase modal ($10/$25/$50/$100/$250 + custom) with a pack selection card UI showing Starter (100 cr / £49), Growth (250 cr / £89), and Scale (500 cr / £149) with per-credit value comparison.",
+      "dependencies": {
+        "stories": [
+          "CRED-003",
+          "CRED-004"
+        ],
+        "files": [
+          "src/components/credits/CreditPurchaseModal.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-015",
+        "CRED-016"
+      ],
+      "acceptance": [
+        "Three pack cards: Starter, Growth (highlighted as best value), Scale with credits count, price in £, and per-credit cost",
+        "Growth pack has 'Most Popular' badge",
+        "Scale pack shows best per-credit value",
+        "'Compare Packs' expandable section showing value breakdown",
+        "Calls purchasePack(orgId, packType) instead of purchaseCredits(orgId, amount)",
+        "Admin-only access preserved"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/credits/CreditPurchaseModal.tsx"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-015",
+      "feature": "credit-packs",
+      "phase": "ui-overhaul",
+      "title": "Update CreditWidget and CreditWidgetDropdown for credit units",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "description": "Update the header credit badge and dropdown to show credit units instead of dollars. Add auto top-up status indicator. Show '342 cr' instead of '$8.35'.",
+      "dependencies": {
+        "stories": [
+          "CRED-004"
+        ],
+        "files": [
+          "src/components/credits/CreditWidget.tsx",
+          "src/components/credits/CreditWidgetDropdown.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-014",
+        "CRED-016"
+      ],
+      "acceptance": [
+        "Badge shows '342 cr' format (integer, no decimals for whole numbers, 1 decimal for fractional)",
+        "Auto top-up indicator: small RefreshCw icon next to balance if auto top-up enabled",
+        "Dropdown shows burn rate in credits/day, projected days remaining",
+        "Recent transactions show credit amounts not dollar amounts",
+        "Feature usage bars denominated in credits",
+        "'Top Up Credits' button opens pack purchase modal"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/credits/CreditWidget.tsx",
+        "src/components/credits/CreditWidgetDropdown.tsx"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-016",
+      "feature": "credit-packs",
+      "phase": "ui-overhaul",
+      "title": "Update CreditEstimator for credit pack economics",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "description": "Update the interactive credit estimator to show what each pack can do, using the new credit-unit costs per action. Replace dollar slider with pack selector showing action estimates per pack.",
+      "dependencies": {
+        "stories": [
+          "CRED-003",
+          "CRED-004"
+        ],
+        "files": [
+          "src/components/credits/CreditEstimator.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-014",
+        "CRED-015"
+      ],
+      "acceptance": [
+        "Estimator shows 'What can each pack do?' with Starter/Growth/Scale tabs",
+        "Each tab shows estimated action counts: copilot messages, meeting summaries, enrichments, content pieces — based on current intelligence tier",
+        "Tier badge (Low/Medium/High) shown per category with cost-per-action",
+        "Quick-pick buttons: 'Starter (100 cr)', 'Growth (250 cr)', 'Scale (500 cr)', 'My balance'",
+        "Slider range 1–1000 credits instead of $1–$10,000"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/credits/CreditEstimator.tsx"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-017",
+      "feature": "credit-packs",
+      "phase": "ui-overhaul",
+      "title": "Redesign CreditsSettingsPage with usage breakdown and storage section",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "description": "Major redesign of the Credits & AI settings page: new balance overview card (credits not dollars), usage breakdown pie/bar chart by category, storage usage section, pack inventory display, and spend trend in credit units.",
+      "dependencies": {
+        "stories": [
+          "CRED-004",
+          "CRED-009",
+          "CRED-013"
+        ],
+        "files": [
+          "src/pages/settings/CreditsSettingsPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-018"
+      ],
+      "acceptance": [
+        "Balance Overview: shows '342 credits' with daily burn rate and projected runway in credits",
+        "Auto top-up status badge: green dot + 'Auto top-up: ON — Growth Pack at 25 cr' or grey + 'Off'",
+        "New Usage Breakdown section: horizontal bar or pie chart showing credit consumption by category (Copilot, Meetings, Research, Content, AR, Storage, Integrations)",
+        "New Storage Usage section: current footprint (audio hours, transcripts, docs) with projected monthly storage cost",
+        "Pack Inventory: list of active packs with remaining credits and purchased date",
+        "Spend Trend chart Y-axis in credits, auto top-up events marked with upward arrow",
+        "Quick Top-Up: three pack buttons replacing dollar amounts"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/settings/CreditsSettingsPage.tsx",
+        "src/components/credits/UsageBreakdownChart.tsx",
+        "src/components/credits/StorageUsageCard.tsx",
+        "src/components/credits/PackInventory.tsx"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-018",
+      "feature": "credit-packs",
+      "phase": "ui-overhaul",
+      "title": "Update TransactionLog and LowBalanceBanner for credit units",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "description": "Update the transaction log to show credit amounts, add type icons, category filtering, and auto top-up transaction tagging. Update the low balance banner to reference credits and auto top-up status.",
+      "dependencies": {
+        "stories": [
+          "CRED-004"
+        ],
+        "files": [
+          "src/components/credits/TransactionLog.tsx",
+          "src/components/credits/LowBalanceBanner.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-017"
+      ],
+      "acceptance": [
+        "Transaction amounts show 'Credits: -0.3' not 'Amount: -$0.10'",
+        "Balance column shows '342 cr' not '$8.35'",
+        "Type icons: Lucide icons for AI action, storage, AR, integration, purchase (manual), purchase (auto top-up), bonus",
+        "Filter by category: AI, AR, Storage, Integrations, Purchases, Auto Top-Up, Bonus",
+        "Auto top-up purchases tagged with RefreshCw icon and distinct badge color",
+        "LowBalanceBanner: amber at 20% remaining, red at 10%, shows 'X credits remaining'",
+        "If auto top-up active, banner says 'Low credits — auto top-up will add [X] credits shortly'"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/credits/TransactionLog.tsx",
+        "src/components/credits/LowBalanceBanner.tsx"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-019",
+      "feature": "credit-packs",
+      "phase": "ui-overhaul",
+      "title": "Build Auto Top-Up Settings panel",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "description": "Build a new Auto Top-Up settings panel in Settings → Credits & Billing. Includes enable toggle, pack selector, threshold slider, monthly cap, saved payment method display, history of recent auto top-ups, and estimated monthly cost.",
+      "dependencies": {
+        "stories": [
+          "CRED-007",
+          "CRED-004"
+        ],
+        "files": [],
+        "schema": [
+          "auto_top_up_settings",
+          "auto_top_up_log"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-017",
+        "CRED-020"
+      ],
+      "acceptance": [
+        "Toggle: Enable/Disable auto top-up (requires saved payment method to enable)",
+        "Pack selector: Starter/Growth/Scale cards with per-credit price",
+        "Threshold slider: 'Top up when balance drops below [X] credits' (range 5-100, default 10% of selected pack)",
+        "Monthly cap selector: 'Maximum [X] auto top-ups per month' (1-5, default 3)",
+        "Saved card display: last 4 digits, expiry, link to update via Stripe portal",
+        "History: last 5 auto top-up events with date, credits added, charge amount, status",
+        "Estimated monthly cost: 'At your current usage, you'll auto top-up ~2 times/month (est. £178/month)' based on burn rate vs threshold"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/credits/AutoTopUpSettings.tsx",
+        "src/lib/services/creditService.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-020",
+      "feature": "credit-packs",
+      "phase": "ui-overhaul",
+      "title": "Build AR Budget Settings panel",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "description": "Build the AR (autonomous research) budget control panel. Shows monthly AR credit cap slider, current month usage vs cap progress bar, pause/resume toggle for proactive agents.",
+      "dependencies": {
+        "stories": [
+          "CRED-011"
+        ],
+        "files": [],
+        "schema": [
+          "ar_budget_settings"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-019"
+      ],
+      "acceptance": [
+        "Monthly AR cap: slider or input (default 30% of last pack size, 0 = unlimited)",
+        "Progress bar: 'AR usage this month: 45 / 150 credits (30%)' with color coding",
+        "Pause/resume toggle for proactive agents (sets ar_paused flag)",
+        "List of proactive agent types with this month's credit usage per type",
+        "Warning when approaching cap: amber at 80%, red at 100%",
+        "Admin-only access"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/credits/ARBudgetSettings.tsx"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-021",
+      "feature": "credit-packs",
+      "phase": "migration",
+      "title": "Create balance migration script (dollars → credits)",
+      "type": "migration",
+      "status": "complete",
+      "priority": 12,
+      "description": "Create a migration script that converts existing dollar-denominated credit balances to credit units at the 1 dollar = 3.3 credits conversion rate. Creates a 'migration' pack for each org with the converted balance.",
+      "dependencies": {
+        "stories": [
+          "CRED-001",
+          "CRED-008"
+        ],
+        "files": [],
+        "schema": [
+          "credit_packs",
+          "org_credit_balance"
+        ]
+      },
+      "blocks": [
+        "CRED-023"
+      ],
+      "parallelWith": [
+        "CRED-022"
+      ],
+      "acceptance": [
+        "Migration script reads all org_credit_balance rows with balance > 0",
+        "For each org: creates a credit_packs row with pack_type='migration', credits_purchased = balance * 3.3, credits_remaining = balance * 3.3, source='migration'",
+        "Updates org_credit_balance.balance_credits to the new credit-unit amount",
+        "Creates a credit_transaction with type='adjustment', description='Migration: dollar balance converted to credits at 3.3x'",
+        "Dry-run mode that reports conversions without executing",
+        "Idempotent: skips orgs that already have a 'migration' pack"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/YYYYMMDD_migrate_dollar_to_credits.sql"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-022",
+      "feature": "credit-packs",
+      "phase": "migration",
+      "title": "Update AI Model Configuration UI to show credit costs",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 12,
+      "description": "Update the AI Model Configuration / SimpleModelTierSelector to display per-action costs in credit units instead of dollar estimates. Show '~0.3 cr/message' for Low, '~0.8 cr/message' for Medium, '~4 cr/message' for High.",
+      "dependencies": {
+        "stories": [
+          "CRED-003"
+        ],
+        "files": [
+          "src/components/credits/SimpleModelTierSelector.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CRED-021"
+      ],
+      "acceptance": [
+        "Copilot tier labels: Low '~0.3 cr/msg', Medium '~0.8 cr/msg', High '~4 cr/msg'",
+        "Meetings tier labels: Low '~0.3 cr/summary', Medium '~1.8 cr/summary', High '~8.5 cr/summary'",
+        "Research tier labels: Low '~0.3 cr/enrichment', Medium '~0.6 cr/enrichment', High '~3.5 cr/enrichment'",
+        "Content tier labels: Low '~0.3 cr/generation', Medium '~1.4 cr/generation', High '~5 cr/generation'",
+        "Cost values read from shared creditPacks config, not hardcoded"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/credits/SimpleModelTierSelector.tsx",
+        "src/components/credits/FeatureModelRow.tsx"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    },
+    {
+      "id": "CRED-023",
+      "feature": "credit-packs",
+      "phase": "migration",
+      "title": "Add feature flag and post-migration onboarding modal",
+      "type": "frontend+backend",
+      "status": "complete",
+      "priority": 13,
+      "description": "Add a feature flag to control the credit pack system rollout. Create a post-migration onboarding modal that introduces auto top-up to existing users on first login after migration.",
+      "dependencies": {
+        "stories": [
+          "CRED-021"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Feature flag 'credit_packs_v2' in org settings or feature_flags table controls old vs new credit system",
+        "When flag is off: old dollar-based UI and metering is used",
+        "When flag is on: new pack-based UI and credit-unit metering is used",
+        "Post-migration modal: shown once per user after migration, introduces credit packs and auto top-up",
+        "Modal includes: 'Your balance has been converted: $X → Y credits', explanation of packs, one-click 'Enable Auto Top-Up' button",
+        "Modal dismissible, shown only once (tracked in user_settings or local storage)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/credits/CreditMigrationModal.tsx",
+        "src/lib/config/featureFlags.ts"
+      ],
+      "startedAt": "2026-02-16T00:00:00Z",
+      "completedAt": "2026-02-17T10:15:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 23,
+    "completedStories": 0,
+    "currentFeature": "credit-packs",
+    "estimatedHours": "8-10 hours (with parallel execution)",
+    "parallelGroups": [
+      {
+        "phase": "foundation",
+        "groups": [
+          [
+            "CRED-002",
+            "CRED-003",
+            "CRED-004"
+          ],
+          [
+            "CRED-005",
+            "CRED-006"
+          ]
+        ]
+      },
+      {
+        "phase": "ai-actions",
+        "groups": [
+          [
+            "CRED-009",
+            "CRED-010"
+          ]
+        ]
+      },
+      {
+        "phase": "ar-storage",
+        "groups": [
+          [
+            "CRED-011",
+            "CRED-012"
+          ]
+        ]
+      },
+      {
+        "phase": "ui-overhaul",
+        "groups": [
+          [
+            "CRED-014",
+            "CRED-015",
+            "CRED-016"
+          ],
+          [
+            "CRED-017",
+            "CRED-018",
+            "CRED-019",
+            "CRED-020"
+          ]
+        ]
+      },
+      {
+        "phase": "migration",
+        "groups": [
+          [
+            "CRED-021",
+            "CRED-022"
+          ]
+        ]
+      }
+    ],
+    "criticalPath": "CRED-001 → CRED-003 → CRED-008 → CRED-009 → CRED-017",
+    "lastUpdated": "2026-02-16T00:00:00Z"
+  },
+  "architectureNotes": {
+    "currentSystem": {
+      "denomination": "Dollars (1 credit = $1 USD)",
+      "balanceTable": "org_credit_balance (single balance row per org)",
+      "ledger": "credit_transactions (immutable log)",
+      "costTracking": "ai_cost_events → calculate_token_cost() RPC → deduct_credits() RPC",
+      "autoTopUp": "Basic: fields on org_credit_balance, 1-hour cooldown, no monthly cap",
+      "purchase": "Stripe checkout with arbitrary dollar amounts ($5-$1000)",
+      "preCheck": "checkCreditBalance() returns allowed/balance, used by copilot, apollo, process-recording"
+    },
+    "newSystem": {
+      "denomination": "Credits (abstract units, priced via packs in GBP)",
+      "packTable": "credit_packs (individual packs with FIFO consumption tracking)",
+      "balanceTable": "org_credit_balance (kept as fast-read cache, updated atomically with packs)",
+      "autoTopUp": "Dedicated tables: auto_top_up_settings + auto_top_up_log, monthly caps, pack selection, retry logic",
+      "purchase": "Pack-based: Starter (100/£49), Growth (250/£89), Scale (500/£149)",
+      "fifo": "Bonus packs consumed first, then oldest purchased pack",
+      "arBudget": "Monthly cap on proactive agent credit consumption, settable per org",
+      "storageMetering": "Monthly cron deducts credits for audio hours, transcripts, docs, enrichment data"
+    },
+    "keyFiles": {
+      "schema": "supabase/migrations/20260210200001_credit_balance_tables.sql",
+      "service": "src/lib/services/creditService.ts",
+      "costTracking": "supabase/functions/_shared/costTracking.ts",
+      "checkout": "supabase/functions/create-credit-checkout/index.ts",
+      "webhook": "supabase/functions/stripe-webhook/index.ts",
+      "autoTopUp": "supabase/functions/credit-auto-topup/index.ts",
+      "balance": "supabase/functions/get-credit-balance/index.ts",
+      "widget": "src/components/credits/CreditWidget.tsx",
+      "dropdown": "src/components/credits/CreditWidgetDropdown.tsx",
+      "settingsPage": "src/pages/settings/CreditsSettingsPage.tsx",
+      "purchaseModal": "src/components/credits/CreditPurchaseModal.tsx",
+      "estimator": "src/components/credits/CreditEstimator.tsx",
+      "transactionLog": "src/components/credits/TransactionLog.tsx",
+      "lowBanner": "src/components/credits/LowBalanceBanner.tsx",
+      "creditGate": "src/components/credits/CreditGate.tsx",
+      "modelTier": "src/components/credits/SimpleModelTierSelector.tsx",
+      "hooks": [
+        "src/lib/hooks/useCreditBalance.ts",
+        "src/lib/hooks/useRequireCredits.ts"
+      ]
+    }
+  }
+}
