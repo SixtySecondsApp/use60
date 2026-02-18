@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-export type QuickActionId = 'follow_up_email' | 'book_call' | 'share_recording' | 'create_proposal';
+export type QuickActionId = 'follow_up_email' | 'book_call' | 'share_recording';
 
 export interface QuickActionPriorityResult {
   orderedActions: QuickActionId[];
@@ -23,7 +23,7 @@ export function useQuickActionPriority(meeting: Meeting | null): QuickActionPrio
   return useMemo(() => {
     if (!meeting) {
       return {
-        orderedActions: ['follow_up_email', 'book_call', 'share_recording', 'create_proposal'],
+        orderedActions: ['follow_up_email', 'book_call', 'share_recording'],
         urgentAction: null,
         urgencyReason: null,
       };
@@ -32,7 +32,7 @@ export function useQuickActionPriority(meeting: Meeting | null): QuickActionPrio
     const { meeting_type, sentiment_score, source_type } = meeting;
 
     // Default priority
-    let priority: QuickActionId[] = ['follow_up_email', 'book_call', 'share_recording', 'create_proposal'];
+    let priority: QuickActionId[] = ['follow_up_email', 'book_call', 'share_recording'];
     let urgentAction: QuickActionId | null = null;
     let urgencyReason: string | null = null;
 
@@ -41,20 +41,19 @@ export function useQuickActionPriority(meeting: Meeting | null): QuickActionPrio
       case 'discovery':
       case 'demo':
         // After discovery/demo, booking next call is most important
-        priority = ['book_call', 'follow_up_email', 'create_proposal', 'share_recording'];
+        priority = ['book_call', 'follow_up_email', 'share_recording'];
         urgentAction = 'book_call';
         urgencyReason = 'Keep momentum after demo';
         break;
       case 'negotiation':
       case 'closing':
-        // In negotiation phase, proposals drive deals forward
-        priority = ['create_proposal', 'follow_up_email', 'book_call', 'share_recording'];
-        urgentAction = 'create_proposal';
+        priority = ['follow_up_email', 'book_call', 'share_recording'];
+        urgentAction = 'follow_up_email';
         urgencyReason = 'Strike while hot';
         break;
       case 'follow_up':
         // Follow-up meetings benefit from email recap and sharing recordings
-        priority = ['follow_up_email', 'share_recording', 'book_call', 'create_proposal'];
+        priority = ['follow_up_email', 'share_recording', 'book_call'];
         break;
     }
 

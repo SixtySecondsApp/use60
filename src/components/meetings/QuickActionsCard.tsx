@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Mail, Phone, Share2, FileText, Zap } from 'lucide-react';
+import { Mail, Phone, Share2, Zap } from 'lucide-react';
 import { useQuickActionPriority, type QuickActionId } from '@/lib/hooks/useQuickActionPriority';
 import { cn } from '@/lib/utils';
 
@@ -16,19 +16,17 @@ interface QuickActionsCardProps {
   onEmailClick: () => void;
   onBookCallClick: () => void;
   onShareClick: () => void;
-  onProposalClick: () => void;
   className?: string;
 }
 
 const actionConfig: Record<QuickActionId, {
   icon: typeof Mail;
   label: string;
-  color: 'blue' | 'violet' | 'emerald' | 'orange';
+  color: 'blue' | 'violet' | 'emerald';
 }> = {
   follow_up_email: { icon: Mail, label: 'Send Follow-up', color: 'blue' },
   book_call: { icon: Phone, label: 'Book Next Call', color: 'violet' },
   share_recording: { icon: Share2, label: 'Share Meeting', color: 'emerald' },
-  create_proposal: { icon: FileText, label: 'Create Proposal', color: 'orange' },
 };
 
 const colorStyles = {
@@ -50,12 +48,6 @@ const colorStyles = {
     icon: 'text-emerald-600 dark:text-emerald-500',
     badge: 'bg-emerald-500',
   },
-  orange: {
-    button: 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20 hover:bg-orange-100 dark:hover:bg-orange-500/20',
-    iconBg: 'bg-orange-100 dark:bg-orange-500/10 ring-1 ring-orange-300 dark:ring-orange-500/30',
-    icon: 'text-orange-600 dark:text-orange-500',
-    badge: 'bg-orange-500',
-  },
 };
 
 export function QuickActionsCard({
@@ -63,7 +55,6 @@ export function QuickActionsCard({
   onEmailClick,
   onBookCallClick,
   onShareClick,
-  onProposalClick,
   className,
 }: QuickActionsCardProps) {
   const { orderedActions, urgentAction, urgencyReason } = useQuickActionPriority(meeting);
@@ -72,7 +63,6 @@ export function QuickActionsCard({
     follow_up_email: onEmailClick,
     book_call: onBookCallClick,
     share_recording: onShareClick,
-    create_proposal: onProposalClick,
   };
 
   const handleActionClick = (actionId: QuickActionId, e: React.MouseEvent) => {
@@ -89,7 +79,7 @@ export function QuickActionsCard({
       </div>
 
       <motion.div
-        className="grid grid-cols-2 gap-2"
+        className="grid grid-cols-3 gap-2"
         variants={{
           show: {
             transition: {
