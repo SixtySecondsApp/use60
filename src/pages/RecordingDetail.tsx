@@ -503,17 +503,18 @@ export const RecordingDetail: React.FC = () => {
     let cancelled = false
     setIsLoadingVideo(true)
 
-    if (recording.recording_s3_key) {
-      // Video is in S3 — fetch signed URL
-      recordingService.getRecordingUrl(id).then((result) => {
-        if (cancelled) return
-        if (result.success && result.url) {
-          setVideoUrl(result.url)
-        }
-        setIsLoadingVideo(false)
-      })
+    // Always call getRecordingUrl endpoint — it handles both S3 signed URLs
+    // and MeetingBaaS URL refresh (prevents expired URL 403 errors)
+    recordingService.getRecordingUrl(id).then((result) => {
+      if (cancelled) return
+      if (result.success && result.url) {
+        setVideoUrl(result.url)
+      }
+      setIsLoadingVideo(false)
+    })
 
-      // Fetch fresh thumbnail URL via batch endpoint
+    // Fetch fresh thumbnail URL via batch endpoint (only works for S3-backed recordings)
+    if (recording.recording_s3_key) {
       recordingService.getBatchSignedUrls([id]).then((urls) => {
         if (cancelled) return
         const entry = urls[id]
@@ -521,10 +522,6 @@ export const RecordingDetail: React.FC = () => {
           setResolvedThumbnailUrl(entry.thumbnail_url)
         }
       })
-    } else if (recording.recording_s3_url) {
-      // No S3 key but URL available (e.g., MeetingBaaS URL) — use directly
-      setVideoUrl(recording.recording_s3_url)
-      setIsLoadingVideo(false)
     }
 
     return () => { cancelled = true }

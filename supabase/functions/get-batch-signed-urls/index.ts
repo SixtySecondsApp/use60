@@ -17,6 +17,7 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
+import { createMeetingBaaSClient } from '../_shared/meetingbaas.ts';
 
 // URL expiry time: 7 days in seconds
 const URL_EXPIRY_SECONDS = 60 * 60 * 24 * 7;
@@ -80,7 +81,7 @@ serve(async (req) => {
     // Fetch recordings (RLS enforces access)
     const { data: recordings, error: queryError } = await supabase
       .from('recordings')
-      .select('id, recording_s3_key, thumbnail_s3_key, status')
+      .select('id, recording_s3_key, recording_s3_url, thumbnail_s3_key, bot_id, status')
       .in('id', recording_ids);
 
     if (queryError) {
@@ -106,14 +107,14 @@ serve(async (req) => {
     // Generate signed URLs for each recording
     const urls: Record<string, SignedUrlEntry> = {};
 
-    await Promise.all(
-      recordings.map(async (recording) => {
-        if (recording.status !== 'ready' || !recording.recording_s3_key) {
-          return;
-        }
+    // Split recordings: S3-backed vs MeetingBaaS-backed
+    const s3Recordings = recordings.filter(r => r.status === 'ready' && r.recording_s3_key);
+    const mbRecordings = recordings.filter(r => r.status === 'ready' && !r.recording_s3_key && r.bot_id);
 
+    // Process S3-backed recordings
+    await Promise.all(
+      s3Recordings.map(async (recording) => {
         try {
-          // Generate video signed URL
           const videoSignedUrl = await getSignedUrl(
             s3Client,
             new GetObjectCommand({
@@ -125,7 +126,6 @@ serve(async (req) => {
 
           const entry: SignedUrlEntry = { video_url: videoSignedUrl };
 
-          // Generate thumbnail signed URL if key exists
           if (recording.thumbnail_s3_key) {
             try {
               entry.thumbnail_url = await getSignedUrl(
@@ -147,6 +147,55 @@ serve(async (req) => {
         }
       })
     );
+
+    // Process MeetingBaaS-backed recordings (refresh expired URLs)
+    if (mbRecordings.length > 0) {
+      let mbClient: ReturnType<typeof createMeetingBaaSClient> | null = null;
+      try {
+        mbClient = createMeetingBaaSClient();
+      } catch (err) {
+        console.warn('[GetBatchSignedUrls] MeetingBaaS client not available:', err);
+      }
+
+      if (mbClient) {
+        const serviceClient = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        );
+
+        await Promise.all(
+          mbRecordings.map(async (recording) => {
+            try {
+              const { data: mbRecording } = await mbClient!.getRecording(recording.bot_id);
+              if (mbRecording?.url) {
+                urls[recording.id] = { video_url: mbRecording.url };
+                // Update stored URL in DB
+                await serviceClient
+                  .from('recordings')
+                  .update({
+                    recording_s3_url: mbRecording.url,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', recording.id);
+              }
+            } catch (err) {
+              // Fall back to stored URL
+              if (recording.recording_s3_url) {
+                urls[recording.id] = { video_url: recording.recording_s3_url };
+              }
+              console.warn(`[GetBatchSignedUrls] MeetingBaaS URL failed for ${recording.id}:`, err);
+            }
+          })
+        );
+      } else {
+        // No MeetingBaaS client — use stored URLs as fallback
+        for (const recording of mbRecordings) {
+          if (recording.recording_s3_url) {
+            urls[recording.id] = { video_url: recording.recording_s3_url };
+          }
+        }
+      }
+    }
 
     console.log(`[GetBatchSignedUrls] Generated URLs for ${Object.keys(urls).length}/${recordings.length} recordings`);
 
