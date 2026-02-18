@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/lib/supabase/clientV2';
+import { subDays, format, startOfDay } from 'date-fns';
 
 // =============================================================================
 // Existing Types (backwards compatible)
@@ -662,25 +663,67 @@ export class TeamAnalyticsService {
         byDate.set(date, existing);
       }
 
-      const sortedDates = Array.from(byDate.keys()).sort();
+      // Build the complete date axis with all dates/buckets in the period
+      const today = startOfDay(new Date());
+      type DateBucket = { count: number; sentimentSum: number; sentimentCount: number; talkTimeSum: number; talkTimeCount: number };
+      const allDates: string[] = [];
+
+      if (periodDays <= 30) {
+        // 7-day or 30-day: one entry per day
+        for (let i = periodDays - 1; i >= 0; i--) {
+          allDates.push(format(subDays(today, i), 'yyyy-MM-dd'));
+        }
+      } else {
+        // 90-day: 30 buckets of 3 days each
+        // Re-aggregate byDate into 3-day buckets
+        const bucketedByDate = new Map<string, DateBucket>();
+
+        for (let bucket = 0; bucket < 30; bucket++) {
+          const bucketStartDaysAgo = periodDays - 1 - (bucket * 3);
+          const bucketKey = format(subDays(today, bucketStartDaysAgo), 'yyyy-MM-dd');
+          const accumulated: DateBucket = { count: 0, sentimentSum: 0, sentimentCount: 0, talkTimeSum: 0, talkTimeCount: 0 };
+
+          // Aggregate 3 consecutive days into this bucket
+          for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
+            const dayKey = format(subDays(today, bucketStartDaysAgo - dayOffset), 'yyyy-MM-dd');
+            const dayData = byDate.get(dayKey);
+            if (dayData) {
+              accumulated.count += dayData.count;
+              accumulated.sentimentSum += dayData.sentimentSum;
+              accumulated.sentimentCount += dayData.sentimentCount;
+              accumulated.talkTimeSum += dayData.talkTimeSum;
+              accumulated.talkTimeCount += dayData.talkTimeCount;
+            }
+          }
+
+          bucketedByDate.set(bucketKey, accumulated);
+          allDates.push(bucketKey);
+        }
+
+        // Replace byDate with bucketed version for the mapping below
+        byDate.clear();
+        for (const [key, value] of bucketedByDate) {
+          byDate.set(key, value);
+        }
+      }
 
       return {
-        meetingVolume: sortedDates.map(date => ({
+        meetingVolume: allDates.map(date => ({
           date,
-          count: byDate.get(date)!.count,
+          count: byDate.get(date)?.count ?? 0,
         })),
-        sentimentTrend: sortedDates.map(date => {
-          const data = byDate.get(date)!;
+        sentimentTrend: allDates.map(date => {
+          const data = byDate.get(date);
           return {
             date,
-            avg: data.sentimentCount > 0 ? data.sentimentSum / data.sentimentCount : null,
+            avg: data && data.sentimentCount > 0 ? data.sentimentSum / data.sentimentCount : null,
           };
         }),
-        talkTimeTrend: sortedDates.map(date => {
-          const data = byDate.get(date)!;
+        talkTimeTrend: allDates.map(date => {
+          const data = byDate.get(date);
           return {
             date,
-            avg: data.talkTimeCount > 0 ? data.talkTimeSum / data.talkTimeCount : null,
+            avg: data && data.talkTimeCount > 0 ? data.talkTimeSum / data.talkTimeCount : null,
           };
         }),
       };
