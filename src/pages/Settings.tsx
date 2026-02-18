@@ -320,6 +320,10 @@ export default function Settings() {
       if (section.id === '60-notetaker') {
         return showNotetakerSettings;
       }
+      // Non-functional sections — hidden until features are ready.
+      if (['task-sync', 'smart-listening', 'proactive-agent'].includes(section.id)) {
+        return false;
+      }
       if (section.requiresOrgAdmin) {
         // Allow org admins AND platform admins to see team settings
         return permissions.canManageTeam || permissions.canManageSettings || isPlatformAdmin;

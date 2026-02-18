@@ -40,7 +40,6 @@ import {
   Calendar,
   Palette,
   Tag,
-  Settings,
 } from 'lucide-react';
 import { CallTypeService, type OrgCallType, type CreateCallTypeInput, type UpdateCallTypeInput } from '@/lib/services/callTypeService';
 import { useOrgId, useOrgPermissions } from '@/lib/contexts/OrgContext';
@@ -652,15 +651,6 @@ function CallTypeCard({
               onCheckedChange={onToggleActive}
               disabled={saving}
             />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onConfigureWorkflow}
-              disabled={saving}
-              title="Configure Workflow"
-            >
-              <Settings className="w-4 h-4" />
-            </Button>
             <Button
               variant="ghost"
               size="icon"

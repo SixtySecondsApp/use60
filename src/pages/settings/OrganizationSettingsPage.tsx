@@ -299,37 +299,19 @@ export default function OrganizationSettingsPage() {
               </p>
             </div>
 
-            {/* Company domain / website */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Company Domain
-                </label>
-                <input
-                  type="text"
-                  value={companyDomain}
-                  onChange={(e) => setCompanyDomain(e.target.value)}
-                  placeholder="example.com"
-                  disabled={!permissions.canManageSettings || isSavingProfile}
-                  className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Used for company enrichment on signup and for org context.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Company Website
-                </label>
-                <input
-                  type="text"
-                  value={companyWebsite}
-                  onChange={(e) => setCompanyWebsite(e.target.value)}
-                  placeholder="https://example.com"
-                  disabled={!permissions.canManageSettings || isSavingProfile}
-                  className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent"
-                />
-              </div>
+            {/* Company website */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Company Website
+              </label>
+              <input
+                type="text"
+                value={companyWebsite}
+                onChange={(e) => setCompanyWebsite(e.target.value)}
+                placeholder="https://example.com"
+                disabled={!permissions.canManageSettings || isSavingProfile}
+                className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent"
+              />
             </div>
 
             {/* Actions */}

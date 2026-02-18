@@ -459,7 +459,7 @@ export class SalesTemplateService {
 
       const { data, error } = await supabase
         .from('user_writing_styles')
-        .select('*')
+        .select('id, user_id, name, tone_description, examples, is_default')
         .eq('user_id', user.id)
         .order('is_default', { ascending: false });
 
@@ -482,7 +482,7 @@ export class SalesTemplateService {
       const { data, error } = await supabase
         .from('user_writing_styles')
         .insert({ ...style, user_id: user.id })
-        .select()
+        .select('id, user_id, name, tone_description, examples, is_default')
         .single();
 
       if (error) throw error;

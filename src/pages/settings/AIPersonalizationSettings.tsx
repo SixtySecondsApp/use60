@@ -83,18 +83,21 @@ export default function AIPersonalizationSettings() {
   };
 
   const handleSave = async () => {
-    if (!currentStyle.name || !currentStyle.tone_description || !currentStyle.examples?.length) {
+    const name = currentStyle.name?.trim();
+    const toneDescription = currentStyle.tone_description?.trim();
+
+    if (!name || !toneDescription) {
       toast.error('Please fill in all fields');
       return;
     }
 
     try {
       // Filter empty examples
-      const cleanExamples = currentStyle.examples.filter(ex => ex.trim());
-      
+      const cleanExamples = (currentStyle.examples || []).filter(ex => ex.trim());
+
       await SalesTemplateService.createWritingStyle({
-        name: currentStyle.name,
-        tone_description: currentStyle.tone_description,
+        name,
+        tone_description: toneDescription,
         examples: cleanExamples,
         is_default: styles.length === 0 // Make default if it's the first one
       });

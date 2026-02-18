@@ -7,7 +7,7 @@ export default function AccountSettings() {
       title="Account Settings"
       description="Manage your profile and account settings"
     >
-      <Profile />
+      <Profile embedded={true} />
     </SettingsPageWrapper>
   );
 }

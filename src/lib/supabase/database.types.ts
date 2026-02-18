@@ -6319,6 +6319,7 @@ export type Database = {
           last_token_refresh: string | null
           refresh_token: string | null
           scopes: string
+          service_preferences: { gmail: boolean; calendar: boolean; drive: boolean } | null
           token_status: string | null
           updated_at: string | null
           user_id: string
@@ -6334,6 +6335,7 @@ export type Database = {
           last_token_refresh?: string | null
           refresh_token?: string | null
           scopes: string
+          service_preferences?: { gmail: boolean; calendar: boolean; drive: boolean } | null
           token_status?: string | null
           updated_at?: string | null
           user_id: string
@@ -6349,6 +6351,7 @@ export type Database = {
           last_token_refresh?: string | null
           refresh_token?: string | null
           scopes?: string
+          service_preferences?: { gmail: boolean; calendar: boolean; drive: boolean } | null
           token_status?: string | null
           updated_at?: string | null
           user_id?: string

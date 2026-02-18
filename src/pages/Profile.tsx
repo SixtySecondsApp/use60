@@ -14,7 +14,11 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { leaveOrganization, isLastOwner } from '@/lib/services/leaveOrganizationService';
 import { GoodbyeScreen } from '@/components/GoodbyeScreen';
 
-export default function Profile() {
+interface ProfileProps {
+  embedded?: boolean;
+}
+
+export default function Profile({ embedded = false }: ProfileProps) {
   const navigate = useNavigate();
   const { userData, isLoading: userLoading } = useUser();
   const { user, userProfile, updatePassword } = useAuth();
@@ -266,8 +270,8 @@ export default function Profile() {
   // Show loading state while user data is loading
   if (userLoading) {
     return (
-      <div className="p-4 sm:p-8 mt-12 lg:mt-0">
-        <div className="max-w-2xl mx-auto">
+      <div className={embedded ? "" : "p-4 sm:p-8 mt-12 lg:mt-0"}>
+        <div className={embedded ? "" : "max-w-2xl mx-auto"}>
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#37bd7e]"></div>
           </div>
@@ -277,13 +281,15 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen p-4 sm:p-8 mt-12 lg:mt-0">
-      <div className="max-w-2xl mx-auto space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Profile Settings</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your account settings and preferences</p>
-        </div>
+    <div className={embedded ? "space-y-8" : "min-h-screen p-4 sm:p-8 mt-12 lg:mt-0"}>
+      <div className={embedded ? "space-y-8" : "max-w-2xl mx-auto space-y-8"}>
+        {/* Header - only show when not embedded in SettingsPageWrapper */}
+        {!embedded && (
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Profile Settings</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your account settings and preferences</p>
+          </div>
+        )}
 
         {/* Profile Form */}
         <div className="bg-white border border-transparent dark:bg-gray-900/50 dark:backdrop-blur-xl dark:border-gray-800/50 rounded-xl shadow-sm dark:shadow-none overflow-hidden">
