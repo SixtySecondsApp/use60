@@ -37,6 +37,10 @@ const metricTitles: Record<DrillDownMetricType, string> = {
   objection: 'Meetings with Objections',
   positive_outcome: 'Positive Outcome Meetings',
   negative_outcome: 'Negative Outcome Meetings',
+  sentiment_extremes: 'Sentiment Highlights',
+  talk_time_extremes: 'Talk Time Distribution',
+  coach_rating_summary: 'Coaching Guidance',
+  objection_details: 'Objections Analysis',
 };
 
 export default function TeamAnalytics() {

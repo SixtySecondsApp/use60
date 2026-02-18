@@ -36,6 +36,7 @@ interface KPICardData {
   color: 'blue' | 'emerald' | 'purple' | 'amber' | 'cyan' | 'green' | 'orange' | 'slate';
   metricType: DrillDownMetricType;
   invertTrend?: boolean; // For metrics where lower is better
+  clickable?: boolean; // defaults to true
 }
 
 const colorClasses = {
@@ -256,7 +257,7 @@ export function TeamKPIGrid({ period, onCardClick, className }: TeamKPIGridProps
       trendPct: changes.sentimentChangePct,
       icon: Smile,
       color: 'emerald',
-      metricType: 'positive_sentiment',
+      metricType: 'sentiment_extremes',
     },
     {
       title: 'Avg Talk Time',
@@ -265,7 +266,7 @@ export function TeamKPIGrid({ period, onCardClick, className }: TeamKPIGridProps
       trendPct: changes.talkTimeChangePct,
       icon: Clock,
       color: 'purple',
-      metricType: 'all',
+      metricType: 'talk_time_extremes',
     },
     {
       title: 'Coach Rating',
@@ -274,7 +275,7 @@ export function TeamKPIGrid({ period, onCardClick, className }: TeamKPIGridProps
       trendPct: changes.coachRatingChangePct,
       icon: Star,
       color: 'amber',
-      metricType: 'all',
+      metricType: 'coach_rating_summary',
     },
     {
       title: 'Forward Movement',
@@ -307,7 +308,7 @@ export function TeamKPIGrid({ period, onCardClick, className }: TeamKPIGridProps
       trendPct: null, // We don't have change data for objections yet
       icon: AlertCircle,
       color: 'orange',
-      metricType: 'objection',
+      metricType: 'objection_details',
     },
     {
       title: 'Team Members',
@@ -319,6 +320,7 @@ export function TeamKPIGrid({ period, onCardClick, className }: TeamKPIGridProps
       icon: Users,
       color: 'slate',
       metricType: 'all',
+      clickable: false,
     },
   ];
 
@@ -329,7 +331,7 @@ export function TeamKPIGrid({ period, onCardClick, className }: TeamKPIGridProps
           key={card.title}
           data={card}
           period={period}
-          onClick={onCardClick ? () => onCardClick(card.metricType) : undefined}
+          onClick={onCardClick && card.clickable !== false ? () => onCardClick(card.metricType) : undefined}
           index={index}
         />
       ))}
