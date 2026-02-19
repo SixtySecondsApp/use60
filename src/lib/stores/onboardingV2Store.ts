@@ -295,6 +295,12 @@ interface OnboardingV2State {
     status: 'pending' | 'approved' | 'rejected';
   } | null;
 
+  // Domain mismatch detection
+  hasDomainMismatch: boolean;
+  emailDomain: string | null;
+  signupCompanyDomain: string | null;
+  resolvedResearchDomain: string | null;
+
   // Context setters
   setOrganizationId: (id: string) => void;
   setDomain: (domain: string) => void;
@@ -338,6 +344,9 @@ interface OnboardingV2State {
   // Organization selection actions
   submitJoinRequest: (orgId: string, orgName: string) => Promise<void>;
   createNewOrganization: (orgName: string) => Promise<void>;
+
+  // Domain mismatch resolution
+  resolveDomainMismatch: (chosenDomain: string) => void;
 
   // Reset
   reset: () => void;
@@ -459,6 +468,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   // Pending join request state
   pendingJoinRequest: null,
 
+  // Domain mismatch detection
+  hasDomainMismatch: false,
+  emailDomain: null,
+  signupCompanyDomain: null,
+  resolvedResearchDomain: null,
+
   // Context setters
   setOrganizationId: (id) => set({ organizationId: id }),
   setDomain: (domain) => {
@@ -478,6 +493,23 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         const domain = extractDomain(email);
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error('No session');
+
+        // Check if signup company_domain differs from email domain
+        const signupCompanyDomain = session.user?.user_metadata?.company_domain
+          ? extractDomain(session.user.user_metadata.company_domain)
+          : null;
+
+        if (
+          signupCompanyDomain &&
+          signupCompanyDomain !== domain &&
+          !isPersonalEmailDomain(signupCompanyDomain)
+        ) {
+          set({
+            hasDomainMismatch: true,
+            emailDomain: domain,
+            signupCompanyDomain,
+          });
+        }
 
         console.log('[onboardingV2] Business email detected, checking for existing org with domain:', domain);
 
@@ -1281,10 +1313,6 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         throw new Error('Cannot start polling without valid organizationId');
       }
 
-      // Get domain for polling (manual enrichment may have company domain)
-      const { domain } = get();
-      const pollDomain = domain || manualData.company_name || '';
-
       // Start polling for status (manual enrichment still runs AI skill generation)
       get().pollEnrichmentStatus(finalOrgId);
 
@@ -1311,11 +1339,13 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // Let Supabase SDK handle JWT automatically
       console.log('[startEnrichment] Invoking deep-enrich-organization edge function');
 
+      const researchDomain = get().resolvedResearchDomain || domain;
+
       const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
         body: {
           action: 'start',
           organization_id: organizationId,
-          domain: domain,
+          domain: researchDomain,
           force: force,
         },
       });
@@ -1884,6 +1914,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     }
   },
 
+  // Domain mismatch resolution
+  resolveDomainMismatch: (chosenDomain: string) => {
+    set({ resolvedResearchDomain: chosenDomain, hasDomainMismatch: false });
+  },
+
   // Reset store
   reset: () => {
     set({
@@ -1930,6 +1965,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       organizationCreationError: null,
       // Pending join request
       pendingJoinRequest: null,
+      // Domain mismatch detection
+      hasDomainMismatch: false,
+      emailDomain: null,
+      signupCompanyDomain: null,
+      resolvedResearchDomain: null,
     });
 
     // Clear localStorage to prevent stale data from being restored

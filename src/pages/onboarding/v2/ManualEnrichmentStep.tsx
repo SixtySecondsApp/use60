@@ -21,6 +21,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { useOnboardingV2Store, ManualEnrichmentData } from '@/lib/stores/onboardingV2Store';
 
+const MAX_CHAR_SINGLE = 200;
+const MAX_CHAR_MULTI = 800;
+
 interface ManualEnrichmentStepProps {
   organizationId: string;
 }
@@ -217,25 +220,36 @@ export function ManualEnrichmentStep({ organizationId: propOrgId }: ManualEnrich
               {/* Input */}
               <div className="mt-6">
                 {currentQuestion.multiline ? (
-                  <textarea
-                    value={answers[currentQuestion.id] || ''}
-                    onChange={(e) => {
-                      setAnswers({ ...answers, [currentQuestion.id]: e.target.value });
-                      setError(null);
-                    }}
-                    placeholder={currentQuestion.placeholder}
-                    rows={3}
-                    className="w-full px-4 py-4 rounded-xl border border-gray-700 bg-gray-800 text-white placeholder:text-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all resize-none"
-                    autoFocus
-                  />
+                  <>
+                    <textarea
+                      value={answers[currentQuestion.id] || ''}
+                      onChange={(e) => {
+                        if (e.target.value.length <= MAX_CHAR_MULTI) {
+                          setAnswers({ ...answers, [currentQuestion.id]: e.target.value });
+                          setError(null);
+                        }
+                      }}
+                      maxLength={MAX_CHAR_MULTI}
+                      placeholder={currentQuestion.placeholder}
+                      rows={3}
+                      className="w-full px-4 py-4 rounded-xl border border-gray-700 bg-gray-800 text-white placeholder:text-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all resize-none"
+                      autoFocus
+                    />
+                    <p className="text-xs text-gray-500 text-right mt-1">
+                      {(answers[currentQuestion.id] || '').length}/{MAX_CHAR_MULTI}
+                    </p>
+                  </>
                 ) : (
                   <input
                     type="text"
                     value={answers[currentQuestion.id] || ''}
                     onChange={(e) => {
-                      setAnswers({ ...answers, [currentQuestion.id]: e.target.value });
-                      setError(null);
+                      if (e.target.value.length <= MAX_CHAR_SINGLE) {
+                        setAnswers({ ...answers, [currentQuestion.id]: e.target.value });
+                        setError(null);
+                      }
                     }}
+                    maxLength={MAX_CHAR_SINGLE}
                     onKeyDown={handleKeyDown}
                     placeholder={currentQuestion.placeholder}
                     className="w-full px-4 py-4 rounded-xl border border-gray-700 bg-gray-800 text-white placeholder:text-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all"

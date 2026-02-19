@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, X, CreditCard, RefreshCw } from 'lucide-react';
+import { AlertTriangle, X, CreditCard, RefreshCw, Sparkles } from 'lucide-react';
 import { useCreditBalance } from '@/lib/hooks/useCreditBalance';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
@@ -22,6 +22,10 @@ export function LowBalanceBanner() {
   const isAdmin = userData ? isUserAdmin(userData) : false;
   const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(false);
+  const welcomeKey = orgId ? `sixty_welcome_credits_${orgId}` : null;
+  const [showWelcome, setShowWelcome] = useState(() =>
+    welcomeKey ? localStorage.getItem(welcomeKey) === 'pending' : false
+  );
 
   if (!orgId || isLoading || !data || dismissed) return null;
 
@@ -34,6 +38,26 @@ export function LowBalanceBanner() {
   // Amber: <14 days remaining (roughly 20% if avg usage),  Red: <7 days (roughly 10%)
   const isRedLow = balance > 0 && hasUsageData && projectedDaysRemaining < 7;
   const isAmberLow = balance > 0 && hasUsageData && projectedDaysRemaining >= 7 && projectedDaysRemaining < 14;
+
+  // Welcome credits banner — shown once after onboarding
+  if (showWelcome && data && data.balance > 0) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-2 text-sm bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200">
+        <Sparkles className="w-4 h-4 flex-shrink-0" />
+        <span className="flex-1">10 Free AI credits have been added!</span>
+        <button
+          onClick={() => {
+            if (welcomeKey) localStorage.removeItem(welcomeKey);
+            setShowWelcome(false);
+          }}
+          className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 flex-shrink-0"
+          aria-label="Dismiss"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
 
   if (!isZero && !isRedLow && !isAmberLow) return null;
 
