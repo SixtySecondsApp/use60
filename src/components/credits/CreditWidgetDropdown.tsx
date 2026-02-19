@@ -6,7 +6,7 @@
  *   2. Stats row (burn rate + projected days)
  *   3. Usage by feature (top 5 horizontal bars)
  *   4. Recent transactions (last 5)
- *   5. Footer with Top Up + View All
+ *   5. Footer with Top Up
  */
 
 import { useNavigate } from 'react-router-dom';
@@ -190,7 +190,7 @@ export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
 
       {/* Footer */}
       <div className="h-px bg-gray-200 dark:bg-gray-700/50 mx-3" />
-      <div className="flex items-center justify-between px-3 pt-2 pb-1">
+      <div className="flex items-center px-3 pt-2 pb-1">
         <button
           onClick={() => {
             closeDropdown();
@@ -199,15 +199,6 @@ export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
           className="text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 px-3 py-1.5 rounded-md transition-colors"
         >
           Top Up Credits
-        </button>
-        <button
-          onClick={() => {
-            closeDropdown();
-            navigate('/settings/credits');
-          }}
-          className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-        >
-          View All
         </button>
       </div>
     </div>

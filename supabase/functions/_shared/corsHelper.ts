@@ -28,9 +28,6 @@ function getAllowedOrigins(): string[] {
   
   // Add production domains
   const prodDomains = [
-    'https://sixty.io',
-    'https://www.sixty.io',
-    'https://app.sixty.io',
     'https://use60.com',
     'https://www.use60.com',
     'https://app.use60.com',

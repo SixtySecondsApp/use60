@@ -13,12 +13,14 @@ interface AddItemButtonProps {
   onAdd: (value: string) => void;
   placeholder: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export function AddItemButton({
   onAdd,
   placeholder,
   className,
+  disabled,
 }: AddItemButtonProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [value, setValue] = useState('');
@@ -71,9 +73,11 @@ export function AddItemButton({
   return (
     <button
       onClick={() => setIsAdding(true)}
+      disabled={disabled}
       className={cn(
         'w-full flex items-center gap-2 p-2 rounded-lg border-2 border-dashed transition-colors',
         'border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400',
+        disabled && 'opacity-50 cursor-not-allowed hover:border-gray-700 hover:text-gray-500',
         className
       )}
     >

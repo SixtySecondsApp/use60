@@ -30,7 +30,6 @@ import {
   Trash2,
   Loader,
   Sparkles,
-  AlertCircle,
 } from 'lucide-react';
 import { useOnboardingV2Store, SKILLS, SkillId } from '@/lib/stores/onboardingV2Store';
 import { EditableItem, EditableTag, AddItemButton } from '@/components/onboarding';
@@ -42,6 +41,7 @@ type SkillStatus = 'pending' | 'configured' | 'skipped';
 const MAX_TEXTAREA_LENGTH = 2000;
 const MAX_TAG_LENGTH = 100;
 const MAX_ITEM_LENGTH = 500;
+const MAX_ITEMS = 10;
 
 // Sanitize input to prevent injection attacks
 const sanitizeInput = (input: string): string => {
@@ -191,7 +191,11 @@ export function SkillsConfigStep() {
                     })
                   }
                   placeholder="Add qualification criterion"
+                  disabled={(activeConfig.criteria?.length ?? 0) >= MAX_ITEMS}
                 />
+                {(activeConfig.criteria?.length ?? 0) >= MAX_ITEMS && (
+                  <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+                )}
               </div>
             </div>
 
@@ -230,7 +234,11 @@ export function SkillsConfigStep() {
                     })
                   }
                   placeholder="Add disqualifier"
+                  disabled={(activeConfig.disqualifiers?.length ?? 0) >= MAX_ITEMS}
                 />
+                {(activeConfig.disqualifiers?.length ?? 0) >= MAX_ITEMS && (
+                  <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+                )}
               </div>
             </div>
           </div>
@@ -281,11 +289,15 @@ export function SkillsConfigStep() {
                   questions: [...(activeConfig.questions || []), ''],
                 })
               }
-              className="w-full p-3 border-2 border-dashed rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400"
+              disabled={(activeConfig.questions?.length ?? 0) >= MAX_ITEMS}
+              className={`w-full p-3 border-2 border-dashed rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400 ${(activeConfig.questions?.length ?? 0) >= MAX_ITEMS ? 'opacity-50 cursor-not-allowed hover:border-gray-700 hover:text-gray-500' : ''}`}
             >
               <Plus className="w-4 h-4" />
               Add question
             </button>
+            {(activeConfig.questions?.length ?? 0) >= MAX_ITEMS && (
+              <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+            )}
           </div>
         );
 
@@ -344,10 +356,14 @@ export function SkillsConfigStep() {
                     setShowAddWordModal(true);
                     setNewWordInput('');
                   }}
-                  className="px-2.5 py-1 border border-dashed text-sm rounded-full transition-colors border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400"
+                  disabled={(activeConfig.avoid?.length ?? 0) >= MAX_ITEMS}
+                  className={`px-2.5 py-1 border border-dashed text-sm rounded-full transition-colors border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400 ${(activeConfig.avoid?.length ?? 0) >= MAX_ITEMS ? 'opacity-50 cursor-not-allowed hover:border-gray-700 hover:text-gray-500' : ''}`}
                 >
                   + Add
                 </button>
+                {(activeConfig.avoid?.length ?? 0) >= MAX_ITEMS && (
+                  <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+                )}
               </div>
             </div>
 
@@ -491,11 +507,15 @@ export function SkillsConfigStep() {
                   ],
                 })
               }
-              className="w-full p-3 border-2 border-dashed rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400"
+              disabled={(activeConfig.objections?.length ?? 0) >= MAX_ITEMS}
+              className={`w-full p-3 border-2 border-dashed rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400 ${(activeConfig.objections?.length ?? 0) >= MAX_ITEMS ? 'opacity-50 cursor-not-allowed hover:border-gray-700 hover:text-gray-500' : ''}`}
             >
               <Plus className="w-4 h-4" />
               Add objection response
             </button>
+            {(activeConfig.objections?.length ?? 0) >= MAX_ITEMS && (
+              <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+            )}
           </div>
         );
 
@@ -580,7 +600,11 @@ export function SkillsConfigStep() {
                     })
                   }
                   placeholder="Add buying signal"
+                  disabled={(activeConfig.buyingSignals?.length ?? 0) >= MAX_ITEMS}
                 />
+                {(activeConfig.buyingSignals?.length ?? 0) >= MAX_ITEMS && (
+                  <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+                )}
               </div>
             </div>
           </div>
