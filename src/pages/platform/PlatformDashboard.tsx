@@ -48,6 +48,8 @@ import {
   Search,
   X,
   Cpu,
+  PhoneCall,
+  Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -151,7 +153,7 @@ const platformSections: Record<string, PlatformSection[]> = {
       color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
     },
   ],
-  'CRM Configuration': [
+  'Pipeline & Automation': [
     {
       id: 'pipeline',
       title: 'Pipeline Settings',
@@ -374,15 +376,6 @@ const platformSections: Record<string, PlatformSection[]> = {
   ],
   'Development Tools': [
     {
-      id: 'meeting-intelligence',
-      title: 'Meeting Intelligence Demo',
-      description: 'Test call type workflows, coaching, and pipeline automation',
-      icon: Brain,
-      href: '/platform/meeting-intelligence-demo',
-      color: 'text-violet-600 bg-violet-100 dark:bg-violet-900/30',
-      badge: 'New',
-    },
-    {
       id: 'deal-truth-simulator',
       title: 'Deal Truth Simulator',
       description: 'Visualize Deal Truth fields, clarity scoring, and close plan execution',
@@ -462,15 +455,6 @@ const platformSections: Record<string, PlatformSection[]> = {
       color: 'text-orange-600 bg-orange-100 dark:bg-orange-900/30',
     },
     {
-      id: 'intelligence-tests',
-      title: 'Intelligence Test Runner',
-      description: 'Run and visualize meeting intelligence unit tests with AI debugging',
-      icon: Brain,
-      href: '/platform/intelligence-tests',
-      color: 'text-pink-600 bg-pink-100 dark:bg-pink-900/30',
-      badge: 'New',
-    },
-    {
       id: 'onboarding-simulator',
       title: 'Onboarding Simulator',
       description: 'Simulate and visualize the free trial journey',
@@ -522,6 +506,35 @@ const platformSections: Record<string, PlatformSection[]> = {
       href: '/demo/agent-research',
       color: 'text-teal-600 bg-teal-100 dark:bg-teal-900/30',
       badge: 'New',
+    },
+  ],
+  'Feature Development': [
+    {
+      id: 'calls',
+      title: 'Calls (JustCall)',
+      description: 'Call recordings and transcripts via JustCall integration — feature in development',
+      icon: PhoneCall,
+      href: '/calls',
+      color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+      badge: 'In Dev',
+    },
+    {
+      id: 'voice',
+      title: 'Voice Recorder',
+      description: 'Voice recording and transcription — feature in development',
+      icon: Mic,
+      href: '/voice',
+      color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+      badge: 'In Dev',
+    },
+    {
+      id: 'content-topics',
+      title: 'Content Topics',
+      description: 'AI-powered content topic extraction and trend analysis from meetings',
+      icon: Layers,
+      href: '/insights/content-topics',
+      color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+      badge: 'In Dev',
     },
   ],
 };

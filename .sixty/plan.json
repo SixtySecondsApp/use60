@@ -23,6 +23,54 @@
       "prd": null,
       "taskRef": "TSK-0455",
       "createdAt": "2026-02-18T14:00:00Z"
+    },
+    {
+      "id": "ops-table-webhooks",
+      "name": "Ops Table Webhook & API Ingestion",
+      "status": "pending",
+      "branch": "feature/ops-table-webhooks",
+      "planFile": ".sixty/plan-ops-table-webhooks.json",
+      "createdAt": "2026-02-19T00:00:00Z"
+    },
+    {
+      "id": "support-centre",
+      "name": "AI-Powered Support Centre (Help Desk)",
+      "status": "pending",
+      "prd": null,
+      "devHubTicketId": "c5c4840b-851b-4839-94a2-334e01db4a7b",
+      "createdAt": "2026-02-19T00:00:00Z"
+    },
+    {
+      "id": "webhook-url-masking",
+      "name": "Mask Supabase Webhook URLs with Use60 Branded URLs",
+      "status": "pending",
+      "prd": null,
+      "devHubTicketId": "dd68e6c9-12d6-4e39-8ccf-087cc6eb6e0b",
+      "createdAt": "2026-02-19T00:00:00Z"
+    },
+    {
+      "id": "audit-quick-fixes",
+      "name": "Audit Quick Fixes — Critical Bugs & Broken Types",
+      "status": "pending",
+      "prd": null,
+      "consultReport": "Command Centre audit (2026-02-19)",
+      "createdAt": "2026-02-19T12:00:00Z"
+    },
+    {
+      "id": "copilot-transition",
+      "name": "Complete Autonomous Copilot Transition",
+      "status": "pending",
+      "prd": null,
+      "consultReport": "Command Centre audit (2026-02-19)",
+      "createdAt": "2026-02-19T12:00:00Z"
+    },
+    {
+      "id": "service-cleanup",
+      "name": "Service Layer Cleanup & Tech Debt",
+      "status": "pending",
+      "prd": null,
+      "consultReport": "Command Centre audit (2026-02-19)",
+      "createdAt": "2026-02-19T12:00:00Z"
     }
   ],
   "stories": [
@@ -200,8 +248,7 @@
         "src/components/meeting-analytics/InsightsTab.tsx",
         "src/components/meeting-analytics/SearchHero.tsx"
       ]
-    }
-  ],
+    },
     {
       "id": "SET-001",
       "feature": "settings-page-fixes",
@@ -434,7 +481,7 @@
       "acceptance": [
         "New BillingSettingsPage.tsx created at src/pages/settings/",
         "Route /settings/billing registered in App.tsx and routeConfig.ts",
-        "Shows current plan (default £29/month) with status indicator",
+        "Shows current plan (default 29/month) with status indicator",
         "Stripe Customer Portal link button (uses Stripe billing portal URL or edge function)",
         "Credit pack top-up section links to existing CreditsSettingsPage or embeds CreditPurchaseModal",
         "If Stripe not yet connected, shows 'Coming soon' or setup instructions"
@@ -443,12 +490,207 @@
         "src/pages/settings/BillingSettingsPage.tsx",
         "src/lib/routes/routeConfig.ts"
       ]
+    },
+
+    {
+      "id": "SUP-001",
+      "feature": "support-centre",
+      "title": "Create support_tickets and support_messages schema with RLS",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["SUP-002", "SUP-003", "SUP-004", "SUP-005"],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "support_tickets table: id, org_id, user_id, subject, description, category (enum: bug, feature_request, billing, how_to, other), priority (enum: low, medium, high, urgent), status (enum: open, in_progress, waiting_on_customer, resolved, closed), assigned_to, created_at, updated_at, resolved_at",
+        "support_messages table: id, ticket_id (FK), sender_id, sender_type (enum: user, agent, system), content, attachments (jsonb), created_at",
+        "RLS: users see own tickets, org admins see all org tickets",
+        "Indexes on org_id, user_id, status, created_at",
+        "Trigger for auto-updating updated_at on support_tickets"
+      ],
+      "files": [
+        "supabase/migrations/20260220000001_support_centre_schema.sql"
+      ]
+    },
+    {
+      "id": "SUP-002",
+      "feature": "support-centre",
+      "title": "Build Support Centre page shell with AI search landing",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["SUP-001"], "files": [], "schema": ["support_tickets"] },
+      "blocks": ["SUP-003", "SUP-004"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "SupportCentrePage.tsx created at src/pages/",
+        "Route /support registered in routeConfig.ts (access: 'any', LifeBuoy icon, tools section)",
+        "Lazy import in lazyPages.tsx",
+        "Page layout: header (icon badge + 'Support Centre') -> search hero -> two tabs (Ask AI, My Tickets)",
+        "Search hero: large input with 'How can we help?' placeholder, suggested questions below"
+      ],
+      "files": [
+        "src/pages/SupportCentrePage.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "SUP-003",
+      "feature": "support-centre",
+      "title": "Build AI Documentation Assistant chat interface",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["SUP-002"], "files": [], "schema": [] },
+      "blocks": ["SUP-006"],
+      "parallelWith": ["SUP-004"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "SupportAIChat.tsx component in src/components/support/",
+        "Chat-style UI: user asks question, AI responds with doc-sourced answer",
+        "Queries docs_articles table via full-text search or calls search-documentation pattern",
+        "Answers show source article links (clickable, open in DocsPage or new tab)",
+        "Suggested follow-up questions after each answer",
+        "'Was this helpful?' thumbs up/down feedback (writes to docs_feedback table)",
+        "'Talk to a human' button below each answer escalates to ticket creation"
+      ],
+      "files": [
+        "src/components/support/SupportAIChat.tsx",
+        "src/lib/hooks/useSupportChat.ts"
+      ]
+    },
+    {
+      "id": "SUP-004",
+      "feature": "support-centre",
+      "title": "Build ticket creation form and My Tickets list",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["SUP-002"], "files": [], "schema": ["support_tickets"] },
+      "blocks": ["SUP-005"],
+      "parallelWith": ["SUP-003"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "CreateTicketForm.tsx in src/components/support/ — Dialog with subject, description (rich text), category dropdown, priority selector",
+        "Form submits to support_tickets table, shows toast with ticket ID",
+        "TicketList.tsx shows user's tickets with status badges, category, priority, created date",
+        "Filters: status (open/resolved/all), category",
+        "Empty state when no tickets"
+      ],
+      "files": [
+        "src/components/support/CreateTicketForm.tsx",
+        "src/components/support/TicketList.tsx",
+        "src/lib/hooks/useSupportTickets.ts"
+      ]
+    },
+    {
+      "id": "SUP-005",
+      "feature": "support-centre",
+      "title": "Build ticket detail view with conversation thread",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["SUP-004"], "files": [], "schema": ["support_tickets", "support_messages"] },
+      "blocks": ["SUP-006"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "TicketDetail.tsx in src/components/support/ — Sheet panel with !top-16 !h-[calc(100vh-4rem)]",
+        "Shows ticket metadata: subject, status badge, category, priority, created/updated dates",
+        "Conversation thread: chronological messages with sender avatar, timestamp, content",
+        "Message input at bottom for user replies (inserts into support_messages)",
+        "Status timeline showing state transitions"
+      ],
+      "files": [
+        "src/components/support/TicketDetail.tsx",
+        "src/components/support/TicketConversation.tsx",
+        "src/lib/hooks/useSupportMessages.ts"
+      ]
+    },
+    {
+      "id": "SUP-006",
+      "feature": "support-centre",
+      "title": "Build internal support agent dashboard and email notifications",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["SUP-003", "SUP-005"], "files": [], "schema": ["support_tickets", "support_messages"] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "SupportAgentDashboard.tsx — org admin view showing all org tickets with assignment, filters, bulk actions",
+        "Assign ticket to team member (updates assigned_to)",
+        "Agent can reply to tickets (sender_type: 'agent')",
+        "Edge function support-ticket-notification sends email on: ticket created, new reply, status changed",
+        "MJML template matching existing email patterns (uses getCorsHeaders)"
+      ],
+      "files": [
+        "src/components/support/SupportAgentDashboard.tsx",
+        "supabase/functions/support-ticket-notification/index.ts"
+      ]
+    },
+
+    {
+      "id": "WBM-001",
+      "feature": "webhook-url-masking",
+      "title": "Add webhook base URL config and Vercel rewrite rule",
+      "type": "infrastructure",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["WBM-002"],
+      "parallelWith": [],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "New VITE_WEBHOOK_BASE_URL env var added to .env.development, .env.staging, .env.production",
+        "Development: points to Supabase URL (backwards compatible)",
+        "Production: points to use60.com domain (e.g. https://app.use60.com/api/webhooks)",
+        "vercel.json rewrite rule: /api/webhooks/:path* -> ${SUPABASE_URL}/functions/v1/:path*",
+        "Utility function getWebhookBaseUrl() in src/lib/utils/ returns the branded URL"
+      ],
+      "files": [
+        "vercel.json",
+        "src/lib/utils/webhookUrl.ts",
+        ".env.development",
+        ".env.staging",
+        ".env.production"
+      ]
+    },
+    {
+      "id": "WBM-002",
+      "feature": "webhook-url-masking",
+      "title": "Update all webhook UI components to display branded URLs",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["WBM-001"], "files": ["src/lib/utils/webhookUrl.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "WebhookSettingsPanel.tsx: webhookUrl uses getWebhookBaseUrl() instead of VITE_SUPABASE_URL",
+        "WebhookSetupInstructions.tsx: all code examples (cURL, Python, Zapier, Make, n8n) show branded URL",
+        "WebhookTestConsole.tsx: test endpoint uses branded URL",
+        "No Supabase project ref or supabase.co domain visible to users anywhere in webhook UI",
+        "Existing webhooks using old Supabase URLs still work (Vercel rewrite handles both paths)"
+      ],
+      "files": [
+        "src/components/ops/WebhookSettingsPanel.tsx",
+        "src/components/ops/WebhookSetupInstructions.tsx",
+        "src/components/ops/WebhookTestConsole.tsx"
+      ]
     }
   ],
   "execution": {
-    "totalStories": 18,
+    "totalStories": 26,
     "completedStories": 7,
     "currentFeature": "settings-page-fixes",
-    "lastUpdated": "2026-02-18T14:00:00Z"
+    "lastUpdated": "2026-02-19T00:00:00Z"
   }
 }

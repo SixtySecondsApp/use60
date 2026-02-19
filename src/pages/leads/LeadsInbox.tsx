@@ -1,22 +1,20 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import type { LeadWithPrep } from '@/lib/services/leadService';
 import { toast } from 'sonner';
 import { LeadList } from '@/components/leads/LeadList';
-import { LeadTable } from '@/components/leads/LeadTable';
 import { LeadDetailPanel } from '@/components/leads/LeadDetailPanel';
-import { LeadDetailModal } from '@/components/leads/LeadDetailModal';
 import { LeadPrepToolbar } from '@/components/leads/LeadPrepToolbar';
-import { LeadPagination } from '@/components/leads/LeadPagination';
-import { Search } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useLeadPrepRunner, useLeads, useLeadReprocessor } from '@/lib/hooks/useLeads';
 import { useUser } from '@/lib/hooks/useUser';
 import { useActiveOrgId, useOrgStore } from '@/lib/stores/orgStore';
+import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
 
 export default function LeadsInbox() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { data: leads = [], isLoading, isFetching, refetch } = useLeads();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const { mutateAsync: runPrep, isPending } = useLeadPrepRunner();
@@ -29,10 +27,25 @@ export default function LeadsInbox() {
   const [reprocessingLeadId, setReprocessingLeadId] = useState<string | null>(null);
   const [orgLoadAttempted, setOrgLoadAttempted] = useState(false);
 
-  // View mode and pagination state from URL params
+  // Look up the standard Leads Ops table ID for table view navigation
+  const { data: leadsOpsTableId } = useQuery({
+    queryKey: ['ops-leads-table-id', orgId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('dynamic_tables')
+        .select('id')
+        .eq('name', 'Leads')
+        .eq('is_standard', true)
+        .eq('organization_id', orgId!)
+        .maybeSingle();
+      return data?.id ?? null;
+    },
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // View mode from URL params (table view navigates to Ops, so only 'list' renders here)
   const viewMode = (searchParams.get('view') || 'list') as 'list' | 'table';
-  const currentPage = parseInt(searchParams.get('page') || '1', 10);
-  const pageSize = 20;
 
   // URL-based filters
   const sourceFilter = searchParams.get('source');
@@ -42,19 +55,9 @@ export default function LeadsInbox() {
   const [visibleCount, setVisibleCount] = useState(20);
   const BATCH_SIZE = 20;
 
-  // Filter and sort state (shared between list and table views)
+  // Filter and sort state
   const [filterType, setFilterType] = useState<'all' | 'meeting_date' | 'booked_date'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!isSearchOpen) return;
-    const timer = setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [isSearchOpen]);
 
   // Filter and sort leads (shared logic for both views)
   const filteredAndSortedLeads = useMemo(() => {
@@ -167,39 +170,23 @@ export default function LeadsInbox() {
     }
   }, [user?.id, orgId, isLoadingOrgs, orgLoadAttempted, loadOrganizations]);
 
-  // Handle view mode change
+  // Handle view mode change — table view navigates to Ops table
   const handleViewModeChange = (view: 'list' | 'table') => {
-    // Clear selection when switching to table view to prevent modal from opening
     if (view === 'table') {
-      setSelectedLeadId(null);
+      if (leadsOpsTableId) {
+        navigate(`/ops/${leadsOpsTableId}`);
+      } else {
+        toast.error('Leads table not provisioned yet. Visit Ops to set up standard tables.');
+      }
+      return;
     }
     setSearchParams((prev) => {
       const newParams = new URLSearchParams(prev);
       newParams.set('view', view);
-      // Reset to page 1 when switching views
       newParams.set('page', '1');
       return newParams;
     });
   };
-
-  // Handle page change
-  const handlePageChange = (page: number) => {
-    setSearchParams((prev) => {
-      const newParams = new URLSearchParams(prev);
-      newParams.set('page', page.toString());
-      return newParams;
-    });
-    // Scroll to top when page changes
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Calculate pagination on filtered/sorted leads
-  const totalPages = Math.ceil(filteredAndSortedLeads.length / pageSize);
-  const paginatedLeads = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    return filteredAndSortedLeads.slice(start, end);
-  }, [filteredAndSortedLeads, currentPage, pageSize]);
 
   // Lazy loaded leads for list view
   const lazyLoadedLeads = useMemo(() => {
@@ -212,51 +199,13 @@ export default function LeadsInbox() {
     setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, filteredAndSortedLeads.length));
   }, [filteredAndSortedLeads.length, BATCH_SIZE]);
 
-  // Reset to page 1 if current page is out of bounds
-  useEffect(() => {
-    if (currentPage > totalPages && totalPages > 0) {
-      handlePageChange(1);
-    }
-  }, [currentPage, totalPages]);
-
-  // Reset to page 1 when filter or search changes
-  // Track previous values to detect actual changes
-  const prevFilterRef = useRef(filterType);
-  const prevSearchRef = useRef(searchQuery);
-
-  useEffect(() => {
-    const filterChanged = prevFilterRef.current !== filterType;
-    const searchChanged = prevSearchRef.current !== searchQuery;
-
-    // Only reset to page 1 if filter or search actually changed
-    if ((filterChanged || searchChanged) && currentPage !== 1) {
-      setSearchParams((prev) => {
-        const newParams = new URLSearchParams(prev);
-        newParams.set('page', '1');
-        return newParams;
-      });
-    }
-
-    // Update refs
-    prevFilterRef.current = filterType;
-    prevSearchRef.current = searchQuery;
-  }, [filterType, searchQuery, currentPage, setSearchParams]);
-
   const selectedLead = useMemo(
     () => leads.find((lead) => lead.id === selectedLeadId) ?? null,
     [leads, selectedLeadId]
   );
 
   // Auto-select first lead on page load or when current selection is not in filtered list
-  // Only auto-select in list view - in table view, user must explicitly click to open modal
   useEffect(() => {
-    // In table view, explicitly clear any selection to prevent modal from opening on page load
-    if (viewMode === 'table') {
-      // Only clear if there's a selection and leads haven't been explicitly clicked
-      // This ensures the modal doesn't open by default when navigating directly to table view
-      return;
-    }
-
     if (filteredAndSortedLeads.length === 0) {
       // No leads, clear selection
       if (selectedLeadId !== null) {
@@ -277,15 +226,7 @@ export default function LeadsInbox() {
         setSelectedLeadId(filteredAndSortedLeads[0].id);
       }
     }
-  }, [filteredAndSortedLeads, selectedLeadId, viewMode]);
-
-  // Clear selection when initially loading in table view to prevent modal from opening
-  useEffect(() => {
-    if (viewMode === 'table' && selectedLeadId !== null) {
-      setSelectedLeadId(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode]);
+  }, [filteredAndSortedLeads, selectedLeadId]);
 
   const handleGeneratePrep = async () => {
     try {
@@ -310,12 +251,6 @@ export default function LeadsInbox() {
   };
 
   return (
-    <>
-      <LeadDetailModal
-        isOpen={viewMode === 'table' && !!selectedLead}
-        onClose={() => setSelectedLeadId(null)}
-        lead={selectedLead}
-      />
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
         <div className="flex h-[calc(100vh-160px)] sm:h-[calc(100vh-140px)] lg:h-[calc(100vh-120px)] flex-col rounded-xl sm:rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800/60 dark:bg-gray-950/40 overflow-hidden">
           <LeadPrepToolbar
@@ -353,155 +288,7 @@ export default function LeadsInbox() {
           </div>
         )}
 
-        {!((sourceFilter || stageFilter) && filteredAndSortedLeads.length === 0 && !isLoading) && viewMode === 'table' ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
-            {/* Filter/Search Toolbar for Table View */}
-            <div className="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/30">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                  Sort by:
-                  <button
-                    type="button"
-                    onClick={() => setIsSearchOpen((prev) => !prev)}
-                    className={cn(
-                      'inline-flex h-6 w-6 items-center justify-center rounded-md border text-gray-500 transition-colors',
-                      isSearchOpen
-                        ? 'border-emerald-500 bg-emerald-500 text-white'
-                        : 'border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 dark:text-gray-300'
-                    )}
-                    aria-label={isSearchOpen ? 'Close lead search' : 'Search leads'}
-                    aria-pressed={isSearchOpen}
-                  >
-                    <Search className="h-3.5 w-3.5" />
-                  </button>
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setFilterType('all')}
-                    className={cn(
-                      'px-2 py-1 text-xs font-medium rounded-md transition-colors',
-                      filterType === 'all'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200'
-                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
-                    )}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setFilterType('meeting_date')}
-                    className={cn(
-                      'px-2 py-1 text-xs font-medium rounded-md transition-colors',
-                      filterType === 'meeting_date'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200'
-                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
-                    )}
-                  >
-                    Meeting Date
-                  </button>
-                  <button
-                    onClick={() => setFilterType('booked_date')}
-                    className={cn(
-                      'px-2 py-1 text-xs font-medium rounded-md transition-colors',
-                      filterType === 'booked_date'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200'
-                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
-                    )}
-                  >
-                    Booked Date
-                  </button>
-                </div>
-              </div>
-
-              {/* Active filters indicator */}
-              {(sourceFilter || stageFilter) && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Filters:</span>
-                  {sourceFilter && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200">
-                      Source: {sourceFilter}
-                      <button
-                        onClick={() => {
-                          const newParams = new URLSearchParams(searchParams);
-                          newParams.delete('source');
-                          setSearchParams(newParams);
-                        }}
-                        className="ml-1 hover:text-blue-900 dark:hover:text-blue-100"
-                        aria-label="Clear source filter"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  )}
-                  {stageFilter && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-200">
-                      Stage: {stageFilter}
-                      <button
-                        onClick={() => {
-                          const newParams = new URLSearchParams(searchParams);
-                          newParams.delete('stage');
-                          setSearchParams(newParams);
-                        }}
-                        className="ml-1 hover:text-purple-900 dark:hover:text-purple-100"
-                        aria-label="Clear stage filter"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  )}
-                  <button
-                    onClick={() => {
-                      const newParams = new URLSearchParams(searchParams);
-                      newParams.delete('source');
-                      newParams.delete('stage');
-                      setSearchParams(newParams);
-                    }}
-                    className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
-                  >
-                    Clear all
-                  </button>
-                </div>
-              )}
-
-              <div className="ml-auto flex items-center">
-                <div
-                  className={cn(
-                    'flex h-8 items-center overflow-hidden rounded-md border transition-all duration-300 ease-out',
-                    isSearchOpen
-                      ? 'w-48 sm:w-60 border-gray-200 bg-white px-2 dark:border-gray-700 dark:bg-gray-900'
-                      : 'pointer-events-none w-0 border-transparent px-0 opacity-0'
-                  )}
-                >
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search leads..."
-                    className="h-full w-full bg-transparent text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <LeadTable
-                leads={paginatedLeads}
-                selectedLeadId={selectedLeadId}
-                onSelect={(id) => setSelectedLeadId(id)}
-                isLoading={isLoading}
-                onReprocessLead={handleReprocessLead}
-                reprocessingLeadId={reprocessingLeadId}
-                isReprocessing={isReprocessingLead}
-              />
-            </div>
-            <LeadPagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={filteredAndSortedLeads.length}
-              pageSize={pageSize}
-              onPageChange={handlePageChange}
-            />
-          </div>
-        ) : (
+        {!((sourceFilter || stageFilter) && filteredAndSortedLeads.length === 0 && !isLoading) && (
           <div className="flex flex-1 flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-800 overflow-hidden">
             {/* Lead List - Full width on mobile, wider sidebar on desktop */}
             <div className="w-full lg:w-[32rem] lg:max-w-[32rem] flex-shrink-0 flex flex-col h-64 lg:h-auto">
@@ -532,7 +319,6 @@ export default function LeadsInbox() {
         )}
       </div>
     </div>
-    </>
   );
 }
 

@@ -45,6 +45,7 @@ const ACTION_TYPES = [
   { value: 'add_tag', label: 'Add a tag' },
   { value: 'run_enrichment', label: 'Run enrichment' },
   { value: 'notify', label: 'Log notification' },
+  { value: 'webhook', label: 'Webhook' },
 ];
 
 const NO_VALUE_OPERATORS = ['is_empty', 'is_not_empty'];
@@ -66,10 +67,21 @@ export function RuleBuilder({ columns, onSave, onCancel, userId, isSaving }: Rul
   const [actionMessage, setActionMessage] = useState('');
   const [actionEnrichmentColumnId, setActionEnrichmentColumnId] = useState('');
 
+  // Webhook action state
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookMethod, setWebhookMethod] = useState<'POST' | 'GET'>('POST');
+  const [webhookHeadersRaw, setWebhookHeadersRaw] = useState('');
+  const [webhookSelectedColumns, setWebhookSelectedColumns] = useState<string[]>([]);
+
+  const webhookUrlValid = webhookUrl.trim() === '' || /^https?:\/\/.+/.test(webhookUrl.trim());
+
   const enrichmentColumns = columns.filter((c) => c.is_enrichment);
   const tagsColumns = columns.filter((c) => c.column_type === 'tags');
 
-  const canSave = name.trim() && triggerType;
+  const canSave =
+    name.trim() &&
+    triggerType &&
+    (actionType !== 'webhook' || (webhookUrl.trim() !== '' && webhookUrlValid));
 
   const handleSave = () => {
     const condition: Record<string, any> = {};
@@ -97,6 +109,27 @@ export function RuleBuilder({ columns, onSave, onCancel, userId, isSaving }: Rul
       case 'notify':
         actionConfig.message = actionMessage || `Rule "${name}" triggered`;
         break;
+      case 'webhook': {
+        actionConfig.url = webhookUrl.trim();
+        actionConfig.method = webhookMethod;
+        if (webhookSelectedColumns.length > 0) {
+          actionConfig.include_columns = webhookSelectedColumns;
+        }
+        // Parse optional headers from "Key: Value" lines
+        const parsedHeaders: Record<string, string> = {};
+        for (const line of webhookHeadersRaw.split('\n')) {
+          const colonIdx = line.indexOf(':');
+          if (colonIdx > 0) {
+            const k = line.slice(0, colonIdx).trim();
+            const v = line.slice(colonIdx + 1).trim();
+            if (k && v) parsedHeaders[k] = v;
+          }
+        }
+        if (Object.keys(parsedHeaders).length > 0) {
+          actionConfig.headers = parsedHeaders;
+        }
+        break;
+      }
     }
 
     onSave({
@@ -258,6 +291,99 @@ export function RuleBuilder({ columns, onSave, onCancel, userId, isSaving }: Rul
             placeholder="Notification message"
             className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none"
           />
+        )}
+
+        {actionType === 'webhook' && (
+          <div className="space-y-3">
+            {/* URL + Method */}
+            <div className="flex gap-2">
+              <select
+                value={webhookMethod}
+                onChange={(e) => setWebhookMethod(e.target.value as 'POST' | 'GET')}
+                className="rounded-lg border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-white outline-none"
+              >
+                <option value="POST">POST</option>
+                <option value="GET">GET</option>
+              </select>
+              <input
+                type="url"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://your-endpoint.com/hook"
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm text-white placeholder-gray-500 outline-none bg-gray-800 ${
+                  webhookUrl && !webhookUrlValid ? 'border-red-500' : 'border-gray-700'
+                }`}
+              />
+            </div>
+            {webhookUrl && !webhookUrlValid && (
+              <p className="text-xs text-red-400">URL must start with http:// or https://</p>
+            )}
+
+            {/* Column filter */}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-400">
+                Send columns (leave empty for all)
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {columns.map((col) => {
+                  const selected = webhookSelectedColumns.includes(col.key);
+                  return (
+                    <button
+                      key={col.key}
+                      type="button"
+                      onClick={() =>
+                        setWebhookSelectedColumns((prev) =>
+                          selected ? prev.filter((k) => k !== col.key) : [...prev, col.key],
+                        )
+                      }
+                      className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                        selected
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {col.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom headers */}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-400">
+                Custom headers (one per line: Key: Value)
+              </label>
+              <textarea
+                value={webhookHeadersRaw}
+                onChange={(e) => setWebhookHeadersRaw(e.target.value)}
+                placeholder={'Authorization: Bearer token\nX-Source: use60'}
+                rows={3}
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 font-mono text-xs text-white placeholder-gray-500 outline-none"
+              />
+            </div>
+
+            {/* Payload preview */}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-400">Payload preview</label>
+              <pre className="rounded-lg bg-gray-950 border border-gray-700 px-3 py-2 text-xs text-gray-300 overflow-auto max-h-36">
+                {JSON.stringify(
+                  {
+                    event: triggerType,
+                    table_id: '<table_id>',
+                    row_id: '<row_id>',
+                    timestamp: new Date().toISOString(),
+                    data:
+                      webhookSelectedColumns.length > 0
+                        ? Object.fromEntries(webhookSelectedColumns.map((k) => [k, '<value>']))
+                        : Object.fromEntries(columns.slice(0, 3).map((c) => [c.key, '<value>'])),
+                  },
+                  null,
+                  2,
+                )}
+              </pre>
+            </div>
+          </div>
         )}
       </div>
 

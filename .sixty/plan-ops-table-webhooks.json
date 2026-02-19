@@ -1,0 +1,280 @@
+{
+  "feature": {
+    "id": "ops-table-webhooks",
+    "name": "Ops Table Webhook & API Ingestion",
+    "branch": "feature/ops-table-webhooks",
+    "status": "pending",
+    "consultReport": ".sixty/consult/ops-table-webhooks.md",
+    "createdAt": "2026-02-19T00:00:00Z"
+  },
+
+  "summary": {
+    "totalStories": 10,
+    "estimatedMinutes": 180,
+    "parallelGroups": [
+      ["OTW-005", "OTW-004"],
+      ["OTW-007", "OTW-008"]
+    ],
+    "mvpStories": ["OTW-001", "OTW-002", "OTW-003", "OTW-005", "OTW-007"]
+  },
+
+  "stories": [
+    {
+      "id": "OTW-001",
+      "feature": "ops-table-webhooks",
+      "title": "Migration: ops_table_webhooks + ops_webhook_logs tables",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "schema": [] },
+      "blocks": ["OTW-002", "OTW-003", "OTW-004", "OTW-005"],
+      "parallelWith": [],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "ops_table_webhooks table: id, table_id (FK dynamic_tables), org_id, api_key (text), is_enabled, auto_create_columns (bool, default false), first_call_received_at (timestamptz), field_mapping (jsonb), created_by, created_at, updated_at",
+        "ops_webhook_logs table: id, webhook_id (FK ops_table_webhooks), direction ('inbound'|'outbound'), status (int), payload (jsonb), mapped_result (jsonb), rows_affected (int), error (text), created_at",
+        "RLS: orgs can read/write their own webhook configs; logs readable by org members",
+        "Index on ops_webhook_logs(webhook_id, created_at DESC) for activity feed",
+        "source_type ENUM on dynamic_table_rows extended to include 'webhook'"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_ops_table_webhooks.sql"
+      ],
+      "notes": "api_key stored as plain text (hashed comparison handled in edge function). Follow existing migration patterns in supabase/migrations/."
+    },
+
+    {
+      "id": "OTW-002",
+      "feature": "ops-table-webhooks",
+      "title": "Edge function: ops-table-inbound-webhook (validate, upsert rows)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["OTW-001"], "schema": ["ops_table_webhooks", "dynamic_table_rows", "dynamic_table_cells"] },
+      "blocks": ["OTW-003", "OTW-007"],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "POST /functions/v1/ops-table-inbound-webhook accepts { table_id, payload: object | object[] }",
+        "Auth: x-api-key header validated against ops_table_webhooks.api_key for the given table_id",
+        "Rate limit: 60 requests/minute per table (return 429 if exceeded)",
+        "Webhook must be is_enabled=true (return 403 if disabled)",
+        "Rows inserted to dynamic_table_rows with source_type='webhook'; cells upserted in 500-item batches",
+        "ops_webhook_logs entry written (direction='inbound', status, rows_affected, error if any)",
+        "Returns { success: true, rows_created: N, rows_updated: N } or error object",
+        "Deploy with --no-verify-jwt; validate via api_key only"
+      ],
+      "files": [
+        "supabase/functions/ops-table-inbound-webhook/index.ts"
+      ],
+      "notes": "Follow sync-hubspot-ops-table batch upsert pattern. Use getCorsHeaders(req) from _shared/corsHelper.ts. Use service role client for cross-table writes."
+    },
+
+    {
+      "id": "OTW-003",
+      "feature": "ops-table-webhooks",
+      "title": "AI field mapping in inbound webhook (payload keys → table columns)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["OTW-001", "OTW-002"], "schema": ["dynamic_table_columns"] },
+      "blocks": ["OTW-007"],
+      "parallelWith": [],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "When no field_mapping configured, Claude Haiku maps payload keys to column labels/keys using fuzzy + semantic matching",
+        "Mapping result cached in ops_table_webhooks.field_mapping after first successful call",
+        "Unknown payload keys (no column match) tracked in mapped_result.unmapped_fields array",
+        "If auto_create_columns=true AND first_call_received_at IS NULL: auto-create columns for unmapped fields using autoDetectColumnType logic (reuse csvOpsTableService pattern)",
+        "After first call, set first_call_received_at=now() and auto_create_columns=false",
+        "Mapped_result stored in ops_webhook_logs for debugging"
+      ],
+      "files": [
+        "supabase/functions/ops-table-inbound-webhook/index.ts"
+      ],
+      "notes": "Extend OTW-002's edge function. Use Claude Haiku (claude-haiku-4-5) for mapping. Column type auto-detection: reuse the same logic as csvOpsTableService.autoDetectColumnType."
+    },
+
+    {
+      "id": "OTW-004",
+      "feature": "ops-table-webhooks",
+      "title": "Outbound webhook action type in evaluate-ops-rule",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["OTW-001"], "schema": ["ops_rules"] },
+      "blocks": ["OTW-008"],
+      "parallelWith": ["OTW-005"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "ops_rules.action_type ENUM extended to include 'webhook'",
+        "action_config for webhook type: { url: string, method: 'POST'|'GET', headers?: Record<string,string>, include_columns?: string[] }",
+        "evaluate-ops-rule handles action_type='webhook': POSTs row data as JSON to configured URL",
+        "Payload includes: { event: trigger_type, table_id, row_id, timestamp, data: { [column_key]: value } }",
+        "Filtered to include_columns if specified, otherwise all columns",
+        "Logs to ops_webhook_logs (direction='outbound', status=response_status)",
+        "Existing circuit breaker (10 failures) and rate limiter (10/min) apply"
+      ],
+      "files": [
+        "supabase/functions/evaluate-ops-rule/index.ts",
+        "supabase/migrations/YYYYMMDD_ops_table_webhooks.sql"
+      ],
+      "notes": "Add 'webhook' to the action_type ENUM in the migration (OTW-001). Keep circuit breaker and rate limit logic unchanged."
+    },
+
+    {
+      "id": "OTW-005",
+      "feature": "ops-table-webhooks",
+      "title": "API panel UI: WebhookSettingsPanel component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["OTW-001"], "schema": ["ops_table_webhooks", "ops_webhook_logs"] },
+      "blocks": ["OTW-006", "OTW-007", "OTW-008", "OTW-009"],
+      "parallelWith": ["OTW-004"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Webhook icon button (Webhook or Zap from lucide-react) in OpsTable toolbar, opens SheetContent panel",
+        "Panel includes !top-16 !h-[calc(100vh-4rem)] for top bar offset",
+        "Inbound section: webhook URL (read-only, copy button), masked API key (sk_...last4, copy full key button, regenerate button with confirmation)",
+        "Inbound section: auto_create_columns toggle labeled 'Auto-create columns for unknown fields (first call only)'",
+        "Outbound section: '+ Add Webhook Rule' button (links to automation rules builder pre-filled with webhook action type)",
+        "Recent Activity table: last 10 log entries (time, direction badge, HTTP status, rows affected); empty state if no calls yet",
+        "Skeleton loading state while fetching"
+      ],
+      "files": [
+        "src/components/ops/WebhookSettingsPanel.tsx",
+        "src/lib/hooks/useWebhookSettings.ts"
+      ],
+      "notes": "useWebhookSettings hook: getWebhookConfig(tableId), generateApiKey(webhookId), updateWebhookConfig(webhookId, patch), getWebhookLogs(webhookId, limit). Never expose full api_key in list queries — fetch masked version by default."
+    },
+
+    {
+      "id": "OTW-006",
+      "feature": "ops-table-webhooks",
+      "title": "Setup instructions: platform-specific tabs (Zapier, Make, n8n, cURL)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["OTW-005"] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "Collapsible 'Setup Instructions' section inside WebhookSettingsPanel (collapsed by default)",
+        "Tabs: Zapier | Make | n8n | cURL / Python",
+        "Each tab shows step-by-step numbered instructions with pre-filled webhook URL and API key",
+        "Zapier: Custom Webhook trigger → Webhook by Zapier action → paste URL + x-api-key header",
+        "Make: HTTP module → POST → URL + header config",
+        "n8n: HTTP Request node config with auth header",
+        "cURL tab: generated curl command + Python requests snippet, both with Copy button",
+        "Expected payload section shows current table columns as JSON schema example",
+        "All URLs and keys dynamically injected (not hardcoded)"
+      ],
+      "files": [
+        "src/components/ops/WebhookSetupInstructions.tsx"
+      ],
+      "notes": "Keep it simple — static content with dynamic variable injection. No need for screenshots (use code blocks). Use lucide-react Copy icon for copy buttons."
+    },
+
+    {
+      "id": "OTW-007",
+      "feature": "ops-table-webhooks",
+      "title": "Test console modal: paste JSON, preview AI mapping, send test",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["OTW-005", "OTW-002", "OTW-003"] },
+      "blocks": [],
+      "parallelWith": ["OTW-008"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "'Test Webhook' button in WebhookSettingsPanel opens a Dialog modal",
+        "JSON textarea for sample payload (defaulted to schema-derived example)",
+        "On paste/type, call a preview endpoint that runs AI mapping WITHOUT inserting rows (dry_run=true)",
+        "Mapping preview table: Payload Key | Maps To (column label) | Action (existing / +create / unmapped)",
+        "Unmapped fields highlighted in amber if auto_create_columns is off",
+        "'Send Test' button: calls edge function with dry_run=false, shows result toast (rows created/updated) or error",
+        "Generated cURL snippet at bottom (auto-updates as payload changes), with Copy button",
+        "Modal is dismissible; does not close on outside click (prevent accidental dismiss while copying)"
+      ],
+      "files": [
+        "src/components/ops/WebhookTestConsole.tsx"
+      ],
+      "notes": "Preview (dry_run=true) should return mapping result without writing to DB. Add dry_run param support to OTW-002 edge function."
+    },
+
+    {
+      "id": "OTW-008",
+      "feature": "ops-table-webhooks",
+      "title": "Outbound webhook rule builder in automation UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["OTW-004", "OTW-005"] },
+      "blocks": [],
+      "parallelWith": ["OTW-007"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "Existing automation rule builder supports action_type='webhook'",
+        "Webhook action config form: URL input (required, validated as URL), event selector (row_created / cell_updated / enrichment_complete), optional column filter (which columns to include in payload)",
+        "Payload preview section shows example JSON that will be sent",
+        "Outbound section in WebhookSettingsPanel lists existing webhook rules with enable/disable toggle and edit/delete",
+        "New rule accessible via '+ Add Webhook Rule' button in panel"
+      ],
+      "files": [
+        "src/components/ops/OpsAutomationRuleBuilder.tsx"
+      ],
+      "notes": "Find the existing automation rule builder component and extend it. If it's inline in OpsTable, consider extracting to a separate file."
+    },
+
+    {
+      "id": "OTW-009",
+      "feature": "ops-table-webhooks",
+      "title": "Webhook activity log with expandable rows",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["OTW-005"] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 15,
+      "acceptance": [
+        "Recent Activity section in WebhookSettingsPanel shows last 50 entries (paginated at 10)",
+        "Each row: relative timestamp, Direction badge (Inbound green / Outbound blue), HTTP status badge (2xx green / 4xx amber / 5xx red), rows affected count",
+        "Click row to expand: shows full payload JSON and mapped_result JSON in collapsible code blocks",
+        "Failed rows show error message + 'Retry' button (re-sends last payload via test console)",
+        "Auto-refreshes every 30 seconds when panel is open"
+      ],
+      "files": [
+        "src/components/ops/WebhookActivityLog.tsx"
+      ],
+      "notes": "Can be built as a sub-component within WebhookSettingsPanel. Use React Query with refetchInterval: 30000."
+    },
+
+    {
+      "id": "OTW-010",
+      "feature": "ops-table-webhooks",
+      "title": "API key rotation and security hardening",
+      "type": "backend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["OTW-001", "OTW-002", "OTW-005"] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 15,
+      "acceptance": [
+        "generateApiKey edge function or RPC: generates new crypto-random key (32 bytes hex, prefixed sk_), stores in DB, returns full key (only time it's visible)",
+        "After key shown once, only last 4 chars returned in API responses (masked display)",
+        "Old key valid for 24-hour grace period after regeneration (stored as previous_api_key with expires_at)",
+        "Rate limit: 100 inbound requests per table per hour (configurable per org tier)",
+        "Log to security_audit_log on key generation and regeneration events"
+      ],
+      "files": [
+        "supabase/functions/ops-table-inbound-webhook/index.ts",
+        "supabase/migrations/YYYYMMDD_ops_table_webhooks.sql"
+      ],
+      "notes": "Add previous_api_key and previous_api_key_expires_at columns to ops_table_webhooks in migration. Use crypto.getRandomValues() for key generation in Deno."
+    }
+  ]
+}

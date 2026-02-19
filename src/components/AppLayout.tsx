@@ -56,7 +56,8 @@ import {
   Calendar,
   Mail,
   CreditCard,
-  Bot
+  Bot,
+  BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/lib/hooks/useUser';
@@ -631,6 +632,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   Settings
                 </Link>
 
+                <Link
+                  to="/docs"
+                  onClick={() => toggleMobileMenu()}
+                  className={cn(
+                    "flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]",
+                    location.pathname.startsWith('/docs')
+                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
+                      : 'text-[#64748B] dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-gray-800/50'
+                  )}
+                >
+                  <BookOpen className="w-6 h-6 sm:w-7 sm:h-7" />
+                  Help & Docs
+                </Link>
+
                 {/* Agent Marketplace - org admins */}
                 {isOrgAdmin && (
                   <Link
@@ -996,6 +1011,33 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     className="overflow-hidden whitespace-nowrap"
                   >
                     Settings
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </Link>
+
+            <Link
+              to="/docs"
+              className={cn(
+                'flex items-center transition-colors text-sm font-medium',
+                isCollapsed
+                  ? 'w-9 h-9 mx-auto rounded-xl justify-center mb-0'
+                  : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
+                location.pathname.startsWith('/docs')
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
+                  : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
+              )}
+            >
+              <BookOpen className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+              <AnimatePresence>
+                {!isCollapsed && (
+                  <motion.span
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: 'auto' }}
+                    exit={{ opacity: 0, width: 0 }}
+                    className="overflow-hidden whitespace-nowrap"
+                  >
+                    Help & Docs
                   </motion.span>
                 )}
               </AnimatePresence>

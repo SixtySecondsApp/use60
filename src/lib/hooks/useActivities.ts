@@ -61,7 +61,10 @@ async function fetchActivities(dateRange?: { start: Date; end: Date }, viewedUse
   let userId = authUserId;
   if (!userId) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    if (!user) {
+      console.warn('[fetchActivities] No authenticated user — returning empty');
+      return [];
+    }
     userId = user.id;
   }
 

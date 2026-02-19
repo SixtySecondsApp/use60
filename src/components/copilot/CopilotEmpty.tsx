@@ -1,29 +1,29 @@
 /**
  * Copilot Empty State Component
  * Displays when no conversation has started
- * US-008: 4 action cards in 2x2 grid
+ * US-008: 4 action cards in 2x2 grid + configure abilities banner
  * UX-004: Input removed -- unified input lives in AssistantShell
  */
 
 import React from 'react';
-import { Mail, Calendar, Target, RefreshCw } from 'lucide-react';
+import { Calendar, Target, AlertCircle, RefreshCw, Sparkles, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useDynamicPrompts } from '@/lib/hooks/useDynamicPrompts';
-import { CampaignRecipeCards } from './CampaignRecipeCards';
 
 interface CopilotEmptyProps {
   onPromptClick: (prompt: string) => void;
 }
 
-// US-008: 4 suggested actions matching brief with glassmorphic icons
+// 4 suggested actions — the most universally useful for daily sales work
 const suggestedActions = [
   {
-    id: 'follow-up',
-    icon: Mail,
-    label: 'Draft a follow-up',
-    desc: 'Post-meeting emails with context',
+    id: 'cold-outreach',
+    icon: Target,
+    label: 'Cold Outreach',
+    desc: 'Find prospects and send a sequence',
     iconColor: 'text-violet-400',
-    prompt: 'Draft a follow-up email for my recent meeting',
+    prompt: 'Start a campaign to find and reach out to prospects',
   },
   {
     id: 'meeting-prep',
@@ -35,7 +35,7 @@ const suggestedActions = [
   },
   {
     id: 'attention',
-    icon: Target,
+    icon: AlertCircle,
     label: 'What needs attention?',
     desc: 'Stale deals, overdue tasks',
     iconColor: 'text-pink-400',
@@ -67,8 +67,8 @@ export const CopilotEmpty: React.FC<CopilotEmptyProps> = ({ onPromptClick }) => 
           </p>
         </div>
 
-        {/* US-008: 2x2 Action Cards Grid - responsive: 1 col on tiny, 2 cols on sm+ */}
-        <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-8">
+        {/* 2x2 Action Cards Grid */}
+        <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6">
           {suggestedActions.map((action) => (
             <button
               key={action.id}
@@ -106,10 +106,33 @@ export const CopilotEmpty: React.FC<CopilotEmptyProps> = ({ onPromptClick }) => 
           ))}
         </div>
 
-        {/* Campaign Recipes */}
-        <div className="w-full max-w-2xl mb-8">
-          <CampaignRecipeCards onSelectRecipe={onPromptClick} />
-        </div>
+        {/* Configure Abilities Banner */}
+        <Link
+          to="/agent/marketplace"
+          className={cn(
+            'w-full max-w-2xl flex items-center justify-between px-5 py-4 rounded-2xl mb-8 transition-all group',
+            'bg-gradient-to-r from-[#37bd7e]/10 to-emerald-500/5',
+            'dark:from-[#37bd7e]/10 dark:to-emerald-500/5',
+            'border border-[#37bd7e]/20 dark:border-[#37bd7e]/20',
+            'hover:border-[#37bd7e]/40 dark:hover:border-[#37bd7e]/40',
+            'hover:shadow-lg hover:shadow-[#37bd7e]/5'
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#37bd7e]/15 flex items-center justify-center">
+              <Sparkles className="w-4.5 h-4.5 text-[#37bd7e]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                Configure Abilities
+              </p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">
+                Enable campaigns, automations, and more skills for your copilot
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-400 dark:text-slate-500 group-hover:text-[#37bd7e] group-hover:translate-x-0.5 transition-all" />
+        </Link>
 
         {/* Quick Prompts */}
         <div className="w-full max-w-2xl">
@@ -118,7 +141,6 @@ export const CopilotEmpty: React.FC<CopilotEmptyProps> = ({ onPromptClick }) => 
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             {promptsLoading ? (
-              // Loading skeleton for prompts
               <>
                 {[1, 2, 3, 4].map((i) => (
                   <div

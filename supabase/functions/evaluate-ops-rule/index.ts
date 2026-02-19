@@ -280,6 +280,84 @@ serve(async (req: Request) => {
           break
         }
 
+        case 'webhook': {
+          const webhookUrl = actionConfig.url as string
+          if (!webhookUrl) throw new Error('Webhook action_config.url is required')
+
+          const method: string = (actionConfig.method as string) ?? 'POST'
+          const customHeaders: Record<string, string> = (actionConfig.headers as Record<string, string>) ?? {}
+          const includeColumns: string[] | undefined = actionConfig.include_columns as string[] | undefined
+
+          // Build data payload, optionally filtered to include_columns
+          let payloadData: Record<string, string | null> = rowData
+          if (includeColumns && includeColumns.length > 0) {
+            payloadData = {}
+            for (const col of includeColumns) {
+              if (col in rowData) payloadData[col] = rowData[col]
+            }
+          }
+
+          const outboundPayload = {
+            event: trigger_type,
+            table_id: rule.table_id,
+            row_id,
+            timestamp: new Date().toISOString(),
+            data: payloadData,
+          }
+
+          let responseStatus = 0
+          let webhookError: string | null = null
+
+          try {
+            const response = await fetch(webhookUrl, {
+              method,
+              headers: {
+                'Content-Type': 'application/json',
+                ...customHeaders,
+              },
+              body: JSON.stringify(outboundPayload),
+            })
+            responseStatus = response.status
+
+            if (!response.ok) {
+              webhookError = `Webhook returned HTTP ${response.status}`
+            }
+          } catch (fetchErr: any) {
+            responseStatus = 0
+            webhookError = fetchErr.message ?? 'Fetch failed'
+          }
+
+          // Log to ops_webhook_logs for outbound (requires a webhook row for FK)
+          const { data: webhookRow } = await supabase
+            .from('ops_table_webhooks')
+            .select('id')
+            .eq('table_id', rule.table_id)
+            .maybeSingle()
+
+          if (webhookRow?.id) {
+            await supabase.from('ops_webhook_logs').insert({
+              webhook_id: webhookRow.id,
+              direction: 'outbound',
+              status: responseStatus,
+              payload: outboundPayload,
+              rows_affected: 1,
+              ...(webhookError ? { error: webhookError } : {}),
+            })
+          }
+
+          if (webhookError) {
+            throw new Error(webhookError)
+          }
+
+          actionResult = {
+            action: 'webhook',
+            url: webhookUrl,
+            method,
+            status: responseStatus,
+          }
+          break
+        }
+
         default:
           throw new Error(`Unknown action type: ${rule.action_type}`)
       }

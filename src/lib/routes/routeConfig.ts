@@ -121,17 +121,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'any',
     label: 'Intelligence',
     icon: Sparkles,
-    showInNav: true,
+    showInNav: false, // V1 — replaced by Meeting Analytics (now /meeting-analytics as "Intelligence")
     navSection: 'main',
     order: 3,
     displayGroup: 1,
   },
   {
     path: '/insights/content-topics',
-    access: 'internal', // Hidden from external users - feature not ready
+    access: 'internal',
     label: 'Content Topics',
     icon: Layers,
-    showInNav: true,
+    showInNav: false, // Moved to Platform Admin "Feature Development"
     navSection: 'main',
     order: 1,
     displayGroup: 3,
@@ -149,13 +149,12 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
   {
     path: '/meeting-analytics',
     access: 'any',
-    label: 'Meeting Analytics',
-    icon: BarChart3,
+    label: 'Intelligence',
+    icon: Sparkles,
     showInNav: true,
     navSection: 'main',
     order: 5,
     displayGroup: 1,
-    badge: 'New',
   },
 
   // ========== Internal-Only Main Routes ==========
@@ -164,7 +163,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Leads',
     icon: Inbox,
-    showInNav: true,
+    showInNav: false, // Phase 2: accessible from Ops standard tables
     navSection: 'main',
     order: 2,
     displayGroup: 3,
@@ -174,7 +173,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'CRM',
     icon: Building2,
-    showInNav: true,
+    showInNav: false, // Replaced by Ops
     navSection: 'main',
     order: 3,
     displayGroup: 3,
@@ -184,7 +183,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Pipeline',
     icon: Kanban,
-    showInNav: true,
+    showInNav: false, // Phase 2: accessible from Ops standard tables
     navSection: 'main',
     order: 4,
     displayGroup: 3,
@@ -194,7 +193,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Calls',
     icon: PhoneCall,
-    showInNav: true,
+    showInNav: false, // Moved to Platform Admin "Feature Development"
     navSection: 'main',
     order: 1,
     displayGroup: 4,
@@ -204,18 +203,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Voice',
     icon: Mic,
-    showInNav: true,
+    showInNav: false, // Moved to Platform Admin "Feature Development"
     navSection: 'main',
     order: 1,
     displayGroup: 5,
-    badge: 'New',
   },
   {
     path: '/activity',
     access: 'internal',
     label: 'Activity',
     icon: Activity,
-    showInNav: true,
+    showInNav: false, // Phase 2: embedded in Dashboard as tab
     navSection: 'main',
     order: 5,
     displayGroup: 3,
@@ -225,7 +223,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Insights',
     icon: BarChart3,
-    showInNav: true,
+    showInNav: false, // Phase 2: embedded in Dashboard as tab
     navSection: 'main',
     order: 6,
     displayGroup: 3,
@@ -237,7 +235,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Tasks',
     icon: CheckSquare,
-    showInNav: true,
+    showInNav: false, // Replaced by Command Centre
     navSection: 'tools',
     order: 1,
     displayGroup: 2,
@@ -247,11 +245,10 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Projects',
     icon: Layers,
-    showInNav: true,
+    showInNav: false, // Replaced by Command Centre
     navSection: 'tools',
     order: 2,
     displayGroup: 2,
-    badge: 'New',
   },
   {
     path: '/ops',
@@ -261,7 +258,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: true,
     navSection: 'tools',
     order: 3,
-    displayGroup: 2,
+    displayGroup: 4, // Phase 2: same group as other tools to remove separator lines
     badge: 'New',
   },
   {
@@ -269,7 +266,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Profiles',
     icon: Building2,
-    showInNav: true,
+    showInNav: false, // Phase 2: accessible via direct URL
     navSection: 'tools',
     order: 4,
     displayGroup: 2,
@@ -281,7 +278,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Workflows',
     icon: Workflow,
-    showInNav: true,
+    showInNav: false, // Hidden from nav — full code deletion deferred
     navSection: 'tools',
     order: 2,
     displayGroup: 5,
@@ -292,8 +289,8 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     label: 'Integrations',
     icon: Plug,
     showInNav: true,
-    navSection: 'tools',
-    order: 5,
+    navSection: 'main',
+    order: 6,
     displayGroup: 1,
   },
   {
@@ -339,12 +336,11 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
   {
     path: '/docs',
     access: 'any',
-    label: 'Docs',
+    label: 'Help & Docs',
     icon: BookOpen,
-    showInNav: true,
-    navSection: 'tools',
-    order: 6,
-    displayGroup: 2,
+    showInNav: false, // Hardcoded in AppLayout sidebar footer (below Settings)
+    navSection: 'settings',
+    order: 5,
   },
   {
     path: '/demo/agent-research',
@@ -411,7 +407,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'orgAdmin',
     label: 'Agent Marketplace',
     icon: Bot,
-    showInNav: true,
+    showInNav: false, // Phase 2: accessible via AI Copilot page
     navSection: 'tools',
     order: 1.5,
     displayGroup: 4,

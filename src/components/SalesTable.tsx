@@ -38,6 +38,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useActivities, Activity } from '@/lib/hooks/useActivities';
 import { useUser } from '@/lib/hooks/useUser'; // Import useUser hook
+import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import {
@@ -57,7 +58,6 @@ import { VisuallyHidden } from '@/components/calendar/ScreenReaderAnnouncements'
 import { exportActivitiesToCSV, getExportSummary } from '@/lib/utils/csvExport';
 import { calculateLTVValue, formatActivityAmount } from '@/lib/utils/calculations';
 import { DateFilter, DateRangePreset, DateRange } from '@/components/ui/date-filter';
-import { SubscriptionStats } from './SubscriptionStats';
 import { Badge } from './Pipeline/Badge';
 import logger from '@/lib/utils/logger';
 import { useDeals } from '@/lib/hooks/useDeals';
@@ -79,8 +79,10 @@ interface StatCardProps {
 }
 
 export function SalesTable() {
+  const { data: authUser, isLoading: isAuthLoading } = useAuthUser();
+
   // Removed unused sorting state
-  // const [sorting, setSorting] = useState<SortingState>([]); 
+  // const [sorting, setSorting] = useState<SortingState>([]);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   // Activities will be fetched for the selected date range
   // (hook call moved below after currentDateRange is computed)
@@ -102,7 +104,6 @@ export function SalesTable() {
   const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false); // State for upload modal
   const [showFilters, setShowFilters] = useState(false); // State for filters panel
-  const [showSubscriptionStats, setShowSubscriptionStats] = useState(false); // State for subscription cards visibility
   const hasLoggedInitialSync = useRef(false);
   const hasSyncedFromFilters = useRef(false);
 
@@ -1231,72 +1232,48 @@ export function SalesTable() {
     const trendIcon = trendPercentage > 0 ? '↗' : trendPercentage < 0 ? '↘' : '→';
 
     return (
-      <div 
-        className={`bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-4 border border-gray-200 dark:border-gray-800/50 cursor-pointer hover:border-${color}-500/50 transition-all duration-300 relative min-h-[120px] flex flex-col`}
+      <div
+        className={`bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30 shadow-sm cursor-pointer hover:border-${color}-500/50 transition-all duration-300 flex flex-col gap-3`}
         onClick={() => {
-          // When clicking a stat card, filter by its corresponding type
           const typeMap: Record<string, Activity['type'] | undefined> = {
             'Total Revenue': 'sale',
             'Meeting Conversion': 'meeting',
             'Proposal Win Rate': 'proposal',
-            'No-Show Rate': undefined, // Show all to see no-shows across types
+            'No-Show Rate': undefined,
             'Won Deals': 'sale',
             'Average Deal Value': 'sale',
           };
-          
           const newType = typeMap[title];
           if (newType === filters.type) {
-            // Toggle off if already filtered
             handleFilterByType(undefined);
           } else {
             handleFilterByType(newType);
           }
         }}
       >
-        {/* Trend indicator in top-right */}
-        <div className="absolute top-3 right-3 flex flex-col items-end">
-          <div className={`flex items-center gap-1 text-xs font-medium ${trendColor}`}>
-            <span>{trendIcon}</span>
-            <span>{trendText}</span>
+        {/* Top row: icon + trend */}
+        <div className="flex items-center justify-between">
+          <div className={`p-2 rounded-xl bg-${color}-500/10 border border-${color}-500/20`}>
+            <Icon className={`w-4 h-4 text-${color}-500`} />
           </div>
-          <div className="text-[10px] text-gray-500 mt-0.5">
-            {period}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs font-semibold ${trendColor}`}>{trendIcon} {trendText}</span>
+            <span className="text-[10px] text-gray-400">{period}</span>
           </div>
         </div>
 
-        {/* Main content */}
-        <div className="flex items-start gap-3 pr-16 flex-1">
-          <div className={`p-2.5 rounded-xl bg-${color}-500/10 border border-${color}-500/20`}>
-            <Icon className={`w-5 h-5 text-${color}-500`} />
-          </div>
-          
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">{title}</p>
-            
-            {/* Primary metric */}
-            <div className="space-y-1">
-              {amount && (
-                <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{amount}</div>
-              )}
-              {percentage && (
-                <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{percentage}</div>
-              )}
-              {!amount && !percentage && (
-                <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{value}</div>
-              )}
-            </div>
-            
-            {/* Spacer to push context info to bottom */}
-            <div className="flex-1"></div>
-            
-            {/* Contextual information */}
-            {contextInfo && (
-              <div className="text-xs text-gray-600 dark:text-gray-500 mt-2">
-                {contextInfo}
-              </div>
-            )}
-          </div>
+        {/* Title */}
+        <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider leading-tight">{title}</p>
+
+        {/* Value */}
+        <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-none">
+          {amount || percentage || value}
         </div>
+
+        {/* Context */}
+        {contextInfo && (
+          <p className="text-xs text-gray-500 dark:text-gray-500 leading-snug mt-auto">{contextInfo}</p>
+        )}
       </div>
     );
   };
@@ -1331,40 +1308,44 @@ export function SalesTable() {
     }
   };
 
+  // Auth loading guard — prevent empty-state flash when embedded in lazy-loaded tabs
+  if (isAuthLoading || !authUser) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400 dark:text-gray-500">
+        <RefreshCw className="h-5 w-5 animate-spin mr-2" />
+        <span className="text-sm">Loading activities...</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 p-4 sm:p-6 lg:p-8">
+    <div className="text-gray-900 dark:text-gray-100 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {isTypeFiltered ? `${filters.type?.charAt(0).toUpperCase() ?? ''}${filters.type?.slice(1) ?? ''} Activities` : 'Activity Log'}
-                  </h1>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 border border-emerald-600/20 dark:border-emerald-500/30 flex items-center justify-center">
+                <BarChartIcon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                  {isTypeFiltered ? `${filters.type?.charAt(0).toUpperCase() ?? ''}${filters.type?.slice(1) ?? ''} Activities` : 'Activity Log'}
+                </h1>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     {isTypeFiltered ? `Showing ${filters.type || ''} activities for the selected period` : 'Track and manage your sales activities'}
                   </p>
                 </div>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl px-4 py-2.5 shadow-sm">
               {isTypeFiltered && (
                 <Button variant="secondary" onClick={resetFilters} size="sm">
                   Show All Types
                 </Button>
               )}
-              
-              {/* Subscription Stats Toggle */}
-              <Button
-                onClick={() => setShowSubscriptionStats(!showSubscriptionStats)}
-                variant="tertiary"
-                size="sm"
-              >
-                <BarChartIcon className="w-4 h-4 mr-2" />
-                {showSubscriptionStats ? 'Hide' : 'Show'} Subscription Stats
-              </Button>
-              
+
               {/* Select Mode Toggle */}
               <motion.div
                 whileHover={{ scale: 1.02 }}
@@ -1535,7 +1516,7 @@ export function SalesTable() {
                   exit={{ height: 0, opacity: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-gray-200 dark:border-gray-800/50 space-y-6">
+                  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm space-y-6">
                     
                     {/* Search */}
                     <div className="space-y-2">
@@ -1774,22 +1755,7 @@ export function SalesTable() {
             />
           </div>
 
-          {/* Subscription Management Stats - Conditionally Rendered */}
-          {showSubscriptionStats && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Subscription Management
-                </h3>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Revenue Overview
-                </div>
-              </div>
-              <SubscriptionStats className="w-full" />
-            </div>
-          )}
-
-          <div className="bg-white dark:bg-transparent backdrop-blur-xl dark:backdrop-blur-0 rounded-lg border border-gray-200 dark:border-transparent overflow-hidden w-full">
+          <div className="bg-white/80 dark:bg-gray-900/20 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-gray-700/30 shadow-sm overflow-hidden w-full">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>

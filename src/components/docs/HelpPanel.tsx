@@ -45,7 +45,7 @@ export function HelpPanel({ docSlug, tooltip = 'Learn more', className }: HelpPa
 
       {/* Slide-over panel */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed top-16 left-0 right-0 bottom-0 z-50 flex justify-end">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/30 dark:bg-black/50"

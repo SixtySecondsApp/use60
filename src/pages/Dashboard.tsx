@@ -1,10 +1,8 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback, useTransition } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useMemo, useEffect, useCallback, useTransition, useRef, lazy, Suspense } from 'react';
 import { useUser } from '@/lib/hooks/useUser';
 import { useTargets } from '@/lib/hooks/useTargets';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useRecentDeals } from '@/lib/hooks/useLazyActivities';
 import { useDashboardMetrics } from '@/lib/hooks/useDashboardMetrics';
 import { format, startOfMonth, endOfMonth, subMonths, addMonths, isAfter, isBefore, getDate } from 'date-fns';
 import {
@@ -19,9 +17,12 @@ import {
   TrendingUp,
   TrendingDown,
   BarChart2,
+  LayoutDashboard,
+  Activity as ActivityIcon,
+  LineChart,
+  Grid3X3,
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
-import { LazySubscriptionStats } from '@/components/LazySubscriptionStats';
 import { MonthYearPicker } from '@/components/MonthYearPicker';
 import { PendingJoinRequestBanner } from '@/components/PendingJoinRequestBanner';
 import { HelpPanel } from '@/components/docs/HelpPanel';
@@ -30,6 +31,11 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
 import { TeamKPIGrid } from '@/components/insights/TeamKPIGrid';
 import { TeamComparisonMatrix } from '@/components/insights/TeamComparisonMatrix';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+const LazyActivityLog = lazy(() => import('@/pages/ActivityLog'));
+const LazySalesFunnel = lazy(() => import('@/pages/SalesFunnel'));
+const LazyHeatmap = lazy(() => import('@/pages/Heatmap'));
 
 interface MetricCardProps {
   title: string;
@@ -46,6 +52,7 @@ interface MetricCardProps {
   isLoadingComparisons?: boolean;
   hasComparisons?: boolean;
   isInitialLoad?: boolean;
+  onNavigateToActivity?: () => void;
 }
 
 interface TooltipProps {
@@ -96,8 +103,7 @@ const Tooltip = ({ show, content, position }: TooltipProps) => {
   );
 };
 
-const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, dateRange, previousMonthTotal, isLoadingComparisons, hasComparisons, isInitialLoad = false }: MetricCardProps) => {
-  const navigate = useNavigate();
+const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, dateRange, previousMonthTotal, isLoadingComparisons, hasComparisons, isInitialLoad = false, onNavigateToActivity }: MetricCardProps) => {
   const { setFilters } = useActivityFilters();
   const [showTrendTooltip, setShowTrendTooltip] = useState(false);
   const [showTotalTooltip, setShowTotalTooltip] = useState(false);
@@ -110,7 +116,9 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
     try {
       if (type) {
         setFilters({ type, dateRange });
-        navigate('/activity', { state: { preserveFilters: true } });
+        if (onNavigateToActivity) {
+          onNavigateToActivity();
+        }
       }
     } catch (error) {
       logger.error('Navigation error:', error);
@@ -356,7 +364,8 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
     prevProps.previousMonthTotal === nextProps.previousMonthTotal &&
     prevProps.isLoadingComparisons === nextProps.isLoadingComparisons &&
     prevProps.hasComparisons === nextProps.hasComparisons &&
-    prevProps.isInitialLoad === nextProps.isInitialLoad
+    prevProps.isInitialLoad === nextProps.isInitialLoad &&
+    prevProps.onNavigateToActivity === nextProps.onNavigateToActivity
   );
 });
 
@@ -468,7 +477,6 @@ function TeamPerformanceSection({ selectedMonth }: { selectedMonth: Date }) {
 
 export default function Dashboard() {
   // Move all hooks to the top
-  const [searchQuery, setSearchQuery] = useState('');
   const [showContent, setShowContent] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [isPending, startTransition] = useTransition();
@@ -515,8 +523,22 @@ export default function Dashboard() {
   };
   const { userData, isLoading: isLoadingUser, session } = useUser();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { setFilters } = useActivityFilters();
+
+  // Tab state from URL
+  const activeTab = searchParams.get('tab') || 'overview';
+  const setTab = useCallback((tab: string) => {
+    if (tab === 'overview') {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab }, { replace: true });
+    }
+  }, [setSearchParams]);
+
+  const navigateToActivityTab = useCallback(() => {
+    setTab('activity');
+  }, [setTab]);
 
   // Check for Fathom connection success notification
   useEffect(() => {
@@ -647,42 +669,11 @@ export default function Dashboard() {
     refreshDashboard
   } = useDashboardMetrics(selectedMonth, showContent && !!userId && !!targets);
   
-  // Lazy load recent deals only when user scrolls to that section
-  const [loadRecentDeals, setLoadRecentDeals] = useState(false);
-  const [dealsLoadTimeout, setDealsLoadTimeout] = useState(false);
-  const { activities: recentDeals, isLoading: isLoadingDeals } = useRecentDeals(loadRecentDeals);
-
-  // Add timeout for loading deals (10 seconds)
-  useEffect(() => {
-    if (loadRecentDeals && isLoadingDeals) {
-      const timeout = setTimeout(() => {
-        setDealsLoadTimeout(true);
-      }, 10000); // 10 second timeout
-
-      return () => clearTimeout(timeout);
-    } else if (!isLoadingDeals) {
-      setDealsLoadTimeout(false);
-    }
-  }, [loadRecentDeals, isLoadingDeals]);
-
   const selectedMonthRange = useMemo(() => {
     const start = startOfMonth(selectedMonth);
     const end = endOfMonth(selectedMonth);
     return { start, end };
   }, [selectedMonth]);
-
-  // All metrics are now handled by useDashboardMetrics hook with caching
-
-  // Filter deals based on search query - use recent deals if loaded, otherwise current month activities
-  const filteredDeals = useMemo(() => {
-    const dealsToFilter = loadRecentDeals ? recentDeals : currentMonthActivities.filter(a => a.type === 'sale');
-    return dealsToFilter.filter(activity => 
-      activity.type === 'sale' &&
-      (activity.client_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-       activity.amount?.toString().includes(searchQuery) ||
-       activity.details?.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }, [recentDeals, currentMonthActivities, searchQuery, loadRecentDeals]);
 
   // Check if any data is loading - include metrics check
   const isAnyLoading = isInitialLoad || isLoadingSales || isLoadingUser || (!userData && !session) || !targets;
@@ -696,28 +687,6 @@ export default function Dashboard() {
       setShowContent(true);
     }
   }, [isAnyLoading, showContent]); // Added showContent to deps to prevent re-running
-
-  // Intersection observer for lazy loading recent deals
-  const recentDealsRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    if (!recentDealsRef.current || loadRecentDeals) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry.isIntersecting) {
-          setLoadRecentDeals(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.1, rootMargin: '50px' }
-    );
-
-    observer.observe(recentDealsRef.current);
-    
-    return () => observer.disconnect();
-  }, [loadRecentDeals, showContent]);
 
   // Single loading check to prevent flicker
   if (!showContent || isAnyLoading) {
@@ -735,30 +704,67 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center justify-between mt-2">
           <p className="text-[#64748B] dark:text-gray-400">Here's how your sales performance is tracking</p>
-          <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-2 border border-transparent dark:border-gray-800/50 shadow-sm dark:shadow-none">
-            <button
-              onClick={handlePreviousMonth}
-              className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
-              title="Previous month"
-            >
-              <ChevronLeft className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
-            </button>
-            <MonthYearPicker
-              value={selectedMonth}
-              onChange={setSelectedMonth}
-              maxDate={new Date()}
-            />
-            <button
-              onClick={handleNextMonth}
-              className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={selectedMonth >= new Date()}
-              title="Next month"
-            >
-              <ChevronRight className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
-            </button>
-          </div>
+          {activeTab === 'overview' && (
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-2 border border-transparent dark:border-gray-800/50 shadow-sm dark:shadow-none">
+              <button
+                onClick={handlePreviousMonth}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
+                title="Previous month"
+              >
+                <ChevronLeft className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
+              </button>
+              <MonthYearPicker
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+                maxDate={new Date()}
+              />
+              <button
+                onClick={handleNextMonth}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={selectedMonth >= new Date()}
+                title="Next month"
+              >
+                <ChevronRight className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Dashboard Tabs */}
+      <Tabs value={activeTab} onValueChange={setTab} className="mb-6">
+        <TabsList className="bg-white border border-transparent shadow-sm dark:bg-gray-900/50 dark:backdrop-blur-xl dark:border-gray-800/50">
+          <TabsTrigger
+            value="overview"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger
+            value="activity"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <ActivityIcon className="w-4 h-4" />
+            Activity
+          </TabsTrigger>
+          <TabsTrigger
+            value="funnel"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <LineChart className="w-4 h-4" />
+            Funnel
+          </TabsTrigger>
+          <TabsTrigger
+            value="heatmap"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <Grid3X3 className="w-4 h-4" />
+            Heatmap
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
 
       {/* Pending Join Request Banner */}
       <div className="mb-6">
@@ -780,6 +786,7 @@ export default function Dashboard() {
           isLoadingComparisons={isLoadingComparisons}
           hasComparisons={hasComparisons}
           isInitialLoad={false}
+          onNavigateToActivity={navigateToActivityTab}
         />
         <MetricCard
           key="outbound-metric"
@@ -794,6 +801,7 @@ export default function Dashboard() {
           isLoadingComparisons={isLoadingComparisons}
           hasComparisons={hasComparisons}
           isInitialLoad={false}
+          onNavigateToActivity={navigateToActivityTab}
         />
         <MetricCard
           key="meetings-metric"
@@ -808,6 +816,7 @@ export default function Dashboard() {
           isLoadingComparisons={isLoadingComparisons}
           hasComparisons={hasComparisons}
           isInitialLoad={false}
+          onNavigateToActivity={navigateToActivityTab}
         />
         <MetricCard
           key="proposals-metric"
@@ -822,144 +831,32 @@ export default function Dashboard() {
           isLoadingComparisons={isLoadingComparisons}
           hasComparisons={hasComparisons}
           isInitialLoad={false}
+          onNavigateToActivity={navigateToActivityTab}
         />
       </div>
 
       {/* Team Performance Section */}
       <TeamPerformanceSection selectedMonth={selectedMonth} />
+        </TabsContent>
 
-      {/* MRR Subscription Statistics */}
-      <div className="mb-8">
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold text-[#1E293B] dark:text-white">Subscription Revenue</h2>
-          <p className="text-sm text-[#64748B] dark:text-gray-400">Track your monthly recurring revenue and client metrics</p>
-        </div>
-        <LazySubscriptionStats
-          onClick={(cardTitle) => {
-            // Navigate to subscriptions page when clicking on MRR cards
-            navigate('/subscriptions');
-          }}
-        />
-      </div>
+        <TabsContent value="activity">
+          <Suspense fallback={<div className="flex items-center justify-center py-12 text-gray-500">Loading activity...</div>}>
+            <LazyActivityLog />
+          </Suspense>
+        </TabsContent>
 
-      {/* Recent Deals Section */}
-      <div ref={recentDealsRef} className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none mb-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-          <h2 className="text-xl font-semibold text-[#1E293B] dark:text-white">Recent Deals</h2>
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by client or amount..."
-              className="w-full py-2 px-3 bg-slate-100 dark:bg-gray-800 border border-[#E2E8F0] dark:border-gray-700 rounded-xl text-[#1E293B] dark:text-white placeholder-[#94A3B8] dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
-            />
-          </div>
-        </div>
-        <div className="space-y-3">
-          {!loadRecentDeals ? (
-            // Show loading placeholder when recent deals haven't been loaded yet
-            <div className="text-center py-8">
-              <div className="text-gray-600 dark:text-gray-500">Loading recent deals...</div>
-            </div>
-          ) : dealsLoadTimeout ? (
-            // Show error state if loading takes too long
-            <div className="text-center py-8">
-              <div className="text-amber-600 dark:text-amber-400 mb-2">Loading is taking longer than expected</div>
-              <button
-                onClick={() => {
-                  setDealsLoadTimeout(false);
-                  setLoadRecentDeals(false);
-                  setTimeout(() => setLoadRecentDeals(true), 100);
-                }}
-                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                Retry
-              </button>
-            </div>
-          ) : isLoadingDeals ? (
-            // Show loading state while fetching
-            <div className="text-center py-8">
-              <div className="text-gray-600 dark:text-gray-500">Fetching deals...</div>
-            </div>
-          ) : (
-            filteredDeals.map((deal) => (
-            <motion.div
-              key={deal.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              whileHover={{ 
-                scale: 1.02,
-                transition: { duration: 0.2 }
-              }}
-              whileTap={{ scale: 0.98 }}
-              className="bg-slate-100 dark:bg-gray-800/50 rounded-xl p-3 sm:p-4 hover:bg-slate-200 dark:hover:bg-gray-800/70 transition-all duration-300 group hover:shadow-lg hover:shadow-emerald-500/10 border border-transparent hover:border-emerald-500/20 relative overflow-hidden cursor-pointer"
-              onClick={() => {
-                setFilters({
-                  type: 'sale',
-                  dateRange: {
-                    start: new Date(deal.date),
-                    end: new Date(deal.date)
-                  }
-                });
-                navigate('/activity');
-              }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-400/[0.03] dark:via-white/[0.03] to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <motion.div
-                    className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300"
-                    whileHover={{ rotate: [0, -10, 10, -5, 5, 0] }}
-                    transition={{ duration: 0.5 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFilters({
-                        type: 'sale',
-                        dateRange: {
-                          start: new Date(deal.date),
-                          end: new Date(deal.date)
-                        }
-                      });
-                      navigate('/activity');
-                    }}
-                  >
-                    <PoundSterling className="w-5 h-5 text-emerald-500" />
-                  </motion.div>
-                  <div>
-                    <h3 className="font-medium text-[#1E293B] dark:text-white group-hover:text-emerald-500 transition-colors duration-300">
-                      {deal.client_name}
-                    </h3>
-                    <p className="text-sm text-[#64748B] dark:text-gray-400">
-                      {deal.details} • {format(new Date(deal.date), 'MMM d, yyyy')}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-left sm:text-right">
-                  <div className="text-lg font-bold text-[#1E293B] dark:text-white group-hover:text-emerald-400 transition-colors duration-300">
-                    £{(deal.amount || 0).toLocaleString()}
-                  </div>
-                  <div className="text-sm text-emerald-500 group-hover:text-emerald-400 transition-colors duration-300">Signed</div>
-                </div>
-              </div>
-            </motion.div>
-          )))}
-          
-          {loadRecentDeals && filteredDeals.length === 0 && (
-            <div className="text-center py-8">
-              <div className="text-[#64748B] dark:text-gray-400">No matching deals found</div>
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="mt-2 text-violet-500 hover:text-violet-400 text-sm"
-                >
-                  Clear search
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+        <TabsContent value="funnel">
+          <Suspense fallback={<div className="flex items-center justify-center py-12 text-gray-500">Loading funnel...</div>}>
+            <LazySalesFunnel />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="heatmap">
+          <Suspense fallback={<div className="flex items-center justify-center py-12 text-gray-500">Loading heatmap...</div>}>
+            <LazyHeatmap />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
       </div>
     </div>
   );

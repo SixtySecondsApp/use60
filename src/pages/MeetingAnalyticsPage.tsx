@@ -176,12 +176,9 @@ export default function MeetingAnalyticsPage() {
           )}
         </motion.div>
 
-        {/* SearchHero - always visible above tabs */}
-        <SearchHero className="mb-6 sm:mb-8" />
-
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="mb-4 sm:mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <TabsList className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl p-1 shadow-sm">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
@@ -222,6 +219,22 @@ export default function MeetingAnalyticsPage() {
               </TabsList>
             </Tabs>
           </div>
+
+          {/* SearchHero - only on Dashboard tab */}
+          <AnimatePresence>
+            {activeTab === 'dashboard' && (
+              <motion.div
+                key="search-hero"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <SearchHero className="mb-6 sm:mb-8" />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <AnimatePresence mode="wait">
             <motion.div

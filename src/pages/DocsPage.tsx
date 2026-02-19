@@ -299,10 +299,13 @@ export default function DocsPage() {
   // Total article count (after filtering)
   const totalArticles = Object.values(filteredArticles).flat().length;
 
-  // Process content: template vars + extract custom blocks
+  // Process content: template vars + strip leading H1 (already shown in page header)
   const processedContent = useMemo(() => {
     if (!article) return '';
-    return processTemplateVars(article.content, orgContext);
+    let content = processTemplateVars(article.content, orgContext);
+    // Remove the first H1 heading to avoid duplicate title
+    content = content.replace(/^#\s+.+\n*/, '');
+    return content;
   }, [article, orgContext]);
 
   // Parse content into segments (markdown + custom blocks)

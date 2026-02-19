@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Database,
@@ -49,8 +50,14 @@ interface StandardTableCardData {
   automationCount: number;
 }
 
+const DEDICATED_ROUTES: Record<string, string> = {
+  'standard_leads': '/leads',
+  'standard_deals': '/pipeline',
+};
+
 export function StandardTablesGallery({ onTableClick, existingTables }: StandardTablesGalleryProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { userData: user } = useUser();
   const activeOrg = useActiveOrg();
   const [provisioning, setProvisioning] = useState(false);
@@ -289,7 +296,14 @@ export function StandardTablesGallery({ onTableClick, existingTables }: Standard
           return (
             <div
               key={card.key}
-              onClick={isActive ? () => onTableClick(existing.id) : undefined}
+              onClick={isActive ? () => {
+                const dedicatedRoute = DEDICATED_ROUTES[card.key];
+                if (dedicatedRoute) {
+                  navigate(dedicatedRoute);
+                } else {
+                  onTableClick(existing.id);
+                }
+              } : undefined}
               className={`
                 group relative overflow-hidden rounded-lg border bg-gradient-to-br p-4 transition-all duration-300
                 ${
@@ -351,7 +365,12 @@ export function StandardTablesGallery({ onTableClick, existingTables }: Standard
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onTableClick(existing.id);
+                        const dedicatedRoute = DEDICATED_ROUTES[card.key];
+                        if (dedicatedRoute) {
+                          navigate(dedicatedRoute);
+                        } else {
+                          onTableClick(existing.id);
+                        }
                       }}
                       className="rounded-lg p-1.5 text-gray-400 opacity-0 transition-all hover:bg-gray-800/60 hover:text-white group-hover:opacity-100"
                       title="View"

@@ -73,7 +73,13 @@ export const CopilotPage: React.FC = () => {
     });
   }, [urlConversationId, seededPrompt, forceNewChat, startNewChat, setConversationId, sendMessage, navigate]);
 
-  return <Copilot />;
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 min-h-0">
+        <Copilot />
+      </div>
+    </div>
+  );
 };
 
 export default CopilotPage;

@@ -1,4 +1,4 @@
-import { List, Table } from 'lucide-react';
+import { Inbox, Table } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface LeadViewToggleProps {
@@ -22,10 +22,10 @@ export function LeadViewToggle({ view, onViewChange, disabled }: LeadViewToggleP
             : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800',
           disabled && 'opacity-50 cursor-not-allowed'
         )}
-        aria-label="List view"
+        aria-label="Inbox view"
         aria-pressed={view === 'list'}
       >
-        <List className="h-4 w-4" />
+        <Inbox className="h-4 w-4" />
       </button>
       <button
         type="button"

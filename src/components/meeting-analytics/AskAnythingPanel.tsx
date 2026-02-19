@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Bot, Loader2, Sparkles, FileText, ChevronDown } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Send, Bot, Loader2, Sparkles, FileText, ChevronDown, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -125,17 +125,29 @@ function CollapsibleSources({ sources }: { sources: MaAskSource[] }) {
 export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { userData } = useUser();
 
   const askMutation = useMaAsk();
 
+  // Expand when there are messages or a request is in flight
+  const shouldExpand = isExpanded || messages.length > 0 || askMutation.isPending;
+
+  // Scroll the page so the latest message is visible (no internal scroll trap)
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if ((messages.length > 0 || askMutation.isPending) && scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, [messages, askMutation.isPending]);
+
+  // Auto-focus textarea when expanding
+  useEffect(() => {
+    if (shouldExpand && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [shouldExpand]);
 
   function handleSubmit(question: string) {
     const trimmed = question.trim();
@@ -194,12 +206,67 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
   const avatarUrl = userData?.avatar_url;
   const userInitial = userData?.first_name?.[0]?.toUpperCase() || 'U';
 
+  // ── Compact mode: input bar + starter chips ──
+  if (!shouldExpand) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-violet-50/80 dark:bg-violet-500/10 border border-violet-200/40 dark:border-violet-500/20 shrink-0">
+            <Sparkles className="h-3 w-3 text-violet-500 dark:text-violet-400" />
+            <span className="text-[11px] font-medium text-violet-600 dark:text-violet-400">AI</span>
+          </div>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={handleTextareaInput}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setIsExpanded(true)}
+            placeholder="Ask a question across your meetings..."
+            rows={1}
+            className="flex-1 resize-none rounded-xl bg-gray-50/80 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/30 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all duration-200"
+          />
+          <button
+            onClick={() => handleSubmit(input)}
+            disabled={!input.trim() || askMutation.isPending}
+            className="shrink-0 flex items-center justify-center w-9 h-9 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl p-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
+        {showStarters && (
+          <div className="flex flex-wrap gap-2">
+            {STARTER_QUESTIONS.map((q) => (
+              <button
+                key={q}
+                onClick={() => { setIsExpanded(true); handleSubmit(q); }}
+                className="bg-white/80 dark:bg-gray-800/40 backdrop-blur-xl rounded-xl px-3.5 py-2 border border-gray-200/50 dark:border-gray-700/30 hover:border-emerald-300 dark:hover:border-emerald-500/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/5 transition-all cursor-pointer text-xs text-gray-500 dark:text-gray-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Expanded mode: full chat interface ──
   return (
-    <div className="bg-white/60 dark:bg-gray-900/30 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-gray-700/30 overflow-hidden flex flex-col h-[480px]">
+    <div className="bg-white/60 dark:bg-gray-900/30 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-gray-700/30 overflow-hidden relative">
+      {/* Collapse button — only when no messages */}
+      {messages.length === 0 && !askMutation.isPending && (
+        <button
+          onClick={() => setIsExpanded(false)}
+          className="absolute top-3 right-3 z-10 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100/80 dark:hover:bg-gray-800/50 transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+
       {/* Messages area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 p-4 sm:p-5">
+      <div ref={scrollRef} className="space-y-4 p-4 sm:p-5">
         {messages.length === 0 && !askMutation.isPending && (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
+          <div className="flex flex-col items-center justify-center min-h-[200px] text-center">
             <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 mb-4">
               <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             </div>
@@ -315,8 +382,11 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
         </div>
       )}
 
-      {/* Input area */}
+      {/* Input area with integrated AI badge */}
       <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-700/30 p-3 sm:p-4 flex items-end gap-2">
+        <div className="shrink-0 self-center">
+          <Sparkles className="h-3.5 w-3.5 text-violet-400 dark:text-violet-500" />
+        </div>
         <textarea
           ref={textareaRef}
           value={input}

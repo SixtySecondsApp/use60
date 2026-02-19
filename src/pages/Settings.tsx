@@ -18,15 +18,6 @@ import { useNavigate } from 'react-router-dom';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useMemo } from 'react';
-import { useSlackOrgSettings } from '@/lib/hooks/useSlackSettings';
-import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
-import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
-import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
-import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
-import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
-import { useAttioIntegration } from '@/lib/hooks/useAttioIntegration';
-import { useBullhornIntegration } from '@/lib/hooks/useBullhornIntegration';
-import { useGoogleIntegration } from '@/lib/stores/integrationStore';
 import {
   User,
   Palette,
@@ -48,6 +39,8 @@ import {
   Eye,
   Wallet,
   Bot,
+  Plug,
+  BookOpen,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -63,33 +56,6 @@ export default function Settings() {
   const navigate = useNavigate();
   const { permissions } = useOrg();
   const { isPlatformAdmin } = useUserPermissions();
-  const { data: slackOrgSettings, isLoading: slackOrgLoading, error: slackOrgError } = useSlackOrgSettings();
-  const isSlackConnected = !slackOrgLoading && !slackOrgError && slackOrgSettings?.is_connected === true;
-  
-  const { isConnected: isFathomConnected, loading: fathomLoading } = useFathomIntegration();
-  const showFathomSettings = !fathomLoading && isFathomConnected;
-
-  const { isConnected: isFirefliesConnected, loading: firefliesLoading } = useFirefliesIntegration();
-  const showFirefliesSettings = !firefliesLoading && isFirefliesConnected;
-
-  const { isOrgEnabled: isNotetakerOrgEnabled, isLoading: notetakerLoading } = useNotetakerIntegration();
-  const showNotetakerSettings = !notetakerLoading && isNotetakerOrgEnabled;
-
-  const { isConnected: isJustCallConnected, loading: justcallLoading } = useJustCallIntegration();
-  const showJustCallSettings = !justcallLoading && isJustCallConnected;
-
-  const { isConnected: isHubSpotConnected, loading: hubspotLoading } = useHubSpotIntegration();
-  const showHubSpotSettings = !hubspotLoading && isHubSpotConnected;
-
-  const { isConnected: isAttioConnected, loading: attioLoading } = useAttioIntegration();
-  const showAttioSettings = !attioLoading && isAttioConnected;
-
-  const { isConnected: isBullhornConnected, loading: bullhornLoading } = useBullhornIntegration();
-  const showBullhornSettings = !bullhornLoading && isBullhornConnected;
-
-  const { isConnected: isGoogleConnected, isLoading: googleLoading } = useGoogleIntegration();
-  const showGoogleSettings = !googleLoading && isGoogleConnected;
-
   const allSettingsSections: SettingsSection[] = [
     {
       id: 'account',
@@ -278,55 +244,32 @@ export default function Settings() {
       path: '/settings/billing',
       requiresOrgAdmin: true,
     },
+    {
+      id: 'integrations-hub',
+      label: 'Integrations Hub',
+      icon: Plug,
+      description: 'Connect your tools and services',
+      path: '/integrations',
+    },
+    {
+      id: 'help-docs',
+      label: 'Help & Docs',
+      icon: BookOpen,
+      description: 'Product guides, help articles, and support',
+      path: '/docs',
+    },
   ];
 
   // Filter sections based on permissions
   const settingsSections = useMemo(() => {
     return allSettingsSections.filter(section => {
-      // Slack settings should only appear when the org is already connected.
-      // If Slack isn't connected (or the status can't be determined), hide the entry entirely.
-      if (section.id === 'slack') {
-        return isSlackConnected;
-      }
-      // JustCall settings should only appear when JustCall is connected.
-      if (section.id === 'justcall') {
-        return showJustCallSettings;
-      }
-      // HubSpot settings should only appear when HubSpot is connected.
-      if (section.id === 'hubspot') {
-        return showHubSpotSettings;
-      }
-      // Attio settings should only appear when Attio is connected.
-      if (section.id === 'attio') {
-        return showAttioSettings;
-      }
-      // Bullhorn settings should only appear when Bullhorn is connected.
-      if (section.id === 'bullhorn') {
-        return showBullhornSettings;
-      }
-      // Google Workspace settings should only appear when Google is connected.
-      if (section.id === 'google-workspace') {
-        return showGoogleSettings;
-      }
-      // Fathom settings should only appear when Fathom is connected.
-      if (section.id === 'fathom') {
-        return showFathomSettings;
-      }
-      // Fireflies settings should only appear when Fireflies is connected.
-      if (section.id === 'fireflies') {
-        return showFirefliesSettings;
-      }
-      // 60 Notetaker settings should only appear when Notetaker is enabled.
-      if (section.id === '60-notetaker') {
-        return showNotetakerSettings;
-      }
       if (section.requiresOrgAdmin) {
         // Allow org admins AND platform admins to see team settings
         return permissions.canManageTeam || permissions.canManageSettings || isPlatformAdmin;
       }
       return true;
     });
-  }, [allSettingsSections, permissions, isPlatformAdmin, isSlackConnected, showGoogleSettings, showFathomSettings, showFirefliesSettings, showNotetakerSettings, showJustCallSettings, showHubSpotSettings, showAttioSettings, showBullhornSettings]);
+  }, [allSettingsSections, permissions, isPlatformAdmin]);
 
   const categories = useMemo(() => {
     const personalSections = settingsSections.filter(s =>
@@ -335,9 +278,8 @@ export default function Settings() {
     const aiSections = settingsSections.filter(s =>
       ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types', 'smart-listening', 'proactive-agent'].includes(s.id)
     );
-    // Meeting recorder integrations (only shown when connected)
     const integrationSections = settingsSections.filter(s =>
-      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
+      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'attio', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
       ['organization-management', 'credits', 'billing'].includes(s.id)
@@ -367,6 +309,18 @@ export default function Settings() {
         id: 'team',
         label: 'Team',
         sections: teamSections,
+      });
+    }
+
+    // "More" category for pages removed from nav but still accessible
+    const moreSections = settingsSections.filter(s =>
+      ['integrations-hub', 'help-docs'].includes(s.id)
+    );
+    if (moreSections.length > 0) {
+      cats.push({
+        id: 'more',
+        label: 'More',
+        sections: moreSections,
       });
     }
 

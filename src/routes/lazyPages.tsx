@@ -56,6 +56,7 @@ export const ExaAbilitiesDemo = lazyWithRetry(() => import('@/pages/demo/ExaAbil
 export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailSequenceTest'));
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
+export const OpsWebhookDemo = lazyWithRetry(() => import('@/pages/demo/OpsWebhookDemo'));
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
 export const PipelineSettings = lazyWithRetry(() => import('@/pages/admin/PipelineSettings'));
@@ -80,11 +81,10 @@ export const AdminModelSettings = lazyWithRetry(() => import('@/pages/admin/Admi
 export const AdminPromptSettings = lazyWithRetry(() => import('@/pages/admin/PromptSettings'));
 export const InternalDomainsSettings = lazyWithRetry(() => import('@/pages/admin/InternalDomainsSettings'));
 export const SlackDemo = lazyWithRetry(() => import('@/pages/admin/SlackDemo'));
-export const MeetingIntelligenceDemo = lazyWithRetry(() => import('@/pages/admin/MeetingIntelligenceDemo'));
-export const MeetingIntelligenceDemoSimple = lazyWithRetry(() => import('@/pages/admin/MeetingIntelligenceDemoSimple'));
+// MeetingIntelligenceDemo and MeetingIntelligenceDemoSimple removed — V1 Intelligence deleted
 export const TasksDemo = lazyWithRetry(() => import('@/pages/admin/TasksDemo'));
 export const ProcessMaps = lazyWithRetry(() => import('@/pages/admin/ProcessMaps'));
-export const IntelligenceTestRunner = lazyWithRetry(() => import('@/pages/admin/IntelligenceTestRunner'));
+// IntelligenceTestRunner removed — V1 Intelligence deleted
 export const VSLAnalyticsTests = lazyWithRetry(() => import('@/pages/admin/VSLAnalyticsTests'));
 export const CronJobsAdmin = lazyWithRetry(() => import('@/pages/admin/CronJobsAdmin'));
 export const ApiMonitor = lazyWithRetry(() => import('@/pages/admin/ApiMonitor'));
@@ -115,8 +115,7 @@ export const Onboarding = lazyWithRetry(() => import('@/pages/onboarding'));
 // ============================================================
 // CRM & DATA PAGES
 // ============================================================
-export const CRM = lazyWithRetry(() => import('@/pages/CRM'));
-export const ElegantCRM = lazyWithRetry(() => import('@/pages/ElegantCRM'));
+// CRM and ElegantCRM removed — replaced by Ops
 export const PipelinePage = lazyWithRetry(() => import('@/pages/PipelinePage').then(module => ({ default: module.PipelinePage })));
 export const FormDisplay = lazyWithRetry(() => import('@/pages/FormDisplay'));
 export const CompaniesTable = lazyWithRetry(() => import('@/pages/companies/CompaniesTable'));
@@ -134,15 +133,12 @@ export const HealthMonitoring = lazyWithRetry(() => import('@/pages/HealthMonito
 // FEATURE PAGES (Meetings, Calls, Tasks, etc.)
 // ============================================================
 export const MeetingsPage = lazyWithRetry(() => import('@/pages/MeetingsPage'));
-export const MeetingIntelligence = lazyWithRetry(() => import('@/pages/MeetingIntelligence'));
-export const MeetingSentimentAnalytics = lazyWithRetry(() => import('@/pages/MeetingSentimentAnalytics'));
+// MeetingIntelligence and MeetingSentimentAnalytics removed — V1 Intelligence deleted
 export const Calls = lazyWithRetry(() => import('@/pages/Calls'));
 export const CallDetail = lazyWithRetry(() => import('@/pages/CallDetail'));
 export const VoiceRecorder = lazyWithRetry(() => import('@/pages/VoiceRecorder'));
 export const VoiceRecordingDetail = lazyWithRetry(() => import('@/pages/VoiceRecordingDetailPage'));
-export const TasksPage = lazyWithRetry(() => import('@/pages/TasksPage'));
-export const ProjectsHub = lazyWithRetry(() => import('@/pages/ProjectsHub'));
-export const GoogleTasksSettings = lazyWithRetry(() => import('@/pages/GoogleTasksSettings'));
+// TasksPage, ProjectsHub, GoogleTasksSettings removed — replaced by Command Centre
 export const Events = lazyWithRetry(() => import('@/pages/Events'));
 export const ActivityLog = lazyWithRetry(() => import('@/pages/ActivityLog'));
 export const ActivityProcessingPage = lazyWithRetry(() => import('@/pages/ActivityProcessingPage'));

@@ -30,6 +30,7 @@ import {
   Building2,
   Shield,
   MoreHorizontal,
+  Inbox,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -100,6 +101,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFactProfiles } from '@/lib/hooks/useFactProfiles';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
+import { WebhookSettingsPanel } from '@/components/ops/WebhookSettingsPanel';
 
 // ---------------------------------------------------------------------------
 // Service singleton
@@ -189,6 +191,7 @@ function OpsDetailPage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessionMessages, setSessionMessages] = useState<any[]>([]);
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [showWebhookPanel, setShowWebhookPanel] = useState(false);
   const [showHubSpotPush, setShowHubSpotPush] = useState(false);
   const [showAttioPush, setShowAttioPush] = useState(false);
   const [showAttioSyncHistory, setShowAttioSyncHistory] = useState(false);
@@ -2448,6 +2451,18 @@ function OpsDetailPage() {
                 {table.row_count.toLocaleString()} {table.row_count === 1 ? 'row' : 'rows'}
               </span>
 
+              {/* Inbox view shortcut for standard Leads table */}
+              {table.name === 'Leads' && (
+                <button
+                  onClick={() => navigate('/leads')}
+                  className="inline-flex items-center gap-1 rounded-md border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-xs font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors shrink-0"
+                  title="Switch to Inbox view"
+                >
+                  <Inbox className="h-3 w-3" />
+                  Inbox
+                </button>
+              )}
+
               {/* Profile context selector */}
               {sortedProfiles.length > 0 && (
                 <Select
@@ -2562,6 +2577,14 @@ function OpsDetailPage() {
                 <Plus className="h-3.5 w-3.5" />
               )}
               Add Row
+            </button>
+            {/* Webhook settings */}
+            <button
+              onClick={() => setShowWebhookPanel(true)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-700 bg-gray-800 text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+              title="API & Webhooks"
+            >
+              <Zap className="h-4 w-4" />
             </button>
             {/* Automations */}
             <AutomationsDropdown
@@ -3907,6 +3930,17 @@ function OpsDetailPage() {
       )}
 
       {/* Instantly integration moved to column system — old modals removed */}
+
+      {/* Webhook Settings Panel */}
+      {tableId && table && (
+        <WebhookSettingsPanel
+          tableId={tableId}
+          tableName={table.name}
+          columns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+          open={showWebhookPanel}
+          onClose={() => setShowWebhookPanel(false)}
+        />
+      )}
 
       {/* TODO: PIPE-020 CampaignCreationWizard will render here */}
     </div>
