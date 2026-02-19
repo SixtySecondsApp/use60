@@ -17,6 +17,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { legacyCorsHeaders as corsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { syncRecordingToMeeting } from '../_shared/recordingCompleteSync.ts';
+import { formatUtterancesToTranscriptText } from '../_shared/transcriptFormatter.ts';
 
 interface GladiaWebhookPayload {
   id: string;
@@ -125,13 +126,18 @@ serve(async (req) => {
         transcript_length: transcription.full_transcript.length,
       });
 
+      // Format transcript with speaker labels and timestamps
+      const formattedText = transcription.utterances?.length > 0
+        ? formatUtterancesToTranscriptText(transcription.utterances)
+        : transcription.full_transcript;
+
       // Save transcript to recordings table
       await supabase
         .from('recordings')
         .update({
           status: 'processing', // Still processing - AI analysis pending
           transcript_json: transcription,
-          transcript_text: transcription.full_transcript,
+          transcript_text: formattedText,
           meeting_duration_seconds: payload.result.metadata?.duration_seconds || null,
           updated_at: new Date().toISOString(),
         })
@@ -151,7 +157,7 @@ serve(async (req) => {
           .single();
 
         const meetingUpdate: any = {
-          transcript_text: transcription.full_transcript,
+          transcript_text: formattedText,
           transcript_json: transcription,
           duration_minutes: durationMinutes,
           processing_status: 'processing', // AI analysis pending

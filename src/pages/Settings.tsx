@@ -263,6 +263,10 @@ export default function Settings() {
   // Filter sections based on permissions
   const settingsSections = useMemo(() => {
     return allSettingsSections.filter(section => {
+      // Non-functional sections — hidden from external users, visible to platform admins.
+      if (['task-sync', 'smart-listening', 'proactive-agent'].includes(section.id)) {
+        return isPlatformAdmin;
+      }
       if (section.requiresOrgAdmin) {
         // Allow org admins AND platform admins to see team settings
         return permissions.canManageTeam || permissions.canManageSettings || isPlatformAdmin;

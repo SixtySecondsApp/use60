@@ -17,8 +17,7 @@ import {
   Video,
   Loader2,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useOnboardingV2Store, SKILLS, SkillId } from '@/lib/stores/onboardingV2Store';
+import { useOnboardingV2Store, SKILLS } from '@/lib/stores/onboardingV2Store';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 import { useInvalidateUserProfile } from '@/lib/hooks/useUserProfile';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -41,7 +40,6 @@ const nextSteps: NextStepItem[] = [
 ];
 
 export function CompletionStep() {
-  const navigate = useNavigate();
   const { enrichment, skillConfigs, setStep, organizationId } = useOnboardingV2Store();
   const { completeStep } = useOnboardingProgress();
   const { user } = useAuth();
@@ -119,6 +117,19 @@ export function CompletionStep() {
         setActiveOrg(organizationId);
       }
 
+      // Grant 10 welcome credits to new org (non-blocking)
+      if (organizationId) {
+        try {
+          await supabase.functions.invoke('grant-welcome-credits', {
+            body: { org_id: organizationId },
+          });
+          localStorage.setItem(`sixty_welcome_credits_${organizationId}`, 'pending');
+        } catch (err) {
+          console.error('[CompletionStep] Failed to grant welcome credits:', err);
+          // Non-fatal — do not block navigation
+        }
+      }
+
       // Create org fact profile — await so the request isn't killed by navigation
       await ensureOrgProfile();
 
@@ -159,11 +170,11 @@ export function CompletionStep() {
         {/* Title */}
         <h2 className="text-2xl font-bold mb-3 text-white">Your Sales Assistant is Ready</h2>
         <p className="mb-8 leading-relaxed text-gray-400">
-          We've trained your AI on{' '}
+          We&apos;ve trained your AI on{' '}
           <span className="font-semibold text-white">
             {enrichment?.company_name || 'your company'}
           </span>
-          's way of selling. It now knows your qualification criteria, objection handling, and
+          &apos;s way of selling. It now knows your qualification criteria, objection handling, and
           brand voice.
         </p>
 
@@ -223,7 +234,7 @@ export function CompletionStep() {
 
       {/* What's Next */}
       <div className="mt-6 rounded-2xl border border-gray-800 bg-gray-900 p-6 text-left shadow-xl">
-        <h3 className="font-bold mb-4 text-white">What's next?</h3>
+        <h3 className="font-bold mb-4 text-white">What&apos;s next?</h3>
         <div className="space-y-3">
           {nextSteps.map((item, i) => {
             const Icon = item.icon;
@@ -235,6 +246,17 @@ export function CompletionStep() {
                 // Set the active org to the one from onboarding
                 if (organizationId) {
                   setActiveOrg(organizationId);
+                }
+                // Grant 10 welcome credits to new org (non-blocking)
+                if (organizationId) {
+                  try {
+                    await supabase.functions.invoke('grant-welcome-credits', {
+                      body: { org_id: organizationId },
+                    });
+                    localStorage.setItem(`sixty_welcome_credits_${organizationId}`, 'pending');
+                  } catch (err) {
+                    console.error('[CompletionStep] Failed to grant welcome credits:', err);
+                  }
                 }
                 // Create org fact profile — await before navigating
                 await ensureOrgProfile();

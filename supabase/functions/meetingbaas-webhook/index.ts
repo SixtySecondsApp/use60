@@ -21,6 +21,7 @@ import { handleCorsPreflightRequest, getCorsHeaders, jsonResponse, errorResponse
 import { captureException, addBreadcrumb } from '../_shared/sentryEdge.ts';
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/use60Signing.ts';
 import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
+import { formatUtterancesToTranscriptText } from '../_shared/transcriptFormatter.ts';
 
 // =============================================================================
 // Types
@@ -835,12 +836,15 @@ async function handleTranscriptReady(
   };
 
   if (transcript && transcript.text) {
-    updateData.transcript_text = transcript.text;
+    const formattedText = transcript.utterances?.length > 0
+      ? formatUtterancesToTranscriptText(transcript.utterances)
+      : transcript.text;
+    updateData.transcript_text = formattedText;
     updateData.transcript_json = {
       text: transcript.text,
       utterances: transcript.utterances || [],
     };
-    console.log(`[MeetingBaaS Webhook] Saving transcript (${transcript.text.length} chars, ${transcript.utterances?.length || 0} utterances) for recording: ${deployment.recording_id}`);
+    console.log(`[MeetingBaaS Webhook] Saving transcript (${formattedText.length} chars, ${transcript.utterances?.length || 0} utterances) for recording: ${deployment.recording_id}`);
   }
 
   await supabase

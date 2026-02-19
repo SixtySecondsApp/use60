@@ -172,7 +172,7 @@ export async function createInvitation({
       if (existingExpiry > now) {
         logger.log('[InvitationService] Reusing pending invitation and regenerating token:', existingInvite.id);
 
-        // Update with new token and 7-day expiration
+        // Update with new token, role, and 7-day expiration
         const { data: updatedInvite, error: updateError } = await supabase
           .from('organization_invitations' as any)
           .update({
@@ -181,6 +181,7 @@ export async function createInvitation({
               .map(b => b.toString(16).padStart(2, '0'))
               .join(''),
             expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            role, // Update role in case it changed from the original invite
           } as any)
           .eq('id', existingInvite.id)
           .select()
@@ -196,7 +197,12 @@ export async function createInvitation({
         // Send invitation email with new token
         const { data: { user } } = await supabase.auth.getUser();
         const inviterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'A team member';
-        await sendInvitationEmail(invitationData, inviterName);
+        const emailSentOnReuse = await sendInvitationEmail(invitationData, inviterName);
+
+        if (!emailSentOnReuse) {
+          logger.warn('[InvitationService] Invitation updated but email failed to send:', invitationData?.id);
+          return { data: invitationData, error: null, warning: 'Invitation created but email delivery failed. You can resend from the invitation list.' };
+        }
 
         return { data: invitationData, error: null };
       }

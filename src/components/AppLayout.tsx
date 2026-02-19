@@ -43,7 +43,6 @@ import {
   Zap,
   History,
   Workflow,
-  ExternalLink as LinkIcon,
   Sparkles,
   Search,
   ChevronDown,
@@ -51,7 +50,6 @@ import {
   ChevronRight,
   BarChart3,
   Layers,
-  Eye,
   EyeOff,
   Calendar,
   Mail,
@@ -477,7 +475,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     >
                       <button
                         onClick={() => {
-                          navigate('/profile');
+                          navigate('/settings/account');
                           setIsMobileUserMenuOpen(false);
                         }}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#64748B] dark:text-gray-400 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors"
@@ -777,7 +775,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => navigate('/profile')}>
+              <DropdownMenuItem onClick={() => navigate('/settings/account')}>
                 <UserCog className="w-4 h-4 mr-2" />
                 Profile
               </DropdownMenuItem>
@@ -802,17 +800,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </>
               )}
 
-              {/* Product Pages Links */}
+              {/* Billing & Pricing */}
               <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
-              <DropdownMenuItem onClick={() => window.open(import.meta.env.DEV ? '/landing' : '/product/meetings', '_blank')}>
-                <Eye className="w-4 h-4 mr-2" />
-                View Sales Page
-                <LinkIcon className="w-3 h-3 ml-auto text-gray-400" />
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => window.open(import.meta.env.DEV ? '/landing#pricing' : '/product/meetings/pricing', '_blank')}>
+              <DropdownMenuItem onClick={() => navigate('/settings/billing')}>
                 <DollarSign className="w-4 h-4 mr-2" />
-                View Pricing
-                <LinkIcon className="w-3 h-3 ml-auto text-gray-400" />
+                Billing & Subscription
               </DropdownMenuItem>
 
               <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />

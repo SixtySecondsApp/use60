@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, Check, Loader } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
+import { Button } from '@/components/ui/button';
 
 interface EnrichmentLoadingStepProps {
   domain: string;
@@ -43,6 +44,10 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
     enrichmentRetryCount,
     pollingStartTime,
     resetAndCleanup,
+    hasDomainMismatch,
+    emailDomain,
+    signupCompanyDomain,
+    resolveDomainMismatch,
   } = useOnboardingV2Store();
 
   const handleStartOver = useCallback(async () => {
@@ -244,6 +249,42 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
       exit={{ opacity: 0, scale: 0.95 }}
       className="w-full max-w-md mx-auto px-4"
     >
+      {/* Domain Mismatch Picker */}
+      {hasDomainMismatch && emailDomain && signupCompanyDomain && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-lg mx-auto px-4 mb-6"
+        >
+          <div className="rounded-2xl border border-amber-700/50 bg-amber-900/20 p-6">
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Which domain should we research?
+            </h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Your email (@{emailDomain}) and the website you entered ({signupCompanyDomain}) are different. Choose which domain to use for your company research.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => resolveDomainMismatch(emailDomain)}
+                variant="outline"
+                className="flex-1 border-gray-600 text-white hover:bg-gray-800"
+              >
+                {emailDomain}
+                <span className="block text-xs text-gray-400 mt-0.5">from your email</span>
+              </Button>
+              <Button
+                onClick={() => resolveDomainMismatch(signupCompanyDomain)}
+                variant="outline"
+                className="flex-1 border-gray-600 text-white hover:bg-gray-800"
+              >
+                {signupCompanyDomain}
+                <span className="block text-xs text-gray-400 mt-0.5">from your website</span>
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 p-8 sm:p-12 text-center">
         {/* Progress Circle */}
         <div className="relative w-24 h-24 mx-auto mb-8">

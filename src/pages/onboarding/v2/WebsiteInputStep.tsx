@@ -112,7 +112,7 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
     // Basic validation
     const domain = extractDomain(trimmed);
     if (!domain || domain.length < 3 || !domain.includes('.')) {
-      setError('Please enter a valid website (e.g., acme.com)');
+      setError('Please enter a valid website (e.g., mycompany.com)');
       return;
     }
 
@@ -144,7 +144,7 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
         {/* Title */}
         <div className="text-center mb-8">
           <h2 className="text-2xl font-bold text-white mb-3">
-            What's your company?
+            What&apos;s your company?
           </h2>
           <p className="text-gray-400">
             Search for an existing organization to join, or provide your website to set up a new one.
@@ -254,7 +254,7 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
                     handleSubmitWebsite();
                   }
                 }}
-                placeholder="acme.com"
+                placeholder="mycompany.com"
                 className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-700 bg-gray-800 text-white placeholder:text-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all"
               />
             </div>
@@ -285,12 +285,12 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
           className="w-full flex items-center justify-center gap-2 py-4 px-6 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 hover:bg-gray-800/50 transition-all"
         >
           <HelpCircle className="w-5 h-5" />
-          <span>I don't have a website yet</span>
+          <span>I don&apos;t have a website yet</span>
         </button>
 
         {/* Helper text */}
         <p className="text-center text-xs text-gray-500 mt-4">
-          No worries! We'll ask a few quick questions to understand your business instead.
+          No worries! We&apos;ll ask a few quick questions to understand your business instead.
         </p>
       </div>
     </motion.div>

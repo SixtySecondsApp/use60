@@ -687,10 +687,305 @@
       ]
     }
   ],
+    {
+      "id": "AQF-001",
+      "feature": "audit-quick-fixes",
+      "title": "Fix webhook action_type union and RuleList label",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AQF-002"],
+      "estimatedMinutes": 15,
+      "acceptance": [
+        "Add '| webhook' to action_type union in useOpsRules.ts line 15",
+        "Add 'webhook': 'Webhook' to actionLabels in RuleList.tsx",
+        "TypeScript build passes with no errors on webhook rule usage"
+      ],
+      "files": [
+        "src/lib/hooks/useOpsRules.ts",
+        "src/components/ops/RuleList.tsx"
+      ]
+    },
+    {
+      "id": "AQF-002",
+      "feature": "audit-quick-fixes",
+      "title": "Create generate_webhook_api_key RPC in migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": ["ops_table_webhooks"] },
+      "blocks": [],
+      "parallelWith": ["AQF-001"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "SQL function generate_webhook_api_key(p_table_id UUID) created",
+        "Generates sk_ prefix + 64 hex chars using gen_random_bytes(32)",
+        "Rotates previous key with 24h grace period (previous_api_key_expires_at)",
+        "Returns the new full API key",
+        "RLS: only org members can call for their org's tables"
+      ],
+      "files": [
+        "supabase/migrations/20260219600002_webhook_api_key_rpc.sql"
+      ]
+    },
+    {
+      "id": "AQF-003",
+      "feature": "audit-quick-fixes",
+      "title": "Implement DB triggers to invoke evaluate-ops-rule on cell/row events",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Trigger on dynamic_table_cells INSERT/UPDATE fires for cell_updated rules",
+        "Trigger on dynamic_table_rows INSERT fires for row_created rules",
+        "Trigger calls pg_net to invoke evaluate-ops-rule edge function async",
+        "Debounce: skips if same row triggered within 5 seconds (prevents cascading)",
+        "Only fires if table has enabled rules (check ops_automation_rules)"
+      ],
+      "files": [
+        "supabase/migrations/20260219600003_ops_rule_triggers.sql"
+      ]
+    },
+    {
+      "id": "AQF-004",
+      "feature": "audit-quick-fixes",
+      "title": "Wire or remove dead ApplicationConfig.autonomous_copilot",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CPT-003"],
+      "parallelWith": ["AQF-005"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "ApplicationConfig.autonomous_copilot either removed or wired into CopilotContext",
+        "If wired: CopilotContext reads enabled flag and model from config instead of hardcoding",
+        "If removed: dead config block deleted, comment added explaining mode is hardcoded",
+        "No disconnected config values remain"
+      ],
+      "files": [
+        "src/lib/configuration/ApplicationConfig.ts",
+        "src/lib/contexts/CopilotContext.tsx"
+      ]
+    },
+    {
+      "id": "AQF-005",
+      "feature": "audit-quick-fixes",
+      "title": "Fix useCompanies stat aggregation stubs returning zeros",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AQF-004"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "useCompanies contactCount returns actual count from contacts table",
+        "useCompanies dealsCount returns actual count from deals table",
+        "useCompanies dealsValue returns actual sum from deals table",
+        "Queries use proper RLS-scoped joins (org_id match)"
+      ],
+      "files": [
+        "src/lib/hooks/useCompanies.ts"
+      ]
+    },
+    {
+      "id": "AQF-006",
+      "feature": "audit-quick-fixes",
+      "title": "Replace predictive model null returns with heuristic defaults",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "days_until_predicted_ghost returns heuristic based on days since last activity",
+        "predicted_days_to_close returns heuristic based on average stage duration",
+        "No null values shown in deal health or relationship health UIs",
+        "Heuristic logic clearly commented as placeholder for future ML model"
+      ],
+      "files": [
+        "src/lib/services/relationshipHealthService.ts",
+        "src/lib/services/dealHealthService.ts"
+      ]
+    },
+
+    {
+      "id": "CPT-001",
+      "feature": "copilot-transition",
+      "title": "Port structured response router to autonomous mode",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": ["AQF-004"], "files": [], "schema": [] },
+      "blocks": ["CPT-002"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Autonomous mode renders structured response components when backend emits structured_response SSE",
+        "Reuse existing CopilotResponse.tsx component router (or simplified subset)",
+        "Pipeline views, deal health cards, follow-up packs render as rich UI not plain text",
+        "Fallback to plain text when no structured_response event received"
+      ],
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts",
+        "src/components/copilot/CopilotResponse.tsx",
+        "src/lib/contexts/CopilotContext.tsx"
+      ]
+    },
+    {
+      "id": "CPT-002",
+      "feature": "copilot-transition",
+      "title": "Add HITL preview-confirm flow to autonomous mode",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["CPT-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CPT-003"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Sequences with is_simulation=true show preview card with Confirm/Cancel buttons",
+        "User reply 'Confirm' re-executes with is_simulation=false",
+        "Cancel dismisses the pending action",
+        "ActionItemsStore tracks pending_action state correctly in autonomous mode"
+      ],
+      "files": [
+        "src/lib/contexts/CopilotContext.tsx",
+        "src/lib/stores/actionItemsStore.ts",
+        "src/components/copilot/CopilotConfirmation.tsx"
+      ]
+    },
+    {
+      "id": "CPT-003",
+      "feature": "copilot-transition",
+      "title": "Add copilot mode-switching toggle in settings",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AQF-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CPT-002"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "AI settings page shows 'Copilot Engine' toggle: Autonomous (Claude) vs Classic (Gemini)",
+        "Selection persists to user_settings table",
+        "CopilotContext reads preference instead of hardcoded true",
+        "Warning shown if switching mid-conversation (clears current session)"
+      ],
+      "files": [
+        "src/pages/settings/AIPersonalizationSettings.tsx",
+        "src/lib/contexts/CopilotContext.tsx",
+        "src/lib/configuration/ApplicationConfig.ts"
+      ]
+    },
+    {
+      "id": "CPT-004",
+      "feature": "copilot-transition",
+      "title": "Wire multi-agent response rendering in copilot UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["CPT-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent_start SSE events show specialist agent card (name, domain, status spinner)",
+        "agent_done SSE events update card with result summary",
+        "synthesis event renders final orchestrated response",
+        "Multiple specialist results displayed as collapsible sections"
+      ],
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts",
+        "src/components/copilot/AgentSpecialistCard.tsx",
+        "src/components/copilot/CopilotResponse.tsx"
+      ]
+    },
+
+    {
+      "id": "SVC-001",
+      "feature": "service-cleanup",
+      "title": "Remove or archive unused services",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SVC-002"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Verify each service has zero imports: coachingService, ghostDetectionService, costAnalysisService, testCalendarFunction, testScenarioService, onboardingService, contentService.examples",
+        "Delete confirmed unused services (or move to src/lib/services/_archived/)",
+        "No broken imports after removal",
+        "Build passes cleanly"
+      ],
+      "files": [
+        "src/lib/services/coachingService.ts",
+        "src/lib/services/ghostDetectionService.ts",
+        "src/lib/services/costAnalysisService.ts",
+        "src/lib/services/testCalendarFunction.ts",
+        "src/lib/services/testScenarioService.ts",
+        "src/lib/services/onboardingService.ts"
+      ]
+    },
+    {
+      "id": "SVC-002",
+      "feature": "service-cleanup",
+      "title": "Consolidate actionItemStore and actionItemsStore",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SVC-001"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Determine which store is canonical (check import counts)",
+        "Migrate all imports to single store",
+        "Delete the deprecated store",
+        "No duplicate action item state management"
+      ],
+      "files": [
+        "src/lib/stores/actionItemStore.ts",
+        "src/lib/stores/actionItemsStore.ts"
+      ]
+    },
+    {
+      "id": "SVC-003",
+      "feature": "service-cleanup",
+      "title": "Build outbound webhook rule configuration UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AQF-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "WebhookSettingsPanel outbound section shows existing webhook rules for this table",
+        "'Add Webhook Rule' button opens RuleBuilder pre-filled with webhook action type",
+        "Existing outbound rules listed with enable/disable toggle and delete",
+        "Remove 'Coming soon' disabled state"
+      ],
+      "files": [
+        "src/components/ops/WebhookSettingsPanel.tsx",
+        "src/components/ops/RuleBuilder.tsx"
+      ]
+    }
+  ],
   "execution": {
-    "totalStories": 26,
+    "totalStories": 39,
     "completedStories": 7,
     "currentFeature": "settings-page-fixes",
-    "lastUpdated": "2026-02-19T00:00:00Z"
+    "lastUpdated": "2026-02-19T12:00:00Z"
   }
 }

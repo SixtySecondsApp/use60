@@ -76,7 +76,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -95,7 +95,7 @@ import {
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
   LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings,
-  CreditPurchaseSuccess, CreditsSettingsPage,
+  CreditPurchaseSuccess, CreditsSettingsPage, BillingSettingsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
   OrgBilling,
   // Insights
@@ -470,6 +470,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/integrations/notetaker-branding" element={<PlatformAdminRouteGuard><AppLayout><NotetakerBranding /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* MeetingBaaS Video Quality */}
                 <Route path="/platform/integrations/notetaker-video-quality" element={<PlatformAdminRouteGuard><AppLayout><NotetakerVideoQuality /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* MeetingBaaS Recording Limit */}
+                <Route path="/platform/integrations/notetaker-recording-limit" element={<PlatformAdminRouteGuard><AppLayout><NotetakerRecordingLimit /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Integration Testing Dashboard - Main page */}
                 <Route path="/platform/integrations" element={<PlatformAdminRouteGuard><AppLayout><IntegrationsDashboard /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - Security & Audit */}
@@ -604,7 +606,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                     </AppLayout>
                   </OrgAdminRouteGuard>
                 } />
-                <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><OrgBilling /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><BillingSettingsPage /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/credits" element={<AppLayout><CreditsSettingsPage /></AppLayout>} />
                 <Route path="/settings/credits/success" element={<AppLayout><CreditPurchaseSuccess /></AppLayout>} />
                 {/* Slack Settings - visible only when Slack is connected (enforced inside page) */}

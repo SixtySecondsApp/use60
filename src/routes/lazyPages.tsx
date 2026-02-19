@@ -39,6 +39,7 @@ export const AgentPerformanceDashboard = lazyWithRetry(() => import('@/pages/pla
 export const CopilotConsolePage = lazyWithRetry(() => import('@/pages/platform/CopilotConsolePage'));
 export const NotetakerBranding = lazyWithRetry(() => import('@/pages/platform/NotetakerBranding'));
 export const NotetakerVideoQuality = lazyWithRetry(() => import('@/pages/platform/NotetakerVideoQuality'));
+export const NotetakerRecordingLimit = lazyWithRetry(() => import('@/pages/platform/NotetakerRecordingLimit'));
 export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionCentre'));
 export const CommandCentre = lazyWithRetry(() => import('@/pages/platform/CommandCentre'));
 export const CommandCentreDemo = lazyWithRetry(() => import('@/pages/platform/CommandCentreDemo'));
@@ -192,6 +193,7 @@ export const InstantlySettings = lazyWithRetry(() => import('@/pages/settings/In
 export const SmartListeningSettings = lazyWithRetry(() => import('@/pages/settings/SmartListeningSettings'));
 export const CreditPurchaseSuccess = lazyWithRetry(() => import('@/pages/settings/CreditPurchaseSuccess'));
 export const CreditsSettingsPage = lazyWithRetry(() => import('@/pages/settings/CreditsSettingsPage'));
+export const BillingSettingsPage = lazyWithRetry(() => import('@/pages/settings/BillingSettingsPage'));
 // Integration settings pages (dedicated settings for each integration)
 export const GoogleWorkspaceIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/GoogleWorkspaceIntegrationPage'));
 export const FathomIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/FathomIntegrationPage'));

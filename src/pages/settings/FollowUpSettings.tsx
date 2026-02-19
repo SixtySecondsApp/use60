@@ -172,6 +172,9 @@ export default function FollowUpSettings() {
   useEffect(() => {
     if (orgId) {
       loadWorkflows();
+    } else {
+      // orgId not yet available - stop spinner so we don't show infinite loading
+      setWorkflowsLoading(false);
     }
     loadTemplates();
   }, [orgId]);
@@ -188,6 +191,58 @@ export default function FollowUpSettings() {
       toast.error('Failed to load workflows');
     } finally {
       setWorkflowsLoading(false);
+    }
+  };
+
+  const handleSeedDefaults = async () => {
+    if (!orgId) return;
+    try {
+      setSaving(true);
+      const defaults: CreateProposalWorkflowInput[] = [
+        {
+          name: 'Full Proposal',
+          description: 'Complete proposal package with goals, SOW, and formatted document',
+          include_goals: true,
+          include_sow: true,
+          include_formatted: true,
+          include_email: false,
+          include_html: false,
+          include_markdown: false,
+          is_default: true,
+        },
+        {
+          name: 'Quick Followup Email',
+          description: 'Fast email for post-meeting follow-up',
+          include_email: true,
+          include_goals: false,
+          include_sow: false,
+          include_formatted: false,
+          include_html: false,
+          include_markdown: false,
+          is_default: false,
+        },
+        {
+          name: 'Client Summary',
+          description: 'Clean markdown summary to share with clients',
+          include_markdown: true,
+          include_goals: true,
+          include_email: false,
+          include_sow: false,
+          include_formatted: false,
+          include_html: false,
+          is_default: false,
+        },
+      ];
+      for (const workflow of defaults) {
+        await OrgProposalWorkflowService.createWorkflow(orgId, workflow, user?.id);
+      }
+      toast.success('Default workflows created');
+      loadWorkflows();
+    } catch (error) {
+      console.error('Error creating default workflows:', error);
+      toast.error('Failed to create default workflows');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -593,13 +648,23 @@ export default function FollowUpSettings() {
                 <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium mb-2">No workflows yet</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  Create your first workflow to get started
+                  Start with our recommended defaults or create your own
                 </p>
                 {canEdit && (
-                  <Button onClick={openCreateModal}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Workflow
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={handleSeedDefaults} disabled={saving}>
+                      {saving ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="mr-2 h-4 w-4" />
+                      )}
+                      Add Default Workflows
+                    </Button>
+                    <Button variant="outline" onClick={openCreateModal}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Custom
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>

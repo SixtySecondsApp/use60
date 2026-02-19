@@ -589,7 +589,14 @@ export default function OrganizationManagementPage() {
       } else {
         toast.success(`Invitation sent to ${newInviteEmail}`);
       }
-      setInvitations([data, ...invitations]);
+      // Update or prepend: if re-inviting same email, replace the existing entry
+      setInvitations(prev => {
+        const idx = prev.findIndex(inv => inv.email.toLowerCase() === data.email.toLowerCase());
+        if (idx >= 0) {
+          return prev.map((inv, i) => i === idx ? data : inv);
+        }
+        return [data, ...prev];
+      });
       setNewInviteEmail('');
       setNewInviteRole('member');
     }

@@ -23,6 +23,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from 'npm:@aws-sdk/clien
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import { handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 import { createMeetingBaaSClient } from '../_shared/meetingbaas.ts';
+import { formatUtterancesToTranscriptText } from '../_shared/transcriptFormatter.ts';
 
 // =============================================================================
 // Types
@@ -259,11 +260,14 @@ async function processCompletedBot(
       if (transcriptError || !transcriptData) {
         console.warn(`[PollStuckBots] Transcript fetch failed for bot ${bot.bot_id}:`, transcriptError?.message || 'No data');
       } else if (transcriptData.text) {
-        console.log(`[PollStuckBots] Transcript fetched (${transcriptData.text.length} chars, ${transcriptData.utterances?.length || 0} utterances)`);
+        const formattedText = transcriptData.utterances?.length > 0
+          ? formatUtterancesToTranscriptText(transcriptData.utterances)
+          : transcriptData.text;
+        console.log(`[PollStuckBots] Transcript fetched (${formattedText.length} chars, ${transcriptData.utterances?.length || 0} utterances)`);
         await supabase
           .from('recordings')
           .update({
-            transcript_text: transcriptData.text,
+            transcript_text: formattedText,
             transcript_json: {
               text: transcriptData.text,
               utterances: transcriptData.utterances || [],
