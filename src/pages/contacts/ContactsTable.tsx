@@ -507,12 +507,23 @@ export default function ContactsTable() {
   // Confirm delete
   const confirmDeleteContact = async () => {
     if (!deletingContact) return;
-    
-    // TODO: Implement actual delete logic
-    toast.success(`Contact "${formatName(deletingContact)}" deleted successfully`);
-    setDeletingContact(null);
-    // Refresh contacts list
-    // refreshContacts();
+
+    try {
+      const { error } = await supabase
+        .from('contacts')
+        .delete()
+        .eq('id', deletingContact.id);
+
+      if (error) throw error;
+
+      // Remove the deleted contact from local state
+      setContacts(prev => prev.filter(c => c.id !== deletingContact.id));
+      setDeletingContact(null);
+      toast.success(`Contact "${formatName(deletingContact)}" deleted`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      toast.error(`Failed to delete contact: ${message}`);
+    }
   };
 
   // Handle add new contact

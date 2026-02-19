@@ -1,9 +1,5 @@
-// @ts-nocheck
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
-
-// Type assertion for build compatibility
-const supabaseClient = supabase as any;
 import { useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { ConfettiService } from '@/lib/services/confettiService';

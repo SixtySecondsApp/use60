@@ -1,12 +1,11 @@
-// @ts-nocheck
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useUser } from '@/lib/hooks/useUser'; // To ensure user is logged in
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
-// Cast supabase client to bypass type issues
-const db = supabase as any;
+// Cast supabase client to bypass type issues with dynamic filter chaining
+const db = supabase as unknown as typeof supabase;
 
 // Define the structure of an activity from the 'activities' table
 export interface OriginalActivity {
