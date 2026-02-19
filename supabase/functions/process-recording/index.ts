@@ -29,6 +29,7 @@ import {
 // Import AI analysis function from fathom-sync for sentiment, talk time, and coaching
 import { analyzeTranscriptWithClaude, TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts';
 import { syncRecordingToMeeting } from '../_shared/recordingCompleteSync.ts';
+import { formatUtterancesToTranscriptText, type SpeakerNameMap } from '../_shared/transcriptFormatter.ts';
 
 // =============================================================================
 // Types
@@ -633,6 +634,20 @@ async function processRecording(
     // Update speakers with any AI enhancements
     speakers = analysis.speakers;
 
+    // Step 4.25: Format transcript_text with speaker names and timestamps
+    // Produces [HH:MM:SS] Speaker Name: text — compatible with Fathom/Fireflies rendering
+    const speakerNameMap: SpeakerNameMap = {};
+    for (const s of speakers) {
+      speakerNameMap[s.speaker_id] = s.name || `Speaker ${s.speaker_id + 1}`;
+    }
+    const formattedTranscriptText = formatUtterancesToTranscriptText(
+      transcript.utterances,
+      speakerNameMap
+    );
+    if (formattedTranscriptText) {
+      console.log(`[ProcessRecording] Formatted transcript: ${formattedTranscriptText.length} chars, ${transcript.utterances.length} utterances`);
+    }
+
     // Step 4.5: Run enhanced AI analysis for sentiment, talk time, and coaching
     // Uses the same analysis pipeline as Fathom recordings for consistency
     console.log('[ProcessRecording] Step 4.5: Running enhanced AI analysis...');
@@ -706,7 +721,7 @@ async function processRecording(
       recording_s3_url: uploadResult.storageUrl || mediaUrlForTranscription,
       recording_s3_key: uploadResult.storagePath || null,
       transcript_json: transcript,
-      transcript_text: transcript.text,
+      transcript_text: formattedTranscriptText || transcript.text,
       transcription_provider: 'assemblyai',
       transcription_status: 'complete',
       transcription_error: null,
@@ -739,7 +754,7 @@ async function processRecording(
     const meetingUpdate: Record<string, unknown> = {
       title: recording.meeting_title,
       summary: analysis.summary,
-      transcript_text: transcript.text,
+      transcript_text: formattedTranscriptText || transcript.text,
       transcript_json: transcript,
       duration_minutes: durationSeconds ? Math.round(durationSeconds / 60) : null,
       processing_status: 'ready',
