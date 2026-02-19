@@ -463,8 +463,9 @@ export async function checkRecordingQuota(
     .maybeSingle();
 
   if (!usage) {
-    // No usage record = under limit (default 20)
-    return { allowed: true, remaining: 20, limit: 20 };
+    // No usage record = under limit, use platform default
+    const defaultLimit = await getPlatformDefaultRecordingLimit(supabase);
+    return { allowed: true, remaining: defaultLimit, limit: defaultLimit };
   }
 
   const remaining = Math.max(0, usage.recordings_limit - usage.recordings_count);
@@ -493,4 +494,19 @@ export async function getPlatformDefaultBotImage(
     .maybeSingle();
 
   return data?.value || null;
+}
+
+/**
+ * Get platform default monthly recording limit from app_settings
+ * Returns the configured limit or 20 as fallback
+ */
+export async function getPlatformDefaultRecordingLimit(supabase: any): Promise<number> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'notetaker_default_recording_limit')
+    .maybeSingle();
+
+  const parsed = parseInt(data?.value ?? '');
+  return isNaN(parsed) ? 20 : parsed;
 }

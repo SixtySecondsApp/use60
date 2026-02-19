@@ -39,6 +39,7 @@ export const AgentPerformanceDashboard = lazyWithRetry(() => import('@/pages/pla
 export const CopilotConsolePage = lazyWithRetry(() => import('@/pages/platform/CopilotConsolePage'));
 export const NotetakerBranding = lazyWithRetry(() => import('@/pages/platform/NotetakerBranding'));
 export const NotetakerVideoQuality = lazyWithRetry(() => import('@/pages/platform/NotetakerVideoQuality'));
+export const NotetakerRecordingLimit = lazyWithRetry(() => import('@/pages/platform/NotetakerRecordingLimit'));
 export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionCentre'));
 export const CommandCentre = lazyWithRetry(() => import('@/pages/platform/CommandCentre'));
 export const CommandCentreDemo = lazyWithRetry(() => import('@/pages/platform/CommandCentreDemo'));

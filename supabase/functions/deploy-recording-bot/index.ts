@@ -20,6 +20,7 @@ import {
   formatEntryMessage,
   checkRecordingQuota,
   getPlatformDefaultBotImage,
+  getPlatformDefaultRecordingLimit,
   DEFAULT_BOT_NAME,
   DEFAULT_BOT_IMAGE,
   DEFAULT_ENTRY_MESSAGE,
@@ -172,13 +173,14 @@ async function incrementUsageCount(
       })
       .eq('id', existing.id);
   } else {
-    // Create new usage record
+    // Create new usage record using platform default limit
+    const defaultLimit = await getPlatformDefaultRecordingLimit(supabase);
     await supabase.from('recording_usage').insert({
       org_id: orgId,
       period_start: periodStart.toISOString().split('T')[0],
       period_end: periodEnd.toISOString().split('T')[0],
       recordings_count: 1,
-      recordings_limit: 20, // Default limit
+      recordings_limit: defaultLimit,
       total_duration_seconds: 0,
       storage_used_bytes: 0,
     });
