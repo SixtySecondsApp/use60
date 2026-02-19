@@ -98,7 +98,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
                 )}
               >
                 {isPopular && (
-                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-10">
                     <Badge className="gap-1 bg-blue-600 text-white hover:bg-blue-600 text-xs px-2 py-0.5">
                       <Star className="h-3 w-3 fill-white" />
                       Most Popular
