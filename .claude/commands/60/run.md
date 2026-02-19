@@ -99,6 +99,22 @@ function canExecute(story, plan) {
 }
 ```
 
+### 1a. Load Dev Hub Context (optional)
+
+If `prd.json` has a non-null `aiDevHubProjectId`, Dev Hub sync is active for this run. All Dev Hub operations in subsequent steps are **non-blocking** — log warnings on failure, never errors.
+
+If Dev Hub MCP tools are unavailable, log `⚠️ Dev Hub MCP unavailable — continuing without task sync.` and skip all Dev Hub steps.
+
+### 1b. Update Dev Hub Task → in_progress
+
+**Skip if Dev Hub sync is not active.**
+
+1. If the story has a non-null `aiDevHubTaskId`, call `update_task` to set status to `"in_progress"`
+2. If `aiDevHubTaskId` is `null` but `aiDevHubProjectId` exists, lazy-create the task now:
+   - Call `create_task` with: projectId, title `[<runSlug>] <storyId>: <Story Title>`, description + acceptance criteria, type `"feature"`, status `"in_progress"`, priority mapped (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
+   - Store returned task ID in `prd.json.userStories[i].aiDevHubTaskId`
+3. If update/create fails, log warning and continue
+
 ### 2. Implement Story
 
 Based on story type:
@@ -125,6 +141,26 @@ npx vitest run --changed HEAD --passWithNoTests
 - Mark story as complete in plan.json
 - Append to progress.md
 - Increment completed count
+
+### 4a. Update Dev Hub Task (post-completion)
+
+**Skip if Dev Hub sync is not active or story has no `aiDevHubTaskId`.**
+
+**On story success (all gates pass):**
+1. Try `update_task` with status `"in review"`
+2. If API error (known bug with `"in review"` / `"done"` statuses), keep status as `"in progress"` and add comment via `create_comment`: `"[STATUS] Story completed — ready for review"`
+3. Add a completion comment via `create_comment` with:
+   - Summary of what was implemented
+   - Files changed
+   - Quality gate results
+4. Log: `Dev Hub: task updated` or `Dev Hub: status update failed (known API bug) — added comment instead`
+
+**On story failure (gates fail):**
+1. Try `update_task` with status `"blocked"`
+2. Add comment via `create_comment` with error details and what needs fixing
+3. If status update fails, add comment: `"[STATUS] Blocked — <error summary>"`
+
+**All Dev Hub operations are non-blocking** — log warnings, never stop execution.
 
 ### 5. Continue (--all mode)
 

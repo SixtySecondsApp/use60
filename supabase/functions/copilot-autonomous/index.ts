@@ -1663,11 +1663,17 @@ serve(async (req: Request) => {
       });
     }
 
-    // Rate limiting
+    // Rate limiting — keyed per-user via anon client (intensive: 10 req/min)
+    const rateLimitClient = createClient(
+      SUPABASE_URL,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
     const rateLimitResult = await rateLimitMiddleware(
+      rateLimitClient,
       req,
-      userId,
-      RATE_LIMIT_CONFIGS.copilot
+      'copilot-autonomous',
+      RATE_LIMIT_CONFIGS.intensive
     );
     if (rateLimitResult) {
       return rateLimitResult;

@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from './cors.ts'
+import { corsHeaders } from './corsHelper.ts'
 
 export interface ApiResponse<T = any> {
   data: T | null;

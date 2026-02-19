@@ -150,14 +150,21 @@ DEAL_FOCUS_SCORE = (Urgency x 0.30) + (Risk x 0.25) + (Value x 0.25) + (Momentum
 
 #### Risk (25% weight) -- Is the deal in danger?
 
-| Signal | Score | Rationale |
-|--------|-------|-----------|
-| Health score < 30 | 100 | Critical -- intervention required |
-| Health score 30-50 | 75 | At risk -- needs this-week attention |
-| Champion went dark (7+ days) | 90 | Single-threaded deal losing its thread |
-| Competitor mentioned in last meeting | 70 | Evaluation risk |
-| Stakeholder change (new decision-maker) | 65 | Relationship restart needed |
-| No activity in 10+ days | 80 | Deal is stalling |
+**Use `deal_health_scores` table for risk assessment:**
+
+| Signal | Score | Rationale | Health Score Field |
+|--------|-------|-----------|-------------------|
+| Health score < 30 | 100 | Critical -- intervention required | `overall_health_score < 30` |
+| Health score 30-50 | 75 | At risk -- needs this-week attention | `overall_health_score 30-50` |
+| Champion went dark (7+ days) | 90 | Single-threaded deal losing its thread | Check `relationship_health_scores.is_ghost_risk` or `days_since_last_contact > 7` |
+| Risk level = critical | 95 | Pre-computed critical risk | `deal_health_scores.risk_level = 'critical'` |
+| Risk level = high | 80 | Pre-computed high risk | `deal_health_scores.risk_level = 'high'` |
+| Sentiment declining | 75 | Buyer engagement deteriorating | `deal_health_scores.sentiment_trend = 'declining'` |
+| Competitor mentioned in last meeting | 70 | Evaluation risk | (manual detection from notes) |
+| Stakeholder change (new decision-maker) | 65 | Relationship restart needed | (manual detection) |
+| No activity in 10+ days | 80 | Deal is stalling | `deal_health_scores.days_since_last_activity > 10` |
+
+**Health score integration**: Query `deal_health_scores` and `relationship_health_scores` for each deal in pipeline. Use `overall_health_score` and `risk_level` as primary risk scoring inputs. Use `risk_factors` array to identify specific interventions needed.
 
 #### Value (25% weight) -- Is it worth the focus?
 
@@ -303,8 +310,12 @@ The planning period affects deal selection and checklist depth:
 
 ## Inputs
 - `pipeline_deals`: Output from `execute_action("get_pipeline_deals", { filter: "closing_soon", period: "this_week", include_health: true, limit: 10 })` -- should include deals and health if available
+- **Health scores**: Query `deal_health_scores` table for all pipeline deals to get `overall_health_score`, `risk_level`, `risk_factors`, `sentiment_trend`, `days_in_current_stage`, `days_since_last_activity`
+- **Relationship health**: Query `relationship_health_scores` for primary contacts to identify ghost risk and response patterns
 - `period` (optional): "this_week" | "this_month" | "this_quarter" -- defaults to "this_week"
 - `user_capacity` (optional): "busy" | "normal" | "available" -- defaults to "normal"
+
+**Prioritization with health data**: Use combined health scores (deal + relationship) to weight the focus score calculation. Deals with low health scores but high urgency/value get rescue-focused checklists. Deals with high health scores get acceleration-focused checklists.
 
 ## Output Contract
 
@@ -385,7 +396,7 @@ This is a positive signal. Return an acceleration-focused task:
 - Rationale: "Pipeline is healthy. Focus on accelerating your nearest close opportunities."
 
 ### No health scores available
-Calculate selection using urgency, value, and staleness only (drop the health component and redistribute its 25% weight to urgency and staleness). Note: "Deal health scores unavailable -- selection based on close date, value, and activity recency."
+Calculate selection using urgency, value, and staleness only (drop the health component and redistribute its 25% weight to urgency and staleness). Note: "Deal health scores unavailable -- selection based on close date, value, and activity recency. Recommend running health recalculation to enable health-informed prioritization."
 
 ### Single deal in pipeline
 Select it. Build a thorough checklist (4-5 items) since all focus goes to one deal. Add a prospecting item at the end: "Identify 2-3 new prospects to diversify pipeline."

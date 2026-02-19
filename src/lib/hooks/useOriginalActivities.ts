@@ -146,7 +146,7 @@ export function useOriginalActivities(filters?: OriginalActivityFilters) {
   }, [fetchActivities, userData?.id]); 
 
   // Function to update an activity in the 'activities' table
-  const updateActivity = async (id: string, updates: Partial<Omit<OriginalActivity, 'profiles'>>) => {
+  const updateActivity = async (id: string, updates: Partial<OriginalActivity>) => {
     // Ensure user is logged in or has permission (basic check)
     if (!userData?.id) {
         logger.error('User not logged in, cannot update activity.');

@@ -3,7 +3,9 @@ name: Meeting Prep Brief
 description: |
   Generate a comprehensive pre-meeting brief with agenda, talking points, and risk assessment.
   Use when a user asks "brief me for my meeting", "prep for the call with Acme",
-  "meeting brief", or needs context before a sales call. Uses calendar, CRM, and transcript data.
+  "meeting brief", or needs context before any meeting. Adapts tone and content to the
+  meeting type -- sales calls get deal-focused language, service visits get professional
+  language, internal meetings get team-focused language. Uses calendar, CRM, and transcript data.
   Returns a structured brief with attendees, goals, talking points, and risks.
 metadata:
   author: sixty-ai
@@ -101,14 +103,14 @@ metadata:
 
 ## Why Meeting Prep Matters
 
-The data is overwhelming and unambiguous:
+Preparation is the highest-leverage activity across every type of meeting:
 
-- **Reps who prepare close 32% more deals** (Gong, 2023 analysis of 1.2M sales calls). Prepared reps ask better questions, handle objections earlier, and move deals forward faster.
-- **70% of B2B buyers say sales reps don't understand their business** (Forrester). The #1 reason? Reps show up with generic pitches instead of tailored context.
-- **First meetings set the trajectory.** CSO Insights found that 65% of deals that reach advanced stages had a "strong first impression" score -- meaning the rep demonstrated knowledge of the prospect's situation in the initial call.
-- **The average rep spends only 4 minutes preparing for a call** (Salesforce State of Sales). The top 10% spend 15-30 minutes. That delta is where quota is won or lost.
+- **Prepared professionals achieve 32% better outcomes** (Gong, 2023 analysis of 1.2M calls). Better questions, fewer surprises, faster progress.
+- **70% of B2B stakeholders say the other party doesn't understand their situation** (Forrester). Generic meetings waste everyone's time.
+- **First meetings set the trajectory.** CSO Insights found that 65% of successful engagements started with a "strong first impression" -- the professional demonstrated knowledge of the other party's context.
+- **Most professionals spend only 4 minutes preparing** (Salesforce State of Sales). The top 10% spend 15-30 minutes. That gap determines outcomes.
 
-This skill exists to close the gap: give every rep the preparation quality of a top performer in 60 seconds.
+This skill exists to close the gap: give every user the preparation quality of a top performer in 60 seconds -- whether the meeting is a sales call, service visit, client onboarding, or team sync.
 
 ## The 5-Layer Prep Framework
 
@@ -220,6 +222,7 @@ This layer synthesizes Layers 1-4 into an actionable plan. It answers: "Given ev
 
 ## Data Gathering (via execute_action)
 
+0. **Check for existing company research profile**: Before doing fresh company research, query the `client_fact_profiles` table for a profile matching the attendee's company domain or name (where `is_org_profile = false` and `research_status = 'complete'`). If a profile exists with `research_completed_at` within the last 7 days, use its `research_data` for Layer 1 (Company Context) instead of gathering from scratch. This avoids redundant research and provides richer data (industry, funding, tech stack, team size, competitors) that was collected during lead enrichment. The fact profile's `research_data` follows this structure: `company_overview` (name, description, founded, headquarters), `market_position` (industry, competitors, differentiators), `team_leadership` (employee count, key people), `financials` (funding, revenue range), `technology` (tech stack, platforms), `recent_activity` (news, milestones).
 1. **Fetch meeting details**: `execute_action("get_meetings", { meeting_id })` -- title, time, attendees, meeting URL
 2. **Fetch primary contact**: `execute_action("get_contact", { id: primary_contact_id })` -- name, title, company, email, phone, notes
 3. **Fetch related deals**: `execute_action("get_deal", { name: company_or_deal_name })` -- stage, amount, MEDDICC, activity
@@ -227,9 +230,30 @@ This layer synthesizes Layers 1-4 into an actionable plan. It answers: "Given ev
 5. **Fetch previous transcripts** (if `include_transcript` is true): Search for transcripts involving the same contact or company
 6. **Fetch recent activities**: Look for emails, calls, tasks in the last 30 days related to this contact/deal
 
+## Meeting Purpose Detection
+
+Before generating anything, determine whether this meeting is business-relevant and what its purpose is. The purpose shapes tone, language, and content — or whether to generate a brief at all.
+
+**Detection signals (check in order):**
+1. **Title matches personal patterns** (doctor, dentist, home visit, school run, haircut, gym, holiday, personal, focus time, etc.) → **Personal meeting. Do NOT generate a brief.** Acknowledge it as personal and skip.
+2. **Active deal exists** → Sales meeting. Use deal stage to select framework below.
+3. **Title contains sales keywords** (demo, discovery, proposal, negotiation, pricing, pitch, close, prospect, renewal) → Sales meeting.
+4. **No external attendees or title suggests internal** (standup, sync, 1:1, retro, sprint, planning, team, huddle) → Internal meeting. Use the Internal framework.
+5. **Attendees are known CRM contacts** (even without a deal) → Business meeting. Use the General framework.
+6. **Title contains service/professional keywords** (onboarding, kickoff, implementation, training, support, consultation, assessment, intake, orientation) → Service/professional meeting. Use the Service/Professional framework.
+7. **Title matches business patterns** (interview, board, investor, partner, qbr, forecast) → Business meeting. Use the appropriate framework.
+8. **None of the above** → **Unknown. Proactively ask the user** before generating anything: "I'm not sure if [meeting title] is a work meeting. Would you like me to prepare a brief for it, or should I skip it?"
+
+**Critical rules:**
+- Do NOT apply sales language (prospect, pipeline, close, objection, win probability) to non-sales meetings. Match tone to context.
+- Do NOT assume every calendar event is work-related. When you cannot determine business relevance, ask rather than guess.
+- A "home visit", for example, is personal — not a service delivery appointment — unless the user's business specifically involves home visits and the attendees are in the CRM.
+
 ## Talking Points Methodology by Meeting Type
 
-### Discovery Call (First Meeting)
+### Sales Meetings
+
+#### Discovery Call (First Meeting)
 **Goal:** Understand their world, not pitch your product.
 
 Talking points should focus on:
@@ -240,7 +264,7 @@ Talking points should focus on:
 
 **Do NOT include:** Product features, pricing, or case studies. It is too early.
 
-### Demo / Evaluation Meeting
+#### Demo / Evaluation Meeting
 **Goal:** Show them their future state, not your feature list.
 
 Talking points should focus on:
@@ -250,7 +274,7 @@ Talking points should focus on:
 - Technical requirements and integration questions
 - Timeline and next steps after the demo
 
-### Negotiation / Pricing Discussion
+#### Negotiation / Pricing Discussion
 **Goal:** Protect value while moving to close.
 
 Talking points should focus on:
@@ -260,7 +284,7 @@ Talking points should focus on:
 - Procurement process: Legal, security review, contract redlines
 - Timeline pressure: Why acting now matters (without being pushy)
 
-### Executive Alignment / Sponsor Meeting
+#### Executive Alignment / Sponsor Meeting
 **Goal:** Get executive sponsorship and budget commitment.
 
 Talking points should focus on:
@@ -269,7 +293,7 @@ Talking points should focus on:
 - Competitive risk of inaction
 - Clear ask: What you need from the executive (budget approval, champion empowerment, timeline commitment)
 
-### Renewal / Expansion Meeting
+#### Renewal / Expansion Meeting
 **Goal:** Demonstrate value delivered and expand the relationship.
 
 Talking points should focus on:
@@ -279,9 +303,60 @@ Talking points should focus on:
 - Upcoming ${company_name} product roadmap items relevant to them
 - Multi-year or expanded pricing
 
+### Service / Professional Meetings
+
+#### Initial Visit / Consultation
+**Goal:** Understand needs, build trust, and set expectations.
+
+Talking points should focus on:
+- Introduction: Who you are, your role, and what you can help with
+- Understanding their situation: "What prompted you to reach out?" / "What are your main concerns?"
+- Setting expectations: What this meeting will cover, what happens next
+- Listening for priorities: Let them lead -- your job is to understand, not prescribe
+
+**Do NOT include:** Sales jargon, upsell language, "qualifying" questions, or pipeline terminology.
+
+#### Onboarding / Kickoff
+**Goal:** Align on scope, process, and timeline.
+
+Talking points should focus on:
+- Recap what was agreed and confirm understanding
+- Walk through the process: What happens, in what order, and who is responsible
+- Address any open questions or concerns
+- Agree on communication preferences and check-in cadence
+
+#### Check-in / Review
+**Goal:** Track progress, surface issues, and adjust as needed.
+
+Talking points should focus on:
+- Progress since last meeting: What has been accomplished?
+- Any challenges or blockers?
+- Are expectations still aligned?
+- Next steps and any adjustments needed
+
+### Internal Meetings
+
+**Goal:** Align the team, unblock work, and decide next actions.
+
+Talking points should focus on:
+- Progress updates and status of key items
+- Blockers that need team input or escalation
+- Decisions needed and who owns them
+- Action items and owners for next steps
+
+### General / Relationship Meetings
+
+**Goal:** Build the relationship, understand context, and identify how to help.
+
+Talking points should focus on:
+- Learn about the person and their current situation
+- Understand what they need and how you might help
+- Share relevant context about yourself or your organization
+- Agree on whether and how to continue the conversation
+
 ## Question Design Principles
 
-Great questions are the single highest-leverage tool in sales. A well-designed question does more work than any slide deck.
+Great questions are the single highest-leverage tool in any meeting. A well-designed question builds understanding faster than any presentation.
 
 ### Open vs. Closed Questions
 
@@ -413,7 +488,7 @@ Return a SkillResult with:
   - `meeting_title`: Meeting subject/title
   - `meeting_time`: When the meeting is scheduled
   - `attendees`: Array of attendee objects (name, email, role, company, decision_authority, last_interaction)
-  - `meeting_type`: Inferred type (discovery, demo, negotiation, executive, renewal, check-in)
+  - `meeting_type`: Inferred type (discovery, demo, negotiation, executive, renewal, check-in, service-visit, onboarding, internal, general)
   - `meeting_goals`: Primary and secondary objectives for this meeting
   - `context_summary`: Key context from CRM (deal stage, recent activity, relationship health)
   - `company_snapshot`: Quick company facts (size, industry, recent news)
@@ -450,7 +525,7 @@ Fall back to searching by contact name, company name, or time range. If still no
 Create a minimal attendee profile from the calendar event (name, email). Flag as "new contact -- not yet in CRM" and suggest creating a record.
 
 ### No deal associated with the contact/company
-Generate the brief without deal context. Focus on company and people layers. Note: "No active deal found -- this may be a new opportunity or a relationship-building meeting."
+Generate the brief without deal context. Focus on company and people layers. Use the Meeting Purpose Detection rules to determine the right framework. Do NOT default to sales language -- if the meeting title suggests a service visit, onboarding, or consultation, use the appropriate non-sales framework.
 
 ### No previous meeting history
 This is a first meeting. Emphasize discovery-oriented talking points and open-ended questions. Note: "First meeting with this contact -- prioritize discovery and rapport."
@@ -465,12 +540,13 @@ Present context for all active deals, but highlight the one most likely related 
 Switch to the 5-Minute Quick Prep format automatically. Prioritize: who is in the room, what stage the deal is in, and the single most important question to ask.
 
 ### Meeting type cannot be inferred
-Default to a balanced brief with discovery-oriented questions and general talking points. Ask the user: "I couldn't determine the meeting type -- is this a discovery call, demo, negotiation, or something else?"
+Do NOT default to sales language. First check if the meeting appears business-related at all (see Meeting Purpose Detection step 8). If business relevance is unclear, ask the user: "I'm not sure if this is a work meeting. Would you like me to prepare a brief, or should I skip it?" If the user confirms it's business, ask: "Is this a sales call, client meeting, internal sync, or something else?" and then use the appropriate framework.
 
 ## Guidelines
 
-- Reference the products, competitors, and case studies from Organization Context to prepare talking points tailored to ${company_name}'s positioning
-- Reference deal stage to suggest appropriate next steps and talking point style
+- **Detect meeting purpose first** using the Meeting Purpose Detection rules above. This determines tone, language, and framework.
+- For sales meetings: reference the products, competitors, and case studies from Organization Context to prepare talking points tailored to ${company_name}'s positioning. Reference deal stage to suggest appropriate next steps and talking point style.
+- For non-sales meetings: do NOT reference products, competitors, deal stages, or pipeline language. Focus on the person, their needs, and the meeting's stated purpose.
 - Flag any red flags or risks from CRM data prominently -- do not bury them
 - Keep the brief concise but actionable (aim for a single-screen summary)
 - Always surface unfulfilled commitments from previous meetings -- this is the #1 credibility killer

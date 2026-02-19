@@ -6934,6 +6934,198 @@ export async function detectAndStructureResponse(
     (messageLower.includes('prepare') && messageLower.includes('meeting')) ||
     (messageLower.includes('brief') && messageLower.includes('meeting'))
 
+  if (isMeetingPrepRequest) {
+    // Build a meeting prep structured response from the next upcoming meeting
+    try {
+      const now = new Date().toISOString()
+      const { data: nextMeeting } = await client
+        .from('meetings')
+        .select('id, title, start_time, end_time, attendees, conference_link, company, deal_id')
+        .eq('owner_user_id', userId)
+        .gte('start_time', now)
+        .order('start_time', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (nextMeeting) {
+        // Optionally fetch the linked deal
+        let dealData = null
+        if (nextMeeting.deal_id) {
+          const { data: deal } = await client
+            .from('deals')
+            .select('id, name, value, expected_close_date')
+            .eq('id', nextMeeting.deal_id)
+            .maybeSingle()
+          dealData = deal
+        }
+
+        return {
+          type: 'next_meeting_command_center',
+          summary: `Here's your prep brief for "${nextMeeting.title || 'your next meeting'}".`,
+          data: {
+            sequenceKey: 'intent-meeting-prep',
+            isSimulation: false,
+            meeting: {
+              id: nextMeeting.id,
+              title: nextMeeting.title || 'Meeting',
+              startTime: nextMeeting.start_time,
+              endTime: nextMeeting.end_time,
+              attendees: Array.isArray(nextMeeting.attendees) ? nextMeeting.attendees : [],
+              meetingUrl: nextMeeting.conference_link || null,
+            },
+            brief: {
+              company_name: nextMeeting.company || null,
+              deal_name: dealData?.name || null,
+              deal_id: dealData?.id || null,
+              attendees: Array.isArray(nextMeeting.attendees) ? nextMeeting.attendees : [],
+              talking_points: [],
+              objectives: [],
+            },
+            prepTaskPreview: null,
+            aiContent,
+          },
+          actions: [],
+          metadata: {
+            timeGenerated: new Date().toISOString(),
+            dataSource: ['intent', 'calendar', 'crm'],
+          },
+        }
+      }
+    } catch (err) {
+      console.warn('[MEETING-PREP-INTENT] Error fetching next meeting:', err)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Daily brief / "catch me up" detection
+  // ---------------------------------------------------------------------------
+  const dailyBriefKeywords = [
+    'catch me up', 'daily brief', 'daily briefing', 'daily summary',
+    'morning briefing', 'morning update', 'morning brief',
+    "what's going on today", "what's happening today",
+    'tell me about my day', 'start of day', 'give me the catchup',
+    'give me my daily', 'give me the rundown',
+    "today's overview", "today's summary",
+  ]
+  const isDailyBriefRequest =
+    dailyBriefKeywords.some(keyword => messageLower.includes(keyword)) ||
+    (messageLower.includes('catch') && messageLower.includes('up') && !messageLower.includes('email')) ||
+    (messageLower.includes('brief') && messageLower.includes('daily'))
+
+  if (isDailyBriefRequest) {
+    try {
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString()
+      const hour = now.getHours()
+      const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+
+      // Fetch today's meetings
+      const { data: rawMeetings } = await client
+        .from('meetings')
+        .select('id, title, start_time, end_time, attendees, conference_link, deal_id')
+        .eq('owner_user_id', userId)
+        .gte('start_time', todayStart)
+        .lte('start_time', todayEnd)
+        .order('start_time', { ascending: true })
+        .limit(10)
+
+      // Fetch stale/at-risk deals
+      const { data: rawDeals } = await client
+        .from('deals')
+        .select('id, name, value, stage_id, expected_close_date, updated_at, company_name, contact_name, contact_email')
+        .eq('owner_id', userId)
+        .eq('status', 'active')
+        .order('updated_at', { ascending: true })
+        .limit(5)
+
+      // Fetch pending tasks due today or overdue
+      const { data: rawTasks } = await client
+        .from('tasks')
+        .select('id, title, due_date, priority, status, deal_id, contact_id')
+        .eq('assigned_to', userId)
+        .eq('status', 'pending')
+        .lte('due_date', todayEnd)
+        .order('due_date', { ascending: true })
+        .limit(10)
+
+      const meetings = (rawMeetings || []).map((m: any) => ({
+        id: m.id,
+        title: m.title || 'Meeting',
+        startTime: m.start_time,
+        endTime: m.end_time,
+        attendees: Array.isArray(m.attendees) ? m.attendees.map((a: any) => a.email || a.name) : [],
+        linkedDealId: m.deal_id || null,
+        meetingUrl: m.conference_link || null,
+      }))
+
+      const nowMs = now.getTime()
+      const priorityDeals = (rawDeals || []).map((d: any) => {
+        const daysSinceUpdate = Math.floor((nowMs - new Date(d.updated_at).getTime()) / (1000 * 60 * 60 * 24))
+        return {
+          id: d.id,
+          name: d.name,
+          value: d.value || 0,
+          stage: null,
+          daysStale: daysSinceUpdate,
+          closeDate: d.expected_close_date || null,
+          healthStatus: daysSinceUpdate > 7 ? 'stale' : 'healthy',
+          company: d.company_name || null,
+          contactName: d.contact_name || null,
+          contactEmail: d.contact_email || null,
+        }
+      })
+
+      const tasks = (rawTasks || []).map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        dueDate: t.due_date,
+        priority: t.priority || 'medium',
+        status: t.status || 'pending',
+        linkedDealId: t.deal_id || null,
+        linkedContactId: t.contact_id || null,
+      }))
+
+      const greeting = timeOfDay === 'morning'
+        ? "Good morning! Here's your day ahead."
+        : timeOfDay === 'afternoon'
+        ? "Here's your afternoon update."
+        : "Wrapping up the day. Here's your summary."
+
+      const meetingCount = meetings.length
+      const dealCount = priorityDeals.length
+      const taskCount = tasks.length
+      const summaryText =
+        `You have ${meetingCount} meeting${meetingCount !== 1 ? 's' : ''} today` +
+        (dealCount > 0 ? `, ${dealCount} deal${dealCount !== 1 ? 's' : ''} needing attention` : '') +
+        (taskCount > 0 ? `, and ${taskCount} pending task${taskCount !== 1 ? 's' : ''}` : '') +
+        '.'
+
+      return {
+        type: 'daily_brief',
+        summary: summaryText,
+        data: {
+          sequenceKey: 'intent-daily-brief',
+          isSimulation: false,
+          greeting,
+          timeOfDay,
+          schedule: meetings,
+          priorityDeals,
+          contactsNeedingAttention: [],
+          tasks,
+          summary: summaryText,
+        },
+        actions: [],
+        metadata: {
+          timeGenerated: new Date().toISOString(),
+          dataSource: ['intent', 'calendar', 'crm', 'tasks'],
+        },
+      }
+    } catch (err) {
+      console.warn('[DAILY-BRIEF-INTENT] Error building daily brief:', err)
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Activity creation detection
   // ---------------------------------------------------------------------------
@@ -7057,7 +7249,8 @@ export async function detectAndStructureResponse(
       }
     }
 
-    return null
+    // Non-availability calendar queries fall through to the fallback classifier
+    // instead of returning null (e.g. "what meetings do I have today")
   }
 
   // ---------------------------------------------------------------------------

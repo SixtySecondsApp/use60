@@ -261,12 +261,6 @@ async function verifyMeetingBaaSSignature(
   timestampHeader: string | null,
   svixId: string | null
 ): Promise<{ ok: boolean; reason?: string }> {
-  // TEMPORARY: Skip signature verification entirely for debugging
-  // TODO: Re-enable once webhook secret is properly configured with MeetingBaaS
-  console.log('[MeetingBaaS Webhook] Signature verification BYPASSED (temporary debug mode)');
-  return { ok: true };
-
-  // Original verification logic below - disabled for debugging
   if (!secret) {
     // If no secret configured, skip verification (development mode)
     return { ok: true };
@@ -1770,102 +1764,28 @@ serve(async (req) => {
     }
 
     if (!orgId) {
-      // TEMPORARY: In staging, use the default test org to allow webhooks through for debugging
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
       const isStaging = supabaseUrl.includes('caerqjzvuerejfrdtygb');
 
-      if (isStaging) {
-        // Default to the primary test org in staging
-        orgId = '1d1b4274-c9c4-4cb7-9efc-243c90c86f4c';
-        console.warn('[MeetingBaaS Webhook] STAGING FALLBACK: Using default org_id for event:', eventType);
-
-        // For bot events (not calendar events), create missing records
-        if (!isCalendarEvent && botId) {
-          // Extract meeting_url from webhook payload if available
-          const meetingUrl = (rawPayload?.data as Record<string, unknown>)?.meeting_url as string
-            || legacyPayload?.meeting_url
-            || 'https://staging-unknown-meeting.use60.com';
-
-          // Check if bot_deployment already exists for this bot_id
-          const { data: existingDeployment } = await supabase
-            .from('bot_deployments')
-            .select('id')
-            .eq('bot_id', botId)
-            .maybeSingle();
-
-          if (!existingDeployment) {
-            // Create the missing recording and bot_deployment records
-            console.log('[MeetingBaaS Webhook] Creating missing recording and bot_deployment for bot_id:', botId);
-
-            // First create a recording record
-            const stagingUserId = 'ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459'; // Default staging test user
-            // Platform must be one of: zoom, google_meet, microsoft_teams
-            const platform = meetingUrl.includes('zoom') ? 'zoom'
-              : meetingUrl.includes('teams') ? 'microsoft_teams'
-              : 'google_meet'; // Default to google_meet
-
-            const { data: newRecording, error: recordingError } = await supabase
-              .from('recordings')
-              .insert({
-                org_id: orgId,
-                user_id: stagingUserId,
-                meeting_platform: platform,
-                meeting_url: meetingUrl,
-                meeting_title: `Staging Recording - ${botId.substring(0, 8)}`,
-                bot_id: botId,
-                status: 'bot_joining',
-              })
-              .select('id')
-              .single();
-
-            if (recordingError) {
-              console.error('[MeetingBaaS Webhook] Failed to create fallback recording:', recordingError);
-            } else {
-              console.log('[MeetingBaaS Webhook] Created recording:', newRecording.id);
-            }
-
-            // Then create the bot_deployment linked to the recording
-            const { error: deploymentError } = await supabase.from('bot_deployments').insert({
-              bot_id: botId,
-              org_id: orgId,
-              recording_id: newRecording?.id || null,
-              status: 'joining',
-              meeting_url: meetingUrl,
-            });
-
-            if (deploymentError) {
-              console.error('[MeetingBaaS Webhook] Failed to create fallback bot_deployment:', deploymentError);
-            } else {
-              console.log('[MeetingBaaS Webhook] Successfully created bot_deployment for bot_id:', botId);
-            }
-          } else {
-            console.log('[MeetingBaaS Webhook] Bot deployment already exists for bot_id:', botId);
-          }
-        }
-        // For calendar events without org_id, log for debugging
-        if (isCalendarEvent) {
-          console.warn('[MeetingBaaS Webhook] Calendar event without org_id - may indicate missing meetingbaas_calendars record for calendar_id:', calendarId);
-        }
-      } else {
-        console.error('[MeetingBaaS Webhook] Could not identify organization', {
-          event_type: eventType,
-          is_calendar_event: isCalendarEvent,
-          bot_id: botId || null,
-          calendar_id: calendarId,
-          token_provided: !!webhookToken,
-          token_value: webhookToken === '{ORG_TOKEN}' ? 'PLACEHOLDER_NOT_REPLACED' : webhookToken?.substring(0, 10) + '...',
-        });
-        return jsonResponse({
-          success: false,
-          error: 'Could not identify organization for this webhook',
-          hint: isCalendarEvent
-            ? 'Ensure meetingbaas_calendars has a record with this calendar_id linked to an org_id.'
-            : 'Ensure bot_deployments or meetingbaas_calendars has the org_id set.',
-          event_type: eventType,
-          bot_id: botId || null,
-          calendar_id: calendarId,
-        }, req, 401);
-      }
+      console.error('[MeetingBaaS Webhook] Could not identify organization', {
+        event_type: eventType,
+        is_calendar_event: isCalendarEvent,
+        is_staging: isStaging,
+        bot_id: botId || null,
+        calendar_id: calendarId,
+        token_provided: !!webhookToken,
+        token_value: webhookToken === '{ORG_TOKEN}' ? 'PLACEHOLDER_NOT_REPLACED' : webhookToken?.substring(0, 10) + '...',
+      });
+      return jsonResponse({
+        success: false,
+        error: 'Could not identify organization for this webhook',
+        hint: isCalendarEvent
+          ? 'Ensure meetingbaas_calendars has a record with this calendar_id linked to an org_id.'
+          : 'Ensure bot_deployments or meetingbaas_calendars has the org_id set.',
+        event_type: eventType,
+        bot_id: botId || null,
+        calendar_id: calendarId,
+      }, req, 400);
     }
 
     // Log webhook event

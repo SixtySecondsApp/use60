@@ -94,13 +94,19 @@ If the story looks too big to complete in one iteration, **split it**:
 
 ### Step 4: Update AI Dev Hub task → in_progress
 
-If `aiDevHubTaskId` is null, create the task first:
-- Project ID: from `prd.json.aiDevHubProjectId` (or `cae03d2d-74ac-49e6-9da2-aae2440e0c00`)
+**Skip entirely if `prd.json.aiDevHubProjectId` is `null` or Dev Hub MCP is unavailable.**
+
+If `aiDevHubTaskId` is null but `aiDevHubProjectId` exists, lazy-create the task:
+- Project ID: from `prd.json.aiDevHubProjectId`
 - Title: `[<runSlug>] <storyId>: <title>`
-- Status: `in_progress`
+- Type: `"feature"`
+- Status: `"in_progress"`
+- Priority: mapped from story priority (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
 - Store the returned taskId in `prd.json`
 
-If `aiDevHubTaskId` exists, update status to `in_progress`.
+If `aiDevHubTaskId` exists, update status to `"in_progress"`.
+
+If create/update fails, log warning and continue (never block execution).
 
 ### Step 5: Implement the story
 
@@ -200,9 +206,12 @@ If hooks are unavailable, use default behavior: stop on first failure.
    ---
    ```
 4. If a reusable pattern was discovered, add it to the `## Codebase Patterns` section at the TOP of `progress.txt`
-5. Update AI Dev Hub task:
-   - Status: `in_review`
-   - Add comment: Summary of implementation + files changed + gates passed
+5. Update AI Dev Hub task (if `aiDevHubTaskId` exists and Dev Hub is available):
+   - Try `update_task` with status `"in review"`
+   - If API error (known bug), keep status as `"in progress"` and add comment via `create_comment`: `"[STATUS] Story completed — ready for review"`
+   - Add completion comment via `create_comment`: Summary of implementation + files changed + gates passed
+   - Log: `Dev Hub: task updated` or `Dev Hub: status update failed (known API bug) — added comment instead`
+   - **Dev Hub failures are non-blocking** — log and continue
 6. **Commit** per the commit policy (see COMMIT FORMAT & POLICY section):
    - Unattended: auto-commit with message `feat: <storyId> - <Story Title>`
    - Interactive: ask before committing
@@ -211,9 +220,11 @@ If hooks are unavailable, use default behavior: stop on first failure.
 **If gates FAIL:**
 
 1. Keep `passes: false`
-2. Update AI Dev Hub task:
-   - Status: `blocked`
-   - Add comment: Error details + what needs to be fixed
+2. Update AI Dev Hub task (if `aiDevHubTaskId` exists and Dev Hub is available):
+   - Try `update_task` with status `"blocked"`
+   - If API error, keep status and add comment via `create_comment`: `"[STATUS] Blocked — <error summary>"`
+   - Add comment with error details + what needs to be fixed
+   - **Dev Hub failures are non-blocking** — log and continue
 3. Append failure note to `progress.txt`
 4. Stop the loop and report:
    ```

@@ -14,7 +14,7 @@ metadata:
   context_profile: sales
   agent_affinity:
     - pipeline
-    - manager
+    - crm_ops
   triggers:
     - pattern: "flag for manager"
       intent: "manager_escalation"

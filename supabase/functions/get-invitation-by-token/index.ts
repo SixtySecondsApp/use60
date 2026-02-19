@@ -3,7 +3,7 @@
 // Safe because invitation tokens are 256-bit cryptographically random
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // Simple in-memory rate limiter per IP (resets on cold start)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -23,9 +23,9 @@ function isRateLimited(ip: string): boolean {
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     // Rate limiting

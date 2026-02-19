@@ -8,13 +8,13 @@ description: |
 metadata:
   author: sixty-ai
   version: "2"
-  category: relationship-ai
+  category: sales-ai
   skill_type: atomic
   is_active: true
   context_profile: account
   agent_affinity:
-    - sales
-    - trial-conversion
+    - pipeline
+    - outreach
   triggers:
     - pattern: "draft trial conversion email"
       intent: "trial_conversion_email"

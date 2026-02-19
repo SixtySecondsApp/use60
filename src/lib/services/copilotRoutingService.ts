@@ -4,7 +4,13 @@
  * Handles skill selection for the copilot with sequence-first routing:
  * 1. Check sequences first (pre-built, tested orchestrations)
  * 2. If sequence matches intent with confidence > 0.7, use it
- * 3. If no sequence match, fall back to individual skills
+ * 3. Fall back to individual skills (confidence > 0.5)
+ * 2b. Standard table query fallback (only if no skill/sequence matched)
+ * 4. Embedding-based semantic fallback (similarity > 0.6)
+ *
+ * Note: Standard table queries (detectStandardTableIntent) run AFTER
+ * sequences and skills to avoid stealing routes from richer sequences
+ * like seq-pipeline-focus-tasks.
  *
  * Sequences are skills with category: 'agent-sequence' that can orchestrate
  * multiple other skills via skill links.
@@ -207,8 +213,10 @@ function calculateTriggerMatch(
 }
 
 /**
- * Step 0: Check if the user intent matches a standard table query.
- * This runs BEFORE skill/sequence matching to fast-track ops table queries.
+ * Step 2b: Check if the user intent matches a standard table query.
+ * Runs AFTER sequence and skill matching to avoid stealing routes from
+ * richer sequences (e.g. "show me my pipeline" should route to
+ * seq-pipeline-focus-tasks, not query-standard-table).
  */
 function detectStandardTableIntent(
   userMessage: string
@@ -342,28 +350,6 @@ export async function routeToSkill(
     };
   }
 
-  // Step 0: Check for standard table query intent FIRST
-  const tableIntent = detectStandardTableIntent(message);
-  if (tableIntent?.matched && tableIntent.tableName) {
-    // Fast-track to query-standard-table skill
-    const standardTableSkill: SkillMatch = {
-      skillId: 'query-standard-table',
-      skillKey: 'query-standard-table',
-      name: 'Query Standard Table',
-      category: 'ops',
-      confidence: 0.85, // High confidence for direct table query intent
-      matchedTrigger: `standard table query: ${tableIntent.tableName}`,
-      isSequence: false,
-    };
-
-    return {
-      selectedSkill: standardTableSkill,
-      candidates: [standardTableSkill],
-      isSequenceMatch: false,
-      reason: `Standard table query detected: ${tableIntent.tableName}`,
-    };
-  }
-
   // Fetch all organization skills in a single RPC call (avoids duplicate requests)
   const allOrgSkills = await fetchOrgSkills(orgId);
 
@@ -422,7 +408,6 @@ export async function routeToSkill(
       frontmatter?.keywords,
       frontmatter?.description
     );
-
     if (confidence > 0) {
       candidates.push({
         skillId: skill.skill_key,
@@ -442,9 +427,11 @@ export async function routeToSkill(
   // Apply data provider preference (Apollo vs AI Ark) if specified
   const preference = context?.dataProviderPreference || 'auto';
   const adjustedCandidates = applyProviderPreference(candidates, preference);
-  // Replace candidates with adjusted order
+  // Replace candidates with adjusted order (spread into new array to avoid
+  // aliasing — applyProviderPreference may return the same reference)
+  const reordered = [...adjustedCandidates];
   candidates.length = 0;
-  candidates.push(...adjustedCandidates);
+  candidates.push(...reordered);
 
   // Select best overall match
   const bestMatch = candidates[0];
@@ -456,6 +443,30 @@ export async function routeToSkill(
       reason: bestMatch.isSequence
         ? `Sequence "${bestMatch.name}" matched below threshold (${(bestMatch.confidence * 100).toFixed(0)}%)`
         : `Individual skill "${bestMatch.name}" matched with confidence ${(bestMatch.confidence * 100).toFixed(0)}%`,
+    };
+  }
+
+  // Step 2b: Standard table query fallback
+  // Only runs when no sequence or skill matched above threshold.
+  // This prevents generic table patterns (e.g. "pipeline") from stealing
+  // routes that should go to richer sequences like seq-pipeline-focus-tasks.
+  const tableIntent = detectStandardTableIntent(message);
+  if (tableIntent?.matched && tableIntent.tableName) {
+    const standardTableSkill: SkillMatch = {
+      skillId: 'query-standard-table',
+      skillKey: 'query-standard-table',
+      name: 'Query Standard Table',
+      category: 'ops',
+      confidence: 0.85,
+      matchedTrigger: `standard table query: ${tableIntent.tableName}`,
+      isSequence: false,
+    };
+
+    return {
+      selectedSkill: standardTableSkill,
+      candidates: [standardTableSkill, ...candidates.slice(0, MAX_CANDIDATES - 1)],
+      isSequenceMatch: false,
+      reason: `Standard table query detected: ${tableIntent.tableName}`,
     };
   }
 

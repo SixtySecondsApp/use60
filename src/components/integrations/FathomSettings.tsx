@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Calendar, Play, Trash2, Copy, Zap, ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Clock, BrainCircuit } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, X, RefreshCw, Calendar, Play, Trash2, Copy, Zap, ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Clock, BrainCircuit } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -43,6 +43,27 @@ export function FathomSettings() {
   const [deleteSyncedMeetings, setDeleteSyncedMeetings] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showWebhookGuide, setShowWebhookGuide] = useState(true);
+  const [webhookDismissed, setWebhookDismissed] = useState(false);
+
+  // Load webhook dismiss state from integration record
+  React.useEffect(() => {
+    if (integration && (integration as any).webhook_setup_dismissed) {
+      setWebhookDismissed(true);
+    } else {
+      setWebhookDismissed(false);
+    }
+  }, [integration]);
+
+  const dismissWebhookBanner = async () => {
+    setWebhookDismissed(true);
+    if (integration) {
+      const supabaseAny = supabase as any;
+      await supabaseAny
+        .from('fathom_integrations')
+        .update({ webhook_setup_dismissed: true })
+        .eq('id', integration.id);
+    }
+  };
   const [reprocessing, setReprocessing] = useState(false);
   const [reprocessResult, setReprocessResult] = useState<any>(null);
   const [showReprocessModal, setShowReprocessModal] = useState(false);
@@ -496,24 +517,36 @@ export function FathomSettings() {
               </div>
 
               {/* Instant Sync Webhook Setup */}
+              {!webhookDismissed && (
               <div className="rounded-lg border-2 border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Zap className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                       <h4 className="font-semibold text-gray-900 dark:text-white">Enable Instant Meeting Sync</h4>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowWebhookGuide(!showWebhookGuide)}
-                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                    >
-                      {showWebhookGuide ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowWebhookGuide(!showWebhookGuide)}
+                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      >
+                        {showWebhookGuide ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={dismissWebhookBanner}
+                        className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                        title="Dismiss"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
 
                   <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -568,6 +601,7 @@ export function FathomSettings() {
                     </div>
                   )}
                 </div>
+              )}
 
               {/* Sync Status */}
               {syncState && (

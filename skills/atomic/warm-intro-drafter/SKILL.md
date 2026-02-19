@@ -8,13 +8,12 @@ description: |
 metadata:
   author: sixty-ai
   version: "2"
-  category: outreach
+  category: writing
   skill_type: atomic
   is_active: true
   context_profile: sales
   agent_affinity:
     - outreach
-    - relationships
   triggers:
     - pattern: "warm intro"
       intent: "warm_introduction"

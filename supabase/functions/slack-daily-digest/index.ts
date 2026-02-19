@@ -3,7 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { buildDailyDigestMessage, type DailyDigestData } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 
@@ -309,7 +309,8 @@ async function getWeekStats(
         .select('value')
         .eq('org_id', orgId)
         .eq('stage', 'signed')
-        .gte('updated_at', weekAgo.toISOString()),
+        .gte('updated_at', weekAgo.toISOString())
+        .limit(500), // Safety cap — paginate for orgs with large deal counts
 
       // Get meeting count this week
       supabase
@@ -330,7 +331,8 @@ async function getWeekStats(
         .from('deals')
         .select('value')
         .eq('org_id', orgId)
-        .in('stage', ['sql', 'opportunity', 'verbal']),
+        .in('stage', ['sql', 'opportunity', 'verbal'])
+        .limit(500), // Safety cap — paginate for orgs with large deal counts
     ]);
 
     const closedDeals = (!closedDealsRes.error && closedDealsRes.data) ? closedDealsRes.data as any[] : [];
@@ -1086,9 +1088,9 @@ async function processOrgDigest(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);

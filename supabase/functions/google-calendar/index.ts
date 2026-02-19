@@ -483,6 +483,7 @@ async function watchCalendar(accessToken: string, request: any): Promise<any> {
     resourceId: data.resourceId,
     expiration: data.expiration,
     channelId: data.id,
+    channelToken: token,
   };
 }
 

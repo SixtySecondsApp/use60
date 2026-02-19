@@ -117,15 +117,34 @@ The goal is not "do more" -- it is "do the one thing that moves the needle most,
 - `organization_id`: Current organization context (from session)
 
 ## Data Gathering (via execute_action)
-1. Fetch deal: `execute_action("get_deal", { id: deal_id })` -- stage, value, close date, contacts, health
-2. Fetch pipeline summary: `execute_action("get_pipeline_summary", {})` -- overall pipeline context
-3. Fetch recent activities: `execute_action("get_deal_activities", { deal_id, limit: 20 })` -- meeting history, emails, calls
-4. Fetch tasks: `execute_action("list_tasks", { deal_id })` -- existing planned actions
-5. Fetch contacts needing attention: `execute_action("get_contacts_needing_attention", { days_since_contact: 7, filter: "at_risk" })` -- engagement gaps
+1. Fetch deal: `execute_action("get_deal", { id: deal_id, include_health: true })` -- stage, value, close date, contacts, health score
+2. Fetch deal health score: Check `deal_health_scores` table for `overall_health_score`, `risk_factors`, `risk_level`, `days_in_current_stage`, `sentiment_trend`, `meeting_count_last_30_days`
+3. Fetch pipeline summary: `execute_action("get_pipeline_summary", {})` -- overall pipeline context
+4. Fetch recent activities: `execute_action("get_deal_activities", { deal_id, limit: 20 })` -- meeting history, emails, calls
+5. Fetch tasks: `execute_action("list_tasks", { deal_id })` -- existing planned actions
+6. Fetch relationship health: Check `relationship_health_scores` for primary contact -- `overall_health_score`, `is_ghost_risk`, `ghost_probability_percent`, `days_since_last_contact`
+
+**Health data integration**: Use `deal_health_score.overall_health_score` and `deal_health_score.risk_factors` to inform action prioritization. Low health scores (< 50) should trigger rescue actions before advancement actions. High ghost risk on the primary contact should trigger multi-threading or channel-switching actions.
 
 If any data call fails, proceed with available data. Note the gap and adjust recommendations accordingly.
 
 ## Action Prioritization Framework
+
+### Health-Informed Prioritization
+
+Before applying the Impact-Urgency-Effort matrix, check the deal's health score and risk factors:
+
+- **Critical health (< 30)**: Prioritize rescue actions first (re-engagement, multi-threading, addressing root cause). Advancement actions are secondary until the deal is stabilized.
+- **Warning health (30-60)**: Balance rescue and advancement. Address the top risk factor while maintaining momentum.
+- **Healthy (60+)**: Focus on advancement actions. Optimize for speed to close.
+
+**Risk factor mapping to actions**:
+- `stage_stall` → Identify and remove the blocker, propose next milestone
+- `no_activity` → Re-engagement action (value-add email or call)
+- `sentiment_decline` → Address objection or concern, introduce reference customer
+- `no_meetings` → Schedule discovery or check-in meeting
+
+**Ghost risk consideration**: If primary contact has `is_ghost_risk: true` or `ghost_probability_percent > 50`, multi-threading becomes the #1 priority action regardless of other factors.
 
 ### The Impact-Urgency-Effort Matrix
 

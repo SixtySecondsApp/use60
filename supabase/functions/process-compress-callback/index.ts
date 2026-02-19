@@ -5,7 +5,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { LambdaClient, InvokeCommand } from 'npm:@aws-sdk/client-lambda@3';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { syncRecordingToMeeting } from '../_shared/recordingCompleteSync.ts';
 
 interface CompressCallbackPayload {
@@ -47,9 +47,9 @@ async function verifySignature(body: string, signature: string, secret: string):
 
 serve(async (req) => {
   // Handle CORS
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     // 1. Verify callback signature
