@@ -55,7 +55,7 @@ interface SettingsSection {
 export default function Settings() {
   const navigate = useNavigate();
   const { permissions } = useOrg();
-  const { isPlatformAdmin } = useUserPermissions();
+  const { isPlatformAdmin, isViewingAsExternal } = useUserPermissions();
   const allSettingsSections: SettingsSection[] = [
     {
       id: 'account',
@@ -262,18 +262,22 @@ export default function Settings() {
 
   // Filter sections based on permissions
   const settingsSections = useMemo(() => {
+    // When viewing as external/customer, treat as a non-admin external user regardless of actual permissions
+    const effectivePlatformAdmin = isPlatformAdmin && !isViewingAsExternal;
+    const effectiveCanManage = !isViewingAsExternal && (permissions.canManageTeam || permissions.canManageSettings || isPlatformAdmin);
+
     return allSettingsSections.filter(section => {
       // Non-functional sections — hidden from external users, visible to platform admins.
       if (['task-sync', 'smart-listening', 'proactive-agent'].includes(section.id)) {
-        return isPlatformAdmin;
+        return effectivePlatformAdmin;
       }
       if (section.requiresOrgAdmin) {
-        // Allow org admins AND platform admins to see team settings
-        return permissions.canManageTeam || permissions.canManageSettings || isPlatformAdmin;
+        // Allow org admins AND platform admins to see team settings (not when viewing as external)
+        return effectiveCanManage;
       }
       return true;
     });
-  }, [allSettingsSections, permissions, isPlatformAdmin]);
+  }, [allSettingsSections, permissions, isPlatformAdmin, isViewingAsExternal]);
 
   const categories = useMemo(() => {
     const personalSections = settingsSections.filter(s =>

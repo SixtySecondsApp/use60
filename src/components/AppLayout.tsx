@@ -553,14 +553,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
                     const mobileClasses = cn(
                       'w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] sm:min-h-[64px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]',
-                      !item.isExternal && (location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
+                      !item.isExternal && (location.pathname === item.href || location.pathname.startsWith(item.href + '/') || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
                         ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
                         : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                     );
 
                     const mobileIconClasses = cn(
                       'w-6 h-6 sm:w-7 sm:h-7 flex-shrink-0',
-                      !item.isExternal && (location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
+                      !item.isExternal && (location.pathname === item.href || location.pathname.startsWith(item.href + '/') || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
                         ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
                     );
 
@@ -895,7 +895,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   isCollapsed
                     ? 'w-12 h-12 mx-auto rounded-xl justify-center'
                     : 'w-full gap-3 px-2 py-2.5 rounded-xl',
-                  !item.isExternal && (location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
+                  !item.isExternal && (location.pathname === item.href || location.pathname.startsWith(item.href + '/') || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
                     ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/10 dark:text-white dark:border-[#37bd7e]/20'
                     : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                 );
@@ -910,7 +910,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       className={cn(
                         'relative z-10 flex items-center justify-center',
                         isCollapsed ? 'w-full h-full' : 'min-w-[20px]',
-                        !item.isExternal && (location.pathname === item.href || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
+                        !item.isExternal && (location.pathname === item.href || location.pathname.startsWith(item.href + '/') || (item.subItems && item.subItems.some(sub => location.pathname === sub.href)))
                           ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
                       )}
                     >
