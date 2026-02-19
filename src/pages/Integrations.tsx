@@ -573,7 +573,6 @@ const integrationCategories: IntegrationCategory[] = [
       { id: 'bullhorn', name: 'Bullhorn', description: 'Staffing & recruiting CRM.', fallbackIcon: <Users className="w-6 h-6 text-amber-600" /> },
       { id: 'highlevel', name: 'GoHighLevel', description: 'All-in-one agency CRM.', fallbackIcon: <Users className="w-6 h-6 text-blue-600" /> },
       { id: 'copper', name: 'Copper', description: 'Google Workspace CRM.', fallbackIcon: <Users className="w-6 h-6 text-orange-400" /> },
-      { id: 'folk', name: 'Folk', description: 'CRM for relationship builders.', fallbackIcon: <Users className="w-6 h-6 text-pink-500" /> },
     ],
   },
   {
@@ -622,20 +621,6 @@ const integrationCategories: IntegrationCategory[] = [
     ],
   },
   {
-    id: 'automation',
-    name: 'Automation & No-Code',
-    description: 'Connect everything together',
-    tooltip: 'Trigger workflows when deals change stages or activities are logged. Push data to any tool and pull updates back into Sixty automatically.',
-    icon: <Zap className="w-5 h-5" />,
-    integrations: [
-      { id: 'zapier', name: 'Zapier', description: 'Connect 5000+ apps.', fallbackIcon: <Zap className="w-6 h-6 text-orange-500" /> },
-      { id: 'make', name: 'Make', description: 'Visual automation platform.', fallbackIcon: <Zap className="w-6 h-6 text-purple-500" /> },
-      { id: 'n8n', name: 'n8n', description: 'Open-source workflows.', fallbackIcon: <Zap className="w-6 h-6 text-red-500" /> },
-      { id: 'webhooks', name: 'Webhooks', description: 'Custom integrations.', fallbackIcon: <Zap className="w-6 h-6 text-gray-600 dark:text-gray-400" /> },
-      { id: 'tray', name: 'Tray.io', description: 'Enterprise automation.', fallbackIcon: <Zap className="w-6 h-6 text-blue-500" /> },
-    ],
-  },
-  {
     id: 'communication',
     name: 'Team Communication',
     description: 'Stay connected with your team',
@@ -645,76 +630,6 @@ const integrationCategories: IntegrationCategory[] = [
       { id: 'discord', name: 'Discord', description: 'Community chat.', fallbackIcon: <Users className="w-6 h-6 text-indigo-500" /> },
       { id: 'intercom', name: 'Intercom', description: 'Customer messaging.', fallbackIcon: <Users className="w-6 h-6 text-blue-500" /> },
       { id: 'microsoft-teams', name: 'Microsoft Teams', description: 'Team collaboration.', fallbackIcon: <Users className="w-6 h-6 text-purple-600" /> },
-    ],
-  },
-];
-
-// =====================================================
-// SUGGESTED INTEGRATIONS (20 High-Value Additions)
-// =====================================================
-
-const suggestedIntegrations: IntegrationCategory[] = [
-  {
-    id: 'email-outreach',
-    name: 'Email & Outreach',
-    description: 'Automate your email campaigns',
-    tooltip: 'Logs outbound email activities automatically. Syncs email sequences to contact timelines and tracks opens/clicks as engagement signals on deals.',
-    icon: <Mail className="w-5 h-5" />,
-    integrations: [
-      { id: 'lemlist', name: 'Lemlist', description: 'Cold email outreach.', fallbackIcon: <Mail className="w-6 h-6 text-purple-500" /> },
-      { id: 'outreach', name: 'Outreach', description: 'Sales engagement platform.', fallbackIcon: <Mail className="w-6 h-6 text-purple-600" /> },
-      { id: 'salesloft', name: 'Salesloft', description: 'Revenue workflow platform.', fallbackIcon: <Mail className="w-6 h-6 text-blue-500" /> },
-    ],
-  },
-  {
-    id: 'sales-intelligence',
-    name: 'Sales Intelligence',
-    description: 'Enrich your leads with data',
-    tooltip: 'Auto-enriches contacts with company data, phone numbers, and social profiles. Fills in missing fields and keeps your contact database accurate and complete.',
-    icon: <Database className="w-5 h-5" />,
-    integrations: [
-      { id: 'linkedin-sales-navigator', name: 'LinkedIn Sales Nav', description: 'Social selling platform.', fallbackIcon: <Database className="w-6 h-6 text-blue-700" /> },
-      { id: 'zoominfo', name: 'ZoomInfo', description: 'B2B contact database.', fallbackIcon: <Database className="w-6 h-6 text-green-500" /> },
-      { id: 'clearbit', name: 'Clearbit', description: 'Data enrichment.', fallbackIcon: <Database className="w-6 h-6 text-blue-500" /> },
-      { id: 'lusha', name: 'Lusha', description: 'Contact data platform.', fallbackIcon: <Database className="w-6 h-6 text-pink-500" /> },
-      { id: 'cognism', name: 'Cognism', description: 'GDPR-compliant B2B data.', fallbackIcon: <Database className="w-6 h-6 text-indigo-500" /> },
-    ],
-  },
-  {
-    id: 'esignature',
-    name: 'E-Signature & Documents',
-    description: 'Close deals faster',
-    tooltip: 'Moves deals to "Signed" stage automatically when contracts are executed. Tracks document views and creates activities for proposal sends.',
-    icon: <FileSignature className="w-5 h-5" />,
-    integrations: [
-      { id: 'docusign', name: 'DocuSign', description: 'E-signature leader.', fallbackIcon: <FileSignature className="w-6 h-6 text-yellow-600" /> },
-      { id: 'pandadoc', name: 'PandaDoc', description: 'Document automation.', fallbackIcon: <FileSignature className="w-6 h-6 text-green-500" /> },
-      { id: 'hellosign', name: 'HelloSign', description: 'Simple e-signatures.', fallbackIcon: <FileSignature className="w-6 h-6 text-blue-500" /> },
-      { id: 'proposify', name: 'Proposify', description: 'Proposal software.', fallbackIcon: <FileSignature className="w-6 h-6 text-teal-500" /> },
-    ],
-  },
-  {
-    id: 'payments',
-    name: 'Payments & Billing',
-    description: 'Get paid faster',
-    tooltip: 'Reconciles deal values with actual payments received. Updates deal status when invoices are paid and calculates accurate revenue metrics.',
-    icon: <CreditCard className="w-5 h-5" />,
-    integrations: [
-      { id: 'stripe', name: 'Stripe', description: 'Payment processing.', fallbackIcon: <CreditCard className="w-6 h-6 text-purple-600" /> },
-      { id: 'quickbooks', name: 'QuickBooks', description: 'Accounting software.', fallbackIcon: <CreditCard className="w-6 h-6 text-green-600" /> },
-      { id: 'xero', name: 'Xero', description: 'Cloud accounting.', fallbackIcon: <CreditCard className="w-6 h-6 text-blue-500" /> },
-      { id: 'chargebee', name: 'Chargebee', description: 'Subscription billing.', fallbackIcon: <CreditCard className="w-6 h-6 text-orange-500" /> },
-    ],
-  },
-  {
-    id: 'ai-productivity',
-    name: 'AI & Productivity',
-    description: 'Supercharge with AI',
-    tooltip: 'Powers AI-generated email drafts, meeting summaries, and deal insights. Extends Meeting Intelligence features with custom AI capabilities.',
-    icon: <Bot className="w-5 h-5" />,
-    integrations: [
-      { id: 'openai', name: 'OpenAI / ChatGPT', description: 'AI assistant integration.', fallbackIcon: <Bot className="w-6 h-6 text-green-500" /> },
-      { id: 'anthropic', name: 'Anthropic / Claude', description: 'AI for enterprises.', fallbackIcon: <Bot className="w-6 h-6 text-orange-500" /> },
     ],
   },
 ];
@@ -734,7 +649,6 @@ export default function Integrations() {
   const allComingSoonIntegrationIds = useMemo(() => {
     const ids: string[] = [];
     for (const cat of integrationCategories) ids.push(...cat.integrations.map((i) => i.id));
-    for (const cat of suggestedIntegrations) ids.push(...cat.integrations.map((i) => i.id));
     return ids;
   }, []);
 
@@ -1037,7 +951,6 @@ export default function Integrations() {
     const allIds = [
       ...builtIntegrations.map((i) => i.id),
       ...integrationCategories.flatMap((c) => c.integrations.map((i) => i.id)),
-      ...suggestedIntegrations.flatMap((c) => c.integrations.map((i) => i.id)),
     ];
 
     // De-dupe
@@ -1085,7 +998,7 @@ export default function Integrations() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {builtIntegrations
-              .filter((integration) => (integration.id === 'hubspot' ? hubspotEnabled : true))
+              .filter((integration) => ['60-notetaker', 'fathom', 'fireflies'].includes(integration.id))
               .map((integration) => (
                 <IntegrationCardWithLogo
                   key={integration.id}
@@ -1130,32 +1043,6 @@ export default function Integrations() {
           ))}
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-gray-200 dark:border-gray-800 my-8" />
-
-        {/* Suggested Integrations */}
-        <div className="mb-8">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-            Suggested Integrations
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
-            Popular tools that could supercharge your workflow
-          </p>
-
-          {suggestedIntegrations.map((category) => (
-            <CategorySection
-              key={category.id}
-              category={category}
-              isBuilt={false}
-              getIntegrationStatus={getIntegrationStatus}
-              onBuiltAction={(integrationId) => handleCardAction(integrationId, true)}
-              builtActionLoadingById={builtActionLoadingById}
-              getVoteState={getVoteState}
-              toggleUpvote={toggleUpvote}
-              sixtyLogoUrl={sixtyLogoUrl}
-            />
-          ))}
-        </div>
 
       </div>
 
