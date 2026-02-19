@@ -789,7 +789,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
               <DropdownMenuItem onClick={() => navigate('/settings/billing')}>
                 <DollarSign className="w-4 h-4 mr-2" />
-                View Pricing
+                Billing & Subscription
               </DropdownMenuItem>
 
               <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
