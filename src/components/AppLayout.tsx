@@ -476,7 +476,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     >
                       <button
                         onClick={() => {
-                          navigate('/profile');
+                          navigate('/settings/account');
                           setIsMobileUserMenuOpen(false);
                         }}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#64748B] dark:text-gray-400 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors"
@@ -762,7 +762,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => navigate('/profile')}>
+              <DropdownMenuItem onClick={() => navigate('/settings/account')}>
                 <UserCog className="w-4 h-4 mr-2" />
                 Profile
               </DropdownMenuItem>

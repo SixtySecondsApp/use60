@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { CallTypeService, type OrgCallType, type CreateCallTypeInput, type UpdateCallTypeInput } from '@/lib/services/callTypeService';
 import { useOrgId, useOrgPermissions } from '@/lib/contexts/OrgContext';
+import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { CallTypeWorkflowEditor } from '@/components/admin/CallTypeWorkflowEditor';
@@ -76,6 +77,7 @@ const COLOR_OPTIONS = [
 export default function CallTypeSettings() {
   const orgId = useOrgId();
   const permissions = useOrgPermissions();
+  const { isPlatformAdmin } = useUserPermissions();
   const [callTypes, setCallTypes] = useState<OrgCallType[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -314,6 +316,7 @@ export default function CallTypeSettings() {
                 onDelete={() => handleDelete(callType.id)}
                 onToggleActive={() => handleToggleActive(callType)}
                 onConfigureWorkflow={() => setWorkflowEditorCallTypeId(callType.id)}
+                showWorkflowCog={isPlatformAdmin}
                 saving={saving}
               />
             ))}
@@ -565,6 +568,7 @@ function CallTypeCard({
   onDelete,
   onToggleActive,
   onConfigureWorkflow,
+  showWorkflowCog,
   saving,
 }: {
   callType: OrgCallType;
@@ -576,6 +580,7 @@ function CallTypeCard({
   onDelete: () => void;
   onToggleActive: () => void;
   onConfigureWorkflow: () => void;
+  showWorkflowCog: boolean;
   saving: boolean;
 }) {
   const iconOption = ICON_OPTIONS.find(opt => opt.value === callType.icon);
@@ -652,15 +657,17 @@ function CallTypeCard({
               onCheckedChange={onToggleActive}
               disabled={saving}
             />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onConfigureWorkflow}
-              disabled={saving}
-              title="Configure Workflow"
-            >
-              <Settings className="w-4 h-4" />
-            </Button>
+            {showWorkflowCog && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onConfigureWorkflow}
+                disabled={saving}
+                title="Configure Workflow"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

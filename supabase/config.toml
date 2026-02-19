@@ -202,6 +202,15 @@ verify_jwt = false
 [functions.google-oauth-initiate]
 verify_jwt = false
 
+# Google OAuth callback - public GET endpoint, Google redirects here with auth code
+# No JWT possible - this is a redirect from Google's servers
+[functions.google-oauth-callback]
+verify_jwt = false
+
+# Google OAuth callback (public variant) - handles both GET redirect and POST exchange
+[functions.google-oauth-callback-public]
+verify_jwt = false
+
 # OAuth exchange function - exchanges code for tokens
 # Called from browser with user JWT, handles auth manually (CORS preflight needs to work)
 [functions.google-oauth-exchange]
@@ -325,4 +334,9 @@ verify_jwt = false
 # Get invitation by token - public endpoint for invitation signup flow
 # No auth needed - validates invitation token from database
 [functions.get-invitation-by-token]
+verify_jwt = false
+
+# Send organization invitation - called from browser with user JWT
+# Handles CORS manually inside function (CORS preflight needs to work)
+[functions.send-organization-invitation]
 verify_jwt = false
