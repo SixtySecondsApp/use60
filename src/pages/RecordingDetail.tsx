@@ -42,6 +42,7 @@ import {
   Check,
   RefreshCw
 } from 'lucide-react'
+import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary'
 import type { RecordingStatus, MeetingPlatform } from '@/lib/types/meetingBaaS'
 
 // Status badge configuration
@@ -149,6 +150,7 @@ export const RecordingDetail: React.FC = () => {
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const [showProposalWizard, setShowProposalWizard] = useState(false)
   const [linkedMeetingId, setLinkedMeetingId] = useState<string | null>(null)
+  const [hasStructuredSummary, setHasStructuredSummary] = useState(false)
   const [linkedMeetingTitle, setLinkedMeetingTitle] = useState<string>('')
   const [meetingActionItems, setMeetingActionItems] = useState<any[]>([])
   const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false)
@@ -911,21 +913,31 @@ export const RecordingDetail: React.FC = () => {
 
                 {/* Summary Tab */}
                 <TabsContent value="summary" className="px-4 sm:px-6 pb-4 sm:pb-6 mt-0">
-                  {recording.summary ? (
-                    <div className="prose dark:prose-invert max-w-none">
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
-                        {recording.summary}
-                      </p>
+                  {/* AI Structured Summary (classification, outcomes, objections, etc.) */}
+                  {linkedMeetingId && (
+                    <div className="mb-4">
+                      <StructuredMeetingSummary meetingId={linkedMeetingId} onSummaryReady={setHasStructuredSummary} />
                     </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Sparkles className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-500 dark:text-gray-400">
-                        {recording.status === 'processing'
-                          ? 'Summary is being generated...'
-                          : 'No summary available for this recording.'}
-                      </p>
-                    </div>
+                  )}
+
+                  {/* Only show basic summary when no structured summary is available */}
+                  {!hasStructuredSummary && (
+                    recording.summary ? (
+                      <div className="prose dark:prose-invert max-w-none">
+                        <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                          {recording.summary}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <Sparkles className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-500 dark:text-gray-400">
+                          {recording.status === 'processing'
+                            ? 'Summary is being generated...'
+                            : 'No summary available for this recording.'}
+                        </p>
+                      </div>
+                    )
                   )}
 
                   {/* Highlights */}

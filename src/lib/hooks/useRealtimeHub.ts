@@ -55,6 +55,7 @@ const TABLE_GROUPS = {
   // MEDIUM priority - important but less frequent
   medium: [
     'meetings',
+    'meeting_classifications',
     'deal_health_scores',
     'deal_health_alerts',
     'relationship_health_scores',

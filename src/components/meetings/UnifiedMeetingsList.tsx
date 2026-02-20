@@ -671,7 +671,7 @@ const UnifiedMeetingsList: React.FC = () => {
         />
         <StatCard
           title="Coach Score"
-          value={stats.avgCoachRating ? `${stats.avgCoachRating}/10` : 'N/A'}
+          value={stats.avgCoachRating ? `${Math.min(stats.avgCoachRating, 10)}/10` : 'N/A'}
           icon={<Award className="h-5 w-5" />}
           trend={stats.avgCoachRating > 7 ? 'up' : stats.avgCoachRating < 5 ? 'down' : 'neutral'}
         />
@@ -766,7 +766,7 @@ const UnifiedMeetingsList: React.FC = () => {
                         </div>
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
-                        {item.source === '60_notetaker' && item.status ? (
+                        {item.source === '60_notetaker' && item.status && statusConfig[item.status] ? (
                           <Badge variant={statusConfig[item.status].variant} className="gap-1 text-xs">
                             {statusConfig[item.status].icon}
                             {statusConfig[item.status].label}
@@ -882,7 +882,7 @@ const UnifiedMeetingsList: React.FC = () => {
                   {/* Badges */}
                   <div className="flex flex-wrap gap-2">
                     <SourceBadge source={item.source} compact />
-                    {item.source === '60_notetaker' && item.status && (
+                    {item.source === '60_notetaker' && item.status && statusConfig[item.status] && (
                       <Badge variant={statusConfig[item.status].variant} className="gap-1 text-xs">
                         {statusConfig[item.status].icon}
                         {statusConfig[item.status].label}

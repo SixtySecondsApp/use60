@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
@@ -16,6 +17,7 @@ import type { MeetingStructuredSummary } from '@/lib/types/meetingIntelligence';
  * Hook to get and manage structured summary for a specific meeting
  */
 export function useStructuredSummary(meetingId: string | null) {
+  const queryClient = useQueryClient();
   const [summary, setSummary] = useState<MeetingStructuredSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -67,7 +69,8 @@ export function useStructuredSummary(meetingId: string | null) {
 
       if (data?.success) {
         await fetchSummary();
-        toast.success('Structured summary generated');
+        // Invalidate team analytics cache so dashboard KPIs reflect new classification
+        queryClient.invalidateQueries({ queryKey: ['team-analytics'] });
         return data.summary;
       } else {
         throw new Error(data?.error || 'Failed to process summary');
@@ -80,7 +83,7 @@ export function useStructuredSummary(meetingId: string | null) {
     } finally {
       setProcessing(false);
     }
-  }, [meetingId, fetchSummary]);
+  }, [meetingId, fetchSummary, queryClient]);
 
   // Subscribe to real-time updates
   useEffect(() => {

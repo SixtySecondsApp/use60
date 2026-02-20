@@ -126,12 +126,13 @@ export const CoachRatingBadge: React.FC<{ rating: number | null | undefined }> =
     return { color: 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 border-red-500/30' }
   }
 
-  const config = getRatingConfig(rating)
+  const clampedRating = Math.min(rating, 10)
+  const config = getRatingConfig(clampedRating)
 
   return (
     <Badge variant="outline" className={cn("text-xs gap-1 border", config.color)}>
       <Star className="h-3 w-3" />
-      {rating}/10
+      {clampedRating}/10
     </Badge>
   )
 }

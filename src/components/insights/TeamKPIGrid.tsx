@@ -3,7 +3,7 @@
  * Shows 8 key metrics with trend indicators and click-to-drill-down
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart3,
@@ -125,12 +125,12 @@ export const TeamKPIGridSkeleton = () => (
 // Individual KPI Card
 function KPICard({
   data,
-  period,
+  periodLabel,
   onClick,
   index,
 }: {
   data: KPICardData;
-  period: TimePeriod;
+  periodLabel: string;
   onClick?: () => void;
   index: number;
 }) {
@@ -202,7 +202,7 @@ function KPICard({
             </div>
             <div className="flex items-center gap-1 mt-1 text-xs text-gray-500 dark:text-gray-500">
               <Calendar className="w-3 h-3" />
-              {periodLabels[period]}
+              {periodLabel}
             </div>
           </div>
         </div>
@@ -225,6 +225,16 @@ function KPICard({
 export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamKPIGridProps) {
   const { data, isLoading, error } = useTeamAggregates(period, dateRange);
 
+  // Compute the comparison period label based on dateRange or period
+  const periodLabel = useMemo(() => {
+    if (dateRange) {
+      const days = Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / 86400000);
+      if (days >= 28 && days <= 31) return 'vs prev month';
+      return `vs prev ${days}d`;
+    }
+    return periodLabels[period];
+  }, [dateRange, period]);
+
   if (isLoading) {
     return <TeamKPIGridSkeleton />;
   }
@@ -241,6 +251,9 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
   const { current, changes } = data;
 
   // Build KPI card data
+  // Note: Uses totalMeetings as denominator for percentage subtitles (includes unclassified meetings).
+  // This shows the rate across all meetings, not just classified ones.
+  // TODO: If a classifiedMeetings count becomes available from the RPC, use it as denominator instead.
   const kpiCards: KPICardData[] = [
     {
       title: 'Total Meetings',
@@ -271,7 +284,7 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
     },
     {
       title: 'Coach Rating',
-      value: current.avgCoachRating !== null ? current.avgCoachRating.toFixed(1) : 'N/A',
+      value: current.avgCoachRating !== null ? Math.min(current.avgCoachRating, 10).toFixed(1) : 'N/A',
       subtitle: 'Out of 10',
       trendPct: changes.coachRatingChangePct,
       icon: Star,
@@ -282,7 +295,7 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
       title: 'Forward Movement',
       value: current.forwardMovementCount,
       subtitle: current.totalMeetings > 0
-        ? `${((current.forwardMovementCount / current.totalMeetings) * 100).toFixed(1)}% of meetings`
+        ? `${((current.forwardMovementCount / current.totalMeetings) * 100).toFixed(0)}% of meetings`
         : 'No meetings',
       trendPct: changes.forwardMovementChangePct,
       icon: TrendingUp,
@@ -293,7 +306,7 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
       title: 'Positive Outcomes',
       value: current.positiveOutcomeCount,
       subtitle: current.totalMeetings > 0
-        ? `${((current.positiveOutcomeCount / current.totalMeetings) * 100).toFixed(1)}% success rate`
+        ? `${((current.positiveOutcomeCount / current.totalMeetings) * 100).toFixed(0)}% success rate`
         : 'No meetings',
       trendPct: changes.positiveOutcomeChangePct,
       icon: Target,
@@ -304,7 +317,7 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
       title: 'Objections Handled',
       value: current.objectionCount,
       subtitle: current.totalMeetings > 0
-        ? `${((current.objectionCount / current.totalMeetings) * 100).toFixed(1)}% of meetings`
+        ? `${((current.objectionCount / current.totalMeetings) * 100).toFixed(0)}% of meetings`
         : 'No meetings',
       trendPct: null, // We don't have change data for objections yet
       icon: AlertCircle,
@@ -331,7 +344,7 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
         <KPICard
           key={card.title}
           data={card}
-          period={period}
+          periodLabel={periodLabel}
           onClick={onCardClick && card.clickable !== false ? () => onCardClick(card.metricType) : undefined}
           index={index}
         />

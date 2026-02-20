@@ -13,7 +13,7 @@
  * - Objections
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle2,
@@ -39,12 +39,15 @@ interface StructuredMeetingSummaryProps {
   meetingId: string;
   className?: string;
   compact?: boolean;
+  /** Callback when summary becomes available (used to hide generic summary in parent) */
+  onSummaryReady?: (hasSummary: boolean) => void;
 }
 
 export function StructuredMeetingSummary({
   meetingId,
   className,
   compact = false,
+  onSummaryReady,
 }: StructuredMeetingSummaryProps) {
   const {
     summary,
@@ -56,36 +59,39 @@ export function StructuredMeetingSummary({
     detectedStage,
   } = useStructuredSummary(meetingId);
 
-  if (loading) {
+
+  // Notify parent when summary is available
+  useEffect(() => {
+    onSummaryReady?.(!!summary);
+  }, [summary, onSummaryReady]);
+
+  if (loading || (!summary && processing)) {
     return (
-      <div className={cn('flex items-center justify-center p-8', className)}>
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className={cn('flex items-center justify-center gap-3 p-8', className)}>
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">
+          {processing ? 'Analyzing meeting...' : 'Loading...'}
+        </span>
       </div>
     );
   }
 
   if (!summary) {
     return (
-      <div className={cn('p-6 text-center', className)}>
-        <p className="text-muted-foreground mb-4">No structured summary available.</p>
+      <div className={cn('p-4 text-center', className)}>
+        {error && <p className="text-destructive text-sm mb-2">{error}</p>}
         <button
           onClick={() => processSummary()}
           disabled={processing}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
         >
           {processing ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Processing...
-            </>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <>
-              <RefreshCw className="h-4 w-4" />
-              Generate Summary
-            </>
+            <Target className="h-3.5 w-3.5" />
           )}
+          {processing ? 'Analyzing...' : error ? 'Retry Analysis' : 'Analyze Meeting'}
         </button>
-        {error && <p className="text-destructive mt-2 text-sm">{error}</p>}
       </div>
     );
   }

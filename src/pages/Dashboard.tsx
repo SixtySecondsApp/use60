@@ -16,6 +16,7 @@ import {
   ArrowDown,
   TrendingUp,
   TrendingDown,
+  Minus,
   BarChart2,
   LayoutDashboard,
   Activity as ActivityIcon,
@@ -49,6 +50,7 @@ interface MetricCardProps {
     end: Date;
   };
   previousMonthTotal?: number;
+  totalTrend?: number;
   isLoadingComparisons?: boolean;
   hasComparisons?: boolean;
   isInitialLoad?: boolean;
@@ -103,7 +105,7 @@ const Tooltip = ({ show, content, position }: TooltipProps) => {
   );
 };
 
-const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, dateRange, previousMonthTotal, isLoadingComparisons, hasComparisons, isInitialLoad = false, onNavigateToActivity }: MetricCardProps) => {
+const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, dateRange, previousMonthTotal, totalTrend: totalTrendProp, isLoadingComparisons, hasComparisons, isInitialLoad = false, onNavigateToActivity }: MetricCardProps) => {
   const { setFilters } = useActivityFilters();
   const [showTrendTooltip, setShowTrendTooltip] = useState(false);
   const [showTotalTooltip, setShowTotalTooltip] = useState(false);
@@ -140,28 +142,20 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
     }
   };
 
-  // Calculate trend against previous month's total with error handling
-  const totalTrend = useMemo(() => {
-    try {
-      if (!previousMonthTotal || previousMonthTotal === 0) return 0;
-      return Math.round(((value - previousMonthTotal) / previousMonthTotal) * 100);
-    } catch (error) {
-      logger.error('Error calculating total trend:', error);
-      return 0;
-    }
-  }, [value, previousMonthTotal]);
+  // Use totalTrend from props (computed by useDashboardMetrics hook) for consistency
+  const totalTrend = totalTrendProp ?? 0;
 
   // Helper function for arrow styling
   const getArrowClass = (trendValue: number) => {
-    return trendValue >= 0 
-      ? 'text-emerald-500' 
-      : 'text-red-500';
+    if (trendValue === 0) return 'text-gray-500';
+    return trendValue > 0 ? 'text-emerald-500' : 'text-red-500';
   };
 
   // Get background colors based on trend values
   const getTrendBg = (trendValue: number) => {
-    return trendValue >= 0 
-      ? 'bg-emerald-500/10 border-emerald-500/30' 
+    if (trendValue === 0) return 'bg-gray-500/10 border-gray-500/30';
+    return trendValue > 0
+      ? 'bg-emerald-500/10 border-emerald-500/30'
       : 'bg-red-500/10 border-red-500/30';
   };
 
@@ -241,19 +235,27 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
                 </>
               ) : (
                 <>
-                  {trend >= 0 ? (
-                    <TrendingUp className={`w-4 h-4 ${getArrowClass(trend)}`} />
+                  {trend === 0 ? (
+                    <>
+                      <Minus className="w-4 h-4 text-gray-500" />
+                      <span className="text-xs font-semibold text-gray-500">0%</span>
+                    </>
+                  ) : trend > 0 ? (
+                    <>
+                      <TrendingUp className={`w-4 h-4 ${getArrowClass(trend)}`} />
+                      <span className={`text-xs font-semibold ${getArrowClass(trend)}`}>+{trend}%</span>
+                    </>
                   ) : (
-                    <TrendingDown className={`w-4 h-4 ${getArrowClass(trend)}`} />
+                    <>
+                      <TrendingDown className={`w-4 h-4 ${getArrowClass(trend)}`} />
+                      <span className={`text-xs font-semibold ${getArrowClass(trend)}`}>{trend}%</span>
+                    </>
                   )}
-                  <span className={`text-xs font-semibold ${getArrowClass(trend)}`}>
-                    {trend >= 0 ? '+' : ''}{trend}%
-                  </span>
                 </>
               )}
             </div>
           </div>
-          
+
           {/* Arrow for total previous month comparison */}
           <div 
             ref={totalRef}
@@ -274,27 +276,35 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
                 </>
               ) : (
                 <>
-                  {totalTrend >= 0 ? (
-                    <ArrowUp className={`w-4 h-4 ${getArrowClass(totalTrend)}`} />
+                  {totalTrend === 0 ? (
+                    <>
+                      <Minus className="w-4 h-4 text-gray-500" />
+                      <span className="text-xs font-semibold text-gray-500">0%</span>
+                    </>
+                  ) : totalTrend > 0 ? (
+                    <>
+                      <ArrowUp className={`w-4 h-4 ${getArrowClass(totalTrend)}`} />
+                      <span className={`text-xs font-semibold ${getArrowClass(totalTrend)}`}>+{totalTrend}%</span>
+                    </>
                   ) : (
-                    <ArrowDown className={`w-4 h-4 ${getArrowClass(totalTrend)}`} />
+                    <>
+                      <ArrowDown className={`w-4 h-4 ${getArrowClass(totalTrend)}`} />
+                      <span className={`text-xs font-semibold ${getArrowClass(totalTrend)}`}>{totalTrend}%</span>
+                    </>
                   )}
-                  <span className={`text-xs font-semibold ${getArrowClass(totalTrend)}`}>
-                    {totalTrend >= 0 ? '+' : ''}{totalTrend}%
-                  </span>
                 </>
               )}
             </div>
           </div>
-          
+
           {/* Tooltips using Portal */}
           <Tooltip 
             show={showTrendTooltip}
             position={trendPosition}
             content={{
               title: "Vs. same point last month",
-              message: trend >= 0 ? "Growing faster" : "Growing slower",
-              positive: trend >= 0
+              message: trend > 0 ? "Ahead of last month's pace" : trend < 0 ? "Behind last month's pace" : "Same as last month's pace",
+              positive: trend > 0
             }}
           />
           
@@ -303,14 +313,15 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
             position={totalPosition}
             content={{
               title: "Vs. previous month's total",
-              message: totalTrend >= 0 ? "Already ahead of last month" : "Behind last month's performance",
-              positive: totalTrend >= 0
+              message: totalTrend > 0 ? "Already ahead of last month" : totalTrend < 0 ? "Behind last month's total" : "Matching last month's total",
+              positive: totalTrend > 0
             }}
           />
         </div>
       </div>
       
       <div className="space-y-3 flex-1">
+        {/* TODO: Currency symbol should come from organization settings */}
         <div className="flex items-baseline gap-2 flex-wrap">
           {isInitialLoad ? (
             <div className="flex items-baseline gap-2">
@@ -343,12 +354,12 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
                   ? 'bg-violet-500/80'
                   : 'bg-orange-500/80'
               }`}
-              style={{ width: `${Math.min(100, (value / target) * 100)}%` }}
+              style={{ width: `${target > 0 ? Math.min(100, (value / target) * 100) : 0}%` }}
             ></div>
           </div>
           <div className="text-xs text-[#64748B] dark:text-gray-400 flex justify-between items-center gap-2">
             <span>Progress</span>
-            <span className="font-medium">{Math.round((value / target) * 100)}%</span>
+            <span className="font-medium">{target > 0 ? `${Math.round((value / target) * 100)}%` : '\u2014'}</span>
           </div>
         </div>
       </div>
@@ -362,6 +373,7 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
     prevProps.target === nextProps.target &&
     prevProps.trend === nextProps.trend &&
     prevProps.previousMonthTotal === nextProps.previousMonthTotal &&
+    prevProps.totalTrend === nextProps.totalTrend &&
     prevProps.isLoadingComparisons === nextProps.isLoadingComparisons &&
     prevProps.hasComparisons === nextProps.hasComparisons &&
     prevProps.isInitialLoad === nextProps.isInitialLoad &&
@@ -457,9 +469,7 @@ function TeamPerformanceSection({ selectedMonth }: { selectedMonth: Date }) {
             Meeting analytics and rep performance metrics
           </p>
         </div>
-        <span className="text-sm font-medium text-[#64748B] dark:text-gray-400">
-          {format(selectedMonth, 'MMMM yyyy')}
-        </span>
+        {/* Date label removed - redundant with date picker */}
       </div>
 
       {/* KPI Grid */}
@@ -510,8 +520,10 @@ export default function Dashboard() {
             logger.error('Invalid date after adding month');
             return prev;
           }
-          // Don't go beyond current month
-          if (newMonth > new Date()) {
+          // Don't go beyond current month (compare year+month only)
+          const now = new Date();
+          if (newMonth.getFullYear() > now.getFullYear() ||
+              (newMonth.getFullYear() === now.getFullYear() && newMonth.getMonth() > now.getMonth())) {
             return prev;
           }
           return newMonth;
@@ -521,6 +533,11 @@ export default function Dashboard() {
       logger.error('Error navigating to next month:', error);
     }
   };
+  const isCurrentMonth = useMemo(() => {
+    const now = new Date();
+    return selectedMonth.getFullYear() === now.getFullYear() && selectedMonth.getMonth() === now.getMonth();
+  }, [selectedMonth]);
+
   const { userData, isLoading: isLoadingUser, session } = useUser();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -667,7 +684,7 @@ export default function Dashboard() {
     hasComparisons,
     currentMonthActivities,
     refreshDashboard
-  } = useDashboardMetrics(selectedMonth, showContent && !!userId && !!targets);
+  } = useDashboardMetrics(selectedMonth, showContent && !!userId && !isLoadingSales);
   
   const selectedMonthRange = useMemo(() => {
     const start = startOfMonth(selectedMonth);
@@ -676,7 +693,8 @@ export default function Dashboard() {
   }, [selectedMonth]);
 
   // Check if any data is loading - include metrics check
-  const isAnyLoading = isInitialLoad || isLoadingSales || isLoadingUser || (!userData && !session) || !targets;
+  // Note: targets can be null (user has no targets set) — that's not a loading state
+  const isAnyLoading = isInitialLoad || isLoadingSales || isLoadingUser || (!userData && !session);
 
   // Remove logging to prevent re-renders
 
@@ -721,7 +739,7 @@ export default function Dashboard() {
               <button
                 onClick={handleNextMonth}
                 className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={selectedMonth >= new Date()}
+                disabled={isCurrentMonth}
                 title="Next month"
               >
                 <ChevronRight className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
@@ -777,8 +795,9 @@ export default function Dashboard() {
           key="revenue-metric"
           title="New Business"
           value={metrics.revenue}
-          target={targets.revenue_target}
+          target={targets?.revenue_target ?? 0}
           trend={trends.revenue}
+          totalTrend={totalTrends.revenue}
           icon={PoundSterling}
           type="sale"
           dateRange={selectedMonthRange}
@@ -792,8 +811,9 @@ export default function Dashboard() {
           key="outbound-metric"
           title="Outbound"
           value={metrics.outbound}
-          target={targets.outbound_target}
+          target={targets?.outbound_target ?? 0}
           trend={trends.outbound}
+          totalTrend={totalTrends.outbound}
           icon={Phone}
           type="outbound"
           dateRange={selectedMonthRange}
@@ -807,8 +827,9 @@ export default function Dashboard() {
           key="meetings-metric"
           title="Meetings"
           value={metrics.meetings}
-          target={targets.meetings_target}
+          target={targets?.meetings_target ?? 0}
           trend={trends.meetings}
+          totalTrend={totalTrends.meetings}
           icon={Users}
           type="meeting"
           dateRange={selectedMonthRange}
@@ -822,8 +843,9 @@ export default function Dashboard() {
           key="proposals-metric"
           title="Proposals"
           value={metrics.proposals}
-          target={targets.proposal_target}
+          target={targets?.proposal_target ?? 0}
           trend={trends.proposals}
+          totalTrend={totalTrends.proposals}
           icon={FileText}
           type="proposal"
           dateRange={selectedMonthRange}

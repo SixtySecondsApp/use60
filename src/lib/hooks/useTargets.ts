@@ -1,66 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
 
-// Mock hook - temporarily disabled Supabase calls to avoid 400 errors
-// TODO: Implement with Neon API when targets functionality is needed
 export interface Target {
   id: string;
   user_id: string;
+  revenue_target: number;
+  outbound_target: number;
+  meetings_target: number;
+  proposal_target: number;
   start_date: string;
   end_date: string;
-  target_amount: number;
-  actual_amount: number;
-  created_at: string;
-  updated_at: string;
 }
 
 export function useTargets(userId: string | undefined) {
-  const [data, setData] = useState<any>({
-    id: 'mock-target-1',
-    user_id: userId || 'default',
-    revenue_target: 50000,
-    outbound_target: 100,
-    meetings_target: 50,
-    proposal_target: 20,
-    start_date: new Date().toISOString(),
-    end_date: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+  return useQuery({
+    queryKey: ['targets', userId],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const { data, error } = await supabase
+        .from('targets')
+        .select('id, user_id, revenue_target, outbound_target, meetings_target, proposal_target, start_date, end_date')
+        .eq('user_id', userId!)
+        .lte('start_date', today)
+        .gte('end_date', today)
+        .order('created_at', { ascending: false })
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    // Mock implementation - returns proper target object structure immediately
-    // Eliminates Supabase 400 errors while keeping components functional
-    if (userId) {
-      setData({
-        id: 'mock-target-1',
-        user_id: userId,
-        revenue_target: 50000,
-        outbound_target: 100,
-        meetings_target: 50,
-        proposal_target: 20,
-        start_date: new Date().toISOString(),
-        end_date: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    }
-  }, [userId]);
-
-  return {
-    data,
-    isLoading,
-    error
-  };
 }
 
 export function useCreateTarget() {
+  // TODO: Implement target creation mutation
   return {
     mutate: async () => {
-      // Mock implementation - does nothing
-      logger.log('Target creation temporarily disabled');
+      logger.log('Target creation not yet implemented');
     },
     isLoading: false,
     error: null
@@ -68,10 +47,10 @@ export function useCreateTarget() {
 }
 
 export function useUpdateTarget() {
+  // TODO: Implement target update mutation
   return {
     mutate: async () => {
-      // Mock implementation - does nothing  
-      logger.log('Target update temporarily disabled');
+      logger.log('Target update not yet implemented');
     },
     isLoading: false,
     error: null
@@ -79,10 +58,10 @@ export function useUpdateTarget() {
 }
 
 export function useDeleteTarget() {
+  // TODO: Implement target deletion mutation
   return {
     mutate: async () => {
-      // Mock implementation - does nothing
-      logger.log('Target deletion temporarily disabled');
+      logger.log('Target deletion not yet implemented');
     },
     isLoading: false,
     error: null

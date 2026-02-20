@@ -19,6 +19,7 @@ import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
 import { ShareMeetingModal } from '@/components/meetings/ShareMeetingModal';
+import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary';
 import { useActivationTracking } from '@/lib/hooks/useActivationTracking';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 
@@ -200,6 +201,7 @@ export function MeetingDetail() {
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
   const [thumbnailEnsured, setThumbnailEnsured] = useState(false);
   const [summaryViewTracked, setSummaryViewTracked] = useState(false);
+  const [hasStructuredSummary, setHasStructuredSummary] = useState(false);
   const [voiceRecordingData, setVoiceRecordingData] = useState<VoiceRecordingData | null>(null);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
 
@@ -840,7 +842,13 @@ export function MeetingDetail() {
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('sale')}>Add Sale</Button>
                   </div>
 
-                  {meeting.summary ? (
+                  {/* AI Structured Summary (classification, outcomes, objections, etc.) */}
+                  <div className="mb-4">
+                    <StructuredMeetingSummary meetingId={meeting.id} onSummaryReady={setHasStructuredSummary} />
+                  </div>
+
+                  {/* Only show basic summary when no structured summary is available */}
+                  {!hasStructuredSummary && meeting.summary ? (
                     <div className="text-sm text-muted-foreground leading-relaxed">
                       {(() => {
                         try {

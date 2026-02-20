@@ -340,3 +340,8 @@ verify_jwt = false
 # Handles CORS manually inside function (CORS preflight needs to work)
 [functions.send-organization-invitation]
 verify_jwt = false
+
+# Meeting structured summary - called from browser with user JWT
+# Uses service role internally; CORS handled in function
+[functions.meeting-process-structured-summary]
+verify_jwt = false
