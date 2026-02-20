@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { getWebhookBaseUrl } from '@/lib/utils/webhookUrl';
 import {
   Sheet,
   SheetContent,
+  SheetTitle,
+  SheetDescription,
 } from '@/components/ui/sheet';
 import {
   AlertDialog,
@@ -68,7 +71,7 @@ export function WebhookSettingsPanel({
   open,
   onClose,
 }: WebhookSettingsPanelProps) {
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ops-table-inbound-webhook`;
+  const webhookUrl = `${getWebhookBaseUrl()}/ops-table-inbound-webhook`;
 
   const { data: config, isLoading } = useWebhookConfig(tableId);
   const generateApiKey = useGenerateApiKey();
@@ -118,7 +121,9 @@ export function WebhookSettingsPanel({
       <SheetContent
         side="right"
         className="!top-16 !h-[calc(100vh-4rem)] overflow-y-auto w-[480px] max-w-full bg-gray-950 border-l border-gray-800 p-0"
+        aria-describedby={undefined}
       >
+        <SheetTitle className="sr-only">API &amp; Webhooks — {tableName}</SheetTitle>
         {/* ---- Header ---- */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
           <div className="flex items-center gap-2">

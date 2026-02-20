@@ -240,13 +240,14 @@ export function useWorkflowOrchestrator() {
         break;
 
       case 'step_error':
+        console.error(`[workflow] Step "${data.step}" failed:`, data.error || data.summary, data);
         setSteps(prev =>
           prev.map(s =>
             s.step === data.step
               ? {
                   ...s,
                   status: 'error' as const,
-                  summary: data.summary,
+                  summary: data.error || data.summary,
                   error: data.error,
                   duration_ms: data.duration_ms,
                   agent: data.agent || s.agent,
@@ -288,7 +289,9 @@ export function useWorkflowOrchestrator() {
         } else if (data.status === 'partial') {
           toast.warning('Workflow completed with some errors. Check the results.');
         } else if (data.status === 'error') {
-          toast.error(data.error || 'Workflow failed');
+          // Surface the actual step-level error detail if available
+          const stepError = (data.steps || []).find((s: { status: string; error?: string }) => s.status === 'error')?.error;
+          toast.error(stepError || data.error || 'Workflow failed');
         }
         break;
     }

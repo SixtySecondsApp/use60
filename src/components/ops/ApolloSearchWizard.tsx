@@ -434,6 +434,7 @@ export function ApolloSearchWizard({
 
   const handleSelectProfile = (profile: ICPProfile) => {
     const f = profile.filters;
+    if (!f) { setStep(1); return; }
     if (f.person_titles?.length) setTitles(f.person_titles);
     if (f.person_locations?.length) setLocations(f.person_locations);
     if (f.q_keywords) setKeywords(f.q_keywords);

@@ -6662,6 +6662,207 @@ export async function detectAndStructureResponse(
         },
       };
     }
+
+    // ---------------------------------------------------------------------------
+    // Meeting intelligence query (RAG pipeline)
+    // ---------------------------------------------------------------------------
+    const meetingIntelExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'meeting_intelligence_query')
+      .slice(-1)[0] as any;
+
+    if (meetingIntelExec?.result?.data?.answer) {
+      const result = meetingIntelExec.result.data;
+      const isAggregate = result.isAggregateQuestion;
+      const hasSources = result.sources?.length > 0;
+      const structuredData: any[] = Array.isArray(result.structuredData) ? result.structuredData : [];
+      const hasStructuredData = structuredData.length > 0;
+
+      // Infer query type
+      let queryType = 'semantic';
+      if (isAggregate) queryType = 'aggregate';
+      else if (result.specificMeeting) queryType = 'structured';
+      else if (hasSources && result.meetingsAnalyzed > 3) queryType = 'cross_meeting';
+
+      // Build suggested actions
+      const suggestedActions: Array<{ id: string; label: string; type: string; icon?: string; callback: string; params?: any }> = [];
+
+      if (hasStructuredData) {
+        const allActionItems = structuredData.flatMap((m: any) => m.actionItems || []);
+        if (allActionItems.length > 0) {
+          suggestedActions.push({
+            id: 'create_tasks',
+            label: 'Create Tasks from Action Items',
+            type: 'create_task_from_meeting',
+            icon: 'CheckSquare',
+            callback: 'create_task_from_meeting',
+            params: { actionItems: allActionItems },
+          });
+        }
+        suggestedActions.push({
+          id: 'draft_email',
+          label: 'Draft Follow-up Email',
+          type: 'draft_email_from_meeting',
+          icon: 'Mail',
+          callback: 'draft_email_from_meeting',
+          params: { meetingData: structuredData[0] },
+        });
+        suggestedActions.push({
+          id: 'post_slack',
+          label: 'Post to Slack',
+          type: 'post_slack',
+          icon: 'MessageSquare',
+          callback: 'send_notification',
+          params: { channel: 'slack', context: 'meeting_intelligence' },
+        });
+      }
+
+      return {
+        type: 'meeting_intelligence',
+        summary: `Found insights from ${result.meetingsAnalyzed} meetings`,
+        data: {
+          queryType,
+          answer: result.answer,
+          sources: result.sources || [],
+          structuredData,
+          metadata: {
+            segmentsSearched: result.segmentsSearched || 0,
+            meetingsAnalyzed: result.meetingsAnalyzed || 0,
+            totalMeetings: result.totalMeetings || 0,
+            isAggregateQuestion: isAggregate,
+            specificMeeting: result.specificMeeting || null,
+          },
+          suggestedActions,
+        },
+        actions: suggestedActions,
+      };
+    }
+
+    // ---------------------------------------------------------------------------
+    // search_meeting_context (lightweight panel — max 3 sources)
+    // ---------------------------------------------------------------------------
+    const searchMeetingCtxExec = toolExecutions
+      .filter((e: any) => e?.success && (
+        // Top-level tool call (copilot-autonomous routes search_meeting_context as its own tool)
+        e?.toolName === 'search_meeting_context' ||
+        // Or via execute_action (api-copilot / fallback)
+        (e?.toolName === 'execute_action' && e?.args?.action === 'search_meeting_context')
+      ))
+      .slice(-1)[0] as any;
+
+    // Result may be nested under .result.data (execute_action) or .result directly (top-level tool)
+    const searchMeetingCtxData = searchMeetingCtxExec?.result?.data ?? searchMeetingCtxExec?.result;
+    if (searchMeetingCtxData?.answer) {
+      const result = searchMeetingCtxData;
+      return {
+        type: 'meeting_context',
+        summary: `Meeting context from ${result.meetingsAnalyzed || 0} meetings`,
+        data: {
+          answer: result.answer,
+          sources: (result.sources || []).slice(0, 3),
+          metadata: {
+            meetingsAnalyzed: result.meetingsAnalyzed || 0,
+            totalMeetings: result.totalMeetings || 0,
+          },
+        },
+      };
+    }
+
+    // ---------------------------------------------------------------------------
+    // Meeting analytics aggregation panels (dashboard / talk_time / sentiment_trends)
+    // ---------------------------------------------------------------------------
+    const analyticsAggregateActions = ['meeting_analytics_dashboard', 'meeting_analytics_talk_time', 'meeting_analytics_sentiment_trends'];
+    const analyticsAggExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && analyticsAggregateActions.includes(e?.args?.action))
+      .slice(-1)[0] as any;
+
+    if (analyticsAggExec?.result?.data) {
+      return {
+        type: 'meeting_intelligence',
+        summary: 'Meeting analytics data',
+        data: {
+          queryType: 'aggregate',
+          answer: '',
+          sources: [],
+          structuredData: [],
+          metadata: {
+            segmentsSearched: 0,
+            meetingsAnalyzed: 0,
+            totalMeetings: 0,
+            isAggregateQuestion: true,
+            specificMeeting: null,
+          },
+          aggregationData: analyticsAggExec.result.data,
+        },
+      };
+    }
+
+    // ---------------------------------------------------------------------------
+    // Per-transcript insights (meeting_analytics_insights)
+    // ---------------------------------------------------------------------------
+    const meetingInsightsExec = toolExecutions
+      .filter((e: any) => e?.toolName === 'execute_action' && e?.success && e?.args?.action === 'meeting_analytics_insights')
+      .slice(-1)[0] as any;
+
+    if (meetingInsightsExec?.result?.data) {
+      const result = meetingInsightsExec.result.data;
+      const transcriptId = meetingInsightsExec.args?.params?.transcriptId || '';
+
+      // Map insights data to a structured meeting for the panel
+      const structuredMeeting = {
+        id: transcriptId,
+        title: result.title || result.transcriptTitle || 'Meeting Insights',
+        date: result.date || '',
+        sentiment: result.sentiment || result.overallSentiment || undefined,
+        positiveScore: result.positiveScore || undefined,
+        agreements: result.agreements || [],
+        decisions: result.decisions || [],
+        objections: result.objections || [],
+        actionItems: result.actionItems || [],
+        summary: result.summary || result.overview || '',
+        talkTime: result.talkTime || undefined,
+      };
+
+      // Build suggested actions from action items
+      const suggestedActions: Array<{ id: string; label: string; type: string; icon?: string; callback: string; params?: any }> = [];
+      if (structuredMeeting.actionItems?.length > 0) {
+        suggestedActions.push({
+          id: 'create_tasks',
+          label: 'Create Tasks from Action Items',
+          type: 'create_task_from_meeting',
+          icon: 'CheckSquare',
+          callback: 'create_task_from_meeting',
+          params: { actionItems: structuredMeeting.actionItems, meetingTitle: structuredMeeting.title },
+        });
+      }
+      suggestedActions.push({
+        id: 'draft_email',
+        label: 'Draft Follow-up Email',
+        type: 'draft_email_from_meeting',
+        icon: 'Mail',
+        callback: 'draft_email_from_meeting',
+        params: { meetingData: structuredMeeting, meetingTitle: structuredMeeting.title },
+      });
+
+      return {
+        type: 'meeting_intelligence',
+        summary: `Insights for: ${structuredMeeting.title}`,
+        data: {
+          queryType: 'structured',
+          answer: structuredMeeting.summary,
+          sources: [],
+          structuredData: [structuredMeeting],
+          metadata: {
+            segmentsSearched: 0,
+            meetingsAnalyzed: 1,
+            totalMeetings: 1,
+            isAggregateQuestion: false,
+            specificMeeting: transcriptId,
+          },
+          suggestedActions,
+        },
+        actions: suggestedActions,
+      };
+    }
   }
 
   // ---------------------------------------------------------------------------

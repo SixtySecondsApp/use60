@@ -22,7 +22,7 @@ import { classifySignal, type SignalClassification } from '../_shared/signalClas
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const APOLLO_API_BASE = 'https://api.apollo.io/v1';
+const APOLLO_API_BASE = 'https://api.apollo.io/api/v1';
 const BATCH_SIZE = 50;
 const MAX_SNAPSHOTS_PER_ENTRY = 4;
 
@@ -79,15 +79,14 @@ async function apolloPersonMatch(apiKey: string, contact: {
   email?: string | null;
 }): Promise<Record<string, unknown> | null> {
   const body: Record<string, unknown> = {
-    api_key: apiKey,
     first_name: contact.first_name,
     last_name: contact.last_name,
   };
   if (contact.email) body.email = contact.email;
 
-  const res = await fetch(`${APOLLO_API_BASE}/v1/people/match`, {
+  const res = await fetch(`${APOLLO_API_BASE}/people/match`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
     body: JSON.stringify(body),
   });
 
@@ -101,17 +100,10 @@ async function apolloPersonMatch(apiKey: string, contact: {
 }
 
 async function apolloOrgEnrich(apiKey: string, domain: string): Promise<Record<string, unknown> | null> {
-  const res = await fetch(`${APOLLO_API_BASE}/v1/organizations/enrich`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-    // Apollo org enrich uses query params
-  });
-
-  // Use POST with api_key in body (Apollo's preferred method)
-  const postRes = await fetch(`${APOLLO_API_BASE}/v1/organizations/enrich`, {
+  const postRes = await fetch(`${APOLLO_API_BASE}/organizations/enrich`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ api_key: apiKey, domain }),
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+    body: JSON.stringify({ domain }),
   });
 
   if (!postRes.ok) {

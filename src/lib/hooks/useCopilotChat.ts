@@ -145,10 +145,10 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
    * Send a message to the autonomous copilot
    */
   const sendMessage = useCallback(
-    async (message: string, options?: SendMessageOptions) => {
+    async (message: string, sendOpts?: SendMessageOptions) => {
       if (!message.trim()) return;
 
-      const silent = options?.silent ?? false;
+      const silent = sendOpts?.silent ?? false;
 
       // Add user message (skip if silent — e.g. enriched prompts from preflight)
       if (!silent) {

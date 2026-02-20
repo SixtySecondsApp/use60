@@ -20,7 +20,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const APOLLO_API_BASE = 'https://api.apollo.io/v1'
+const APOLLO_API_BASE = 'https://api.apollo.io/api/v1'
 const CONCURRENCY = 5
 const DEFAULT_BATCH_SIZE = 100
 
@@ -309,8 +309,8 @@ serve(async (req: Request) => {
 
           try {
             const response = await fetchWithRetry(
-              `${APOLLO_API_BASE}/organizations/enrich?api_key=${apolloApiKey}&domain=${encodeURIComponent(domain)}`,
-              { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+              `${APOLLO_API_BASE}/organizations/enrich?domain=${encodeURIComponent(domain)}`,
+              { method: 'GET', headers: { 'Content-Type': 'application/json', 'x-api-key': apolloApiKey } },
               { maxRetries: 2, baseDelayMs: 2000, logPrefix: '[apollo-org-enrich]' },
             )
 

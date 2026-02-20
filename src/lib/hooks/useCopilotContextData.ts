@@ -222,22 +222,33 @@ async function fetchCalendarContext(
 ): Promise<CalendarContext | null> {
   const now = new Date().toISOString();
 
-  // Fetch upcoming events that have attendees (not solo calendar blocks)
-  // Filter: attendees_count > 1 to ensure there's at least one other person
+  // Fetch upcoming or in-progress events that have attendees (not solo calendar blocks)
+  // Include meetings where end_time > now (still happening) even if start_time < now
   const { data: events } = await supabase
     .from('calendar_events')
     .select('id, title, start_time, end_time, html_link, attendees_count, attendees')
     .eq('user_id', userId)
-    .gte('start_time', now)
-    .gt('attendees_count', 1) // More than 1 = has external attendees (user + others)
+    .or(`start_time.gte.${now},end_time.gt.${now}`)
+    .gt('attendees_count', 1)
     .order('start_time', { ascending: true })
-    .limit(5); // Fetch more to ensure we find a valid meeting
+    .limit(5);
 
-  if (!events || events.length === 0) return null;
+  // Fallback: if strict attendees_count filter returns nothing, retry without it
+  let finalEvents = events;
+  if (!events || events.length === 0) {
+    const { data: fallback } = await supabase
+      .from('calendar_events')
+      .select('id, title, start_time, end_time, html_link, attendees_count, attendees')
+      .eq('user_id', userId)
+      .or(`start_time.gte.${now},end_time.gt.${now}`)
+      .order('start_time', { ascending: true })
+      .limit(5);
+    finalEvents = fallback;
+  }
 
-  // Find the first event that has non-self attendees
-  // Double-check by parsing attendees JSON if available
-  const nextEvent = events[0];
+  if (!finalEvents || finalEvents.length === 0) return null;
+
+  const nextEvent = finalEvents[0];
   const startDate = new Date(nextEvent.start_time);
 
   return {

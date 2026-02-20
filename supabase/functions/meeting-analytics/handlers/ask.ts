@@ -395,15 +395,29 @@ Provide a clear, specific answer. For questions about promises, proposals, or co
     // ============================================
     // STEP 8: Return answer with source citations
     // ============================================
+    // Build a lookup from transcriptId -> structuredData item for source enrichment
+    const structuredDataMap = new Map(
+      validStructuredData
+        .filter(Boolean)
+        .map((d: any) => [d.id, d])
+    );
+
     return successResponse(
       {
         answer,
-        sources: relevantSegments.map(r => ({
-          transcriptId: r.transcriptId,
-          transcriptTitle: transcriptMap.get(r.transcriptId)?.title || 'Unknown',
-          text: r.text.substring(0, 200) + (r.text.length > 200 ? '...' : ''),
-          similarity: typeof r.similarity === 'number' ? r.similarity : parseFloat(String(r.similarity)),
-        })),
+        sources: relevantSegments.map(r => {
+          const sd = structuredDataMap.get(r.transcriptId) as any;
+          const sim = typeof r.similarity === 'number' ? r.similarity : parseFloat(String(r.similarity));
+          return {
+            transcriptId: r.transcriptId,
+            transcriptTitle: transcriptMap.get(r.transcriptId)?.title || 'Unknown',
+            text: r.text.substring(0, 200) + (r.text.length > 200 ? '...' : ''),
+            similarity: sim,
+            date: sd?.date || null,
+            sentiment: sd?.sentiment || null,
+          };
+        }),
+        structuredData: validStructuredData,
         segmentsSearched: filteredSearchResults.length,
         meetingsAnalyzed: validStructuredData.length,
         totalMeetings: allTranscripts.length,

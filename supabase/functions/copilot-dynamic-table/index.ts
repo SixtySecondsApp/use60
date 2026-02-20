@@ -394,31 +394,38 @@ serve(async (req) => {
       // Generate table name
       const tableName = requestedTableName || truncateName(query_description || 'AI Ark Search')
 
-      // Create table
+      // Create table — auto-increment name on duplicate
       const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
-      const { data: newTable, error: tableError } = await serviceClient
-        .from('dynamic_tables')
-        .insert({
-          organization_id: orgId,
-          created_by: userId,
-          name: tableName,
-          description: query_description,
-          source_type: 'ai_ark',
-          source_query: search_params,
-        })
-        .select('id, name')
-        .single()
+      let finalTableName = tableName
+      let newTable: { id: string; name: string } | null = null
+      let lastError: { message?: string; code?: string } | null = null
 
-      if (tableError || !newTable) {
-        console.error('[copilot-dynamic-table] Failed to create AI Ark table:', tableError?.message)
-        if (tableError?.code === '23505') {
-          return new Response(
-            JSON.stringify({ error: `A table named "${tableName}" already exists.`, code: 'DUPLICATE_TABLE_NAME' }),
-            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
+      for (let suffix = 0; suffix <= 5; suffix++) {
+        if (suffix > 0) finalTableName = `${tableName} (${suffix})`
+
+        const { data, error: tableError } = await serviceClient
+          .from('dynamic_tables')
+          .insert({
+            organization_id: orgId,
+            created_by: userId,
+            name: finalTableName,
+            description: query_description,
+            source_type: 'ai_ark',
+            source_query: search_params,
+          })
+          .select('id, name')
+          .single()
+
+        if (!tableError && data) { newTable = data; break }
+        lastError = tableError
+        if (tableError?.code !== '23505') break
+        console.log(`[copilot-dynamic-table] AI Ark table "${finalTableName}" exists, trying next suffix`)
+      }
+
+      if (!newTable) {
+        console.error('[copilot-dynamic-table] Failed to create AI Ark table:', lastError?.message)
         return new Response(
-          JSON.stringify({ error: 'Failed to create ops table' }),
+          JSON.stringify({ error: `Failed to create ops table: ${lastError?.message || 'Unknown error'}` }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
@@ -904,35 +911,44 @@ serve(async (req) => {
       tableNameFinal = existingTable.name
       console.log(`[copilot-dynamic-table] Using existing table: ${tableId} — "${tableNameFinal}"`)
     } else {
-      const { data: newTable, error: tableError } = await serviceClient
-        .from('dynamic_tables')
-        .insert({
-          organization_id: orgId,
-          created_by: userId,
-          name: tableName,
-          description: query_description,
-          source_type: 'apollo',
-          source_query: search_params,
-        })
-        .select('id, name')
-        .single()
+      // Try creating the table, auto-incrementing name on duplicate
+      let finalTableName = tableName
+      let newTable: { id: string; name: string } | null = null
+      let lastError: { message?: string; code?: string } | null = null
 
-      if (tableError || !newTable) {
-        console.error('[copilot-dynamic-table] Failed to create table:', tableError?.message)
-
-        // Handle unique constraint violation (duplicate table name)
-        if (tableError?.code === '23505') {
-          return new Response(
-            JSON.stringify({
-              error: `A table named "${tableName}" already exists. Please provide a different name.`,
-              code: 'DUPLICATE_TABLE_NAME',
-            }),
-            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+      for (let suffix = 0; suffix <= 5; suffix++) {
+        if (suffix > 0) {
+          finalTableName = `${tableName} (${suffix})`
         }
 
+        const { data, error: tableError } = await serviceClient
+          .from('dynamic_tables')
+          .insert({
+            organization_id: orgId,
+            created_by: userId,
+            name: finalTableName,
+            description: query_description,
+            source_type: 'apollo',
+            source_query: search_params,
+          })
+          .select('id, name')
+          .single()
+
+        if (!tableError && data) {
+          newTable = data
+          break
+        }
+
+        lastError = tableError
+        // Retry only on duplicate name constraint violation
+        if (tableError?.code !== '23505') break
+        console.log(`[copilot-dynamic-table] Table "${finalTableName}" exists, trying next suffix`)
+      }
+
+      if (!newTable) {
+        console.error('[copilot-dynamic-table] Failed to create table:', lastError?.message)
         return new Response(
-          JSON.stringify({ error: 'Failed to create ops table' }),
+          JSON.stringify({ error: `Failed to create ops table: ${lastError?.message || 'Unknown error'}` }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }

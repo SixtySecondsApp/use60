@@ -231,6 +231,13 @@ ACTION PARAMETERS:
 - search_leads_create_table: { query, person_titles?, person_locations?, organization_num_employees_ranges?, person_seniorities?, per_page?, source? } - Search for leads and create an ops table with results. query is a plain-English description of the search (e.g. "marketing agencies in Bristol"). source defaults to "apollo". Does NOT require confirm=true.
 - enrich_table_column: { table_id, column_id, row_ids? } - Enrich a column in an ops table. Does NOT require confirm=true.
 
+## Meeting Intelligence
+- meeting_intelligence_query: { question, transcriptId?, maxMeetings? } - RAG search across meeting transcripts. Returns AI-synthesized answer with source citations.
+- meeting_analytics_dashboard: {} - Get aggregated meeting metrics (total meetings, avg sentiment, talk time stats)
+- meeting_analytics_talk_time: { limit? } - Get talk time analytics per speaker across meetings
+- meeting_analytics_sentiment_trends: { days? } - Get sentiment trend data over time
+- meeting_analytics_insights: { transcriptId } - Get detailed insights for a specific transcript (topics, sentiment, action items, key moments)
+
 Write actions (create_task, create_ops_table, update_crm, etc.) require params.confirm=true. search_leads_create_table and enrich_table_column do NOT require confirmation.`,
     input_schema: {
       type: 'object' as const,
@@ -289,6 +296,11 @@ Write actions (create_task, create_ops_table, update_crm, etc.) require params.c
             'search_crm_companies',
             'search_crm_deals',
             'materialize_contact',
+            'meeting_intelligence_query',
+            'meeting_analytics_dashboard',
+            'meeting_analytics_talk_time',
+            'meeting_analytics_sentiment_trends',
+            'meeting_analytics_insights',
           ],
           description: 'The action to execute',
         },
@@ -464,6 +476,71 @@ For now, this is a placeholder - materialization will be implemented in Phase 3.
       required: ['index_record_id'],
     },
   },
+  // 9. search_documentation - Search platform documentation
+  {
+    name: 'search_documentation',
+    description: `Search the platform documentation to answer user questions about features, setup, integrations, and how-to guides.
+
+WHEN TO USE:
+- User asks "how do I..." or "how to..." about platform features
+- User asks about setup, configuration, or integrations
+- User asks "what is..." about platform concepts
+- User needs help or guidance with any platform feature
+- User asks about billing, security, or admin settings
+
+Returns relevant documentation articles with content snippets. Use the results to provide a helpful, synthesized answer to the user.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The search query - the user\'s question or topic to search for',
+        },
+        category: {
+          type: 'string',
+          enum: ['Getting Started', 'Pipeline', 'Meetings', 'Contacts & Companies', 'Tasks', 'Integrations', 'AI Copilot', 'Admin & Settings', 'Credits & Billing', 'Security & Compliance'],
+          description: 'Optional category filter to narrow search results',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max number of articles to return (default 5)',
+        },
+      },
+      required: ['query'],
+    },
+  },
+  // 10. search_meeting_context - Proactive meeting context enrichment
+  {
+    name: 'search_meeting_context',
+    description: `Search for relevant meeting context when discussing deals, contacts, or companies. Call this PROACTIVELY when:
+- User asks about a deal and you want to include recent meeting context
+- User discusses a contact and you want to surface what was discussed
+- User mentions a company and you want to find relevant meeting intelligence
+
+This returns a lightweight summary of relevant meetings — use it to enrich your responses with meeting intelligence.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query (e.g., "recent discussions about pricing with Acme Corp")',
+        },
+        contactName: {
+          type: 'string',
+          description: 'Optional: filter by contact name mentioned in meetings',
+        },
+        companyName: {
+          type: 'string',
+          description: 'Optional: filter by company name mentioned in meetings',
+        },
+        maxResults: {
+          type: 'number',
+          description: 'Max meetings to analyze (default: 5)',
+        },
+      },
+      required: ['query'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -480,7 +557,8 @@ async function executeToolCall(
   client: ReturnType<typeof createClient>,
   userId: string,
   orgId: string | null,
-  userAuthToken?: string
+  userAuthToken?: string,
+  contextTimezone?: string
 ): Promise<unknown> {
   // Resolve org for skills/execute_action tools
   const resolvedOrgId = await resolveOrgId(client, userId, orgId);
@@ -509,6 +587,11 @@ async function executeToolCall(
     case 'execute_action': {
       const action = input.action as ExecuteActionName;
       const params = (input.params || {}) as Record<string, unknown>;
+      // Auto-inject user timezone for period-based actions when the LLM omitted it
+      const periodActions = ['get_meetings_for_period', 'get_meeting_count', 'get_time_breakdown', 'get_booking_stats'];
+      if (contextTimezone && periodActions.includes(action) && !params.timezone) {
+        params.timezone = contextTimezone;
+      }
       console.log(`[executeToolCall] execute_action called: action=${action}, hasUserAuthToken=${!!userAuthToken}, params keys: ${Object.keys(params).join(', ')}`);
       if (!action) {
         return { success: false, data: null, error: 'action is required for execute_action' };
@@ -621,6 +704,119 @@ async function executeToolCall(
       const { materializeContact } = await import('../_shared/materializationService.ts');
       const result = await materializeContact(client, resolvedOrgId, indexRecord);
 
+      return result;
+    }
+
+    case 'search_documentation': {
+      const query = input.query ? String(input.query) : '';
+      const category = input.category ? String(input.category) : undefined;
+      const limit = input.limit ? Number(input.limit) : 5;
+
+      if (!query) {
+        return { success: false, error: 'query is required for search_documentation' };
+      }
+
+      try {
+        // Generate embedding for the query
+        const openaiKey = Deno.env.get('OPENAI_API_KEY');
+        if (!openaiKey) {
+          // Fallback to text search if no OpenAI key
+          let textQuery = client
+            .from('docs_articles')
+            .select('id, slug, title, category, content')
+            .eq('published', true)
+            .textSearch('content', query, { type: 'websearch', config: 'english' })
+            .limit(limit);
+
+          if (category) {
+            textQuery = textQuery.eq('category', category);
+          }
+
+          const { data, error } = await textQuery;
+          if (error) return { success: false, error: error.message };
+
+          return {
+            success: true,
+            articles: (data || []).map((a: any) => ({
+              slug: a.slug,
+              title: a.title,
+              category: a.category,
+              content_snippet: a.content?.slice(0, 500) || '',
+            })),
+          };
+        }
+
+        // Generate query embedding via OpenAI
+        const embResponse = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${openaiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: query,
+            dimensions: 1536,
+          }),
+        });
+
+        if (!embResponse.ok) {
+          console.error('[search_documentation] OpenAI embedding error:', await embResponse.text());
+          return { success: false, error: 'Failed to generate query embedding' };
+        }
+
+        const embData = await embResponse.json();
+        const queryEmbedding = embData.data[0].embedding;
+
+        // Use service role client for RPC (match_docs_by_embedding uses SECURITY DEFINER)
+        const serviceClient = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        );
+
+        const { data, error } = await serviceClient.rpc('match_docs_by_embedding', {
+          query_embedding: JSON.stringify(queryEmbedding),
+          match_threshold: 0.4,
+          match_count: limit,
+        });
+
+        if (error) {
+          console.error('[search_documentation] RPC error:', error);
+          return { success: false, error: error.message };
+        }
+
+        // Filter by category if specified
+        let results = data || [];
+        if (category) {
+          results = results.filter((a: any) => a.category === category);
+        }
+
+        return {
+          success: true,
+          articles: results.map((a: any) => ({
+            slug: a.slug,
+            title: a.title,
+            category: a.category,
+            content_snippet: a.content?.slice(0, 500) || '',
+            similarity: a.similarity,
+          })),
+          total: results.length,
+        };
+      } catch (err: any) {
+        console.error('[search_documentation] Error:', err);
+        return { success: false, error: err.message || 'search_documentation failed' };
+      }
+    }
+
+    case 'search_meeting_context': {
+      const result = await executeAction(
+        client,
+        userId,
+        resolvedOrgId,
+        'search_meeting_context' as ExecuteActionName,
+        input,
+        { userAuthToken }
+      );
       return result;
     }
 
@@ -923,6 +1119,68 @@ interface ProfileContext {
   productContext?: string;
 }
 
+interface EmailPersonalization {
+  signOff?: string;
+  writingStyleSummary?: string;
+}
+
+async function fetchEmailPersonalization(
+  client: ReturnType<typeof createClient>,
+  userId: string
+): Promise<EmailPersonalization> {
+  const result: EmailPersonalization = {};
+
+  // Fetch sign-off and writing style in parallel
+  const [toneResult, styleResult] = await Promise.all([
+    client
+      .from('user_tone_settings')
+      .select('email_sign_off')
+      .eq('user_id', userId)
+      .eq('content_type', 'email')
+      .maybeSingle(),
+    client
+      .from('user_writing_styles')
+      .select('name, tone_description, style_metadata, examples')
+      .eq('user_id', userId)
+      .eq('is_default', true)
+      .maybeSingle(),
+  ]);
+
+  if (toneResult.data?.email_sign_off) {
+    result.signOff = toneResult.data.email_sign_off;
+  }
+
+  if (styleResult.data) {
+    const ws = styleResult.data;
+    const parts: string[] = [];
+    if (ws.name) parts.push(`Style: ${ws.name}`);
+    if (ws.tone_description) parts.push(`Tone: ${ws.tone_description}`);
+
+    const meta = ws.style_metadata as Record<string, unknown> | null;
+    if (meta) {
+      if (meta.formality) parts.push(`Formality: ${meta.formality}`);
+      if (meta.directness) parts.push(`Directness: ${meta.directness}`);
+      if (meta.warmth) parts.push(`Warmth: ${meta.warmth}`);
+      const gs = meta.greetings_signoffs as { greetings?: string[]; signoffs?: string[] } | null;
+      if (gs?.signoffs?.length) parts.push(`Preferred sign-offs: ${gs.signoffs.join(', ')}`);
+      if (gs?.greetings?.length) parts.push(`Preferred greetings: ${gs.greetings.join(', ')}`);
+    }
+
+    if (ws.examples && Array.isArray(ws.examples) && ws.examples.length > 0) {
+      const snippets = (ws.examples as string[]).slice(0, 2).map((ex: string) =>
+        ex.length > 200 ? ex.slice(0, 200) + '...' : ex
+      );
+      parts.push(`Example writing samples:\n${snippets.join('\n---\n')}`);
+    }
+
+    if (parts.length > 0) {
+      result.writingStyleSummary = parts.join('\n');
+    }
+  }
+
+  return result;
+}
+
 async function fetchProfileContext(
   client: ReturnType<typeof createClient>,
   factProfileId?: string,
@@ -996,16 +1254,18 @@ function buildSystemPrompt(
   context?: Record<string, unknown>,
   memoryContext?: string,
   apifyConnection?: ApifyConnectionInfo,
-  profileContext?: ProfileContext
+  profileContext?: ProfileContext,
+  emailPersonalization?: EmailPersonalization
 ): string {
   return `You are an AI sales assistant for a platform called Sixty. You help sales professionals manage their pipeline, prepare for meetings, track contacts, and execute sales workflows.
 
-## Your 4 Tools
+## Your Tools
 
 1. **resolve_entity** - CRITICAL: Use FIRST when user mentions a person by first name only (e.g., "Stan", "John"). Searches CRM, meetings, and calendar in parallel to find the right person. DO NOT ask for clarification first.
 2. **list_skills** - See available skills and sequences by category
 3. **get_skill** - Retrieve a skill/sequence document for guidance (use exact skill_key from list)
-4. **execute_action** - Perform actions (query CRM, fetch meetings, search emails, manage pipeline, etc.)
+4. **execute_action** - Perform actions (query CRM, fetch meetings, search emails, manage pipeline, meeting intelligence, etc.)
+5. **search_meeting_context** - Proactively search for relevant meeting context when discussing deals, contacts, or companies. Use this to enrich responses with real meeting intelligence.
 
 ## How To Work
 
@@ -1013,6 +1273,7 @@ function buildSystemPrompt(
 2. **If user needs data** (deals, contacts, meetings, pipeline) -> Use execute_action with the appropriate action
 3. **If task involves a skill or multi-step workflow** -> Use list_skills to discover, get_skill to retrieve, then follow the skill instructions
 4. Use execute_action to gather data or perform tasks
+5. **When discussing deals or contacts** -> Proactively call search_meeting_context to enrich your response with relevant meeting intelligence. This helps provide context from past conversations.
 
 ## Multi-Step Workflows
 
@@ -1047,8 +1308,10 @@ Don't stop after completing just one step — complete the FULL workflow the use
 **IMPORTANT: When discussing deals, always reference their health score, risk signals, and relationship health status. Proactively flag deals with critical health (<40 score) or high ghost risk (>50%). Health scores are automatically included in all deal queries.**
 
 ### Meeting Prep
-- Use execute_action with get_next_meeting { include_context: true } for next meeting
-- Use execute_action with get_meetings_for_period { period: "today" } for today's schedule
+- Use execute_action with get_next_meeting { include_context: true } for the single next upcoming meeting
+- Use execute_action with get_meetings_for_period { period: "today"${context?.temporalContext ? `, timezone: "${(context.temporalContext as Record<string, string>).timezone}"` : ''} } for today's FULL schedule — **ALWAYS use this when the user asks about "my meetings today", "today's schedule", "what do I have today", or any variant asking about multiple meetings**. This returns ALL events for today, not just the next one.
+- **ALWAYS pass timezone when using any period-based action** (get_meetings_for_period, get_meeting_count, get_time_breakdown). The user's timezone is: ${context?.temporalContext ? `"${(context.temporalContext as Record<string, string>).timezone}"` : '"UTC"'}. Without it, date ranges will default to UTC and return the wrong day's meetings.
+- When the user says they have "many meetings", list the full day with get_meetings_for_period, don't just show the next one
 
 ### Follow-up Management
 - Use execute_action with get_contacts_needing_attention { days_since_contact: 14 }
@@ -1099,12 +1362,12 @@ For quick searches across HubSpot/Attio CRM data WITHOUT creating full materiali
 ## Organization Context
 
 ${organizationId ? `Organization ID: ${organizationId}` : 'No organization specified'}
-${context && Object.keys(context).length > 0 ? `\nAvailable context: ${Object.keys(context).join(', ')}` : ''}
+${context?.temporalContext ? `\n## Current Date & Time\n\nToday is ${(context.temporalContext as Record<string, string>).date}. Current time: ${(context.temporalContext as Record<string, string>).time} (${(context.temporalContext as Record<string, string>).timezone}).` : ''}
 ${memoryContext || ''}
 ${memoryContext ? MEMORY_SYSTEM_ADDITION : ''}
 ${profileContext?.companyContext ? `\n## Company Context\n\nThe user has selected a company profile for this conversation. Use this context to personalize responses, tailor outreach messaging, and inform sales strategy:\n\n${profileContext.companyContext}\n` : ''}
 ${profileContext?.productContext ? `\n## Product Context\n\nThe user has selected a product profile for this conversation. Use this context to craft relevant messaging, highlight product-market fit, and tailor sales approaches:\n\n${profileContext.productContext}\n` : ''}
-
+${emailPersonalization?.signOff || emailPersonalization?.writingStyleSummary ? `\n## Email Personalization\n\nWhen generating ANY email (cold outreach, follow-ups, introductions, meeting follow-ups, etc.), ALWAYS apply these user preferences:\n${emailPersonalization.signOff ? `\n**Sign-Off:** Always end emails with:\n${emailPersonalization.signOff}` : ''}${emailPersonalization.writingStyleSummary ? `\n\n**Trained Writing Style:**\n${emailPersonalization.writingStyleSummary}` : ''}\n` : ''}
 ## Behavior Guidelines
 
 - Be concise but thorough in your responses
@@ -1112,6 +1375,8 @@ ${profileContext?.productContext ? `\n## Product Context\n\nThe user has selecte
 - Confirm before CRM updates or notifications (execute_action write actions like create_task, update_crm require params.confirm=true). Lead searches do NOT need confirmation.
 - If a tool returns an error, explain what happened and suggest alternatives
 - Present data in a helpful, actionable way for sales professionals
+- **Email output rules:** When you generate an email draft, output ONLY the email (subject line + body). Do NOT append meta-commentary, analysis, word counts, scoring, or coaching notes (e.g. "Word count: 62 | One ask: Quick call"). The user wants a ready-to-send email, not a writing critique. After the email, you may offer to adjust but never add statistics or framework labels.
+- **Email style rules:** Never use em dashes (— or –) in emails, they are the biggest AI tell. Never use oxford commas ("sales, marketing and ops" not "sales, marketing, and ops"). Don't swap punctuation for colons or dashes. If a sentence needs a colon or em dash to work, rewrite it as two short sentences. Keep punctuation simple: full stops, commas, question marks.
 
 ### LEAD SEARCH — MANDATORY TOOL USAGE
 
@@ -1697,13 +1962,16 @@ serve(async (req: Request) => {
       console.log('[copilot-autonomous] Apify connected for org:', organizationId);
     }
 
-    // Fetch profile context if IDs provided (non-blocking on failure)
-    const profileContext = (fact_profile_id || product_profile_id)
-      ? await fetchProfileContext(supabase, fact_profile_id, product_profile_id)
-      : undefined;
+    // Fetch profile context and email personalization in parallel
+    const [profileContext, emailPersonalization] = await Promise.all([
+      (fact_profile_id || product_profile_id)
+        ? fetchProfileContext(supabase, fact_profile_id, product_profile_id)
+        : Promise.resolve(undefined),
+      fetchEmailPersonalization(supabase, userId),
+    ]);
 
     // Build system prompt (no longer depends on per-skill tool defs)
-    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext);
+    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext, emailPersonalization);
 
     // Use the tool architecture (expanded from original 4-tool to include CRM index and more)
     const claudeTools = TOOL_DEFINITIONS;
@@ -2092,7 +2360,8 @@ serve(async (req: Request) => {
                     supabase,
                     userId,
                     organizationId || null,
-                    token
+                    token,
+                    (context?.temporalContext as Record<string, string> | undefined)?.timezone
                   );
 
                   const toolLatencyMs = Date.now() - toolStartTime;
@@ -2286,7 +2555,8 @@ serve(async (req: Request) => {
                 supabase,
                 userId,
                 organizationId || null,
-                token
+                token,
+                (context?.temporalContext as Record<string, string> | undefined)?.timezone
               );
 
               toolResults.push({

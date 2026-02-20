@@ -678,15 +678,17 @@ async function handleFindContacts(
   // Call Apollo API directly (server-to-server, no auth needed for our own API key)
   try {
     const apolloPayload: Record<string, unknown> = {
-      api_key: apolloApiKey,
       per_page: count,
       page: 1,
       ...searchParams,
     };
 
-    const apolloResponse = await fetch('https://api.apollo.io/v1/mixed_people/api_search', {
+    const apolloResponse = await fetch('https://api.apollo.io/api/v1/mixed_people/api_search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apolloApiKey,
+      },
       body: JSON.stringify(apolloPayload),
     });
 

@@ -160,17 +160,18 @@ export default function AIPersonalizationSettings() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2">
-            <Input
+          <div className="flex flex-col gap-2 max-w-sm">
+            <textarea
               value={emailSignOff}
               onChange={(e) => setEmailSignOff(e.target.value)}
-              placeholder="e.g. Best, Andrew"
-              className="max-w-sm"
+              placeholder={"e.g.\nBest regards,\nAndrew"}
+              rows={3}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
             />
             <Button
               onClick={saveEmailSignOff}
               disabled={emailSignOffSaving}
-              className="bg-[#37bd7e] hover:bg-[#2da76c]"
+              className="bg-[#37bd7e] hover:bg-[#2da76c] w-fit"
             >
               <Save className="w-4 h-4 mr-2" />
               {emailSignOffSaving ? 'Saving...' : 'Save'}

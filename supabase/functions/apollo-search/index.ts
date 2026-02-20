@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const APOLLO_API_BASE = 'https://api.apollo.io/v1'
+const APOLLO_API_BASE = 'https://api.apollo.io/api/v1'
 
 // Apollo uses predefined employee range buckets — arbitrary ranges are silently ignored
 const VALID_EMPLOYEE_RANGES = [
@@ -264,7 +264,6 @@ serve(async (req) => {
 
     // Build Apollo search payload
     const searchPayload: Record<string, unknown> = {
-      api_key: apolloApiKey,
       per_page: Math.min(per_page, 100),
       page,
     }
@@ -295,7 +294,10 @@ serve(async (req) => {
     // Call Apollo People Search API
     const apolloResponse = await fetch(`${APOLLO_API_BASE}/mixed_people/api_search`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apolloApiKey,
+      },
       body: JSON.stringify(searchPayload),
     })
 

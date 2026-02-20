@@ -176,7 +176,9 @@ export type CopilotResponseType =
   | 'pipeline_outreach'
   | 'deal_intelligence'
   | 'unified_task_list'
-  | 'task_deliverable';
+  | 'task_deliverable'
+  | 'meeting_intelligence'
+  | 'meeting_context';
 
 export interface CopilotResponse {
   type: CopilotResponseType;
@@ -261,7 +263,9 @@ export type ResponseData =
   | DailyFocusPlanResponseData
   | FollowupZeroInboxResponseData
   | DealSlippageGuardrailsResponseData
-  | DailyBriefResponseData;
+  | DailyBriefResponseData
+  | MeetingIntelligenceResponseData
+  | MeetingContextResponseData;
 
 // ============================================================================
 // Demo-grade sequence panels (Top 3 workflows)
@@ -2352,4 +2356,75 @@ export interface ActionMetrics {
   activitiesCreated: number;
 }
 
+// ============================================================================
+// Meeting Intelligence Response
+// ============================================================================
+
+export interface MeetingIntelligenceSource {
+  transcriptId: string;
+  transcriptTitle: string;
+  text: string;
+  similarity: number;
+  date?: string;
+  sentiment?: string;
+  positiveScore?: number;
+}
+
+export interface MeetingIntelligenceStructuredMeeting {
+  title: string;
+  id: string;
+  date: string;
+  sentiment?: string;
+  positiveScore?: number;
+  agreements?: string[];
+  decisions?: string[];
+  milestones?: string[];
+  objections?: Array<{ title: string; description: string }>;
+  questions?: string[];
+  actionItems?: Array<{ text: string; assignee?: string; priority?: string }>;
+  summary?: string;
+  talkTime?: {
+    speakers: Array<{ name: string; percentage: number }>;
+    totalWords: number;
+    talkRatio: string;
+    isBalanced: boolean;
+  };
+}
+
+export interface MeetingIntelligenceSuggestedAction {
+  type: 'create_task' | 'create_task_from_meeting' | 'draft_email' | 'draft_email_from_meeting' | 'update_deal' | 'post_slack';
+  label: string;
+  data: Record<string, unknown>;
+}
+
+export interface MeetingIntelligenceResponseData {
+  queryType: 'semantic' | 'aggregate' | 'structured' | 'cross_meeting';
+  answer: string;
+  sources: MeetingIntelligenceSource[];
+  structuredData?: MeetingIntelligenceStructuredMeeting[];
+  metadata: {
+    segmentsSearched: number;
+    meetingsAnalyzed: number;
+    totalMeetings: number;
+    isAggregateQuestion: boolean;
+    specificMeeting: string | null;
+    searchTimeMs?: number;
+  };
+  suggestedActions?: MeetingIntelligenceSuggestedAction[];
+  /** Raw aggregation data from meeting_analytics_dashboard/talk_time/sentiment_trends */
+  aggregationData?: Record<string, unknown>;
+}
+
+// ============================================================================
+// Meeting Context Response
+// ============================================================================
+
+export interface MeetingContextResponseData {
+  answer: string;
+  sources: MeetingIntelligenceSource[];
+  metadata: {
+    meetingsAnalyzed: number;
+    totalMeetings: number;
+  };
+}
 

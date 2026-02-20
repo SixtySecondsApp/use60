@@ -146,6 +146,7 @@ serve(async (req) => {
       'crm.objects.owners.read',
       // CRM Lists (needed for importing from HubSpot lists)
       'crm.lists.read',
+      'crm.lists.write',
       // Engagements (notes, calls, emails, meetings, tasks)
       'sales-email-read',
       'timeline',

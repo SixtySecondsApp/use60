@@ -51,6 +51,7 @@ import {
   Cpu,
   PhoneCall,
   Mic,
+  LifeBuoy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -152,6 +153,14 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: Users,
       href: '/platform/users',
       color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
+    },
+    {
+      id: 'support-tickets',
+      title: 'Support Tickets',
+      description: 'View and manage customer support tickets',
+      icon: LifeBuoy,
+      href: '/platform/support-tickets',
+      color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30',
     },
   ],
   'Pipeline & Automation': [

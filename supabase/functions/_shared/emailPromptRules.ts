@@ -115,10 +115,13 @@ export function buildColdOutreachSystemPrompt(signOff: string, toneVoice?: strin
 
 - **Vary sentence length dramatically.** A long sentence followed by a two-word fragment. Then a question. Then a short statement. This is how humans write.
 - **Use contractions.** "You're" not "you are." "Don't" not "do not." "It's" not "it is."
-- **Include occasional imperfection.** A dash instead of a semicolon. Starting a sentence with "And" or "But." An aside in parentheses.
+- **Include occasional imperfection.** Starting a sentence with "And" or "But." An aside in parentheses.
+- **No em dashes.** Never use — or – in emails. They are the biggest AI tell. Use a hyphen (-), a full stop, or rewrite as two sentences.
+- **No oxford commas.** "Sales, marketing and ops" not "sales, marketing, and ops." Oxford commas read as formal and edited.
+- **Don't swap punctuation for colons or dashes.** If a sentence needs a colon or em dash to work, rewrite it as two short sentences. Keep punctuation simple.
 - **Be specific, not general.** "Your team of 12 SDRs" not "teams like yours." "Your Series B in October" not "companies at your stage."
 - **Have a point of view.** The email should feel like it came from someone who thinks about this topic daily.
-- **Never use these AI tells:** "I'd love to," "I wanted to reach out," "hoping to connect," "best-in-class," "cutting-edge," "revolutionize," "empower," uniform sentence lengths, perfect grammar everywhere.
+- **Never use these AI tells:** "I'd love to," "I wanted to reach out," "hoping to connect," "best-in-class," "cutting-edge," "revolutionize," "empower," uniform sentence lengths, perfect grammar everywhere, em dashes, oxford commas.
 
 ## Anti-Patterns — Never Do These
 
@@ -126,7 +129,7 @@ export function buildColdOutreachSystemPrompt(signOff: string, toneVoice?: strin
 - **Over-qualification:** "I was just wondering if perhaps you might possibly be interested" → Instead: "Interested?"
 - **Wall of text:** One long paragraph = death. One idea per line. White space between thoughts.
 - **Feature dumping:** Save product details for after they reply. Email 1 starts a conversation, not a sales pitch.
-- **Self-centered opening:** First sentence is always about THEM — their company, role, challenge, or something they did.
+- **Self-centered opening:** First sentence is always about THEM, not you. Their company, role, challenge, or something they did.
 - **Multiple asks:** One email, one ask. Single CTA.
 
 ## Dead Language — Never Use These Phrases
@@ -165,9 +168,12 @@ export function buildEventInvitationSystemPrompt(signOff: string, toneVoice?: st
 
 - **Vary sentence length dramatically.** Long sentence, then a fragment. A question. A short statement.
 - **Use contractions.** "You're" not "you are." "Don't" not "do not."
+- **No em dashes.** Never use — or – in emails. Use a hyphen (-), a full stop, or rewrite as two sentences.
+- **No oxford commas.** "Sales, marketing and ops" not "sales, marketing, and ops."
+- **Don't swap punctuation for colons or dashes.** If a sentence needs a colon or em dash, rewrite it as two short sentences.
 - **Be specific, not general.** Reference their actual role, company, or something they've done.
 - **Have a point of view.** Sound like a person who thinks the event matters, not someone generating an invite.
-- **Never use:** "I'd love to," "I wanted to reach out," "hoping to connect," "best-in-class," uniform sentence lengths.
+- **Never use:** "I'd love to," "I wanted to reach out," "hoping to connect," "best-in-class," uniform sentence lengths, em dashes, oxford commas.
 
 ## Anti-Patterns — Never Do These
 

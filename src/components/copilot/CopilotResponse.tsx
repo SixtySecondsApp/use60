@@ -51,6 +51,8 @@ import { UnifiedTaskListResponse } from './responses/UnifiedTaskListResponse';
 import type { UnifiedTaskListResponseData } from './responses/UnifiedTaskListResponse';
 import { TaskDeliverableResponse } from './responses/TaskDeliverableResponse';
 import type { TaskDeliverableResponseData } from './responses/TaskDeliverableResponse';
+import MeetingContextResponse from './responses/MeetingContextResponse';
+import MeetingIntelligenceResponse from './responses/MeetingIntelligenceResponse';
 import { MeetingCountResponse } from './responses/MeetingCountResponse';
 import { MeetingBriefingResponse } from './responses/MeetingBriefingResponse';
 import { MeetingListResponse } from './responses/MeetingListResponse';
@@ -306,6 +308,12 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'task_deliverable':
       return <TaskDeliverableResponse data={response as any} onActionClick={onActionClick} />;
+
+    case 'meeting_context':
+      return <MeetingContextResponse data={response as any} onActionClick={onActionClick} />;
+
+    case 'meeting_intelligence':
+      return <MeetingIntelligenceResponse data={response as any} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown

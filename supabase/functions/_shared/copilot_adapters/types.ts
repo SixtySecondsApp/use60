@@ -72,7 +72,15 @@ export type ExecuteActionName =
   | 'sync_ops_attio'
   | 'push_ops_to_instantly'
   // Ops insights
-  | 'get_ops_insights';
+  | 'get_ops_insights'
+  // Meeting intelligence
+  | 'meeting_intelligence_query'
+  | 'search_meeting_context'
+  // Meeting analytics aggregation
+  | 'meeting_analytics_dashboard'
+  | 'meeting_analytics_talk_time'
+  | 'meeting_analytics_sentiment_trends'
+  | 'meeting_analytics_insights';
 
 /**
  * Parameters for run_sequence action - executes a multi-step agent sequence

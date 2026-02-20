@@ -364,9 +364,12 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
       try {
         const includeContext = params.includeContext ?? true;
         const now = new Date();
+        const nowIso = now.toISOString();
 
-        // Get next upcoming calendar event with attendees (exclude solo calendar blocks)
-        // Filter for meetings with attendees_count > 1 (user + at least one other person)
+        // Find the next meeting that is either upcoming or currently in progress.
+        // Include meetings where end_time > now (still happening) even if start_time < now.
+        // Use attendees_count > 1 to exclude solo calendar blocks, but fall back to
+        // a broader query if that yields nothing (attendees_count may be NULL/0 for some events).
         const { data: events, error: eventsError } = await client
           .from('calendar_events')
           .select(`
@@ -375,21 +378,40 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           `)
           .eq('user_id', userId)
           .neq('status', 'cancelled')
-          .gte('start_time', now.toISOString())
-          .gt('attendees_count', 1) // More than 1 = has external attendees
+          .or(`start_time.gte.${nowIso},end_time.gt.${nowIso}`)
+          .gt('attendees_count', 1)
           .order('start_time', { ascending: true })
-          .limit(5); // Fetch more to ensure we find a valid meeting
+          .limit(5);
+
+        // Fallback: if strict attendees_count filter returns nothing, retry without it.
+        // This catches events where attendees_count is NULL or not synced properly.
+        let finalEvents = events;
+        if ((!events || events.length === 0) && !eventsError) {
+          const { data: fallback, error: fallbackError } = await client
+            .from('calendar_events')
+            .select(`
+              id, external_id, title, description, start_time, end_time, location, meeting_url,
+              attendees, attendees_count, status, organizer_email
+            `)
+            .eq('user_id', userId)
+            .neq('status', 'cancelled')
+            .or(`start_time.gte.${nowIso},end_time.gt.${nowIso}`)
+            .order('start_time', { ascending: true })
+            .limit(5);
+          if (fallbackError) throw fallbackError;
+          finalEvents = fallback;
+        }
 
         if (eventsError) throw eventsError;
 
-        if (!events || events.length === 0) {
+        if (!finalEvents || finalEvents.length === 0) {
           return ok({
             found: false,
             message: 'No upcoming meetings with attendees found',
           }, this.source);
         }
 
-        const event = events[0];
+        const event = finalEvents[0];
         const startTime = new Date(event.start_time);
         const endTime = new Date(event.end_time);
         const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / 60000);

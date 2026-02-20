@@ -2096,6 +2096,253 @@ export async function executeAction(
       };
     }
 
+    // =========================================================================
+    // Meeting Intelligence
+    // =========================================================================
+
+    case 'meeting_intelligence_query': {
+      const question = params.question ? String(params.question) : '';
+      if (!question) {
+        return { success: false, data: null, error: 'question is required for meeting_intelligence_query' };
+      }
+
+      const meetingAnalyticsBaseUrl =
+        Deno.env.get('MEETING_ANALYTICS_BASE_URL') ||
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/meeting-analytics`;
+      const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+      try {
+        const resp = await fetch(`${meetingAnalyticsBaseUrl}/api/search/ask`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '',
+          },
+          body: JSON.stringify({
+            question,
+            transcriptId: params.transcriptId ? String(params.transcriptId) : undefined,
+            maxMeetings: params.maxMeetings ? Number(params.maxMeetings) : 20,
+            includeDemo: false,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Meeting analytics service unavailable: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return {
+          success: true,
+          data: {
+            answer: result.answer,
+            sources: result.sources,
+            structuredData: result.structuredData || [],
+            segmentsSearched: result.segmentsSearched,
+            meetingsAnalyzed: result.meetingsAnalyzed,
+            totalMeetings: result.totalMeetings,
+            isAggregateQuestion: result.isAggregateQuestion,
+            specificMeeting: result.specificMeeting,
+          },
+          source: 'meeting_intelligence_query',
+        };
+      } catch (e: any) {
+        return { success: false, data: null, error: `Meeting analytics service unavailable: ${e?.message || 'Unknown error'}` };
+      }
+    }
+
+    case 'search_meeting_context': {
+      const query = params.query ? String(params.query) : '';
+      if (!query) {
+        return { success: false, data: null, error: 'query is required for search_meeting_context' };
+      }
+
+      // Build enriched question from optional name/company context
+      const contextPrefix = [
+        params.contactName ? `Contact: ${String(params.contactName)}` : '',
+        params.companyName ? `Company: ${String(params.companyName)}` : '',
+      ].filter(Boolean).join(', ');
+      const enrichedQuery = contextPrefix ? `${contextPrefix}. ${query}` : query;
+
+      const meetingAnalyticsBaseUrl =
+        Deno.env.get('MEETING_ANALYTICS_BASE_URL') ||
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/meeting-analytics`;
+      const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+      try {
+        const resp = await fetch(`${meetingAnalyticsBaseUrl}/api/search/ask`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '',
+          },
+          body: JSON.stringify({
+            question: enrichedQuery,
+            maxMeetings: params.maxResults ? Number(params.maxResults) : 5,
+            includeDemo: false,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Meeting analytics service unavailable: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return {
+          success: true,
+          data: {
+            answer: result.answer,
+            sources: result.sources,
+            structuredData: result.structuredData || [],
+            segmentsSearched: result.segmentsSearched,
+            meetingsAnalyzed: result.meetingsAnalyzed,
+            totalMeetings: result.totalMeetings,
+            isAggregateQuestion: result.isAggregateQuestion,
+            specificMeeting: result.specificMeeting,
+          },
+          source: 'search_meeting_context',
+        };
+      } catch (e: any) {
+        return { success: false, data: null, error: `Meeting analytics service unavailable: ${e?.message || 'Unknown error'}` };
+      }
+    }
+
+    // =========================================================================
+    // Meeting Analytics Aggregation
+    // =========================================================================
+
+    case 'meeting_analytics_dashboard': {
+      const meetingAnalyticsBaseUrl =
+        Deno.env.get('MEETING_ANALYTICS_BASE_URL') ||
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/meeting-analytics`;
+      const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+      try {
+        const url = new URL(`${meetingAnalyticsBaseUrl}/api/dashboard/metrics`);
+        if (params.includeDemo !== undefined) url.searchParams.set('includeDemo', String(params.includeDemo));
+        if (params.demoOnly !== undefined) url.searchParams.set('demoOnly', String(params.demoOnly));
+
+        const resp = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '',
+          },
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Meeting analytics dashboard unavailable: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'meeting_analytics_dashboard' };
+      } catch (e: any) {
+        return { success: false, data: null, error: `Meeting analytics dashboard unavailable: ${e?.message || 'Unknown error'}` };
+      }
+    }
+
+    case 'meeting_analytics_talk_time': {
+      const meetingAnalyticsBaseUrl =
+        Deno.env.get('MEETING_ANALYTICS_BASE_URL') ||
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/meeting-analytics`;
+      const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+      try {
+        const url = new URL(`${meetingAnalyticsBaseUrl}/api/analytics/talk-time`);
+        if (params.includeDemo !== undefined) url.searchParams.set('includeDemo', String(params.includeDemo));
+        if (params.demoOnly !== undefined) url.searchParams.set('demoOnly', String(params.demoOnly));
+        if (params.limit !== undefined) url.searchParams.set('limit', String(params.limit));
+
+        const resp = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '',
+          },
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Meeting analytics talk-time unavailable: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'meeting_analytics_talk_time' };
+      } catch (e: any) {
+        return { success: false, data: null, error: `Meeting analytics talk-time unavailable: ${e?.message || 'Unknown error'}` };
+      }
+    }
+
+    case 'meeting_analytics_sentiment_trends': {
+      const meetingAnalyticsBaseUrl =
+        Deno.env.get('MEETING_ANALYTICS_BASE_URL') ||
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/meeting-analytics`;
+      const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+      try {
+        const url = new URL(`${meetingAnalyticsBaseUrl}/api/analytics/sentiment-trends`);
+        if (params.includeDemo !== undefined) url.searchParams.set('includeDemo', String(params.includeDemo));
+        if (params.demoOnly !== undefined) url.searchParams.set('demoOnly', String(params.demoOnly));
+        if (params.days !== undefined) url.searchParams.set('days', String(params.days));
+
+        const resp = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '',
+          },
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Meeting analytics sentiment-trends unavailable: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'meeting_analytics_sentiment_trends' };
+      } catch (e: any) {
+        return { success: false, data: null, error: `Meeting analytics sentiment-trends unavailable: ${e?.message || 'Unknown error'}` };
+      }
+    }
+
+    case 'meeting_analytics_insights': {
+      const transcriptId = params.transcriptId ? String(params.transcriptId) : '';
+      if (!transcriptId) {
+        return { success: false, data: null, error: 'transcriptId is required for meeting_analytics_insights' };
+      }
+
+      const meetingAnalyticsBaseUrl =
+        Deno.env.get('MEETING_ANALYTICS_BASE_URL') ||
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/meeting-analytics`;
+      const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+      try {
+        const url = new URL(`${meetingAnalyticsBaseUrl}/api/insights/${transcriptId}`);
+
+        const resp = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '',
+          },
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, data: null, error: `Meeting analytics insights unavailable: ${errBody}` };
+        }
+
+        const result = await resp.json();
+        return { success: true, data: result, source: 'meeting_analytics_insights' };
+      } catch (e: any) {
+        return { success: false, data: null, error: `Meeting analytics insights unavailable: ${e?.message || 'Unknown error'}` };
+      }
+    }
+
     default:
       return { success: false, data: null, error: `Unknown action: ${String(action)}` };
   }

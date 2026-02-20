@@ -490,16 +490,31 @@ async function executeSearch(
       body: JSON.stringify(requestBody),
     })
 
-    const data = await response.json()
-
-    if (!response.ok || data.error) {
-      const errorDetail = data.details ? ` Details: ${typeof data.details === 'string' ? data.details.slice(0, 200) : JSON.stringify(data.details).slice(0, 200)}` : ''
-      console.error(`${LOG} Search failed:`, data.error, errorDetail)
+    const responseText = await response.text()
+    let data: Record<string, unknown>
+    try {
+      data = JSON.parse(responseText)
+    } catch {
+      console.error(`${LOG} Non-JSON response from copilot-dynamic-table (${response.status}):`, responseText.slice(0, 500))
       return {
         step: 'search',
         status: 'error',
-        summary: data.error || 'Apollo search failed',
-        error: `${data.error || 'Apollo search failed'}${errorDetail}`,
+        summary: `Apollo search failed (HTTP ${response.status})`,
+        error: `Non-JSON response (${response.status}): ${responseText.slice(0, 300)}`,
+        duration_ms: Date.now() - start,
+        agent: 'research' as AgentName,
+      }
+    }
+
+    if (!response.ok || data.error) {
+      const errorDetail = data.details ? ` Details: ${typeof data.details === 'string' ? data.details.slice(0, 200) : JSON.stringify(data.details).slice(0, 200)}` : ''
+      const fullError = `${data.error || data.message || 'Apollo search failed'}${errorDetail}`
+      console.error(`${LOG} Search failed (${response.status}):`, fullError, JSON.stringify(data).slice(0, 500))
+      return {
+        step: 'search',
+        status: 'error',
+        summary: fullError,
+        error: fullError,
         duration_ms: Date.now() - start,
         agent: 'research' as AgentName,
       }

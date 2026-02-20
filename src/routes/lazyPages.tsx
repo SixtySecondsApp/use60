@@ -158,6 +158,8 @@ export const FactProfileEditPage = lazyWithRetry(() => import('@/pages/FactProfi
 export const ProductProfileViewPage = lazyWithRetry(() => import('@/pages/ProductProfileViewPage'));
 export const ProductProfileEditPage = lazyWithRetry(() => import('@/pages/ProductProfileEditPage'));
 export const DocsPage = lazyWithRetry(() => import('@/pages/DocsPage'));
+export const SupportCentrePage = lazyWithRetry(() => import('@/pages/SupportCentrePage'));
+export const SupportTicketsPage = lazyWithRetry(() => import('@/pages/platform/SupportTicketsPage'));
 
 // ============================================================
 // SETTINGS PAGES

@@ -273,6 +273,28 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       return;
     }
 
+    // Meeting intelligence actions
+    if (actionName === 'open_transcript' && (payload?.transcriptId || payload?.id)) {
+      navigate(`/meeting-analytics?transcript=${encodeURIComponent(String(payload.transcriptId || payload.id))}`);
+      return;
+    }
+
+    if (actionName === 'create_task_from_meeting' || actionName === 'create_task') {
+      const context = payload?.meetingTitle
+        ? `Create a task from this meeting: "${String(payload.meetingTitle)}"${payload?.description ? ` — ${String(payload.description)}` : ''}`
+        : 'Create a task from this meeting action item';
+      sendMessage(context);
+      return;
+    }
+
+    if (actionName === 'draft_email_from_meeting' || actionName === 'draft_email') {
+      const context = payload?.meetingTitle
+        ? `Draft a follow-up email based on the meeting: "${String(payload.meetingTitle)}"${payload?.recipient ? ` to ${String(payload.recipient)}` : ''}`
+        : 'Draft a follow-up email from this meeting';
+      sendMessage(context);
+      return;
+    }
+
     // Email actions - handled in-component (EmailResponse)
     if (actionName === 'change_email_tone') return;
     if (actionName === 'shorten') return;

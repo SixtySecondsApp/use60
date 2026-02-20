@@ -139,6 +139,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/webhooks/:path*",
+      "destination": "https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/:path*"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

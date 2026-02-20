@@ -100,11 +100,13 @@ serve(async (req) => {
     console.log('[apollo-credits] usage_stats returned:', usageResponse.status)
 
     // Strategy 2: Minimal search to capture rate limit headers
-    const probeResponse = await fetch('https://api.apollo.io/v1/mixed_people/api_search', {
+    const probeResponse = await fetch('https://api.apollo.io/api/v1/mixed_people/api_search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apolloApiKey,
+      },
       body: JSON.stringify({
-        api_key: apolloApiKey,
         per_page: 1,
         page: 1,
         q_keywords: 'test',

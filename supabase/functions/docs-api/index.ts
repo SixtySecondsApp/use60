@@ -7,6 +7,51 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
+async function generateArticleEmbedding(articleId: string, title: string, category: string, content: string): Promise<void> {
+  try {
+    const openaiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiKey) return; // Skip if no key configured
+
+    const embeddingText = `${title}: ${category} — ${content.slice(0, 8000)}`;
+
+    const response = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-3-small',
+        input: embeddingText,
+        dimensions: 1536,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('[docs-api] Embedding generation failed:', response.status);
+      return;
+    }
+
+    const data = await response.json();
+    const embedding = data.data[0].embedding;
+
+    // Use service role to update embedding (bypasses RLS)
+    const serviceClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    await serviceClient
+      .from('docs_articles')
+      .update({ content_embedding: JSON.stringify(embedding) })
+      .eq('id', articleId);
+
+    console.log(`[docs-api] Embedding generated for article ${articleId}`);
+  } catch (err) {
+    console.error('[docs-api] Embedding error (non-fatal):', err);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -161,6 +206,9 @@ serve(async (req) => {
           diff_summary: 'Initial version',
         });
 
+        // Auto-generate embedding (fire-and-forget)
+        generateArticleEmbedding(article.id, slug, category, content).catch(() => {});
+
         return new Response(JSON.stringify({ data: article }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -196,6 +244,11 @@ serve(async (req) => {
         if (error) throw error;
 
         // Version is auto-created by trigger
+
+        // Auto-generate embedding if content changed (fire-and-forget)
+        if (content !== undefined) {
+          generateArticleEmbedding(article.id, article.title, article.category, article.content).catch(() => {});
+        }
 
         return new Response(JSON.stringify({ data: article }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

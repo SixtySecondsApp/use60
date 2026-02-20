@@ -38,6 +38,7 @@ import {
   FileSearch,
   Brain,
   Send,
+  LifeBuoy,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -343,6 +344,15 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     order: 5,
   },
   {
+    path: '/support',
+    access: 'any',
+    label: 'Support',
+    icon: LifeBuoy,
+    showInNav: false, // Hardcoded in AppLayout sidebar footer (below Settings)
+    navSection: 'settings',
+    order: 6,
+  },
+  {
     path: '/demo/agent-research',
     access: 'internal',
     label: 'AI Research Demo',
@@ -548,6 +558,15 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false,
     navSection: 'platform',
     order: 24,
+  },
+  {
+    path: '/platform/support-tickets',
+    access: 'platformAdmin',
+    label: 'Support Tickets',
+    icon: LifeBuoy,
+    showInNav: true,
+    navSection: 'platform',
+    order: 14,
   },
   // Meetings Waitlist (now embedded in Platform Settings)
   {

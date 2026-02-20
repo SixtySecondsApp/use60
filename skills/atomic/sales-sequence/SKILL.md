@@ -336,10 +336,13 @@ The biggest risk with AI-generated emails is they sound AI-generated. To avoid t
 
 - **Vary sentence length dramatically.** A long sentence followed by a two-word fragment. Then a question. Then a short statement. This is how humans write.
 - **Use contractions.** "You're" not "you are." "Don't" not "do not." "It's" not "it is."
-- **Include occasional imperfection.** A dash instead of a semicolon. Starting a sentence with "And" or "But." An aside in parentheses.
+- **Include occasional imperfection.** Starting a sentence with "And" or "But." An aside in parentheses.
+- **No em dashes (—).** Em dashes are the single biggest AI tell in emails. Real people don't type them. Use a hyphen (-), a full stop, or just restructure the sentence. Never use — or – in any email.
+- **No oxford commas.** Drop the comma before "and" in lists. "Sales, marketing and ops" not "sales, marketing, and ops." Oxford commas read as formal and edited, not conversational.
+- **Don't swap punctuation for colons or dashes.** If a sentence needs a colon or em dash to work, rewrite it as two short sentences instead. Keep punctuation simple: full stops, commas, question marks.
 - **Be specific, not general.** "Your team of 12 SDRs" not "teams like yours." "Your Series B in October" not "companies at your stage."
 - **Have a point of view.** The email should feel like it came from someone who thinks about this topic, not someone who generated text about it.
-- **Never use these AI tells:** "I'd love to," "I wanted to reach out," "hoping to connect," "best-in-class," "cutting-edge," "revolutionize," "empower," uniform sentence lengths, perfect grammar everywhere.
+- **Never use these AI tells:** "I'd love to," "I wanted to reach out," "hoping to connect," "best-in-class," "cutting-edge," "revolutionize," "empower," uniform sentence lengths, perfect grammar everywhere, em dashes, oxford commas.
 
 ## Error Handling
 

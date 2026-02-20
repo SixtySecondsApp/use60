@@ -87,7 +87,7 @@ import {
   MeetingsPage, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage,
-  OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage,
+  OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
   ProductProfileViewPage, ProductProfileEditPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
@@ -509,6 +509,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Intelligence Test Runner removed — V1 Intelligence deleted */}
                 {/* VSL Analytics Tests (internal-only): test video analytics tracking */}
                 <Route path="/platform/vsl-analytics-tests" element={<InternalRouteGuard><AppLayout><VSLAnalyticsTests /></AppLayout></InternalRouteGuard>} />
+                {/* Support Tickets - Platform Admin queue across all orgs */}
+                <Route path="/platform/support-tickets" element={<PlatformAdminRouteGuard><AppLayout><SupportTicketsPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Dashboard - MUST be last (catch-all for /platform) */}
                 <Route path="/platform" element={<PlatformAdminRouteGuard><AppLayout><PlatformDashboard /></AppLayout></PlatformAdminRouteGuard>} />
 
@@ -542,6 +544,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/fact-profiles/:id/edit" element={<RedirectFactProfileEdit />} />
                 <Route path="/prospecting" element={<Navigate to="/profiles?tab=icps" replace />} />
                 <Route path="/docs" element={<AppLayout><DocsPage /></AppLayout>} />
+                <Route path="/support" element={<AppLayout><SupportCentrePage /></AppLayout>} />
                 <Route path="/tasks/settings" element={<Navigate to="/settings/task-sync" replace />} />
                 <Route path="/calendar" element={<ExternalRedirect url="https://calendar.google.com" />} />
                 <Route path="/events" element={<InternalRouteGuard><AppLayout><Events /></AppLayout></InternalRouteGuard>} />

@@ -55,7 +55,7 @@ import {
   Mail,
   CreditCard,
   Bot,
-  BookOpen
+  LifeBuoy
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/lib/hooks/useUser';
@@ -84,6 +84,9 @@ import { useOrg } from '@/lib/contexts/OrgContext';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
 import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
+import { SetupWizardSidebarIndicator } from '@/components/setup-wizard/SetupWizardSidebarIndicator';
+import { SetupWizardDialog } from '@/components/setup-wizard/SetupWizardDialog';
+import { useTicketsNeedingAttention } from '@/lib/hooks/useTicketsNeedingAttention';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
@@ -173,6 +176,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Initialize task notifications - this will show toasts for auto-created tasks
   useTaskNotifications();
 
+  // Support ticket attention count for nav badge (platform admins only)
+  const { count: supportAttentionCount } = useTicketsNeedingAttention();
+
   // Check if user needs to set up their password (magic link users)
   const { needsSetup: needsPasswordSetup, completeSetup: completePasswordSetup } = usePasswordSetupRequired();
 
@@ -236,7 +242,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Note: /ops/ pages removed — they use normal page scroll so users can scroll
   // when the mouse is outside the table.
   const isFullHeightPage = useMemo(() => {
-    return location.pathname === '/copilot' || location.pathname.startsWith('/ops/');
+    return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/');
   }, [location.pathname]);
 
   // Keyboard shortcut for SmartSearch (⌘K) - Disabled
@@ -616,6 +622,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
               {/* Fixed Footer with Settings and Logout */}
               <div className="flex-shrink-0 p-4 sm:p-6 border-t border-[#E2E8F0] dark:border-gray-800 space-y-2">
+                <SetupWizardSidebarIndicator />
                 <Link
                   to="/settings"
                   onClick={() => toggleMobileMenu()}
@@ -631,17 +638,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
 
                 <Link
-                  to="/docs"
+                  to="/support"
                   onClick={() => toggleMobileMenu()}
                   className={cn(
                     "flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 min-h-[56px] rounded-xl text-base sm:text-lg font-medium transition-colors active:scale-[0.98]",
-                    location.pathname.startsWith('/docs')
+                    location.pathname.startsWith('/support')
                       ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                       : 'text-[#64748B] dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-gray-800/50'
                   )}
                 >
-                  <BookOpen className="w-6 h-6 sm:w-7 sm:h-7" />
-                  Help & Docs
+                  <LifeBuoy className="w-6 h-6 sm:w-7 sm:h-7" />
+                  Support
                 </Link>
 
                 {/* Agent Marketplace - org admins */}
@@ -922,12 +929,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           initial={{ opacity: 0, width: 0 }}
                           animate={{ opacity: 1, width: 'auto' }}
                           exit={{ opacity: 0, width: 0 }}
-                          className="overflow-hidden whitespace-nowrap"
+                          className="overflow-hidden whitespace-nowrap flex-1"
                         >
                           {item.label}
                         </motion.span>
                       )}
                     </AnimatePresence>
+                    {!isCollapsed && item.href === '/platform/support-tickets' && supportAttentionCount > 0 && (
+                      <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none ml-auto">
+                        {supportAttentionCount > 9 ? '9+' : supportAttentionCount}
+                      </span>
+                    )}
                   </>
                 );
 
@@ -981,6 +993,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             'mt-auto pt-6 border-t border-[#E2E8F0] dark:border-gray-800/50',
             isCollapsed ? 'space-y-1' : 'space-y-0'
           )}>
+            <SetupWizardSidebarIndicator isCollapsed={isCollapsed} />
             <Link
               to="/settings"
               className={cn(
@@ -1009,18 +1022,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
 
             <Link
-              to="/docs"
+              to="/support"
               className={cn(
                 'flex items-center transition-colors text-sm font-medium',
                 isCollapsed
                   ? 'w-9 h-9 mx-auto rounded-xl justify-center mb-0'
                   : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
-                location.pathname.startsWith('/docs')
+                location.pathname.startsWith('/support')
                   ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                   : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
               )}
             >
-              <BookOpen className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+              <LifeBuoy className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
               <AnimatePresence>
                 {!isCollapsed && (
                   <motion.span
@@ -1029,7 +1042,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     exit={{ opacity: 0, width: 0 }}
                     className="overflow-hidden whitespace-nowrap"
                   >
-                    Help & Docs
+                    Support
                   </motion.span>
                 )}
               </AnimatePresence>
@@ -1169,6 +1182,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
         <QuickAdd isOpen={isQuickAddOpen} onClose={() => setIsQuickAddOpen(false)} />
         <CommandCenter isOpen={isCommandCenterOpen} onClose={() => setIsCommandCenterOpen(false)} />
+        <SetupWizardDialog />
 
         {/* Password Setup Modal - shown for magic link users who haven't set a password */}
         <PasswordSetupModal

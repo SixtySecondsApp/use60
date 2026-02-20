@@ -37,6 +37,7 @@ import {
   handleApprovalsRefresh,
 } from './handlers/phase5.ts';
 import { handleHITLAction } from './handlers/hitl.ts';
+import { handleSupportAction } from './handlers/support.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -365,6 +366,77 @@ async function updateMessage(
   } catch (error) {
     console.error('Error updating message:', error);
   }
+}
+
+/**
+ * Update the original Slack message via chat.update API (works even when response_url has expired).
+ * Used for expired/invalid HITL approvals where response_url is stale.
+ */
+async function updateMessageViaApi(
+  botToken: string,
+  channelId: string,
+  messageTs: string,
+  blocks: unknown[],
+  text: string
+): Promise<void> {
+  try {
+    const res = await fetch('https://slack.com/api/chat.update', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: channelId,
+        ts: messageTs,
+        blocks,
+        text,
+      }),
+    });
+    const result = await res.json();
+    if (!result.ok) {
+      console.error('chat.update failed:', result.error);
+    }
+  } catch (error) {
+    console.error('Error updating message via API:', error);
+  }
+}
+
+/**
+ * Handle expired/invalid HITL approval — updates the original Slack message
+ * to show an expiry notice (since response_url may be stale).
+ */
+async function handleExpiredHITLApproval(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  approval: HITLApprovalRecord | undefined,
+  errorMessage: string
+): Promise<Response> {
+  // Try response_url first (works within ~30 min)
+  if (payload.response_url) {
+    await sendEphemeral(payload.response_url, {
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⏰ ${errorMessage}` } }],
+      text: errorMessage,
+    });
+  }
+
+  // Also update the original message via API to replace buttons with expiry notice
+  if (approval?.slack_channel_id && approval?.slack_message_ts) {
+    const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
+    if (orgConnection) {
+      const typeLabel = approval.resource_name || approval.resource_type;
+      const blocks = [
+        { type: 'section', text: { type: 'mrkdwn', text: `⏰ *${errorMessage}*\n_${typeLabel}_` } },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: `Clicked by <@${payload.user.id}> • ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` }] },
+      ];
+      await updateMessageViaApi(orgConnection.botToken, approval.slack_channel_id, approval.slack_message_ts, blocks, errorMessage);
+    }
+  }
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
 
 // ============================================================================
@@ -2530,16 +2602,7 @@ async function handleHITLApprove(
   // Validate the approval
   const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
   if (!validation.valid || !validation.approval) {
-    if (payload.response_url) {
-      await sendEphemeral(payload.response_url, {
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ ${validation.error || 'Invalid approval'}` } }],
-        text: validation.error || 'Invalid approval',
-      });
-    }
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
   }
 
   const approval = validation.approval;
@@ -2605,16 +2668,7 @@ async function handleHITLReject(
   // Validate the approval
   const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
   if (!validation.valid || !validation.approval) {
-    if (payload.response_url) {
-      await sendEphemeral(payload.response_url, {
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ ${validation.error || 'Invalid approval'}` } }],
-        text: validation.error || 'Invalid approval',
-      });
-    }
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
   }
 
   const approval = validation.approval;
@@ -2799,16 +2853,7 @@ async function handleHITLEdit(
   // Validate the approval
   const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
   if (!validation.valid || !validation.approval) {
-    if (payload.response_url) {
-      await sendEphemeral(payload.response_url, {
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ ${validation.error || 'Invalid approval'}` } }],
-        text: validation.error || 'Invalid approval',
-      });
-    }
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
   }
 
   const approval = validation.approval;
@@ -7335,6 +7380,38 @@ serve(async (req) => {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
+        }
+
+        // =====================================================================
+        // SUP-004: Route support ticket actions (support_*)
+        // =====================================================================
+        if (action.action_id.startsWith('support_')) {
+          console.log('[Support] Processing action:', action.action_id);
+          const result = await handleSupportAction(action.action_id, payload);
+
+          if (result && payload.response_url) {
+            if (result.success && result.responseBlocks) {
+              await sendEphemeral(payload.response_url, {
+                blocks: result.responseBlocks,
+                text: result.responseText || 'Support action completed',
+              });
+            } else if (!result.success) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `❌ ${result.error || 'Failed to process support action'}` },
+                  },
+                ],
+                text: result.error || 'Failed to process support action',
+              });
+            }
+          }
+
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
 
         // =====================================================================

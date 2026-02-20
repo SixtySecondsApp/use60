@@ -107,13 +107,13 @@ serve(async (req) => {
     // Try Apollo as backup if Perplexity didn't provide enough data
     if ((!enrichmentData.description || !enrichmentData.industry) && APOLLO_API_KEY) {
       try {
-        const apolloResponse = await fetch("https://api.apollo.io/v1/organizations/enrich", {
+        const apolloResponse = await fetch("https://api.apollo.io/api/v1/organizations/enrich", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "x-api-key": APOLLO_API_KEY,
           },
           body: JSON.stringify({
-            api_key: APOLLO_API_KEY,
             domain: company.domain,
           }),
         });

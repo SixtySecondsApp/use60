@@ -20,7 +20,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const APOLLO_API_BASE = 'https://api.apollo.io/v1'
+const APOLLO_API_BASE = 'https://api.apollo.io/api/v1'
 const CONCURRENCY = 5
 const DEFAULT_BATCH_SIZE = 100
 
@@ -577,8 +577,11 @@ serve(async (req: Request) => {
                 `${APOLLO_API_BASE}/people/bulk_match`,
                 {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ api_key: apolloApiKey, details }),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apolloApiKey,
+                  },
+                  body: JSON.stringify({ details }),
                 },
                 { maxRetries: 2, baseDelayMs: 3000, logPrefix: '[apollo-enrich-bulk]' },
               )
@@ -625,7 +628,6 @@ serve(async (req: Request) => {
           limiter(async () => {
             try {
               const apolloBody: Record<string, unknown> = {
-                api_key: apolloApiKey,
                 ...params,
               }
 
@@ -636,7 +638,10 @@ serve(async (req: Request) => {
                 `${APOLLO_API_BASE}/people/match`,
                 {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apolloApiKey,
+                  },
                   body: JSON.stringify(apolloBody),
                 },
                 { maxRetries: 2, baseDelayMs: 2000, logPrefix: '[apollo-enrich]' },

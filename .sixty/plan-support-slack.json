@@ -1,0 +1,211 @@
+{
+  "feature": "support-slack",
+  "name": "Support Centre: Slack Notifications + Admin Queue",
+  "description": "Enhance Support Centre with Slack notifications to a dedicated #support channel, interactive buttons for ticket management from Slack, a platform admin ticket queue page with realtime unread badge, and sidebar navigation for internal team.",
+  "createdAt": "2026-02-19T18:00:00Z",
+  "consultReport": ".sixty/consult/support-slack.md",
+  "status": "pending",
+
+  "decisions": {
+    "slack_target": "Dedicated #support channel (env var SUPPORT_SLACK_CHANNEL_ID)",
+    "visibility": "Platform admins only — customers use existing Support Centre",
+    "unread_logic": "Tickets where status='open' OR last message is from user (needs agent response)",
+    "realtime": "Supabase postgres_changes subscription for live badge updates"
+  },
+
+  "stories": [
+    {
+      "id": "SUP-001",
+      "title": "Add needs_attention tracking + cross-org admin query support",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "feature": "support-slack",
+      "dependencies": { "stories": [], "files": [], "schema": ["support_tickets", "support_messages"] },
+      "blocks": ["SUP-003", "SUP-005", "SUP-006"],
+      "parallelWith": ["SUP-002"],
+      "acceptance": [
+        "Migration adds `needs_attention` boolean column to support_tickets (default true)",
+        "Trigger auto-sets needs_attention=true on new ticket and when latest message sender_type='user'",
+        "Trigger auto-sets needs_attention=false when agent replies or status changes to resolved/closed",
+        "Index on (needs_attention, status) for efficient admin count queries",
+        "RPC `get_support_tickets_needing_attention_count` returns count for platform admins (bypasses RLS via security definer)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260219000001_support_needs_attention.sql"
+      ]
+    },
+    {
+      "id": "SUP-002",
+      "title": "Build Slack Block Kit support ticket message builder",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "feature": "support-slack",
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/slackBlocks.ts"], "schema": [] },
+      "blocks": ["SUP-003", "SUP-004"],
+      "parallelWith": ["SUP-001"],
+      "acceptance": [
+        "SupportTicketData interface added to slackBlocks.ts",
+        "buildSupportTicketNotification() builds Block Kit message with: header, subject, description preview, org name, priority badge, category, created time",
+        "Action buttons: 'Assign to me' (support_assign::{ticketId}), 'View in Platform' (support_view::{ticketId}), 'Set Priority' overflow menu",
+        "buildSupportReplyNotification() for customer reply alerts with thread context",
+        "All text properly truncated using existing safety helpers"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts"
+      ]
+    },
+    {
+      "id": "SUP-003",
+      "title": "Enhance support-ticket-notification to post to Slack channel",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "feature": "support-slack",
+      "dependencies": { "stories": ["SUP-001", "SUP-002"], "files": ["supabase/functions/support-ticket-notification/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SUP-004"],
+      "acceptance": [
+        "On ticket_created: posts rich Block Kit notification to SUPPORT_SLACK_CHANNEL_ID",
+        "On new_reply from customer: posts reply notification to same channel with ticket thread context",
+        "On status_changed: posts brief status update to channel",
+        "Uses org's bot token from slack_org_settings (falls back to env var SLACK_BOT_TOKEN for platform-level channel)",
+        "Gracefully skips Slack posting if channel ID not configured (no errors)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/support-ticket-notification/index.ts"
+      ]
+    },
+    {
+      "id": "SUP-004",
+      "title": "Add Slack interactive handlers for support ticket actions",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "feature": "support-slack",
+      "dependencies": { "stories": ["SUP-002"], "files": ["supabase/functions/slack-interactive/index.ts"], "schema": ["support_tickets"] },
+      "blocks": [],
+      "parallelWith": ["SUP-003"],
+      "acceptance": [
+        "support_assign::{ticketId} action: assigns ticket to clicking user (resolves Slack user → Sixty user), sets status to in_progress, updates original message with assignment confirmation",
+        "support_view::{ticketId} action: returns ephemeral message with deep link to /platform/support-tickets?ticket={ticketId}",
+        "support_priority::{ticketId}::{priority} action: updates ticket priority, updates original message",
+        "All actions verify the clicking user is a platform admin (internal user check)",
+        "Errors shown as ephemeral messages to the clicking user only"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/handlers/support.ts"
+      ]
+    },
+    {
+      "id": "SUP-005",
+      "title": "Create platform admin support ticket queue page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "feature": "support-slack",
+      "dependencies": { "stories": ["SUP-001"], "files": [], "schema": [] },
+      "blocks": ["SUP-007"],
+      "parallelWith": ["SUP-006"],
+      "acceptance": [
+        "New page at /platform/support-tickets with platformAdmin access",
+        "Reuses and enhances SupportAgentDashboard: adds org name column, org filter dropdown, assigned agent name (not just 'Assigned')",
+        "Summary stats row: Total, Needs Attention (red badge if >0), Urgent, Avg Response Time placeholder",
+        "Click ticket opens TicketDetail sheet with agent reply capability",
+        "Route added to routeConfig.ts, lazy page added to lazyPages.tsx, route added to App.tsx"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/platform/SupportTicketsPage.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "SUP-006",
+      "title": "Create useTicketsNeedingAttention hook with realtime subscription",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "feature": "support-slack",
+      "dependencies": { "stories": ["SUP-001"], "files": [], "schema": [] },
+      "blocks": ["SUP-007"],
+      "parallelWith": ["SUP-005"],
+      "acceptance": [
+        "useTicketsNeedingAttention() hook returns { count, isLoading }",
+        "Calls get_support_tickets_needing_attention_count RPC",
+        "Supabase realtime subscription on support_tickets table (INSERT + UPDATE events) invalidates React Query cache",
+        "Only enabled when user is platform admin (useUserPermissions check)",
+        "Channel cleanup in useEffect return"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/useTicketsNeedingAttention.ts"
+      ]
+    },
+    {
+      "id": "SUP-007",
+      "title": "Add Support Tickets nav item with notification badge to sidebar",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "feature": "support-slack",
+      "dependencies": { "stories": ["SUP-005", "SUP-006"], "files": ["src/components/AppLayout.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Route config entry at /platform/support-tickets with showInNav: true, navSection: 'platform', icon: LifeBuoy",
+        "Red notification badge showing count of tickets needing attention (similar to NotificationBell pattern)",
+        "Badge shows number (e.g., '3') or '9+' if >9, with subtle pulse animation when count > 0",
+        "Badge only renders for platform admins, disappears when count is 0",
+        "PlatformDashboard card added for 'Support Tickets' in Customer Management section"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/AppLayout.tsx",
+        "src/pages/platform/PlatformDashboard.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "phases": [
+      {
+        "name": "Foundation",
+        "stories": ["SUP-001", "SUP-002"],
+        "parallel": true,
+        "estimatedMinutes": 20
+      },
+      {
+        "name": "Backend Integration",
+        "stories": ["SUP-003", "SUP-004"],
+        "parallel": true,
+        "estimatedMinutes": 25
+      },
+      {
+        "name": "Frontend",
+        "stories": ["SUP-005", "SUP-006"],
+        "parallel": true,
+        "estimatedMinutes": 25
+      },
+      {
+        "name": "Nav + Badge",
+        "stories": ["SUP-007"],
+        "parallel": false,
+        "estimatedMinutes": 20
+      }
+    ],
+    "totalEstimate": {
+      "sequential": "2h 30m",
+      "withParallel": "1h 30m"
+    }
+  }
+}

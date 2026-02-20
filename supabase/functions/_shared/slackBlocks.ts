@@ -3984,9 +3984,9 @@ export function buildCampaignReadyMessage(data: CampaignReadyData): SlackMessage
     ]),
     divider(),
     actions([
-      { text: 'Open in Ops Table', actionId: `campaign_ready_open_table_${data.table_id}`, value: safeButtonValue(`${appUrl}/ops/${data.table_id}`), style: 'primary' },
+      { text: 'Open in Ops Table', actionId: `campaign_ready_open_table_${data.table_id}`, value: data.table_id, url: `${appUrl}/ops/${data.table_id}`, style: 'primary' },
       ...(data.conversation_id
-        ? [{ text: 'Continue in Copilot', actionId: `campaign_ready_continue_${data.conversation_id}`, value: safeButtonValue(`${appUrl}/copilot?conversation=${data.conversation_id}`) }]
+        ? [{ text: 'Continue in Copilot', actionId: `campaign_ready_continue_${data.conversation_id}`, value: data.conversation_id, url: `${appUrl}/copilot?conversation=${data.conversation_id}` }]
         : []),
     ]),
   ];
@@ -3996,3 +3996,108 @@ export function buildCampaignReadyMessage(data: CampaignReadyData): SlackMessage
     text: `Your campaign "${data.campaign_name}" is ready — ${data.leads_found} leads, ${data.emails_generated} emails generated in ${durationStr}`,
   };
 }
+
+// =============================================================================
+// SUPPORT TICKET DATA INTERFACES
+// =============================================================================
+
+export interface SupportTicketData {
+  ticketId: string;
+  subject: string;
+  description: string;
+  orgName: string;
+  userName: string;
+  category: string;
+  priority: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface SupportReplyData extends SupportTicketData {
+  replyPreview: string;
+  replierName: string;
+}
+
+// =============================================================================
+// SUPPORT TICKET MESSAGE BUILDERS
+// =============================================================================
+
+/**
+ * Get a human-readable priority indicator for support tickets
+ */
+const getSupportPriorityLabel = (priority: string): string => {
+  switch (priority.toLowerCase()) {
+    case 'urgent': return 'URGENT';
+    case 'high':   return 'High';
+    case 'medium': return 'Medium';
+    case 'low':    return 'Low';
+    default:       return priority;
+  }
+};
+
+/**
+ * New Support Ticket notification — sent to the support channel when a ticket is created.
+ */
+export const buildSupportTicketNotification = (data: SupportTicketData): SlackBlock[] => {
+  const descriptionPreview = truncate(data.description, 200);
+  const formattedDate = new Date(data.createdAt).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+
+  return [
+    header('New Support Ticket'),
+    section(`*${safeMrkdwn(data.subject)}*\n${descriptionPreview}`),
+    sectionWithFields([
+      { label: 'Organization', value: data.orgName },
+      { label: 'Priority', value: getSupportPriorityLabel(data.priority) },
+      { label: 'Category', value: data.category },
+      { label: 'Status', value: data.status },
+    ]),
+    context([`Submitted by ${data.userName} | ${formattedDate}`]),
+    divider(),
+    actions([
+      { text: 'Assign to me', actionId: `support_assign::${data.ticketId}`, value: data.ticketId, style: 'primary' },
+      { text: 'View in Platform', actionId: `support_view::${data.ticketId}`, value: data.ticketId },
+      { text: 'Mark Urgent', actionId: `support_priority_urgent::${data.ticketId}`, value: data.ticketId },
+      { text: 'Mark High', actionId: `support_priority_high::${data.ticketId}`, value: data.ticketId },
+    ]),
+  ];
+};
+
+/**
+ * Customer Reply notification — sent when a customer replies to an existing ticket.
+ */
+export const buildSupportReplyNotification = (data: SupportReplyData): SlackBlock[] => {
+  const replyPreview = truncate(data.replyPreview, 200);
+
+  return [
+    header('Customer Reply'),
+    section(`*Re: ${safeMrkdwn(data.subject)}*\n${replyPreview}`),
+    context([`From ${data.replierName} | Org: ${data.orgName}`]),
+    divider(),
+    actions([
+      { text: 'Assign to me', actionId: `support_assign::${data.ticketId}`, value: data.ticketId, style: 'primary' },
+      { text: 'View in Platform', actionId: `support_view::${data.ticketId}`, value: data.ticketId },
+    ]),
+  ];
+};
+
+/**
+ * Support ticket status change notification.
+ */
+export const buildSupportStatusChange = (data: {
+  ticketId: string;
+  subject: string;
+  oldStatus: string;
+  newStatus: string;
+  changedBy: string;
+}): SlackBlock[] => {
+  return [
+    section(
+      `*Support ticket status updated*\n` +
+      `_${truncate(data.subject, 150)}_\n` +
+      `${data.oldStatus} → *${data.newStatus}*`
+    ),
+    context([`Changed by ${data.changedBy}`]),
+  ];
+};
