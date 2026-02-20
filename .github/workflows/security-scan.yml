@@ -160,7 +160,7 @@ jobs:
           submodules: recursive
 
       - name: GitGuardian Scan
-        if: ${{ secrets.GITGUARDIAN_API_KEY != '' }}
+        if: env.GITGUARDIAN_API_KEY != ''
         uses: GitGuardian/ggshield-action@v1
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
