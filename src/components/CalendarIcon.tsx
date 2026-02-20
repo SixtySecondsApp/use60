@@ -213,7 +213,10 @@ export function CalendarIcon() {
                       Connect Google Calendar to view your events
                     </p>
                     <button
-                      onClick={handleViewFullPage}
+                      onClick={() => {
+                        navigate('/settings/integrations/google-workspace');
+                        setIsOpen(false);
+                      }}
                       className="px-4 py-2 bg-[#37bd7e] text-white rounded-lg hover:bg-[#2da76c] transition-colors text-sm"
                     >
                       Connect Calendar

@@ -1,12 +1,18 @@
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { LayoutDashboard, FileText, Wand2, ClipboardList, Search, Database, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, FileText, Wand2, ClipboardList, Search, Database, RefreshCw, Loader2, AlertCircle, Calendar, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useMeetingIntelligence } from '@/lib/hooks/useMeetingIntelligence';
+import {
+  format, startOfDay, endOfDay, startOfMonth, endOfMonth,
+  eachDayOfInterval, getDay, addMonths, subMonths, isSameDay,
+  isAfter, isBefore, isWithinInterval, isToday,
+} from 'date-fns';
 import type { TimePeriod } from '@/lib/hooks/useTeamAnalytics';
 
 import { SearchHero } from '@/components/meeting-analytics/SearchHero';
@@ -15,6 +21,110 @@ import { TranscriptsTab } from '@/components/meeting-analytics/TranscriptsTab';
 import { InsightsTab } from '@/components/meeting-analytics/InsightsTab';
 import { ReportsTab } from '@/components/meeting-analytics/ReportsTab';
 import { TranscriptDetailSheet } from '@/components/meeting-analytics/TranscriptDetailSheet';
+
+type DatePreset = '7d' | '30d' | '90d' | 'custom';
+
+// ============================================================================
+// Inline Calendar Range Picker (heatmap-inspired)
+// ============================================================================
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+interface CalendarRangePickerProps {
+  rangeStart: Date | null;
+  rangeEnd: Date | null;
+  onSelect: (date: Date) => void;
+}
+
+function CalendarRangePicker({ rangeStart, rangeEnd, onSelect }: CalendarRangePickerProps) {
+  const [viewMonth, setViewMonth] = useState(rangeEnd ?? rangeStart ?? new Date());
+
+  const monthStart = startOfMonth(viewMonth);
+  const monthEnd = endOfMonth(viewMonth);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const firstDayOfWeek = getDay(monthStart);
+  const emptyDays = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+
+  const isInRange = (date: Date) => {
+    if (!rangeStart || !rangeEnd) return false;
+    const s = isBefore(rangeStart, rangeEnd) ? rangeStart : rangeEnd;
+    const e = isAfter(rangeStart, rangeEnd) ? rangeStart : rangeEnd;
+    return isWithinInterval(date, { start: startOfDay(s), end: endOfDay(e) });
+  };
+
+  const isStart = (date: Date) => rangeStart && isSameDay(date, rangeStart);
+  const isEnd = (date: Date) => rangeEnd && isSameDay(date, rangeEnd);
+  const isFuture = (date: Date) => isAfter(startOfDay(date), endOfDay(new Date()));
+
+  return (
+    <div className="space-y-2">
+      {/* Month navigation */}
+      <div className="flex items-center justify-between px-1">
+        <button
+          onClick={() => setViewMonth(prev => subMonths(prev, 1))}
+          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-md transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        </button>
+        <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+          {format(viewMonth, 'MMMM yyyy')}
+        </span>
+        <button
+          onClick={() => setViewMonth(prev => addMonths(prev, 1))}
+          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-md transition-colors"
+          disabled={isAfter(startOfMonth(addMonths(viewMonth, 1)), new Date())}
+        >
+          <ChevronRight className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        </button>
+      </div>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {WEEKDAYS.map(d => (
+          <div key={d} className="text-[10px] font-medium text-gray-400 dark:text-gray-500 text-center py-1">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {Array.from({ length: emptyDays }).map((_, i) => (
+          <div key={`e-${i}`} className="aspect-square" />
+        ))}
+        {days.map(date => {
+          const disabled = isFuture(date);
+          const selected = isStart(date) || isEnd(date);
+          const inRange = isInRange(date) && !selected;
+          const today = isToday(date);
+
+          return (
+            <button
+              key={date.toISOString()}
+              disabled={disabled}
+              onClick={() => onSelect(date)}
+              className={cn(
+                'aspect-square rounded-lg relative flex items-center justify-center text-xs font-medium transition-all duration-150',
+                disabled && 'opacity-30 cursor-not-allowed',
+                !disabled && !selected && !inRange && 'hover:bg-emerald-500/20 dark:hover:bg-emerald-500/20',
+                // Selected endpoints — emerald filled (heatmap style)
+                selected && 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30',
+                // In-range days — lighter emerald
+                inRange && 'bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                // Default
+                !selected && !inRange && 'text-gray-700 dark:text-gray-300 bg-gray-100/50 dark:bg-gray-800/30',
+                // Today ring
+                today && !selected && 'ring-1 ring-emerald-500/50',
+              )}
+            >
+              {format(date, 'd')}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 const tabs = [
   { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -33,11 +143,70 @@ export default function MeetingAnalyticsPage() {
 
   const activeTab = searchParams.get('tab') || 'dashboard';
 
-  // Period selector state (shared across tabs)
-  const [period, setPeriod] = useState<TimePeriod>(30);
-  const handlePeriodChange = useCallback((value: string) => {
-    setPeriod(parseInt(value, 10) as TimePeriod);
+  // Date range state (shared across tabs)
+  const [datePreset, setDatePreset] = useState<DatePreset>('30d');
+  const [calendarStart, setCalendarStart] = useState<Date | null>(null);
+  const [calendarEnd, setCalendarEnd] = useState<Date | null>(null);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+
+  // Derive period and dateRange from state
+  const period: TimePeriod = useMemo(() => {
+    if (datePreset === '7d') return 7;
+    if (datePreset === '90d') return 90;
+    return 30;
+  }, [datePreset]);
+
+  const dateRange = useMemo(() => {
+    if (datePreset === 'custom' && calendarStart && calendarEnd) {
+      const s = isBefore(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
+      const e = isAfter(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
+      return { start: startOfDay(s), end: endOfDay(e) };
+    }
+    return undefined;
+  }, [datePreset, calendarStart, calendarEnd]);
+
+  const handlePresetClick = useCallback((preset: DatePreset) => {
+    setDatePreset(preset);
+    if (preset !== 'custom') {
+      setCalendarStart(null);
+      setCalendarEnd(null);
+      setIsDatePickerOpen(false);
+    }
   }, []);
+
+  const handleCalendarSelect = useCallback((date: Date) => {
+    if (!calendarStart || (calendarStart && calendarEnd)) {
+      // Starting new selection
+      setCalendarStart(date);
+      setCalendarEnd(null);
+      setDatePreset('custom');
+    } else {
+      // Completing selection
+      setCalendarEnd(date);
+      setDatePreset('custom');
+    }
+  }, [calendarStart, calendarEnd]);
+
+  const handleClearDateRange = useCallback(() => {
+    setDatePreset('30d');
+    setCalendarStart(null);
+    setCalendarEnd(null);
+    setIsDatePickerOpen(false);
+  }, []);
+
+  const dateDisplayText = useMemo(() => {
+    if (datePreset === 'custom' && calendarStart && calendarEnd) {
+      const s = isBefore(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
+      const e = isAfter(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
+      return `${format(s, 'MMM d')} – ${format(e, 'MMM d, yyyy')}`;
+    }
+    if (datePreset === 'custom' && calendarStart) {
+      return `${format(calendarStart, 'MMM d')} – select end`;
+    }
+    if (datePreset === '7d') return 'Last 7 days';
+    if (datePreset === '90d') return 'Last 90 days';
+    return 'Last 30 days';
+  }, [datePreset, calendarStart, calendarEnd]);
 
   const handleSync = async () => {
     setIsIndexing(true);
@@ -195,29 +364,89 @@ export default function MeetingAnalyticsPage() {
               })}
             </TabsList>
 
-            {/* Period Selector */}
-            <Tabs value={period.toString()} onValueChange={handlePeriodChange}>
-              <TabsList className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl p-1 shadow-sm">
-                <TabsTrigger
-                  value="7"
-                  className="px-3 py-1.5 text-sm rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800/80 data-[state=active]:shadow-sm transition-all"
+            {/* Date Range Picker */}
+            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all',
+                    'bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border shadow-sm',
+                    datePreset === 'custom'
+                      ? 'border-emerald-500/50 text-emerald-700 dark:text-emerald-400'
+                      : 'border-gray-200/50 dark:border-gray-700/30 text-gray-700 dark:text-gray-300',
+                    'hover:border-emerald-300/50 dark:hover:border-emerald-500/30'
+                  )}
                 >
-                  7 days
-                </TabsTrigger>
-                <TabsTrigger
-                  value="30"
-                  className="px-3 py-1.5 text-sm rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800/80 data-[state=active]:shadow-sm transition-all"
-                >
-                  30 days
-                </TabsTrigger>
-                <TabsTrigger
-                  value="90"
-                  className="px-3 py-1.5 text-sm rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800/80 data-[state=active]:shadow-sm transition-all"
-                >
-                  90 days
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+                  <Calendar className="w-4 h-4 dark:text-white" />
+                  <span>{dateDisplayText}</span>
+                  {datePreset === 'custom' && (
+                    <X
+                      className="w-3.5 h-3.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                      onClick={(e) => { e.stopPropagation(); handleClearDateRange(); }}
+                    />
+                  )}
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-80 p-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-gray-200/50 dark:border-gray-700/30 shadow-xl rounded-xl"
+                align="end"
+              >
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center gap-2 pb-2 border-b border-gray-200/50 dark:border-gray-700/30">
+                    <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-200">Date Range</span>
+                  </div>
+
+                  {/* Quick presets */}
+                  <div className="flex gap-2">
+                    {([['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days']] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        onClick={() => handlePresetClick(key)}
+                        className={cn(
+                          'flex-1 px-3 py-1.5 text-sm rounded-lg font-medium transition-all',
+                          datePreset === key
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-gray-100/80 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-gray-200/80 dark:hover:bg-gray-700/50'
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Calendar range picker */}
+                  <div className="pt-2 border-t border-gray-200/50 dark:border-gray-700/30">
+                    <CalendarRangePicker
+                      rangeStart={calendarStart}
+                      rangeEnd={calendarEnd}
+                      onSelect={handleCalendarSelect}
+                    />
+                  </div>
+
+                  {/* Selection summary + reset */}
+                  {calendarStart && (
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200/50 dark:border-gray-700/30">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {calendarEnd
+                          ? `${format(isBefore(calendarStart, calendarEnd) ? calendarStart : calendarEnd, 'MMM d')} – ${format(isAfter(calendarStart, calendarEnd) ? calendarStart : calendarEnd, 'MMM d, yyyy')}`
+                          : `${format(calendarStart, 'MMM d')} – select end date`
+                        }
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleClearDateRange}
+                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 h-7 px-2"
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* SearchHero - only on Dashboard tab */}
@@ -245,7 +474,7 @@ export default function MeetingAnalyticsPage() {
               transition={{ duration: 0.2 }}
             >
               <TabsContent value="dashboard" className="mt-0">
-                <DashboardTab period={period} />
+                <DashboardTab period={period} dateRange={dateRange} />
               </TabsContent>
 
               <TabsContent value="transcripts" className="mt-0">

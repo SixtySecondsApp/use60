@@ -22,6 +22,7 @@ import { useMaDashboard, useMaAlerts } from '@/lib/hooks/useMeetingAnalytics';
 import { TeamTrendsChart, TeamTrendsChartSkeleton } from '@/components/insights/TeamTrendsChart';
 
 import type { TimePeriod } from '@/lib/hooks/useTeamAnalytics';
+import type { DateRange } from '@/lib/services/teamAnalyticsService';
 
 const GLASS_CARD =
   'bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10';
@@ -94,9 +95,10 @@ function getSeverityGradient(severity: 'info' | 'warning' | 'critical'): string 
 interface DashboardTabProps {
   className?: string;
   period: TimePeriod;
+  dateRange?: DateRange;
 }
 
-export function DashboardTab({ className, period }: DashboardTabProps) {
+export function DashboardTab({ className, period, dateRange }: DashboardTabProps) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
 
@@ -140,7 +142,7 @@ export function DashboardTab({ className, period }: DashboardTabProps) {
       {/* Team Comparison Matrix (full width)                        */}
       {/* ---------------------------------------------------------- */}
       <div className={cn(GLASS_CARD, 'p-5')}>
-        <TeamTrendsChart period={period} />
+        <TeamTrendsChart period={period} dateRange={dateRange} />
       </div>
 
       {/* ---------------------------------------------------------- */}
