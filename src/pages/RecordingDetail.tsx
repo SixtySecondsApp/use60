@@ -648,7 +648,7 @@ export const RecordingDetail: React.FC = () => {
     )
   }
 
-  const status = statusConfig[recording.status]
+  const status = statusConfig[recording.status] || { label: recording.status, variant: 'outline' as const, icon: null }
   const platform = platformConfig[recording.meeting_platform]
   const hasAiInsights = recording.sentiment_score != null || recording.coach_rating != null || recording.talk_time_rep_pct != null
 

@@ -467,10 +467,14 @@ async function processRecording(
 
   try {
     // Update status to processing
-    await supabase
+    const { error: statusError } = await supabase
       .from('recordings')
       .update({ status: 'processing' })
       .eq('id', recordingId);
+
+    if (statusError) {
+      console.error('[ProcessRecording] Failed to update status to processing:', statusError.message);
+    }
 
     const internalDomain = recording.organizations?.company_domain || null;
 
@@ -718,13 +722,10 @@ async function processRecording(
     const recordingUpdate: Record<string, unknown> = {
       status: 'ready',
       // Use our storage URL if available, fallback to original media URL
-      recording_s3_url: uploadResult.storageUrl || mediaUrlForTranscription,
+      recording_s3_url: uploadResult.storageUrl || recordingMediaUrl,
       recording_s3_key: uploadResult.storagePath || null,
       transcript_json: transcript,
       transcript_text: formattedTranscriptText || transcript.text,
-      transcription_provider: 'assemblyai',
-      transcription_status: 'complete',
-      transcription_error: null,
       summary: analysis.summary,
       highlights: analysis.highlights,
       action_items: analysis.action_items,
@@ -744,10 +745,17 @@ async function processRecording(
       recordingUpdate.talk_time_judgement = getTalkTimeJudgement(enhancedAnalysis.talkTime.repPct);
     }
 
-    await supabase
+    const { error: recordingUpdateError } = await supabase
       .from('recordings')
       .update(recordingUpdate)
       .eq('id', recordingId);
+
+    if (recordingUpdateError) {
+      console.error('[ProcessRecording] CRITICAL: Failed to save recording results:', recordingUpdateError.message);
+      console.error('[ProcessRecording] Update payload keys:', Object.keys(recordingUpdate));
+      throw new Error(`Failed to save recording results: ${recordingUpdateError.message}`);
+    }
+    console.log('[ProcessRecording] Step 7: Recording saved successfully');
 
     // Step 7.5: Sync to unified meetings table for 60_notetaker source
     console.log('[ProcessRecording] Step 7.5: Syncing to meetings table...');
@@ -759,7 +767,7 @@ async function processRecording(
       duration_minutes: durationSeconds ? Math.round(durationSeconds / 60) : null,
       processing_status: 'ready',
       recording_s3_key: uploadResult.storagePath || null,
-      recording_s3_url: uploadResult.storageUrl || mediaUrlForTranscription,
+      recording_s3_url: uploadResult.storageUrl || recordingMediaUrl,
       speakers: speakers,
       provider: '60_notetaker',
       updated_at: new Date().toISOString(),
@@ -828,12 +836,16 @@ async function processRecording(
     }
 
     // Step 8: Update bot deployment status
-    await supabase
+    const { error: deployError } = await supabase
       .from('bot_deployments')
       .update({
         status: 'completed',
       })
       .eq('bot_id', effectiveBotId);
+
+    if (deployError) {
+      console.warn('[ProcessRecording] Failed to update bot deployment status (non-fatal):', deployError.message);
+    }
 
     // Step 9: Trigger CRM sync
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -937,15 +949,17 @@ async function processRecording(
 
     // Update recording with error status
     const errorMessage = error instanceof Error ? error.message : 'Processing failed';
-    await supabase
+    const { error: failUpdateError } = await supabase
       .from('recordings')
       .update({
         status: 'failed',
         error_message: errorMessage,
-        transcription_status: 'failed',
-        transcription_error: errorMessage,
       })
       .eq('id', recordingId);
+
+    if (failUpdateError) {
+      console.error('[ProcessRecording] Failed to update error status:', failUpdateError.message);
+    }
 
     return {
       success: false,

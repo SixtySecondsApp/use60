@@ -11,7 +11,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { legacyCorsHeaders as corsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   createMeetingBaaSClient,
   MeetingBaaSClient,
@@ -244,6 +244,9 @@ serve(async (req) => {
   if (preflightResponse) {
     return preflightResponse;
   }
+
+  // Build CORS headers from the actual request origin
+  const corsHeaders = getCorsHeaders(req);
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
