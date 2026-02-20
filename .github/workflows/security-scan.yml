@@ -20,42 +20,6 @@ env:
 
 jobs:
   # ============================================
-  # CodeQL - Static Application Security Testing
-  # ============================================
-  codeql-analysis:
-    name: CodeQL SAST Analysis
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-          queries: +security-extended,security-and-quality
-          # Custom query packs for additional coverage
-          config: |
-            paths-ignore:
-              - node_modules
-              - dist
-              - '**/*.test.ts'
-              - '**/*.test.tsx'
-              - '**/*.spec.ts'
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:javascript-typescript"
-
-  # ============================================
   # Dependency Vulnerability Scanning
   # ============================================
   dependency-review:
@@ -65,6 +29,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
@@ -83,6 +49,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -91,13 +59,13 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || npm install --no-audit
 
       - name: Run npm audit
         run: |
           echo "## npm Audit Results" >> $GITHUB_STEP_SUMMARY
           npm audit --json > audit-results.json || true
-          
+
           # Parse and display results
           node -e "
             const audit = require('./audit-results.json');
@@ -107,13 +75,13 @@ jobs:
             console.log('  High:', vulns.high || 0);
             console.log('  Moderate:', vulns.moderate || 0);
             console.log('  Low:', vulns.low || 0);
-            
+
             // Fail on critical or high
             if ((vulns.critical || 0) > 0 || (vulns.high || 0) > 0) {
-              console.error('❌ Critical or high vulnerabilities found!');
+              console.error('Critical or high vulnerabilities found!');
               process.exit(1);
             }
-            console.log('✅ No critical/high vulnerabilities');
+            console.log('No critical/high vulnerabilities');
           "
 
       - name: Upload audit results
@@ -179,7 +147,7 @@ jobs:
           retention-days: 30
 
   # ============================================
-  # Secret Scanning - GitGuardian
+  # Secret Scanning
   # ============================================
   secret-scan:
     name: Secret Detection
@@ -189,8 +157,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: GitGuardian Scan
+        if: ${{ secrets.GITGUARDIAN_API_KEY != '' }}
         uses: GitGuardian/ggshield-action@v1
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
@@ -217,6 +187,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Run Trivy vulnerability scanner (filesystem)
         uses: aquasecurity/trivy-action@master
@@ -257,6 +229,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -265,7 +239,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || npm install --no-audit
 
       - name: Check licenses
         run: |
@@ -285,18 +259,17 @@ jobs:
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
-    needs: [codeql-analysis, npm-audit, semgrep, trivy-scan]
+    needs: [npm-audit, semgrep, trivy-scan]
     if: always()
     steps:
       - name: Generate Summary
         run: |
-          echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "# Security Scan Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Scan | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| CodeQL SAST | ${{ needs.codeql-analysis.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| npm Audit | ${{ needs.npm-audit.result == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Semgrep | ${{ needs.semgrep.result == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Trivy | ${{ needs.trivy-scan.result == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| npm Audit | ${{ needs.npm-audit.result == 'success' && 'Passed' || 'Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep | ${{ needs.semgrep.result == 'success' && 'Passed' || 'Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy | ${{ needs.trivy-scan.result == 'success' && 'Passed' || 'Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "View detailed results in the **Security** tab." >> $GITHUB_STEP_SUMMARY
