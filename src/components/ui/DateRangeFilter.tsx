@@ -7,7 +7,7 @@
  *   // Use dateFilter.period and dateFilter.dateRange for data fetching
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
   format, startOfDay, endOfDay, startOfMonth, endOfMonth,
   eachDayOfInterval, getDay, addMonths, subMonths, isSameDay,
@@ -51,7 +51,12 @@ export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRa
   const [datePreset, setDatePreset] = useState<DatePreset>(defaultPreset);
   const [calendarStart, setCalendarStart] = useState<Date | null>(null);
   const [calendarEnd, setCalendarEnd] = useState<Date | null>(null);
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isDatePickerOpen, setIsDatePickerOpenRaw] = useState(false);
+
+  // Snapshot of the last valid state before opening, so we can restore on incomplete close
+  const lastValidState = useRef<{ preset: DatePreset; start: Date | null; end: Date | null }>({
+    preset: defaultPreset, start: null, end: null,
+  });
 
   const period = useMemo(() => {
     if (datePreset === '7d') return 7;
@@ -74,12 +79,29 @@ export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRa
     return undefined;
   }, [datePreset, calendarStart, calendarEnd, period]);
 
+  // Wrap setIsDatePickerOpen to handle cleanup on close
+  const setIsDatePickerOpen = useCallback((open: boolean) => {
+    if (open) {
+      // Snapshot current valid state before user starts interacting
+      lastValidState.current = { preset: datePreset, start: calendarStart, end: calendarEnd };
+    } else {
+      // Closing: if selection is incomplete (custom with no end date), restore previous state
+      // This prevents the filter from getting "stuck" when user browses months without completing a selection
+      if (datePreset === 'custom' && (!calendarStart || !calendarEnd)) {
+        setDatePreset(lastValidState.current.preset);
+        setCalendarStart(lastValidState.current.start);
+        setCalendarEnd(lastValidState.current.end);
+      }
+    }
+    setIsDatePickerOpenRaw(open);
+  }, [datePreset, calendarStart, calendarEnd]);
+
   const handlePresetClick = useCallback((preset: DatePreset) => {
     setDatePreset(preset);
     if (preset !== 'custom') {
       setCalendarStart(null);
       setCalendarEnd(null);
-      setIsDatePickerOpen(false);
+      setIsDatePickerOpenRaw(false);
     }
   }, []);
 
@@ -98,7 +120,7 @@ export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRa
     setDatePreset(defaultPreset);
     setCalendarStart(null);
     setCalendarEnd(null);
-    setIsDatePickerOpen(false);
+    setIsDatePickerOpenRaw(false);
   }, [defaultPreset]);
 
   const dateDisplayText = useMemo(() => {
@@ -341,9 +363,10 @@ export function DateRangeFilter({
             </div>
           )}
 
-          {/* Calendar range picker */}
+          {/* Calendar range picker — key forces remount on reopen so viewMonth resets */}
           <div className="pt-2 border-t border-gray-200/50 dark:border-gray-700/30">
             <CalendarRangePicker
+              key={isDatePickerOpen ? 'open' : 'closed'}
               rangeStart={calendarStart}
               rangeEnd={calendarEnd}
               onSelect={handleCalendarSelect}
