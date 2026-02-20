@@ -1,17 +1,15 @@
-import React, { useState, useMemo, useEffect, useCallback, useTransition, useRef, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useUser } from '@/lib/hooks/useUser';
 import { useTargets } from '@/lib/hooks/useTargets';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDashboardMetrics } from '@/lib/hooks/useDashboardMetrics';
-import { format, startOfMonth, endOfMonth, subMonths, addMonths, isAfter, isBefore, getDate } from 'date-fns';
+import { startOfMonth, endOfMonth } from 'date-fns';
 import {
   PoundSterling,
   Phone,
   Users,
   FileText,
-  ChevronLeft,
-  ChevronRight,
   ArrowUp,
   ArrowDown,
   TrendingUp,
@@ -24,8 +22,8 @@ import {
   Grid3X3,
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
-import { MonthYearPicker } from '@/components/MonthYearPicker';
 import { PendingJoinRequestBanner } from '@/components/PendingJoinRequestBanner';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { HelpPanel } from '@/components/docs/HelpPanel';
 import logger from '@/lib/utils/logger';
 import { toast } from 'sonner';
@@ -451,11 +449,7 @@ function DashboardSkeleton() {
   );
 }
 
-function TeamPerformanceSection({ selectedMonth }: { selectedMonth: Date }) {
-  const dateRange = useMemo(() => ({
-    start: startOfMonth(selectedMonth),
-    end: endOfMonth(selectedMonth),
-  }), [selectedMonth]);
+function TeamPerformanceSection({ dateRange }: { dateRange: { start: Date; end: Date } }) {
 
   return (
     <div className="mb-8">
@@ -488,55 +482,15 @@ function TeamPerformanceSection({ selectedMonth }: { selectedMonth: Date }) {
 export default function Dashboard() {
   // Move all hooks to the top
   const [showContent, setShowContent] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
-  const [isPending, startTransition] = useTransition();
-  
-  // Safe month navigation handlers with transition
-  const handlePreviousMonth = () => {
-    try {
-      startTransition(() => {
-        setSelectedMonth(prev => {
-          const newMonth = subMonths(prev, 1);
-          // Ensure the date is valid
-          if (isNaN(newMonth.getTime())) {
-            logger.error('Invalid date after subtracting month');
-            return prev;
-          }
-          return newMonth;
-        });
-      });
-    } catch (error) {
-      logger.error('Error navigating to previous month:', error);
+  const dateFilter = useDateRangeFilter('30d');
+
+  // Derive selectedMonth from date filter for useDashboardMetrics compatibility
+  const selectedMonth = useMemo(() => {
+    if (dateFilter.dateRange) {
+      return dateFilter.dateRange.start;
     }
-  };
-  
-  const handleNextMonth = () => {
-    try {
-      startTransition(() => {
-        setSelectedMonth(prev => {
-          const newMonth = addMonths(prev, 1);
-          // Ensure the date is valid
-          if (isNaN(newMonth.getTime())) {
-            logger.error('Invalid date after adding month');
-            return prev;
-          }
-          // Don't go beyond current month (compare year+month only)
-          const now = new Date();
-          if (newMonth.getFullYear() > now.getFullYear() ||
-              (newMonth.getFullYear() === now.getFullYear() && newMonth.getMonth() > now.getMonth())) {
-            return prev;
-          }
-          return newMonth;
-        });
-      });
-    } catch (error) {
-      logger.error('Error navigating to next month:', error);
-    }
-  };
-  const isCurrentMonth = useMemo(() => {
-    const now = new Date();
-    return selectedMonth.getFullYear() === now.getFullYear() && selectedMonth.getMonth() === now.getMonth();
-  }, [selectedMonth]);
+    return new Date();
+  }, [dateFilter.dateRange]);
 
   const { userData, isLoading: isLoadingUser, session } = useUser();
   const navigate = useNavigate();
@@ -687,10 +641,13 @@ export default function Dashboard() {
   } = useDashboardMetrics(selectedMonth, showContent && !!userId && !isLoadingSales);
   
   const selectedMonthRange = useMemo(() => {
+    if (dateFilter.dateRange) {
+      return { start: dateFilter.dateRange.start, end: dateFilter.dateRange.end };
+    }
     const start = startOfMonth(selectedMonth);
     const end = endOfMonth(selectedMonth);
     return { start, end };
-  }, [selectedMonth]);
+  }, [dateFilter.dateRange, selectedMonth]);
 
   // Check if any data is loading - include metrics check
   // Note: targets can be null (user has no targets set) — that's not a loading state
@@ -723,28 +680,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mt-2">
           <p className="text-[#64748B] dark:text-gray-400">Here's how your sales performance is tracking</p>
           {activeTab === 'overview' && (
-            <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-2 border border-transparent dark:border-gray-800/50 shadow-sm dark:shadow-none">
-              <button
-                onClick={handlePreviousMonth}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
-                title="Previous month"
-              >
-                <ChevronLeft className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
-              </button>
-              <MonthYearPicker
-                value={selectedMonth}
-                onChange={setSelectedMonth}
-                maxDate={new Date()}
-              />
-              <button
-                onClick={handleNextMonth}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={isCurrentMonth}
-                title="Next month"
-              >
-                <ChevronRight className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
-              </button>
-            </div>
+            <DateRangeFilter {...dateFilter} />
           )}
         </div>
       </div>
@@ -858,7 +794,7 @@ export default function Dashboard() {
       </div>
 
       {/* Team Performance Section */}
-      <TeamPerformanceSection selectedMonth={selectedMonth} />
+      <TeamPerformanceSection dateRange={selectedMonthRange} />
         </TabsContent>
 
         <TabsContent value="activity">

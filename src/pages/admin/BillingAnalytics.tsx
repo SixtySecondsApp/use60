@@ -1,7 +1,7 @@
 // src/pages/admin/BillingAnalytics.tsx
 // RevenueCat-inspired subscription analytics dashboard
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { format, subDays, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import {
   DollarSign,
@@ -32,6 +32,7 @@ import {
   Area,
 } from 'recharts';
 import { toast } from 'sonner';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { cn } from '@/lib/utils';
 import {
   useCurrentMRR,
@@ -63,6 +64,13 @@ export default function BillingAnalytics() {
   });
   const [selectedCurrency, setSelectedCurrency] = useState<string | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
+  const dateFilter = useDateRangeFilter('90d');
+
+  useEffect(() => {
+    if (dateFilter.dateRange) {
+      setDateRange({ start: dateFilter.dateRange.start, end: dateFilter.dateRange.end });
+    }
+  }, [dateFilter.dateRange]);
 
   // Fetch metrics
   const { data: currentMRR, isLoading: mrrLoading } = useCurrentMRR();
@@ -176,6 +184,7 @@ export default function BillingAnalytics() {
                 <SelectItem value="EUR">EUR</SelectItem>
               </SelectContent>
             </Select>
+            <DateRangeFilter {...dateFilter} />
             <Button onClick={handleRefresh} variant="outline" disabled={refreshing}>
               <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
               Refresh

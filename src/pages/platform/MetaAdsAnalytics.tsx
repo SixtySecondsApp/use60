@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   TrendingUp,
@@ -17,21 +17,13 @@ import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import {
   useMetaAdsAnalytics,
   getSourceStyle,
   formatLandingPage,
   MetaAdPerformance,
 } from '@/lib/hooks/useMetaAdsAnalytics';
-
-type DateRangePreset = '7d' | '30d' | '90d';
 
 // Source icons
 const SourceIcon: React.FC<{ source: string; className?: string }> = ({ source, className }) => {
@@ -60,7 +52,7 @@ const SourceIcon: React.FC<{ source: string; className?: string }> = ({ source, 
 };
 
 export function MetaAdsAnalytics() {
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('30d');
+  const dateFilter = useDateRangeFilter('30d');
 
   const {
     loading,
@@ -75,23 +67,11 @@ export function MetaAdsAnalytics() {
     refresh,
   } = useMetaAdsAnalytics();
 
-  const handlePresetChange = (value: DateRangePreset) => {
-    setDatePreset(value);
-    const endDate = new Date();
-    const startDate = new Date();
-    switch (value) {
-      case '7d':
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case '30d':
-        startDate.setDate(startDate.getDate() - 30);
-        break;
-      case '90d':
-        startDate.setDate(startDate.getDate() - 90);
-        break;
+  useEffect(() => {
+    if (dateFilter.dateRange) {
+      setDateRange({ startDate: dateFilter.dateRange.start, endDate: dateFilter.dateRange.end });
     }
-    setDateRange({ startDate, endDate });
-  };
+  }, [dateFilter.dateRange]);
 
   // Show loading state while checking user permissions
   if (userLoading) {
@@ -150,18 +130,7 @@ export function MetaAdsAnalytics() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Date Range Selector */}
-            <Select value={datePreset} onValueChange={handlePresetChange}>
-              <SelectTrigger className="w-[160px] bg-gray-800 border-gray-700 text-white">
-                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-800 border-gray-700">
-                <SelectItem value="7d">Last 7 Days</SelectItem>
-                <SelectItem value="30d">Last 30 Days</SelectItem>
-                <SelectItem value="90d">Last 90 Days</SelectItem>
-              </SelectContent>
-            </Select>
+            <DateRangeFilter {...dateFilter} variant="dark" />
 
             {/* Refresh Button */}
             <Button
@@ -174,20 +143,6 @@ export function MetaAdsAnalytics() {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
-        </div>
-
-        {/* Date Range Display */}
-        <div className="mb-6">
-          <p className="text-gray-500 text-sm">
-            Showing data from{' '}
-            <span className="text-gray-300">
-              {format(dateRange.startDate, 'MMM d, yyyy')}
-            </span>{' '}
-            to{' '}
-            <span className="text-gray-300">
-              {format(dateRange.endDate, 'MMM d, yyyy')}
-            </span>
-          </p>
         </div>
 
         {/* Error State */}
