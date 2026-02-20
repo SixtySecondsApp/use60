@@ -247,6 +247,10 @@ export function MeetingDetail() {
   };
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [id]);
+
+  useEffect(() => {
     if (!id) return;
 
     const fetchMeetingDetails = async () => {

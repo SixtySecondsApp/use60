@@ -13,12 +13,17 @@ import {
   Loader2,
   FileEdit,
   CornerDownLeft,
+  XCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { Task } from '@/lib/database/models';
 import { Button } from '@/components/ui/button';
 import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
 import { useCommandCentreSkills, type CommandCentreSkill } from '@/lib/hooks/useCommandCentreSkills';
 import { useExecuteSkillForTask } from '@/lib/hooks/useExecuteSkillForTask';
+import { supabase } from '@/lib/supabase/clientV2';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 /** Map deliverable_type to a default skill key for "Do this" */
 const DELIVERABLE_SKILL_MAP: Record<string, string> = {
@@ -42,8 +47,30 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
 
   const { data: skills } = useCommandCentreSkills(organizationId ?? null);
   const executeSkill = useExecuteSkillForTask();
+  const queryClient = useQueryClient();
 
   const isAIDoing = executeSkill.isPending || task.ai_status === 'working';
+  const isFailed = task.ai_status === 'failed';
+
+  const handleCancelAI = async () => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ ai_status: 'none', updated_at: new Date().toISOString() })
+      .eq('id', task.id);
+    if (error) {
+      toast.error('Failed to cancel AI task');
+    } else {
+      toast.success('AI task cancelled');
+      queryClient.invalidateQueries({ queryKey: ['command-centre-tasks'] });
+    }
+  };
+
+  const handleRetry = () => {
+    const skillKey =
+      DELIVERABLE_SKILL_MAP[task.deliverable_type || ''] ||
+      'post-meeting-followup-drafter';
+    executeSkill.mutate({ taskId: task.id, skillKey });
+  };
 
   // Sync canvas content from task when task changes
   useEffect(() => {
@@ -158,6 +185,35 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
       <div className="flex-1 overflow-y-auto">
         {/* AI working overlay */}
         <AnimatePresence>
+          {isFailed && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="sticky top-0 z-10 mx-4 mt-3"
+            >
+              <div className="flex items-center justify-between rounded-lg border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/5 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <XCircle className="h-4 w-4 text-red-500" />
+                  <div>
+                    <p className="text-xs font-medium text-red-700 dark:text-red-400">AI draft failed</p>
+                    <p className="text-[11px] text-red-500 dark:text-red-400/60">Something went wrong. You can retry or write manually.</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-500/10 gap-1"
+                  onClick={handleRetry}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Retry
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
           {isAIDoing && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -165,12 +221,23 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
               exit={{ opacity: 0 }}
               className="sticky top-0 z-10 mx-4 mt-3"
             >
-              <div className="flex items-center gap-3 rounded-lg border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 px-4 py-3">
-                <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
-                <div>
-                  <p className="text-xs font-medium text-violet-700 dark:text-violet-400">AI is drafting content...</p>
-                  <p className="text-[11px] text-violet-500 dark:text-violet-400/60">Reading task context, meeting notes, and contact history</p>
+              <div className="flex items-center justify-between rounded-lg border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
+                  <div>
+                    <p className="text-xs font-medium text-violet-700 dark:text-violet-400">AI is drafting content...</p>
+                    <p className="text-[11px] text-violet-500 dark:text-violet-400/60">Reading task context, meeting notes, and contact history</p>
+                  </div>
                 </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-violet-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 gap-1"
+                  onClick={handleCancelAI}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Cancel
+                </Button>
               </div>
             </motion.div>
           )}

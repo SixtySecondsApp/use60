@@ -50,11 +50,12 @@ const statusConfig: Record<IntegrationStatus, { badge: string; text: string; dot
 
 function IntegrationLogo({
   logoUrl,
+  fallbackIcon,
   name,
   containerClassName,
 }: {
   logoUrl?: string | null;
-  fallbackIcon?: React.ReactNode; // Kept for API compatibility but not rendered
+  fallbackIcon?: React.ReactNode;
   name: string;
   containerClassName?: string;
 }) {
@@ -66,6 +67,8 @@ function IntegrationLogo({
     setErrored(false);
   }, [logoUrl]);
 
+  const showFallback = !logoUrl || errored;
+
   return (
     <div
       className={cn(
@@ -73,7 +76,6 @@ function IntegrationLogo({
         containerClassName
       )}
     >
-      {/* Only render S3 logo - no fallback icons */}
       {logoUrl && !errored && (
         <img
           src={logoUrl}
@@ -90,6 +92,11 @@ function IntegrationLogo({
             setLoaded(false);
           }}
         />
+      )}
+      {showFallback && fallbackIcon && (
+        <div className="w-6 h-6 text-gray-400 dark:text-gray-500">
+          {fallbackIcon}
+        </div>
       )}
     </div>
   );

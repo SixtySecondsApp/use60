@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
+import { getLogoDevUrl } from '@/lib/utils/logoDev';
 
 interface LogoResponse {
   logo_url: string | null;
@@ -289,11 +290,11 @@ export function useIntegrationLogo(
       .replace(/\/$/, '')
       .toLowerCase();
 
-    // Always render a deterministic S3 URL immediately (prevents fallback flicker).
-    // If we've already resolved a better/confirmed URL, use the cached value.
-    const s3Url = getLogoS3Url(normalizedDomain);
+    // Use logo.dev URL as immediate source (CloudFront CDN, reliable in browsers).
+    // If we've already resolved a cached S3 URL, use that instead.
+    const logoDevUrl = getLogoDevUrl(normalizedDomain);
     const cached = logoUrlCache.get(normalizedDomain);
-    setLogoUrl(cached || s3Url);
+    setLogoUrl(cached || logoDevUrl);
 
     // Optionally warm/populate the S3 cache via edge function.
     if (!enableFetch) return;

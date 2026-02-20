@@ -58,7 +58,8 @@ import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
 import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
-import { getIntegrationDomain, getLogoS3Url, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
+import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
+import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { useUser } from '@/lib/hooks/useUser';
 import { IntegrationVoteState, useIntegrationUpvotes } from '@/lib/hooks/useIntegrationUpvotes';
 import { useBrandingSettings } from '@/lib/hooks/useBrandingSettings';
@@ -946,7 +947,7 @@ export default function Integrations() {
     [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, instantlyLoading, apifyLoading]
   );
 
-  // Preload cached S3 logo URLs on page load to prevent any visible swap/flicker.
+  // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
   useEffect(() => {
     const allIds = [
       ...builtIntegrations.map((i) => i.id),
@@ -954,10 +955,12 @@ export default function Integrations() {
     ];
 
     // De-dupe
-    const urls = Array.from(new Set(allIds.map((id) => getLogoS3Url(getIntegrationDomain(id)))));
+    const domains = Array.from(new Set(allIds.map((id) => getIntegrationDomain(id))));
 
-    for (const url of urls) {
+    for (const domain of domains) {
       try {
+        const url = getLogoDevUrl(domain);
+        if (!url) continue;
         const img = new Image();
         img.decoding = 'async';
         img.src = url;
