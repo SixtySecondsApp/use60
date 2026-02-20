@@ -222,6 +222,15 @@ See: `docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md` and `docs/security/SECUR
 | `docs/deployment/PRODUCTION_DEPLOYMENT_CHECKLIST.md` | Production deployment procedures |
 | `docs/integrations/` | 19 integration-specific docs |
 | `docs/PRD_PROACTIVE_AI_TEAMMATE.md` | Product vision and roadmap |
+| `docs/SUBMODULES.md` | Git submodule setup and commands |
+
+## Git Submodules
+
+This repo uses git submodules. Always run `git submodule update --init --recursive` after pulling. See `docs/SUBMODULES.md` for full guide.
+
+| Submodule | Path | Repo |
+|-----------|------|------|
+| meeting-translation | `meeting-translation/` | `SixtySecondsApp/meeting-translation` |
 
 ## Cursor Rules
 
