@@ -184,6 +184,34 @@ function parseMarkdownSummary(markdown: string): string {
     .replace(/\n/g, '<br/>');
 }
 
+// Speaker color system matching the reference transcript design
+const SPEAKER_CONFIGS = [
+  {
+    gradient: 'linear-gradient(135deg, #3b82f6, #60a5fa)',
+    color: '#60a5fa',
+    rowHoverClass: 'group-hover:bg-blue-500/10 group-hover:border-blue-400/20',
+    tsHoverClass: 'group-hover:text-blue-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
+    color: '#a78bfa',
+    rowHoverClass: 'group-hover:bg-violet-500/10 group-hover:border-violet-400/20',
+    tsHoverClass: 'group-hover:text-violet-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #059669, #34d399)',
+    color: '#34d399',
+    rowHoverClass: 'group-hover:bg-emerald-500/10 group-hover:border-emerald-400/20',
+    tsHoverClass: 'group-hover:text-emerald-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #ea580c, #fb923c)',
+    color: '#fb923c',
+    rowHoverClass: 'group-hover:bg-orange-500/10 group-hover:border-orange-400/20',
+    tsHoverClass: 'group-hover:text-orange-400',
+  },
+];
+
 export function MeetingDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -204,6 +232,7 @@ export function MeetingDetail() {
   const [hasStructuredSummary, setHasStructuredSummary] = useState(false);
   const [voiceRecordingData, setVoiceRecordingData] = useState<VoiceRecordingData | null>(null);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
+  const [speakerAvatarMap, setSpeakerAvatarMap] = useState<Map<string, string>>(new Map());
 
   // Activation tracking for North Star metric
   const { trackFirstSummaryViewed } = useActivationTracking();
@@ -383,6 +412,36 @@ export function MeetingDetail() {
 
     fetchVoiceRecordingData();
   }, [meeting?.voice_recording_id, meeting?.source_type]);
+
+  // Fetch profile avatars for attendees so transcript can show org member photos
+  useEffect(() => {
+    const emails = attendees.map(a => a.email).filter(Boolean) as string[];
+    if (emails.length === 0) return;
+
+    const fetchProfiles = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('email, avatar_url, remove_avatar, first_name, last_name')
+        .in('email', emails);
+
+      if (!data?.length) return;
+
+      const map = new Map<string, string>();
+      for (const profile of data) {
+        if (profile.avatar_url && !profile.remove_avatar) {
+          // Map by full name (from attendees) → avatarUrl
+          const attendee = attendees.find(a => a.email === profile.email);
+          if (attendee?.name) map.set(attendee.name, profile.avatar_url);
+          // Also map by first name for partial matches
+          const firstName = (profile.first_name || attendee?.name || '').trim().split(/\s+/)[0];
+          if (firstName) map.set(firstName, profile.avatar_url);
+        }
+      }
+      setSpeakerAvatarMap(map);
+    };
+
+    fetchProfiles();
+  }, [attendees]);
 
   // Real-time subscription for processing status updates
   useEffect(() => {
@@ -679,7 +738,7 @@ export function MeetingDetail() {
           {/* Media Player - Voice, 60 Notetaker, or Fathom */}
           {meeting.source_type === 'voice' && meeting.voice_recording_id ? (
             /* Voice Meeting Player with Stacked Waveforms */
-            <div className="glassmorphism-card overflow-hidden">
+            <div className="glassmorphism-card overflow-hidden" style={{ maxHeight: '320px' }}>
               <VoiceMeetingPlayer
                 voiceRecordingId={meeting.voice_recording_id}
                 speakers={voiceRecordingData?.speakers || []}
@@ -691,11 +750,12 @@ export function MeetingDetail() {
             </div>
           ) : meeting.source_type === '60_notetaker' && meeting.video_url ? (
             /* 60 Notetaker Video Player */
-            <div className="glassmorphism-card overflow-hidden">
+            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }}>
               <video
                 controls
                 preload="metadata"
-                className="w-full aspect-video bg-black"
+                className="w-full h-full bg-black"
+                style={{ objectFit: 'contain' }}
                 poster={meeting.thumbnail_url || undefined}
               >
                 <source src={meeting.video_url} type="video/mp4" />
@@ -720,14 +780,14 @@ export function MeetingDetail() {
             </div>
           ) : (meeting.fathom_recording_id || meeting.share_url) ? (
             /* Fathom Video Player */
-            <div className="glassmorphism-card overflow-hidden" data-player-container>
+            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }} data-player-container>
               <FathomPlayerV2
                 ref={playerRef}
                 shareUrl={meeting.share_url}
                 title={meeting.title}
                 startSeconds={currentTimestamp}
                 timeoutMs={10000}
-                className="aspect-video"
+                className="h-full"
                 onLoad={() => undefined}
                 onError={() => undefined}
               />
@@ -920,48 +980,139 @@ export function MeetingDetail() {
                 {/* Transcript Tab */}
                 <TabsContent value="transcript" className="mt-0">
                   {meeting.transcript_text ? (
-                    <div className="glassmorphism-light p-4 rounded-lg max-h-[600px] overflow-y-auto">
-                      <div className="text-sm leading-relaxed space-y-3">
-                        {meeting.transcript_text.split('\n').map((line, idx) => {
-                          // New format: [HH:MM:SS] Speaker: text
+                    <div className="max-h-[600px] overflow-y-auto pr-1 scrollbar-custom">
+                      <div className="text-sm space-y-0">
+                      {(() => {
+                        const speakerSlotMap = new Map<string, number>();
+                        let slotIdx = 0;
+                        const getSlot = (speaker: string) => {
+                          if (!speakerSlotMap.has(speaker)) speakerSlotMap.set(speaker, slotIdx++ % SPEAKER_CONFIGS.length);
+                          return speakerSlotMap.get(speaker)!;
+                        };
+                        const getFirstName = (name: string) => name.trim().split(/\s+/)[0];
+
+                        const lines = meeting.transcript_text!.split('\n');
+                        const result: React.ReactNode[] = [];
+                        let prevSpeaker: string | null = null;
+
+                        lines.forEach((line, idx) => {
+                          // Timestamped format: [HH:MM:SS] Speaker: text
                           const tsMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/);
                           if (tsMatch) {
                             const [, ts, speaker, text] = tsMatch;
                             const seconds = parseTimestampToSeconds(ts);
-                            return (
-                              <div key={idx} className="flex gap-3 group">
-                                {seconds !== null ? (
-                                  <button
-                                    onClick={() => handleTimestampJump(seconds)}
-                                    className="text-xs text-zinc-500 hover:text-blue-400 font-mono shrink-0 w-[62px] text-right cursor-pointer transition-colors"
-                                    title={`Jump to ${ts}`}
-                                  >
-                                    {ts}
-                                  </button>
-                                ) : (
-                                  <span className="text-xs text-zinc-600 font-mono shrink-0 w-[62px] text-right">{ts}</span>
-                                )}
-                                <div className="font-semibold text-blue-400 shrink-0">{speaker}:</div>
-                                <div className="text-muted-foreground flex-1">{text}</div>
+                            const sp = speaker.trim();
+                            const slot = getSlot(sp);
+                            const { gradient, color, rowHoverClass, tsHoverClass } = SPEAKER_CONFIGS[slot];
+                            const firstName = getFirstName(sp);
+                            const initial = firstName[0]?.toUpperCase() ?? '?';
+                            const isCont = sp === prevSpeaker;
+                            const avatarUrl = speakerAvatarMap.get(sp) || speakerAvatarMap.get(firstName);
+
+                            if (!isCont && prevSpeaker !== null) {
+                              result.push(
+                                <div key={`br-${idx}`} className="my-2 h-px bg-gradient-to-r from-transparent via-gray-200/60 dark:via-gray-700/40 to-transparent" />
+                              );
+                            }
+
+                            const inner = (
+                              <div className={`group w-full text-left flex items-start gap-3 px-2 py-2 rounded-lg border border-transparent transition-all duration-150 ${rowHoverClass}`}>
+                                {/* Speaker avatar + name column */}
+                                <div className="w-9 shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                                  {!isCont ? (
+                                    <>
+                                      {avatarUrl ? (
+                                        <img src={avatarUrl} alt={firstName} className="w-6 h-6 rounded-md object-cover shrink-0" />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                             style={{ background: gradient }}>
+                                          {initial}
+                                        </div>
+                                      )}
+                                      <span className="text-[10px] font-medium leading-none" style={{ color }}>{firstName}</span>
+                                    </>
+                                  ) : (
+                                    <div className="w-6 h-6" />
+                                  )}
+                                </div>
+                                {/* Content + timestamp */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">{text}</p>
+                                    {seconds !== null && (
+                                      <span className={`font-mono text-[11px] text-gray-400 dark:text-gray-500 shrink-0 mt-0.5 transition-colors ${tsHoverClass}`}>{ts}</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             );
+
+                            result.push(
+                              seconds !== null ? (
+                                <button key={idx} className="w-full text-left" onClick={() => handleTimestampJump(seconds)}>
+                                  {inner}
+                                </button>
+                              ) : (
+                                <div key={idx}>{inner}</div>
+                              )
+                            );
+                            prevSpeaker = sp;
+                            return;
                           }
+
                           // Legacy format: Speaker: text (no timestamp)
-                          const speakerMatch = line.match(/^([^:]+):\s*(.*)$/);
-                          if (speakerMatch) {
-                            const [, speaker, text] = speakerMatch;
-                            return (
-                              <div key={idx} className="flex gap-3">
-                                <div className="font-semibold text-blue-400 min-w-[120px] shrink-0">{speaker}:</div>
-                                <div className="text-muted-foreground flex-1">{text}</div>
+                          const spMatch = line.match(/^([^:]+):\s*(.*)$/);
+                          if (spMatch) {
+                            const [, speaker, text] = spMatch;
+                            const sp = speaker.trim();
+                            const slot = getSlot(sp);
+                            const { gradient, color, rowHoverClass } = SPEAKER_CONFIGS[slot];
+                            const firstName = getFirstName(sp);
+                            const initial = firstName[0]?.toUpperCase() ?? '?';
+                            const isCont = sp === prevSpeaker;
+                            const avatarUrl = speakerAvatarMap.get(sp) || speakerAvatarMap.get(firstName);
+
+                            if (!isCont && prevSpeaker !== null) {
+                              result.push(
+                                <div key={`br-${idx}`} className="my-2 h-px bg-gradient-to-r from-transparent via-gray-200/60 dark:via-gray-700/40 to-transparent" />
+                              );
+                            }
+                            result.push(
+                              <div key={idx} className={`flex items-start gap-3 px-2 py-2 rounded-lg border border-transparent ${rowHoverClass}`}>
+                                <div className="w-9 shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                                  {!isCont ? (
+                                    <>
+                                      {avatarUrl ? (
+                                        <img src={avatarUrl} alt={firstName} className="w-6 h-6 rounded-md object-cover shrink-0" />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                             style={{ background: gradient }}>
+                                          {initial}
+                                        </div>
+                                      )}
+                                      <span className="text-[10px] font-medium leading-none" style={{ color }}>{firstName}</span>
+                                    </>
+                                  ) : (
+                                    <div className="w-6 h-6" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">{text}</p>
+                                </div>
                               </div>
                             );
+                            prevSpeaker = sp;
+                            return;
                           }
-                          // Plain text line (no speaker)
-                          return line.trim() ? (
-                            <div key={idx} className="text-muted-foreground">{line}</div>
-                          ) : null;
-                        })}
+
+                          // Plain text line
+                          if (line.trim()) {
+                            result.push(<div key={idx} className="text-sm text-muted-foreground pl-12 py-1">{line}</div>);
+                          }
+                        });
+
+                        return result;
+                      })()}
                       </div>
                     </div>
                   ) : meeting.transcript_status === 'processing' ? (
@@ -1024,26 +1175,47 @@ export function MeetingDetail() {
 
           {/* Attendees */}
           <div className="section-card">
-            <div className="font-semibold mb-2">Attendees</div>
-            <div className="space-y-2">
+            <div className="font-semibold mb-3">Attendees ({attendees.length})</div>
+            <div className="space-y-1">
               {attendees.length > 0 ? (
-                attendees.map((attendee) => {
+                attendees.map((attendee, idx) => {
                   const isExternal = attendee.is_external;
                   const contactId = isExternal ? attendee.id : null;
+                  const firstName = attendee.name?.trim().split(/\s+/)[0] ?? '';
+                  const initial = firstName[0]?.toUpperCase() ?? '?';
+                  const avatarUrl = speakerAvatarMap.get(attendee.name ?? '') || speakerAvatarMap.get(firstName);
+
                   const content = (
-                    <div className="flex items-center justify-between text-sm">
-                      <div>
-                        <div className="font-medium">{attendee.name}</div>
+                    <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-2 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-900/40 transition-colors">
+                      {/* Avatar */}
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt={firstName}
+                          className="w-8 h-8 rounded-full object-cover shrink-0"
+                        />
+                      ) : (
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0"
+                          style={{ background: SPEAKER_CONFIGS[idx % SPEAKER_CONFIGS.length].gradient }}
+                        >
+                          {initial}
+                        </div>
+                      )}
+                      {/* Info */}
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm truncate">{attendee.name}</div>
                         {attendee.email && (
-                          <div className="text-muted-foreground text-xs">{attendee.email}</div>
+                          <div className="text-xs text-muted-foreground truncate">{attendee.email}</div>
                         )}
                       </div>
+                      {/* Badge */}
                       {isExternal ? (
-                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300">
+                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 shrink-0">
                           External
                         </Badge>
                       ) : (
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="shrink-0">
                           Internal
                         </Badge>
                       )}
@@ -1051,18 +1223,11 @@ export function MeetingDetail() {
                   );
 
                   return contactId ? (
-                    <Link
-                      key={attendee.id}
-                      to={`/crm/contacts/${contactId}`}
-                      className="block hover:bg-gray-100 dark:hover:bg-zinc-900/40 rounded-lg px-2 -mx-2 transition-colors"
-                    >
+                    <Link key={attendee.id} to={`/crm/contacts/${contactId}`} className="block">
                       {content}
                     </Link>
                   ) : (
-                    <div
-                      key={attendee.id}
-                      className="block hover:bg-gray-100 dark:hover:bg-zinc-900/40 rounded-lg px-2 -mx-2 transition-colors"
-                    >
+                    <div key={attendee.id}>
                       {content}
                     </div>
                   );

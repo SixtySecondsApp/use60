@@ -110,6 +110,14 @@ const MOMENT_TYPE_BG: Record<MaMomentType, string> = {
 };
 
 const SPEAKER_COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4'];
+const SPEAKER_GRADIENTS = [
+  'linear-gradient(135deg, #3b82f6, #60a5fa)',
+  'linear-gradient(135deg, #7c3aed, #a78bfa)',
+  'linear-gradient(135deg, #059669, #34d399)',
+  'linear-gradient(135deg, #ea580c, #fb923c)',
+  'linear-gradient(135deg, #0891b2, #22d3ee)',
+  'linear-gradient(135deg, #9333ea, #c084fc)',
+];
 
 function parseSpeakerTalkTime(fullText: string) {
   const lines = (fullText || '').split('\n').filter(l => l.trim());
@@ -135,23 +143,35 @@ function parseSpeakerTalkTime(fullText: string) {
 }
 
 function SpeakerTranscriptView({ fullText }: { fullText: string }) {
-  const lines = fullText.split('\n').filter(l => l.trim());
-  const speakerPattern = /^([A-Za-z\s\-'.]+):\s*(.*)$/;
-  const speakerColorMap = new Map<string, string>();
-  let colorIndex = 0;
+  const lines = fullText.split('\n');
+  // Match both timestamped [HH:MM:SS] Speaker: text and legacy Speaker: text
+  const tsPattern = /^\[(\d{2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/;
+  const legacyPattern = /^([A-Za-z\s\-'.]+):\s*(.*)$/;
+  const speakerSlotMap = new Map<string, number>();
+  let slotIdx = 0;
 
-  const segments = lines.map(line => {
-    const match = line.match(speakerPattern);
-    if (match) {
-      const speaker = match[1].trim();
-      if (!speakerColorMap.has(speaker)) {
-        speakerColorMap.set(speaker, SPEAKER_COLORS[colorIndex % SPEAKER_COLORS.length]);
-        colorIndex++;
-      }
-      return { speaker, text: match[2].trim(), color: speakerColorMap.get(speaker)! };
+  interface Seg { speaker: string | null; text: string; ts: string | null; slot: number; }
+  const segments: Seg[] = [];
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const tsMatch = line.match(tsPattern);
+    if (tsMatch) {
+      const [, ts, speaker, text] = tsMatch;
+      const sp = speaker.trim();
+      if (!speakerSlotMap.has(sp)) speakerSlotMap.set(sp, slotIdx++ % SPEAKER_GRADIENTS.length);
+      segments.push({ speaker: sp, text: text.trim(), ts, slot: speakerSlotMap.get(sp)! });
+      continue;
     }
-    return { speaker: null, text: line.trim(), color: '#6b7280' };
-  });
+    const legMatch = line.match(legacyPattern);
+    if (legMatch) {
+      const sp = legMatch[1].trim();
+      if (!speakerSlotMap.has(sp)) speakerSlotMap.set(sp, slotIdx++ % SPEAKER_GRADIENTS.length);
+      segments.push({ speaker: sp, text: legMatch[2].trim(), ts: null, slot: speakerSlotMap.get(sp)! });
+      continue;
+    }
+    segments.push({ speaker: null, text: line.trim(), ts: null, slot: 0 });
+  }
 
   const hasSpeakers = segments.some(s => s.speaker !== null);
 
@@ -163,24 +183,50 @@ function SpeakerTranscriptView({ fullText }: { fullText: string }) {
     );
   }
 
+  let prevSpeaker: string | null = null;
   return (
-    <div className="space-y-3">
-      {segments.map((seg, i) => (
-        seg.speaker ? (
-          <div key={i} className="flex gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
-                 style={{ backgroundColor: seg.color }}>
-              {seg.speaker[0].toUpperCase()}
+    <div className="py-2">
+      {segments.map((seg, i) => {
+        if (!seg.speaker) {
+          return seg.text ? <p key={i} className="text-sm text-gray-500 dark:text-gray-500 px-2 py-1 pl-[calc(52px+2.25rem+0.75rem)]">{seg.text}</p> : null;
+        }
+        const gradient = SPEAKER_GRADIENTS[seg.slot];
+        const color = SPEAKER_COLORS[seg.slot % SPEAKER_COLORS.length];
+        const firstName = seg.speaker.trim().split(/\s+/)[0];
+        const initial = firstName[0]?.toUpperCase() ?? '?';
+        const isCont = seg.speaker === prevSpeaker;
+        prevSpeaker = seg.speaker;
+
+        return (
+          <React.Fragment key={i}>
+            {!isCont && i > 0 && (
+              <div className="h-px my-1 mx-4"
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(148,163,184,0.12) 20%, rgba(148,163,184,0.12) 80%, transparent)' }} />
+            )}
+            <div className={`flex items-start gap-0 px-2 rounded-lg ${isCont ? 'pt-1 pb-2' : 'pt-3 pb-2'}`}>
+              {/* Timestamp placeholder col */}
+              {seg.ts && (
+                <div className="flex-shrink-0 w-[52px] pt-0.5 pr-3 text-right">
+                  <span className="font-mono text-[11px] text-gray-400/60">{seg.ts}</span>
+                </div>
+              )}
+              {!seg.ts && <div className="flex-shrink-0 w-[52px]" />}
+              {/* Avatar */}
+              <div className={`flex-shrink-0 w-9 ${isCont ? 'invisible' : ''}`}>
+                <div className="w-[26px] h-[26px] rounded-lg flex items-center justify-center text-white text-[11px] font-semibold"
+                     style={{ background: gradient }}>
+                  {initial}
+                </div>
+              </div>
+              {/* Content */}
+              <div className="flex-1 min-w-0 pl-3">
+                {!isCont && <div className="text-[12px] font-semibold mb-1" style={{ color }}>{firstName}</div>}
+                <div className="text-[14px] leading-[1.65] text-gray-700 dark:text-gray-300">{seg.text}</div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <span className="text-xs font-semibold" style={{ color: seg.color }}>{seg.speaker}</span>
-              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{seg.text}</p>
-            </div>
-          </div>
-        ) : seg.text ? (
-          <p key={i} className="text-sm text-gray-500 dark:text-gray-500 pl-11">{seg.text}</p>
-        ) : null
-      ))}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
