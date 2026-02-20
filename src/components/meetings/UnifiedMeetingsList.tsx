@@ -671,7 +671,7 @@ const UnifiedMeetingsList: React.FC = () => {
         />
         <StatCard
           title="Coach Score"
-          value={stats.avgCoachRating ? `${stats.avgCoachRating}/10` : 'N/A'}
+          value={stats.avgCoachRating ? `${Math.min(stats.avgCoachRating, 10)}/10` : 'N/A'}
           icon={<Award className="h-5 w-5" />}
           trend={stats.avgCoachRating > 7 ? 'up' : stats.avgCoachRating < 5 ? 'down' : 'neutral'}
         />

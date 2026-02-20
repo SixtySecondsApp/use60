@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Play,
-  Calendar,
   RefreshCw,
   ArrowLeft,
   Users,
@@ -15,16 +14,9 @@ import {
   Mail,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
 import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { VSLComparisonCards, VSLTrendChart, VSLRetentionGraph } from '@/components/vsl-analytics';
 import {
   useVSLAnalytics,
@@ -36,10 +28,8 @@ import {
   formatLandingPageName,
 } from '@/lib/hooks/useLandingPageAnalytics';
 
-type DateRangePreset = '7d' | '30d' | '90d' | 'thisMonth' | 'lastMonth';
-
 export function VSLAnalytics() {
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('30d');
+  const dateFilter = useDateRangeFilter('30d');
 
   const {
     loading,
@@ -47,7 +37,6 @@ export function VSLAnalytics() {
     data,
     isAdmin,
     userLoading,
-    dateRange,
     variants,
     comparison,
     hasData,
@@ -66,26 +55,17 @@ export function VSLAnalytics() {
     refresh: refreshLanding,
   } = useLandingPageAnalytics();
 
-  const handlePresetChange = (value: DateRangePreset) => {
-    setDatePreset(value);
-    switch (value) {
-      case '7d':
-        setLast7Days();
-        break;
-      case '30d':
-        setLast30Days();
-        break;
-      case '90d':
-        setLast90Days();
-        break;
-      case 'thisMonth':
-        setThisMonth();
-        break;
-      case 'lastMonth':
-        setLastMonth();
-        break;
+  // Sync date filter state with the VSL analytics hook
+  useEffect(() => {
+    if (dateFilter.datePreset === 'custom' && dateFilter.dateRange) {
+      return;
     }
-  };
+    switch (dateFilter.period) {
+      case 7: setLast7Days(); break;
+      case 30: setLast30Days(); break;
+      case 90: setLast90Days(); break;
+    }
+  }, [dateFilter.period, dateFilter.datePreset]);
 
   // Show loading state while checking user permissions
   if (userLoading) {
@@ -145,19 +125,14 @@ export function VSLAnalytics() {
 
           <div className="flex items-center gap-3">
             {/* Date Range Selector */}
-            <Select value={datePreset} onValueChange={handlePresetChange}>
-              <SelectTrigger className="w-[160px] bg-gray-800 border-gray-700 text-white">
-                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-800 border-gray-700">
-                <SelectItem value="7d">Last 7 Days</SelectItem>
-                <SelectItem value="30d">Last 30 Days</SelectItem>
-                <SelectItem value="90d">Last 90 Days</SelectItem>
-                <SelectItem value="thisMonth">This Month</SelectItem>
-                <SelectItem value="lastMonth">Last Month</SelectItem>
-              </SelectContent>
-            </Select>
+            <DateRangeFilter
+              {...dateFilter}
+              variant="dark"
+              extraPresets={[
+                { key: 'thisMonth', label: 'This Month', onClick: () => { setThisMonth(); dateFilter.setIsDatePickerOpen(false); } },
+                { key: 'lastMonth', label: 'Last Month', onClick: () => { setLastMonth(); dateFilter.setIsDatePickerOpen(false); } },
+              ]}
+            />
 
             {/* Refresh Button */}
             <Button
@@ -170,28 +145,6 @@ export function VSLAnalytics() {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
-        </div>
-
-        {/* Date Range Display */}
-        <div className="mb-6">
-          <p className="text-gray-500 text-sm">
-            Showing data from{' '}
-            <span className="text-gray-300">
-              {format(dateRange.startDate, 'MMM d, yyyy')}
-            </span>{' '}
-            to{' '}
-            <span className="text-gray-300">
-              {format(dateRange.endDate, 'MMM d, yyyy')}
-            </span>
-            {data?.fetchedAt && (
-              <span className="ml-2">
-                · Last updated{' '}
-                <span className="text-gray-300">
-                  {format(new Date(data.fetchedAt), 'h:mm a')}
-                </span>
-              </span>
-            )}
-          </p>
         </div>
 
         {/* Error State */}

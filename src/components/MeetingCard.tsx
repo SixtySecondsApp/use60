@@ -463,7 +463,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
             <div>
               <span className="text-gray-500">Coach Rating</span>
               <div className={`font-semibold ${getCoachRatingColor(meeting.coach_rating)}`}>
-                {meeting.coach_rating}/10
+                {Math.min(meeting.coach_rating, 10)}/10
               </div>
             </div>
           )}

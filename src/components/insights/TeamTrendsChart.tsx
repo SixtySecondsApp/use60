@@ -31,6 +31,7 @@ import {
 
 interface TeamTrendsChartProps {
   period: TimePeriod;
+  dateRange?: { start: Date; end: Date };
   className?: string;
 }
 
@@ -309,8 +310,8 @@ function TabInfoTooltip({ text }: { text: string }) {
 const TAB_CLASS =
   'flex items-center gap-2 text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm';
 
-export function TeamTrendsChart({ period, className }: TeamTrendsChartProps) {
-  const { data, isPending, error } = useTeamTrends(period);
+export function TeamTrendsChart({ period, dateRange, className }: TeamTrendsChartProps) {
+  const { data, isPending, error } = useTeamTrends(period, dateRange);
 
   // isPending covers both "actively fetching" and "query disabled" — show skeleton instead of error
   if (isPending) {

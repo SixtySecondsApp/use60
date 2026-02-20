@@ -940,10 +940,14 @@ export class TeamAnalyticsService {
   static async getSentimentExtremes(
     orgId: string,
     periodDays: TimePeriod = 30,
-    userId?: string
+    userId?: string,
+    dateRange?: DateRange
   ): Promise<SentimentExtremesResult> {
     try {
-      const dateFrom = new Date(Date.now() - periodDays * 86400000).toISOString();
+      const dateFrom = dateRange
+        ? dateRange.start.toISOString()
+        : new Date(Date.now() - periodDays * 86400000).toISOString();
+      const dateTo = dateRange ? dateRange.end.toISOString() : undefined;
 
       const buildQuery = (ascending: boolean) => {
         let q = supabase
@@ -957,8 +961,10 @@ export class TeamAnalyticsService {
           .eq('org_id', orgId)
           .not('sentiment_score', 'is', null)
           .not('meeting_start', 'is', null)
-          .gte('meeting_start', dateFrom)
-          .order('sentiment_score', { ascending })
+          .gte('meeting_start', dateFrom);
+
+        if (dateTo) q = q.lte('meeting_start', dateTo);
+        q = q.order('sentiment_score', { ascending })
           .limit(5);
 
         if (userId) q = q.eq('owner_user_id', userId);
@@ -998,10 +1004,14 @@ export class TeamAnalyticsService {
   static async getTalkTimeExtremes(
     orgId: string,
     periodDays: TimePeriod = 30,
-    userId?: string
+    userId?: string,
+    dateRange?: DateRange
   ): Promise<TalkTimeExtremesResult> {
     try {
-      const dateFrom = new Date(Date.now() - periodDays * 86400000).toISOString();
+      const dateFrom = dateRange
+        ? dateRange.start.toISOString()
+        : new Date(Date.now() - periodDays * 86400000).toISOString();
+      const dateTo = dateRange ? dateRange.end.toISOString() : undefined;
 
       const buildQuery = (ascending: boolean) => {
         let q = supabase
@@ -1015,8 +1025,10 @@ export class TeamAnalyticsService {
           .eq('org_id', orgId)
           .not('talk_time_rep_pct', 'is', null)
           .not('meeting_start', 'is', null)
-          .gte('meeting_start', dateFrom)
-          .order('talk_time_rep_pct', { ascending })
+          .gte('meeting_start', dateFrom);
+
+        if (dateTo) q = q.lte('meeting_start', dateTo);
+        q = q.order('talk_time_rep_pct', { ascending })
           .limit(5);
 
         if (userId) q = q.eq('owner_user_id', userId);
@@ -1143,19 +1155,23 @@ export class TeamAnalyticsService {
   static async getObjectionDetails(
     orgId: string,
     periodDays: TimePeriod = 30,
-    userId?: string
+    userId?: string,
+    dateRange?: DateRange
   ): Promise<ObjectionDetailsResult> {
     try {
-      const dateFrom = new Date(Date.now() - periodDays * 86400000).toISOString();
+      const dateFrom = dateRange
+        ? dateRange.start.toISOString()
+        : new Date(Date.now() - periodDays * 86400000).toISOString();
+      const dateTo = dateRange ? dateRange.end.toISOString() : undefined;
 
-      // 1. Get 5 meetings with objections (reuse existing drill-down)
-      const meetings = await this.getMeetingsForDrillDown(orgId, 'objection', periodDays, userId, 5);
+      // 1. Get 5 meetings with objections (reuse existing drill-down, pass dateRange)
+      const meetings = await this.getMeetingsForDrillDown(orgId, 'objection', periodDays, userId, 5, dateRange);
 
       // 2. Get top 3 objections via existing RPC
       const { data: topObjData, error: topObjError } = await supabase.rpc('get_top_objections', {
         p_org_id: orgId,
         p_date_from: dateFrom,
-        p_date_to: null,
+        p_date_to: dateTo || null,
         p_limit: 3,
       });
 
@@ -1171,12 +1187,16 @@ export class TeamAnalyticsService {
       }));
 
       // 3. Get handling methods: query meeting_classifications for resolved objections with responses
-      const { data: classData, error: classError } = await supabase
+      let classQuery = supabase
         .from('meeting_classifications')
         .select('objections, meetings!inner(title, meeting_start, org_id)')
         .eq('org_id', orgId)
         .eq('has_objection', true)
         .gte('meetings.meeting_start', dateFrom);
+
+      if (dateTo) classQuery = classQuery.lte('meetings.meeting_start', dateTo);
+
+      const { data: classData, error: classError } = await classQuery;
 
       if (classError) {
         console.error('Error fetching classification data:', classError);

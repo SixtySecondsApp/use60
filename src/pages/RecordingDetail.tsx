@@ -42,7 +42,37 @@ import {
   Check,
   RefreshCw
 } from 'lucide-react'
+import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary'
+import { VideoPlayer, type VideoPlayerHandle } from '@/components/ui/VideoPlayer'
 import type { RecordingStatus, MeetingPlatform } from '@/lib/types/meetingBaaS'
+
+// Speaker color configs for transcript redesign (same palette as MeetingDetail)
+const SPEAKER_CONFIGS = [
+  {
+    gradient: 'linear-gradient(135deg, #3b82f6, #60a5fa)',
+    color: '#60a5fa',
+    rowHoverClass: 'group-hover:bg-blue-500/10 group-hover:border-blue-400/20',
+    tsHoverClass: 'group-hover:text-blue-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
+    color: '#a78bfa',
+    rowHoverClass: 'group-hover:bg-violet-500/10 group-hover:border-violet-400/20',
+    tsHoverClass: 'group-hover:text-violet-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #059669, #34d399)',
+    color: '#34d399',
+    rowHoverClass: 'group-hover:bg-emerald-500/10 group-hover:border-emerald-400/20',
+    tsHoverClass: 'group-hover:text-emerald-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #ea580c, #fb923c)',
+    color: '#fb923c',
+    rowHoverClass: 'group-hover:bg-orange-500/10 group-hover:border-orange-400/20',
+    tsHoverClass: 'group-hover:text-orange-400',
+  },
+];
 
 // Status badge configuration
 const statusConfig: Record<RecordingStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
@@ -143,12 +173,14 @@ export const RecordingDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const videoRef = useRef<HTMLVideoElement>(null)
+  const playerRef = useRef<VideoPlayerHandle>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [resolvedThumbnailUrl, setResolvedThumbnailUrl] = useState<string | null>(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const [showProposalWizard, setShowProposalWizard] = useState(false)
   const [linkedMeetingId, setLinkedMeetingId] = useState<string | null>(null)
+  const [hasStructuredSummary, setHasStructuredSummary] = useState(false)
   const [linkedMeetingTitle, setLinkedMeetingTitle] = useState<string>('')
   const [meetingActionItems, setMeetingActionItems] = useState<any[]>([])
   const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false)
@@ -160,12 +192,27 @@ export const RecordingDetail: React.FC = () => {
   const [speakerEdits, setSpeakerEdits] = useState<Record<number, string>>({})
   const [isSavingSpeakers, setIsSavingSpeakers] = useState(false)
   const [isPollingStatus, setIsPollingStatus] = useState(false)
+  const [speakerProfileMap, setSpeakerProfileMap] = useState<Record<number, { name: string; avatar_url: string | null }>>({})
+  const [calendarAttendees, setCalendarAttendees] = useState<Array<{ email: string; name?: string }>>([])
 
   // Fetch recording data
   const { recording, isLoading, error } = useRecording(id || '')
 
   // Subscribe to real-time updates
   useRecordingRealtime(id || '')
+
+  // Fetch attendees from calendar_events when recording.attendees is empty (older recordings)
+  useEffect(() => {
+    if (recording?.attendees?.length || !recording?.calendar_event_id) return
+    supabase
+      .from('calendar_events')
+      .select('attendees')
+      .eq('id', recording.calendar_event_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.attendees?.length) setCalendarAttendees(data.attendees)
+      })
+  }, [recording?.attendees, recording?.calendar_event_id])
 
   // Tasks for the linked meeting
   const taskFilters = useMemo(() => (
@@ -444,47 +491,130 @@ export const RecordingDetail: React.FC = () => {
     }
   }, [id, recording?.speakers, recording?.hitl_type, speakerEdits, linkedMeetingId])
 
-  // Build speaker name map from recording.speakers and transcript_json.speakers
+  // Build speaker map: only stores REAL identified names/emails (no "Speaker N" placeholder)
+  // speaker_id → { name?, email?, is_internal? }
   const speakerMap = useMemo(() => {
-    const map: Record<number, { name: string; email?: string; is_internal?: boolean }> = {}
-    // Priority 1: recording.speakers (most reliable, from process-recording)
+    const map: Record<number, { name?: string; email?: string; is_internal?: boolean }> = {}
+
+    // Priority 1: recording.speakers (set by process-recording when attendees were matched)
     if (recording?.speakers) {
       for (const s of recording.speakers) {
-        const displayName = s.name || s.email || `Speaker ${s.speaker_id + 1}`
-        map[s.speaker_id] = { name: displayName, email: s.email, is_internal: s.is_internal }
-      }
-    }
-    // Priority 2: transcript_json.speakers (supplement if missing from above)
-    if (recording?.transcript_json?.speakers) {
-      for (const s of recording.transcript_json.speakers) {
-        if (!map[s.id]) {
-          map[s.id] = { name: s.name || s.email || `Speaker ${s.id + 1}`, email: s.email, is_internal: s.is_internal }
+        map[s.speaker_id] = {
+          name: s.name || undefined,   // only store real names, not undefined fallback
+          email: s.email || undefined,
+          is_internal: s.is_internal,
         }
       }
     }
+
+    // Priority 2: transcript_json.speakers (supplement unset entries)
+    if (recording?.transcript_json?.speakers) {
+      for (const s of recording.transcript_json.speakers) {
+        const existing = map[s.id]
+        if (!existing?.name && s.name) map[s.id] = { ...map[s.id], name: s.name }
+        if (!existing?.email && s.email) map[s.id] = { ...map[s.id], email: s.email }
+      }
+    }
+
     return map
   }, [recording?.speakers, recording?.transcript_json?.speakers])
 
-  // Get speaker display name for an utterance
-  // Note: process-recording saves utterances with "speaker" field (number),
-  // but the TypeScript type expects "speaker_id". Handle both for compatibility.
+  // Effective attendees: recording.attendees (from deploy/bot.completed) or calendarAttendees fallback
+  // speaker_id N maps to attendees[N] — matches how process-recording does positional identification
+  const effectiveAttendees = useMemo(() =>
+    (recording?.attendees?.length ? recording.attendees : calendarAttendees) as Array<{ email?: string; name?: string }>,
+    [recording?.attendees, calendarAttendees]
+  )
+
+  // Fetch org member profiles for speakers — looks up by email in profiles table
+  // Uses speaker email first, then attendees positional fallback (speaker_id → attendees[speaker_id])
+  useEffect(() => {
+    if (!recording?.speakers?.length) return
+
+    const speakerEmailMap = new Map<number, string>() // speaker_id → email
+
+    // Source 1: direct email on speaker object (most reliable — set by process-recording)
+    for (const s of recording.speakers) {
+      if (s.email) speakerEmailMap.set(s.speaker_id, s.email)
+    }
+
+    // Source 2: attendees positional fallback — speaker_id N → effectiveAttendees[N]
+    for (const s of recording.speakers) {
+      if (!speakerEmailMap.has(s.speaker_id)) {
+        const att = effectiveAttendees[s.speaker_id]
+        if (att?.email) speakerEmailMap.set(s.speaker_id, att.email)
+      }
+    }
+
+    if (!speakerEmailMap.size) return
+
+    const emails = [...new Set(speakerEmailMap.values())].filter(Boolean)
+    if (!emails.length) return
+
+    supabase
+      .from('profiles')
+      .select('email, first_name, last_name, avatar_url')
+      .in('email', emails)
+      .then(({ data }) => {
+        if (!data?.length) return
+        const emailToProfile = new Map(data.map(p => [p.email, p]))
+        const map: Record<number, { name: string; avatar_url: string | null }> = {}
+        for (const [speakerId, email] of speakerEmailMap) {
+          const p = emailToProfile.get(email)
+          if (p) {
+            const fullName = [p.first_name, p.last_name].filter(Boolean).join(' ')
+            map[speakerId] = { name: fullName || email, avatar_url: p.avatar_url ?? null }
+          }
+        }
+        setSpeakerProfileMap(map)
+      })
+  }, [recording?.speakers, effectiveAttendees])
+
+  // Get speaker display name for an utterance — full priority chain:
+  // profile → identified name → utterance speaker_name → utterance email → attendee positional → fallback
+  // Note: process-recording may save utterances with "speaker" field (number) instead of "speaker_id"
   const getSpeakerName = useCallback((utterance: Record<string, unknown>) => {
     const speakerId = (utterance.speaker_id ?? utterance.speaker) as number | undefined
-    // 1. Check our speakerMap (built from recording.speakers)
-    if (speakerId != null && speakerMap[speakerId]) {
-      return speakerMap[speakerId].name
+
+    // 1. Org member profile (looked up by email — most accurate, has real full name)
+    if (speakerId != null && speakerProfileMap[speakerId]?.name) {
+      return speakerProfileMap[speakerId].name
     }
-    // 2. Utterance-level speaker_name
+
+    // 2. Identified name from recording.speakers / transcript_json.speakers
+    if (speakerId != null && speakerMap[speakerId]?.name) {
+      return speakerMap[speakerId].name!
+    }
+
+    // 3. Utterance-level speaker_name (provided directly by MeetingBaaS / Gladia — very reliable)
     if (utterance.speaker_name) return utterance.speaker_name as string
-    // 3. Utterance-level email
+
+    // 4. Utterance-level email
     if (utterance.speaker_email) return utterance.speaker_email as string
-    // 4. Fallback (1-indexed for display)
+
+    // 5. Email from identified speaker map (at least shows who they are)
+    if (speakerId != null && speakerMap[speakerId]?.email) {
+      return speakerMap[speakerId].email!
+    }
+
+    // 6. Attendees positional fallback — speaker_id N → attendees[N]
+    //    (matches how process-recording assigns speaker IDs to attendee positions)
+    if (speakerId != null && effectiveAttendees[speakerId]) {
+      const att = effectiveAttendees[speakerId]
+      if (att.name) return att.name
+      if (att.email) return att.email
+    }
+
+    // 7. Final fallback
     return `Speaker ${(speakerId ?? 0) + 1}`
-  }, [speakerMap])
+  }, [speakerMap, speakerProfileMap, effectiveAttendees])
 
   // Handle timestamp click: scroll to video + seek
   const handleTimestampJump = useCallback((seconds: number) => {
-    if (videoRef.current) {
+    if (playerRef.current) {
+      playerRef.current.seek(seconds)
+      playerRef.current.videoElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } else if (videoRef.current) {
       videoRef.current.currentTime = seconds
       videoRef.current.play().catch(() => { /* autoplay may be blocked */ })
       videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -653,7 +783,7 @@ export const RecordingDetail: React.FC = () => {
   const hasAiInsights = recording.sentiment_score != null || recording.coach_rating != null || recording.talk_time_rep_pct != null
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-[1400px] mx-auto">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -784,26 +914,23 @@ export const RecordingDetail: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <div className="bg-black rounded-xl overflow-hidden aspect-video">
-                {isLoadingVideo ? (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 text-white animate-spin" />
-                  </div>
-                ) : videoUrl ? (
-                  <video
-                    ref={videoRef}
-                    controls
-                    className="w-full h-full"
-                    src={videoUrl}
-                    poster={resolvedThumbnailUrl || recording.thumbnail_url || undefined}
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
-                    <Video className="h-12 w-12" />
-                    <p className="text-sm">Video unavailable</p>
-                  </div>
-                )}
-              </div>
+              {isLoadingVideo ? (
+                <div className="bg-black rounded-2xl aspect-video flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 text-white/60 animate-spin" />
+                </div>
+              ) : videoUrl ? (
+                <VideoPlayer
+                  ref={playerRef}
+                  src={videoUrl}
+                  poster={resolvedThumbnailUrl || recording.thumbnail_url || undefined}
+                  className="aspect-video w-full"
+                />
+              ) : (
+                <div className="bg-gray-900/60 border border-gray-700/40 rounded-2xl aspect-video flex flex-col items-center justify-center text-gray-500 gap-2">
+                  <Video className="h-12 w-12" />
+                  <p className="text-sm">Video unavailable</p>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -911,21 +1038,31 @@ export const RecordingDetail: React.FC = () => {
 
                 {/* Summary Tab */}
                 <TabsContent value="summary" className="px-4 sm:px-6 pb-4 sm:pb-6 mt-0">
-                  {recording.summary ? (
-                    <div className="prose dark:prose-invert max-w-none">
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
-                        {recording.summary}
-                      </p>
+                  {/* AI Structured Summary (classification, outcomes, objections, etc.) */}
+                  {linkedMeetingId && (
+                    <div className="mb-4">
+                      <StructuredMeetingSummary meetingId={linkedMeetingId} onSummaryReady={setHasStructuredSummary} />
                     </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Sparkles className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-500 dark:text-gray-400">
-                        {recording.status === 'processing'
-                          ? 'Summary is being generated...'
-                          : 'No summary available for this recording.'}
-                      </p>
-                    </div>
+                  )}
+
+                  {/* Only show basic summary when no structured summary is available */}
+                  {!hasStructuredSummary && (
+                    recording.summary ? (
+                      <div className="prose dark:prose-invert max-w-none">
+                        <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                          {recording.summary}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <Sparkles className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-500 dark:text-gray-400">
+                          {recording.status === 'processing'
+                            ? 'Summary is being generated...'
+                            : 'No summary available for this recording.'}
+                        </p>
+                      </div>
+                    )
                   )}
 
                   {/* Highlights */}
@@ -955,78 +1092,201 @@ export const RecordingDetail: React.FC = () => {
 
                 {/* Transcript Tab */}
                 <TabsContent value="transcript" className="px-4 sm:px-6 pb-4 sm:pb-6 mt-0">
-                  {recording.transcript_json?.utterances ? (
-                    <div className="max-h-[600px] overflow-y-auto">
-                      <div className="text-sm leading-relaxed space-y-3">
-                        {recording.transcript_json.utterances.map((utterance, index) => {
-                          const speakerName = getSpeakerName(utterance as unknown as Record<string, unknown>)
-                          const seconds = utterance.start
-                          return (
-                            <div key={index} className="flex gap-3 group">
-                              <button
-                                onClick={() => handleTimestampJump(seconds)}
-                                className="text-xs text-zinc-500 hover:text-blue-400 font-mono shrink-0 w-[62px] text-right cursor-pointer transition-colors pt-0.5"
-                                title={`Jump to ${formatTimestamp(seconds)}`}
-                              >
-                                {formatTimestamp(seconds)}
-                              </button>
-                              <div className="font-semibold text-blue-400 shrink-0">
-                                {speakerName}:
-                              </div>
-                              <div className="text-muted-foreground flex-1">
-                                {utterance.text}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : recording.transcript_text ? (
-                    <div className="max-h-[600px] overflow-y-auto">
-                      <div className="text-sm leading-relaxed space-y-3">
-                        {recording.transcript_text.split('\n').map((line, idx) => {
-                          // New format: [HH:MM:SS] Speaker: text
-                          const tsMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/)
-                          if (tsMatch) {
-                            const [, ts, speaker, text] = tsMatch
-                            const secs = parseTimestampToSeconds(ts)
+                  {recording.transcript_json?.utterances ? (() => {
+                    // Build stable speaker → config map
+                    const speakerConfigMap = new Map<string, typeof SPEAKER_CONFIGS[number]>();
+                    let configIdx = 0;
+                    const getConfig = (key: string) => {
+                      if (!speakerConfigMap.has(key)) {
+                        speakerConfigMap.set(key, SPEAKER_CONFIGS[configIdx++ % SPEAKER_CONFIGS.length]);
+                      }
+                      return speakerConfigMap.get(key)!;
+                    };
+                    const getFirstName = (name: string) => name.trim().split(/\s+/)[0];
+
+                    return (
+                      <div className="max-h-[600px] overflow-y-auto pr-1 scrollbar-custom">
+                        <div className="text-sm space-y-0">
+                          {recording.transcript_json.utterances.map((utterance, index) => {
+                            const utt = utterance as unknown as Record<string, unknown>;
+                            const speakerId = (utt.speaker_id ?? utt.speaker) as number | undefined;
+                            const speakerName = getSpeakerName(utt);
+                            const seconds = utterance.start;
+                            const cfg = getConfig(speakerName);
+                            const firstName = getFirstName(speakerName);
+                            const avatarUrl = speakerId != null ? speakerProfileMap[speakerId]?.avatar_url : null;
+                            const prevUtt = index > 0 ? recording.transcript_json!.utterances[index - 1] as unknown as Record<string, unknown> : null;
+                            const prevSpeaker = prevUtt ? getSpeakerName(prevUtt) : null;
+                            const isContinuation = prevSpeaker === speakerName;
+                            const showDivider = !isContinuation && index > 0;
+
                             return (
-                              <div key={idx} className="flex gap-3 group">
-                                {secs !== null ? (
-                                  <button
-                                    onClick={() => handleTimestampJump(secs)}
-                                    className="text-xs text-zinc-500 hover:text-blue-400 font-mono shrink-0 w-[62px] text-right cursor-pointer transition-colors"
-                                    title={`Jump to ${ts}`}
-                                  >
-                                    {ts}
-                                  </button>
-                                ) : (
-                                  <span className="text-xs text-zinc-600 font-mono shrink-0 w-[62px] text-right">{ts}</span>
+                              <div key={index}>
+                                {showDivider && (
+                                  <div className="my-2 h-px bg-gradient-to-r from-transparent via-gray-200/60 dark:via-gray-700/40 to-transparent" />
                                 )}
-                                <div className="font-semibold text-blue-400 shrink-0">{speaker}:</div>
-                                <div className="text-muted-foreground flex-1">{text}</div>
+                                <button
+                                  onClick={() => handleTimestampJump(seconds)}
+                                  className={`group w-full text-left flex items-start gap-3 px-2 py-2 rounded-lg border border-transparent transition-all duration-150 ${cfg.rowHoverClass}`}
+                                >
+                                  {/* Speaker avatar column */}
+                                  <div className="w-9 shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                                    {!isContinuation ? (
+                                      <>
+                                        {avatarUrl ? (
+                                          <img
+                                            src={avatarUrl}
+                                            alt={firstName}
+                                            className="w-6 h-6 rounded-md object-cover shrink-0"
+                                          />
+                                        ) : (
+                                          <div
+                                            className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                            style={{ background: cfg.gradient }}
+                                          >
+                                            {firstName[0]?.toUpperCase()}
+                                          </div>
+                                        )}
+                                        <span className="text-[10px] font-medium leading-none" style={{ color: cfg.color }}>
+                                          {firstName}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <div className="w-6 h-6" />
+                                    )}
+                                  </div>
+                                  {/* Content column */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">
+                                        {utterance.text}
+                                      </p>
+                                      <span className={`font-mono text-[11px] text-gray-400 dark:text-gray-500 shrink-0 mt-0.5 transition-colors ${cfg.tsHoverClass}`}>
+                                        {formatTimestamp(seconds)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </button>
                               </div>
-                            )
-                          }
-                          // Legacy format: Speaker: text
-                          const speakerMatch = line.match(/^([^:]+):\s*(.*)$/)
-                          if (speakerMatch) {
-                            const [, speaker, text] = speakerMatch
-                            return (
-                              <div key={idx} className="flex gap-3">
-                                <div className="font-semibold text-blue-400 min-w-[120px] shrink-0">{speaker}:</div>
-                                <div className="text-muted-foreground flex-1">{text}</div>
-                              </div>
-                            )
-                          }
-                          // Plain text
-                          return line.trim() ? (
-                            <div key={idx} className="text-muted-foreground">{line}</div>
-                          ) : null
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
+                    );
+                  })() : recording.transcript_text ? (() => {
+                    // Build stable speaker → config map for text format
+                    const speakerConfigMap = new Map<string, typeof SPEAKER_CONFIGS[number]>();
+                    let configIdx = 0;
+                    const getConfig = (key: string) => {
+                      if (!speakerConfigMap.has(key)) {
+                        speakerConfigMap.set(key, SPEAKER_CONFIGS[configIdx++ % SPEAKER_CONFIGS.length]);
+                      }
+                      return speakerConfigMap.get(key)!;
+                    };
+                    const getFirstName = (name: string) => name.trim().split(/\s+/)[0];
+                    let prevSpeakerText: string | null = null;
+
+                    return (
+                      <div className="max-h-[600px] overflow-y-auto pr-1 scrollbar-custom">
+                        <div className="text-sm space-y-0">
+                          {recording.transcript_text.split('\n').map((line, idx) => {
+                            // New format: [HH:MM:SS] Speaker: text
+                            const tsMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/);
+                            if (tsMatch) {
+                              const [, ts, speaker, text] = tsMatch;
+                              const secs = parseTimestampToSeconds(ts);
+                              const cfg = getConfig(speaker);
+                              const firstName = getFirstName(speaker);
+                              const isContinuation = prevSpeakerText === speaker;
+                              const showDivider = !isContinuation && idx > 0;
+                              prevSpeakerText = speaker;
+                              return (
+                                <div key={idx}>
+                                  {showDivider && (
+                                    <div className="my-2 h-px bg-gradient-to-r from-transparent via-gray-200/60 dark:via-gray-700/40 to-transparent" />
+                                  )}
+                                  <button
+                                    onClick={() => secs !== null && handleTimestampJump(secs)}
+                                    className={`group w-full text-left flex items-start gap-3 px-2 py-2 rounded-lg border border-transparent transition-all duration-150 ${cfg.rowHoverClass} ${secs !== null ? 'cursor-pointer' : 'cursor-default'}`}
+                                  >
+                                    <div className="w-9 shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                                      {!isContinuation ? (
+                                        <>
+                                          <div
+                                            className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                            style={{ background: cfg.gradient }}
+                                          >
+                                            {firstName[0]?.toUpperCase()}
+                                          </div>
+                                          <span className="text-[10px] font-medium leading-none" style={{ color: cfg.color }}>
+                                            {firstName}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <div className="w-6 h-6" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">{text}</p>
+                                        {secs !== null && (
+                                          <span className={`font-mono text-[11px] text-gray-400 dark:text-gray-500 shrink-0 mt-0.5 transition-colors ${cfg.tsHoverClass}`}>
+                                            {ts}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </button>
+                                </div>
+                              );
+                            }
+                            // Legacy format: Speaker: text (no timestamp)
+                            const speakerMatch = line.match(/^([^:]+):\s*(.*)$/);
+                            if (speakerMatch) {
+                              const [, speaker, text] = speakerMatch;
+                              const cfg = getConfig(speaker);
+                              const firstName = getFirstName(speaker);
+                              const isContinuation = prevSpeakerText === speaker;
+                              const showDivider = !isContinuation && idx > 0;
+                              prevSpeakerText = speaker;
+                              return (
+                                <div key={idx}>
+                                  {showDivider && (
+                                    <div className="my-2 h-px bg-gradient-to-r from-transparent via-gray-200/60 dark:via-gray-700/40 to-transparent" />
+                                  )}
+                                  <div className="flex items-start gap-3 px-2 py-2">
+                                    <div className="w-9 shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                                      {!isContinuation ? (
+                                        <>
+                                          <div
+                                            className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                            style={{ background: cfg.gradient }}
+                                          >
+                                            {firstName[0]?.toUpperCase()}
+                                          </div>
+                                          <span className="text-[10px] font-medium leading-none" style={{ color: cfg.color }}>
+                                            {firstName}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <div className="w-6 h-6" />
+                                      )}
+                                    </div>
+                                    <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm flex-1">{text}</p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            // Plain text line
+                            prevSpeakerText = null;
+                            return line.trim() ? (
+                              <div key={idx} className="px-2 py-1 text-gray-500 dark:text-gray-400 text-sm">{line}</div>
+                            ) : null;
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })() : (
                     <div className="text-center py-12">
                       <FileText className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
                       <p className="text-gray-500 dark:text-gray-400">
@@ -1092,7 +1352,18 @@ export const RecordingDetail: React.FC = () => {
             <div className="space-y-2">
               {recording.speakers && recording.speakers.length > 0 ? (
                 recording.speakers.map((speaker) => {
-                  const displayName = speaker.name || speaker.email || `Speaker ${speaker.speaker_id + 1}`
+                  // Resolution chain: profile → identified name/email → utterance-level → attendee positional → fallback
+                  const attFallback = effectiveAttendees[speaker.speaker_id]
+                  const resolvedName =
+                    speakerProfileMap[speaker.speaker_id]?.name ||
+                    speakerMap[speaker.speaker_id]?.name ||
+                    speaker.name ||
+                    speaker.email ||
+                    attFallback?.name ||
+                    attFallback?.email ||
+                    `Speaker ${speaker.speaker_id + 1}`
+                  const resolvedEmail = speakerMap[speaker.speaker_id]?.email || speaker.email || attFallback?.email
+                  const resolvedAvatar = speakerProfileMap[speaker.speaker_id]?.avatar_url
                   const isExternal = !speaker.is_internal
 
                   return (
@@ -1101,12 +1372,20 @@ export const RecordingDetail: React.FC = () => {
                       className="flex items-center justify-between text-sm hover:bg-gray-100 dark:hover:bg-zinc-900/40 rounded-lg px-2 -mx-2 py-1.5 transition-colors"
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <div className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0",
-                          speaker.is_internal ? 'bg-emerald-500' : 'bg-blue-500'
-                        )}>
-                          {(editingSpeakers ? speakerEdits[speaker.speaker_id]?.[0] : displayName.charAt(0))?.toUpperCase() || '?'}
-                        </div>
+                        {resolvedAvatar && !editingSpeakers ? (
+                          <img
+                            src={resolvedAvatar}
+                            alt={resolvedName}
+                            className="w-8 h-8 rounded-full object-cover shrink-0"
+                          />
+                        ) : (
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0"
+                            style={{ background: SPEAKER_CONFIGS[speaker.speaker_id % SPEAKER_CONFIGS.length].gradient }}
+                          >
+                            {(editingSpeakers ? speakerEdits[speaker.speaker_id]?.[0] : resolvedName.charAt(0))?.toUpperCase() || '?'}
+                          </div>
+                        )}
                         <div className="min-w-0 flex-1">
                           {editingSpeakers ? (
                             <Input
@@ -1115,14 +1394,14 @@ export const RecordingDetail: React.FC = () => {
                                 ...prev,
                                 [speaker.speaker_id]: e.target.value
                               }))}
-                              placeholder={`Speaker ${speaker.speaker_id + 1}`}
+                              placeholder={resolvedName}
                               className="h-7 text-sm"
                             />
                           ) : (
                             <>
-                              <div className="font-medium truncate">{displayName}</div>
-                              {speaker.email && speaker.name && (
-                                <div className="text-xs text-muted-foreground truncate">{speaker.email}</div>
+                              <div className="font-medium truncate">{resolvedName}</div>
+                              {resolvedEmail && resolvedEmail !== resolvedName && (
+                                <div className="text-xs text-muted-foreground truncate">{resolvedEmail}</div>
                               )}
                             </>
                           )}

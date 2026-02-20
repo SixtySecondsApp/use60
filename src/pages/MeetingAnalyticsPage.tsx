@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useMeetingIntelligence } from '@/lib/hooks/useMeetingIntelligence';
+import { format } from 'date-fns';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import type { TimePeriod } from '@/lib/hooks/useTeamAnalytics';
 
 import { SearchHero } from '@/components/meeting-analytics/SearchHero';
@@ -33,11 +35,10 @@ export default function MeetingAnalyticsPage() {
 
   const activeTab = searchParams.get('tab') || 'dashboard';
 
-  // Period selector state (shared across tabs)
-  const [period, setPeriod] = useState<TimePeriod>(30);
-  const handlePeriodChange = useCallback((value: string) => {
-    setPeriod(parseInt(value, 10) as TimePeriod);
-  }, []);
+  // Date range state (shared across tabs)
+  const dateFilter = useDateRangeFilter('30d');
+  const period = dateFilter.period as TimePeriod;
+  const { dateRange } = dateFilter;
 
   const handleSync = async () => {
     setIsIndexing(true);
@@ -195,29 +196,8 @@ export default function MeetingAnalyticsPage() {
               })}
             </TabsList>
 
-            {/* Period Selector */}
-            <Tabs value={period.toString()} onValueChange={handlePeriodChange}>
-              <TabsList className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl p-1 shadow-sm">
-                <TabsTrigger
-                  value="7"
-                  className="px-3 py-1.5 text-sm rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800/80 data-[state=active]:shadow-sm transition-all"
-                >
-                  7 days
-                </TabsTrigger>
-                <TabsTrigger
-                  value="30"
-                  className="px-3 py-1.5 text-sm rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800/80 data-[state=active]:shadow-sm transition-all"
-                >
-                  30 days
-                </TabsTrigger>
-                <TabsTrigger
-                  value="90"
-                  className="px-3 py-1.5 text-sm rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800/80 data-[state=active]:shadow-sm transition-all"
-                >
-                  90 days
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* Date Range Picker */}
+            <DateRangeFilter {...dateFilter} />
           </div>
 
           {/* SearchHero - only on Dashboard tab */}
@@ -245,7 +225,7 @@ export default function MeetingAnalyticsPage() {
               transition={{ duration: 0.2 }}
             >
               <TabsContent value="dashboard" className="mt-0">
-                <DashboardTab period={period} />
+                <DashboardTab period={period} dateRange={dateRange} />
               </TabsContent>
 
               <TabsContent value="transcripts" className="mt-0">

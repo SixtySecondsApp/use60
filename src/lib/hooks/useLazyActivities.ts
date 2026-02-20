@@ -43,7 +43,7 @@ async function fetchLimitedActivities(config: LazyActivitiesConfig) {
   let query = (supabase as any)
     .from('activities')
     .select(`
-      *,
+      id, user_id, type, date, amount, quantity, client_name, details, deal_id, created_at,
       deals (
         id,
         name,
@@ -105,10 +105,9 @@ export function useLazyActivities(config: LazyActivitiesConfig = { enabled: fals
     queryFn: () => fetchLimitedActivities(effectiveConfig),
     enabled: effectiveConfig.enabled && !!userId,
     staleTime: 5 * 60 * 1000, // 5 minutes - prevent excessive refetching
-    cacheTime: 10 * 60 * 1000, // 10 minutes - keep data in cache longer
+    gcTime: 10 * 60 * 1000, // 10 minutes - keep data in cache longer
     refetchOnWindowFocus: false, // Don't refetch on window focus to prevent flicker
     refetchOnMount: false, // Don't refetch on mount if we have cached data
-    keepPreviousData: true, // Keep showing old data while fetching new data
     placeholderData: previousData => previousData, // Use previous data as placeholder during transitions
   });
 
@@ -120,8 +119,8 @@ export function useLazyActivities(config: LazyActivitiesConfig = { enabled: fals
 
 // Hook specifically for dashboard metrics with progressive loading
 export function useDashboardActivities(currentMonth: Date, enabled: boolean = true) {
-  const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-  const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+  const startOfMonth = new Date(Date.UTC(currentMonth.getFullYear(), currentMonth.getMonth(), 1));
+  const endOfMonth = new Date(Date.UTC(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999));
 
   // Remove logging to prevent re-renders
 
@@ -135,9 +134,9 @@ export function useDashboardActivities(currentMonth: Date, enabled: boolean = tr
 
 // Hook for previous month data (loads after current month)
 export function usePreviousMonthActivities(currentMonth: Date, enabled: boolean = false) {
-  const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
-  const startOfPrevMonth = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 1);
-  const endOfPrevMonth = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+  const prevMonth = new Date(Date.UTC(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  const startOfPrevMonth = new Date(Date.UTC(prevMonth.getUTCFullYear(), prevMonth.getUTCMonth(), 1));
+  const endOfPrevMonth = new Date(Date.UTC(prevMonth.getUTCFullYear(), prevMonth.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 
   return useLazyActivities({
     enabled,
@@ -171,7 +170,7 @@ export function useProgressiveDashboardData(currentMonth: Date, enabled: boolean
     // Overall loading state
     isInitialLoad: currentMonthResult.isLoading,
     isLoadingComparisons: previousMonthResult.isLoading,
-    hasComparisons: previousMonthResult.data && previousMonthResult.data.length > 0,
+    hasComparisons: previousMonthResult.data !== undefined && previousMonthResult.data !== null,
   };
 }
 
