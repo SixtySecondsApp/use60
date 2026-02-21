@@ -629,10 +629,7 @@ IMPORTANT: Output ONLY the final email. Start directly with "Subject:" — no pr
     if (!user?.id || !activeOrgId) return;
     setIsFinishing(true);
     try {
-      const stepResult = await completeStep(user.id, activeOrgId, 'test');
-      if (stepResult.creditsAwarded) {
-        toast.success('+60 credits earned!', { description: 'Setup complete!' });
-      }
+      await completeStep(user.id, activeOrgId, 'test');
     } finally {
       setIsFinishing(false);
     }
@@ -908,7 +905,7 @@ IMPORTANT: Output ONLY the final email. Start directly with "Subject:" — no pr
               ) : (
                 <span className="flex items-center gap-2">
                   <PartyPopper className="w-4 h-4" />
-                  Complete Setup & Earn +60 Credits
+                  Complete Setup & Earn +20 Credits
                 </span>
               )}
             </Button>

@@ -34,7 +34,8 @@ export const WORKFLOW_AI_NODES = [
   { type: 'freepik_video_gen', label: 'Video Generator', description: 'AI Video Creation (Multiple Models)', iconName: 'Video', nodeType: 'freepikVideoGen' },
   { type: 'veo3_video_gen', label: 'Veo 3', description: 'Google Veo 3 Text-to-Video', iconName: 'Video', nodeType: 'veo3VideoGen' },
   { type: 'freepik_lip_sync', label: 'Lip Sync', description: 'Sync audio to video', iconName: 'MessageSquare', nodeType: 'freepikLipSync' },
-  { type: 'freepik_music', label: 'Music Generator', description: 'AI Music Creation', iconName: 'Music', nodeType: 'freepikMusic' }
+  { type: 'freepik_music', label: 'Music Generator', description: 'AI Music Creation', iconName: 'Music', nodeType: 'freepikMusic' },
+  { type: 'ai_ark_search', label: 'AI Ark Search', description: 'Find companies, people, or lookalike accounts', iconName: 'Search', nodeType: 'aiArkSearch' }
 ];
 
 // Deprecated: Merged into WORKFLOW_AI_NODES

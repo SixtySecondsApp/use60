@@ -1,0 +1,505 @@
+{
+  "project": {
+    "name": "Command Centre — Audit Fix",
+    "description": "Fix all broken, incomplete, and degraded issues found in the Command Centre audit. The V2 redesign (WritingCanvas + ContextPanel + SlashCommandDropdown) left many features non-functional. This plan restores full usability.",
+    "createdAt": "2026-02-20T12:00:00Z",
+    "auditReport": ".sixty/consult/command-centre-audit.md",
+    "baseFeaturePlan": ".sixty/plan-command-centre.json"
+  },
+
+  "features": [
+    {
+      "id": "critical-fixes",
+      "name": "Critical Bug Fixes (Crashes & Data Loss)",
+      "status": "pending",
+      "priority": 1,
+      "description": "Fix issues that cause crashes, data errors, or silent data loss"
+    },
+    {
+      "id": "canvas-save",
+      "name": "Canvas Persistence & Input Wiring",
+      "status": "pending",
+      "priority": 2,
+      "description": "Make the writing canvas actually save content and wire up the bottom input bar"
+    },
+    {
+      "id": "wire-stubs",
+      "name": "Wire Stub Buttons & Interactions",
+      "status": "pending",
+      "priority": 3,
+      "description": "Connect all dead buttons to real functionality"
+    },
+    {
+      "id": "context-panel",
+      "name": "Context Panel Data Population",
+      "status": "pending",
+      "priority": 4,
+      "description": "Ensure metadata is fetched and context panel actually renders for tasks with context"
+    },
+    {
+      "id": "quality",
+      "name": "Code Quality & Cleanup",
+      "status": "pending",
+      "priority": 5,
+      "description": "Fix patterns violations, remove dead code, consolidate duplicated configs"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "FIX-001",
+      "feature": "critical-fixes",
+      "title": "Add metadata to task SELECT queries",
+      "type": "data",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["FIX-007", "FIX-008"],
+      "acceptance": [
+        "useCommandCentreTasks fetchAllTasks and fetchFilteredTasks include metadata in SELECT",
+        "Task metadata is available for ContextPanel, subtask badges, and parent/child grouping",
+        "Context panel toggle button appears for tasks that have meeting_context or contact_context"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/hooks/useCommandCentreTasks.ts"
+      ]
+    },
+    {
+      "id": "FIX-002",
+      "feature": "critical-fixes",
+      "title": "Remove dismiss_reason from SELECT, fix dismiss mutation",
+      "type": "data",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "acceptance": [
+        "useDismissTask no longer selects dismiss_reason column",
+        "Dismiss mutation succeeds without PostgREST error",
+        "Toast confirms dismissal to user"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+    {
+      "id": "FIX-003",
+      "feature": "critical-fixes",
+      "title": "Add organization_id filter to unified-task-ai-worker skill lookup",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "acceptance": [
+        "handleSkillExecution filters organization_skills by organization_id from user's org membership",
+        "Skill content is isolated per-org — no cross-org data leak",
+        "Error message if skill not found for the user's org"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/unified-task-ai-worker/index.ts"
+      ]
+    },
+    {
+      "id": "FIX-004",
+      "feature": "critical-fixes",
+      "title": "Fix AIReasoningFooter positioning (relative, not fixed)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "acceptance": [
+        "AIReasoningFooter renders at the bottom of the command centre container, not the viewport",
+        "Does not overlap WritingCanvas bottom input area",
+        "Respects the 3-column layout — only spans the center column"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/command-centre/AIReasoningFooter.tsx",
+        "src/pages/platform/CommandCentre.tsx"
+      ]
+    },
+    {
+      "id": "FIX-005",
+      "feature": "critical-fixes",
+      "title": "Add priority fallback guard in SidebarTaskItem",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "acceptance": [
+        "SidebarTaskItem does not crash if task.priority is undefined or an unexpected value",
+        "Falls back to a default config (e.g., grey dot, 'Unknown' label)"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "src/components/command-centre/SidebarTaskItem.tsx"
+      ]
+    },
+    {
+      "id": "FIX-006",
+      "feature": "critical-fixes",
+      "title": "Add error state and staleTime to task queries",
+      "type": "data",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "acceptance": [
+        "CommandCentre.tsx renders an error state with retry button when task query fails",
+        "useCommandCentreTasks has staleTime: 30_000 on both queries to avoid excessive refetches",
+        "Error toast shown on query failure"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/hooks/useCommandCentreTasks.ts",
+        "src/pages/platform/CommandCentre.tsx"
+      ]
+    },
+
+    {
+      "id": "FIX-007",
+      "feature": "canvas-save",
+      "title": "Add debounced auto-save for WritingCanvas edits",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["FIX-001"], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-008"],
+      "acceptance": [
+        "Canvas edits are debounced (1s) and saved to task.metadata.deliverable_content or task.description",
+        "Save indicator shows 'Saving...' / 'Saved' in the toolbar area",
+        "Content persists across task switches and page refreshes",
+        "Unsaved changes warned on task switch (optional)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-centre/WritingCanvas.tsx",
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+    {
+      "id": "FIX-008",
+      "feature": "canvas-save",
+      "title": "Wire bottom input bar to add notes/comments",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["FIX-001"], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-007"],
+      "acceptance": [
+        "Bottom textarea submits on Enter (or click send button)",
+        "Creates a note/comment appended to task.metadata.notes or separate comments array",
+        "Input clears after submit",
+        "Slash command (/) still opens the command dropdown as before"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/WritingCanvas.tsx",
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+    {
+      "id": "FIX-009",
+      "feature": "canvas-save",
+      "title": "Fix N keyboard shortcut — add data attribute to sidebar",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "acceptance": [
+        "data-command-centre-quick-add attribute is set on the quick-add input or button in TaskSidebar",
+        "Pressing N focuses the quick-add element or opens the new task dialog"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "src/components/command-centre/TaskSidebar.tsx"
+      ]
+    },
+
+    {
+      "id": "FIX-010",
+      "feature": "wire-stubs",
+      "title": "Wire Revise with AI and Let AI Draft buttons",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["FIX-007"], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-011", "FIX-012"],
+      "acceptance": [
+        "Revise with AI calls useExecuteSkillForTask with a 'revise' instruction appended to existing deliverable",
+        "Let AI Draft calls useExecuteSkillForTask with the task's default skill/deliverable type",
+        "Both show AI working state in the canvas"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/TaskDetailHeader.tsx",
+        "src/pages/platform/CommandCentre.tsx"
+      ]
+    },
+    {
+      "id": "FIX-011",
+      "feature": "wire-stubs",
+      "title": "Wire Copy Link and More Options buttons",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-010", "FIX-012"],
+      "acceptance": [
+        "Copy Link copies /command-centre?task={id} to clipboard with toast confirmation",
+        "More Options opens a dropdown with: Edit title, Change priority, Change type, Delete task",
+        "Dropdown actions call existing mutations or open inline editors"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/TaskDetailHeader.tsx"
+      ]
+    },
+    {
+      "id": "FIX-012",
+      "feature": "wire-stubs",
+      "title": "Wire context panel related items navigation and meeting playback link",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["FIX-001"], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-010", "FIX-011"],
+      "acceptance": [
+        "Clicking a related deal navigates to /deals/{id}",
+        "Clicking a related meeting navigates to /meetings/{id}",
+        "Clicking a related contact navigates to /contacts/{id}",
+        "Meeting recording card links to the full meeting page (not inline video player)",
+        "Remove fake video player, replace with 'View Recording' link button"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx"
+      ]
+    },
+    {
+      "id": "FIX-013",
+      "feature": "wire-stubs",
+      "title": "Add approved status to filter system with visual treatment",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "acceptance": [
+        "Approved tasks appear in a 'Done' or dedicated 'Approved' filter bucket",
+        "SidebarTaskItem shows a green checkmark badge for approved tasks",
+        "Counts update correctly when tasks are approved"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/hooks/useCommandCentreTasks.ts",
+        "src/components/command-centre/SidebarTaskItem.tsx",
+        "src/components/command-centre/types.ts"
+      ]
+    },
+    {
+      "id": "FIX-014",
+      "feature": "wire-stubs",
+      "title": "Add empty state CTA when no tasks exist",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "acceptance": [
+        "When task list is empty, sidebar shows an illustrated empty state",
+        "CTA button: 'Create your first task' opens the new task dialog",
+        "Secondary text explains that AI will also create tasks from meetings and signals"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/command-centre/TaskSidebar.tsx"
+      ]
+    },
+
+    {
+      "id": "FIX-015",
+      "feature": "context-panel",
+      "title": "Populate task metadata with meeting/contact context in AI worker",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["FIX-001", "FIX-003"], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-016"],
+      "acceptance": [
+        "When unified-task-ai-worker processes a task linked to a meeting (via metadata.meeting_id), it fetches meeting + transcript and writes meeting_context into task.metadata",
+        "When task is linked to a contact (via contact_id), worker writes contact_context with recent activities",
+        "Context panel renders for AI-processed tasks that have linked meetings/contacts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/unified-task-ai-worker/index.ts"
+      ]
+    },
+    {
+      "id": "FIX-016",
+      "feature": "context-panel",
+      "title": "Populate related_items from task-signal-processor",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["FIX-001"], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-015"],
+      "acceptance": [
+        "task-signal-processor writes related_items into metadata when creating tasks (e.g., related deal, meeting, contact)",
+        "Related items tab in ContextPanel shows real linked entities",
+        "Each related item has correct type/id for navigation (wired in FIX-012)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/task-signal-processor/index.ts"
+      ]
+    },
+
+    {
+      "id": "FIX-017",
+      "feature": "quality",
+      "title": "Extract shared taskTypeConfig and priorityConfig to types.ts",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-018", "FIX-019", "FIX-020"],
+      "acceptance": [
+        "taskTypeConfig and priorityConfig defined once in types.ts and exported",
+        "TaskDetailHeader, SidebarTaskItem, TaskDetailPanel all import from types.ts",
+        "No duplicate config objects remain"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/command-centre/types.ts",
+        "src/components/command-centre/TaskDetailHeader.tsx",
+        "src/components/command-centre/SidebarTaskItem.tsx",
+        "src/components/command-centre/TaskDetailPanel.tsx"
+      ]
+    },
+    {
+      "id": "FIX-018",
+      "feature": "quality",
+      "title": "Remove dead code: TaskDetailPanel, orphaned components, demo pages routing",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["FIX-017"], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-019", "FIX-020"],
+      "acceptance": [
+        "TaskDetailPanel.tsx deleted (not imported anywhere)",
+        "CommentThread.tsx deleted (only used by TaskDetailPanel)",
+        "ActivityTimeline.tsx deleted (only used by TaskDetailPanel)",
+        "DeliverableEditor.tsx deleted (only used by TaskDetailPanel)",
+        "Demo page routes remain accessible but are not linked in production nav (no change needed — already not in nav)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/command-centre/TaskDetailPanel.tsx",
+        "src/components/command-centre/CommentThread.tsx",
+        "src/components/command-centre/ActivityTimeline.tsx",
+        "src/components/command-centre/DeliverableEditor.tsx"
+      ]
+    },
+    {
+      "id": "FIX-019",
+      "feature": "quality",
+      "title": "Fix dangerouslySetInnerHTML — use safe markdown rendering",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-017", "FIX-018", "FIX-020"],
+      "acceptance": [
+        "WritingCanvas uses a safe markdown renderer (DOMPurify + existing regex, or react-markdown if already a dep)",
+        "No dangerouslySetInnerHTML with unsanitized user/AI content",
+        "Markdown rendering covers bold, italic, links, lists, code blocks"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/command-centre/WritingCanvas.tsx"
+      ]
+    },
+    {
+      "id": "FIX-020",
+      "feature": "quality",
+      "title": "Wire sortField/sortOrder from store to query, add ContextPanel useEffect deps",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": [],
+      "parallelWith": ["FIX-017", "FIX-018", "FIX-019"],
+      "acceptance": [
+        "useCommandCentreTasks reads sortField and sortOrder from commandCentreStore and applies to .order() clause",
+        "ContextPanel useEffect includes tabs and availableTabs in dependency array",
+        "Sort dropdown UI added to sidebar header (created_at, priority, due_date, title)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/useCommandCentreTasks.ts",
+        "src/components/command-centre/ContextPanel.tsx",
+        "src/components/command-centre/TaskSidebar.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 20,
+    "completedStories": 0,
+    "phases": [
+      {
+        "name": "Phase 1: Critical Fixes",
+        "stories": ["FIX-001", "FIX-002", "FIX-003", "FIX-004", "FIX-005", "FIX-006"],
+        "parallel": true,
+        "note": "All 6 stories are independent — can run in parallel"
+      },
+      {
+        "name": "Phase 2: Canvas & Input",
+        "stories": ["FIX-007", "FIX-008", "FIX-009"],
+        "parallel": true,
+        "note": "FIX-007 and FIX-008 depend on FIX-001 (metadata in SELECT). FIX-009 is independent."
+      },
+      {
+        "name": "Phase 3: Wire Stubs",
+        "stories": ["FIX-010", "FIX-011", "FIX-012", "FIX-013", "FIX-014"],
+        "parallel": true,
+        "note": "FIX-010 depends on FIX-007. FIX-012 depends on FIX-001. Others are independent."
+      },
+      {
+        "name": "Phase 4: Context Panel Data",
+        "stories": ["FIX-015", "FIX-016"],
+        "parallel": true,
+        "note": "Both are edge function changes, independent of each other. Depend on FIX-001 and FIX-003."
+      },
+      {
+        "name": "Phase 5: Code Quality",
+        "stories": ["FIX-017", "FIX-018", "FIX-019", "FIX-020"],
+        "parallel": true,
+        "note": "FIX-018 depends on FIX-017. Others are independent."
+      }
+    ],
+    "estimatedTotal": {
+      "sequential": "4.5 hours",
+      "parallel": "2.5 hours"
+    }
+  }
+}

@@ -70,11 +70,12 @@ interface Commitment {
   speaker_side?: 'seller' | 'buyer';
   phrase: string;
   source_quote?: string;
-  intent: 'send_proposal' | 'schedule_meeting' | 'send_content' | 'general';
+  intent: 'send_proposal' | 'schedule_meeting' | 'send_content' | 'check_with_team' | 'pricing_request' | 'stakeholder_introduction' | 'competitive_mention' | 'timeline_signal' | 'objection_blocker' | 'general';
   action_type?: string;
   confidence: number;
   confidence_tier?: 'explicit' | 'strong_implied' | 'weak_implied';
   deadline?: string;
+  deadline_parsed?: string; // ISO 8601 date parsed from natural language deadline
   context?: string;
 }
 
@@ -161,6 +162,10 @@ ${contextSections.join('\n')}
 ## TRANSCRIPT
 ${req.transcript}
 
+## TODAY'S DATE
+${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+Use this to resolve relative dates like "by Friday", "next week", "end of month".
+
 ## ANALYSIS INSTRUCTIONS
 
 ### 1. COMMITMENTS
@@ -169,7 +174,17 @@ Detect explicit and implied promises. Classify by confidence tier:
 - **Strong Implied (0.75-0.89)**: "Let me get that over to you" — implied promise, may lack deadline
 - **Weak Implied (0.5-0.74)**: "I'll try to get that done" — effort, not guarantee. Report but do NOT map to automation.
 
-Map each commitment to an action type: send_proposal, schedule_meeting, send_content, general.
+Map each commitment to an intent type:
+- **send_proposal**: "I'll send you a proposal", "Let me put together pricing", "You'll have the quote by Friday"
+- **schedule_meeting**: "Let's schedule a follow-up", "We should set up a technical review", "I'll send a calendar invite"
+- **send_content**: "I'll send over the case study", "Let me share that whitepaper", "I'll email you the deck"
+- **check_with_team**: "Let me check with our technical team", "I'll run this by engineering", "I need to talk to our security team about that"
+- **pricing_request**: "Can you send over pricing?", "What would this cost for our team?", "We need to see numbers before moving forward"
+- **stakeholder_introduction**: "I need to loop in our CTO", "Let me get Sarah from legal involved", "We should bring in the procurement team"
+- **competitive_mention**: "We're also evaluating [competitor]", "Your competitor offered us X", "How do you compare to [competitor]?"
+- **timeline_signal**: "We need this live by Q2", "Budget expires end of March", "Our contract with [incumbent] ends in June"
+- **objection_blocker**: "Security is a major concern for us", "We'd need SOC 2 compliance", "Our team is worried about the migration"
+- **general**: Any other commitment that doesn't fit the above categories
 Speaker is "rep" if it's ${req.rep_name}, "prospect" otherwise.
 
 ### 2. BUYING SIGNALS (MEDDICC)
@@ -193,10 +208,11 @@ Return JSON with the following structure (no markdown code blocks):
     {
       "speaker": "rep|prospect",
       "phrase": "exact quote from transcript",
-      "intent": "send_proposal|schedule_meeting|send_content|general",
+      "intent": "send_proposal|schedule_meeting|send_content|check_with_team|pricing_request|stakeholder_introduction|competitive_mention|timeline_signal|objection_blocker|general",
       "confidence": 0.0-1.0,
       "confidence_tier": "explicit|strong_implied|weak_implied",
       "deadline": "if mentioned (e.g., 'by Friday', 'end of day Thursday')",
+      "deadline_parsed": "ISO 8601 date if deadline can be parsed (e.g., '2026-02-21T17:00:00'), null otherwise. Parse relative dates like 'by Friday' or 'end of day Thursday' relative to today's date.",
       "context": "brief context of what prompted this commitment"
     }
   ],
@@ -215,7 +231,7 @@ Return JSON with the following structure (no markdown code blocks):
       "owner": "rep|prospect",
       "action": "description of action item",
       "deadline": "if mentioned",
-      "intent_type": "send_proposal|schedule_meeting|send_content if applicable",
+      "intent_type": "send_proposal|schedule_meeting|send_content|check_with_team|pricing_request|stakeholder_introduction|competitive_mention|timeline_signal|objection_blocker if applicable",
       "priority": "P0|P1|P2|P3"
     }
   ]

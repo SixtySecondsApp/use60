@@ -87,6 +87,7 @@ class NodeRegistry {
 import { FindLinkedInNode } from '../nodes/linkedin/FindLinkedInNode';
 import { ScrapeLinkedInNode } from '../nodes/linkedin/ScrapeLinkedInNode';
 import { OutreachTemplateNode } from '../nodes/linkedin/OutreachTemplateNode';
+import AiArkSearchNode from '../nodes/AiArkSearchNode';
 
 // ... existing code ...
 
@@ -116,6 +117,14 @@ nodeRegistry.register({
   category: 'ai',
   description: 'Generate personalized outreach email',
   icon: 'Mail'
+});
+
+nodeRegistry.register({
+  type: 'aiArkSearch',
+  component: AiArkSearchNode,
+  category: 'integration',
+  description: 'Search companies, people, or find lookalike accounts via AI Ark',
+  icon: 'Search'
 });
 
 // Export convenience functions

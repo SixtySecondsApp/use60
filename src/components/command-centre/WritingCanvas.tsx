@@ -1,24 +1,22 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Bold,
-  Italic,
-  Link,
-  List,
-  ListOrdered,
-  AtSign,
-  Paperclip,
-  Image,
   Wand2,
-  Loader2,
   FileEdit,
-  CornerDownLeft,
   XCircle,
   RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
 } from 'lucide-react';
+import { ActivityTimeline } from './ActivityTimeline';
+import { CommentSection } from './CommentSection';
 import { Task } from '@/lib/database/models';
 import { Button } from '@/components/ui/button';
 import { SlashCommandDropdown, type SlashCommand } from './SlashCommandDropdown';
+import { CanvasConversation, type ConversationMessage } from './CanvasConversation';
 import { useCommandCentreSkills, type CommandCentreSkill } from '@/lib/hooks/useCommandCentreSkills';
 import { useExecuteSkillForTask } from '@/lib/hooks/useExecuteSkillForTask';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -31,18 +29,26 @@ const DELIVERABLE_SKILL_MAP: Record<string, string> = {
   research_brief: 'company-research',
   meeting_prep: 'meeting-prep-brief',
   content_draft: 'post-meeting-followup-drafter',
+  proposal: 'proposal-generator',
+  follow_up: 'post-meeting-followup-drafter',
 };
 
 interface WritingCanvasProps {
   task: Task;
   organizationId?: string | null;
+  onSaveContent?: (content: string) => void;
+  onSaveMetadata?: (metadata: Record<string, unknown>) => void;
 }
 
-export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
+export function WritingCanvas({ task, organizationId, onSaveContent, onSaveMetadata }: WritingCanvasProps) {
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [canvasContent, setCanvasContent] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [isConversationLoading, setIsConversationLoading] = useState(false);
+  const [canvasVersions, setCanvasVersions] = useState<string[]>([]);
+  const [showUndoButton, setShowUndoButton] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const canvasRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: skills } = useCommandCentreSkills(organizationId ?? null);
@@ -90,6 +96,153 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
     setCanvasContent(getContent());
   }, [task.id, task.deliverable_type, task.deliverable_data, task.metadata, task.description]);
 
+  // Debounced auto-save canvas content to task deliverable_data
+  useEffect(() => {
+    if (!canvasContent || !task?.id) return;
+    const timer = setTimeout(() => {
+      onSaveContent?.(canvasContent);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [canvasContent, task?.id, onSaveContent]);
+
+  // Load conversation from task metadata when task changes
+  useEffect(() => {
+    if (task.metadata?.canvas_conversation) {
+      setConversationMessages(task.metadata.canvas_conversation as ConversationMessage[]);
+    } else {
+      setConversationMessages([]);
+    }
+    setCanvasVersions(task.metadata?.canvas_versions as string[] || []);
+    setShowUndoButton(false);
+  }, [task.id]);
+
+  // Debounced persist conversation to task metadata
+  useEffect(() => {
+    if (conversationMessages.length === 0 || !task?.id) return;
+    const timer = setTimeout(() => {
+      onSaveMetadata?.({ canvas_conversation: conversationMessages });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [conversationMessages, task?.id, onSaveMetadata]);
+
+  // Debounced persist canvas versions to task metadata
+  useEffect(() => {
+    if (!task?.id || canvasVersions.length === 0) return;
+    const timer = setTimeout(() => {
+      onSaveMetadata?.({ canvas_versions: canvasVersions });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [canvasVersions, task?.id, onSaveMetadata]);
+
+  const simulateStreaming = async (finalContent: string) => {
+    const words = finalContent.split(' ');
+    let accumulated = '';
+
+    for (let i = 0; i < words.length; i++) {
+      accumulated += (i > 0 ? ' ' : '') + words[i];
+      setCanvasContent(accumulated);
+      await new Promise((r) => setTimeout(r, Math.max(10, 30 - Math.floor(i / 10))));
+    }
+
+    setCanvasContent(finalContent);
+  };
+
+  const handleUndo = useCallback(() => {
+    if (canvasVersions.length === 0) return;
+
+    const previousContent = canvasVersions[canvasVersions.length - 1];
+    setCanvasContent(previousContent);
+    setCanvasVersions(prev => prev.slice(0, -1));
+
+    setConversationMessages(prev => {
+      const lastAiIndex = prev.findLastIndex(m => m.role === 'assistant');
+      if (lastAiIndex >= 0) {
+        return prev.slice(0, lastAiIndex);
+      }
+      return prev;
+    });
+
+    if (onSaveContent) {
+      onSaveContent(previousContent);
+    }
+
+    toast.info('Reverted to previous version');
+
+    if (canvasVersions.length <= 1) {
+      setShowUndoButton(false);
+    }
+  }, [canvasVersions, onSaveContent]);
+
+  // Cmd+Z / Ctrl+Z undo when canvas is focused
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && showUndoButton) {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showUndoButton, handleUndo]);
+
+  const handleSendMessage = async (message: string) => {
+    const userMsg: ConversationMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: message,
+      timestamp: new Date().toISOString(),
+    };
+    setConversationMessages((prev) => [...prev, userMsg]);
+    setIsConversationLoading(true);
+
+    // Snapshot current content before AI modifies canvas
+    setCanvasVersions(prev => {
+      const updated = [...prev, canvasContent];
+      return updated.slice(-10);
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('unified-task-ai-worker', {
+        body: {
+          action: 'refine_canvas',
+          task_id: task.id,
+          current_content: canvasContent,
+          conversation_history: conversationMessages,
+          user_instruction: message,
+        },
+      });
+
+      if (error) throw error;
+
+      const newContent = data?.content || data?.refined_content || canvasContent;
+      await simulateStreaming(newContent);
+      setShowUndoButton(true);
+
+      const aiMsg: ConversationMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: 'Canvas updated.',
+        timestamp: new Date().toISOString(),
+      };
+      setConversationMessages((prev) => [...prev, aiMsg]);
+
+      if (onSaveContent) {
+        onSaveContent(newContent);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update canvas');
+      const errMsg: ConversationMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: "Sorry, I couldn't update the canvas. Please try again.",
+        timestamp: new Date().toISOString(),
+      };
+      setConversationMessages((prev) => [...prev, errMsg]);
+    } finally {
+      setIsConversationLoading(false);
+    }
+  };
+
   const handleCanvasKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === '/' && !showSlashMenu) {
       setShowSlashMenu(true);
@@ -129,57 +282,45 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Canvas toolbar */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-gray-700/50 bg-slate-50/50 dark:bg-gray-800/30">
-        <div className="flex items-center gap-0.5">
-          {[
-            { icon: Bold, label: 'Bold' },
-            { icon: Italic, label: 'Italic' },
-            { icon: Link, label: 'Link' },
-            null,
-            { icon: List, label: 'Bullet list' },
-            { icon: ListOrdered, label: 'Numbered list' },
-            null,
-            { icon: AtSign, label: 'Mention' },
-            { icon: Paperclip, label: 'Attach' },
-            { icon: Image, label: 'Image' },
-          ].map((item, i) =>
-            item === null ? (
-              <div key={i} className="w-px h-4 bg-slate-200 dark:bg-gray-700 mx-1" />
-            ) : (
-              <button
-                key={item.label}
-                className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-gray-700/50 text-slate-400 hover:text-slate-600 dark:hover:text-gray-300 transition-colors"
-                title={item.label}
-              >
-                <item.icon className="h-3.5 w-3.5" />
-              </button>
-            )
-          )}
-        </div>
-
-        {/* "Do this" button */}
+      {/* Canvas toolbar — minimal */}
+      <div className="shrink-0 flex items-center justify-end px-4 py-1.5 border-b border-slate-100 dark:border-gray-700/30">
         {!isCompleted && (
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              className="h-7 text-xs gap-1.5 border-violet-200 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10"
+              className="h-7 text-xs gap-1.5"
               onClick={handleDoThis}
               disabled={isAIDoing}
             >
               {isAIDoing ? (
-                <><Loader2 className="h-3 w-3 animate-spin" /> AI working...</>
+                <>AI working...</>
               ) : (
                 <><Wand2 className="h-3 w-3" /> Do this</>
               )}
             </Button>
-            <span className="text-[10px] text-slate-400 dark:text-gray-500">
+            <span className="text-[10px] text-slate-300 dark:text-gray-600">
               Type <kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-gray-800 text-[9px] font-mono">/</kbd> for commands
             </span>
           </div>
         )}
       </div>
+
+      {/* Undo banner */}
+      {showUndoButton && canvasVersions.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-1.5 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800">
+          <span className="text-xs text-amber-700 dark:text-amber-300">AI edited this draft</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-xs gap-1 text-amber-700 hover:text-amber-900"
+            onClick={handleUndo}
+          >
+            <RotateCcw className="h-3 w-3" />
+            Undo
+          </Button>
+        </div>
+      )}
 
       {/* Canvas content */}
       <div className="flex-1 overflow-y-auto">
@@ -221,13 +362,10 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
               exit={{ opacity: 0 }}
               className="sticky top-0 z-10 mx-4 mt-3"
             >
-              <div className="flex items-center justify-between rounded-lg border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
-                  <div>
-                    <p className="text-xs font-medium text-violet-700 dark:text-violet-400">AI is drafting content...</p>
-                    <p className="text-[11px] text-violet-500 dark:text-violet-400/60">Reading task context, meeting notes, and contact history</p>
-                  </div>
+              <div className="flex items-center justify-between rounded-md border border-slate-200 dark:border-gray-700/50 bg-slate-50 dark:bg-gray-800/30 px-3 py-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                  <p className="text-xs text-slate-500 dark:text-gray-400">AI is drafting content...</p>
                 </div>
                 <Button
                   size="sm"
@@ -245,42 +383,28 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
 
         <div className="flex-1 px-8 py-6 max-w-3xl mx-auto w-full">
           {!isCompleted ? (
-            <textarea
-              ref={canvasRef}
-              value={canvasContent}
-              onChange={(e) => setCanvasContent(e.target.value)}
-              placeholder="Start writing or type / for AI commands..."
-              className="w-full h-full min-h-[200px] resize-none bg-transparent text-sm text-slate-700 dark:text-gray-300 leading-relaxed placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:outline-none"
-            />
+            <div className="relative">
+              {isConversationLoading && (
+                <div className="absolute top-0 right-0 flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-50 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded px-2 py-0.5 z-10">
+                  <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                  Editing...
+                </div>
+              )}
+              <textarea
+                ref={canvasRef}
+                value={canvasContent}
+                onChange={(e) => setCanvasContent(e.target.value)}
+                placeholder="Start writing or type / for AI commands..."
+                className={`w-full h-full min-h-[200px] resize-none bg-transparent text-sm text-slate-700 dark:text-gray-300 leading-relaxed placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:outline-none transition-all duration-200 ${isConversationLoading ? 'ring-1 ring-violet-300 dark:ring-violet-500/30 rounded' : ''}`}
+              />
+            </div>
           ) : hasContent ? (
             <div className="prose prose-sm dark:prose-invert max-w-none
               prose-headings:font-semibold prose-headings:text-slate-800 dark:prose-headings:text-gray-200
               prose-p:text-slate-600 dark:prose-p:text-gray-400 prose-p:leading-relaxed
               prose-strong:text-slate-800 dark:prose-strong:text-gray-200
             ">
-              {canvasContent.split('\n').map((line, i) => {
-                if (line.startsWith('# ')) return <h1 key={i}>{line.slice(2)}</h1>;
-                if (line.startsWith('## ')) return <h2 key={i}>{line.slice(3)}</h2>;
-                if (line.startsWith('### ')) return <h3 key={i}>{line.slice(4)}</h3>;
-                if (line.trim() === '---') return <hr key={i} />;
-                if (line.startsWith('- ')) {
-                  return (
-                    <div key={i} className="flex items-start gap-2 py-0.5">
-                      <span className="text-slate-400 mt-1.5">·</span>
-                      <span dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
-                    </div>
-                  );
-                }
-                if (!line.trim()) return <div key={i} className="h-3" />;
-                return (
-                  <p key={i} dangerouslySetInnerHTML={{
-                    __html: line
-                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                      .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')
-                  }} />
-                );
-              })}
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{canvasContent}</ReactMarkdown>
             </div>
           ) : (
             <div className="text-center py-16">
@@ -293,12 +417,12 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
               </p>
               <Button
                 size="sm"
-                className="h-8 text-xs gap-1.5 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
+                className="h-8 text-xs gap-1.5"
                 onClick={handleDoThis}
                 disabled={isAIDoing}
               >
                 {isAIDoing ? (
-                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Working...</>
+                  <>Working...</>
                 ) : (
                   <><Wand2 className="h-3.5 w-3.5" /> Do this for me</>
                 )}
@@ -308,36 +432,59 @@ export function WritingCanvas({ task, organizationId }: WritingCanvasProps) {
         </div>
       </div>
 
-      {/* Bottom input area with slash commands */}
+      {/* Activity & Comments - collapsible */}
+      {(() => {
+        const activityLog = (task.metadata?.activity_log as any[]) || [];
+        const comments = (task.metadata?.comments as any[]) || [];
+        const hasActivityOrComments = activityLog.length > 0 || comments.length > 0;
+        if (!hasActivityOrComments) return null;
+        return (
+          <div className="shrink-0 border-t border-slate-100 dark:border-gray-700/30">
+            <button
+              onClick={() => setShowActivity(!showActivity)}
+              className="flex items-center gap-2 w-full px-4 py-2 text-xs text-slate-500 dark:text-gray-400 hover:bg-slate-50 dark:hover:bg-gray-800/30 transition-colors"
+            >
+              <MessageSquare className="h-3 w-3" />
+              Activity & Notes
+              {comments.length > 0 && (
+                <span className="text-[10px] bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-full px-1.5">
+                  {comments.length}
+                </span>
+              )}
+              <span className="ml-auto">
+                {showActivity ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+              </span>
+            </button>
+            {showActivity && (
+              <div className="px-4 pb-3 space-y-4 max-h-48 overflow-y-auto">
+                {activityLog.length > 0 && <ActivityTimeline activities={activityLog} />}
+                <CommentSection taskId={task.id} comments={comments} />
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Bottom conversation area */}
       {!isCompleted && (
-        <div className="shrink-0 border-t border-slate-200 dark:border-gray-700/50 bg-white dark:bg-gray-900/80 px-4 py-3">
-          <div className="relative">
-            <AnimatePresence>
-              {showSlashMenu && (
+        <div className="shrink-0 bg-white dark:bg-gray-900/80 relative">
+          <AnimatePresence>
+            {showSlashMenu && (
+              <div className="absolute bottom-full left-0 right-0 px-3 pb-1 z-20">
                 <SlashCommandDropdown
                   filter={slashFilter}
                   onSelect={handleSlashSelect}
                   onClose={() => setShowSlashMenu(false)}
                   commands={skills}
                 />
-              )}
-            </AnimatePresence>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 relative">
-                <textarea
-                  ref={textareaRef}
-                  rows={1}
-                  placeholder="Type / for AI commands, or add notes..."
-                  onKeyDown={handleCanvasKeyDown}
-                  onChange={handleCanvasInput}
-                  className="w-full resize-none rounded-lg border border-slate-200 dark:border-gray-700/50 bg-slate-50/50 dark:bg-gray-800/50 px-3 py-2 text-xs text-slate-700 dark:text-gray-300 placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
-                />
               </div>
-              <Button size="sm" variant="ghost" className="h-8 text-xs text-slate-400">
-                <CornerDownLeft className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
+            )}
+          </AnimatePresence>
+          <CanvasConversation
+            messages={conversationMessages}
+            onSendMessage={handleSendMessage}
+            isLoading={isConversationLoading}
+          />
         </div>
       )}
     </div>

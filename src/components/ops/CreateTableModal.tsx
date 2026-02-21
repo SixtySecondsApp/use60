@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileSpreadsheet, Table2, Search, Wand2, LayoutTemplate, Cable } from 'lucide-react';
+import { Upload, FileSpreadsheet, Table2, Search, Wand2, LayoutTemplate, Cable, Building2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ interface CreateTableModalProps {
   onSelectHubSpot: () => void;
   onSelectAttio: () => void;
   onSelectApollo: () => void;
+  onSelectAiArk: () => void;
   onSelectOpsTable: () => void;
   onSelectBlank: () => void;
   onSelectWorkflow?: () => void;
@@ -47,6 +48,14 @@ const SOURCE_OPTIONS = [
     icon: Search,
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/10',
+  },
+  {
+    id: 'ai_ark',
+    title: 'AI Ark Search',
+    description: 'Premium company & people data with tech stack filters',
+    icon: Building2,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/10',
   },
   {
     id: 'hubspot',
@@ -97,6 +106,7 @@ export function CreateTableModal({
   onSelectHubSpot,
   onSelectAttio,
   onSelectApollo,
+  onSelectAiArk,
   onSelectOpsTable,
   onSelectBlank,
   onSelectWorkflow,
@@ -113,6 +123,9 @@ export function CreateTableModal({
         break;
       case 'apollo':
         onSelectApollo();
+        break;
+      case 'ai_ark':
+        onSelectAiArk();
         break;
       case 'hubspot':
         onSelectHubSpot();

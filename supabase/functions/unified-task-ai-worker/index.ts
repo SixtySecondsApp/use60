@@ -54,7 +54,54 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { task_id, skill_key } = await req.json();
+    const body = await req.json();
+    const { action, task_id, skill_key } = body;
+
+    // Handle canvas refinement action — returns immediately, no task status update
+    if (action === 'refine_canvas') {
+      const { current_content, conversation_history, user_instruction } = body;
+
+      if (!user_instruction) {
+        return errorResponse('Missing user_instruction in request body', req, 400);
+      }
+
+      const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+      if (!apiKey) {
+        return errorResponse('ANTHROPIC_API_KEY not configured', req, 500);
+      }
+
+      const messages: Array<{ role: string; content: string }> = [
+        {
+          role: 'user',
+          content: `Here is the current draft:\n\n${current_content || '(empty)'}\n\nInstruction: ${user_instruction}`,
+        },
+      ];
+
+      const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2000,
+          system: `You are a sales writing assistant. The user has a draft deliverable (email, proposal, etc.) and wants you to refine it based on their instruction. Return ONLY the refined content, no explanations or preamble.`,
+          messages,
+        }),
+      });
+
+      if (!claudeResponse.ok) {
+        const errText = await claudeResponse.text();
+        return errorResponse(`Claude API error: ${claudeResponse.status} - ${errText}`, req, 500);
+      }
+
+      const claudeData = await claudeResponse.json();
+      const refinedContent = claudeData.content?.[0]?.text || current_content;
+
+      return jsonResponse({ content: refinedContent }, req);
+    }
 
     if (!task_id) {
       return errorResponse('Missing task_id in request body', req, 400);
@@ -95,27 +142,49 @@ serve(async (req) => {
     // Dispatch to handler based on skill_key (if provided) or deliverable_type
     let deliverableData: Record<string, unknown>;
 
+    // Resolve organization_id for the task owner (used for skill lookup scoping)
+    let orgId: string | null = null;
+    if (task.assigned_to) {
+      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+      const { data: membership } = await serviceClient
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', task.assigned_to)
+        .limit(1)
+        .maybeSingle();
+      orgId = membership?.org_id ?? null;
+    }
+
+    // Pre-fetch context once for use in both the handler and metadata write-back
+    const taskContext = await fetchTaskContext(supabase, task);
+
     try {
       if (skill_key) {
         // Skill-based execution path
-        deliverableData = await handleSkillExecution(supabase, task, skill_key);
+        deliverableData = await handleSkillExecution(supabase, task, skill_key, orgId, taskContext);
       } else {
         // Legacy deliverable_type dispatch
         switch (task.deliverable_type) {
           case 'email_draft':
-            deliverableData = await handleEmailDraft(supabase, task);
+            deliverableData = await handleEmailDraft(supabase, task, taskContext);
             break;
           case 'research_brief':
-            deliverableData = await handleResearchBrief(supabase, task);
+            deliverableData = await handleResearchBrief(supabase, task, taskContext);
             break;
           case 'meeting_prep':
-            deliverableData = await handleMeetingPrep(supabase, task);
+            deliverableData = await handleMeetingPrep(supabase, task, taskContext);
             break;
           case 'crm_update':
-            deliverableData = await handleCrmUpdate(supabase, task);
+            deliverableData = await handleCrmUpdate(supabase, task, taskContext);
             break;
           case 'content_draft':
-            deliverableData = await handleContentDraft(supabase, task);
+            deliverableData = await handleContentDraft(supabase, task, taskContext);
+            break;
+          case 'proposal':
+            deliverableData = await handleProposalGeneration(supabase, task, taskContext);
+            break;
+          case 'follow_up':
+            deliverableData = await handleFollowUpDraft(supabase, task, taskContext);
             break;
           default:
             return errorResponse(
@@ -126,13 +195,53 @@ serve(async (req) => {
         }
       }
 
-      // Update task with deliverable data and status
+      // Build enriched metadata from the context that was used
+      const enrichedMetadata = {
+        ...(task.metadata || {}),
+        enriched_at: new Date().toISOString(),
+        meeting_context: taskContext.meeting
+          ? {
+              id: taskContext.meeting.id,
+              title: taskContext.meeting.title,
+              date: taskContext.meeting.start_time,
+              summary: taskContext.meeting.summary,
+              action_items: taskContext.meetingActionItems || [],
+            }
+          : null,
+        contact_context: taskContext.contact
+          ? {
+              id: taskContext.contact.id,
+              name: `${taskContext.contact.first_name} ${taskContext.contact.last_name}`,
+              title: taskContext.contact.title,
+              company: taskContext.contact.company_name,
+              last_contacted_at: taskContext.contact.last_contacted_at,
+              recent_activities: (taskContext.recentActivities || []).map((a: any) => ({
+                type: a.activity_type,
+                subject: a.subject,
+                created_at: a.created_at,
+              })),
+            }
+          : null,
+        deal_context: taskContext.deal
+          ? {
+              id: taskContext.deal.id,
+              name: taskContext.deal.name,
+              value: taskContext.deal.value,
+              expected_close_date: taskContext.deal.expected_close_date,
+              priority: taskContext.deal.priority,
+              risk_level: taskContext.deal.risk_level,
+            }
+          : null,
+      };
+
+      // Update task with deliverable data, status, and enriched metadata
       const { error: updateDraftError } = await supabase
         .from('tasks')
         .update({
           ai_status: 'draft_ready',
           deliverable_data: deliverableData,
           status: 'draft_ready',
+          metadata: enrichedMetadata,
           updated_at: new Date().toISOString(),
         })
         .eq('id', task_id);
@@ -231,6 +340,8 @@ interface TaskContext {
   company?: any;
   meeting?: any;
   transcript?: string;
+  recentActivities?: any[];
+  meetingActionItems?: any[];
 }
 
 async function fetchTaskContext(
@@ -244,7 +355,7 @@ async function fetchTaskContext(
     if (task.deal_id) {
       const { data: deal } = await supabase
         .from('deals')
-        .select('id, title, stage, value, owner_id, created_at, updated_at, notes')
+        .select('id, name, stage_id, value, expected_close_date, notes, next_steps, priority, risk_level, owner_id, updated_at')
         .eq('id', task.deal_id)
         .maybeSingle();
 
@@ -257,12 +368,24 @@ async function fetchTaskContext(
     if (task.contact_id) {
       const { data: contact } = await supabase
         .from('contacts')
-        .select('id, first_name, last_name, email, phone, company, title, owner_id')
+        .select('id, first_name, last_name, email, phone, company_name, title, last_contacted_at, owner_id')
         .eq('id', task.contact_id)
         .maybeSingle();
 
       if (contact) {
         context.contact = contact;
+      }
+
+      // Fetch recent activities for the contact
+      const { data: activities } = await supabase
+        .from('activities')
+        .select('id, activity_type, subject, created_at, notes')
+        .eq('contact_id', task.contact_id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (activities && activities.length > 0) {
+        context.recentActivities = activities;
       }
     }
 
@@ -284,26 +407,27 @@ async function fetchTaskContext(
     if (meetingId) {
       const { data: meeting } = await supabase
         .from('meetings')
-        .select('id, title, start_time, end_time, owner_user_id, summary, transcript')
+        .select('id, title, start_time, end_time, owner_user_id, summary, summary_oneliner, sentiment_score, transcript_text')
         .eq('id', meetingId)
         .maybeSingle();
 
       if (meeting) {
         context.meeting = meeting;
 
-        // Try to get transcript from meeting_transcripts table if not in meeting
-        if (!meeting.transcript) {
-          const { data: transcriptData } = await supabase
-            .from('meeting_transcripts')
-            .select('transcript')
-            .eq('meeting_id', meetingId)
-            .maybeSingle();
+        // Use transcript_text from the meetings table (truncated to 2000 chars)
+        if (meeting.transcript_text) {
+          context.transcript = meeting.transcript_text.substring(0, 2000);
+        }
 
-          if (transcriptData?.transcript) {
-            context.transcript = transcriptData.transcript;
-          }
-        } else {
-          context.transcript = meeting.transcript;
+        // Fetch action items linked to the meeting
+        const { data: actionItems } = await supabase
+          .from('meeting_action_items')
+          .select('id, title, description, assignee_name, due_date, status')
+          .eq('meeting_id', meetingId)
+          .limit(10);
+
+        if (actionItems && actionItems.length > 0) {
+          context.meetingActionItems = actionItems;
         }
       }
     }
@@ -319,9 +443,10 @@ async function fetchTaskContext(
 
 async function handleEmailDraft(
   supabase: any,
-  task: any
+  task: any,
+  context?: TaskContext
 ): Promise<Record<string, unknown>> {
-  const context = await fetchTaskContext(supabase, task);
+  if (!context) context = await fetchTaskContext(supabase, task);
 
   const systemPrompt = `You are a professional sales email assistant. Generate personalized, concise follow-up emails that are:
 - Professional yet warm in tone
@@ -341,9 +466,15 @@ BODY: [email body]`;
   let contextDetails = '';
 
   if (context.deal) {
-    contextDetails += `\nDeal: ${context.deal.title} (Stage: ${context.deal.stage}, Value: ${context.deal.value || 'N/A'})`;
+    contextDetails += `\nDeal: ${context.deal.name} (Value: ${context.deal.value || 'N/A'})`;
+    if (context.deal.expected_close_date) {
+      contextDetails += ` — Expected Close: ${context.deal.expected_close_date}`;
+    }
     if (context.deal.notes) {
       contextDetails += `\nDeal Notes: ${context.deal.notes}`;
+    }
+    if (context.deal.next_steps) {
+      contextDetails += `\nNext Steps: ${context.deal.next_steps}`;
     }
   }
 
@@ -352,8 +483,11 @@ BODY: [email body]`;
     if (context.contact.title) {
       contextDetails += ` - ${context.contact.title}`;
     }
-    if (context.contact.company) {
-      contextDetails += ` at ${context.contact.company}`;
+    if (context.contact.company_name) {
+      contextDetails += ` at ${context.contact.company_name}`;
+    }
+    if (context.contact.last_contacted_at) {
+      contextDetails += `\nLast Contacted: ${context.contact.last_contacted_at}`;
     }
   }
 
@@ -364,6 +498,10 @@ BODY: [email body]`;
     }
   }
 
+  if (context.recentActivities && context.recentActivities.length > 0) {
+    contextDetails += `\nRecent Activities: ${context.recentActivities.map((a: any) => `${a.activity_type}: ${a.subject}`).join(', ')}`;
+  }
+
   if (context.meeting) {
     contextDetails += `\nRecent Meeting: ${context.meeting.title}`;
     if (context.meeting.summary) {
@@ -371,9 +509,12 @@ BODY: [email body]`;
     }
   }
 
+  if (context.meetingActionItems && context.meetingActionItems.length > 0) {
+    contextDetails += `\nMeeting Action Items: ${context.meetingActionItems.map((ai: any) => ai.title).join(', ')}`;
+  }
+
   if (context.transcript) {
-    const truncatedTranscript = context.transcript.substring(0, 1000);
-    contextDetails += `\nMeeting Transcript (excerpt): ${truncatedTranscript}${context.transcript.length > 1000 ? '...' : ''}`;
+    contextDetails += `\nMeeting Transcript (excerpt): ${context.transcript}${context.transcript.length >= 2000 ? '...' : ''}`;
   }
 
   const userPrompt = `Generate a professional follow-up email for:
@@ -404,9 +545,10 @@ The email should follow up on the task and move the conversation forward with cl
 
 async function handleResearchBrief(
   supabase: any,
-  task: any
+  task: any,
+  context?: TaskContext
 ): Promise<Record<string, unknown>> {
-  const context = await fetchTaskContext(supabase, task);
+  if (!context) context = await fetchTaskContext(supabase, task);
 
   const systemPrompt = `You are a business research analyst creating comprehensive research briefs for sales teams.
 
@@ -445,15 +587,27 @@ Include sections like: Company Overview, Industry Context, Key Decision Makers, 
 - Name: ${context.contact.first_name} ${context.contact.last_name}
 - Title: ${context.contact.title || 'Unknown'}
 - Email: ${context.contact.email || 'Not available'}
-- Company: ${context.contact.company || 'Unknown'}`;
+- Company: ${context.contact.company_name || 'Unknown'}`;
+    if (context.contact.last_contacted_at) {
+      contextDetails += `\n- Last Contacted: ${context.contact.last_contacted_at}`;
+    }
+  }
+
+  if (context.recentActivities && context.recentActivities.length > 0) {
+    contextDetails += `\n\nRecent Activities:`;
+    context.recentActivities.forEach((a: any) => {
+      contextDetails += `\n- ${a.activity_type}: ${a.subject}`;
+    });
   }
 
   if (context.deal) {
     contextDetails += `\n\nActive Opportunity:
-- Deal: ${context.deal.title}
-- Stage: ${context.deal.stage}
+- Deal: ${context.deal.name}
 - Value: ${context.deal.value || 'Not specified'}
-- Notes: ${context.deal.notes || 'None'}`;
+- Expected Close: ${context.deal.expected_close_date || 'Not set'}
+- Priority: ${context.deal.priority || 'Not set'}
+- Notes: ${context.deal.notes || 'None'}
+- Next Steps: ${context.deal.next_steps || 'None'}`;
   }
 
   if (context.meeting) {
@@ -465,10 +619,16 @@ Include sections like: Company Overview, Industry Context, Key Decision Makers, 
     }
   }
 
+  if (context.meetingActionItems && context.meetingActionItems.length > 0) {
+    contextDetails += `\n\nMeeting Action Items:`;
+    context.meetingActionItems.forEach((ai: any) => {
+      contextDetails += `\n- ${ai.title}${ai.assignee_name ? ` (${ai.assignee_name})` : ''}`;
+    });
+  }
+
   if (context.transcript) {
-    const truncatedTranscript = context.transcript.substring(0, 1500);
     contextDetails += `\n\nConversation Context:
-${truncatedTranscript}${context.transcript.length > 1500 ? '...' : ''}`;
+${context.transcript}${context.transcript.length >= 2000 ? '...' : ''}`;
   }
 
   const userPrompt = `Create a comprehensive research brief based on the following context:
@@ -510,16 +670,17 @@ The brief should be actionable, insightful, and help the sales team understand t
 
 async function handleMeetingPrep(
   supabase: any,
-  task: any
+  task: any,
+  context?: TaskContext
 ): Promise<Record<string, unknown>> {
-  const context = await fetchTaskContext(supabase, task);
+  if (!context) context = await fetchTaskContext(supabase, task);
 
   // Fetch past meetings for the same contact/deal
   let pastMeetings = [];
   if (task.contact_id || task.deal_id) {
     const query = supabase
       .from('meetings')
-      .select('id, title, start_time, summary, transcript')
+      .select('id, title, start_time, summary, transcript_text')
       .order('start_time', { ascending: false })
       .limit(3);
 
@@ -580,7 +741,17 @@ Return your response in this exact JSON format:
     contextDetails += `\n\nPrimary Contact:
 - Name: ${context.contact.first_name} ${context.contact.last_name}
 - Title: ${context.contact.title || 'Unknown'}
-- Company: ${context.contact.company || 'Unknown'}`;
+- Company: ${context.contact.company_name || 'Unknown'}`;
+    if (context.contact.last_contacted_at) {
+      contextDetails += `\n- Last Contacted: ${context.contact.last_contacted_at}`;
+    }
+  }
+
+  if (context.recentActivities && context.recentActivities.length > 0) {
+    contextDetails += `\n\nRecent Activity History:`;
+    context.recentActivities.forEach((a: any) => {
+      contextDetails += `\n- ${a.activity_type}: ${a.subject}`;
+    });
   }
 
   if (context.company) {
@@ -593,10 +764,13 @@ Return your response in this exact JSON format:
 
   if (context.deal) {
     contextDetails += `\n\nActive Deal:
-- Title: ${context.deal.title}
-- Stage: ${context.deal.stage}
+- Name: ${context.deal.name}
 - Value: ${context.deal.value || 'Not specified'}
-- Notes: ${context.deal.notes || 'None'}`;
+- Expected Close: ${context.deal.expected_close_date || 'Not set'}
+- Priority: ${context.deal.priority || 'Not set'}
+- Risk Level: ${context.deal.risk_level || 'Not assessed'}
+- Notes: ${context.deal.notes || 'None'}
+- Next Steps: ${context.deal.next_steps || 'None'}`;
   }
 
   if (pastMeetings.length > 0) {
@@ -609,10 +783,16 @@ Return your response in this exact JSON format:
     });
   }
 
+  if (context.meetingActionItems && context.meetingActionItems.length > 0) {
+    contextDetails += `\n\nOpen Action Items from Last Meeting:`;
+    context.meetingActionItems.forEach((ai: any) => {
+      contextDetails += `\n- ${ai.title}${ai.assignee_name ? ` (${ai.assignee_name})` : ''}${ai.status ? ` [${ai.status}]` : ''}`;
+    });
+  }
+
   if (context.transcript) {
-    const truncatedTranscript = context.transcript.substring(0, 1000);
     contextDetails += `\n\nRecent Conversation Excerpt:
-${truncatedTranscript}${context.transcript.length > 1000 ? '...' : ''}`;
+${context.transcript}${context.transcript.length >= 2000 ? '...' : ''}`;
   }
 
   const userPrompt = `Prepare a comprehensive meeting brief based on this context:
@@ -651,9 +831,10 @@ Focus on strategic talking points, potential risks to address, and any relevant 
 
 async function handleCrmUpdate(
   supabase: any,
-  task: any
+  task: any,
+  context?: TaskContext
 ): Promise<Record<string, unknown>> {
-  const context = await fetchTaskContext(supabase, task);
+  if (!context) context = await fetchTaskContext(supabase, task);
 
   const systemPrompt = `You are a sales operations expert analyzing CRM data quality and suggesting updates based on recent interactions.
 
@@ -676,10 +857,13 @@ Focus on actionable updates like stage changes, priority adjustments, next steps
 
   if (context.deal) {
     contextDetails += `\nCurrent Deal State:
-- Title: ${context.deal.title}
-- Stage: ${context.deal.stage}
+- Name: ${context.deal.name}
 - Value: ${context.deal.value || 'Not set'}
+- Expected Close: ${context.deal.expected_close_date || 'Not set'}
+- Priority: ${context.deal.priority || 'Not set'}
+- Risk Level: ${context.deal.risk_level || 'Not assessed'}
 - Notes: ${context.deal.notes || 'None'}
+- Next Steps: ${context.deal.next_steps || 'None'}
 - Last Updated: ${context.deal.updated_at}`;
   }
 
@@ -688,7 +872,16 @@ Focus on actionable updates like stage changes, priority adjustments, next steps
 - Name: ${context.contact.first_name} ${context.contact.last_name}
 - Email: ${context.contact.email || 'Not set'}
 - Title: ${context.contact.title || 'Not set'}
-- Company: ${context.contact.company || 'Not set'}`;
+- Company: ${context.contact.company_name || 'Not set'}
+- Last Contacted: ${context.contact.last_contacted_at || 'Not recorded'}`;
+  }
+
+  if (context.recentActivities && context.recentActivities.length > 0) {
+    contextDetails += `\n\nRecent Activities:`;
+    context.recentActivities.forEach((a: any) => {
+      contextDetails += `\n- ${a.activity_type}: ${a.subject}`;
+      if (a.notes) contextDetails += ` — ${a.notes}`;
+    });
   }
 
   if (context.company) {
@@ -706,10 +899,16 @@ Focus on actionable updates like stage changes, priority adjustments, next steps
 - Summary: ${context.meeting.summary || 'No summary available'}`;
   }
 
+  if (context.meetingActionItems && context.meetingActionItems.length > 0) {
+    contextDetails += `\n\nOpen Action Items:`;
+    context.meetingActionItems.forEach((ai: any) => {
+      contextDetails += `\n- ${ai.title}${ai.status ? ` [${ai.status}]` : ''}`;
+    });
+  }
+
   if (context.transcript) {
-    const truncatedTranscript = context.transcript.substring(0, 1500);
     contextDetails += `\n\nMeeting Transcript (excerpt):
-${truncatedTranscript}${context.transcript.length > 1500 ? '...' : ''}`;
+${context.transcript}${context.transcript.length >= 2000 ? '...' : ''}`;
   }
 
   const userPrompt = `Based on the following CRM data and recent interactions, suggest specific field updates:
@@ -760,9 +959,10 @@ Analyze this information and suggest CRM updates that would improve data quality
 
 async function handleContentDraft(
   supabase: any,
-  task: any
+  task: any,
+  context?: TaskContext
 ): Promise<Record<string, unknown>> {
-  const context = await fetchTaskContext(supabase, task);
+  if (!context) context = await fetchTaskContext(supabase, task);
 
   const systemPrompt = `You are a professional content writer specializing in business and sales content.
 
@@ -782,8 +982,8 @@ Return ONLY the content itself in markdown format. Do not include any JSON wrapp
 
   if (context.deal) {
     contextDetails += `\nRelated Deal:
-- Title: ${context.deal.title}
-- Stage: ${context.deal.stage}
+- Name: ${context.deal.name}
+- Stage: ${context.deal.stage_id || 'Unknown'}
 - Value: ${context.deal.value || 'Not specified'}`;
   }
 
@@ -791,7 +991,7 @@ Return ONLY the content itself in markdown format. Do not include any JSON wrapp
     contextDetails += `\n\nTarget Audience:
 - Contact: ${context.contact.first_name} ${context.contact.last_name}
 - Title: ${context.contact.title || 'Unknown'}
-- Company: ${context.contact.company || 'Unknown'}`;
+- Company: ${context.contact.company_name || 'Unknown'}`;
   }
 
   if (context.company) {
@@ -810,9 +1010,8 @@ Return ONLY the content itself in markdown format. Do not include any JSON wrapp
   }
 
   if (context.transcript) {
-    const truncatedTranscript = context.transcript.substring(0, 1000);
     contextDetails += `\n\nConversation Reference:
-${truncatedTranscript}${context.transcript.length > 1000 ? '...' : ''}`;
+${context.transcript}${context.transcript.length >= 2000 ? '...' : ''}`;
   }
 
   const userPrompt = `Create content based on the following context:
@@ -830,18 +1029,146 @@ The content should be professional, engaging, and tailored to the context provid
   };
 }
 
+async function handleProposalGeneration(
+  supabase: any,
+  task: any,
+  context?: TaskContext
+): Promise<Record<string, unknown>> {
+  if (!context) context = await fetchTaskContext(supabase, task);
+
+  const systemPrompt = `You are a professional B2B sales proposal writer. Generate a comprehensive, well-structured proposal based on the provided context.
+
+The proposal should include:
+- Executive Summary
+- Understanding of Client Needs (based on meeting notes and deal context)
+- Proposed Solution
+- Key Benefits and ROI
+- Pricing/Investment section (use placeholder ranges if no specific pricing available)
+- Timeline and Next Steps
+- Terms and Conditions (brief)
+
+Format the proposal in clean markdown. Be professional, specific to the client, and action-oriented.
+Keep total length under 1500 words.`;
+
+  let contextDetails = `Proposal for: ${task.title}\n`;
+  if (task.description) contextDetails += `Description: ${task.description}\n`;
+
+  if (context.deal) {
+    contextDetails += `\nDeal Information:\n- Name: ${context.deal.name}\n- Value: ${context.deal.value || 'TBD'}\n- Expected Close: ${context.deal.expected_close_date || 'TBD'}`;
+    if (context.deal.notes) contextDetails += `\n- Notes: ${context.deal.notes}`;
+    if (context.deal.next_steps) contextDetails += `\n- Next Steps: ${context.deal.next_steps}`;
+  }
+
+  if (context.contact) {
+    contextDetails += `\n\nClient Contact:\n- Name: ${context.contact.first_name} ${context.contact.last_name}`;
+    if (context.contact.title) contextDetails += `\n- Title: ${context.contact.title}`;
+    if (context.contact.company_name) contextDetails += `\n- Company: ${context.contact.company_name}`;
+  }
+
+  if (context.company) {
+    contextDetails += `\n\nCompany:\n- Name: ${context.company.name}`;
+    if (context.company.industry) contextDetails += `\n- Industry: ${context.company.industry}`;
+    if (context.company.size) contextDetails += `\n- Size: ${context.company.size}`;
+  }
+
+  if (context.meeting) {
+    contextDetails += `\n\nRecent Meeting: ${context.meeting.title}`;
+    if (context.meeting.summary) contextDetails += `\nMeeting Summary: ${context.meeting.summary}`;
+  }
+
+  if (context.meetingActionItems && context.meetingActionItems.length > 0) {
+    contextDetails += `\n\nAction Items from Meeting:\n${context.meetingActionItems.map((ai: any) => `- ${ai.title}`).join('\n')}`;
+  }
+
+  if (context.transcript) {
+    contextDetails += `\n\nMeeting Transcript (excerpt): ${context.transcript}`;
+  }
+
+  const response = await callClaude(systemPrompt, contextDetails);
+  return {
+    content: response,
+    generated_at: new Date().toISOString(),
+  };
+}
+
+async function handleFollowUpDraft(
+  supabase: any,
+  task: any,
+  context?: TaskContext
+): Promise<Record<string, unknown>> {
+  if (!context) context = await fetchTaskContext(supabase, task);
+
+  const systemPrompt = `You are a professional sales follow-up email writer. Draft a concise, personalized follow-up email after a meeting or interaction.
+
+The email should:
+- Reference specific topics discussed in the meeting
+- Summarize key action items and commitments
+- Propose clear next steps with dates
+- Be warm but professional
+- Be under 200 words
+- Include a clear call-to-action
+
+Return your response in this exact format:
+SUBJECT: [subject line]
+BODY: [email body]`;
+
+  const contactName = task.contact_name || context.contact?.first_name || 'there';
+  const contactEmail = task.contact_email || context.contact?.email || '';
+
+  let contextDetails = `Follow-up for: ${task.title}\nRecipient: ${contactName} (${contactEmail})\n`;
+
+  if (context.meeting) {
+    contextDetails += `\nMeeting: ${context.meeting.title}`;
+    if (context.meeting.start_time) {
+      contextDetails += ` (${new Date(context.meeting.start_time).toLocaleDateString()})`;
+    }
+    if (context.meeting.summary) contextDetails += `\nMeeting Summary: ${context.meeting.summary}`;
+  }
+
+  if (context.meetingActionItems && context.meetingActionItems.length > 0) {
+    contextDetails += `\n\nAction Items:\n${context.meetingActionItems.map((ai: any) => `- ${ai.title}${ai.assignee_name ? ` (${ai.assignee_name})` : ''}${ai.due_date ? ` - due ${ai.due_date}` : ''}`).join('\n')}`;
+  }
+
+  if (context.transcript) {
+    contextDetails += `\n\nMeeting Transcript (excerpt): ${context.transcript}`;
+  }
+
+  if (context.deal) {
+    contextDetails += `\n\nDeal: ${context.deal.name}`;
+    if (context.deal.next_steps) contextDetails += `\nAgreed Next Steps: ${context.deal.next_steps}`;
+  }
+
+  const response = await callClaude(systemPrompt, contextDetails);
+
+  const subjectMatch = response.match(/SUBJECT:\s*(.+?)(?:\n|$)/i);
+  const bodyMatch = response.match(/BODY:\s*([\s\S]+)/i);
+
+  return {
+    to: contactEmail,
+    subject: subjectMatch?.[1]?.trim() || `Follow-up: ${task.title}`,
+    body: bodyMatch?.[1]?.trim() || response,
+    generated_at: new Date().toISOString(),
+  };
+}
+
 // Skill-based execution handler
 
 async function handleSkillExecution(
   supabase: any,
   task: any,
-  skillKey: string
+  skillKey: string,
+  orgId: string | null,
+  context?: TaskContext
 ): Promise<Record<string, unknown>> {
-  // Fetch the skill content from organization_skills
+  if (!orgId) {
+    throw new Error(`Cannot fetch skill "${skillKey}": organization not found for task owner`);
+  }
+  // Fetch the skill content from organization_skills, scoped to the task owner's org
   const { data: skills, error: skillError } = await supabase
     .from('organization_skills')
     .select('skill_key, frontmatter, content')
     .eq('skill_key', skillKey)
+    .eq('organization_id', orgId)
     .eq('is_enabled', true)
     .limit(1);
 
@@ -854,8 +1181,8 @@ async function handleSkillExecution(
     throw new Error(`Skill "${skillKey}" not found or not enabled`);
   }
 
-  // Fetch task context (reuses existing function)
-  const context = await fetchTaskContext(supabase, task);
+  // Use pre-fetched context if provided, otherwise fetch it
+  if (!context) context = await fetchTaskContext(supabase, task);
 
   // Build the user prompt from task + context
   let contextDetails = `Task: ${task.title}\n`;
@@ -866,8 +1193,13 @@ async function handleSkillExecution(
   if (context.contact) {
     contextDetails += `\nContact: ${context.contact.first_name} ${context.contact.last_name}`;
     if (context.contact.title) contextDetails += ` - ${context.contact.title}`;
-    if (context.contact.company) contextDetails += ` at ${context.contact.company}`;
+    if (context.contact.company_name) contextDetails += ` at ${context.contact.company_name}`;
     if (context.contact.email) contextDetails += `\nEmail: ${context.contact.email}`;
+    if (context.contact.last_contacted_at) contextDetails += `\nLast Contacted: ${context.contact.last_contacted_at}`;
+  }
+
+  if (context.recentActivities && context.recentActivities.length > 0) {
+    contextDetails += `\n\nRecent Activities: ${context.recentActivities.map((a: any) => `${a.activity_type}: ${a.subject}`).join(', ')}`;
   }
 
   if (context.company) {
@@ -877,9 +1209,12 @@ async function handleSkillExecution(
   }
 
   if (context.deal) {
-    contextDetails += `\n\nDeal: ${context.deal.title} (Stage: ${context.deal.stage})`;
+    contextDetails += `\n\nDeal: ${context.deal.name}`;
     if (context.deal.value) contextDetails += `\nValue: ${context.deal.value}`;
+    if (context.deal.expected_close_date) contextDetails += `\nExpected Close: ${context.deal.expected_close_date}`;
+    if (context.deal.priority) contextDetails += `\nPriority: ${context.deal.priority}`;
     if (context.deal.notes) contextDetails += `\nNotes: ${context.deal.notes}`;
+    if (context.deal.next_steps) contextDetails += `\nNext Steps: ${context.deal.next_steps}`;
   }
 
   if (context.meeting) {
@@ -887,9 +1222,12 @@ async function handleSkillExecution(
     if (context.meeting.summary) contextDetails += `\nSummary: ${context.meeting.summary}`;
   }
 
+  if (context.meetingActionItems && context.meetingActionItems.length > 0) {
+    contextDetails += `\n\nMeeting Action Items: ${context.meetingActionItems.map((ai: any) => ai.title).join(', ')}`;
+  }
+
   if (context.transcript) {
-    const truncated = context.transcript.substring(0, 1500);
-    contextDetails += `\n\nTranscript excerpt:\n${truncated}${context.transcript.length > 1500 ? '...' : ''}`;
+    contextDetails += `\n\nTranscript excerpt:\n${context.transcript}${context.transcript.length >= 2000 ? '...' : ''}`;
   }
 
   const today = new Date().toLocaleDateString('en-US', {

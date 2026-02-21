@@ -1,20 +1,28 @@
 /**
  * Edge Function: provision-standard-ops-tables
  *
- * Provisions the 5 standard ops tables (Leads, Meetings, All Contacts, All Companies, Deals)
- * for the authenticated user's organization.
+ * Provisions standard ops tables for the authenticated user's organization.
  *
- * This is a one-time provisioning operation that creates:
- * - 5 standard dynamic tables with predefined schemas
- * - All system columns for each table
- * - Default system views for each table
- * - Marks the organization as provisioned
+ * Accepts optional `table_keys` in the request body to provision specific tables:
+ *   - No body / empty table_keys: provisions all tables
+ *   - table_keys: ['standard_deals'] — provisions only Deals
+ *   - table_keys: ['standard_waitlist'] — provisions only Waitlist Signups
+ *   - table_keys: ['standard_leads', ...] — provisions main 4 (Leads, Meetings, Contacts, Companies)
  *
  * Idempotent - can be called multiple times safely.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+
+// Keys handled by provision_standard_ops_tables RPC (main 4)
+const MAIN_TABLE_KEYS = new Set([
+  'standard_leads',
+  'standard_meetings',
+  'standard_all_contacts',
+  'standard_all_companies',
+  'standard_clients',
+]);
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
@@ -26,6 +34,17 @@ Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
 
   try {
+    // Parse optional body
+    let tableKeys: string[] | null = null;
+    try {
+      const body = await req.json();
+      if (Array.isArray(body?.table_keys) && body.table_keys.length > 0) {
+        tableKeys = body.table_keys;
+      }
+    } catch {
+      // No body or invalid JSON — provision all
+    }
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
@@ -65,7 +84,6 @@ Deno.serve(async (req: Request) => {
     );
 
     // Get user's organization (service role bypasses RLS on organization_memberships)
-    // Note: organization_memberships only has org_id, user_id, role, created_at, updated_at
     const { data: membership, error: membershipError } = await serviceClient
       .from('organization_memberships')
       .select('org_id')
@@ -87,62 +105,91 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Call provisioning RPC for main 4 tables
-    const { data, error: rpcError } = await serviceClient.rpc('provision_standard_ops_tables', {
-      p_org_id: membership.org_id,
-      p_user_id: user.id
-    });
+    const orgId = membership.org_id;
+    const userId = user.id;
 
-    if (rpcError) {
-      throw new Error(`RPC error: ${rpcError.message}`);
-    }
+    // Determine which RPCs to call based on table_keys
+    const provisionAll = !tableKeys;
+    const needsMain = provisionAll || tableKeys!.some((k) => MAIN_TABLE_KEYS.has(k));
+    const needsDeals = provisionAll || tableKeys!.includes('standard_deals');
+    const needsWaitlist = provisionAll || tableKeys!.includes('standard_waitlist');
 
-    // Also provision the Deals standard table (separate function for modularity)
-    const { data: dealsResult, error: dealsError } = await serviceClient.rpc('provision_deals_ops_table', {
-      p_org_id: membership.org_id,
-      p_user_id: user.id
-    });
+    const results: Record<string, unknown> = {};
+    const errors: Record<string, string> = {};
 
-    if (dealsError) {
-      console.error('Failed to provision Deals ops table:', dealsError.message);
-      // Don't fail the whole operation — Deals table is additive
-    }
-
-    // Provision Waitlist Signups table for the platform org only
-    let waitlistResult = null;
-    let waitlistError = null;
-    try {
-      const { data: org } = await serviceClient
-        .from('organizations')
-        .select('name')
-        .eq('id', membership.org_id)
-        .maybeSingle();
-
-      if (org?.name?.toLowerCase().includes('sixty')) {
-        const { data: wlResult, error: wlError } = await serviceClient.rpc('provision_waitlist_ops_table', {
-          p_org_id: membership.org_id,
-          p_user_id: user.id
-        });
-        waitlistResult = wlResult;
-        if (wlError) {
-          waitlistError = wlError;
-          console.error('Failed to provision Waitlist ops table:', wlError.message);
-        }
+    // 1. Main 4 tables (Leads, Meetings, All Contacts, All Companies, Clients)
+    if (needsMain) {
+      const { data, error } = await serviceClient.rpc('provision_standard_ops_tables', {
+        p_org_id: orgId,
+        p_user_id: userId,
+      });
+      if (error) {
+        console.error('Failed to provision main tables:', error.message);
+        errors.main = error.message;
+      } else {
+        results.main = data;
       }
-    } catch (err) {
-      console.error('Waitlist provisioning check failed:', err);
-      // Non-blocking — don't fail the whole request
+    }
+
+    // 2. Deals table
+    if (needsDeals) {
+      const { data, error } = await serviceClient.rpc('provision_deals_ops_table', {
+        p_org_id: orgId,
+        p_user_id: userId,
+      });
+      if (error) {
+        console.error('Failed to provision Deals ops table:', error.message);
+        errors.deals = error.message;
+      } else {
+        results.deals = data;
+      }
+    }
+
+    // 3. Waitlist Signups table (platform org only)
+    if (needsWaitlist) {
+      try {
+        const { data: org } = await serviceClient
+          .from('organizations')
+          .select('name')
+          .eq('id', orgId)
+          .maybeSingle();
+
+        if (org?.name?.toLowerCase().includes('sixty')) {
+          const { data, error } = await serviceClient.rpc('provision_waitlist_ops_table', {
+            p_org_id: orgId,
+            p_user_id: userId,
+          });
+          if (error) {
+            console.error('Failed to provision Waitlist ops table:', error.message);
+            errors.waitlist = error.message;
+          } else {
+            results.waitlist = data;
+          }
+        } else {
+          results.waitlist = { status: 'skipped', reason: 'not_platform_org' };
+        }
+      } catch (err) {
+        console.error('Waitlist provisioning check failed:', err);
+        errors.waitlist = err instanceof Error ? err.message : 'Unknown error';
+      }
+    }
+
+    // If every requested RPC failed, return 500
+    const hasAnySuccess = Object.keys(results).length > 0;
+    const hasErrors = Object.keys(errors).length > 0;
+
+    if (!hasAnySuccess && hasErrors) {
+      return new Response(
+        JSON.stringify({ success: false, errors }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        data: {
-          ...data,
-          deals: dealsResult || { error: dealsError?.message },
-          ...(waitlistResult ? { waitlist: waitlistResult } : {}),
-          ...(waitlistError ? { waitlist: { error: waitlistError.message } } : {})
-        }
+        data: results,
+        ...(hasErrors ? { errors } : {}),
       }),
       {
         status: 200,

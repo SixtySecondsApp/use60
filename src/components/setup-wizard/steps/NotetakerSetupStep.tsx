@@ -20,10 +20,7 @@ export function NotetakerSetupStep() {
     if (!user?.id || !activeOrgId) return;
     setConfirming(true);
     try {
-      const result = await completeStep(user.id, activeOrgId, 'notetaker');
-      if (result.creditsAwarded) {
-        toast.success(`+${result.creditsAmount} credits earned!`, { description: 'AI Notetaker confirmed' });
-      }
+      await completeStep(user.id, activeOrgId, 'notetaker');
     } finally {
       setConfirming(false);
     }
@@ -33,10 +30,7 @@ export function NotetakerSetupStep() {
     if (!user?.id || !activeOrgId) return;
     try {
       await notetaker.enable();
-      const result = await completeStep(user.id, activeOrgId, 'notetaker');
-      if (result.creditsAwarded) {
-        toast.success('+60 credits earned!', { description: 'AI Notetaker enabled' });
-      }
+      await completeStep(user.id, activeOrgId, 'notetaker');
     } catch (err) {
       toast.error('Failed to enable Notetaker');
     }
@@ -44,10 +38,7 @@ export function NotetakerSetupStep() {
 
   const handleSkip = async () => {
     if (!user?.id || !activeOrgId) return;
-    const result = await completeStep(user.id, activeOrgId, 'notetaker');
-    if (result.creditsAwarded) {
-      toast.success('+60 credits earned!', { description: 'Notetaker step completed' });
-    }
+    await completeStep(user.id, activeOrgId, 'notetaker');
     setCurrentStep('crm');
   };
 
@@ -96,7 +87,7 @@ export function NotetakerSetupStep() {
             disabled={confirming}
             className="w-full h-10 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg"
           >
-            {confirming ? 'Confirming...' : 'Confirm & Earn +60 Credits'}
+            {confirming ? 'Confirming...' : 'Confirm & Earn +20 Credits'}
           </Button>
         </div>
       ) : !calendarDone ? (

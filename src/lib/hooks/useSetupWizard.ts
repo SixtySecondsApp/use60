@@ -6,7 +6,6 @@ import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
 import { useAttioIntegration } from '@/lib/hooks/useAttioIntegration';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
-import { toast } from 'sonner';
 
 const PENDING_OAUTH_KEY = 'setupWizard:pendingOAuth';
 
@@ -47,13 +46,7 @@ export function useSetupWizard() {
     // Re-open wizard at the completed step and mark it done
     store.openWizard();
     store.setCurrentStep(pendingStep);
-    store.completeStep(user.id, activeOrgId, pendingStep).then((result) => {
-      if (result.creditsAwarded) {
-        toast.success(`+${result.creditsAmount} credits earned!`, {
-          description: `${pendingStep === 'calendar' ? 'Calendar' : 'CRM'} connected`,
-        });
-      }
-    });
+    store.completeStep(user.id, activeOrgId, pendingStep);
   }, [user?.id, activeOrgId, store.hasFetched, google.isConnected, hubspot.isConnected, attio.isConnected]);
 
   const completedCount = useMemo(

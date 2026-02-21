@@ -1,18 +1,9 @@
+import { useState } from 'react';
 import {
-  Mail,
-  RefreshCw,
-  FileSearch,
-  CalendarClock,
-  Target,
-  FileText,
-  Phone,
-  Pencil,
-  BellRing,
-  Lightbulb,
   Bot,
   Building2,
   UserCircle,
-  Calendar,
+  Calendar as CalendarIcon,
   Copy,
   MoreHorizontal,
   Send,
@@ -23,12 +14,29 @@ import {
   PanelRightClose,
   CheckCircle2,
   Circle,
+  Target,
+  Pencil,
+  ArrowUpDown,
+  Tag,
+  Trash2,
 } from 'lucide-react';
 import { Task } from '@/lib/database/models';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { priorityConfig, taskTypeConfig } from './types';
+import { useDeleteTask, useUpdateTaskField } from '@/lib/hooks/useTaskActions';
 
 interface TaskDetailHeaderProps {
   task: Task;
@@ -38,28 +46,16 @@ interface TaskDetailHeaderProps {
   onToggleContext: () => void;
 }
 
-const taskTypeConfig = {
-  email: { icon: Mail, label: 'Email', color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10' },
-  follow_up: { icon: RefreshCw, label: 'Follow-up', color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-500/10' },
-  research: { icon: FileSearch, label: 'Research', color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-500/10' },
-  meeting_prep: { icon: CalendarClock, label: 'Meeting Prep', color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
-  crm_update: { icon: Target, label: 'CRM Update', color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-  proposal: { icon: FileText, label: 'Proposal', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10' },
-  call: { icon: Phone, label: 'Call', color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-500/10' },
-  content: { icon: Pencil, label: 'Content', color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-500/10' },
-  alert: { icon: BellRing, label: 'Alert', color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-500/10' },
-  insight: { icon: Lightbulb, label: 'Insight', color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-500/10' },
-} as const;
-
-const priorityConfig = {
-  low: { label: 'Low', color: 'text-slate-500', dot: 'bg-slate-400', dotColor: 'bg-slate-400' },
-  medium: { label: 'Medium', color: 'text-blue-500', dot: 'bg-blue-400', dotColor: 'bg-blue-400' },
-  high: { label: 'High', color: 'text-orange-500', dot: 'bg-orange-400', dotColor: 'bg-orange-400' },
-  urgent: { label: 'Urgent', color: 'text-red-500', dot: 'bg-red-400', dotColor: 'bg-red-400' },
-};
-
 export function TaskDetailHeader({ task, onApprove, onDismiss, contextOpen, onToggleContext }: TaskDetailHeaderProps) {
-  const typeInfo = taskTypeConfig[task.task_type as keyof typeof taskTypeConfig] || taskTypeConfig.email;
+  const deleteTask = useDeleteTask();
+  const updateField = useUpdateTaskField();
+  const [editTitleOpen, setEditTitleOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [editDueDateOpen, setEditDueDateOpen] = useState(false);
+  const [editDueDate, setEditDueDate] = useState(task.due_date || '');
+  const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  const typeInfo = taskTypeConfig[task.task_type] || taskTypeConfig['email'];
   const TypeIcon = typeInfo.icon;
   const isCompleted = task.status === 'completed';
   const isDraftReady = task.ai_status === 'draft_ready';
@@ -119,12 +115,50 @@ export function TaskDetailHeader({ task, onApprove, onDismiss, contextOpen, onTo
           >
             {contextOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
           </button>
-          <button className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-gray-800 text-slate-400 transition-colors" title="Copy link">
+          <button
+            className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-gray-800 text-slate-400 transition-colors"
+            title="Copy link"
+            onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/command-centre?task=${task.id}`);
+              toast.success('Link copied to clipboard');
+            }}
+          >
             <Copy className="h-3.5 w-3.5" />
           </button>
-          <button className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-gray-800 text-slate-400 transition-colors" title="More options">
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-gray-800 text-slate-400 transition-colors" title="More options">
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => {
+                setEditTitle(task.title);
+                setEditTitleOpen(true);
+              }}>
+                <Pencil className="h-4 w-4 mr-2" /> Edit title
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPriorityPickerOpen(true)}>
+                <ArrowUpDown className="h-4 w-4 mr-2" /> Change priority
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTypePickerOpen(true)}>
+                <Tag className="h-4 w-4 mr-2" /> Change type
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                setEditDueDate(task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '');
+                setEditDueDateOpen(true);
+              }}>
+                <CalendarIcon className="h-4 w-4 mr-2" /> Change due date
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => deleteTask.mutate(task.id)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" /> Delete task
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -164,7 +198,7 @@ export function TaskDetailHeader({ task, onApprove, onDismiss, contextOpen, onTo
         )}
         {task.due_date && (
           <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-gray-400">
-            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+            <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
             <span>{new Date(task.due_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
           </div>
         )}
@@ -234,6 +268,131 @@ export function TaskDetailHeader({ task, onApprove, onDismiss, contextOpen, onTo
           </Button>
         </div>
       )}
+
+      {/* Edit Title Dialog */}
+      <Dialog open={editTitleOpen} onOpenChange={setEditTitleOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Task Title</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && editTitle.trim()) {
+                updateField.mutate({ taskId: task.id, field: 'title', value: editTitle.trim() });
+                toast.success('Title updated');
+                setEditTitleOpen(false);
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTitleOpen(false)}>Cancel</Button>
+            <Button onClick={() => {
+              if (editTitle.trim()) {
+                updateField.mutate({ taskId: task.id, field: 'title', value: editTitle.trim() });
+                toast.success('Title updated');
+                setEditTitleOpen(false);
+              }
+            }}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Priority Picker Dialog */}
+      <Dialog open={priorityPickerOpen} onOpenChange={setPriorityPickerOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Change Priority</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1">
+            {Object.entries(priorityConfig).map(([key, cfg]) => (
+              <button
+                key={key}
+                className={cn(
+                  'w-full flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors text-left',
+                  task.priority === key
+                    ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                    : 'hover:bg-slate-100 dark:hover:bg-gray-800 text-slate-700 dark:text-gray-300'
+                )}
+                onClick={() => {
+                  updateField.mutate({ taskId: task.id, field: 'priority', value: key });
+                  toast.success(`Priority changed to ${cfg.label}`);
+                  setPriorityPickerOpen(false);
+                }}
+              >
+                <div className={cn('w-2.5 h-2.5 rounded-full', cfg.dotColor)} />
+                {cfg.label}
+                {task.priority === key && <Check className="h-3.5 w-3.5 ml-auto" />}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Type Picker Dialog */}
+      <Dialog open={typePickerOpen} onOpenChange={setTypePickerOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Change Type</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1">
+            {Object.entries(taskTypeConfig).map(([key, cfg]) => {
+              const Icon = cfg.icon;
+              return (
+                <button
+                  key={key}
+                  className={cn(
+                    'w-full flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors text-left',
+                    task.task_type === key
+                      ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                      : 'hover:bg-slate-100 dark:hover:bg-gray-800 text-slate-700 dark:text-gray-300'
+                  )}
+                  onClick={() => {
+                    updateField.mutate({ taskId: task.id, field: 'task_type', value: key });
+                    toast.success(`Type changed to ${cfg.label}`);
+                    setTypePickerOpen(false);
+                  }}
+                >
+                  <Icon className={cn('h-4 w-4', cfg.color)} />
+                  {cfg.label}
+                  {task.task_type === key && <Check className="h-3.5 w-3.5 ml-auto" />}
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Due Date Dialog */}
+      <Dialog open={editDueDateOpen} onOpenChange={setEditDueDateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change Due Date</DialogTitle>
+          </DialogHeader>
+          <Input
+            type="date"
+            autoFocus
+            value={editDueDate}
+            onChange={(e) => setEditDueDate(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              updateField.mutate({ taskId: task.id, field: 'due_date', value: null });
+              toast.success('Due date removed');
+              setEditDueDateOpen(false);
+            }}>Remove Date</Button>
+            <Button onClick={() => {
+              if (editDueDate) {
+                updateField.mutate({ taskId: task.id, field: 'due_date', value: new Date(editDueDate).toISOString() });
+                toast.success('Due date updated');
+              }
+              setEditDueDateOpen(false);
+            }}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,0 +1,651 @@
+{
+  "project": {
+    "name": "Command Centre — The Morning Coffee Experience",
+    "description": "Transform the Command Centre from a broken task list into the definitive human+AI sales workspace. 5 wow features: Morning Coffee Queue, Conversational Canvas, One-Click Execute, Live Context Intelligence, Task Chains. Built on top of critical bug fixes.",
+    "createdAt": "2026-02-20T13:00:00Z",
+    "vision": "You open it at 8am and there are 5 tasks waiting — each one 80% done. AI watched your meetings, read your emails, scanned your pipeline, and pre-built the deliverables overnight. You review, refine via conversation, and hit send. 5 real sales actions in under 10 minutes.",
+    "demoScript": "Open Command Centre → 5 pre-drafted tasks from overnight signals → Click follow-up email → Canvas shows personalized draft with meeting context → Type 'add the Meridian case study' → Canvas streams update in-place → Approve & Send → compose preview → Send → Sidebar updates, next chain task surfaces as ready → Continue through queue → 3-4 tasks shipped in 8 minutes",
+    "auditReport": ".sixty/consult/command-centre-audit.md",
+    "bugFixPlan": ".sixty/plan-command-centre-audit-fix.json"
+  },
+
+  "features": [
+    {
+      "id": "phase-0-fixes",
+      "name": "Phase 0: Critical Bug Fixes",
+      "status": "pending",
+      "priority": 0,
+      "description": "Fix crashes, data loss, and broken fundamentals so the feature actually loads and functions"
+    },
+    {
+      "id": "morning-coffee",
+      "name": "Phase 1: Morning Coffee Queue",
+      "status": "pending",
+      "priority": 1,
+      "description": "Time-aware greeting, urgency-sorted task queue, rich AI context injection for high-quality pre-built drafts"
+    },
+    {
+      "id": "one-click-execute",
+      "name": "Phase 2: One-Click Execute (Confirm-then-Send)",
+      "status": "pending",
+      "priority": 2,
+      "description": "Approve triggers real actions: email send (via compose preview), Slack post, CRM update, campaign push"
+    },
+    {
+      "id": "conversational-canvas",
+      "name": "Phase 3: Conversational Canvas",
+      "status": "pending",
+      "priority": 3,
+      "description": "Bottom input becomes a conversation with AI about the deliverable. In-place streaming edits with version undo."
+    },
+    {
+      "id": "live-context",
+      "name": "Phase 4: Live Context Intelligence",
+      "status": "pending",
+      "priority": 4,
+      "description": "Right panel dynamically fetches and displays context based on task type and linked entities"
+    },
+    {
+      "id": "task-chains",
+      "name": "Phase 5: Task Chains",
+      "status": "pending",
+      "priority": 5,
+      "description": "Visual chain grouping in sidebar, auto-surface next task on completion, background AI pre-work"
+    }
+  ],
+
+  "stories": [
+    {"_section": "========== PHASE 0: CRITICAL BUG FIXES (from audit) =========="},
+
+    {
+      "id": "FIX-001",
+      "feature": "phase-0-fixes",
+      "title": "Add metadata to task SELECT queries",
+      "type": "data",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {"stories": []},
+      "blocks": ["MC-003", "CTX-001", "CTX-002", "CHAIN-001"],
+      "acceptance": [
+        "fetchAllTasks and fetchFilteredTasks include metadata in SELECT",
+        "Context panel toggle appears for tasks with meeting_context or contact_context",
+        "Subtask badges and parent/child grouping work"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["src/lib/hooks/useCommandCentreTasks.ts"]
+    },
+    {
+      "id": "FIX-002",
+      "feature": "phase-0-fixes",
+      "title": "Remove dismiss_reason from SELECT, fix dismiss mutation",
+      "type": "data",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {"stories": []},
+      "blocks": [],
+      "acceptance": [
+        "useDismissTask no longer selects non-existent dismiss_reason column",
+        "Dismiss mutation succeeds, toast confirms"
+      ],
+      "estimatedMinutes": 5,
+      "files": ["src/lib/hooks/useTaskActions.ts"]
+    },
+    {
+      "id": "FIX-003",
+      "feature": "phase-0-fixes",
+      "title": "Add org filter to AI worker skill lookup",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {"stories": []},
+      "blocks": [],
+      "acceptance": [
+        "handleSkillExecution filters organization_skills by organization_id",
+        "No cross-org data leak"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/unified-task-ai-worker/index.ts"]
+    },
+    {
+      "id": "FIX-004",
+      "feature": "phase-0-fixes",
+      "title": "Fix AIReasoningFooter positioning + priority fallback + error state + staleTime",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {"stories": []},
+      "blocks": [],
+      "acceptance": [
+        "AIReasoningFooter uses relative positioning within the center column, not fixed viewport",
+        "SidebarTaskItem falls back gracefully for unexpected priority values",
+        "CommandCentre shows error state with retry when query fails",
+        "useCommandCentreTasks has staleTime: 30_000"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/AIReasoningFooter.tsx",
+        "src/components/command-centre/SidebarTaskItem.tsx",
+        "src/pages/platform/CommandCentre.tsx",
+        "src/lib/hooks/useCommandCentreTasks.ts"
+      ]
+    },
+    {
+      "id": "FIX-005",
+      "feature": "phase-0-fixes",
+      "title": "Fix N keyboard shortcut + canvas save basics",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {"stories": []},
+      "blocks": ["CANVAS-001"],
+      "acceptance": [
+        "data-command-centre-quick-add attribute on sidebar new task trigger",
+        "N key focuses/opens the new task flow",
+        "Basic debounced auto-save for canvas content to task metadata"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/TaskSidebar.tsx",
+        "src/components/command-centre/WritingCanvas.tsx",
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+
+    {"_section": "========== PHASE 1: MORNING COFFEE QUEUE =========="},
+
+    {
+      "id": "MC-001",
+      "feature": "morning-coffee",
+      "title": "Time-aware greeting header with task summary",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {"stories": ["FIX-004"]},
+      "blocks": [],
+      "parallelWith": ["MC-002"],
+      "acceptance": [
+        "Header shows 'Good morning/afternoon/evening, {firstName}'",
+        "Summary line: '{N} ready for review, {N} in progress, {N} needs your input'",
+        "Counts derived from task statuses (draft_ready → ready, ai_working → in progress, pending_review → needs input)",
+        "Greeting disappears after first task interaction (focus on work, not chrome)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/CommandCentre.tsx",
+        "src/components/command-centre/TaskSidebar.tsx"
+      ]
+    },
+    {
+      "id": "MC-002",
+      "feature": "morning-coffee",
+      "title": "Urgency-sorted task queue with smart prioritization",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {"stories": ["FIX-004"]},
+      "blocks": [],
+      "parallelWith": ["MC-001"],
+      "acceptance": [
+        "Default sort is by urgency score, not created_at",
+        "Urgency factors: time-sensitivity (overdue > due today > due this week), task type (follow-up > proposal > CRM update), signal freshness",
+        "Sort dropdown in sidebar header allows override: Urgency, Created, Priority, Due date",
+        "Wire sortField/sortOrder from Zustand store to the query"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useCommandCentreTasks.ts",
+        "src/components/command-centre/TaskSidebar.tsx",
+        "src/lib/stores/commandCentreStore.ts"
+      ]
+    },
+    {
+      "id": "MC-003",
+      "feature": "morning-coffee",
+      "title": "Enrich AI worker prompts with real context (meeting transcripts, CRM data, contact history)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {"stories": ["FIX-001", "FIX-003"]},
+      "blocks": ["EXEC-001"],
+      "acceptance": [
+        "When task has a linked meeting_id, AI worker fetches transcript excerpts and injects into prompt",
+        "When task has a linked contact_id/company_id, worker fetches recent activities, deal data, email history",
+        "When task has a linked deal_id, worker fetches stage, value, competitors, pricing discussions",
+        "AI drafts reference specific names, dates, commitments, and numbers from real data",
+        "Worker writes enriched metadata (meeting_context, contact_context) back to task for context panel"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/unified-task-ai-worker/index.ts"
+      ]
+    },
+    {
+      "id": "MC-004",
+      "feature": "morning-coffee",
+      "title": "Empty state with onboarding CTA",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {"stories": []},
+      "blocks": [],
+      "acceptance": [
+        "Empty task list shows an illustrated empty state with explanation of how tasks get created",
+        "'Create your first task' CTA button",
+        "Secondary: 'AI will create tasks from your meetings, pipeline signals, and email threads'",
+        "Links to connect calendar/email if not yet connected"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/command-centre/TaskSidebar.tsx"
+      ]
+    },
+
+    {"_section": "========== PHASE 2: ONE-CLICK EXECUTE =========="},
+
+    {
+      "id": "EXEC-001",
+      "feature": "one-click-execute",
+      "title": "Email compose preview modal (confirm-then-send)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {"stories": ["MC-003"]},
+      "blocks": ["EXEC-002"],
+      "acceptance": [
+        "Approve on email-type tasks opens a ComposePreview dialog/sheet",
+        "Pre-filled: To (from contact), CC (optional), Subject, Body (from deliverable)",
+        "All fields editable before send",
+        "Send button calls email-send-as-rep edge function with the final content",
+        "On success: toast 'Sent from your Gmail', task status → completed",
+        "On error: toast with error, task stays as-is",
+        "Cancel returns to the task without changing status"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/command-centre/ComposePreview.tsx",
+        "src/components/command-centre/WritingCanvas.tsx",
+        "src/pages/platform/CommandCentre.tsx"
+      ]
+    },
+    {
+      "id": "EXEC-002",
+      "feature": "one-click-execute",
+      "title": "Post-send automation: create follow-up task + log activity",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {"stories": ["EXEC-001"]},
+      "blocks": [],
+      "acceptance": [
+        "After successful email send, auto-create a follow-up task (3 business days later) of type 'follow_up'",
+        "Log a 'email_sent' activity on the contact/deal",
+        "Toast includes follow-up info: 'Follow-up task created for Thursday'",
+        "Follow-up task is linked to same contact/deal as parent"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/ComposePreview.tsx",
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+    {
+      "id": "EXEC-003",
+      "feature": "one-click-execute",
+      "title": "Slack post preview + send for internal debrief tasks",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {"stories": ["MC-003"]},
+      "blocks": [],
+      "parallelWith": ["EXEC-001"],
+      "acceptance": [
+        "Approve on slack-type tasks opens a Slack preview (shows formatted Block Kit message)",
+        "Channel selector (defaults to #deals or task-specified channel)",
+        "Send button calls Slack webhook/API",
+        "On success: task completed, toast confirms channel + timestamp"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-centre/SlackPreview.tsx",
+        "src/pages/platform/CommandCentre.tsx"
+      ]
+    },
+    {
+      "id": "EXEC-004",
+      "feature": "one-click-execute",
+      "title": "CRM update preview + confirm for deal/contact updates",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {"stories": ["MC-003"]},
+      "blocks": [],
+      "parallelWith": ["EXEC-001"],
+      "acceptance": [
+        "Approve on crm_update tasks shows a diff preview: current value → proposed value for each field",
+        "Confirm writes to Supabase (and syncs to HubSpot/Attio if connected)",
+        "Fields: deal stage, contact properties, activity notes",
+        "On success: task completed, toast confirms what was updated"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-centre/CrmUpdatePreview.tsx",
+        "src/pages/platform/CommandCentre.tsx"
+      ]
+    },
+    {
+      "id": "EXEC-005",
+      "feature": "one-click-execute",
+      "title": "Wire Copy Link, More Options dropdown, approved filter status",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {"stories": []},
+      "blocks": [],
+      "acceptance": [
+        "Copy Link copies /command-centre?task={id} to clipboard with toast",
+        "More Options dropdown: Edit title, Change priority, Change type, Delete",
+        "Approved tasks appear in Done filter bucket with green checkmark badge"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/TaskDetailHeader.tsx",
+        "src/lib/hooks/useCommandCentreTasks.ts",
+        "src/components/command-centre/SidebarTaskItem.tsx"
+      ]
+    },
+
+    {"_section": "========== PHASE 3: CONVERSATIONAL CANVAS =========="},
+
+    {
+      "id": "CANVAS-001",
+      "feature": "conversational-canvas",
+      "title": "Convert bottom input to conversation thread with AI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {"stories": ["FIX-005"]},
+      "blocks": ["CANVAS-002"],
+      "acceptance": [
+        "Bottom area shows a conversation thread: user messages + AI responses",
+        "User types a refinement instruction (e.g., 'make it more casual') and hits Enter/Send",
+        "Message appears in the thread immediately (optimistic)",
+        "Conversation history persists in task.metadata.canvas_conversation[]",
+        "Slash commands (/) still open the skill dropdown as before"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/command-centre/WritingCanvas.tsx",
+        "src/components/command-centre/CanvasConversation.tsx",
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+    {
+      "id": "CANVAS-002",
+      "feature": "conversational-canvas",
+      "title": "In-place streaming canvas updates from conversation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {"stories": ["CANVAS-001"]},
+      "blocks": ["CANVAS-003"],
+      "acceptance": [
+        "When user sends a refinement message, AI streams updated content directly into the canvas",
+        "The canvas visually shows streaming (characters appearing) while AI responds",
+        "AI receives: current canvas content + conversation history + user's latest instruction",
+        "Edge function returns streamed response that updates deliverable_data in real-time",
+        "Thread shows 'Canvas updated' confirmation after streaming completes"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "src/components/command-centre/WritingCanvas.tsx",
+        "src/components/command-centre/CanvasConversation.tsx",
+        "supabase/functions/unified-task-ai-worker/index.ts"
+      ]
+    },
+    {
+      "id": "CANVAS-003",
+      "feature": "conversational-canvas",
+      "title": "Version snapshots and undo for AI canvas edits",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {"stories": ["CANVAS-002"]},
+      "blocks": [],
+      "acceptance": [
+        "Before each AI edit, current canvas content is snapshot to task.metadata.canvas_versions[]",
+        "Subtle 'Undo AI edit' button appears at top of canvas after AI modifies content",
+        "Cmd+Z (when canvas focused) also reverts to previous version",
+        "Version history capped at 10 versions (oldest dropped)",
+        "Undo restores previous content and removes the last conversation entry"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/WritingCanvas.tsx",
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+
+    {"_section": "========== PHASE 4: LIVE CONTEXT INTELLIGENCE =========="},
+
+    {
+      "id": "CTX-001",
+      "feature": "live-context",
+      "title": "Type-aware context panel with dynamic data fetching",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {"stories": ["FIX-001", "MC-003"]},
+      "blocks": ["CTX-002"],
+      "acceptance": [
+        "Context panel layout adapts based on deliverable_type / task type",
+        "Email follow-up: Meeting highlights tab, Buyer signals tab, Contact history tab",
+        "Proposal: Deal overview tab, Competitive intel tab, Pricing discussions tab",
+        "Re-engagement: Last contact timeline, Engagement history, Recent prospect activity",
+        "CRM update: Current vs proposed values, Confidence scores, Related signals",
+        "Each tab fetches its own data via React Query (lazy, on tab open)"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx",
+        "src/components/command-centre/context-tabs/MeetingHighlightsTab.tsx",
+        "src/components/command-centre/context-tabs/BuyerSignalsTab.tsx",
+        "src/components/command-centre/context-tabs/DealOverviewTab.tsx",
+        "src/components/command-centre/context-tabs/ContactHistoryTab.tsx"
+      ]
+    },
+    {
+      "id": "CTX-002",
+      "feature": "live-context",
+      "title": "Wire context panel navigation and remove fake video player",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {"stories": ["CTX-001"]},
+      "blocks": [],
+      "acceptance": [
+        "Clicking a related deal navigates to /deals/{id}",
+        "Clicking a related meeting navigates to /meetings/{id}",
+        "Clicking a contact navigates to /contacts/{id}",
+        "Replace fake video player with 'View Recording' link button to /meetings/{id}",
+        "Fix useEffect dependency array (add tabs/availableTabs)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx"
+      ]
+    },
+
+    {"_section": "========== PHASE 5: TASK CHAINS =========="},
+
+    {
+      "id": "CHAIN-001",
+      "feature": "task-chains",
+      "title": "Visual chain grouping in sidebar with progress indicator",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {"stories": ["FIX-001"]},
+      "blocks": ["CHAIN-002"],
+      "acceptance": [
+        "Tasks with parent_task_id are grouped under their parent in the sidebar",
+        "Parent shows chain title + progress: 'Post-Meeting Pack (2/4)'",
+        "Expand/collapse to show child tasks",
+        "Chain progress bar (visual, like a mini progress indicator)",
+        "Completed child tasks show checkmark, active shows highlight, pending shows grey"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/command-centre/TaskSidebar.tsx",
+        "src/components/command-centre/SidebarTaskItem.tsx",
+        "src/components/command-centre/TaskChainGroup.tsx"
+      ]
+    },
+    {
+      "id": "CHAIN-002",
+      "feature": "task-chains",
+      "title": "Auto-surface next task in chain on completion",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {"stories": ["CHAIN-001"]},
+      "blocks": ["CHAIN-003"],
+      "acceptance": [
+        "When a task in a chain is completed/approved, the next pending task in the chain auto-selects",
+        "Next task gets a 'Ready' badge glow animation in the sidebar",
+        "If next task is already draft_ready, it's immediately viewable",
+        "If next task is still ai_working, show progress in the canvas"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/CommandCentre.tsx",
+        "src/components/command-centre/TaskSidebar.tsx",
+        "src/lib/hooks/useTaskActions.ts"
+      ]
+    },
+    {
+      "id": "CHAIN-003",
+      "feature": "task-chains",
+      "title": "Background AI pre-work on next chain tasks",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {"stories": ["CHAIN-002"]},
+      "blocks": [],
+      "acceptance": [
+        "When a chain task is approved, check if next tasks in chain have ai_status: 'none'",
+        "If so, trigger unified-task-ai-worker for the next 1-2 tasks in background",
+        "AI works silently — no spinner in sidebar until user navigates to that task",
+        "When user eventually clicks the task, draft is already ready",
+        "Rate-limited: max 2 background AI executions per chain completion"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useTaskActions.ts",
+        "src/lib/hooks/useExecuteSkillForTask.ts"
+      ]
+    },
+
+    {"_section": "========== PHASE 6: CODE QUALITY (parallel with any phase) =========="},
+
+    {
+      "id": "CLEAN-001",
+      "feature": "phase-0-fixes",
+      "title": "Extract shared configs, remove dead code, fix XSS",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {"stories": []},
+      "blocks": [],
+      "acceptance": [
+        "taskTypeConfig and priorityConfig defined once in types.ts, imported everywhere",
+        "TaskDetailPanel.tsx, CommentThread.tsx, ActivityTimeline.tsx, DeliverableEditor.tsx deleted (orphaned by V2)",
+        "WritingCanvas markdown rendering uses DOMPurify or react-markdown (no raw dangerouslySetInnerHTML)",
+        "console.error replaced with app logger in useCommandCentreSkills"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-centre/types.ts",
+        "src/components/command-centre/TaskDetailHeader.tsx",
+        "src/components/command-centre/SidebarTaskItem.tsx",
+        "src/components/command-centre/WritingCanvas.tsx",
+        "src/lib/hooks/useCommandCentreSkills.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 24,
+    "completedStories": 0,
+    "phases": [
+      {
+        "name": "Phase 0: Critical Bug Fixes",
+        "stories": ["FIX-001", "FIX-002", "FIX-003", "FIX-004", "FIX-005"],
+        "parallel": true,
+        "estimateMinutes": 70,
+        "note": "All 5 independent. Unblocks everything. CLEAN-001 can run in parallel.",
+        "demoCheckpoint": "Feature loads without crashes, tasks display with metadata, canvas saves edits"
+      },
+      {
+        "name": "Phase 1: Morning Coffee Queue",
+        "stories": ["MC-001", "MC-002", "MC-003", "MC-004"],
+        "parallel": "MC-001 || MC-002 || MC-004, then MC-003",
+        "estimateMinutes": 90,
+        "note": "MC-003 (context enrichment) is the big one — makes AI drafts actually good",
+        "demoCheckpoint": "Open CC → personalized greeting → urgency-sorted queue → click task → see AI draft with real meeting/CRM data"
+      },
+      {
+        "name": "Phase 2: One-Click Execute",
+        "stories": ["EXEC-001", "EXEC-002", "EXEC-003", "EXEC-004", "EXEC-005"],
+        "parallel": "EXEC-001 || EXEC-003 || EXEC-004 || EXEC-005, then EXEC-002",
+        "estimateMinutes": 120,
+        "note": "EXEC-001 (email compose preview) is the hero. EXEC-003/004 can parallel.",
+        "demoCheckpoint": "Review AI draft → Approve → compose preview → Send → email goes out → follow-up task auto-created"
+      },
+      {
+        "name": "Phase 3: Conversational Canvas",
+        "stories": ["CANVAS-001", "CANVAS-002", "CANVAS-003"],
+        "parallel": false,
+        "estimateMinutes": 85,
+        "note": "Sequential chain: conversation thread → streaming updates → version undo",
+        "demoCheckpoint": "Type 'add the Meridian case study' → canvas streams updated content in-place → Undo reverts"
+      },
+      {
+        "name": "Phase 4: Live Context Intelligence",
+        "stories": ["CTX-001", "CTX-002"],
+        "parallel": false,
+        "estimateMinutes": 50,
+        "note": "CTX-001 is the rebuild, CTX-002 wires navigation. Depends on MC-003 for data.",
+        "demoCheckpoint": "Right panel shows meeting highlights, buyer signals, deal data — adapts per task type"
+      },
+      {
+        "name": "Phase 5: Task Chains",
+        "stories": ["CHAIN-001", "CHAIN-002", "CHAIN-003"],
+        "parallel": false,
+        "estimateMinutes": 75,
+        "note": "Sequential: visual grouping → auto-surface → background pre-work",
+        "demoCheckpoint": "Complete email task → sidebar highlights next in chain (proposal) → it's already drafted"
+      }
+    ],
+    "estimatedTotal": {
+      "sequential": "~8 hours",
+      "withParallel": "~5.5 hours",
+      "byPhase": {
+        "phase0": "1h (parallel)",
+        "phase1": "1.5h",
+        "phase2": "2h (parallel)",
+        "phase3": "1.5h",
+        "phase4": "50m",
+        "phase5": "1.25h"
+      }
+    }
+  },
+
+  "designDecisions": {
+    "canvasEditing": "In-place streaming (Cursor-style). AI streams directly into the canvas. Version snapshots stored for undo.",
+    "executePattern": "Confirm-then-send. Approve opens a preview modal (email compose, Slack preview, CRM diff). User has final say.",
+    "chainBehavior": "Surface-as-ready. Completing a task highlights the next in chain but doesn't auto-present. AI pre-works in background.",
+    "contextPanel": "Type-aware. Tabs and content adapt based on deliverable_type. Lazy data fetching per tab.",
+    "sortDefault": "Urgency score (time-sensitivity × type priority × signal freshness). User can override.",
+    "undoMechanism": "Snapshot-based. Up to 10 versions stored in task.metadata.canvas_versions[]. Cmd+Z or Undo button."
+  }
+}

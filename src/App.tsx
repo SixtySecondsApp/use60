@@ -76,7 +76,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, CommandCentreWowDemo, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -314,6 +314,9 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
         {/* Organization invitation acceptance (can be accessed logged in or out) */}
         <Route path="/invite/:token" element={<AcceptInvitation />} />
 
+        {/* Commitment Detection Demo */}
+        <Route path="/cde-demo" element={<CommitmentDetectionDemo />} />
+
         {/* ========== PROTECTED ROUTES (Auth Required) ========== */}
         <Route path="/*" element={
           <ProtectedRoute>
@@ -339,6 +342,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/command-centre" element={<InternalRouteGuard><AppLayout><CommandCentre /></AppLayout></InternalRouteGuard>} />
                 <Route path="/command-centre-demo" element={<InternalRouteGuard><AppLayout><CommandCentreDemo /></AppLayout></InternalRouteGuard>} />
                 <Route path="/command-centre-v2" element={<InternalRouteGuard><AppLayout><CommandCentreV2Demo /></AppLayout></InternalRouteGuard>} />
+                <Route path="/command-centre-wow" element={<InternalRouteGuard><AppLayout><CommandCentreWowDemo /></AppLayout></InternalRouteGuard>} />
                 <Route path="/activity" element={<InternalRouteGuard><AppLayout><ActivityLog /></AppLayout></InternalRouteGuard>} />
                 <Route path="/insights" element={<AppLayout><Insights /></AppLayout>} />
                 <Route path="/crm" element={<Navigate to="/ops" replace />} />
@@ -542,7 +546,6 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/fact-profiles" element={<Navigate to="/profiles?tab=companies" replace />} />
                 <Route path="/fact-profiles/:id" element={<RedirectFactProfile />} />
                 <Route path="/fact-profiles/:id/edit" element={<RedirectFactProfileEdit />} />
-                <Route path="/prospecting" element={<Navigate to="/profiles?tab=icps" replace />} />
                 <Route path="/docs" element={<AppLayout><DocsPage /></AppLayout>} />
                 <Route path="/support" element={<AppLayout><SupportCentrePage /></AppLayout>} />
                 <Route path="/tasks/settings" element={<Navigate to="/settings/task-sync" replace />} />

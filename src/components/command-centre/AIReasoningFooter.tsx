@@ -7,7 +7,7 @@ interface AIReasoningFooterProps {
 
 export function AIReasoningFooter({ reasoning, confidenceScore }: AIReasoningFooterProps) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-violet-200 dark:border-violet-500/20 bg-violet-50/95 dark:bg-violet-500/5 backdrop-blur-sm px-4 py-2.5">
+    <div className="border-t border-slate-200 dark:border-gray-700/50 bg-slate-50/80 dark:bg-gray-800/30 px-4 py-2.5">
       <div className="max-w-4xl mx-auto flex items-center gap-3">
         <div className="shrink-0 w-7 h-7 rounded-full bg-violet-100 dark:bg-violet-500/10 flex items-center justify-center">
           <Brain className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />

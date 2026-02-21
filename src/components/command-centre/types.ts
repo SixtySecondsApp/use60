@@ -5,6 +5,21 @@
  * Tasks, Action Centre, Next Action Suggestions, and Meeting Action Items.
  */
 
+import {
+  Mail,
+  RefreshCw,
+  FileSearch,
+  CalendarClock,
+  Target,
+  FileText,
+  Phone,
+  Pencil,
+  BellRing,
+  Lightbulb,
+  Circle,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
 // ============================================================
 // Core Type Unions
 // ============================================================
@@ -192,7 +207,7 @@ export interface TaskActivity {
 
 export type CommandCentreFilter = 'all' | 'review' | 'drafts' | 'working' | 'done';
 
-export type CommandCentreSortField = 'created_at' | 'due_date' | 'priority' | 'ai_status';
+export type CommandCentreSortField = 'urgency' | 'created_at' | 'due_date' | 'priority' | 'ai_status';
 
 export type CommandCentreSortOrder = 'asc' | 'desc';
 
@@ -216,7 +231,7 @@ export interface CommandCentreFilterCounts {
 }
 
 // ============================================================
-// UI Config Maps
+// UI Config Map Interfaces
 // ============================================================
 
 export interface PriorityConfig {
@@ -226,8 +241,43 @@ export interface PriorityConfig {
 }
 
 export interface TaskTypeConfig {
-  icon: string;
+  icon: LucideIcon;
   label: string;
   color: string;
   bg: string;
 }
+
+// ============================================================
+// Shared UI Config Maps (single source of truth)
+// ============================================================
+
+export const priorityConfig: Record<string, { color: string; dotColor: string; label: string }> = {
+  urgent: { color: 'text-red-500', dotColor: 'bg-red-400', label: 'Urgent' },
+  high: { color: 'text-orange-500', dotColor: 'bg-orange-400', label: 'High' },
+  medium: { color: 'text-blue-500', dotColor: 'bg-blue-400', label: 'Medium' },
+  low: { color: 'text-slate-500', dotColor: 'bg-slate-400', label: 'Low' },
+};
+
+export interface TaskTypeConfigEntry {
+  icon: LucideIcon;
+  label: string;
+  color: string;
+  bg: string;
+}
+
+export const taskTypeConfig: Record<string, TaskTypeConfigEntry> = {
+  email: { icon: Mail, label: 'Email', color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10' },
+  follow_up: { icon: RefreshCw, label: 'Follow-up', color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-500/10' },
+  research: { icon: FileSearch, label: 'Research', color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-500/10' },
+  meeting_prep: { icon: CalendarClock, label: 'Meeting Prep', color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+  crm_update: { icon: Target, label: 'CRM Update', color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+  proposal: { icon: FileText, label: 'Proposal', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+  call: { icon: Phone, label: 'Call', color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-500/10' },
+  content: { icon: Pencil, label: 'Content', color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-500/10' },
+  alert: { icon: BellRing, label: 'Alert', color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-500/10' },
+  insight: { icon: Lightbulb, label: 'Insight', color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-500/10' },
+  meeting: { icon: CalendarClock, label: 'Meeting', color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+  demo: { icon: CalendarClock, label: 'Demo', color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-500/10' },
+  general: { icon: Circle, label: 'General', color: 'text-slate-500', bg: 'bg-slate-50 dark:bg-slate-500/10' },
+  slack_message: { icon: Mail, label: 'Slack', color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-500/10' },
+};

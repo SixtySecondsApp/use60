@@ -1,0 +1,297 @@
+{
+  "feature": "command-centre-upgrade",
+  "name": "Command Centre — Full Feature Upgrade",
+  "description": "Make Command Centre genuinely useful: meeting transcript access, proposal generation, follow-up drafting, recording playback, action item management, and task editing.",
+  "consultReport": ".sixty/consult/command-centre-audit.md",
+  "createdAt": "2026-02-20T17:30:00Z",
+  "totalEstimate": "7-8 days",
+  "mvpEstimate": "3-4 days (stories 1-5)",
+
+  "stories": [
+    {
+      "id": "CCU-001",
+      "title": "Lazy-load context panel data for all tasks",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 45,
+      "dependencies": [],
+      "blocks": ["CCU-003", "CCU-006", "CCU-007"],
+      "parallelWith": ["CCU-002"],
+      "acceptance": [
+        "ContextPanel fetches deal/contact/company/meeting data on-demand when task is selected",
+        "Manual tasks show full context (not empty panels)",
+        "Loading skeleton shown while context fetches",
+        "Context refreshes when task changes, not stale from enrichment time"
+      ],
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx",
+        "src/lib/hooks/useTaskContext.ts (new)"
+      ],
+      "description": "Currently ContextPanel only shows data from task.metadata that was pre-enriched by the AI worker. Manual tasks and old tasks have empty context panels. Create a useTaskContext hook that lazy-fetches deal, contact, company, meeting, and recent activities when a task is selected. Fall back to metadata if fetch fails. Show loading skeletons during fetch."
+    },
+    {
+      "id": "CCU-002",
+      "title": "Add proposal generation handler + slash command",
+      "type": "backend+frontend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 40,
+      "dependencies": [],
+      "blocks": [],
+      "parallelWith": ["CCU-001"],
+      "acceptance": [
+        "unified-task-ai-worker handles deliverable_type='proposal' via proposal-generator skill",
+        "/proposal slash command appears in WritingCanvas",
+        "Generated proposal appears in canvas as markdown",
+        "Task type 'proposal' tasks work end-to-end with AI"
+      ],
+      "files": [
+        "supabase/functions/unified-task-ai-worker/index.ts",
+        "src/components/command-centre/WritingCanvas.tsx"
+      ],
+      "description": "The proposal-generator skill exists but isn't wired to Command Centre. Add a handleProposalGeneration() handler in unified-task-ai-worker that calls the skill with task context (deal, contact, meeting). Update DELIVERABLE_SKILL_MAP in WritingCanvas to map 'proposal' -> 'proposal-generator'. Ensure the skill is registered with command_centre.enabled in frontmatter."
+    },
+    {
+      "id": "CCU-003",
+      "title": "Add follow-up email AI handler with meeting context",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "estimatedMinutes": 35,
+      "dependencies": ["CCU-001"],
+      "blocks": [],
+      "parallelWith": ["CCU-004"],
+      "acceptance": [
+        "unified-task-ai-worker handles 'follow_up' task type",
+        "Follow-up drafts include relevant meeting context (summary, action items, key points)",
+        "Email draft pre-populated with To address from task contact",
+        "Slash command /follow-up available in WritingCanvas"
+      ],
+      "files": [
+        "supabase/functions/unified-task-ai-worker/index.ts",
+        "src/components/command-centre/WritingCanvas.tsx"
+      ],
+      "description": "When ComposePreview creates a 3-day follow-up task, the AI should be able to draft it. Add handler in unified-task-ai-worker that uses post-meeting-followup-drafter skill. Include meeting summary, action items, and any pending commitments as context. Map 'follow_up' -> 'post-meeting-followup-drafter' in WritingCanvas DELIVERABLE_SKILL_MAP."
+    },
+    {
+      "id": "CCU-004",
+      "title": "Implement task property editing (replace Coming Soon stubs)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "estimatedMinutes": 30,
+      "dependencies": [],
+      "blocks": [],
+      "parallelWith": ["CCU-003"],
+      "acceptance": [
+        "Edit title via inline edit or dialog",
+        "Change priority via dropdown",
+        "Change type via dropdown",
+        "Change due date via date picker",
+        "All changes persist to database immediately"
+      ],
+      "files": [
+        "src/components/command-centre/TaskDetailHeader.tsx",
+        "src/lib/hooks/useTaskActions.ts"
+      ],
+      "description": "TaskDetailHeader.tsx has 3 'Coming soon' toast stubs for Edit title, Change priority, and Change type. Replace with working implementations. Use inline edit for title (click to edit pattern). Use Radix Select for priority and type dropdowns. Add date picker for due date. Wire to existing useUpdateTask mutation or add a new useUpdateTaskField mutation."
+    },
+    {
+      "id": "CCU-005",
+      "title": "Add meeting transcript search to context panel",
+      "type": "frontend+backend",
+      "status": "pending",
+      "priority": 5,
+      "estimatedMinutes": 60,
+      "dependencies": ["CCU-001"],
+      "blocks": ["CCU-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Search input in ContextPanel for querying meeting transcripts",
+        "Results show meeting title, date, relevant snippet with highlighting",
+        "Can search across all user meetings or filter by contact/deal",
+        "Clicking a result shows the full transcript context with timestamp",
+        "Uses existing meeting-intelligence-search edge function"
+      ],
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx",
+        "src/components/command-centre/MeetingSearchPanel.tsx (new)",
+        "src/lib/hooks/useMeetingSearch.ts (new)"
+      ],
+      "description": "The meeting-intelligence-search edge function already does hybrid semantic search with Claude + Google File Search API. Build a UI panel in ContextPanel with a search input. Create useMeetingSearch hook that calls the edge function. Display results with meeting title, date, speaker, snippet, and timestamp. Support filtering by contact_id/deal_id (auto-populated from current task context). This is the single highest-impact feature — lets reps say 'what did they say about budget?' and get an answer inline."
+    },
+    {
+      "id": "CCU-006",
+      "title": "Embed recording player with transcript timestamps",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "estimatedMinutes": 60,
+      "dependencies": ["CCU-001"],
+      "blocks": [],
+      "parallelWith": ["CCU-007"],
+      "acceptance": [
+        "ContextPanel shows embedded recording player when task has meeting_id",
+        "Transcript displayed below player with speaker labels",
+        "Clicking transcript line jumps player to that timestamp",
+        "Action items highlighted in transcript with visual indicators",
+        "Player supports play/pause and basic seek"
+      ],
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx",
+        "src/components/command-centre/RecordingPlayer.tsx (new)",
+        "src/components/command-centre/TranscriptViewer.tsx (new)"
+      ],
+      "description": "When a task is linked to a meeting with a recording, embed a player in the context panel. Use the Fathom share URL or S3 recording URL (via get-recording-url edge function). Parse transcript_text into timestamped segments (Fathom format). Display with speaker labels. Click-to-seek. Highlight action items within the transcript. This gives reps the 'replay the moment' capability without leaving Command Centre."
+    },
+    {
+      "id": "CCU-007",
+      "title": "Add action items management tab to context panel",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "estimatedMinutes": 40,
+      "dependencies": ["CCU-001"],
+      "blocks": [],
+      "parallelWith": ["CCU-006"],
+      "acceptance": [
+        "New 'Action Items' tab in ContextPanel for meeting-linked tasks",
+        "Lists all action items from the linked meeting",
+        "Shows sync status (synced to task vs not)",
+        "Can create task from unsynced action item with one click",
+        "Completed action items visually differentiated"
+      ],
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx",
+        "src/components/command-centre/ActionItemsTab.tsx (new)",
+        "src/lib/hooks/useMeetingActionItems.ts (new)"
+      ],
+      "description": "For tasks linked to meetings, add an 'Action Items' tab that shows all meeting_action_items for that meeting. Show title, assignee, priority, and whether it's been synced to a task. Allow one-click task creation from unsynced items via create-task-unified. Show playback_url timestamps if available. This closes the loop between meeting AI and task management."
+    },
+    {
+      "id": "CCU-008",
+      "title": "Cross-meeting contact intelligence view",
+      "type": "frontend+backend",
+      "status": "pending",
+      "priority": 8,
+      "estimatedMinutes": 90,
+      "dependencies": ["CCU-005"],
+      "blocks": [],
+      "parallelWith": ["CCU-009"],
+      "acceptance": [
+        "Contact Intelligence tab in ContextPanel when task has contact_id",
+        "Shows timeline of all meetings with this contact",
+        "Displays sentiment trend across meetings",
+        "Highlights key decisions, commitments, and buying signals",
+        "Shows unresolved action items across all meetings"
+      ],
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx",
+        "src/components/command-centre/ContactIntelligenceTab.tsx (new)",
+        "src/lib/hooks/useContactIntelligence.ts (new)"
+      ],
+      "description": "Aggregate meeting data per contact to give reps a 'relationship timeline'. Query all meetings where contact is a participant. For each meeting: show date, sentiment, key topics, action items. Compute aggregate stats: total meetings, avg sentiment, key themes. Use meeting-intelligence-search filtered by contact_id for deeper queries. This is the 'max context' feature — everything about a contact in one view."
+    },
+    {
+      "id": "CCU-009",
+      "title": "Activity history and comments restoration",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "estimatedMinutes": 40,
+      "dependencies": [],
+      "blocks": [],
+      "parallelWith": ["CCU-008"],
+      "acceptance": [
+        "Activity timeline shows task status changes, AI actions, and user edits",
+        "Comments section allows adding notes to tasks",
+        "AI-generated activity entries (draft generated, refined, approved) auto-tracked",
+        "Collapsible section at bottom of WritingCanvas or in ContextPanel"
+      ],
+      "files": [
+        "src/components/command-centre/ActivityTimeline.tsx (new)",
+        "src/components/command-centre/CommentSection.tsx (new)",
+        "src/components/command-centre/WritingCanvas.tsx"
+      ],
+      "description": "The old ActivityTimeline.tsx and CommentThread.tsx were deleted. Rebuild lightweight versions. Activity reads from task.metadata.activity_log (array of {action, actor, timestamp} objects). Comments read from task.metadata.comments. Keep it simple — no separate tables, just metadata. Add auto-tracking: when AI generates draft, add activity entry. When user approves, add entry. Place in a collapsible section."
+    },
+    {
+      "id": "CCU-010",
+      "title": "Bulk task actions and keyboard shortcuts",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "estimatedMinutes": 35,
+      "dependencies": [],
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Multi-select tasks in sidebar (Shift+Click for range, Cmd+Click for individual)",
+        "Bulk actions: approve, dismiss, delete, change priority",
+        "Keyboard shortcut 'A' to approve selected task",
+        "Keyboard shortcut 'D' to dismiss selected task",
+        "Selection count shown in sidebar header"
+      ],
+      "files": [
+        "src/components/command-centre/TaskSidebar.tsx",
+        "src/components/command-centre/SidebarTaskItem.tsx",
+        "src/components/command-centre/useKeyboardNav.ts",
+        "src/lib/stores/commandCentreStore.ts"
+      ],
+      "description": "Add multi-select to sidebar. Store selectedTaskIds in Zustand store. Show bulk action bar when 2+ tasks selected. Wire approve/dismiss/delete mutations to work on arrays. Add keyboard shortcuts for common single-task actions (A=approve, D=dismiss, E=edit). Extend useKeyboardNav.ts with these shortcuts."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 10,
+    "phases": {
+      "phase1_context": {
+        "name": "Context Foundation",
+        "stories": ["CCU-001", "CCU-002"],
+        "parallelGroup": true,
+        "estimatedDays": 1
+      },
+      "phase2_ai_handlers": {
+        "name": "Core AI + Editing",
+        "stories": ["CCU-003", "CCU-004"],
+        "parallelGroup": true,
+        "estimatedDays": 1
+      },
+      "phase3_meeting_intel": {
+        "name": "Meeting Intelligence",
+        "stories": ["CCU-005"],
+        "parallelGroup": false,
+        "estimatedDays": 1
+      },
+      "phase4_recording_actions": {
+        "name": "Recording & Action Items",
+        "stories": ["CCU-006", "CCU-007"],
+        "parallelGroup": true,
+        "estimatedDays": 1.5
+      },
+      "phase5_advanced": {
+        "name": "Cross-Meeting Intelligence",
+        "stories": ["CCU-008"],
+        "parallelGroup": false,
+        "estimatedDays": 1.5
+      },
+      "phase6_polish": {
+        "name": "Polish & Productivity",
+        "stories": ["CCU-009", "CCU-010"],
+        "parallelGroup": true,
+        "estimatedDays": 1
+      }
+    },
+    "mvp": {
+      "stories": ["CCU-001", "CCU-002", "CCU-003", "CCU-004", "CCU-005"],
+      "estimate": "3-4 days",
+      "delivers": "Context-aware command centre with proposal gen, follow-up drafting, and transcript search"
+    },
+    "full": {
+      "stories": ["CCU-001", "CCU-002", "CCU-003", "CCU-004", "CCU-005", "CCU-006", "CCU-007", "CCU-008", "CCU-009", "CCU-010"],
+      "estimate": "7-8 days",
+      "delivers": "Full-featured sales rep productivity hub with recording playback, cross-meeting intelligence, activity tracking, and bulk actions"
+    }
+  }
+}

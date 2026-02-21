@@ -28,6 +28,7 @@ import { HubSpotImportWizard } from '@/components/ops/HubSpotImportWizard';
 import { AttioImportWizard } from '@/components/ops/AttioImportWizard';
 import { CrossOpImportWizard } from '@/components/ops/CrossOpImportWizard';
 import { ApolloSearchWizard } from '@/components/ops/ApolloSearchWizard';
+import { AiArkSearchWizard } from '@/components/prospecting/AiArkSearchWizard';
 import { CreateTableModal } from '@/components/ops/CreateTableModal';
 import { StandardTablesGallery } from '@/components/ops/StandardTablesGallery';
 import { StandardTablesHealth } from '@/components/ops/StandardTablesHealth';
@@ -200,6 +201,7 @@ function OpsPage() {
   const [showAttioImport, setShowAttioImport] = useState(false);
   const [showApolloSearch, setShowApolloSearch] = useState(false);
   const [showCrossOpImport, setShowCrossOpImport] = useState(false);
+  const [showAiArkSearch, setShowAiArkSearch] = useState(false);
   const [showWorkflowPrompt, setShowWorkflowPrompt] = useState(false);
   const [workflowInput, setWorkflowInput] = useState('');
   const [standardTab, setStandardTab] = useState<'tables' | 'history'>('tables');
@@ -532,6 +534,7 @@ function OpsPage() {
         onSelectHubSpot={() => setShowHubSpotImport(true)}
         onSelectAttio={() => setShowAttioImport(true)}
         onSelectApollo={() => setShowApolloSearch(true)}
+        onSelectAiArk={() => setShowAiArkSearch(true)}
         onSelectOpsTable={() => setShowCrossOpImport(true)}
         onSelectBlank={() => createTableMutation.mutate()}
         onSelectWorkflow={() => setShowWorkflowPrompt(true)}
@@ -574,6 +577,15 @@ function OpsPage() {
         onOpenChange={setShowApolloSearch}
         onComplete={(tableId) => {
           setShowApolloSearch(false);
+          navigate(`/ops/${tableId}`);
+        }}
+      />
+
+      <AiArkSearchWizard
+        open={showAiArkSearch}
+        onOpenChange={setShowAiArkSearch}
+        onComplete={(tableId) => {
+          setShowAiArkSearch(false);
           navigate(`/ops/${tableId}`);
         }}
       />

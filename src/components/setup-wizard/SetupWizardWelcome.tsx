@@ -38,7 +38,7 @@ export function SetupWizardWelcome() {
             </p>
             <div className="flex items-baseline gap-1.5 mt-0.5">
               <span className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
-                300
+                100
               </span>
               <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
                 free credits
@@ -46,7 +46,7 @@ export function SetupWizardWelcome() {
             </div>
           </div>
           <div className="text-xs text-gray-400 dark:text-gray-500">
-            60 per step
+            20 per step
           </div>
         </div>
       </div>
@@ -94,7 +94,7 @@ export function SetupWizardWelcome() {
                 <span className="text-xs font-medium text-green-600 dark:text-green-400">Done</span>
               ) : (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                  +60
+                  +20
                 </span>
               )}
             </div>

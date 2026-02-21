@@ -72,7 +72,10 @@ export interface SlackChannel {
   is_member: boolean;
 }
 
-export type SlackFeature = 'meeting_debrief' | 'daily_digest' | 'meeting_prep' | 'deal_rooms';
+export type SlackFeature = 'meeting_debrief' | 'daily_digest' | 'meeting_prep' | 'deal_rooms'
+  | 'agent_alert_engineering' | 'agent_alert_legal' | 'agent_alert_security'
+  | 'agent_alert_pricing' | 'agent_alert_product' | 'agent_alert_competitive'
+  | 'agent_alert_deal_risk' | 'agent_alert_default';
 
 // Query keys
 const QUERY_KEYS = {

@@ -87,9 +87,6 @@ export function FollowUpSetupStep() {
     setSaving(true);
     try {
       const result = await completeStep(user.id, activeOrgId, 'followups');
-      if (result.creditsAwarded) {
-        toast.success(`+${result.creditsAmount} credits earned!`, { description: 'Email style confirmed' });
-      }
       if (!result.allCompleted) {
         setCurrentStep('test');
       }
@@ -112,9 +109,6 @@ export function FollowUpSetupStep() {
       }
       // Complete the wizard step
       const result = await completeStep(user.id, activeOrgId, 'followups');
-      if (result.creditsAwarded) {
-        toast.success(`+${result.creditsAmount} credits earned!`, { description: 'Email style configured' });
-      }
       if (!result.allCompleted) {
         setCurrentStep('test');
       }
@@ -125,10 +119,7 @@ export function FollowUpSetupStep() {
 
   const handleSkip = async () => {
     if (!user?.id || !activeOrgId) return;
-    const result = await completeStep(user.id, activeOrgId, 'followups');
-    if (result.creditsAwarded) {
-      toast.success('+60 credits earned!', { description: 'Follow-up step completed' });
-    }
+    await completeStep(user.id, activeOrgId, 'followups');
     setCurrentStep('test');
   };
 
@@ -192,7 +183,7 @@ export function FollowUpSetupStep() {
             disabled={saving}
             className="w-full h-10 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg"
           >
-            {saving ? 'Confirming...' : 'Confirm & Earn +60 Credits'}
+            {saving ? 'Confirming...' : 'Confirm & Earn +20 Credits'}
           </Button>
           <a
             href="/settings/ai-personalization"

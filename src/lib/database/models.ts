@@ -335,6 +335,7 @@ export interface Task {
   contact_name?: string;
   // Legacy field for backward compatibility; in some queries this is also a joined object
   company?: string | Company;
+  parent_task_id?: string; // References parent task for subtask chains
   meeting_action_item_id?: string; // Link to Fathom meeting action item
   meeting_id?: string; // Direct reference to meeting
   call_action_item_id?: string; // Link to Call action item

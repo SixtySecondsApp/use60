@@ -33,6 +33,8 @@ interface PeopleSearchParams {
   seniority_level?: string[]
   location?: string[]
   name?: string
+  keywords?: string[]
+  industry?: string[]
   page?: number
   per_page?: number
 }
@@ -41,6 +43,8 @@ interface AIArkSearchParams {
   action: 'company_search' | 'people_search'
   _auth_token?: string
   _skip_credit_deduction?: boolean
+  preview_mode?: boolean
+  page_size?: number
   // Company search flat params
   industry?: string[]
   employee_min?: number
@@ -59,6 +63,8 @@ interface AIArkSearchParams {
   job_title?: string[]
   seniority_level?: string[]
   name?: string
+  // Shared (used by both company and people search)
+  keywords?: string[]
   // Pagination
   page?: number
   per_page?: number
@@ -119,7 +125,7 @@ function buildCompanyPayload(params: CompanySearchParams, page: number, size: nu
     const range: Record<string, number> = {}
     if (params.employee_min != null) range.start = params.employee_min
     if (params.employee_max != null) range.end = params.employee_max
-    account.employeeSize = range
+    account.employeeSize = [range]
   }
 
   if (params.location?.length) {
@@ -176,6 +182,17 @@ function buildPeoplePayload(params: PeopleSearchParams, page: number, size: numb
 
   if (params.company_name) {
     account.name = { any: { include: [params.company_name] } }
+  }
+
+  // AI Ark /v1/people only supports account.domain and account.name for
+  // company-level filters. Industry and keyword filters are NOT supported on
+  // the people endpoint — convert them to keyword-based account.name search
+  // so the query still narrows results meaningfully.
+  if (params.industry?.length || params.keywords?.length) {
+    const terms = [...(params.industry ?? []), ...(params.keywords ?? [])]
+    if (terms.length && !account.name) {
+      account.name = { any: { include: terms, searchMode: 'SMART' } }
+    }
   }
 
   if (params.job_title?.length) {
@@ -299,7 +316,7 @@ serve(async (req) => {
   try {
     // Parse body -- auth token may be in body as fallback when headers are stripped
     const body = await req.json()
-    const { _auth_token, _skip_credit_deduction, action, ...searchParams } = body as AIArkSearchParams
+    const { _auth_token, _skip_credit_deduction, action, preview_mode, page_size, ...searchParams } = body as AIArkSearchParams
 
     // Validate action
     if (!action || !['company_search', 'people_search'].includes(action)) {
@@ -396,7 +413,11 @@ serve(async (req) => {
     // Pagination: accept caller's 1-based page, translate to 0-based for AI Ark
     const callerPage = searchParams.page ?? 1
     const aiArkPage = Math.max(0, callerPage - 1)
-    const size = Math.min(searchParams.per_page || 25, 100)
+    // preview_mode overrides page_size -- always fetch 5 results
+    const effectiveSize = preview_mode
+      ? 5
+      : Math.min(Math.max(page_size || searchParams.per_page || 25, 1), 100)
+    const size = effectiveSize
 
     // Build AI Ark search payload and determine endpoint
     let apiEndpoint: string
@@ -486,6 +507,18 @@ serve(async (req) => {
     const totalElements = (aiArkData.totalElements ?? 0) as number
     const totalPages = (aiArkData.totalPages ?? 0) as number
 
+    const estimatedCreditCost = action === 'company_search'
+      ? {
+          search_cost: CREDIT_COSTS.ai_ark_company,
+          per_page_cost: CREDIT_COSTS.ai_ark_company,
+          description: `Company search costs ${CREDIT_COSTS.ai_ark_company} credits per call`,
+        }
+      : {
+          search_cost: CREDIT_COSTS.ai_ark_people,
+          per_page_cost: CREDIT_COSTS.ai_ark_people,
+          description: `People search costs ${CREDIT_COSTS.ai_ark_people} credits per call`,
+        }
+
     if (action === 'company_search') {
       const companies = content.map(normalizeCompany)
 
@@ -495,15 +528,21 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({
+          results: companies,
           companies,
           pagination: {
             page: callerPage,
+            page_size: size,
             per_page: size,
             total: totalElements,
             total_pages: totalPages,
             has_more: callerPage < totalPages,
+            returned: companies.length,
           },
+          total_count: totalElements,
+          estimated_credit_cost: estimatedCreditCost,
           credits_consumed: creditsConsumed,
+          action,
           query: searchPayload,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -517,15 +556,21 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({
+          results: contacts,
           contacts,
           pagination: {
             page: callerPage,
+            page_size: size,
             per_page: size,
             total: totalElements,
             total_pages: totalPages,
             has_more: callerPage < totalPages,
+            returned: contacts.length,
           },
+          total_count: totalElements,
+          estimated_credit_cost: estimatedCreditCost,
           credits_consumed: creditsConsumed,
+          action,
           query: searchPayload,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

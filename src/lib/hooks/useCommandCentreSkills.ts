@@ -45,7 +45,6 @@ export function useCommandCentreSkills(organizationId: string | null) {
       };
 
       if (error) {
-        console.error('[useCommandCentreSkills] RPC error:', error);
         return [];
       }
 

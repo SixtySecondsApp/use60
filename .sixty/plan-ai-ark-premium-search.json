@@ -1,0 +1,446 @@
+{
+  "feature": {
+    "id": "ai-ark-premium",
+    "name": "AI Ark Premium Search Experience",
+    "description": "Transform AI Ark from basic integration to premium data sourcing hub — rich autocomplete filters from founder's reference datasets, credit-smart 5-preview pattern, Gemini-powered NL search, dedicated /prospecting page, and workflow integration",
+    "prd": "Consult report at .sixty/consult/ai-ark-premium-search.md",
+    "consultReport": ".sixty/consult/ai-ark-premium-search.md",
+    "createdAt": "2026-02-20T00:00:00Z",
+    "status": "pending",
+    "phases": ["1-foundation", "2-filters", "3-wizard", "4-hub", "5-workflow"],
+    "prerequisite": "plan-ai-ark-integration.json (complete)",
+    "decisions": {
+      "nl_parser_model": "gemini-2.0-flash",
+      "entry_point": "dedicated /prospecting page",
+      "reference_data": "top 5K bundled + API for full",
+      "preview_mode": "5 results + total count"
+    }
+  },
+
+  "stories": [
+    {
+      "id": "ARKP-001",
+      "feature": "ai-ark-premium",
+      "phase": "1-foundation",
+      "title": "Bundle pruned AI Ark reference data and build autocomplete service",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["ARKP-003", "ARKP-004", "ARKP-005", "ARKP-007"],
+      "parallelWith": ["ARKP-002"],
+      "acceptance": [
+        "src/lib/data/ai-ark/ contains pruned JSON: top 5K technologies (by doc_count), top 10K cities, all 149 industries, all 800+ industry tags, all countries+states with trade zones",
+        "aiArkReferenceService.ts exports fuzzy search functions: searchIndustries(query), searchTechnologies(query), searchCities(query), searchCountries(query), getTradeZoneCountries(zone)",
+        "Fuzzy matching uses case-insensitive prefix match with fallback to includes() — no external dependency",
+        "Total bundled JSON is under 300KB gzipped",
+        "Service returns results sorted by relevance (exact prefix first, then contains, then fuzzy)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/data/ai-ark/industries.json",
+        "src/lib/data/ai-ark/industry-tags.json",
+        "src/lib/data/ai-ark/technologies.json",
+        "src/lib/data/ai-ark/cities.json",
+        "src/lib/data/ai-ark/countries.json",
+        "src/lib/services/aiArkReferenceService.ts"
+      ],
+      "notes": "Source data from /AI-Ark-Structure/. Prune technologies to top 5K by doc_count. Prune cities to top 10K by population proxy (they're sorted by frequency in the source). For countries, flatten JSONL to JSON with {name, iso2, region, subregion, zones[], states[]}. Include a getFullDataset(type) async function that loads from edge function for deep searches beyond the bundled subset."
+    },
+
+    {
+      "id": "ARKP-002",
+      "feature": "ai-ark-premium",
+      "phase": "1-foundation",
+      "title": "Add preview_mode to ai-ark-search edge function (5-record preview with total count)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/ai-ark-search/index.ts"], "schema": [] },
+      "blocks": ["ARKP-006", "ARKP-008"],
+      "parallelWith": ["ARKP-001"],
+      "acceptance": [
+        "ai-ark-search accepts optional preview_mode: true parameter",
+        "When preview_mode=true, sends size=5 to AI Ark API instead of default 25",
+        "Response includes total_count from API's totalElements field regardless of mode",
+        "Response includes estimated_credit_cost for the full pull (total_count * cost_per_result or flat rate)",
+        "Non-preview mode supports configurable page_size (default 25, max 100) and page number"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/ai-ark-search/index.ts"
+      ],
+      "notes": "Minimal change — just add size=5 conditional and ensure totalElements is always passed through in the normalized response. Credit estimate: company=0.25/call, people=1.25/call (flat per API call, not per result)."
+    },
+
+    {
+      "id": "ARKP-003",
+      "feature": "ai-ark-premium",
+      "phase": "2-filters",
+      "title": "Build AiArkIndustryPicker autocomplete combobox",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["ARKP-001"], "files": [], "schema": [] },
+      "blocks": ["ARKP-006"],
+      "parallelWith": ["ARKP-004", "ARKP-005"],
+      "acceptance": [
+        "AiArkIndustryPicker component renders as multi-select combobox with search input",
+        "Searches across both industries.json (149 exact values) and industry-tags.json (800+ broader tags)",
+        "Selected values displayed as removable chips/badges below the input",
+        "Distinguishes between 'industry' (exact AI Ark filter) and 'tag' (broader category) with subtle visual indicator",
+        "Returns selected values as { industries: string[], tags: string[] } for separate API filter mapping"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/prospecting/filters/AiArkIndustryPicker.tsx"
+      ],
+      "notes": "Use Radix Popover + Command pattern (like existing comboboxes in the app). Industries map to account.industry.include[], tags map to account.keyword searches."
+    },
+
+    {
+      "id": "ARKP-004",
+      "feature": "ai-ark-premium",
+      "phase": "2-filters",
+      "title": "Build AiArkTechPicker autocomplete combobox with popularity badges",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["ARKP-001"], "files": [], "schema": [] },
+      "blocks": ["ARKP-006"],
+      "parallelWith": ["ARKP-003", "ARKP-005"],
+      "acceptance": [
+        "AiArkTechPicker component renders as multi-select combobox with search input",
+        "Shows top 20 popular technologies as quick-select suggestions when input is empty",
+        "Each suggestion shows doc_count as popularity indicator (e.g. '11.6M companies' badge)",
+        "Search returns instant results from bundled 5K, with 'Search all 64K+' link that hits API for full dataset",
+        "Selected values displayed as removable chips"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/prospecting/filters/AiArkTechPicker.tsx"
+      ],
+      "notes": "Popularity badges use compact number format (11.6M, 5.9M, etc.). The 'Search all' fallback calls aiArkReferenceService.getFullDataset('technologies') which hits an edge function that reads from the full 64K source."
+    },
+
+    {
+      "id": "ARKP-005",
+      "feature": "ai-ark-premium",
+      "phase": "2-filters",
+      "title": "Build AiArkLocationPicker with city typeahead and trade zone quick-select",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["ARKP-001"], "files": [], "schema": [] },
+      "blocks": ["ARKP-006"],
+      "parallelWith": ["ARKP-003", "ARKP-004"],
+      "acceptance": [
+        "AiArkLocationPicker component has two modes: City search and Region/Zone quick-select",
+        "City mode: typeahead combobox searching bundled 10K cities, with 'Search all 244K+' fallback",
+        "Country mode: grouped list by region (Americas, Europe, Asia, etc.) with multi-select checkboxes",
+        "Trade zone chips at top: G7, EU, APEC, LATAM, MENA — clicking auto-selects all constituent countries",
+        "Selected locations displayed as removable chips with country flag emoji prefix",
+        "Returns { cities: string[], countries: string[], states: string[] } for API mapping"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/prospecting/filters/AiArkLocationPicker.tsx"
+      ],
+      "notes": "Trade zone mapping comes from country&state.jsonl 'zone' field. G7 = US/UK/FR/DE/IT/JP/CA. EU from zone array. Country flag emojis from iso2 code. State-level filtering optional in v1 — just country and city."
+    },
+
+    {
+      "id": "ARKP-006",
+      "feature": "ai-ark-premium",
+      "phase": "3-wizard",
+      "title": "Build AiArkSearchWizard with 3-step flow (filters → 5-preview → import)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["ARKP-002", "ARKP-003", "ARKP-004", "ARKP-005"], "files": [], "schema": [] },
+      "blocks": ["ARKP-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "Step 0 (optional): ICP profile selection or 'Custom Search' — mirrors ApolloSearchWizard pattern",
+        "Step 1: Filter panel with AiArkIndustryPicker, AiArkTechPicker, AiArkLocationPicker, employee range slider (presets: 1-10, 11-50, 51-200, 201-500, 501-1000, 1000+), revenue range slider, founded year range, seniority multi-select (for people search), job title input",
+        "Step 1 has search type toggle: Company Search vs People Search (changes available filters)",
+        "Step 1 shows credit balance widget with color-coded bar (green/yellow/red) and estimated cost",
+        "Step 1 has NL search textarea: 'Describe who you're looking for...' (wired in ARKP-007)",
+        "Step 2: Preview showing '5 of N results' with total count badge, results in table format, credit cost for full pull displayed prominently, 'Pull Full Page (25 results) — ~2.5 credits' CTA button",
+        "Step 3: Full results table with selection checkboxes, 'Load 25 more' button at bottom (never auto-loads), running credit counter, 'Import Selected to Ops Table' button with table name input",
+        "All steps show AI Ark logo/badge distinguishing from Apollo",
+        "Cancel at any step shows credit consumption summary"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/components/prospecting/AiArkSearchWizard.tsx",
+        "src/components/prospecting/AiArkPreviewTable.tsx",
+        "src/components/prospecting/AiArkCreditWidget.tsx"
+      ],
+      "notes": "Follow ApolloSearchWizard.tsx patterns closely but with the 5-preview credit gate. Step 2 is the key differentiator — users see 5 results + total count and decide whether to commit credits. The CreditWidget component is reusable and shows: remaining balance, estimated cost for next action, cost so far this session."
+    },
+
+    {
+      "id": "ARKP-007",
+      "feature": "ai-ark-premium",
+      "phase": "3-wizard",
+      "title": "Build parse-ai-ark-query edge function (NL → structured filters via Gemini Flash 3.1)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["ARKP-001"], "files": [], "schema": [] },
+      "blocks": ["ARKP-008"],
+      "parallelWith": ["ARKP-006"],
+      "acceptance": [
+        "parse-ai-ark-query edge function accepts natural language query string",
+        "Uses Gemini Flash 3.1 (gemini-2.0-flash) with structured output/function calling",
+        "System prompt includes: all 149 industries, all 800+ industry tags, seniority levels, and example filter structures as vocabulary — LLM maps freetext to exact enum values",
+        "Returns structured AiArkSearchParams: { search_type: 'company'|'people', industry, technologies, location, employee_min/max, revenue_min/max, founded_min/max, job_title, seniority, keywords, company_domain, suggested_table_name, summary }",
+        "Handles compound queries: 'Series B fintech companies in London using React' → multiple filter fields populated",
+        "Returns suggested_table_name generated from query (e.g. 'Fintech — London — React')"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "supabase/functions/parse-ai-ark-query/index.ts"
+      ],
+      "notes": "Mirror parse-apollo-query pattern but with AI Ark's filter vocabulary. The key innovation: we send the FULL industry list + industry tag list in the system prompt so the LLM can map 'fintech' → the exact AI Ark industry value. For technologies, send top 200 popular ones in prompt + instruct LLM to use exact names. Use getCorsHeaders(req) from _shared/corsHelper.ts. Pin @supabase/supabase-js@2.43.4."
+    },
+
+    {
+      "id": "ARKP-008",
+      "feature": "ai-ark-premium",
+      "phase": "3-wizard",
+      "title": "Wire NL search input in wizard to parse-ai-ark-query with auto-fill filters",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["ARKP-006", "ARKP-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "NL textarea in wizard step 1 calls parse-ai-ark-query on Enter or 'Parse' button click",
+        "Shows 'Parsing...' loading state with spinner",
+        "On success: auto-fills all filter components with returned structured params",
+        "Populated filters are highlighted briefly (green flash) to show what was detected",
+        "User can review and modify any auto-filled filter before searching",
+        "If parse returns search_type, auto-toggles Company/People search mode",
+        "Error state: shows toast with 'Could not parse query, try using filters directly'"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/prospecting/AiArkSearchWizard.tsx",
+        "src/lib/hooks/useParseAiArkQuery.ts"
+      ],
+      "notes": "Create useParseAiArkQuery hook that calls the edge function via supabase.functions.invoke(). Follow useParseApolloQuery pattern exactly."
+    },
+
+    {
+      "id": "ARKP-009",
+      "feature": "ai-ark-premium",
+      "phase": "4-hub",
+      "title": "Build /prospecting page as central data sourcing hub",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["ARKP-006"], "files": [], "schema": [] },
+      "blocks": ["ARKP-010"],
+      "parallelWith": ["ARKP-011"],
+      "acceptance": [
+        "New route /prospecting renders ProspectingHub page",
+        "Tab navigation: 'AI Ark' (default, with premium badge), 'Apollo', 'Combined'",
+        "AI Ark tab: Opens AiArkSearchWizard inline (not as dialog)",
+        "Apollo tab: Opens ApolloSearchWizard inline",
+        "Combined tab: Side-by-side results from both providers (future — can be placeholder in v1)",
+        "Sidebar: Saved searches with name, provider, date, result count — click to re-run",
+        "Header: Credit balance widget showing AI Ark credits + Apollo credits side by side",
+        "Page added to main navigation under 'Prospecting' with Search icon",
+        "Recent search history section below main search area"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "src/pages/ProspectingHub.tsx",
+        "src/components/prospecting/ProspectingTabs.tsx",
+        "src/components/prospecting/SavedSearches.tsx"
+      ],
+      "notes": "Add route to the app router. Nav item goes in the main sidebar. Saved searches stored in localStorage initially — can migrate to DB later. The inline wizard rendering means the wizard components need to support both dialog mode (for Ops page import) and inline mode (for prospecting hub)."
+    },
+
+    {
+      "id": "ARKP-010",
+      "feature": "ai-ark-premium",
+      "phase": "4-hub",
+      "title": "Add similarity search tab with 'Find Companies Like...' flow",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["ARKP-009"], "files": ["supabase/functions/ai-ark-similarity/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ARKP-012"],
+      "acceptance": [
+        "'Similar Companies' tab in ProspectingHub with dedicated UI",
+        "Input: company domain OR company name OR LinkedIn URL — with autocomplete from recent contacts/deals",
+        "Shows seed company card with logo, name, industry, size (fetched from AI Ark or existing data)",
+        "Results: 5-preview pattern — shows 5 similar companies with similarity indicators",
+        "'Pull more' button loads full page of lookalikes",
+        "Optional: Additional filters (industry, size range) to narrow lookalike results",
+        "Import to Ops Table flow reuses same pattern from AiArkSearchWizard step 3"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/prospecting/AiArkSimilaritySearch.tsx"
+      ],
+      "notes": "AI Ark similarity search uses lookalikeDomains param (max 5 seeds). The seed company card could pull data from our existing contacts/deals tables first before hitting AI Ark API."
+    },
+
+    {
+      "id": "ARKP-011",
+      "feature": "ai-ark-premium",
+      "phase": "5-workflow",
+      "title": "Add AI Ark as ProspectResearchNode in workflow builder",
+      "type": "backend+frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["ARKP-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ARKP-009", "ARKP-012"],
+      "acceptance": [
+        "AiArkSearchNode available in workflow builder node palette",
+        "Node config supports: action type (company_search, people_search, similarity_search), all filter parameters",
+        "Node executes ai-ark-search edge function with configured params",
+        "Output: array of normalized companies or contacts, feeds into downstream nodes (enrich, campaign, etc.)",
+        "Credit cost estimation shown in node config panel",
+        "Respects 5 req/sec rate limit with built-in throttling for batch workflows"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/workflows/nodes/AiArkSearchNode.tsx",
+        "src/lib/workflows/nodeExecutors/aiArkSearchExecutor.ts"
+      ],
+      "notes": "Follow ProspectResearchNode pattern. The executor calls ai-ark-search via supabase.functions.invoke(). Throttling uses the same 250ms delay pattern from ai-ark-enrich."
+    },
+
+    {
+      "id": "ARKP-012",
+      "feature": "ai-ark-premium",
+      "phase": "5-workflow",
+      "title": "Update copilot skills with reference data vocabulary and smart source routing",
+      "type": "skills",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["ARKP-001", "ARKP-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ARKP-010", "ARKP-011"],
+      "acceptance": [
+        "All 5 AI Ark atomic skills updated with reference data examples in their SKILL.md descriptions",
+        "ai-ark-company-search skill includes top 50 industries and top 50 technologies as example values in triggers",
+        "seq-ai-ark-semantic-discovery sequence now routes through parse-ai-ark-query for structured extraction before searching",
+        "Copilot routing: when user says 'find companies', copilot checks AI Ark vs Apollo credits/config and recommends the best source",
+        "Copilot can explain credit costs: 'AI Ark charges ~2.5 credits per company search. You have X credits remaining.'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/ai-ark-company-search/SKILL.md",
+        "skills/atomic/ai-ark-people-search/SKILL.md",
+        "skills/atomic/ai-ark-similarity-search/SKILL.md",
+        "skills/sequences/seq-ai-ark-semantic-discovery/SKILL.md"
+      ],
+      "notes": "Focus on trigger phrases and description updates for better copilot routing. The smart source routing is a description update — copilot already checks integration_credentials to see what's configured."
+    },
+
+    {
+      "id": "ARKP-013",
+      "feature": "ai-ark-premium",
+      "phase": "5-workflow",
+      "title": "Add 'Find Similar Companies' button on deal and company detail cards",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["ARKP-010"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "'Find Similar' button appears on deal detail card when AI Ark is configured for the org",
+        "Button pre-fills similarity search with the deal's company domain",
+        "Navigates to /prospecting#similarity with the domain pre-populated",
+        "Also appears on company detail cards and contact cards (using their company domain)",
+        "Button hidden when AI Ark integration is not connected"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/deals/DealDetailCard.tsx",
+        "src/components/contacts/ContactDetailCard.tsx"
+      ],
+      "notes": "Small touchpoint that drives discovery of the similarity search feature. Uses useAiArkIntegration().isConnected to conditionally render."
+    },
+
+    {
+      "id": "ARKP-014",
+      "feature": "ai-ark-premium",
+      "phase": "5-workflow",
+      "title": "Build enrichment cascade (AI Ark first → Apollo fallback for gaps)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": ["supabase/functions/ai-ark-enrich/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ARKP-013"],
+      "acceptance": [
+        "New enrich-cascade edge function orchestrates multi-provider enrichment",
+        "Strategy: Try AI Ark reverse-lookup first (higher quality), then Apollo for any missing fields",
+        "Returns merged result with source attribution per field (e.g. email from AI Ark, phone from Apollo)",
+        "Respects rate limits for both providers (5/sec AI Ark, Apollo's own limits)",
+        "Cost tracking: logs credits consumed from each provider separately",
+        "Configurable per-org: can disable cascade and use single provider only"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/enrich-cascade/index.ts"
+      ],
+      "notes": "This is a future enhancement. V1 can be simple: check if AI Ark returns email/phone, if not and Apollo is configured, try Apollo. The source attribution is stored in dynamic_table_rows.source_data to track provenance."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 0,
+    "currentPhase": "1-foundation",
+    "lastUpdated": "2026-02-20T00:00:00Z",
+    "estimatedTotal": "5.5 hours",
+    "mvpStories": ["ARKP-001", "ARKP-002", "ARKP-003", "ARKP-004", "ARKP-005", "ARKP-006", "ARKP-007", "ARKP-008"],
+    "mvpEstimate": "3.5 hours"
+  },
+
+  "parallelGroups": [
+    {
+      "group": ["ARKP-001", "ARKP-002"],
+      "phase": "1-foundation",
+      "reason": "Independent — one is frontend data bundling, other is edge function update",
+      "timeSaved": "20 min"
+    },
+    {
+      "group": ["ARKP-003", "ARKP-004", "ARKP-005"],
+      "phase": "2-filters",
+      "reason": "All filter components are independent, share only the reference data service",
+      "timeSaved": "50 min"
+    },
+    {
+      "group": ["ARKP-006", "ARKP-007"],
+      "phase": "3-wizard",
+      "reason": "Wizard UI and NL parser edge function are independent until wiring in ARKP-008",
+      "timeSaved": "35 min"
+    },
+    {
+      "group": ["ARKP-010", "ARKP-011", "ARKP-012"],
+      "phase": "4-5",
+      "reason": "Similarity UI, workflow node, and skill updates are fully independent",
+      "timeSaved": "55 min"
+    }
+  ],
+
+  "deploymentNotes": [
+    "New edge functions (parse-ai-ark-query, enrich-cascade) must be deployed with --no-verify-jwt to staging",
+    "Updated ai-ark-search must be redeployed to staging after preview_mode changes",
+    "Reference data JSON files add ~300KB gzipped to the frontend bundle — verify build size",
+    "All edge functions must pin @supabase/supabase-js@2.43.4 and use getCorsHeaders(req)"
+  ]
+}

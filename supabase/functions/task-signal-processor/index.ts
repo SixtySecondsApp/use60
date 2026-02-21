@@ -58,6 +58,17 @@ serve(async (req) => {
       'buyer_commitment_due',
       'verbal_commitment_detected',
       'meeting_no_show',
+      // Intent-driven signal types from detect-intents commitment engine
+      'proposal_requested',
+      'meeting_requested',
+      'content_requested',
+      'internal_check_required',
+      'pricing_requested',
+      'new_stakeholder_identified',
+      'competitive_risk',
+      'timeline_change',
+      'objection_identified',
+      'general_commitment',
     ];
 
     if (!validSignalTypes.includes(signal_type)) {
@@ -80,6 +91,8 @@ serve(async (req) => {
       metadata: {
         signal_data: data,
         signal_timestamp: new Date().toISOString(),
+        // Persist buying signals from detect-intents for Command Centre display
+        ...(data.buying_signals?.length && { buying_signals: data.buying_signals }),
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -217,7 +230,10 @@ serve(async (req) => {
         };
         break;
 
-      case 'buyer_commitment_due':
+      case 'buyer_commitment_due': {
+        const deadlineParsed = data.deadline_parsed ? new Date(data.deadline_parsed) : null;
+        const hasValidDeadline = deadlineParsed && !isNaN(deadlineParsed.getTime()) && deadlineParsed > new Date();
+
         taskData = {
           ...taskData,
           source: 'meeting_transcript',
@@ -229,31 +245,45 @@ serve(async (req) => {
           description: data.commitment || 'Buyer action item is past due date.',
           ai_status: 'queued',
           risk_level: 'high',
-          expires_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+          ...(hasValidDeadline && { due_date: deadlineParsed!.toISOString() }),
+          expires_at: hasValidDeadline
+            ? new Date(deadlineParsed!.getTime() + 4 * 60 * 60 * 1000).toISOString()
+            : new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
           ...(data.deal_id && { deal_id: data.deal_id }),
           ...(data.contact_id && { contact_id: data.contact_id }),
           ...(data.meeting_id && { meeting_id: data.meeting_id }),
         };
         break;
+      }
 
-      case 'verbal_commitment_detected':
+      case 'verbal_commitment_detected': {
+        // Use extracted deadline from detect-intents when available
+        const deadlineParsed = data.deadline_parsed ? new Date(data.deadline_parsed) : null;
+        const hasValidDeadline = deadlineParsed && !isNaN(deadlineParsed.getTime()) && deadlineParsed > new Date();
+
         taskData = {
           ...taskData,
           source: 'meeting_transcript',
-          task_type: 'follow_up',
-          deliverable_type: 'email_draft',
+          task_type: data.task_type || 'follow_up',
+          deliverable_type: data.deliverable_type || 'email_draft',
           title: data.contact_name
             ? `Confirm verbal agreement with ${data.contact_name}`
             : 'Confirm verbal commitment',
-          description: data.commitment_detail || 'High-confidence buying signal detected in meeting.',
+          description: data.commitment_detail || data.trigger_phrase || 'High-confidence buying signal detected in meeting.',
           ai_status: 'queued',
           risk_level: 'high',
-          expires_at: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
+          // Use extracted deadline as due_date, fall back to no due_date
+          ...(hasValidDeadline && { due_date: deadlineParsed!.toISOString() }),
+          // expires_at: extracted deadline + 4 hour buffer, or 1 day fallback
+          expires_at: hasValidDeadline
+            ? new Date(deadlineParsed!.getTime() + 4 * 60 * 60 * 1000).toISOString()
+            : new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
           ...(data.deal_id && { deal_id: data.deal_id }),
           ...(data.contact_id && { contact_id: data.contact_id }),
           ...(data.meeting_id && { meeting_id: data.meeting_id }),
         };
         break;
+      }
 
       case 'meeting_no_show':
         taskData = {
@@ -276,6 +306,75 @@ serve(async (req) => {
           ...(data.company_id && { company_id: data.company_id }),
         };
         break;
+
+      // Intent-driven signal types from the Commitment Detection Engine.
+      // The detect-intents adapter passes task_type, deliverable_type,
+      // trigger_phrase, deadline_parsed, and intent in the data payload.
+      case 'proposal_requested':
+      case 'meeting_requested':
+      case 'content_requested':
+      case 'internal_check_required':
+      case 'pricing_requested':
+      case 'new_stakeholder_identified':
+      case 'competitive_risk':
+      case 'timeline_change':
+      case 'objection_identified':
+      case 'general_commitment': {
+        const deadlineParsed = data.deadline_parsed ? new Date(data.deadline_parsed) : null;
+        const hasValidDeadline = deadlineParsed && !isNaN(deadlineParsed.getTime()) && deadlineParsed > new Date();
+
+        // Build a human-readable title from the signal type
+        const signalLabels: Record<string, string> = {
+          proposal_requested: 'Send proposal',
+          meeting_requested: 'Schedule follow-up meeting',
+          content_requested: 'Send requested content',
+          internal_check_required: 'Check with team',
+          pricing_requested: 'Send pricing',
+          new_stakeholder_identified: 'Connect with new stakeholder',
+          competitive_risk: 'Address competitive threat',
+          timeline_change: 'Act on timeline signal',
+          objection_identified: 'Address objection/blocker',
+          general_commitment: 'Follow up on commitment',
+        };
+
+        const fallbackExpiryHours: Record<string, number> = {
+          proposal_requested: 48,
+          meeting_requested: 24,
+          content_requested: 48,
+          internal_check_required: 24,
+          pricing_requested: 48,
+          new_stakeholder_identified: 48,
+          competitive_risk: 72,
+          timeline_change: 48,
+          objection_identified: 72,
+          general_commitment: 48,
+        };
+
+        const label = signalLabels[signal_type] || 'Follow up on commitment';
+        const expiryHours = fallbackExpiryHours[signal_type] || 48;
+
+        taskData = {
+          ...taskData,
+          source: 'meeting_transcript',
+          task_type: data.task_type || 'follow_up',
+          deliverable_type: data.deliverable_type || 'email_draft',
+          title: data.contact_name
+            ? `${label}: ${data.contact_name}`
+            : label,
+          description: data.trigger_phrase || data.commitment_detail || `Detected intent: ${signal_type}`,
+          ai_status: data.auto_generate ? 'queued' : 'not_needed',
+          risk_level: ['competitive_risk', 'objection_identified'].includes(signal_type) ? 'high' : 'medium',
+          ...(hasValidDeadline && { due_date: deadlineParsed!.toISOString() }),
+          expires_at: hasValidDeadline
+            ? new Date(deadlineParsed!.getTime() + 4 * 60 * 60 * 1000).toISOString()
+            : new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString(),
+          ...(data.deal_id && { deal_id: data.deal_id }),
+          ...(data.contact_id && { contact_id: data.contact_id }),
+          ...(data.meeting_id && { meeting_id: data.meeting_id }),
+          ...(data.company_id && { company_id: data.company_id }),
+        };
+        break;
+      }
     }
 
     // Insert the task

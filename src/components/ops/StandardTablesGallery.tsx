@@ -207,9 +207,15 @@ export function StandardTablesGallery({ onTableClick, existingTables }: Standard
         body: { table_keys: [tableKey] },
       });
       if (error) throw error;
-      toast.success('Table restored — populating data...');
+      // Check for partial errors in the response
+      if (data?.errors && Object.keys(data.errors).length > 0) {
+        const failedKeys = Object.keys(data.errors).join(', ');
+        toast.error(`Failed to restore: ${failedKeys} — ${Object.values(data.errors).join('; ')}`);
+      } else {
+        toast.success('Table restored — populating data...');
+        triggerBackfill(true);
+      }
       queryClient.invalidateQueries({ queryKey: ['ops-tables'] });
-      triggerBackfill(true);
     } catch (err) {
       console.error('Restore error:', err);
       toast.error('Failed to restore table: ' + (err as Error).message);

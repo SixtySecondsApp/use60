@@ -1,0 +1,160 @@
+{
+  "project": {
+    "name": "Sixty Sales Dashboard",
+    "template": null,
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth"
+    },
+    "createdAt": "2026-02-21T12:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "agent-alert-routing",
+      "name": "AI Agent Alert Channel Routing",
+      "status": "pending",
+      "prd": null,
+      "description": "Add configurable per-org Slack channel routing for AI agent alerts. Admins map intent categories (engineering, legal, security, pricing, product, competitive, deal risk) to specific Slack channels via the existing Slack Settings page. Backend resolveSlackChannel() checks org config first, falls back to hardcoded CHANNEL_KEYWORD_MAP.",
+      "createdAt": "2026-02-21T12:00:00Z",
+      "architectureNotes": "Reuses existing slack_notification_settings table (one row per intent category with feature prefix 'agent_alert_*'), existing SlackChannelSelector component, and existing useSlackSettings hooks. No new tables or migrations needed — just new rows and a backend lookup."
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "ALERT-001",
+      "feature": "agent-alert-routing",
+      "sprint": 1,
+      "title": "Add agent alert intent categories to SlackFeature type and FEATURES array",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/hooks/useSlackSettings.ts", "src/pages/settings/SlackSettings.tsx"],
+        "schema": ["slack_notification_settings"]
+      },
+      "blocks": ["ALERT-003", "ALERT-004"],
+      "parallelWith": ["ALERT-002"],
+      "acceptance": [
+        "SlackFeature type union in useSlackSettings.ts includes 8 new agent_alert_* variants (engineering, legal, security, pricing, product, competitive, deal_risk, default)",
+        "FEATURES array in SlackSettings.tsx has a new 'AI Agent Alerts' section rendered in the Features tab",
+        "Section shows 8 intent category rows each with a SlackChannelSelector dropdown",
+        "Section only visible to org admins (reuses existing isAdmin gate)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/hooks/useSlackSettings.ts",
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ALERT-002",
+      "feature": "agent-alert-routing",
+      "sprint": 1,
+      "title": "Update resolveSlackChannel() to check org-configured channels first",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/_shared/orchestrator/intentActionRegistry.ts"],
+        "schema": ["slack_notification_settings"]
+      },
+      "blocks": ["ALERT-004"],
+      "parallelWith": ["ALERT-001"],
+      "acceptance": [
+        "New async function getOrgAlertChannelMap(orgId) queries slack_notification_settings WHERE feature LIKE 'agent_alert_%' and returns a category-to-channel map",
+        "New function classifyIntentCategory(phrase, context) maps commitment text to one of the 8 intent categories using keyword matching",
+        "resolveSlackChannel() signature updated to accept optional orgId param; when provided, checks org channel map first before falling back to CHANNEL_KEYWORD_MAP",
+        "If org has no configured channels, behavior is identical to current (zero regression)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/intentActionRegistry.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ALERT-003",
+      "feature": "agent-alert-routing",
+      "sprint": 1,
+      "title": "Build AgentAlertSettings component with per-category channel selectors",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["ALERT-001"],
+        "files": ["src/components/settings/SlackChannelSelector.tsx"],
+        "schema": []
+      },
+      "blocks": ["ALERT-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "New section in SlackSettings Features tab renders 8 rows: Technical/Engineering, Legal/Compliance, Security, Pricing/Sales Ops, Product/Roadmap, Competitive Alerts, Deal Risk/Objections, Default (fallback)",
+        "Each row has a Lucide icon, label, and SlackChannelSelector dropdown",
+        "Saving a channel calls useUpdateNotificationSettings with feature='agent_alert_{category}' and the selected channel_id/channel_name",
+        "Default row is visually distinguished (e.g. muted label 'Used when no specific category matches')"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ALERT-004",
+      "feature": "agent-alert-routing",
+      "sprint": 1,
+      "title": "Wire callers of resolveSlackChannel to pass orgId and add test alert button",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["ALERT-002", "ALERT-003"],
+        "files": ["supabase/functions/task-signal-processor/index.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "task-signal-processor (and any other callers of resolveSlackChannel) now pass orgId when available",
+        "Test Alert button in the frontend sends a test Slack message to the 'Default' configured channel (or first configured category channel)",
+        "Test message uses existing slack-test-message edge function pattern with a sample agent alert payload",
+        "Toast confirms success or shows error"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/task-signal-processor/index.ts",
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 4,
+    "currentFeature": "agent-alert-routing",
+    "lastUpdated": "2026-02-21T13:00:00Z"
+  }
+}

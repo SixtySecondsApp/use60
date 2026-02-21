@@ -101,6 +101,9 @@ metadata:
     - name: automation_map
       type: object
       description: "Mapping of detected intents to platform automation actions with confidence scores"
+    - name: executive_summary
+      type: string
+      description: "3-5 sentence summary covering key commitments, signal assessment, and most urgent follow-ups"
   requires_capabilities:
     - meetings
     - crm
@@ -239,6 +242,12 @@ Each detected commitment maps to a platform action. See `references/intent-patte
 | Prospect: "I'll talk to my team / boss about this" | `buyer_followup_tracker` | Creates tracking task with check-in reminder |
 | Prospect: "We'll review internally and get back to you" | `buyer_followup_tracker` | Creates tracking task with nudge email draft |
 | Prospect: "I'll send you our requirements / RFP" | `document_receipt_tracker` | Creates waiting task with reminder |
+| "Let me check with our team on that" | `check_with_team` | Pings relevant Slack channel, creates internal tracking task |
+| "Can you send over pricing?" / "What would this cost?" | `pricing_request` | Triggers proposal skill with pricing context, tags deal as 'Pricing Requested' |
+| "I need to loop in our CTO" / "Let me get Sarah involved" | `stakeholder_introduction` | Creates contact record for new stakeholder, drafts intro email |
+| "We're also looking at [competitor]" / "Your competitor offered X" | `competitive_mention` | Fires competitor-intel skill, updates MEDDICC Competition, alerts manager |
+| "We need this live by Q2" / "Budget expires end of March" | `timeline_signal` | Updates deal close date, creates milestone tasks, escalates if aggressive |
+| "Security is a concern" / "We'd need SOC 2" | `objection_blocker` | Fires objection-to-playbook skill, creates battlecard task, flags risk |
 
 ### Commitment Object Structure
 
@@ -256,6 +265,7 @@ For each detected commitment:
   "source_quote": "I'll have the revised pricing with the enterprise tier to you by end of day Thursday.",
   "timestamp": "00:42:18",
   "deadline": "2026-02-14T17:00:00",
+  "deadline_parsed": "2026-02-14T17:00:00",
   "deadline_source": "explicit",
   "action_type": "proposal_generation",
   "automation": {
@@ -487,6 +497,17 @@ The automation map is the final output that connects detected intents to executa
 | 0.7-0.89 | Requires confirmation. Present as "suggested action." |
 | 0.5-0.69 | Deferred. Present as "possible action -- needs verification." |
 | Below 0.5 | Not mapped. Mentioned in notes only. |
+
+### Intent-Specific Confidence Thresholds
+
+Some intent types use lower thresholds due to their strategic importance:
+
+| Intent Type | Auto-Action Threshold | Rationale |
+|---|---|---|
+| `competitive_mention` | 0.6 | Even low-confidence competitive signals should be tracked |
+| `objection_blocker` | 0.6 | Blockers need immediate visibility regardless of phrasing certainty |
+| `timeline_signal` | 0.6 | Timeline mentions are objective — parsing confidence matters more than intent confidence |
+| All others | 0.7 | Standard threshold for commitment-based actions |
 
 ## Step 6: Compile the Output
 

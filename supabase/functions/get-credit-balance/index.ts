@@ -241,15 +241,21 @@ serve(async (req: Request) => {
         .not('duration_seconds', 'is', null),
 
       // 12. Storage: transcript count (table may not exist on all envs)
-      safeQuery(
-        supabase
-          .from('meeting_transcripts')
-          .select('id', { count: 'exact', head: true })
-          .in(
-            'meeting_id',
-            supabase.from('meetings').select('id').eq('org_id', org_id)
-          )
-      ),
+      // First fetch meeting IDs for the org, then count transcripts
+      (async () => {
+        const { data: orgMeetings } = await supabase
+          .from('meetings')
+          .select('id')
+          .eq('org_id', org_id);
+        const meetingIds = (orgMeetings || []).map((m: { id: string }) => m.id);
+        if (meetingIds.length === 0) return { data: null, error: null, count: 0 };
+        return safeQuery(
+          supabase
+            .from('meeting_transcripts')
+            .select('id', { count: 'exact', head: true })
+            .in('meeting_id', meetingIds)
+        );
+      })(),
 
       // 13. Storage: document count (table may not exist on all envs)
       safeQuery(

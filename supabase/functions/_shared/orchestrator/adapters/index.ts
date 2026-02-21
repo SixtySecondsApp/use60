@@ -49,6 +49,8 @@ import {
   generateRiskAlertsAdapter,
   deliverRiskSlackAdapter,
 } from './dealRisk.ts';
+import { pingSlackChannelAdapter } from './pingSlackChannel.ts';
+import { updateDealTimelineAdapter } from './updateDealTimeline.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -122,6 +124,12 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'score-deal-risks': scoreDealRisksAdapter,
   'generate-risk-alerts': generateRiskAlertsAdapter,
   'deliver-risk-slack': deliverRiskSlackAdapter,
+
+  // Check-with-team commitment (meeting_ended sequence, check_with_team intent)
+  'ping-slack-channel': pingSlackChannelAdapter,
+
+  // CRM intent updates (timeline_signal, pricing_request, competitive_mention, stakeholder_introduction)
+  'update-deal-timeline': updateDealTimelineAdapter,
 };
 
 /**

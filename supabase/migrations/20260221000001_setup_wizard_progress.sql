@@ -54,7 +54,7 @@ AS $$
 DECLARE
   v_row setup_wizard_progress%ROWTYPE;
   v_credits_awarded BOOLEAN := false;
-  v_credits_amount INTEGER := 60;
+  v_credits_amount INTEGER := 20;
   v_all_done BOOLEAN;
   v_step_col TEXT;
   v_step_at_col TEXT;

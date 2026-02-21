@@ -17,6 +17,16 @@ interface UseKeyboardNavOptions {
   onSelectTask: (id: string | null) => void;
   onToggleSidebar?: () => void;
   onToggleContext?: () => void;
+  onApprove?: () => void;
+  onDismiss?: () => void;
+  onNewTask?: () => void;
+}
+
+function isInputFocused(): boolean {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName.toLowerCase();
+  return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable;
 }
 
 export function useKeyboardNav({
@@ -25,6 +35,9 @@ export function useKeyboardNav({
   onSelectTask,
   onToggleSidebar,
   onToggleContext,
+  onApprove,
+  onDismiss,
+  onNewTask,
 }: UseKeyboardNavOptions) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -90,13 +103,34 @@ export function useKeyboardNav({
 
         case 'n':
         case 'N': {
-          // Focus the quick-add input
+          if (onNewTask && !isInputFocused()) {
+            e.preventDefault();
+            onNewTask();
+            break;
+          }
+          // Focus the quick-add input as fallback
           const quickAddInput = document.querySelector(
             '[data-command-centre-quick-add]'
           ) as HTMLInputElement | null;
           if (quickAddInput) {
             e.preventDefault();
             quickAddInput.focus();
+          }
+          break;
+        }
+
+        case 'a': {
+          if (!e.metaKey && !e.ctrlKey && !isInputFocused()) {
+            e.preventDefault();
+            onApprove?.();
+          }
+          break;
+        }
+
+        case 'd': {
+          if (!e.metaKey && !e.ctrlKey && !isInputFocused()) {
+            e.preventDefault();
+            onDismiss?.();
           }
           break;
         }
@@ -117,7 +151,7 @@ export function useKeyboardNav({
           break;
       }
     },
-    [tasks, selectedTaskId, onSelectTask, onToggleSidebar, onToggleContext]
+    [tasks, selectedTaskId, onSelectTask, onToggleSidebar, onToggleContext, onApprove, onDismiss, onNewTask]
   );
 
   useEffect(() => {

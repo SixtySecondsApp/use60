@@ -5,7 +5,6 @@ import { useSetupWizard } from '@/lib/hooks/useSetupWizard';
 import { useGoogleOAuthInitiate } from '@/lib/hooks/useGoogleIntegration';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 export function CalendarSetupStep() {
@@ -21,10 +20,7 @@ export function CalendarSetupStep() {
     if (!user?.id || !activeOrgId) return;
     setConfirming(true);
     try {
-      const result = await completeStep(user.id, activeOrgId, 'calendar');
-      if (result.creditsAwarded) {
-        toast.success(`+${result.creditsAmount} credits earned!`, { description: 'Calendar connected' });
-      }
+      await completeStep(user.id, activeOrgId, 'calendar');
     } finally {
       setConfirming(false);
     }
@@ -86,7 +82,7 @@ export function CalendarSetupStep() {
             disabled={confirming}
             className="w-full h-10 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg"
           >
-            {confirming ? 'Confirming...' : 'Confirm & Earn +60 Credits'}
+            {confirming ? 'Confirming...' : 'Confirm & Earn +20 Credits'}
           </Button>
         </div>
       ) : (

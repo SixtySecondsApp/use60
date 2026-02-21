@@ -17,6 +17,9 @@ interface CommandCentreState {
   // Selection
   selectedTaskId: string | null;
 
+  // Multi-select
+  selectedTaskIds: string[];
+
   // Filters
   activeFilter: CommandCentreFilter;
   searchQuery: string;
@@ -42,13 +45,20 @@ interface CommandCentreState {
   moveFocusUp: () => void;
   moveFocusDown: (maxIndex: number) => void;
   reset: () => void;
+
+  // Multi-select actions
+  toggleTaskSelection: (id: string) => void;
+  addToSelection: (id: string) => void;
+  selectRange: (ids: string[]) => void;
+  clearSelection: () => void;
 }
 
 const DEFAULTS = {
   selectedTaskId: null,
+  selectedTaskIds: [] as string[],
   activeFilter: 'all' as CommandCentreFilter,
   searchQuery: '',
-  sortField: 'created_at' as CommandCentreSortField,
+  sortField: 'urgency' as CommandCentreSortField,
   sortOrder: 'desc' as CommandCentreSortOrder,
   sidebarCollapsed: false,
   contextOpen: false,
@@ -60,6 +70,7 @@ export const useCommandCentreStore = create<CommandCentreState>()(
     (set, get) => ({
       // Initial state
       selectedTaskId: DEFAULTS.selectedTaskId,
+      selectedTaskIds: DEFAULTS.selectedTaskIds,
       activeFilter: DEFAULTS.activeFilter,
       searchQuery: DEFAULTS.searchQuery,
       sortField: DEFAULTS.sortField,
@@ -125,7 +136,32 @@ export const useCommandCentreStore = create<CommandCentreState>()(
           ...DEFAULTS,
           sidebarCollapsed, // Keep persisted value
           contextOpen, // Keep persisted value
+          selectedTaskIds: [],
         });
+      },
+
+      toggleTaskSelection: (id: string) => {
+        const { selectedTaskIds } = get();
+        if (selectedTaskIds.includes(id)) {
+          set({ selectedTaskIds: selectedTaskIds.filter(i => i !== id) });
+        } else {
+          set({ selectedTaskIds: [...selectedTaskIds, id] });
+        }
+      },
+
+      addToSelection: (id: string) => {
+        const { selectedTaskIds } = get();
+        if (!selectedTaskIds.includes(id)) {
+          set({ selectedTaskIds: [...selectedTaskIds, id] });
+        }
+      },
+
+      selectRange: (ids: string[]) => {
+        set({ selectedTaskIds: ids });
+      },
+
+      clearSelection: () => {
+        set({ selectedTaskIds: [] });
       },
     }),
     {

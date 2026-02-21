@@ -45,6 +45,14 @@ import {
   Inbox,
   FileText,
   Zap,
+  Wrench,
+  Scale,
+  Shield,
+  DollarSign,
+  Package,
+  Swords,
+  Pin,
+  Send,
 } from 'lucide-react';
 
 import { SlackChannelSelector } from '@/components/settings/SlackChannelSelector';
@@ -65,6 +73,7 @@ import { useIsOrgAdmin } from '@/contexts/UserPermissionsContext';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
+import { cn } from '@/lib/utils';
 
 // Timezone options
 const TIMEZONES = [
@@ -127,6 +136,17 @@ const FEATURES = [
     supportsDM: false,
     hasThresholds: true,
   },
+];
+
+export const AGENT_ALERT_CATEGORIES = [
+  { key: 'agent_alert_engineering' as SlackFeature, label: 'Technical / Engineering', icon: Wrench, keywords: 'technical, engineering, integration, API' },
+  { key: 'agent_alert_legal' as SlackFeature, label: 'Legal / Compliance', icon: Scale, keywords: 'legal, contract, compliance, terms' },
+  { key: 'agent_alert_security' as SlackFeature, label: 'Security', icon: Shield, keywords: 'security, SOC, GDPR, infosec' },
+  { key: 'agent_alert_pricing' as SlackFeature, label: 'Pricing / Sales Ops', icon: DollarSign, keywords: 'pricing, discount, billing' },
+  { key: 'agent_alert_product' as SlackFeature, label: 'Product / Roadmap', icon: Package, keywords: 'product, feature, roadmap' },
+  { key: 'agent_alert_competitive' as SlackFeature, label: 'Competitive Alerts', icon: Swords, keywords: 'competitor, competitive, alternative' },
+  { key: 'agent_alert_deal_risk' as SlackFeature, label: 'Deal Risk / Objections', icon: AlertTriangle, keywords: 'risk, objection, blocker, concern' },
+  { key: 'agent_alert_default' as SlackFeature, label: 'Default (fallback)', icon: Pin, keywords: 'All other detected intents' },
 ];
 
 function FeatureSettingsCard({
@@ -1391,6 +1411,112 @@ export default function SlackSettings() {
                     }
                   />
                 ))}
+              </div>
+
+              {/* AI Agent Alerts Section */}
+              <div className="mt-8 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">AI Agent Alerts</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Route detected intents to specific Slack channels. When the AI agent detects
+                    commitments in meetings, alerts are sent to the configured channel for each category.
+                  </p>
+                </div>
+
+                <div className="rounded-lg border bg-card">
+                  {AGENT_ALERT_CATEGORIES.map((category, index) => {
+                    const settings = notificationSettings?.find(s => s.feature === category.key);
+                    const Icon = category.icon;
+                    const isDefault = category.key === 'agent_alert_default';
+
+                    return (
+                      <div
+                        key={category.key}
+                        className={cn(
+                          'flex items-center justify-between px-4 py-3',
+                          index !== AGENT_ALERT_CATEGORIES.length - 1 && 'border-b',
+                          isDefault && 'bg-muted/30'
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className={cn(
+                            'flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+                            isDefault ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'
+                          )}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{category.label}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {isDefault ? 'Used when no specific category matches' : category.keywords}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="w-[220px] shrink-0 ml-4">
+                          <SlackChannelSelector
+                            value={settings?.channel_id || null}
+                            onChange={(channelId, channelName) => {
+                              updateSettings.mutate({
+                                feature: category.key,
+                                settings: {
+                                  channel_id: channelId,
+                                  channel_name: channelName,
+                                  is_enabled: true,
+                                  delivery_method: 'channel',
+                                },
+                              });
+                            }}
+                            placeholder="Select channel..."
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (!activeOrgId) return;
+                      try {
+                        const defaultSettings = notificationSettings?.find(
+                          s => s.feature === 'agent_alert_default' && s.channel_id
+                        );
+                        const anySettings = notificationSettings?.find(
+                          s => s.feature?.startsWith('agent_alert_') && s.channel_id
+                        );
+                        const targetChannel = defaultSettings || anySettings;
+
+                        if (!targetChannel?.channel_id) {
+                          toast.error('Configure at least one channel first');
+                          return;
+                        }
+
+                        const { data, error } = await supabase.functions.invoke('slack-test-message', {
+                          body: {
+                            orgId: activeOrgId,
+                            channelId: targetChannel.channel_id,
+                          },
+                        });
+
+                        if (error) throw error;
+                        if (!(data as any)?.success) throw new Error((data as any)?.error || 'Slack API error');
+                        toast.success(`Test alert sent to #${targetChannel.channel_name}`);
+                      } catch (err: any) {
+                        toast.error(err?.message || 'Failed to send test alert');
+                      }
+                    }}
+                    disabled={!notificationSettings?.some(
+                      s => s.feature?.startsWith('agent_alert_') && s.channel_id
+                    )}
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Test Alert
+                  </Button>
+                </div>
               </div>
             </TabsContent>
           )}

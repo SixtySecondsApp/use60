@@ -27,7 +27,7 @@ export function SetupWizardComplete() {
           </span>
         </div>
         <div className="text-4xl font-bold text-green-700 dark:text-green-300">
-          300
+          100
         </div>
         <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">credits</p>
       </div>

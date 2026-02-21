@@ -37,6 +37,8 @@ export interface AiArkPeopleSearchParams {
   company_name?: string
   location?: string[]
   name?: string
+  keywords?: string[]
+  industry?: string[]
   per_page?: number
   page?: number
 }

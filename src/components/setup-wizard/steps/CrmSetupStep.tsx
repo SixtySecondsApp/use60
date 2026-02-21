@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { useSetupWizard } from '@/lib/hooks/useSetupWizard';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 export function CrmSetupStep() {
@@ -19,10 +18,7 @@ export function CrmSetupStep() {
     if (!user?.id || !activeOrgId) return;
     setConfirming(true);
     try {
-      const result = await completeStep(user.id, activeOrgId, 'crm');
-      if (result.creditsAwarded) {
-        toast.success(`+${result.creditsAmount} credits earned!`, { description: 'CRM connected' });
-      }
+      await completeStep(user.id, activeOrgId, 'crm');
     } finally {
       setConfirming(false);
     }
@@ -39,10 +35,7 @@ export function CrmSetupStep() {
 
   const handleSkip = async () => {
     if (!user?.id || !activeOrgId) return;
-    const result = await completeStep(user.id, activeOrgId, 'crm');
-    if (result.creditsAwarded) {
-      toast.success('+60 credits earned!', { description: 'CRM step completed' });
-    }
+    await completeStep(user.id, activeOrgId, 'crm');
     setCurrentStep('followups');
   };
 
@@ -95,7 +88,7 @@ export function CrmSetupStep() {
             disabled={confirming}
             className="w-full h-10 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg"
           >
-            {confirming ? 'Confirming...' : 'Confirm & Earn +60 Credits'}
+            {confirming ? 'Confirming...' : 'Confirm & Earn +20 Credits'}
           </Button>
         </div>
       ) : (

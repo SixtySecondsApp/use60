@@ -1,180 +1,90 @@
-import { Task } from '@/lib/database/models';
+import { Bot, UserCircle, CheckCircle2, Wand2, Edit, ThumbsUp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns';
-import {
-  Bot,
-  User,
-  CheckCircle,
-  Circle,
-  FileText,
-  Send,
-  Edit,
-  Trash,
-  MessageCircle,
-} from 'lucide-react';
+
+interface ActivityEntry {
+  action: string;
+  actor: string;
+  timestamp: string;
+}
 
 interface ActivityTimelineProps {
-  task: Task;
+  activities: ActivityEntry[];
 }
 
-interface ActivityItem {
-  id: string;
-  type: 'ai' | 'user' | 'system';
-  action: string;
-  timestamp: string;
-  icon?: 'check' | 'edit' | 'send' | 'comment' | 'create' | 'delete';
-}
+const actionIcons: Record<string, any> = {
+  'ai_draft_generated': Wand2,
+  'ai_refined': Edit,
+  'user_approved': ThumbsUp,
+  'user_dismissed': X,
+  'user_edited': Edit,
+  'status_changed': CheckCircle2,
+};
 
-export function ActivityTimeline({ task }: ActivityTimelineProps) {
-  // Build activity items from task data
-  const activityItems: ActivityItem[] = [];
-
-  // Add from metadata if available
-  if (task.metadata?.activity && Array.isArray(task.metadata.activity)) {
-    activityItems.push(...(task.metadata.activity as ActivityItem[]));
-  }
-
-  // Generate basic activity from task timestamps
-  if (task.created_at) {
-    activityItems.push({
-      id: 'created',
-      type: 'system',
-      action: 'Task created',
-      timestamp: task.created_at,
-      icon: 'create',
-    });
-  }
-
-  if (task.status === 'draft_ready' && task.updated_at) {
-    activityItems.push({
-      id: 'draft',
-      type: 'ai',
-      action: 'Draft content generated',
-      timestamp: task.updated_at,
-      icon: 'edit',
-    });
-  }
-
-  if (task.status === 'approved' && task.actioned_at) {
-    activityItems.push({
-      id: 'approved',
-      type: 'user',
-      action: 'Task approved',
-      timestamp: task.actioned_at,
-      icon: 'check',
-    });
-  }
-
-  if (task.completed_at) {
-    activityItems.push({
-      id: 'completed',
-      type: 'system',
-      action: 'Task completed',
-      timestamp: task.completed_at,
-      icon: 'check',
-    });
-  }
-
-  // Sort by timestamp (newest first)
-  activityItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-  const getIcon = (item: ActivityItem) => {
-    switch (item.icon) {
-      case 'check':
-        return CheckCircle;
-      case 'edit':
-        return Edit;
-      case 'send':
-        return Send;
-      case 'comment':
-        return MessageCircle;
-      case 'delete':
-        return Trash;
-      case 'create':
-      default:
-        return FileText;
-    }
-  };
-
-  const getTypeColor = (type: ActivityItem['type']) => {
-    switch (type) {
-      case 'ai':
-        return {
-          bg: 'bg-violet-500',
-          ring: 'ring-violet-100 dark:ring-violet-500/20',
-        };
-      case 'user':
-        return {
-          bg: 'bg-blue-500',
-          ring: 'ring-blue-100 dark:ring-blue-500/20',
-        };
-      case 'system':
-      default:
-        return {
-          bg: 'bg-slate-400',
-          ring: 'ring-slate-100 dark:ring-slate-500/20',
-        };
-    }
-  };
-
-  if (activityItems.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 text-center">
-        <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
-          <Circle className="w-6 h-6 text-slate-400 dark:text-slate-500" />
-        </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          No activity yet
-        </p>
-      </div>
-    );
-  }
+export function ActivityTimeline({ activities }: ActivityTimelineProps) {
+  if (!activities || activities.length === 0) return null;
 
   return (
-    <div className="p-6">
-      <div className="space-y-6">
-        {activityItems.map((item, index) => {
-          const Icon = getIcon(item);
-          const colors = getTypeColor(item.type);
-          const isLast = index === activityItems.length - 1;
+    <div className="space-y-2">
+      {activities.map((entry, i) => {
+        const isAI = entry.actor === 'AI' || entry.actor === 'ai';
+        const Icon = actionIcons[entry.action] || (isAI ? Bot : UserCircle);
 
-          return (
-            <div key={item.id} className="flex gap-4 relative">
-              {/* Timeline Line */}
-              {!isLast && (
-                <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700" />
+        return (
+          <div key={i} className="flex items-start gap-2.5">
+            <div className="relative flex flex-col items-center">
+              <div className={cn(
+                'w-5 h-5 rounded-full flex items-center justify-center',
+                isAI ? 'bg-violet-100 dark:bg-violet-500/20' : 'bg-blue-100 dark:bg-blue-500/20'
+              )}>
+                <Icon className={cn('h-2.5 w-2.5', isAI ? 'text-violet-500' : 'text-blue-500')} />
+              </div>
+              {i < activities.length - 1 && (
+                <div className="w-px h-4 bg-slate-200 dark:bg-gray-700/50 mt-1" />
               )}
-
-              {/* Icon Circle */}
-              <div
-                className={cn(
-                  'shrink-0 w-8 h-8 rounded-full flex items-center justify-center ring-4 z-10',
-                  colors.bg,
-                  colors.ring
-                )}
-              >
-                {item.type === 'ai' ? (
-                  <Bot className="w-4 h-4 text-white" />
-                ) : item.type === 'user' ? (
-                  <User className="w-4 h-4 text-white" />
-                ) : (
-                  <Icon className="w-4 h-4 text-white" />
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 pt-0.5">
-                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {item.action}
-                </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
-                </p>
-              </div>
             </div>
-          );
-        })}
-      </div>
+            <div className="flex-1 min-w-0 pb-2">
+              <p className="text-[11px] text-slate-600 dark:text-gray-400">
+                {formatAction(entry.action)}
+              </p>
+              <span className="text-[10px] text-slate-400 dark:text-gray-500">
+                {formatTimestamp(entry.timestamp)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
+}
+
+function formatAction(action: string): string {
+  const map: Record<string, string> = {
+    'ai_draft_generated': 'AI generated a draft',
+    'ai_refined': 'AI refined the draft',
+    'user_approved': 'Approved by user',
+    'user_dismissed': 'Dismissed by user',
+    'user_edited': 'Edited by user',
+    'status_changed': 'Status changed',
+    'comment_added': 'Comment added',
+  };
+  return map[action] || action.replace(/_/g, ' ');
+}
+
+function formatTimestamp(ts: string): string {
+  try {
+    const date = new Date(ts);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return ts;
+  }
 }

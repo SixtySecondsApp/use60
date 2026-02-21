@@ -21,6 +21,7 @@ import {
   formatContactSection,
   formatRelationshipHistory,
 } from './contextEnrichment.ts';
+import { resolveIntentAction, resolveSlackChannelAsync } from '../intentActionRegistry.ts';
 
 export const detectIntentsAdapter: SkillAdapter = {
   name: 'detect-intents',
@@ -64,7 +65,7 @@ export const detectIntentsAdapter: SkillAdapter = {
 
       // Fallback transcript from context
       if (!transcript) {
-        transcript = state.context.tier2?.meetingHistory?.[0]?.transcript_text || '';
+        transcript = (state.context.tier2?.meetingHistory?.[0] as any)?.transcript_text || state.context.tier2?.meetingHistory?.[0]?.transcript || '';
       }
 
       // Fallback: query meeting directly
@@ -168,36 +169,150 @@ export const detectIntentsAdapter: SkillAdapter = {
 
       const result = await response.json();
 
-      // Map detected intents to queued followups
+      // Persist buying signals + commitments to meeting_structured_summaries
+      if (meetingId && (result.buying_signals?.length || result.commitments?.length)) {
+        try {
+          const repCommitments = (result.commitments || [])
+            .filter((c: any) => c.speaker_side === 'seller' || c.speaker === 'rep')
+            .map((c: any) => c.phrase || c.source_quote);
+          const prospectCommitments = (result.commitments || [])
+            .filter((c: any) => c.speaker_side === 'buyer' || c.speaker === 'prospect')
+            .map((c: any) => c.phrase || c.source_quote);
+          const competitorMentions = (result.commitments || [])
+            .filter((c: any) => c.intent === 'competitive_mention')
+            .map((c: any) => c.phrase || c.source_quote);
+          const objections = (result.commitments || [])
+            .filter((c: any) => c.intent === 'objection_blocker')
+            .map((c: any) => c.phrase || c.source_quote);
+          const outcomeSignals = (result.buying_signals || []).map((s: any) => ({
+            text: s.text || s.description,
+            framework: s.framework || 'MEDDICC',
+            strength: s.strength,
+            category: s.category,
+          }));
+
+          await supabase
+            .from('meeting_structured_summaries')
+            .upsert({
+              meeting_id: meetingId,
+              org_id: state.event.org_id,
+              rep_commitments: repCommitments,
+              prospect_commitments: prospectCommitments,
+              competitor_mentions: competitorMentions,
+              objections: objections,
+              outcome_signals: outcomeSignals,
+              ai_model_used: 'claude-haiku-4-5',
+              version: 2,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'meeting_id' });
+
+          console.log('[detect-intents] Persisted to meeting_structured_summaries');
+        } catch (persistErr) {
+          console.warn('[detect-intents] Failed to persist structured summary:', persistErr);
+        }
+      }
+
+      // Map detected intents to queued followups via registry
       const followups: QueuedFollowup[] = [];
 
       for (const commitment of result.commitments || []) {
-        if (commitment.speaker === 'rep' || commitment.speaker_side === 'seller') {
-          if (commitment.intent === 'send_proposal' || commitment.action_type === 'proposal_generation') {
-            followups.push({
-              type: 'proposal_generation',
-              source: 'orchestrator:chain',
-              payload: {
-                meeting_id: meetingId,
-                contact_id: state.context.tier2?.contact?.id,
-                trigger_phrase: commitment.phrase || commitment.source_quote,
-                confidence: commitment.confidence,
-              },
-            });
-          } else if (commitment.intent === 'schedule_meeting' || commitment.action_type === 'calendar_find_times') {
-            followups.push({
-              type: 'calendar_find_times',
-              source: 'orchestrator:chain',
-              payload: {
-                meeting_id: meetingId,
-                contact_id: state.context.tier2?.contact?.id,
-                trigger_phrase: commitment.phrase || commitment.source_quote,
-                confidence: commitment.confidence,
-              },
-            });
-          } else if (commitment.intent === 'send_content' || commitment.action_type === 'content_delivery') {
-            console.log('[detect-intents] Content delivery intent detected:', commitment.phrase || commitment.source_quote);
-          }
+        const resolution = resolveIntentAction({
+          intent: commitment.intent,
+          confidence: commitment.confidence,
+          confidence_tier: commitment.confidence_tier,
+        });
+
+        if (!resolution) continue;
+
+        const { config, should_auto_action, should_suggest } = resolution;
+
+        // Only queue follow-ups for actionable commitments
+        if (!should_auto_action && !should_suggest) continue;
+
+        // Build base payload with deadline passthrough + buying signals
+        const basePayload: Record<string, unknown> = {
+          meeting_id: meetingId,
+          contact_id: state.context.tier2?.contact?.id,
+          deal_id: state.context.tier2?.deal?.id,
+          trigger_phrase: commitment.phrase || commitment.source_quote,
+          confidence: commitment.confidence,
+          confidence_tier: commitment.confidence_tier,
+          intent: commitment.intent,
+          deadline_parsed: commitment.deadline_parsed || null,
+          auto_action: should_auto_action,
+          // Pass buying signals so tasks get them in metadata
+          buying_signals: result.buying_signals || [],
+        };
+
+        // Queue orchestrator event if one is mapped
+        if (config.orchestrator_event) {
+          followups.push({
+            type: config.orchestrator_event as any, // EventType may not include all new types yet
+            source: 'orchestrator:chain',
+            payload: basePayload,
+          });
+        }
+
+        // Queue Slack channel ping for check_with_team type intents
+        if (config.slack_action === 'ping_channel') {
+          const channelResult = await resolveSlackChannelAsync({
+            phrase: commitment.phrase || '',
+            context: commitment.context,
+            orgId: state.event.org_id,
+          });
+          followups.push({
+            type: 'meeting_ended' as any, // Reuse meeting_ended as carrier event
+            source: 'orchestrator:chain',
+            payload: {
+              ...basePayload,
+              _action: 'ping_slack_channel',
+              slack_channel: channelResult?.channel_name ?? null,
+              slack_channel_id: channelResult?.channel_id ?? null,
+              commitment_text: commitment.phrase || commitment.source_quote,
+            },
+          });
+        }
+
+        // Queue skill execution for linked skills
+        if (config.linked_skill) {
+          followups.push({
+            type: 'meeting_ended' as any,
+            source: 'orchestrator:chain',
+            payload: {
+              ...basePayload,
+              _action: 'execute_skill',
+              skill_key: config.linked_skill,
+            },
+          });
+        }
+
+        // Queue task creation via signal processor for all auto-actionable intents
+        if (should_auto_action && config.signal_type) {
+          followups.push({
+            type: 'meeting_ended' as any,
+            source: 'orchestrator:chain',
+            payload: {
+              ...basePayload,
+              _action: 'create_task',
+              signal_type: config.signal_type,
+              task_type: config.task_type,
+              deliverable_type: config.deliverable_type,
+              auto_generate: config.auto_generate,
+            },
+          });
+        }
+
+        // Log CRM updates for separate processing
+        if (config.crm_updates && config.crm_updates.length > 0) {
+          followups.push({
+            type: 'meeting_ended' as any,
+            source: 'orchestrator:chain',
+            payload: {
+              ...basePayload,
+              _action: 'crm_update',
+              crm_updates: config.crm_updates,
+            },
+          });
         }
       }
 
@@ -206,6 +321,7 @@ export const detectIntentsAdapter: SkillAdapter = {
         buying_signals: result.buying_signals?.length || 0,
         follow_up_items: result.follow_up_items?.length || 0,
         queued_followups: followups.length,
+        auto_actioned: followups.filter((f: any) => f.payload?.auto_action).length,
       });
 
       return {

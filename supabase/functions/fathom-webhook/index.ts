@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/use60Signing.ts'
 import { addBreadcrumb, captureException, withSentry } from '../_shared/sentryEdge.ts'
 
@@ -150,7 +150,7 @@ serve(async (req) => {
         .select('user_id, fathom_user_email, is_active, created_at')
         .eq('fathom_user_email', recordedByEmail)
         .eq('is_active', true)
-        .single()
+        .maybeSingle()
 
       if (integrationError) {
       }
@@ -227,7 +227,7 @@ serve(async (req) => {
         .eq('owner_user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
       if (!meetingError && meeting && !meeting.transcript_text) {
         // Transcript not available - enqueue retry job

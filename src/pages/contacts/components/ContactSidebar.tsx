@@ -1,8 +1,13 @@
-import React from 'react';
-import { User, Users, Mail, Phone, Building2, TrendingUp, ExternalLink } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, Users, Mail, Phone, Building2, TrendingUp, ExternalLink, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { useNavigate } from 'react-router-dom';
 import type { Contact } from '@/lib/database/models';
 import type { ContactCompanyGraph } from '@/lib/hooks/useContactCompanyGraph';
+import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
+import { extractDomainFromContact } from '@/lib/utils/domainUtils';
+import { AiArkSimilaritySearch } from '@/components/prospecting/AiArkSimilaritySearch';
 
 interface ContactSidebarProps {
   contact: Contact;
@@ -10,6 +15,18 @@ interface ContactSidebarProps {
 }
 
 export function ContactSidebar({ contact, graph }: ContactSidebarProps) {
+  const navigate = useNavigate();
+  const { isConnected: aiArkConnected } = useAiArkIntegration();
+  const [showSimilaritySearch, setShowSimilaritySearch] = useState(false);
+
+  // Derive company domain for "Find Similar" navigation
+  const contactDomain = extractDomainFromContact({
+    email: contact.email,
+    company: contact.company
+      ? { domain: (contact.company as any).domain, website: contact.company.website }
+      : undefined,
+  });
+
   // Use graph data for insights
   const insights = graph?.insights;
   const activities = graph?.activities || [];
@@ -209,6 +226,40 @@ export function ContactSidebar({ contact, graph }: ContactSidebarProps) {
           </div>
         </div>
       </div>
+
+      {/* Find Similar Companies (AI Ark) */}
+      {aiArkConnected && contactDomain && (
+        <Button
+          variant="ghost"
+          onClick={() => setShowSimilaritySearch(true)}
+          className="w-full justify-start gap-2 text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20"
+        >
+          <Layers className="w-4 h-4 shrink-0" />
+          Find Similar Companies
+        </Button>
+      )}
+
+      {/* AI Ark Similarity Search Dialog */}
+      <Dialog open={showSimilaritySearch} onOpenChange={setShowSimilaritySearch}>
+        <DialogContent className="sm:max-w-4xl bg-zinc-900 border-zinc-700 text-white max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Layers className="w-5 h-5 text-violet-400" />
+              Find Similar Companies
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Find companies similar to {contactDomain}
+            </DialogDescription>
+          </DialogHeader>
+          <AiArkSimilaritySearch
+            initialDomain={contactDomain || ''}
+            onComplete={(tableId) => {
+              setShowSimilaritySearch(false);
+              navigate(`/ops/${tableId}`);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
-} 
+}

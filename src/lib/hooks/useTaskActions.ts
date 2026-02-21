@@ -46,6 +46,44 @@ interface Comment {
   created_at: string;
 }
 
+async function triggerChainPreWork(completedTaskId: string) {
+  try {
+    // Get the completed task to find its chain
+    const { data: completedTask } = await supabase
+      .from('tasks')
+      .select('id, parent_task_id, assigned_to')
+      .eq('id', completedTaskId)
+      .maybeSingle();
+
+    if (!completedTask?.parent_task_id) return;
+
+    // Find next pending tasks in the same chain
+    const { data: nextTasks } = await supabase
+      .from('tasks')
+      .select('id, ai_status, task_type, deliverable_type')
+      .eq('parent_task_id', completedTask.parent_task_id)
+      .in('status', ['pending'])
+      .eq('ai_status', 'none')
+      .order('created_at', { ascending: true })
+      .limit(2); // Rate limit: max 2 per completion
+
+    if (!nextTasks || nextTasks.length === 0) return;
+
+    // Trigger AI worker for each (fire-and-forget, don't await)
+    for (const task of nextTasks) {
+      supabase.functions.invoke('unified-task-ai-worker', {
+        body: {
+          task_id: task.id,
+          action: 'generate_deliverable',
+          background: true,
+        }
+      }).catch(() => {}); // Silently fail
+    }
+  } catch {
+    // Silent failure - this is background work
+  }
+}
+
 export function useApproveTask() {
   const queryClient = useQueryClient();
 
@@ -66,10 +104,13 @@ export function useApproveTask() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, { taskId }) => {
       queryClient.invalidateQueries({ queryKey: ['command-centre-tasks'], type: 'all' });
       queryClient.invalidateQueries({ queryKey: ['command-centre-task-counts'] });
       toast.success('Task approved');
+
+      // Trigger background AI pre-work for next chain tasks
+      triggerChainPreWork(taskId);
     },
     onError: (error: Error) => {
       toast.error(`Failed to approve task: ${error.message}`);
@@ -87,15 +128,11 @@ export function useDismissTask() {
         actioned_at: new Date().toISOString(),
       };
 
-      if (dismiss_reason) {
-        updateData.dismiss_reason = dismiss_reason;
-      }
-
       const { data, error } = await supabase
         .from('tasks')
         .update(updateData)
         .eq('id', taskId)
-        .select('id, title, status, actioned_at, dismiss_reason')
+        .select('id, title, status, actioned_at')
         .maybeSingle();
 
       if (error) throw error;
@@ -242,6 +279,29 @@ export function useAddComment() {
   });
 }
 
+export function useDeleteTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['command-centre-tasks'], type: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['command-centre-task-counts'] });
+      toast.success('Task deleted');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete task: ${error.message}`);
+    },
+  });
+}
+
 export function useUpdateTaskStatus() {
   const queryClient = useQueryClient();
 
@@ -266,6 +326,38 @@ export function useUpdateTaskStatus() {
     },
     onError: (error: Error) => {
       toast.error(`Failed to update task status: ${error.message}`);
+    },
+  });
+}
+
+interface UpdateTaskFieldVariables {
+  taskId: string;
+  field: string;
+  value: unknown;
+}
+
+export function useUpdateTaskField() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ taskId, field, value }: UpdateTaskFieldVariables) => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ [field]: value, updated_at: new Date().toISOString() })
+        .eq('id', taskId)
+        .select('id, title')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) throw new Error('Task not found');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['command-centre-tasks'], type: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['command-centre-task-counts'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update task: ${error.message}`);
     },
   });
 }
