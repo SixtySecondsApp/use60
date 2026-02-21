@@ -18,6 +18,7 @@ import {
   divider,
   actions as actionsBlock,
   header as headerBlock,
+  buildManagerPrereadMessage,
 } from '../_shared/slackBlocks.ts';
 import {
   handleMomentumSetNextStep,
@@ -7278,6 +7279,191 @@ async function handleDebriefAddAllTasks(
   });
 }
 
+// =============================================================================
+// IMP-006: Handle "Send to manager as pre-read" button
+// action_id: imp_send_preread::{event_id}
+//
+// Looks up the event's prep content from the orchestrator job outputs,
+// resolves the manager's Slack user ID (admin/owner in same org),
+// and sends a condensed pre-read DM.
+// =============================================================================
+
+async function handleImpSendPreread(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction,
+): Promise<Response> {
+  const corsHeaders = getCorsHeaders({ headers: new Headers() } as Request);
+
+  try {
+    const parts = action.action_id.split('::');
+    const eventId = parts[1];
+
+    if (!eventId) {
+      console.error('[IMP] imp_send_preread: missing event_id in action_id');
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 1. Resolve requesting user's org
+    const { data: slackUser } = await supabase
+      .from('slack_auth')
+      .select('user_id, access_token')
+      .eq('slack_user_id', payload.user.id)
+      .maybeSingle();
+
+    if (!slackUser?.user_id || !slackUser?.access_token) {
+      console.error('[IMP] imp_send_preread: could not resolve user from slack_user_id');
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const { data: membership } = await supabase
+      .from('organization_memberships')
+      .select('org_id')
+      .eq('user_id', slackUser.user_id)
+      .maybeSingle();
+
+    const orgId = membership?.org_id;
+    if (!orgId) {
+      console.error('[IMP] imp_send_preread: org not found for user');
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 2. Fetch the calendar event title and start_time
+    const { data: calEvent } = await supabase
+      .from('calendar_events')
+      .select('id, title, start_time, meeting_type')
+      .eq('id', eventId)
+      .maybeSingle();
+
+    if (!calEvent) {
+      console.error('[IMP] imp_send_preread: event not found:', eventId);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 3. Fetch prep content from orchestrator job outputs
+    //    Look for the most recent successful agent job for this event
+    const { data: jobRow } = await supabase
+      .from('agent_jobs')
+      .select('id, outputs')
+      .eq('org_id', orgId)
+      .contains('payload', { meeting_id: eventId })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Extract prep sections from job outputs if available
+    let sections: Array<{ title: string; body: string }> = [];
+    if (jobRow?.outputs) {
+      const outputs = jobRow.outputs as Record<string, unknown>;
+      const prepOutput = outputs['generate-internal-prep'] as { prep_documents?: Array<{ sections?: Array<{ title: string; body: string }> }> } | undefined;
+      sections = prepOutput?.prep_documents?.[0]?.sections || [];
+    }
+
+    // Fallback sections if no job output found
+    if (sections.length === 0) {
+      sections = [
+        { title: 'Meeting', body: calEvent.title || 'Internal meeting' },
+        { title: 'Note', body: 'Prep content generated — see the full briefing in the app.' },
+      ];
+    }
+
+    // 4. Resolve manager: find an admin/owner in the org who has Slack connected
+    const { data: adminMemberships } = await supabase
+      .from('organization_memberships')
+      .select('user_id, role')
+      .eq('org_id', orgId)
+      .in('role', ['admin', 'owner'])
+      .neq('user_id', slackUser.user_id)
+      .limit(5);
+
+    let managerSlackUserId: string | null = null;
+    for (const admin of adminMemberships || []) {
+      const { data: adminSlack } = await supabase
+        .from('slack_auth')
+        .select('slack_user_id')
+        .eq('user_id', admin.user_id)
+        .maybeSingle();
+      if (adminSlack?.slack_user_id) {
+        managerSlackUserId = adminSlack.slack_user_id;
+        break;
+      }
+    }
+
+    // 5. Resolve rep display name
+    const { data: repProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name, email')
+      .eq('id', slackUser.user_id)
+      .maybeSingle();
+
+    const repName = repProfile
+      ? [repProfile.first_name, repProfile.last_name].filter(Boolean).join(' ') || repProfile.email || 'Your rep'
+      : 'Your rep';
+
+    // 6. Build and send the pre-read message
+    const prereadMsg = buildManagerPrereadMessage({
+      repName,
+      meetingTitle: calEvent.title || 'Internal Meeting',
+      meetingType: calEvent.meeting_type || 'internal',
+      startTime: calEvent.start_time,
+      sections,
+      appUrl,
+    });
+
+    // Send DM to manager (or acknowledgment DM to rep if no manager found)
+    const targetSlackUserId = managerSlackUserId || payload.user.id;
+    const channelToOpen = managerSlackUserId
+      ? managerSlackUserId
+      : payload.user.id;
+
+    // Open DM channel with the target user
+    const openDmRes = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${slackUser.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ users: channelToOpen }),
+    });
+    const openDm = await openDmRes.json() as { ok: boolean; channel?: { id: string } };
+
+    if (openDm.ok && openDm.channel?.id) {
+      await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${slackUser.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: openDm.channel.id,
+          blocks: prereadMsg.blocks,
+          text: prereadMsg.text,
+        }),
+      });
+
+      console.log(
+        `[IMP] Pre-read sent for event ${eventId} to Slack user ${targetSlackUserId}`
+      );
+    } else {
+      console.error('[IMP] Failed to open DM channel:', openDm);
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[IMP] handleImpSendPreread error:', err);
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   const corsPreflightResponse = handleCorsPreflightRequest(req);
@@ -7813,6 +7999,14 @@ serve(async (req) => {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
+        }
+
+        // =====================================================================
+        // IMP-006: Internal Meeting Prep — manager pre-read forwarding
+        // Format: imp_send_preread::{event_id}
+        // =====================================================================
+        else if (action.action_id.startsWith('imp_send_preread::')) {
+          return handleImpSendPreread(supabase, payload, action);
         }
 
         // Unknown action - just acknowledge
