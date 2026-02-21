@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_credit_menu_history_action
   ON credit_menu_history(action_id, changed_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_price_snapshots_workflow
-  ON price_snapshots(workflow_ref) WHERE expires_at > NOW();
+  ON price_snapshots(workflow_ref, expires_at);
 
 -- ============================================================================
 -- Auto-update menu_version + updated_at on price changes
