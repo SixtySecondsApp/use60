@@ -4101,3 +4101,214 @@ export const buildSupportStatusChange = (data: {
     context([`Changed by ${data.changedBy}`]),
   ];
 };
+
+// =============================================================================
+// CRM-006: CRM Auto-Update HITL Approval Message
+// =============================================================================
+
+export interface CRMAppliedChange {
+  field_name: string;
+  new_value: unknown;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface CRMPendingApproval {
+  id: string;
+  field_name: string;
+  old_value: unknown;
+  new_value: unknown;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning?: string;
+}
+
+export interface CRMSkippedField {
+  field_name: string;
+  reasoning?: string;
+}
+
+export interface CRMApprovalMessageData {
+  dealId: string;
+  dealName: string;
+  meetingId: string;
+  meetingTitle: string;
+  autoApplied: CRMAppliedChange[];
+  pendingApprovals: CRMPendingApproval[];
+  skippedFields: CRMSkippedField[];
+  appUrl: string;
+}
+
+/**
+ * Format a CRM field value for display in Slack
+ */
+const formatCRMValue = (value: unknown, fieldName: string): string => {
+  if (value === null || value === undefined) return '_empty_';
+  const str = String(value);
+  if (str.length === 0) return '_empty_';
+
+  // Truncate long values
+  const display = str.length > 80 ? str.slice(0, 79) + '…' : str;
+
+  // Currency formatting for deal_value
+  if (fieldName === 'deal_value' || fieldName === 'value') {
+    const num = parseFloat(str.replace(/[$,]/g, ''));
+    if (!isNaN(num)) return `$${num.toLocaleString()}`;
+  }
+
+  return display;
+};
+
+/**
+ * Confidence badge — plain text labels safe for mrkdwn
+ */
+const crmConfidenceBadge = (confidence: 'high' | 'medium' | 'low'): string => {
+  switch (confidence) {
+    case 'high': return '[HIGH]';
+    case 'medium': return '[MED]';
+    case 'low': return '[LOW]';
+    default: return '';
+  }
+};
+
+/**
+ * Build CRM Approval Message
+ *
+ * Slack Block Kit message sent after a meeting ends when CRM fields were
+ * extracted. Summarises auto-applied changes and presents pending fields
+ * for per-field or bulk approve/reject/edit.
+ *
+ * Stays within the Slack 50-block limit by capping pending fields shown.
+ */
+export const buildCRMApprovalMessage = (data: CRMApprovalMessageData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+
+  // --- Header ---
+  const headerText = `CRM Update — ${truncate(data.dealName, 60)} from ${truncate(data.meetingTitle, 40)}`;
+  blocks.push(header(headerText));
+
+  // --- Context: deal + meeting links ---
+  const contextParts: string[] = [];
+  if (data.appUrl) {
+    contextParts.push(`<${data.appUrl}/deals/${data.dealId}|View Deal>`);
+    contextParts.push(`<${data.appUrl}/meetings/${data.meetingId}|View Meeting>`);
+  }
+  if (contextParts.length > 0) {
+    blocks.push(context(contextParts));
+  }
+
+  // --- Auto-applied section ---
+  if (data.autoApplied.length > 0) {
+    blocks.push(divider());
+    const autoLines = data.autoApplied.slice(0, 8).map((c) => {
+      const displayValue = formatCRMValue(c.new_value, c.field_name);
+      const fieldLabel = c.field_name.replace(/_/g, ' ');
+      return `*${fieldLabel}:* ${displayValue}`;
+    });
+    blocks.push(section(`*Auto-applied (${data.autoApplied.length} field${data.autoApplied.length !== 1 ? 's' : ''})*\n${autoLines.join('\n')}`));
+  }
+
+  // --- Per-field approvals ---
+  if (data.pendingApprovals.length > 0) {
+    blocks.push(divider());
+    blocks.push(section(`*Needs your review (${data.pendingApprovals.length} field${data.pendingApprovals.length !== 1 ? 's' : ''})*`));
+
+    // Budget: header(1) + context(1) + divider(up to 2) + auto section(up to 2) +
+    //         review header(1) + divider(1) + approve-all row(1) + skipped(up to 2) = ~11 fixed blocks
+    // Remaining: 50 - 11 = 39. Each field costs 2 blocks (section + actions).
+    const MAX_FIELD_BLOCKS = 36; // 18 fields max
+    const maxFields = Math.floor(MAX_FIELD_BLOCKS / 2);
+    const fieldsToShow = data.pendingApprovals.slice(0, maxFields);
+
+    for (const field of fieldsToShow) {
+      const fieldLabel = field.field_name.replace(/_/g, ' ');
+      const oldDisplay = formatCRMValue(field.old_value, field.field_name);
+      const newDisplay = formatCRMValue(field.new_value, field.field_name);
+      const badge = crmConfidenceBadge(field.confidence);
+      const reasoning = field.reasoning ? `\n_${truncate(field.reasoning, 80)}_` : '';
+
+      blocks.push(
+        section(
+          `*${fieldLabel}* ${badge}\n${oldDisplay} → *${newDisplay}*${reasoning}`
+        )
+      );
+
+      // Per-field action buttons: action_id format: crm_{action}::{field_name}::{queue_id}
+      const queueValue = safeButtonValue(JSON.stringify({ queueId: field.id, fieldName: field.field_name }));
+      blocks.push({
+        type: 'actions',
+        block_id: `crm_field_actions::${field.id}`,
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Approve'), emoji: false },
+            style: 'primary',
+            action_id: `crm_approve::${field.field_name}::${field.id}`,
+            value: queueValue,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Reject'), emoji: false },
+            style: 'danger',
+            action_id: `crm_reject::${field.field_name}::${field.id}`,
+            value: queueValue,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Edit'), emoji: false },
+            action_id: `crm_edit::${field.field_name}::${field.id}`,
+            value: queueValue,
+          },
+        ],
+      });
+    }
+
+    if (data.pendingApprovals.length > maxFields) {
+      blocks.push(
+        context([`+ ${data.pendingApprovals.length - maxFields} more field(s) — view in app`])
+      );
+    }
+  }
+
+  // --- Approve All / Reject All ---
+  if (data.pendingApprovals.length > 0) {
+    blocks.push(divider());
+    const allQueueIds = data.pendingApprovals.map((f) => f.id);
+    const bulkValue = safeButtonValue(JSON.stringify({ queueIds: allQueueIds, dealId: data.dealId }));
+    blocks.push({
+      type: 'actions',
+      block_id: `crm_bulk_actions::${data.dealId}`,
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Approve All'), emoji: false },
+          style: 'primary',
+          action_id: `crm_approve_all::${data.dealId}`,
+          value: bulkValue,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Reject All'), emoji: false },
+          style: 'danger',
+          action_id: `crm_reject_all::${data.dealId}`,
+          value: bulkValue,
+        },
+      ],
+    });
+  }
+
+  // --- Low-confidence skipped fields ---
+  if (data.skippedFields.length > 0) {
+    const skippedNames = data.skippedFields
+      .slice(0, 5)
+      .map((f) => f.field_name.replace(/_/g, ' '))
+      .join(', ');
+    const suffix = data.skippedFields.length > 5 ? ` +${data.skippedFields.length - 5} more` : '';
+    blocks.push(context([`Noted (low confidence, not applied): ${skippedNames}${suffix}`]));
+  }
+
+  const pendingCount = data.pendingApprovals.length;
+  const autoCount = data.autoApplied.length;
+  const fallbackText =
+    `CRM Update for ${data.dealName}: ${autoCount} auto-applied, ${pendingCount} awaiting approval`;
+
+  return { blocks, text: fallbackText };
+};

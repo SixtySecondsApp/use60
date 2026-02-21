@@ -1,0 +1,352 @@
+{
+  "name": "PRD-03: Auto CRM Update Agent",
+  "version": "1.0",
+  "createdAt": "2026-02-21T23:30:00Z",
+  "source": "docs/copilot/always_on_60/use60_master_plan.md#PRD-03",
+
+  "summary": "After every meeting, HubSpot is updated automatically — notes, next steps, contacts, activity logs auto-applied; stage changes, close date, and amount presented for approval via Slack with approve/reject/edit buttons.",
+
+  "existingInfrastructure": {
+    "crm_field_extractor_adapter": "supabase/functions/_shared/orchestrator/adapters/crmFieldExtractor.ts — Claude Haiku extraction with confidence scoring (high/medium/low) for stage, next_steps, close_date, deal_value, stakeholders, blockers, summary",
+    "crm_update_adapter": "supabase/functions/_shared/orchestrator/adapters/crmUpdate.ts — applies extracted fields to deals table, records changes in crm_field_updates via RPC",
+    "hubspot_admin": "supabase/functions/hubspot-admin/index.ts — full HubSpot CRUD for contacts, deals, tasks with OAuth token management",
+    "push_to_hubspot": "supabase/functions/push-to-hubspot/index.ts — batch contact push with field mapping and duplicate strategy",
+    "extract_action_items": "supabase/functions/extract-action-items/index.ts — Claude-powered action item extraction from meeting transcripts",
+    "slack_post_meeting": "supabase/functions/slack-post-meeting/index.ts — rich Slack debrief with Block Kit messages",
+    "slack_blocks": "supabase/functions/_shared/slackBlocks.ts — Block Kit builders for meetings, HITL approval, deal alerts",
+    "delivery_slack": "supabase/functions/_shared/proactive/deliverySlack.ts — sendSlackDM() for DM delivery",
+    "fleet_orchestrator": "PRD-02 complete — fleetRouter.ts + runner.ts with DB-driven event routing, handoff protocol, dead-letter queue, circuit breaker",
+    "agent_config_engine": "PRD-01 schema complete — 3-layer config resolution via resolve_agent_config(), methodology templates seeded",
+    "crm_field_updates_table": "Audit trail table for CRM changes (used by crmUpdateAdapter)",
+    "deal_risk_scorer": "PRD-04 partial — weighted scoring model + fleet routes registered, can receive crm_updated handoff"
+  },
+
+  "dependencies": {
+    "prd_01": { "status": "schema_complete", "needed": "getAgentConfig() for update thresholds, auto-approve field lists, confidence minimums" },
+    "prd_02": { "status": "complete", "needed": "Fleet event routing for meeting_ended → crm_update sequence, handoff to deal_risk_rescore" },
+    "prd_04": { "status": "partial", "needed": "Receives crm_updated handoff to trigger deal risk re-scoring" }
+  },
+
+  "definitionOfDone": [
+    "Rep finishes a call → within 15 minutes receives a Slack message showing what was updated automatically and what needs approval",
+    "One-tap approve in Slack updates HubSpot fields immediately",
+    "Auto-approve fields (notes, next steps, activity log) applied without approval",
+    "Approval-required fields (stage, close date, deal value) presented via Slack HITL",
+    "Confidence scoring: high confidence = suggest change, low confidence = note only",
+    "Agent config (PRD-01) controls which fields are auto-approve vs approval-required per org",
+    "CRM update triggers deal risk re-score via fleet handoff (PRD-04)",
+    "Full audit trail: every field change recorded with before/after values and source",
+    "Heartbeat checks: pending approvals age, stale queue alerts, error rate monitoring"
+  ],
+
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Schema & Agent Configuration",
+      "description": "Database tables for approval queue, audit trail enhancement, and agent config seeding"
+    },
+    {
+      "id": "phase-2",
+      "name": "CRM Field Classification & Extraction Enhancement",
+      "description": "Extend existing crmFieldExtractor with approval policy classification and confidence thresholds"
+    },
+    {
+      "id": "phase-3",
+      "name": "Auto-Apply Engine",
+      "description": "Automatic CRM writes for approved field types, HubSpot sync, activity logging"
+    },
+    {
+      "id": "phase-4",
+      "name": "Slack HITL Approval Flow",
+      "description": "Rich Slack messages with approve/reject/edit for approval-required fields"
+    },
+    {
+      "id": "phase-5",
+      "name": "Fleet Integration & Handoffs",
+      "description": "Register crm_update sequence in fleet, wire meeting_ended handoff, trigger deal risk re-score"
+    },
+    {
+      "id": "phase-6",
+      "name": "Heartbeat & Verification",
+      "description": "Health monitoring, stale approval alerts, end-to-end integration testing"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "CRM-001",
+      "phase": "phase-1",
+      "title": "Create crm_approval_queue table and enhance crm_field_updates audit trail",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["deals", "meetings"] },
+      "blocks": ["CRM-004", "CRM-005", "CRM-007", "CRM-010"],
+      "parallelWith": ["CRM-002"],
+      "acceptance": [
+        "crm_approval_queue table: id, org_id, user_id, deal_id, meeting_id, field_name, current_value (jsonb), proposed_value (jsonb), confidence (text: high/medium/low), reason (text), status (enum: pending/approved/rejected/edited/expired), slack_message_ts (text), approved_by (uuid), approved_at (timestamptz), expires_at (timestamptz), created_at",
+        "crm_field_updates table enhanced: add previous_value (jsonb), change_source (enum: auto_apply/approved/manual), confidence (text), meeting_id (uuid FK)",
+        "RLS: users see own org approvals, admin can approve any in org",
+        "Index on (org_id, status, created_at) for pending queue queries",
+        "Trigger auto-sets expires_at to 48 hours from creation"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222300001_crm_approval_queue.sql"
+      ]
+    },
+    {
+      "id": "CRM-002",
+      "phase": "phase-1",
+      "title": "Seed agent_config_defaults for crm_update agent type",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["CRM-003", "CRM-004", "CRM-005"],
+      "parallelWith": ["CRM-001"],
+      "acceptance": [
+        "Insert agent_config_defaults rows for agent_type='crm_update' with keys: auto_approve_fields (array: notes, next_steps, activity_log, stakeholders, blockers), approval_required_fields (array: stage, close_date, deal_value), confidence_minimum (text: medium), approval_expiry_hours (number: 48), max_pending_approvals (number: 10), slack_notification_enabled (boolean: true), hubspot_sync_enabled (boolean: true)",
+        "Methodology-specific overrides: MEDDIC adds 'meddic_score' to auto_approve_fields, BANT adds 'budget_confirmed' to approval_required_fields",
+        "Config values match existing crmFieldExtractor output schema",
+        "All config keys documented in migration comments"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222300002_crm_update_agent_config.sql"
+      ]
+    },
+    {
+      "id": "CRM-003",
+      "phase": "phase-2",
+      "title": "Create CRM field classification service with confidence-based routing",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CRM-002"], "files": ["supabase/functions/_shared/orchestrator/adapters/crmFieldExtractor.ts"], "schema": [] },
+      "blocks": ["CRM-004", "CRM-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "crmFieldClassifier.ts created in supabase/functions/_shared/orchestrator/adapters/",
+        "classifyFields(extractedFields, agentConfig) returns { autoApply: FieldChange[], requireApproval: FieldChange[], skipLowConfidence: FieldChange[] }",
+        "Reads auto_approve_fields and approval_required_fields from agent config (via getAgentConfig)",
+        "Applies confidence_minimum threshold: fields below minimum go to skipLowConfidence",
+        "Each FieldChange includes: field_name, current_value, proposed_value, confidence, reason",
+        "Unit-testable: pure function with config injection"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/crmFieldClassifier.ts"
+      ]
+    },
+    {
+      "id": "CRM-004",
+      "phase": "phase-3",
+      "title": "Build auto-apply engine for pre-approved CRM field updates",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["CRM-001", "CRM-002", "CRM-003"], "files": ["supabase/functions/_shared/orchestrator/adapters/crmUpdate.ts"], "schema": ["crm_approval_queue"] },
+      "blocks": ["CRM-006", "CRM-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "crmAutoApply.ts adapter created in supabase/functions/_shared/orchestrator/adapters/",
+        "Receives classified autoApply fields and applies to deals table immediately",
+        "Records each change in crm_field_updates with change_source='auto_apply'",
+        "Appends meeting summary to deal notes (not overwrites)",
+        "Creates activity record in activities table (type: 'crm_auto_update', entity_type: 'deal')",
+        "Returns applied changes array for downstream Slack notification"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/crmAutoApply.ts"
+      ]
+    },
+    {
+      "id": "CRM-005",
+      "phase": "phase-3",
+      "title": "Build HubSpot sync for auto-applied fields",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["CRM-001", "CRM-002", "CRM-003"], "files": ["supabase/functions/hubspot-admin/index.ts"], "schema": [] },
+      "blocks": ["CRM-009"],
+      "parallelWith": ["CRM-004"],
+      "acceptance": [
+        "crmHubSpotSync.ts created in supabase/functions/_shared/orchestrator/adapters/",
+        "syncToHubSpot(orgId, dealId, appliedChanges) pushes auto-applied changes to HubSpot",
+        "Reads hubspot_sync_enabled from agent config — skips if disabled",
+        "Looks up HubSpot deal ID from deals.hubspot_deal_id (or hubspot_sync_state)",
+        "Handles missing HubSpot connection gracefully (logs warning, continues)",
+        "Creates HubSpot engagement/note for activity log entries",
+        "Token refresh handled via existing hubspot-token-refresh pattern"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/crmHubSpotSync.ts"
+      ]
+    },
+    {
+      "id": "CRM-006",
+      "phase": "phase-4",
+      "title": "Build Slack HITL approval message with Block Kit",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["CRM-004"], "files": ["supabase/functions/_shared/slackBlocks.ts", "supabase/functions/_shared/proactive/deliverySlack.ts"], "schema": ["crm_approval_queue"] },
+      "blocks": ["CRM-007", "CRM-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "buildCRMApprovalMessage() added to slackBlocks.ts",
+        "Message shows: meeting title, deal name, what was auto-applied (summary), proposed changes requiring approval (each field with current → proposed, confidence badge)",
+        "Action buttons per field: Approve / Reject / Edit (with value input modal)",
+        "Approve All / Reject All buttons for batch action",
+        "Low-confidence skipped fields shown as 'Noted (low confidence)' section",
+        "Message includes meeting link and deal link",
+        "Renders within Slack 50-block limit"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/orchestrator/adapters/crmSlackNotify.ts"
+      ]
+    },
+    {
+      "id": "CRM-007",
+      "phase": "phase-4",
+      "title": "Build Slack interaction handler for approval actions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["CRM-001", "CRM-006"], "files": [], "schema": ["crm_approval_queue"] },
+      "blocks": ["CRM-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "agent-crm-approval edge function handles Slack interactive payload",
+        "Approve action: updates crm_approval_queue status='approved', applies change to deals table, syncs to HubSpot, records in crm_field_updates with change_source='approved'",
+        "Reject action: updates status='rejected', records rejection reason",
+        "Edit action: opens Slack modal with value input, applies edited value on submit",
+        "Approve All: batch approves all pending fields for that meeting",
+        "Updates original Slack message to show resolution status (strikethrough pending, show approved/rejected)",
+        "Handles expired approvals gracefully (show 'expired' message if actioned after 48h)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/agent-crm-approval/index.ts"
+      ]
+    },
+    {
+      "id": "CRM-008",
+      "phase": "phase-5",
+      "title": "Register crm_update fleet sequence and meeting_ended handoff",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/orchestrator/fleetRouter.ts"], "schema": ["fleet_event_routes", "fleet_sequence_definitions", "fleet_handoff_routes"] },
+      "blocks": ["CRM-009"],
+      "parallelWith": ["CRM-004", "CRM-005", "CRM-006"],
+      "acceptance": [
+        "Insert fleet_sequence_definitions for 'crm_update' sequence: step_1 (extract_crm_fields), step_2 (classify_fields), step_3 (auto_apply), step_4 (hubspot_sync), step_5 (slack_notify)",
+        "Insert fleet_event_routes for event_type='meeting_ended' → sequence_key='crm_update' (wave 3, after intents/action items)",
+        "Insert fleet_handoff_routes: crm_update completion → deal_risk_rescore event (PRD-04 integration)",
+        "Context mapping passes: meeting_id, deal_id, org_id, user_id, applied_changes, pending_approvals",
+        "Migration idempotent (ON CONFLICT DO UPDATE)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222300003_crm_update_fleet_routes.sql"
+      ]
+    },
+    {
+      "id": "CRM-009",
+      "phase": "phase-5",
+      "title": "Wire agent-crm-update orchestrator adapter into fleet runner",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": { "stories": ["CRM-004", "CRM-005", "CRM-006", "CRM-007", "CRM-008"], "files": ["supabase/functions/_shared/orchestrator/runner.ts"], "schema": [] },
+      "blocks": ["CRM-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "Register crm_update adapter steps in orchestrator adapter registry",
+        "step extract_crm_fields → crmFieldExtractor (existing)",
+        "step classify_fields → crmFieldClassifier (CRM-003)",
+        "step auto_apply → crmAutoApply (CRM-004)",
+        "step hubspot_sync → crmHubSpotSync (CRM-005)",
+        "step slack_notify → crmSlackNotify (CRM-006)",
+        "Each step reads agent config via getAgentConfig(orgId, userId, 'crm_update')",
+        "Cost tracking: each AI step logs credit consumption"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/index.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ]
+    },
+    {
+      "id": "CRM-010",
+      "phase": "phase-6",
+      "title": "Build heartbeat monitor for pending approvals and error rates",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": { "stories": ["CRM-001"], "files": [], "schema": ["crm_approval_queue"] },
+      "blocks": [],
+      "parallelWith": ["CRM-011"],
+      "acceptance": [
+        "agent-crm-heartbeat edge function (cron: every 4 hours)",
+        "Checks: pending approvals older than 24h → reminder Slack DM to rep",
+        "Checks: expired approvals (>48h) → auto-expire and log",
+        "Checks: error rate in last 24h → alert if >5% of updates failed",
+        "Checks: pending queue depth → alert if >max_pending_approvals per user",
+        "Heartbeat results logged to agent_heartbeat_log table (if exists) or sequence_jobs",
+        "Uses agent config for thresholds (approval_expiry_hours, max_pending_approvals)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/agent-crm-heartbeat/index.ts"
+      ]
+    },
+    {
+      "id": "CRM-011",
+      "phase": "phase-6",
+      "title": "End-to-end integration test: meeting → CRM update → Slack → approve → HubSpot",
+      "type": "qa",
+      "status": "complete",
+      "priority": 11,
+      "dependencies": { "stories": ["CRM-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CRM-010"],
+      "acceptance": [
+        "Test script simulates meeting_ended event with sample transcript via fleet orchestrator",
+        "Verifies: fields extracted with correct confidence levels",
+        "Verifies: auto-approve fields (notes, next_steps) written to deals table",
+        "Verifies: approval-required fields (stage, close_date) queued in crm_approval_queue",
+        "Verifies: Slack message sent with correct Block Kit structure",
+        "Verifies: crm_field_updates audit trail has entries for all changes",
+        "Verifies: handoff event fired to deal_risk_rescore",
+        "Document manual test steps for Slack interactive flow (approve/reject/edit)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/agent-crm-update/test.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 11,
+    "completedStories": 11,
+    "estimatedTotalMinutes": 290,
+    "estimatedHours": "4.8 hours",
+    "parallelGroups": [
+      { "group": 1, "stories": ["CRM-001", "CRM-002"], "description": "Schema & config (parallel)" },
+      { "group": 2, "stories": ["CRM-003"], "description": "Field classifier (needs CRM-002)" },
+      { "group": 3, "stories": ["CRM-004", "CRM-005", "CRM-008"], "description": "Auto-apply, HubSpot sync, fleet routes (parallel)" },
+      { "group": 4, "stories": ["CRM-006"], "description": "Slack HITL message (needs CRM-004)" },
+      { "group": 5, "stories": ["CRM-007"], "description": "Slack interaction handler (needs CRM-006)" },
+      { "group": 6, "stories": ["CRM-009"], "description": "Wire into fleet runner (needs all adapters)" },
+      { "group": 7, "stories": ["CRM-010", "CRM-011"], "description": "Heartbeat + E2E test (parallel)" }
+    ]
+  }
+}

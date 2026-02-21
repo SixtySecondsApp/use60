@@ -22,7 +22,7 @@ VALUES
   (NULL, 'campaign_daily_check','campaign_daily_check', 0),
   (NULL, 'coaching_weekly',     'coaching_weekly',     0),
   (NULL, 'deal_risk_scan',      'deal_risk_scan',      0)
-ON CONFLICT ON CONSTRAINT fleet_event_routes_unique DO UPDATE
+ON CONFLICT (COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), event_type, sequence_key) DO UPDATE
   SET is_active = true, updated_at = now();
 
 
@@ -54,7 +54,7 @@ VALUES (
   ]'::jsonb,
   '["tier1","tier2"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 -- pre_meeting_90min: 5 steps
@@ -72,7 +72,7 @@ VALUES (
   ]'::jsonb,
   '["tier1","tier2"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 -- email_received: 2 steps (sequential, no depends_on)
@@ -87,7 +87,7 @@ VALUES (
   ]'::jsonb,
   '["tier1","tier2"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 -- proposal_generation: 4 steps (sequential)
@@ -104,7 +104,7 @@ VALUES (
   ]'::jsonb,
   '["tier1","tier2","tier3:template"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 -- calendar_find_times: 3 steps (sequential)
@@ -120,7 +120,7 @@ VALUES (
   ]'::jsonb,
   '["tier1","tier2"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 -- stale_deal_revival: 4 steps with parallel waves
@@ -137,7 +137,7 @@ VALUES (
   ]'::jsonb,
   '["tier1","tier2","tier3:news","tier3:linkedin"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 -- campaign_daily_check: 4 steps (sequential)
@@ -154,7 +154,7 @@ VALUES (
   ]'::jsonb,
   '["tier1"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 -- coaching_weekly: 4 steps (sequential)
@@ -171,7 +171,7 @@ VALUES (
   ]'::jsonb,
   '["tier1","tier2"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 -- deal_risk_scan: 5 steps with parallel waves
@@ -189,7 +189,7 @@ VALUES (
   ]'::jsonb,
   '["tier1","tier2"]'::jsonb
 )
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique DO UPDATE
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version) DO UPDATE
   SET steps = EXCLUDED.steps, context_requirements = EXCLUDED.context_requirements, updated_at = now();
 
 

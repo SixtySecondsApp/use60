@@ -19,10 +19,13 @@ CREATE TABLE IF NOT EXISTS fleet_event_routes (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- UNIQUE with COALESCE to handle NULL org_id correctly
-  CONSTRAINT fleet_event_routes_unique
-    UNIQUE (COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), event_type, sequence_key)
+  -- uniqueness enforced via index below (expressions not allowed in UNIQUE constraints)
+  CONSTRAINT fleet_event_routes_no_dup CHECK (true)
 );
+
+-- Unique index with COALESCE to handle NULL org_id correctly
+CREATE UNIQUE INDEX IF NOT EXISTS fleet_event_routes_unique
+  ON fleet_event_routes (COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), event_type, sequence_key);
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_fleet_event_routes_lookup
@@ -74,7 +77,7 @@ CREATE POLICY "fleet_event_routes_org_read"
     org_id IS NOT NULL
     AND EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = fleet_event_routes.org_id
+      WHERE organization_memberships.org_id = fleet_event_routes.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -103,10 +106,13 @@ CREATE TABLE IF NOT EXISTS fleet_sequence_definitions (
   CONSTRAINT fleet_sequence_definitions_steps_check
     CHECK (jsonb_typeof(steps) = 'array' AND jsonb_array_length(steps) >= 1),
 
-  -- UNIQUE with COALESCE for NULL org_id
-  CONSTRAINT fleet_sequence_definitions_unique
-    UNIQUE (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version)
+  -- uniqueness enforced via index below
+  CONSTRAINT fleet_sequence_definitions_no_dup CHECK (true)
 );
+
+-- Unique index with COALESCE for NULL org_id
+CREATE UNIQUE INDEX IF NOT EXISTS fleet_sequence_definitions_unique
+  ON fleet_sequence_definitions (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version);
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_fleet_sequence_definitions_lookup
@@ -154,7 +160,7 @@ CREATE POLICY "fleet_sequence_definitions_org_read"
     org_id IS NOT NULL
     AND EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = fleet_sequence_definitions.org_id
+      WHERE organization_memberships.org_id = fleet_sequence_definitions.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -213,7 +219,7 @@ CREATE POLICY "fleet_handoff_routes_org_read"
     org_id IS NOT NULL
     AND EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = fleet_handoff_routes.org_id
+      WHERE organization_memberships.org_id = fleet_handoff_routes.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );

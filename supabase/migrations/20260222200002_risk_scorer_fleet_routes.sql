@@ -16,7 +16,7 @@ VALUES
   (NULL, 'cron.deal_risk_scan', 'risk_scoring', 0, NULL, true),
   -- Event-triggered re-score for a single deal
   (NULL, 'deal_risk_rescore', 'risk_rescore_single', 0, NULL, true)
-ON CONFLICT ON CONSTRAINT fleet_event_routes_unique_route
+ON CONFLICT (COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), event_type, sequence_key)
 DO UPDATE SET
   sequence_key = EXCLUDED.sequence_key,
   is_active = EXCLUDED.is_active,
@@ -77,7 +77,7 @@ VALUES
       "timeout_ms": 15000
     }
   ]'::JSONB, '["org_id", "deal_id"]'::JSONB, true)
-ON CONFLICT ON CONSTRAINT fleet_sequence_definitions_unique_version
+ON CONFLICT (sequence_key, COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), version)
 DO UPDATE SET
   steps = EXCLUDED.steps,
   context_requirements = EXCLUDED.context_requirements,

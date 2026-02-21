@@ -71,6 +71,14 @@
       "prd": null,
       "consultReport": "Command Centre audit (2026-02-19)",
       "createdAt": "2026-02-19T12:00:00Z"
+    },
+    {
+      "id": "auto-crm-update",
+      "name": "PRD-03: Auto CRM Update Agent",
+      "status": "complete",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-03",
+      "planFile": ".sixty/plan-auto-crm-update.json",
+      "createdAt": "2026-02-21T23:30:00Z"
     }
   ],
   "stories": [
@@ -983,9 +991,9 @@
     }
   ],
   "execution": {
-    "totalStories": 39,
-    "completedStories": 7,
+    "totalStories": 50,
+    "completedStories": 18,
     "currentFeature": "settings-page-fixes",
-    "lastUpdated": "2026-02-19T12:00:00Z"
+    "lastUpdated": "2026-02-21T23:30:00Z"
   }
 }

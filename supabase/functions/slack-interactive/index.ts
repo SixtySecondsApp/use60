@@ -7415,6 +7415,34 @@ serve(async (req) => {
         }
 
         // =====================================================================
+        // CRM-007: Route CRM approval actions (crm_*) to agent-crm-approval
+        // =====================================================================
+        if (action.action_id.startsWith('crm_approve::') ||
+            action.action_id.startsWith('crm_reject::') ||
+            action.action_id.startsWith('crm_edit::') ||
+            action.action_id.startsWith('crm_approve_all::') ||
+            action.action_id.startsWith('crm_reject_all::')) {
+          console.log('[CRM Approval] Forwarding action to agent-crm-approval:', action.action_id);
+          // Forward the raw form body to agent-crm-approval (it handles its own Slack verification)
+          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              // Forward Slack signing headers for verification
+              'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
+              'x-slack-signature': req.headers.get('x-slack-signature') || '',
+            },
+            body: `payload=${encodeURIComponent(payloadStr)}`,
+          }).catch(err => console.error('[CRM Approval] Forward error:', err));
+          // Acknowledge immediately (agent-crm-approval handles async response)
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
         // ORCH-009: Route orchestrator actions (orch_*) to orchestrator handler
         // =====================================================================
         if (action.action_id.startsWith('orch_')) {
@@ -7800,6 +7828,20 @@ serve(async (req) => {
         console.log('View submission:', payload.view?.callback_id);
         if (payload.view?.callback_id === 'log_activity_modal') {
           return handleLogActivitySubmission(supabase, payload);
+        }
+        if (payload.view?.callback_id === 'crm_edit_modal_submit') {
+          console.log('[CRM Approval] Forwarding edit modal submission to agent-crm-approval');
+          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
+              'x-slack-signature': req.headers.get('x-slack-signature') || '',
+            },
+            body: `payload=${encodeURIComponent(JSON.stringify(payload))}`,
+          }).catch(err => console.error('[CRM Approval] Forward error:', err));
+          return new Response('', { status: 200, headers: corsHeaders });
         }
         if (payload.view?.callback_id === 'hitl_edit_modal') {
           return handleHITLEditSubmission(supabase, payload);

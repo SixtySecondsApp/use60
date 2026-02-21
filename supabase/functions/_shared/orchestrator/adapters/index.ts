@@ -42,6 +42,10 @@ import {
 import { notifySlackSummaryAdapter } from './notifySlackSummary.ts';
 import { crmFieldExtractorAdapter } from './crmFieldExtractor.ts';
 import { crmUpdateAdapter } from './crmUpdate.ts';
+import { crmFieldClassifierAdapter } from './crmFieldClassifier.ts';
+import { crmAutoApplyAdapter } from './crmAutoApply.ts';
+import { crmHubSpotSyncAdapter } from './crmHubSpotSync.ts';
+import { crmSlackNotifyAdapter } from './crmSlackNotify.ts';
 import { researchTriggerEventsAdapter, analyseStallReasonAdapter, draftReengagementAdapter } from './reengagement.ts';
 import {
   scanActiveDealsAdapter,
@@ -91,10 +95,16 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'correlate-win-loss': correlateWinLossAdapter,
   'generate-coaching-digest': generateCoachingDigestAdapter,
   'deliver-coaching-slack': deliverCoachingSlackAdapter,
-  // CRM field extraction
+  // CRM field extraction + update pipeline (legacy direct-write path)
   'extract-crm-fields': crmFieldExtractorAdapter,
   'update-crm-from-meeting': crmUpdateAdapter,
   'notify-slack-summary': notifySlackSummaryAdapter,
+
+  // CRM Auto-Update Agent pipeline (PRD-03: classify → auto-apply → HubSpot sync → Slack HITL)
+  'classify-crm-fields': crmFieldClassifierAdapter,
+  'auto-apply-crm-fields': crmAutoApplyAdapter,
+  'hubspot-sync-crm-fields': crmHubSpotSyncAdapter,
+  'slack-crm-notify': crmSlackNotifyAdapter,
 
   // Pre-Meeting Briefing (pre_meeting_90min sequence)
   'enrich-attendees': enrichAttendeesAdapter,
