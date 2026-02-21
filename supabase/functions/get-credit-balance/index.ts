@@ -70,8 +70,21 @@ interface StorageUsage {
   last_storage_deduction_date: string | null;
 }
 
-interface BalanceResponse {
+interface SubscriptionCreditsDto {
   balance: number;
+  expiry: string | null;
+}
+
+interface OnboardingCreditsDto {
+  balance: number;
+  complete: boolean;
+}
+
+interface BalanceResponse {
+  balance_credits: number;
+  subscription_credits: SubscriptionCreditsDto;
+  onboarding_credits: OnboardingCreditsDto;
+  pack_credits: number;
   pack_inventory: PackInventory;
   packs: CreditPackDto[];
   auto_top_up: AutoTopUpDto | null;
@@ -169,10 +182,10 @@ serve(async (req: Request) => {
       enrichmentCountResult,
       lastStorageDeductionResult,
     ] = await Promise.all([
-      // 3. Get aggregate balance
+      // 3. Get aggregate balance + subscription/onboarding breakdown
       supabase
         .from('org_credit_balance')
-        .select('balance_credits')
+        .select('balance_credits, subscription_credits_balance, subscription_credits_expiry, onboarding_credits_balance, onboarding_complete')
         .eq('org_id', org_id)
         .maybeSingle(),
 
@@ -295,7 +308,13 @@ serve(async (req: Request) => {
     }
 
     // --- Balance ---
-    const balance = balanceResult.data?.balance_credits ?? 0;
+    const balanceRow = balanceResult.data;
+    const balance = balanceRow?.balance_credits ?? 0;
+    const subscriptionCreditsBalance = balanceRow?.subscription_credits_balance ?? 0;
+    const subscriptionCreditsExpiry = balanceRow?.subscription_credits_expiry ?? null;
+    const onboardingCreditsBalance = balanceRow?.onboarding_credits_balance ?? 0;
+    const onboardingComplete = balanceRow?.onboarding_complete ?? false;
+    const packCredits = Math.max(0, balance - subscriptionCreditsBalance - onboardingCreditsBalance);
 
     // --- Burn rate (credits/day) ---
     const totalCostLast7Days = (burnResult.data ?? []).reduce(
@@ -433,7 +452,16 @@ serve(async (req: Request) => {
 
     // Build response
     const response: BalanceResponse = {
-      balance: Math.round(balance * 100) / 100,
+      balance_credits: Math.round(balance * 100) / 100,
+      subscription_credits: {
+        balance: Math.round(subscriptionCreditsBalance * 100) / 100,
+        expiry: subscriptionCreditsExpiry,
+      },
+      onboarding_credits: {
+        balance: Math.round(onboardingCreditsBalance * 100) / 100,
+        complete: onboardingComplete,
+      },
+      pack_credits: Math.round(packCredits * 100) / 100,
       pack_inventory: packInventory,
       packs: sortedPacks,
       auto_top_up: autoTopUp,

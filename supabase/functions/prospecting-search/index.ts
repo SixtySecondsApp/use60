@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { checkCreditBalance } from '../_shared/costTracking.ts'
+import { deductCreditsOrdered } from '../_shared/creditPacks.ts'
 import { classifyLeads, extractDomainFromEmail } from '../_shared/classifyLeadStatus.ts'
 
 // ---------------------------------------------------------------------------
@@ -245,12 +246,14 @@ serve(async (req) => {
     // 8. Deduct credits
     // ------------------------------------------------------------------
     try {
-      await serviceClient.rpc('deduct_credits', {
-        p_org_id: orgId,
-        p_amount: creditsConsumed,
-        p_description: `Prospecting search: ${provider}${action ? ` (${action})` : ''}`,
-        p_feature_key: 'prospecting_search',
-      })
+      await deductCreditsOrdered(
+        serviceClient,
+        orgId,
+        creditsConsumed,
+        'prospecting_search',
+        'medium',
+        { description: `Prospecting search: ${provider}${action ? ` (${action})` : ''}` },
+      )
     } catch (err) {
       console.warn('[prospecting-search] Credit deduction error (non-blocking):', err)
     }

@@ -46,8 +46,21 @@ export interface StorageUsage {
   lastStorageDeductionDate: string | null;
 }
 
+export interface SubscriptionCredits {
+  balance: number;
+  expiry: string | null;
+}
+
+export interface OnboardingCredits {
+  balance: number;
+  complete: boolean;
+}
+
 export interface CreditBalance {
   balance: number;
+  subscriptionCredits: SubscriptionCredits;
+  onboardingCredits: OnboardingCredits;
+  packCredits: number;
   packInventory: PackInventory;
   dailyBurnRate: number;
   projectedDaysRemaining: number;
@@ -93,7 +106,16 @@ function getUtcStartOfDayDaysAgo(daysAgo: number): string {
 }
 
 interface BalanceResponseDto {
-  balance?: number;
+  balance_credits?: number;
+  subscription_credits?: {
+    balance: number;
+    expiry: string | null;
+  };
+  onboarding_credits?: {
+    balance: number;
+    complete: boolean;
+  };
+  pack_credits?: number;
   pack_inventory?: {
     active_packs: number;
     total_remaining: number;
@@ -160,7 +182,16 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
   if (!error && data) {
     const autoTopUpRaw = data?.auto_top_up;
     return {
-      balance: data?.balance ?? 0,
+      balance: data?.balance_credits ?? 0,
+      subscriptionCredits: {
+        balance: data?.subscription_credits?.balance ?? 0,
+        expiry: data?.subscription_credits?.expiry ?? null,
+      },
+      onboardingCredits: {
+        balance: data?.onboarding_credits?.balance ?? 0,
+        complete: data?.onboarding_credits?.complete ?? false,
+      },
+      packCredits: data?.pack_credits ?? 0,
       packInventory: {
         activePacks: data?.pack_inventory?.active_packs ?? 0,
         totalRemaining: data?.pack_inventory?.total_remaining ?? 0,
@@ -217,6 +248,9 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
 
     return {
       balance: row?.balance_credits ?? 0,
+      subscriptionCredits: { balance: 0, expiry: null },
+      onboardingCredits: { balance: 0, complete: false },
+      packCredits: 0,
       packInventory: { activePacks: 0, totalRemaining: 0 },
       dailyBurnRate: 0,
       projectedDaysRemaining: -1, // no usage data available from fallback
@@ -229,6 +263,9 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
   } catch {
     return {
       balance: 0,
+      subscriptionCredits: { balance: 0, expiry: null },
+      onboardingCredits: { balance: 0, complete: false },
+      packCredits: 0,
       packInventory: { activePacks: 0, totalRemaining: 0 },
       dailyBurnRate: 0,
       projectedDaysRemaining: -1,

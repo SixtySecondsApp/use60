@@ -75,9 +75,9 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
   growth: {
     packType: 'growth',
     credits: 250,
-    priceGBP: 89,
+    priceGBP: 99,
     label: 'Insight',
-    description: 'Most popular for growing sales teams',
+    description: 'Best value for growing sales teams',
     popular: true,
   },
   scale: {
@@ -127,6 +127,13 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     label: 'Custom Pack',
     description: 'Custom credit allocation (admin/migration use)',
   },
+};
+
+// Consumer-facing pack names (maps internal pack types to display names from brief)
+export const CONSUMER_PACK_NAMES: Record<string, { label: string; tagline: string }> = {
+  starter: { label: 'Signal', tagline: 'Detect what matters' },
+  growth: { label: 'Insight', tagline: 'Connect the dots' },
+  scale: { label: 'Intelligence', tagline: 'Full AI autonomy' },
 };
 
 // Ordered list for display (standard packs first, then agency)

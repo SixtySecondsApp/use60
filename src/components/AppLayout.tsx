@@ -79,7 +79,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useTheme } from '@/hooks/useTheme';
 import { TrialBanner } from '@/components/subscription/TrialBanner';
-import { useTrialStatus } from '@/lib/hooks/useSubscription';
+import { TrialConversionModal } from '@/components/billing/TrialConversionModal';
+import { useTrialStatus, useOrgSubscription } from '@/lib/hooks/useSubscription';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
@@ -93,11 +94,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { signOut } = useAuth();
   const { activeOrgId, activeOrg } = useOrg();
   const trialStatus = useTrialStatus(activeOrgId);
+  const { data: orgSubscription } = useOrgSubscription(activeOrgId);
   const hasIntegrationAlerts = useHasIntegrationAlerts();
   const location = useLocation();
 
   // Check if user has integration that needs reconnection (must be before isIntegrationBannerVisible)
   const { needsReconnect: integrationNeedsReconnect } = useIntegrationReconnectNeeded();
+
+  // Show the trial conversion modal when the trial has expired
+  const isTrialExpired = orgSubscription?.status === 'expired';
 
   // Check if trial banner should be showing (same logic as TrialBanner component)
   const isTrialBannerVisible = useMemo(() => {
@@ -114,9 +119,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       // Ignore errors
     }
 
-    // Check real trial status
-    return trialStatus.isTrialing && !trialStatus.isLoading;
-  }, [trialStatus.isTrialing, trialStatus.isLoading]);
+    // Show for trialing (with 75%+ usage — TrialBanner handles the threshold internally)
+    // or expired (banner also shows for expired status)
+    return (trialStatus.isTrialing || isTrialExpired) && !trialStatus.isLoading;
+  }, [trialStatus.isTrialing, trialStatus.isLoading, isTrialExpired]);
 
   // Check if integration reconnect banner should be showing
   const isIntegrationBannerVisible = hasIntegrationAlerts || !!integrationNeedsReconnect;
@@ -1190,6 +1196,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           userEmail={userData?.email || null}
           onComplete={completePasswordSetup}
         />
+
+        {/* Trial Conversion Modal - shown when trial expires, cannot be dismissed */}
+        <TrialConversionModal isOpen={isTrialExpired} />
 
         {/* SmartSearch - Hidden */}
         {/* <SmartSearch

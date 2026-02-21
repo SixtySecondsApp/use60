@@ -18,7 +18,18 @@ import type {
   StartFreeTrialRequest,
   StartFreeTrialResponse,
   BillingCycle,
+  SubscriptionCreditState,
 } from '../types/subscription';
+
+export interface TrialProgress {
+  daysRemaining: number;
+  daysTotal: number;
+  meetingsUsed: number;
+  meetingsLimit: number;
+  percentUsed: number;
+  isExpired: boolean;
+  expiryReason: 'days' | 'meetings' | null;
+}
 
 // ============================================================================
 // Plan Operations
@@ -621,15 +632,212 @@ export async function getSubscriptionSummary(orgId: string): Promise<{
  */
 export async function changePlan(
   orgId: string,
-  newPlanId: string,
+  newPlanSlug: 'basic' | 'pro',
   billingCycle: BillingCycle = 'monthly'
 ): Promise<CreateCheckoutSessionResponse> {
   // For plan changes, we use Stripe Checkout which handles prorations
   return createCheckoutSession({
     org_id: orgId,
-    plan_id: newPlanId,
+    plan_slug: newPlanSlug,
     billing_cycle: billingCycle,
   });
+}
+
+// ============================================================================
+// Plan Check Methods
+// ============================================================================
+
+/**
+ * Check if organization is on an active Pro plan
+ */
+export async function isProPlan(orgId: string): Promise<boolean> {
+  const subscription = await getOrgSubscription(orgId);
+  return (
+    subscription?.plan?.slug === 'pro' &&
+    ['active', 'trialing'].includes(subscription.status)
+  );
+}
+
+/**
+ * Check if organization is on an active Basic plan
+ */
+export async function isBasicPlan(orgId: string): Promise<boolean> {
+  const subscription = await getOrgSubscription(orgId);
+  return (
+    subscription?.plan?.slug === 'basic' &&
+    ['active', 'trialing'].includes(subscription.status)
+  );
+}
+
+/**
+ * Get trial progress details for an organization
+ * Returns null if the org is not currently trialing
+ */
+export async function getTrialProgress(orgId: string): Promise<TrialProgress | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('organization_subscriptions')
+    .select('trial_start_at, trial_ends_at, trial_meetings_used, trial_meetings_limit, status')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching trial progress:', error);
+    return null;
+  }
+
+  if (!data || data.status !== 'trialing') return null;
+
+  const now = new Date();
+  const trialEndsAt = data.trial_ends_at ? new Date(data.trial_ends_at) : null;
+  const daysTotal = 14;
+  const daysRemaining = trialEndsAt
+    ? Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  const meetingsUsed: number = data.trial_meetings_used ?? 0;
+  const meetingsLimit: number = data.trial_meetings_limit ?? 0;
+
+  const daysPercent = daysTotal > 0 ? Math.round(((daysTotal - daysRemaining) / daysTotal) * 100) : 100;
+  const meetingsPercent = meetingsLimit > 0 ? Math.round((meetingsUsed / meetingsLimit) * 100) : 0;
+  const percentUsed = Math.max(daysPercent, meetingsPercent);
+
+  const daysExpired = daysRemaining <= 0;
+  const meetingsExpired = meetingsLimit > 0 && meetingsUsed >= meetingsLimit;
+  const isExpired = daysExpired || meetingsExpired;
+
+  let expiryReason: 'days' | 'meetings' | null = null;
+  if (isExpired) {
+    expiryReason = meetingsExpired ? 'meetings' : 'days';
+  }
+
+  return {
+    daysRemaining,
+    daysTotal,
+    meetingsUsed,
+    meetingsLimit,
+    percentUsed,
+    isExpired,
+    expiryReason,
+  };
+}
+
+/**
+ * Check if organization's trial has expired (status = 'expired')
+ */
+export async function isTrialExpired(orgId: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('organization_subscriptions')
+    .select('status')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (error || !data) return false;
+  return data.status === 'expired';
+}
+
+/**
+ * Check if organization's trial is at or above the 75% warning threshold
+ * (either 75%+ of meetings used or 75%+ of days elapsed)
+ */
+export async function isTrialWarning(orgId: string): Promise<boolean> {
+  const progress = await getTrialProgress(orgId);
+  if (!progress) return false;
+  return progress.percentUsed >= 75;
+}
+
+/**
+ * Check if organization has API access via their plan
+ */
+export async function hasApiAccess(orgId: string): Promise<boolean> {
+  const subscription = await getOrgSubscription(orgId);
+  if (!subscription) return false;
+  return (
+    subscription.plan.features?.api_access === true &&
+    ['active', 'trialing'].includes(subscription.status)
+  );
+}
+
+/**
+ * Get subscription credit state for an organization
+ */
+export async function getSubscriptionCreditState(orgId: string): Promise<SubscriptionCreditState> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('org_credit_balance')
+    .select('balance_credits, subscription_credits_balance, subscription_credits_expiry, onboarding_credits_balance, onboarding_complete')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching credit state:', error);
+  }
+
+  const balanceCredits: number = data?.balance_credits ?? 0;
+  const subscriptionCreditsBalance: number = data?.subscription_credits_balance ?? 0;
+  const onboardingCreditsBalance: number = data?.onboarding_credits_balance ?? 0;
+  const packCreditsBalance = balanceCredits - subscriptionCreditsBalance - onboardingCreditsBalance;
+
+  return {
+    subscriptionCreditsBalance,
+    subscriptionCreditsExpiry: data?.subscription_credits_expiry ?? null,
+    onboardingCreditsBalance,
+    onboardingComplete: data?.onboarding_complete ?? false,
+    packCreditsBalance: Math.max(0, packCreditsBalance),
+    totalBalance: balanceCredits,
+  };
+}
+
+// ============================================================================
+// Plan Update (Upgrade / Downgrade)
+// ============================================================================
+
+export interface UpdateSubscriptionRequest {
+  org_id: string;
+  new_plan_slug: 'basic' | 'pro';
+  billing_cycle: BillingCycle;
+}
+
+export interface UpdateSubscriptionResponse {
+  success: boolean;
+  change_type: 'upgrade' | 'downgrade' | 'cycle_change';
+  effective: 'immediate' | 'period_end';
+  proration_amount?: number; // in pence
+  currency?: string;
+  message: string;
+}
+
+/**
+ * Update an existing Stripe subscription (upgrade/downgrade/cycle change).
+ * Upgrades are immediate with proration. Downgrades take effect at period end.
+ */
+export async function updateSubscription(
+  request: UpdateSubscriptionRequest
+): Promise<UpdateSubscriptionResponse> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await supabase.functions.invoke('update-subscription', {
+    body: request,
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  });
+
+  if (response.error) {
+    console.error('Update subscription error:', response.error);
+    throw new Error(response.error.message || 'Failed to update subscription');
+  }
+
+  // The edge function may return an error in the body even with a 200 status
+  if (response.data?.error) {
+    throw new Error(response.data.error);
+  }
+
+  return response.data as UpdateSubscriptionResponse;
 }
 
 // ============================================================================
