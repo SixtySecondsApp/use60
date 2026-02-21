@@ -47,6 +47,8 @@ import { crmAutoApplyAdapter } from './crmAutoApply.ts';
 import { crmHubSpotSyncAdapter } from './crmHubSpotSync.ts';
 import { crmSlackNotifyAdapter } from './crmSlackNotify.ts';
 import { researchTriggerEventsAdapter, analyseStallReasonAdapter, draftReengagementAdapter } from './reengagement.ts';
+import { apolloSignalAdapter } from './reengagementApollo.ts';
+import { apifyNewsAdapter } from './reengagementApify.ts';
 import {
   scanActiveDealsAdapter,
   scoreDealRisksAdapter,
@@ -128,6 +130,10 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'research-trigger-events': researchTriggerEventsAdapter,
   'analyse-stall-reason': analyseStallReasonAdapter,
   'draft-reengagement': draftReengagementAdapter,
+
+  // Re-engagement signal pipeline (reengagement_trigger sequence — REN-003, REN-004)
+  'apollo-signal-scan': apolloSignalAdapter,
+  'apify-news-scan': apifyNewsAdapter,
 
   // Deal Risk Scan (deal_risk_scan sequence)
   'scan-active-deals': scanActiveDealsAdapter,
