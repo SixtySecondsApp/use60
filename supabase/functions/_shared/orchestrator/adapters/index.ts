@@ -62,6 +62,8 @@ import { updateDealTimelineAdapter } from './updateDealTimeline.ts';
 import { overnightSummaryAdapter } from './overnightSummary.ts';
 import { internalMeetingDetectorAdapter } from './internalMeetingDetector.ts';
 import { meetingTypeClassifierAdapter } from './meetingTypeClassifier.ts';
+import { eodOpenItemsAdapter, eodTomorrowPreviewAdapter } from './eodSynthesis.ts';
+import { eodOvernightPlanAdapter } from './eodOvernight.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -160,6 +162,11 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   // Internal Meeting Prep pipeline (IMP-003, IMP-004)
   'detect-internal-meetings': internalMeetingDetectorAdapter,
   'classify-meeting-types': meetingTypeClassifierAdapter,
+
+  // EOD Synthesis pipeline (EOD-004, EOD-005)
+  'eod-open-items': eodOpenItemsAdapter,
+  'eod-tomorrow-preview': eodTomorrowPreviewAdapter,
+  'eod-overnight-plan': eodOvernightPlanAdapter,
 };
 
 /**
