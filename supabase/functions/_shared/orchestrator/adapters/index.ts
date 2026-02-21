@@ -60,6 +60,7 @@ import {
 import { pingSlackChannelAdapter } from './pingSlackChannel.ts';
 import { updateDealTimelineAdapter } from './updateDealTimeline.ts';
 import { overnightSummaryAdapter } from './overnightSummary.ts';
+import { internalMeetingDetectorAdapter } from './internalMeetingDetector.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -154,6 +155,9 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
 
   // Morning Briefing pipeline (BRF-006)
   'overnight-summary': overnightSummaryAdapter,
+
+  // Internal Meeting Prep pipeline (IMP-003)
+  'detect-internal-meetings': internalMeetingDetectorAdapter,
 };
 
 /**
