@@ -19,8 +19,8 @@ import {
   useCreateCheckoutSession,
 } from '@/lib/hooks/useSubscription';
 import { PLAN_DETAILS, ANNUAL_SAVINGS } from '@/lib/config/planDetails';
-import CreditBalanceSection from '@/components/billing/CreditBalanceSection';
-import TransactionHistorySection from '@/components/billing/TransactionHistorySection';
+import { CreditBalanceSection } from '@/components/billing/CreditBalanceSection';
+import { TransactionHistorySection } from '@/components/billing/TransactionHistorySection';
 import { PlanChangeModal } from '@/components/billing/PlanChangeModal';
 import type { PlanSlug, BillingCycle as ModalBillingCycle } from '@/components/billing/PlanChangeModal';
 import { Button } from '@/components/ui/button';
