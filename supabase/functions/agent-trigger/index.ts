@@ -357,7 +357,7 @@ serve(async (req) => {
       // Test mode: fetch the specific trigger by ID
       const { data: trigger, error: triggerError } = await supabase
         .from('agent_triggers')
-        .select('id, organization_id, trigger_event, agent_name, prompt_template, delivery_channel')
+        .select('id, organization_id, trigger_event, agent_name, prompt_template, delivery_channel, handoff_target_event, handoff_context_mapping, handoff_conditions')
         .eq('id', trigger_id)
         .eq('organization_id', organization_id)
         .maybeSingle();
@@ -372,7 +372,7 @@ serve(async (req) => {
       // Normal mode: fetch active triggers for this event and org
       const { data: triggers, error: triggerError } = await supabase
         .from('agent_triggers')
-        .select('id, organization_id, trigger_event, agent_name, prompt_template, delivery_channel')
+        .select('id, organization_id, trigger_event, agent_name, prompt_template, delivery_channel, handoff_target_event, handoff_context_mapping, handoff_conditions')
         .eq('organization_id', organization_id)
         .eq('trigger_event', event)
         .eq('is_active', true);
@@ -504,6 +504,58 @@ serve(async (req) => {
           `[agent-trigger] Ran ${agentName} for event '${triggerEvent}' in org ${organization_id}: ` +
           `${result.iterations} iterations, ${durationMs}ms, delivered=${delivered}`
         );
+
+        // FLT-007: Check handoff fields — fire orchestrator event if defined
+        const triggerRow = trigger as TriggerRow & {
+          handoff_target_event?: string;
+          handoff_context_mapping?: Record<string, unknown>;
+          handoff_conditions?: Record<string, unknown>;
+        };
+        if (triggerRow.handoff_target_event && !isTestMode) {
+          try {
+            // Evaluate handoff conditions against agent output
+            let shouldHandoff = true;
+            if (triggerRow.handoff_conditions) {
+              const output = { responseText: result.responseText, success: true };
+              for (const [key, expected] of Object.entries(triggerRow.handoff_conditions)) {
+                if ((output as any)[key] !== expected) {
+                  shouldHandoff = false;
+                  break;
+                }
+              }
+            }
+
+            if (shouldHandoff) {
+              const handoffPayload: Record<string, unknown> = {
+                ...(triggerRow.handoff_context_mapping || {}),
+                _trigger_output: result.responseText?.slice(0, 5000),
+                _trigger_id: trigger.id,
+                _trigger_event: triggerEvent,
+              };
+
+              fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${supabaseServiceKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  type: triggerRow.handoff_target_event,
+                  source: 'orchestrator:trigger-handoff',
+                  org_id: organization_id,
+                  user_id: user_id,
+                  payload: handoffPayload,
+                }),
+              }).catch(handoffErr => {
+                console.error(`[agent-trigger] Handoff to ${triggerRow.handoff_target_event} failed:`, handoffErr);
+              });
+
+              console.log(`[agent-trigger] Handoff fired: ${triggerEvent} → ${triggerRow.handoff_target_event}`);
+            }
+          } catch (handoffErr) {
+            console.error(`[agent-trigger] Handoff processing error:`, handoffErr);
+          }
+        }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         const durationMs = Date.now() - runStart;

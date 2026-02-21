@@ -14,6 +14,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/corsHelper.ts';
 import { runSequence, resumeSequence } from '../_shared/orchestrator/runner.ts';
 import type { OrchestratorEvent } from '../_shared/orchestrator/types.ts';
+import { retryDeadLetters } from '../_shared/orchestrator/deadLetter.ts';
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
@@ -34,6 +35,15 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
+
+    // Route: Retry dead-letter queue entries (called by cron)
+    if (body.action === 'retry_dead_letters') {
+      console.log('[agent-orchestrator] Processing dead-letter retry queue');
+      const stats = await retryDeadLetters(supabase, body.limit || 10);
+      return new Response(JSON.stringify({ success: true, ...stats }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Route: Resume a paused sequence
     if (body.resume_job_id) {

@@ -33,6 +33,9 @@ import { getSequenceForEvent, getRequiredContextTiers, getCallTypeFromState } fr
 import { loadContext } from './contextLoader.ts';
 import { getAgentConfig } from '../config/agentConfigEngine.ts';
 import type { AgentConfigMap } from '../config/types.ts';
+import { resolveRoute, getSequenceSteps, getHandoffRoutes, evaluateHandoffConditions, applyContextMapping, getAgentTypeForSkill } from './fleetRouter.ts';
+import { enqueueDeadLetter } from './deadLetter.ts';
+import { isCircuitAllowed, recordSuccess, recordFailure, loadPersistedState, getStateToPersist } from './circuitBreaker.ts';
 
 // Steps that should only run for sales calls (Discovery, Demo, Close)
 const SALES_ONLY_STEPS = new Set([
@@ -74,8 +77,20 @@ export async function runSequence(
     }
   }
 
-  // 3. Get sequence definition
-  const steps = getSequenceForEvent(event.type);
+  // 3. Get sequence definition (DB-driven with hardcoded fallback)
+  let steps: SequenceStep[];
+  let routeSource: 'db' | 'hardcoded';
+  try {
+    const route = await resolveRoute(supabase, event.org_id, event.type);
+    const seqResult = await getSequenceSteps(supabase, event.org_id, route.sequenceKey);
+    steps = seqResult.steps;
+    routeSource = seqResult.source === 'db' ? 'db' : route.source;
+    console.log(`[runner] Route resolved: ${route.sequenceKey} (source: ${routeSource})`);
+  } catch (routeErr) {
+    console.warn('[runner] Fleet route resolution failed, using hardcoded:', routeErr);
+    steps = getSequenceForEvent(event.type);
+    routeSource = 'hardcoded';
+  }
   const availableSteps = steps.filter(s => s.available);
   if (availableSteps.length === 0) {
     return { job_id: '', status: 'skipped', error: 'No available steps for event type' };
@@ -246,8 +261,18 @@ export async function resumeSequence(
   const state = job.context as SequenceState;
   state.updated_at = new Date().toISOString();
 
-  // Get remaining steps
-  const allSteps = getSequenceForEvent(state.event.type).filter(s => s.available);
+  // Restore circuit breaker state from persisted context
+  loadPersistedState((state as any)._circuitBreakerState);
+
+  // Get remaining steps (DB-driven with fallback)
+  let allSteps: SequenceStep[];
+  try {
+    const route = await resolveRoute(supabase, state.event.org_id, state.event.type);
+    const seqResult = await getSequenceSteps(supabase, state.event.org_id, route.sequenceKey);
+    allSteps = seqResult.steps.filter(s => s.available);
+  } catch {
+    allSteps = getSequenceForEvent(state.event.type).filter(s => s.available);
+  }
   const remainingSteps = allSteps.filter(s => !state.steps_completed.includes(s.skill));
 
   return await executeSteps(supabase, jobId, state, remainingSteps, startTime);
@@ -302,6 +327,8 @@ async function executeStepsParallel(
     const elapsed = Date.now() - startTime;
     const timeLeft = EDGE_FUNCTION_TIMEOUT_MS - elapsed;
     if (timeLeft < SAFETY_MARGIN_MS) {
+      // Persist circuit breaker state for next invocation
+      (state as any)._circuitBreakerState = getStateToPersist();
       await persistState(supabase, jobId, state);
       await selfInvoke(jobId);
       return { job_id: jobId, status: 'continuing' };
@@ -347,6 +374,28 @@ async function executeStepsParallel(
         }
       }
 
+      // Circuit breaker check (FLT-010)
+      const circuitCheck = isCircuitAllowed(step.skill);
+      if (!circuitCheck.allowed) {
+        console.log(`[orchestrator] Circuit open for ${step.skill}, skipping`);
+        if (step.criticality === 'critical') {
+          // Critical step blocked by circuit breaker → dead-letter queue
+          await enqueueDeadLetter(supabase, {
+            org_id: state.event.org_id,
+            user_id: state.event.user_id,
+            event_type: state.event.type,
+            event_payload: state.event.payload,
+            source_job_id: jobId,
+            error_message: `Circuit breaker open for ${step.skill}`,
+            error_step: step.skill,
+          });
+        }
+        state.steps_completed.push(step.skill);
+        state.outputs[step.skill] = { skipped: true, reason: 'circuit_open' };
+        remaining.delete(step.skill);
+        continue;
+      }
+
       // Mark step as running in DB
       await rpcUpdateStep(supabase, jobId, state.steps_completed.length + 1, step.skill, null, 'running');
 
@@ -375,12 +424,32 @@ async function executeStepsParallel(
       const { step, result } = settled.value;
 
       if (result.success) {
+        recordSuccess(step.skill);
         state.steps_completed.push(step.skill);
         state.outputs[step.skill] = result.output;
         remaining.delete(step.skill);
 
         if (result.queued_followups) {
           state.queued_followups.push(...result.queued_followups);
+        }
+
+        // Handoff routing: check DB for handoff routes after step completion (FLT-006)
+        try {
+          const handoffs = await getHandoffRoutes(supabase, state.event.org_id, state.event.type, step.skill);
+          for (const handoff of handoffs) {
+            if (evaluateHandoffConditions(handoff.conditions, result.output)) {
+              const handoffPayload = applyContextMapping(handoff.context_mapping, result.output);
+              state.queued_followups.push({
+                type: handoff.target_event_type as any,
+                source: 'orchestrator:chain',
+                payload: handoffPayload,
+                delay_minutes: handoff.delay_minutes,
+              });
+              console.log(`[orchestrator] Handoff: ${step.skill} → ${handoff.target_event_type} (delay: ${handoff.delay_minutes}min)`);
+            }
+          }
+        } catch (handoffErr) {
+          console.warn(`[orchestrator] Handoff check failed for ${step.skill} (non-fatal):`, handoffErr);
         }
 
         if (result.pending_approval) {
@@ -405,8 +474,20 @@ async function executeStepsParallel(
         await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
 
       } else {
+        recordFailure(step.skill);
+
         if (step.criticality === 'critical') {
           state.error = `Critical step ${step.skill} failed: ${result.error}`;
+          // Write to dead-letter queue for critical failures (FLT-009)
+          await enqueueDeadLetter(supabase, {
+            org_id: state.event.org_id,
+            user_id: state.event.user_id,
+            event_type: state.event.type,
+            event_payload: state.event.payload,
+            source_job_id: jobId,
+            error_message: result.error || 'Unknown error',
+            error_step: step.skill,
+          });
           await persistState(supabase, jobId, state);
           await supabase.from('sequence_jobs').update({
             status: 'failed',
@@ -799,6 +880,15 @@ async function processFollowups(
 
     } catch (err) {
       console.error(`[orchestrator] Failed to process followup:`, err);
+      // Write to dead-letter queue instead of silently dropping (FLT-009)
+      await enqueueDeadLetter(supabase, {
+        org_id: state.event.org_id,
+        user_id: state.event.user_id,
+        event_type: followup.type,
+        event_payload: followup.payload,
+        source_job_id: jobId,
+        error_message: `Followup fire-and-forget failed: ${String(err)}`,
+      });
     }
   }
 }
