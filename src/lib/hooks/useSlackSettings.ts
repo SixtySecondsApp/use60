@@ -211,6 +211,33 @@ export function useUpdateNotificationSettings() {
 }
 
 /**
+ * Hook to join the Slack bot to a public channel
+ */
+export function useJoinSlackChannel() {
+  const { activeOrgId } = useOrg();
+  const orgId = activeOrgId;
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ channelId }: { channelId: string }) => {
+      if (!orgId) throw new Error('No org selected');
+
+      const { data, error } = await supabase.functions.invoke('slack-join-channel', {
+        body: { orgId, channelId },
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Failed to join channel');
+
+      return data as { success: true; channel: { id: string; name: string } };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.channels(orgId || '') });
+    },
+  });
+}
+
+/**
  * Hook to get Slack channels
  */
 export function useSlackChannels() {
