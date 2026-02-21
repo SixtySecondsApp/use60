@@ -31,6 +31,8 @@ import {
 } from './types.ts';
 import { getSequenceForEvent, getRequiredContextTiers, getCallTypeFromState } from './eventSequences.ts';
 import { loadContext } from './contextLoader.ts';
+import { getAgentConfig } from '../config/agentConfigEngine.ts';
+import type { AgentConfigMap } from '../config/types.ts';
 
 // Steps that should only run for sales calls (Discovery, Demo, Close)
 const SALES_ONLY_STEPS = new Set([
@@ -140,7 +142,30 @@ export async function runSequence(
 
   console.log('[runner] Settings gate: All checks passed, proceeding with sequence', event.type);
 
-  // 7. Create sequence job record (with RPC fallback)
+  // 7. Load agent config from config engine (supplements existing settings gates)
+  let agentConfig: AgentConfigMap | null = null;
+  try {
+    // Map event type to agent type
+    const agentTypeMap: Record<string, string> = {
+      'meeting.completed': 'internal_meeting_prep',
+      'deal.stage_changed': 'deal_risk',
+      'deal.at_risk': 'deal_risk',
+      'deal.stalled': 'reengagement',
+      'morning.trigger': 'morning_briefing',
+      'eod.trigger': 'eod_synthesis',
+      'email.received': 'email_signals',
+      'coaching.trigger': 'coaching_digest',
+      'contact.updated': 'crm_update',
+    };
+    const agentType = agentTypeMap[event.type] || 'global';
+    agentConfig = await getAgentConfig(supabase, event.org_id, event.user_id || null, agentType as any);
+    console.log('[runner] Config engine: loaded config for', agentType, 'with', Object.keys(agentConfig.entries).length, 'keys');
+  } catch (configErr) {
+    // Non-fatal: if config engine fails, proceed with defaults
+    console.warn('[runner] Config engine: failed to load, proceeding without:', configErr);
+  }
+
+  // 8. Create sequence job record (with RPC fallback)
   const { jobId: newJobId, error: jobError } = await rpcStartJob(supabase, event);
 
   if (jobError || !newJobId) {
@@ -161,7 +186,7 @@ export async function runSequence(
     console.warn('[orchestrator] Could not update orchestrator columns on sequence_jobs');
   }
 
-  // 8. Build initial state
+  // 9. Build initial state
   const state: SequenceState = {
     event,
     context,
@@ -171,6 +196,7 @@ export async function runSequence(
     queued_followups: [],
     started_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    agentConfig: agentConfig?.entries ?? null,
   };
 
   // 9. Execute steps
