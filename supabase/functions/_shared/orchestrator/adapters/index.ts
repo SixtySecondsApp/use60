@@ -62,6 +62,7 @@ import { updateDealTimelineAdapter } from './updateDealTimeline.ts';
 import { overnightSummaryAdapter } from './overnightSummary.ts';
 import { internalMeetingDetectorAdapter } from './internalMeetingDetector.ts';
 import { meetingTypeClassifierAdapter } from './meetingTypeClassifier.ts';
+import { internalPrepTemplatesAdapter } from './internalPrepTemplates.ts';
 import { eodOpenItemsAdapter, eodTomorrowPreviewAdapter } from './eodSynthesis.ts';
 import { eodOvernightPlanAdapter } from './eodOvernight.ts';
 
@@ -159,9 +160,10 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   // Morning Briefing pipeline (BRF-006)
   'overnight-summary': overnightSummaryAdapter,
 
-  // Internal Meeting Prep pipeline (IMP-003, IMP-004)
+  // Internal Meeting Prep pipeline (IMP-003, IMP-004, IMP-005)
   'detect-internal-meetings': internalMeetingDetectorAdapter,
   'classify-meeting-types': meetingTypeClassifierAdapter,
+  'generate-internal-prep': internalPrepTemplatesAdapter,
 
   // EOD Synthesis pipeline (EOD-004, EOD-005)
   'eod-open-items': eodOpenItemsAdapter,
