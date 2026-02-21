@@ -99,10 +99,13 @@ export interface WriteItemParams {
   title: string;
   summary?: string;
   context?: Record<string, unknown>;
+  priority_score?: number;
   deal_id?: string;
   contact_id?: string;
   source_event_id?: string;
   urgency?: Urgency;
   due_date?: string;
   parent_item_id?: string;
+  /** Skip deduplication check and always insert a new item */
+  skip_dedup?: boolean;
 }

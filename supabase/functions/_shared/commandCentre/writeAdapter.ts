@@ -15,6 +15,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type { WriteItemParams } from './types.ts';
+import { checkForDuplicate } from './deduplicator.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -46,6 +47,18 @@ export async function writeToCommandCentre(params: WriteItemParams): Promise<str
   try {
     const supabase = getServiceClient();
 
+    // Dedup check: if a compatible open item already exists, merge into it instead of inserting.
+    if (!params.skip_dedup) {
+      const dedupResult = await checkForDuplicate(params);
+      if (dedupResult.merged && dedupResult.winnerItemId) {
+        console.log('[commandCentre] writeToCommandCentre: dedup merge — returning existing item', dedupResult.winnerItemId, {
+          source_agent: params.source_agent,
+          item_type: params.item_type,
+        });
+        return dedupResult.winnerItemId;
+      }
+    }
+
     const { data, error } = await supabase
       .from('command_centre_items')
       .insert({
@@ -57,6 +70,7 @@ export async function writeToCommandCentre(params: WriteItemParams): Promise<str
         title: params.title,
         summary: params.summary ?? null,
         context: params.context ?? {},
+        priority_score: params.priority_score ?? null,
         urgency: params.urgency ?? 'normal',
         due_date: params.due_date ?? null,
         deal_id: params.deal_id ?? null,
@@ -131,6 +145,7 @@ export async function writeMultipleItems(items: WriteItemParams[]): Promise<stri
       title: params.title,
       summary: params.summary ?? null,
       context: params.context ?? {},
+      priority_score: params.priority_score ?? null,
       urgency: params.urgency ?? 'normal',
       due_date: params.due_date ?? null,
       deal_id: params.deal_id ?? null,
