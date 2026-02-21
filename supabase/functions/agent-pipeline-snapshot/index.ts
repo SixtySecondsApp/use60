@@ -49,16 +49,16 @@ interface DealRow {
   id: string;
   value: number | null;
   risk_score: number | null;
+  health_score: number | null;
   deal_stages: {
     name: string;
-    close_probability: number | null;
+    default_probability: number | null;
   } | null;
 }
 
 interface ClosedDeal {
   value: number | null;
-  closed_at: string | null;
-  updated_at: string;
+  closed_won_date: string | null;
 }
 
 // ============================================================================
@@ -176,9 +176,9 @@ async function captureUserSnapshot(
   // -------------------------------------------------------------------------
   const { data: openDeals, error: dealsError } = await supabase
     .from('deals')
-    .select('id, value, risk_score, deal_stages(name, close_probability)')
+    .select('id, value, risk_score, health_score, deal_stages(name, default_probability)')
     .eq('owner_id', userId)
-    .eq('organization_id', orgId)
+    .eq('org_id', orgId)
     .not('status', 'in', '("won","lost")');
 
   if (dealsError) {
@@ -199,11 +199,12 @@ async function captureUserSnapshot(
   for (const deal of deals) {
     const value = deal.value ?? 0;
     const stageName = deal.deal_stages?.name ?? 'Unknown';
-    const closeProbability = deal.deal_stages?.close_probability ?? 0;
+    const defaultProbability = deal.deal_stages?.default_probability ?? 0;
     const riskScore = deal.risk_score ?? 0;
+    const healthScore = deal.health_score;
 
     totalPipelineValue += value;
-    weightedPipelineValue += value * (closeProbability / 100);
+    weightedPipelineValue += value * (defaultProbability / 100);
 
     if (!dealsByStage[stageName]) {
       dealsByStage[stageName] = { count: 0, total_value: 0 };
@@ -211,8 +212,8 @@ async function captureUserSnapshot(
     dealsByStage[stageName].count++;
     dealsByStage[stageName].total_value += value;
 
-    // At-risk threshold: risk_score >= 60 (matches global thresholds default)
-    if (riskScore >= 60) {
+    // At-risk: risk_score >= 60 OR health_score < 50 (matches global thresholds defaults)
+    if (riskScore >= 60 || (healthScore !== null && healthScore < 50)) {
       dealsAtRisk++;
     }
   }
@@ -222,17 +223,17 @@ async function captureUserSnapshot(
   // -------------------------------------------------------------------------
   const { data: closedDeals, error: closedError } = await supabase
     .from('deals')
-    .select('value, closed_at, updated_at')
+    .select('value, closed_won_date')
     .eq('owner_id', userId)
-    .eq('organization_id', orgId)
+    .eq('org_id', orgId)
     .eq('status', 'won')
-    .gte('updated_at', lastMondayIso);
+    .gte('closed_won_date', lastMondayIso);
 
   if (closedError) {
     console.warn(`[pipeline-snapshot] Failed to fetch closed deals for user ${userId}:`, closedError.message);
   }
 
-  const closedThisPeriod = (closedDeals as ClosedDeal[] || []).reduce(
+  const closedThisPeriod = ((closedDeals as ClosedDeal[]) || []).reduce(
     (sum, d) => sum + (d.value ?? 0),
     0
   );
