@@ -32,6 +32,7 @@ import { UsageBreakdownChart } from '@/components/credits/UsageBreakdownChart';
 import { AutoTopUpSettings } from '@/components/credits/AutoTopUpSettings';
 import { ARBudgetSettings } from '@/components/credits/ARBudgetSettings';
 import { CreditMigrationModal } from '@/components/credits/CreditMigrationModal';
+import { CreditMenuTable } from '@/components/credits/CreditMenuTable';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Loader2,
@@ -52,6 +53,7 @@ import {
   Settings,
   Receipt,
   ChevronDown,
+  Tag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -84,7 +86,7 @@ function getStatusBg(balance: number, projectedDays: number) {
 // Valid tab values
 // ============================================================================
 
-const VALID_TABS = ['topup', 'inventory', 'usage', 'transactions', 'settings'] as const;
+const VALID_TABS = ['topup', 'inventory', 'usage', 'transactions', 'settings', 'pricing'] as const;
 type TabValue = (typeof VALID_TABS)[number];
 
 function isValidTab(value: string | null): value is TabValue {
@@ -308,6 +310,10 @@ export default function CreditsSettingsPage() {
               <Settings className="w-3.5 h-3.5" />
               Settings
             </TabsTrigger>
+            <TabsTrigger value="pricing" className="gap-1.5">
+              <Tag className="w-3.5 h-3.5" />
+              Pricing
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Tab: Top Up ─────────────────────────────────────────── */}
@@ -527,6 +533,15 @@ export default function CreditsSettingsPage() {
                 </div>
               </div>
             )}
+          </TabsContent>
+
+          {/* ── Tab: Pricing ──────────────────────────────────────────── */}
+          <TabsContent value="pricing" className="mt-4">
+            <CreditMenuTable
+              currentTier={
+                (balance as any)?.intelligenceTier ?? 'medium'
+              }
+            />
           </TabsContent>
         </Tabs>
       </div>

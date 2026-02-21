@@ -1,0 +1,544 @@
+{
+  "project": {
+    "name": "Credit Usage Tracking & Admin Menu System",
+    "template": "existing-codebase",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "payments": "stripe",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-02-21T00:00:00Z",
+    "branch": "feat/credit-tracking"
+  },
+
+  "features": [
+    {
+      "id": "credit-tracking",
+      "name": "Credit Usage Tracking & Admin Menu System",
+      "status": "in_progress",
+      "description": "Migrate hardcoded pricing to DB-managed credit_menu. Add rich per-action credit_logs, grace threshold, daily/weekly budget caps, user-facing transparent pricing page, 45-day log retention, and Copilot usage intelligence.",
+      "brief": "docs/credit-tracking-brief.md",
+      "createdAt": "2026-02-21T00:00:00Z"
+    }
+  ],
+
+  "existingInfrastructure": {
+    "note": "DO NOT REBUILD — extend these. See plan-credit-system.json for original build.",
+    "tables": [
+      "org_credit_balance (balance_credits, auto_topup settings, ar_monthly_cap, ar_paused)",
+      "credit_transactions (immutable ledger: purchase | deduction | refund | adjustment | bonus)",
+      "credit_packs (FIFO inventory with deduct_credits_fifo() RPC)",
+      "auto_top_up_settings + auto_top_up_log (Stripe-connected auto top-up)",
+      "ai_cost_events (raw per-call cost events, used by existing analytics)",
+      "ai_feature_config (feature -> model mapping, intelligence_tier in settings JSONB)",
+      "org_ai_config (org-level model overrides)"
+    ],
+    "sharedFunctions": [
+      "_shared/costTracking.ts — logAICostEvent(), logFlatRateCostEvent(), checkCreditBalance(), checkAgentBudget(), checkArBudget()",
+      "_shared/creditPacks.ts — ACTION_CREDIT_COSTS (hardcoded, BEING REPLACED), getActionCost(), formatCredits()"
+    ],
+    "edgeFunctions": [
+      "get-credit-balance (full balance, packs, burn rate, usage breakdown)",
+      "credit-auto-topup (Stripe PaymentIntent auto top-up)",
+      "create-credit-checkout (Stripe Checkout Session)",
+      "stripe-webhook (payment fulfillment)",
+      "ai-ark-credits, apollo-credits (flat-rate deductions)"
+    ],
+    "frontendFiles": [
+      "src/lib/config/creditPacks.ts — ACTION_CREDIT_COSTS (hardcoded costs, will be fallback-only)",
+      "src/lib/services/creditService.ts — frontend balance queries",
+      "src/lib/hooks/useCreditBalance.ts — React Query hook",
+      "src/pages/settings/CreditsSettingsPage.tsx — existing credits settings UI",
+      "src/components/credits/ — 12 sub-components (CreditWidget, TransactionLog, etc.)"
+    ]
+  },
+
+  "stories": [
+
+    {
+      "id": "CTRAK-001",
+      "feature": "credit-tracking",
+      "title": "Create credit_menu, credit_menu_history, and price_snapshots migration",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["CTRAK-003", "CTRAK-004", "CTRAK-005", "CTRAK-009", "CTRAK-010"],
+      "parallelWith": ["CTRAK-002"],
+      "acceptance": [
+        "credit_menu table with action_id PK, display_name, category, unit, cost_low/medium/high, is_active, free_with_sub, is_flat_rate, menu_version, updated_by",
+        "credit_menu_history audit trail with before/after pricing, event_type (created|updated|activated|deactivated)",
+        "price_snapshots table with cost_at_queue, tier_at_queue, expires_at (7 days) for queued workflow versioning",
+        "Trigger increments menu_version on price or is_active changes",
+        "Trigger auto-inserts credit_menu_history row on INSERT and UPDATE",
+        "Seeded with all 17 actions from ACTION_CREDIT_COSTS + INTEGRATION_CREDIT_COSTS + agent costs",
+        "get_action_credit_cost(action_id, tier) RPC returns live pricing for edge functions",
+        "get_credit_menu_for_tier(tier) RPC returns active menu grouped by category"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260221040000_credit_menu_table.sql"
+      ],
+      "notes": "Already written. Migration file created at 20260221040000_credit_menu_table.sql"
+    },
+
+    {
+      "id": "CTRAK-002",
+      "feature": "credit-tracking",
+      "title": "Create credit_logs and credit_log_summaries migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["org_credit_balance"]
+      },
+      "blocks": ["CTRAK-003", "CTRAK-011", "CTRAK-012"],
+      "parallelWith": ["CTRAK-001"],
+      "acceptance": [
+        "credit_logs table: log_id UUID, user_id, org_id, action_id, display_name, credits_charged DECIMAL, intelligence_tier enum, balance_before, balance_after, context_summary TEXT, context_refs JSONB, source enum (user_initiated|agent_automated|sequence_step|scheduled), agent_type TEXT nullable, created_at, status enum (completed|failed|refunded)",
+        "credit_log_summaries table: user_id, org_id, month DATE, category, total_credits DECIMAL, action_count INT — for post-purge analytics",
+        "RLS: users read own logs (0-30 days), service_role reads all (0-45 days)",
+        "Index on (org_id, user_id, created_at DESC) for fast user queries",
+        "Index on (created_at) for efficient purge job",
+        "get_user_credit_logs(user_id, days) RPC — returns last N days with 30-day ceiling for non-admins"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260221040001_credit_logs_table.sql"
+      ]
+    },
+
+    {
+      "id": "CTRAK-003",
+      "feature": "credit-tracking",
+      "title": "Update costTracking.ts to read pricing from credit_menu DB and write to credit_logs",
+      "type": "api",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["CTRAK-001", "CTRAK-002"],
+        "files": ["supabase/functions/_shared/costTracking.ts", "supabase/functions/_shared/creditPacks.ts"],
+        "schema": ["credit_menu", "credit_logs"]
+      },
+      "blocks": ["CTRAK-006", "CTRAK-008"],
+      "parallelWith": ["CTRAK-004", "CTRAK-005"],
+      "acceptance": [
+        "New getActionCostFromDB(client, actionId, tier) async function calls get_action_credit_cost RPC. Falls back to getActionCost() from creditPacks.ts if DB returns null.",
+        "logAICostEvent() and logFlatRateCostEvent() now call getActionCostFromDB for pricing lookup",
+        "Both functions write a credit_logs entry with full context (source='agent_automated', balance_before/after from deduction result)",
+        "context_refs JSONB populated from metadata parameter (meeting_id, contact_id, deal_id etc.)",
+        "Backward compatible: all existing call sites work without changes",
+        "No change to existing ai_cost_events writes (both tables written)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/costTracking.ts"
+      ],
+      "implementation": {
+        "getActionCostFromDB": "const { data } = await client.rpc('get_action_credit_cost', { p_action_id: actionId, p_tier: tier }); return data ?? getActionCost(actionId, tier);",
+        "credit_logs_write": "After deductAndMaybeTopUp, insert into credit_logs with full context. Use supabase admin client (service role) for log write so it doesn't fail on RLS.",
+        "balanceCapture": "deduct_credits_fifo returns new balance — that's balance_after. Query org_credit_balance before deduction for balance_before."
+      }
+    },
+
+    {
+      "id": "CTRAK-004",
+      "feature": "credit-tracking",
+      "title": "Create admin-credit-menu edge function (admin CRUD)",
+      "type": "api",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["CTRAK-001"],
+        "files": ["supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["credit_menu", "credit_menu_history"]
+      },
+      "blocks": ["CTRAK-010"],
+      "parallelWith": ["CTRAK-003", "CTRAK-005"],
+      "acceptance": [
+        "GET / — list all credit_menu entries (including drafts) with latest history entry",
+        "POST / — create new action in draft state (is_active=false). Validates all 3 tier prices are set.",
+        "PUT /:action_id — update pricing. Validates no tier is null/zero for active items.",
+        "PATCH /:action_id/activate — set is_active=true (draft -> live)",
+        "PATCH /:action_id/deactivate — set is_active=false",
+        "GET /history — full credit_menu_history audit trail, ordered by changed_at DESC",
+        "Auth: platform super-admin only (check user metadata or platform_admins table)",
+        "Uses getCorsHeaders(req) from corsHelper.ts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/admin-credit-menu/index.ts"
+      ],
+      "implementation": {
+        "auth": "Verify JWT, check user has platform admin role via service role client",
+        "pattern": "Route on method + path. Service role client for all writes. Return JSON with standard envelope: { data, error }."
+      }
+    },
+
+    {
+      "id": "CTRAK-005",
+      "feature": "credit-tracking",
+      "title": "Create get-credit-menu edge function (public, active items)",
+      "type": "api",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["CTRAK-001"],
+        "files": ["supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["credit_menu"]
+      },
+      "blocks": ["CTRAK-009"],
+      "parallelWith": ["CTRAK-003", "CTRAK-004"],
+      "acceptance": [
+        "Returns active credit_menu entries grouped by category: { ai_actions: [...], agents: [...], integrations: [...], enrichment: [...], storage: [...] }",
+        "Each entry includes: action_id, display_name, description, unit, cost_low, cost_medium, cost_high, free_with_sub, is_flat_rate",
+        "Optional ?tier=low|medium|high query param — if provided, also returns resolved_cost for the tier",
+        "Auth: any authenticated user (JWT required)",
+        "Cached: 5 minute cache header so UI doesn't hammer DB on every page load"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/get-credit-menu/index.ts"
+      ]
+    },
+
+    {
+      "id": "CTRAK-006",
+      "feature": "credit-tracking",
+      "title": "Add grace threshold support and negative balance to deduct_credits_fifo",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["CTRAK-003"],
+        "files": [],
+        "schema": ["org_credit_balance", "credit_packs"]
+      },
+      "blocks": ["CTRAK-008"],
+      "parallelWith": ["CTRAK-007"],
+      "acceptance": [
+        "org_credit_balance gains grace_threshold_credits DECIMAL column (default 10 for self-serve, configurable per org)",
+        "deduct_credits_fifo() updated: if balance < cost but balance > -grace_threshold, allow and go negative",
+        "If balance <= -grace_threshold, return -1 (blocked) as before",
+        "checkCreditBalance() in costTracking.ts updated to return grace zone status: { allowed, balance, inGrace: boolean }",
+        "When entering grace zone, insert a credit_log entry with source='grace_threshold' for audit trail",
+        "On next top-up (add_credits_pack or add_credits), if balance is negative, settle the negative first"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260221040002_grace_threshold.sql",
+        "supabase/functions/_shared/costTracking.ts"
+      ],
+      "implementation": {
+        "deductLogic": "In deduct_credits_fifo: IF new_balance < -grace_threshold THEN RETURN -1 (blocked). ELSE allow deduction even if new_balance < 0.",
+        "settleOnTopup": "In add_credits_pack/add_credits: if org_credit_balance.balance_credits < 0 before add, note recovery in credit_transactions with type='grace_recovery'."
+      }
+    },
+
+    {
+      "id": "CTRAK-007",
+      "feature": "credit-tracking",
+      "title": "Create credit_budget_caps migration (daily/weekly per-org caps)",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["org_credit_balance"]
+      },
+      "blocks": ["CTRAK-008"],
+      "parallelWith": ["CTRAK-006"],
+      "acceptance": [
+        "credit_budget_caps table: org_id (PK), cap_type enum (daily|weekly|unlimited), cap_amount DECIMAL nullable, current_period_spent DECIMAL default 0, period_reset_at TIMESTAMPTZ",
+        "RLS: org admins read/write own org caps",
+        "reset_budget_period() function: sets current_period_spent=0, period_reset_at=next reset time (midnight for daily, next Monday for weekly)",
+        "pg_cron job entry to call reset_budget_period() daily at 00:01 UTC for daily caps and Monday 00:01 for weekly caps",
+        "check_budget_cap(org_id) RPC returns { allowed, spent, cap, cap_type, resets_at }"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260221040003_credit_budget_caps.sql"
+      ]
+    },
+
+    {
+      "id": "CTRAK-008",
+      "feature": "credit-tracking",
+      "title": "Wire budget cap check into costTracking.ts",
+      "type": "api",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["CTRAK-006", "CTRAK-007"],
+        "files": ["supabase/functions/_shared/costTracking.ts"],
+        "schema": ["credit_budget_caps"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New checkBudgetCap(client, orgId) function in costTracking.ts calls check_budget_cap RPC",
+        "Returns { allowed, spent, cap, capType, resetsAt }",
+        "logAICostEvent() and logFlatRateCostEvent() call checkBudgetCap before deduction. If not allowed, return early without charging (log failed status to credit_logs).",
+        "increment_budget_spent(orgId, amount) called after successful deduction to update current_period_spent",
+        "cap_type='unlimited' always returns allowed=true",
+        "Backward compat: if credit_budget_caps row doesn't exist for org, treat as unlimited"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/costTracking.ts"
+      ]
+    },
+
+    {
+      "id": "CTRAK-009",
+      "feature": "credit-tracking",
+      "title": "Build user-facing Credit Menu page component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["CTRAK-001", "CTRAK-005"],
+        "files": [
+          "src/pages/settings/CreditsSettingsPage.tsx",
+          "src/lib/services/creditService.ts"
+        ],
+        "schema": ["credit_menu"]
+      },
+      "blocks": [],
+      "parallelWith": ["CTRAK-010"],
+      "acceptance": [
+        "New 'Pricing' tab in CreditsSettingsPage (alongside Top Up, Inventory, Usage, Transactions, Settings)",
+        "Fetches from get-credit-menu edge function via creditService.getCreditMenu()",
+        "Shows active intelligence tier indicator (Low/Medium/High) with highlight on user's current tier column",
+        "Groups actions by category with section headers: AI Actions, Autonomous Agents, Integrations & Enrichment, Storage",
+        "FREE badge (green) on free_with_sub actions. Flat-rate badge on is_flat_rate integrations.",
+        "Credit pack comparison row at bottom: Signal 100cr/£49, Insight 250cr/£89, Intelligence 500cr/£149 with 'Buy' buttons",
+        "Budget cap quick-set inline: Daily / Weekly / Unlimited toggle with amount input"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/credits/CreditMenuTable.tsx",
+        "src/pages/settings/CreditsSettingsPage.tsx"
+      ],
+      "implementation": {
+        "dataFetch": "Add getCreditMenu() to creditService.ts. React Query key: ['credit-menu']. Cache 5 minutes.",
+        "tierHighlight": "Read user's intelligence tier from useCreditBalance or org settings. Apply bg-blue-500/10 border-blue-500/20 to active tier column.",
+        "table": "Use existing Tailwind table pattern from TransactionLog.tsx. Sticky header row."
+      }
+    },
+
+    {
+      "id": "CTRAK-010",
+      "feature": "credit-tracking",
+      "title": "Build Admin Credit Menu management UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["CTRAK-001", "CTRAK-004"],
+        "files": [
+          "src/pages/platform/AIModelAdmin.tsx"
+        ],
+        "schema": ["credit_menu", "credit_menu_history"]
+      },
+      "blocks": [],
+      "parallelWith": ["CTRAK-009"],
+      "acceptance": [
+        "New page at /platform/credit-menu (alongside existing AIModelAdmin, SkillsAdmin)",
+        "Table shows all credit_menu entries (including drafts), grouped by category",
+        "Each row: action_id, display_name, cost_low/medium/high (inline editable), is_active toggle, last updated",
+        "Inline edit: click cell to edit price. Validates >0 for all 3 tiers before save.",
+        "Warning modal if price change >50% from current value (anti-error protection)",
+        "Activate/Deactivate toggle. Draft badge on inactive items.",
+        "History drawer: click action to see credit_menu_history for that action_id",
+        "Add New Action button: creates draft with action_id, display_name, category, description, unit, all 3 tier prices"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/platform/CreditMenuAdmin.tsx",
+        "src/lib/services/adminCreditMenuService.ts"
+      ],
+      "implementation": {
+        "service": "adminCreditMenuService.ts: listAll(), update(actionId, data), create(data), activate(actionId), deactivate(actionId), getHistory(actionId). All call admin-credit-menu edge function.",
+        "inlineEdit": "Use contentEditable or small input on focus. Debounce save 800ms.",
+        "routing": "Add route to platform admin router. Guard with isPlatformAdmin check."
+      }
+    },
+
+    {
+      "id": "CTRAK-011",
+      "feature": "credit-tracking",
+      "title": "Create log retention purge edge function (45-day, nightly)",
+      "type": "api",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["CTRAK-002"],
+        "files": [],
+        "schema": ["credit_logs", "credit_log_summaries"]
+      },
+      "blocks": [],
+      "parallelWith": ["CTRAK-009", "CTRAK-010"],
+      "acceptance": [
+        "Edge function purge-credit-logs runs nightly at 03:00 UTC via pg_cron",
+        "Before deleting, aggregates to-be-purged entries (>45 days) into credit_log_summaries by (org_id, user_id, month, category)",
+        "Upserts summaries (increments total_credits, action_count if month row exists)",
+        "Deletes all credit_logs WHERE created_at < NOW() - INTERVAL '45 days'",
+        "Returns count of purged rows and summaries written",
+        "Also purges expired price_snapshots (past expires_at)",
+        "Deployed with --no-verify-jwt (internal cron call). Validates X-Cron-Secret header."
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/purge-credit-logs/index.ts"
+      ]
+    },
+
+    {
+      "id": "CTRAK-012",
+      "feature": "credit-tracking",
+      "title": "Add credit usage query tool to Copilot (NL queries on credit_logs)",
+      "type": "api",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["CTRAK-002", "CTRAK-003"],
+        "files": [
+          "supabase/functions/copilot-autonomous/index.ts",
+          "supabase/functions/_shared/costTracking.ts"
+        ],
+        "schema": ["credit_logs", "credit_log_summaries"]
+      },
+      "blocks": ["CTRAK-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function get-credit-usage-summary(user_id, org_id, query_type) returns structured usage data",
+        "query_type options: today | this_week | last_30_days | by_category | burn_rate | top_meetings",
+        "burn_rate: rolling 7-day average daily spend, projected depletion date",
+        "copilot-autonomous gets a new tool definition: query_credit_usage({ query_type, filters })",
+        "Copilot responds conversationally with the data (not raw JSON)",
+        "Handles: 'how many credits today', 'biggest expense', 'how long will credits last', 'show usage this week', 'which meetings cost most'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/get-credit-usage-summary/index.ts",
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+
+    {
+      "id": "CTRAK-013",
+      "feature": "credit-tracking",
+      "title": "Add proactive spend alert triggers to Copilot",
+      "type": "api",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["CTRAK-012"],
+        "files": ["supabase/functions/copilot-autonomous/index.ts"],
+        "schema": ["org_credit_balance", "credit_logs"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "check_credit_alerts(org_id, user_id) function evaluates 6 alert conditions: balance<20%, balance<10cr, negative balance, budget cap hit, weekly digest ready, tier upgrade suggestion",
+        "Returns array of pending alerts (alert_type, message, data)",
+        "copilot-autonomous checks pending alerts at session start and surfaces relevant one as a proactive message",
+        "Alert deduplication: each alert type stored with last_alerted_at, won't re-alert within 24h (balance/cap) or 7d (weekly digest)",
+        "credit_alert_log table: user_id, alert_type, alerted_at, data JSONB — prevents repeat spamming",
+        "Tier upgrade suggestion: compares last 7d high-tier cost vs estimated medium-tier cost. Only suggests if saving >20%."
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260221040004_credit_alert_log.sql",
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    }
+
+  ],
+
+  "execution": {
+    "totalStories": 13,
+    "completedStories": 12,
+    "currentFeature": "credit-tracking",
+    "estimatedTotalMinutes": 330,
+    "estimatedHours": "5-7 hours (with parallel execution)",
+    "lastUpdated": "2026-02-21T13:00:00Z",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "name": "Schema Foundation",
+        "stories": ["CTRAK-001", "CTRAK-002"],
+        "description": "Independent migrations — run in parallel. CTRAK-001 already complete.",
+        "status": "in_progress"
+      },
+      {
+        "group": 2,
+        "name": "Backend APIs + Grace Threshold",
+        "stories": ["CTRAK-003", "CTRAK-004", "CTRAK-005"],
+        "description": "All depend on schema but are independent of each other",
+        "status": "pending"
+      },
+      {
+        "group": 3,
+        "name": "Grace Threshold + Budget Caps Schema",
+        "stories": ["CTRAK-006", "CTRAK-007"],
+        "description": "Independent schema additions, run in parallel",
+        "status": "pending"
+      },
+      {
+        "group": 4,
+        "name": "Budget Cap Wiring",
+        "stories": ["CTRAK-008"],
+        "description": "Depends on both CTRAK-006 and CTRAK-007",
+        "status": "pending"
+      },
+      {
+        "group": 5,
+        "name": "Frontend + Retention",
+        "stories": ["CTRAK-009", "CTRAK-010", "CTRAK-011"],
+        "description": "Admin UI, user menu page, and purge job can all run in parallel",
+        "status": "pending"
+      },
+      {
+        "group": 6,
+        "name": "Copilot Intelligence",
+        "stories": ["CTRAK-012"],
+        "description": "NL query tool — needs credit_logs populated",
+        "status": "pending"
+      },
+      {
+        "group": 7,
+        "name": "Proactive Alerts",
+        "stories": ["CTRAK-013"],
+        "description": "Depends on CTRAK-012 query infrastructure",
+        "status": "pending"
+      }
+    ]
+  },
+
+  "dependencyGraph": {
+    "CTRAK-001": {"depends": [], "blocks": ["CTRAK-003", "CTRAK-004", "CTRAK-005", "CTRAK-009", "CTRAK-010"]},
+    "CTRAK-002": {"depends": [], "blocks": ["CTRAK-003", "CTRAK-011", "CTRAK-012"]},
+    "CTRAK-003": {"depends": ["CTRAK-001", "CTRAK-002"], "blocks": ["CTRAK-006", "CTRAK-008"]},
+    "CTRAK-004": {"depends": ["CTRAK-001"], "blocks": ["CTRAK-010"]},
+    "CTRAK-005": {"depends": ["CTRAK-001"], "blocks": ["CTRAK-009"]},
+    "CTRAK-006": {"depends": ["CTRAK-003"], "blocks": ["CTRAK-008"]},
+    "CTRAK-007": {"depends": [], "blocks": ["CTRAK-008"]},
+    "CTRAK-008": {"depends": ["CTRAK-006", "CTRAK-007"], "blocks": []},
+    "CTRAK-009": {"depends": ["CTRAK-001", "CTRAK-005"], "blocks": []},
+    "CTRAK-010": {"depends": ["CTRAK-001", "CTRAK-004"], "blocks": []},
+    "CTRAK-011": {"depends": ["CTRAK-002"], "blocks": []},
+    "CTRAK-012": {"depends": ["CTRAK-002", "CTRAK-003"], "blocks": ["CTRAK-013"]},
+    "CTRAK-013": {"depends": ["CTRAK-012"], "blocks": []}
+  }
+}
