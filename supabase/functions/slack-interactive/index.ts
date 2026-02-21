@@ -8009,6 +8009,60 @@ serve(async (req) => {
           return handleImpSendPreread(supabase, payload, action);
         }
 
+        // =====================================================================
+        // EOD-006: End-of-Day Synthesis interaction handlers
+        // action_id prefix: eod_*
+        // Buttons: eod_looks_good, eod_adjust_priorities, eod_add_task
+        // =====================================================================
+        else if (action.action_id === 'eod_looks_good') {
+          // User confirmed EOD looks good — log feedback and acknowledge
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId) {
+            await logSlackInteraction(supabase, {
+              userId: ctx.userId,
+              orgId: ctx.orgId || null,
+              actionType: 'eod_acknowledged',
+              actionCategory: 'eod_synthesis',
+              metadata: { action: 'looks_good', value: action.value },
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else if (action.action_id === 'eod_adjust_priorities') {
+          // Deep-link user to copilot with EOD context pre-loaded
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId) {
+            await logSlackInteraction(supabase, {
+              userId: ctx.userId,
+              orgId: ctx.orgId || null,
+              actionType: 'eod_adjust_priorities',
+              actionCategory: 'eod_synthesis',
+              metadata: { value: action.value },
+            });
+          }
+          // Respond with ephemeral message directing user to the app
+          if (payload.response_url) {
+            await fetch(payload.response_url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                response_type: 'ephemeral',
+                text: `Open the copilot to adjust your priorities: ${appUrl}/copilot`,
+                replace_original: false,
+              }),
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else if (action.action_id === 'eod_add_task') {
+          // Open the add-task modal (reuse existing modal handler)
+          return handleOpenAddTaskModal(supabase, payload);
+        }
+
         // Unknown action - just acknowledge
         console.log('Unknown action_id:', action.action_id);
         return new Response(JSON.stringify({ ok: true }), {
