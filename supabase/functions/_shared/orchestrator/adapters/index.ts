@@ -50,6 +50,7 @@ import { researchTriggerEventsAdapter, analyseStallReasonAdapter, draftReengagem
 import { apolloSignalAdapter } from './reengagementApollo.ts';
 import { apifyNewsAdapter } from './reengagementApify.ts';
 import { signalRelevanceScorerAdapter } from './reengagementScorer.ts';
+import { reengagementSlackAdapter } from './reengagementSlack.ts';
 import {
   scanActiveDealsAdapter,
   scoreDealRisksAdapter,
@@ -133,10 +134,11 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'analyse-stall-reason': analyseStallReasonAdapter,
   'draft-reengagement': draftReengagementAdapter,
 
-  // Re-engagement signal pipeline (reengagement_trigger sequence — REN-003, REN-004, REN-005)
+  // Re-engagement signal pipeline (reengagement_trigger sequence — REN-003, REN-004, REN-005, REN-006)
   'apollo-signal-scan': apolloSignalAdapter,
   'apify-news-scan': apifyNewsAdapter,
   'score-reengagement-signals': signalRelevanceScorerAdapter,
+  'deliver-reengagement-slack': reengagementSlackAdapter,
 
   // Deal Risk Scan (deal_risk_scan sequence)
   'scan-active-deals': scanActiveDealsAdapter,

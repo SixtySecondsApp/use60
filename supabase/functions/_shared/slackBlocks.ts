@@ -4312,3 +4312,167 @@ export const buildCRMApprovalMessage = (data: CRMApprovalMessageData): SlackMess
 
   return { blocks, text: fallbackText };
 };
+
+// =============================================================================
+// RE-ENGAGEMENT HITL APPROVAL (REN-006)
+// =============================================================================
+
+export interface ReengagementSignal {
+  type: string;
+  source: string;
+  description: string;
+  score_delta: number;
+  detected_at: string;
+  url?: string;
+}
+
+export interface ReengagementApprovalData {
+  dealId: string;
+  dealName: string;
+  dealValue: number | null;
+  companyName: string | null;
+  contactName: string;
+  contactEmail: string;
+  ownerName: string | null;
+  ownerSlackUserId?: string;
+  // Signal context
+  score: number;
+  temperature: number;
+  daysSinceClose: number;
+  lossReason: string | null;
+  topSignals: ReengagementSignal[];
+  // Draft email
+  emailSubject: string;
+  emailBody: string;
+  signalSummary: string;
+  // Routing
+  appUrl: string;
+}
+
+/**
+ * Build Re-engagement HITL Approval Message
+ *
+ * Sent to a rep's DM when the re-engagement pipeline finds a hot deal.
+ * Buttons use `reengagement_*::deal_id` convention — routed in slack-interactive.
+ *
+ * Action IDs:
+ *   reengagement_send::{dealId}    — approve and mark as converted
+ *   reengagement_edit::{dealId}    — placeholder (edit in-app)
+ *   reengagement_snooze::{dealId}  — snooze 14 days
+ *   reengagement_remove::{dealId}  — remove from watchlist
+ */
+export const buildReengagementApprovalMessage = (data: ReengagementApprovalData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+
+  // --- Header ---
+  const headerText = safeHeaderText(`Re-engagement opportunity: ${data.dealName}`);
+  blocks.push(header(headerText));
+
+  // --- Deal + contact context ---
+  const dealValueStr = data.dealValue
+    ? `$${Number(data.dealValue).toLocaleString()}`
+    : 'value unknown';
+
+  const contextParts: string[] = [
+    `Company: *${truncate(data.companyName || 'Unknown', 50)}*`,
+    `Value: *${dealValueStr}*`,
+    `Lost: *${data.daysSinceClose} days ago*`,
+  ];
+  if (data.lossReason) {
+    contextParts.push(`Reason: ${data.lossReason.replace(/_/g, ' ')}`);
+  }
+
+  blocks.push(section(safeMrkdwn(contextParts.join(' • '))));
+
+  // --- Signal summary ---
+  blocks.push(divider());
+
+  const signalSummaryText = safeMrkdwn(
+    `*Why now?* ${data.signalSummary}\n\n` +
+    `Relevance score: *${data.score}/100* • Temperature: *${(data.temperature * 100).toFixed(0)}%*`
+  );
+  blocks.push(section(signalSummaryText));
+
+  // Top signals (max 3)
+  if (data.topSignals.length > 0) {
+    const signalLines = data.topSignals
+      .slice(0, 3)
+      .map((s) => {
+        const typeLabel = s.type.replace(/_/g, ' ');
+        const desc = truncate(s.description, 120);
+        return `• *[${typeLabel}]* ${desc}`;
+      })
+      .join('\n');
+
+    blocks.push(section(safeMrkdwn(`*Signals detected:*\n${signalLines}`)));
+  }
+
+  // --- Draft email preview ---
+  blocks.push(divider());
+
+  blocks.push(section(safeMrkdwn(
+    `*Draft email to ${truncate(data.contactName, 50)}* (${truncate(data.contactEmail, 80)})`
+  )));
+
+  blocks.push(section(safeMrkdwn(
+    `*Subject:* ${truncate(data.emailSubject, 200)}`
+  )));
+
+  blocks.push(section(safeMrkdwn(
+    `*Message:*\n${truncate(data.emailBody, 700)}`
+  )));
+
+  // --- Action buttons ---
+  blocks.push(divider());
+
+  const dealIdSafe = truncate(data.dealId, 36); // UUID length
+
+  blocks.push({
+    type: 'actions',
+    block_id: `reengage_actions::${dealIdSafe}`,
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Approve & Send'), emoji: false },
+        style: 'primary',
+        action_id: `reengagement_send::${dealIdSafe}`,
+        value: safeButtonValue(JSON.stringify({
+          dealId: data.dealId,
+          contactEmail: data.contactEmail,
+          contactName: data.contactName,
+        })),
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Edit Draft'), emoji: false },
+        action_id: `reengagement_edit::${dealIdSafe}`,
+        value: safeButtonValue(JSON.stringify({ dealId: data.dealId })),
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Snooze 30d'), emoji: false },
+        action_id: `reengagement_snooze::${dealIdSafe}`,
+        value: safeButtonValue(JSON.stringify({ dealId: data.dealId, snoozeDays: 30 })),
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Dismiss'), emoji: false },
+        style: 'danger',
+        action_id: `reengagement_remove::${dealIdSafe}`,
+        value: safeButtonValue(JSON.stringify({ dealId: data.dealId })),
+      },
+    ],
+  });
+
+  // --- Footer context ---
+  blocks.push(context([
+    safeContextMrkdwn(
+      `Re-engagement pipeline • <${data.appUrl}/deals/${data.dealId}|View deal>`
+    ),
+  ]));
+
+  return {
+    blocks,
+    text: `Re-engagement opportunity: ${data.dealName} — ${data.signalSummary}`,
+  };
+};
