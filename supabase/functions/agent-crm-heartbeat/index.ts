@@ -23,6 +23,7 @@ import {
   jsonResponse,
 } from '../_shared/corsHelper.ts';
 import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
+import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
 
 // =============================================================================
 // Config
@@ -183,6 +184,35 @@ async function sendStaleReminders(
       if (result.success) {
         remindersSent++;
         console.log(`[crm-heartbeat] Stale reminder → user ${userId} (${count} items, oldest ${hoursStale}h)`);
+
+        // Dual-write to Command Centre: stale CRM approvals need attention
+        try {
+          const ccFieldList = rows
+            .slice(0, 3)
+            .map((r) => r.field_name.replace(/_/g, ' '))
+            .join(', ');
+          const ccMore = count > 3 ? ` and ${count - 3} more` : '';
+
+          await writeToCommandCentre({
+            org_id: orgId,
+            user_id: userId,
+            source_agent: 'crm_update',
+            item_type: 'crm_update',
+            title: `${count} CRM update${count !== 1 ? 's' : ''} awaiting approval (oldest: ${hoursStale}h)`,
+            summary: `Fields pending: ${ccFieldList}${ccMore}`,
+            context: {
+              pending_count: count,
+              hours_stale: hoursStale,
+              field_names: rows.map((r) => r.field_name),
+              approval_ids: rows.map((r) => r.id),
+            },
+            deal_id: dealId ?? undefined,
+            urgency: hoursStale >= 48 ? 'high' : 'normal',
+          });
+        } catch (ccErr) {
+          // CC failure must not break the agent's primary flow
+          console.error('[crm-heartbeat] CC write failed for stale reminder user', userId, String(ccErr));
+        }
       } else {
         errors.push(`DM failed user=${userId}: ${result.error}`);
       }

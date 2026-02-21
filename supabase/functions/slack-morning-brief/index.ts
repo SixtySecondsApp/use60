@@ -28,6 +28,11 @@ import {
 import { buildMorningBriefMessage, type MorningBriefData } from '../_shared/slackBlocks.ts';
 import { runSkill } from '../_shared/skillsRuntime.ts';
 import { InstantlyClient } from '../_shared/instantly.ts';
+import {
+  loadCCBriefItems,
+  convertCCItemsToPriorities,
+  convertCCItemsToInsights,
+} from '../_shared/commandCentre/briefingAdapter.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -155,35 +160,76 @@ serve(async (req) => {
               continue; // No data to show (all clear)
             }
 
-            // Generate AI insights using skills
+            // CC8-006: Check config flag to decide source for priorities/insights
+            // When 'command_centre' source is active and CC has 3+ items, skip the
+            // legacy AI skill so CC-derived priorities are not overwritten.
+            let ccSourceActive = false;
             try {
-              const skillResult = await runSkill(
-                supabase,
-                'suggest_next_actions',
-                {
-                  activityContext: JSON.stringify(briefData),
-                  recentActivities: JSON.stringify(briefData.meetings.slice(0, 5)),
-                  existingTasks: JSON.stringify([...briefData.tasks.overdue, ...briefData.tasks.dueToday]),
-                },
-                org.org_id,
-                recipient.userId
-              );
+              const { data: morningBriefSourceConfig } = await supabase.rpc('resolve_agent_config', {
+                p_org_id: org.org_id,
+                p_user_id: recipient.userId,
+                p_agent_type: 'morning_briefing',
+                p_config_key: 'morning_brief_source',
+              });
 
-              if (skillResult.success && skillResult.output) {
-                if (Array.isArray(skillResult.output)) {
-                  briefData.priorities = skillResult.output
-                    .slice(0, 3)
-                    .map((item: any) => item.title || item.action || String(item));
-                } else if (skillResult.output.priorities) {
-                  briefData.priorities = skillResult.output.priorities;
-                }
-                if (skillResult.output.insights) {
-                  briefData.insights = skillResult.output.insights;
+              const briefSource: string = morningBriefSourceConfig ?? 'legacy';
+
+              if (briefSource === 'command_centre') {
+                // Load CC items and use them if there are enough to be meaningful
+                try {
+                  const ccItems = await loadCCBriefItems(supabase, recipient.userId, 15);
+                  if (ccItems.total >= 3) {
+                    briefData.priorities = convertCCItemsToPriorities(ccItems);
+                    briefData.insights = convertCCItemsToInsights(ccItems);
+                    ccSourceActive = true;
+                    console.log(
+                      `[slack-morning-brief] CC source: ${ccItems.total} items (${ccItems.critical.length} critical, ${ccItems.high.length} high, ${ccItems.normal.length} normal) for user ${recipient.userId}`,
+                    );
+                  } else {
+                    // Fall back to legacy if CC has fewer than 3 items (transition safety net)
+                    console.log(
+                      `[slack-morning-brief] CC source: only ${ccItems.total} items — falling back to legacy for user ${recipient.userId}`,
+                    );
+                  }
+                } catch (ccError) {
+                  console.warn('[slack-morning-brief] CC items load failed, falling back to legacy:', ccError);
                 }
               }
-            } catch (skillError) {
-              console.warn('[slack-morning-brief] Skill execution failed, using defaults:', skillError);
+            } catch (configError) {
+              console.warn('[slack-morning-brief] Config flag read failed, using legacy path:', configError);
             }
+
+            // Generate AI insights using skills (legacy path — skipped when CC source is active)
+            if (!ccSourceActive) {
+              try {
+                const skillResult = await runSkill(
+                  supabase,
+                  'suggest_next_actions',
+                  {
+                    activityContext: JSON.stringify(briefData),
+                    recentActivities: JSON.stringify(briefData.meetings.slice(0, 5)),
+                    existingTasks: JSON.stringify([...briefData.tasks.overdue, ...briefData.tasks.dueToday]),
+                  },
+                  org.org_id,
+                  recipient.userId
+                );
+
+                if (skillResult.success && skillResult.output) {
+                  if (Array.isArray(skillResult.output)) {
+                    briefData.priorities = skillResult.output
+                      .slice(0, 3)
+                      .map((item: any) => item.title || item.action || String(item));
+                  } else if (skillResult.output.priorities) {
+                    briefData.priorities = skillResult.output.priorities;
+                  }
+                  if (skillResult.output.insights) {
+                    briefData.insights = skillResult.output.insights;
+                  }
+                }
+              } catch (skillError) {
+                console.warn('[slack-morning-brief] Skill execution failed, using defaults:', skillError);
+              }
+            } // end if (!ccSourceActive)
 
             // Build Slack message
             const slackMessage = buildMorningBriefMessage(briefData);

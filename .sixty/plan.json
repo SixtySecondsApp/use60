@@ -79,6 +79,46 @@
       "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-03",
       "planFile": ".sixty/plan-auto-crm-update.json",
       "createdAt": "2026-02-21T23:30:00Z"
+    },
+    {
+      "id": "reengagement-trigger",
+      "name": "PRD-05: Re-engagement Trigger Agent",
+      "status": "pending",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-05",
+      "planFile": ".sixty/plan-reengagement-trigger.json",
+      "createdAt": "2026-02-21T00:00:00Z"
+    },
+    {
+      "id": "enhanced-morning-briefing",
+      "name": "PRD-06: Enhanced Morning Briefing",
+      "status": "pending",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-06",
+      "planFile": ".sixty/plan-enhanced-morning-briefing.json",
+      "createdAt": "2026-02-21T00:00:00Z"
+    },
+    {
+      "id": "eod-synthesis",
+      "name": "PRD-07: End-of-Day Synthesis",
+      "status": "pending",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-07",
+      "planFile": ".sixty/plan-eod-synthesis.json",
+      "createdAt": "2026-02-21T00:00:00Z"
+    },
+    {
+      "id": "internal-meeting-prep",
+      "name": "PRD-08: Internal Meeting Prep",
+      "status": "pending",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-08",
+      "planFile": ".sixty/plan-internal-meeting-prep.json",
+      "createdAt": "2026-02-21T00:00:00Z"
+    },
+    {
+      "id": "command-centre-enhancement",
+      "name": "Command Centre Enhancement — Shared Inbox (Phases 8-12)",
+      "status": "pending",
+      "prd": "Command Centre Enhancement Plan",
+      "planFile": ".sixty/plan-command-centre-enhancement.json",
+      "createdAt": "2026-02-21T00:00:00Z"
     }
   ],
   "stories": [
@@ -991,9 +1031,9 @@
     }
   ],
   "execution": {
-    "totalStories": 50,
+    "totalStories": 82,
     "completedStories": 18,
     "currentFeature": "settings-page-fixes",
-    "lastUpdated": "2026-02-21T23:30:00Z"
+    "lastUpdated": "2026-02-22T00:00:00Z"
   }
 }

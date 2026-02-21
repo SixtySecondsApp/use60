@@ -23,6 +23,7 @@ import {
 } from '../_shared/orchestrator/riskScorerConfig.ts';
 import type { RiskScorerConfig } from '../_shared/orchestrator/riskScorerConfig.ts';
 import { isCircuitAllowed, recordSuccess, recordFailure } from '../_shared/orchestrator/circuitBreaker.ts';
+import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -144,6 +145,7 @@ serve(async (req) => {
 
         // Check if alert should be flagged
         const alertThreshold = getEffectiveAlertThreshold(config);
+        let hoursSinceAlert = Infinity;
         if (score.riskScore >= alertThreshold) {
           // Check 24-hour suppression
           const { data: existing } = await supabase
@@ -153,12 +155,63 @@ serve(async (req) => {
             .maybeSingle();
 
           const lastAlertAt = existing?.alert_sent_at;
-          const hoursSinceAlert = lastAlertAt
+          hoursSinceAlert = lastAlertAt
             ? (Date.now() - new Date(lastAlertAt).getTime()) / (1000 * 60 * 60)
             : Infinity;
 
           if (hoursSinceAlert >= 24) {
             result.alerts_flagged++;
+          }
+        }
+
+        // Dual-write to Command Centre for at-risk deals (score >= alertThreshold or generally at risk < 70)
+        if (score.riskScore >= alertThreshold || score.riskScore >= 50) {
+          try {
+            // Fetch deal owner to attribute the CC item correctly
+            const { data: dealRow } = await supabase
+              .from('deals')
+              .select('owner_id, name')
+              .eq('id', deal.deal_id)
+              .maybeSingle();
+
+            const dealOwnerId = dealRow?.owner_id;
+            const dealName = dealRow?.name || deal.deal_name;
+
+            if (dealOwnerId) {
+              const topSignals = score.signals
+                .slice(0, 3)
+                .map((s) => s.description);
+
+              const urgency =
+                score.riskScore >= 80 || score.overallLevel === 'critical'
+                  ? 'critical'
+                  : score.riskScore >= 50 || score.overallLevel === 'high'
+                  ? 'high'
+                  : 'normal';
+
+              await writeToCommandCentre({
+                org_id: orgId,
+                user_id: dealOwnerId,
+                source_agent: 'deal_risk',
+                item_type: 'deal_action',
+                title: `Deal at risk: ${dealName} (${score.riskScore}/100)`,
+                summary: topSignals.length > 0
+                  ? `Risk signals: ${topSignals.join(', ')}`
+                  : `Risk level: ${score.overallLevel}`,
+                context: {
+                  deal_id: deal.deal_id,
+                  score: score.riskScore,
+                  signals: score.signals,
+                  score_breakdown: score.scoreBreakdown,
+                  overall_level: score.overallLevel,
+                },
+                deal_id: deal.deal_id,
+                urgency,
+              });
+            }
+          } catch (ccErr) {
+            // CC failure must not break the agent's primary flow
+            console.error('[agent-deal-risk-batch] CC write failed for deal', deal.deal_id, String(ccErr));
           }
         }
       } catch (err) {
