@@ -75,9 +75,9 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
   growth: {
     packType: 'growth',
     credits: 250,
-    priceGBP: 89,
+    priceGBP: 99,
     label: 'Insight',
-    description: 'Most popular for growing sales teams',
+    description: 'Best value for growing sales teams',
     popular: true,
   },
   scale: {
