@@ -23,6 +23,9 @@ import {
   deliverToInApp,
 } from '../_shared/proactive/index.ts';
 import { buildStaleDealAlertMessage } from '../_shared/slackBlocks.ts';
+import { loadRiskScorerConfig, isQuietHours, getEffectiveAlertThreshold } from '../_shared/orchestrator/riskScorerConfig.ts';
+import { buildRiskAlertBlocks, buildRiskAlertText } from '../_shared/riskAlertBlocks.ts';
+import { getPlaybooksForDeal } from '../_shared/orchestrator/riskPlaybooks.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -219,9 +222,167 @@ serve(async (req) => {
       }
     }
 
+    // =========================================================================
+    // PRD-04 RSK-009: Weighted risk score alerts with suppression
+    // =========================================================================
+    let weightedAlerts = 0;
+
+    for (const org of slackOrgs) {
+      try {
+        const slackSettings = await getSlackOrgSettings(supabase, org.org_id);
+        if (!slackSettings) continue;
+
+        // Load org risk scorer config
+        const riskConfig = await loadRiskScorerConfig(supabase, org.org_id);
+        const alertThreshold = getEffectiveAlertThreshold(riskConfig);
+
+        // Get deals with weighted risk scores above threshold
+        const { data: highRiskDeals } = await supabase
+          .rpc('get_high_risk_deals', {
+            p_org_id: org.org_id,
+            p_threshold: alertThreshold,
+            p_limit: 20,
+          });
+
+        if (!highRiskDeals?.length) continue;
+
+        const recipients = await getSlackRecipients(supabase, org.org_id);
+
+        for (const riskDeal of highRiskDeals) {
+          // 24-hour suppression check
+          if (riskDeal.alert_sent_at) {
+            const hoursSinceAlert = (Date.now() - new Date(riskDeal.alert_sent_at).getTime()) / (1000 * 60 * 60);
+            if (hoursSinceAlert < 24) continue;
+          }
+
+          // Find the recipient (deal owner)
+          const recipient = recipients.find(r => r.userId === riskDeal.owner_id);
+          if (!recipient) continue;
+
+          // Load user-level config for quiet hours
+          const userConfig = await loadRiskScorerConfig(supabase, org.org_id, recipient.userId);
+          if (isQuietHours(userConfig.user_overrides)) continue;
+
+          // Get active signals for this deal
+          const { data: signals } = await supabase
+            .from('deal_risk_signals')
+            .select('signal_type, severity, title, description, evidence')
+            .eq('deal_id', riskDeal.deal_id)
+            .eq('is_resolved', false)
+            .eq('auto_dismissed', false)
+            .order('severity')
+            .limit(5);
+
+          const signalSummaries = (signals || []).map(s => ({
+            signal_type: s.signal_type,
+            severity: s.severity,
+            title: s.title || s.signal_type,
+            evidence_quote: s.evidence?.quotes?.[0] || null,
+          }));
+
+          // Build deal context for playbooks
+          const dealContext = {
+            deal_name: riskDeal.deal_name || 'Unknown',
+            deal_value: riskDeal.deal_value ?? null,
+            deal_stage: riskDeal.deal_stage || 'unknown',
+            days_in_stage: 0,
+            champion_name: null as string | null,
+            champion_days_silent: null as number | null,
+            competitor_names: [] as string[],
+            owner_name: riskDeal.owner_name || null,
+          };
+
+          const signalContexts = (signals || []).map(s => ({
+            signal_type: s.signal_type,
+            severity: s.severity,
+            title: s.title || s.signal_type,
+            description: s.description || '',
+            evidence: s.evidence || null,
+          }));
+
+          const playbooks = getPlaybooksForDeal(signalContexts, dealContext, 3);
+
+          // Build rich Block Kit message
+          const alertContext = {
+            deal_id: riskDeal.deal_id,
+            deal_name: riskDeal.deal_name || 'Unknown Deal',
+            deal_value: riskDeal.deal_value ?? null,
+            deal_stage: riskDeal.deal_stage || 'unknown',
+            days_in_stage: 0,
+            risk_score: riskDeal.score,
+            previous_score: riskDeal.previous_score ?? null,
+            risk_level: riskDeal.score >= (riskConfig.thresholds.alert_critical) ? 'critical' : 'high',
+            owner_name: riskDeal.owner_name || null,
+          };
+
+          const blocks = buildRiskAlertBlocks(alertContext, signalSummaries, playbooks, {
+            app_url: APP_URL,
+            include_evidence: riskConfig.alert_settings.include_evidence,
+            include_playbook: riskConfig.alert_settings.include_playbook,
+          });
+
+          const alertText = buildRiskAlertText(alertContext, signalSummaries);
+
+          // Deliver via Slack
+          const slackResult = await deliverToSlack(
+            supabase,
+            {
+              type: 'weighted_risk_alert',
+              orgId: org.org_id,
+              recipientUserId: recipient.userId,
+              recipientSlackUserId: recipient.slackUserId,
+              title: alertText,
+              message: alertText,
+              blocks,
+              actionUrl: `${APP_URL}/deals/${riskDeal.deal_id}`,
+              inAppCategory: 'pipeline',
+              inAppType: alertContext.risk_level === 'critical' ? 'error' : 'warning',
+              metadata: { dealId: riskDeal.deal_id, riskScore: riskDeal.score },
+            },
+            slackSettings.botAccessToken,
+          );
+
+          if (slackResult.sent) {
+            // Mark alert sent via RPC
+            await supabase.rpc('mark_risk_alert_sent', { p_deal_id: riskDeal.deal_id });
+            await recordNotificationSent(
+              supabase,
+              'weighted_risk_alert',
+              org.org_id,
+              recipient.slackUserId,
+              slackResult.channelId,
+              slackResult.ts,
+              riskDeal.deal_id,
+            );
+            weightedAlerts++;
+          }
+
+          // Mirror to in-app
+          await deliverToInApp(supabase, {
+            type: 'weighted_risk_alert',
+            orgId: org.org_id,
+            recipientUserId: recipient.userId,
+            recipientSlackUserId: recipient.slackUserId,
+            title: alertText,
+            message: alertText,
+            actionUrl: `${APP_URL}/deals/${riskDeal.deal_id}`,
+            inAppCategory: 'pipeline',
+            inAppType: alertContext.risk_level === 'critical' ? 'error' : 'warning',
+            metadata: { dealId: riskDeal.deal_id, riskScore: riskDeal.score },
+          });
+        }
+      } catch (orgErr) {
+        console.error(`[slack-deal-risk-alert] Weighted alert error for org ${org.org_id}:`, orgErr);
+        errors.push(`Org ${org.org_id} (weighted): ${orgErr instanceof Error ? orgErr.message : 'Unknown'}`);
+      }
+    }
+
+    totalAlerts += weightedAlerts;
+
     return jsonResponse({
       success: true,
       alertsSent: totalAlerts,
+      weightedAlertsSent: weightedAlerts,
       errors: errors.length > 0 ? errors : undefined,
     }, req);
   } catch (error) {

@@ -1,0 +1,567 @@
+{
+  "name": "PRD-04: Deal Risk Scorer Agent",
+  "version": "1.0",
+  "createdAt": "2026-02-21T23:00:00Z",
+  "description": "Upgrade existing deal risk infrastructure into a fleet-managed agent: daily batch scoring via orchestrator cron, event-triggered re-scoring on meeting_ended/CRM updates, weighted signal model with PRD-01 config engine integration, and rich Slack Block Kit alerts with intervention playbooks.",
+  "source_prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-04",
+  "existing_infrastructure": {
+    "deal_risk_signals_table": "Fully implemented \u2014 10 signal types, severity levels, evidence JSONB, resolution tracking, RLS",
+    "deal_risk_aggregates_table": "Fully implemented \u2014 per-deal summary with signal counts, sentiment trend, champion contact days, recommended actions",
+    "deal_risk_scores_table": "Added in 20260215 migration \u2014 simpler upsert pattern with previous_score delta tracking, alert_sent_at",
+    "deal_analyze_risk_signals_fn": "Existing edge function \u2014 pattern-based signal detection from meeting transcripts, engagement analysis, stage-specific severity multipliers",
+    "slack_deal_risk_alert_fn": "Existing Vercel cron (30min) \u2014 basic risk conditions (close date passed, activity gap, health status), Slack DM delivery",
+    "frontend_components": "RiskBadge, DealRiskPanel, DealRiskFactors, useDealRiskSignals hook \u2014 all production-ready",
+    "rpc_functions": "upsert_deal_risk_score, mark_risk_alert_sent, get_high_risk_deals, get_deals_needing_risk_scan, calculate_deal_risk_aggregate",
+    "slack_slash_risks": "/sixty risks command with stale/closing filters and risk scoring",
+    "types": "Full TypeScript types in meetingIntelligence.ts \u2014 RiskSignalType, RiskSeverity, DealRiskSignal, DealRiskAggregate",
+    "note": "PRD-04 upgrades existing infrastructure \u2014 NOT building from scratch. Key additions: fleet orchestrator integration, PRD-01 config-driven weights/thresholds, weighted scoring model replacing simple addition, daily batch cron, event-triggered re-scoring, intervention playbook system, and richer Slack Block Kit delivery."
+  },
+  "dependencies": {
+    "PRD-01": "Agent Configuration Engine \u2014 reads agent_config_org/user_overrides for scoring weights, thresholds, alert preferences",
+    "PRD-02": "Fleet Orchestrator \u2014 receives handoff triggers (meeting_ended \u2192 re-score deal, crm_updated \u2192 re-score deal), daily cron route"
+  },
+  "definition_of_done": "All active deals scored at least daily via fleet-managed cron. Event-triggered re-scoring after meeting_ended and CRM updates. Risk scores use weighted model (engagement 25%, champion 25%, momentum 25%, sentiment 25%) configurable via PRD-01 config engine. High/Critical deals generate Slack alerts with specific evidence and intervention playbooks. Alert suppression prevents duplicate alerts within 24 hours. Config changes apply within 1 scoring run.",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Weighted Scoring Engine",
+      "description": "Replace simple signal addition with weighted scoring model, integrate PRD-01 config for weights/thresholds",
+      "priority": "critical",
+      "duration": "1 session",
+      "stories": [
+        "RSK-001",
+        "RSK-002",
+        "RSK-003"
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Fleet Integration & Cron Scheduling",
+      "description": "Wire deal risk scoring into fleet orchestrator event routes and daily cron batch",
+      "priority": "critical",
+      "duration": "1 session",
+      "stories": [
+        "RSK-004",
+        "RSK-005"
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Intervention Playbook System",
+      "description": "Per-signal-type intervention suggestions with evidence-backed recommendations",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": [
+        "RSK-006",
+        "RSK-007"
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Enhanced Slack Delivery",
+      "description": "Rich Slack Block Kit alerts with intervention playbooks, action buttons, and suppression rules",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": [
+        "RSK-008",
+        "RSK-009"
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Event-Triggered Re-scoring",
+      "description": "Handoff triggers from meeting_ended and CRM update events to re-score affected deals",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": [
+        "RSK-010",
+        "RSK-011"
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Verification & Seed Data",
+      "description": "Fleet seed data, end-to-end verification, config validation",
+      "priority": "required",
+      "duration": "1 session",
+      "stories": [
+        "RSK-012",
+        "RSK-013"
+      ]
+    }
+  ],
+  "stories": [
+    {
+      "id": "RSK-001",
+      "phase": "phase-1",
+      "title": "Weighted risk scoring model migration",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "description": "Add weighted scoring columns to deal_risk_scores and update calculate_deal_risk_aggregate RPC to use 4-dimension weighted model (engagement 25%, champion 25%, momentum 25%, sentiment 25%). Add score_breakdown JSONB column to deal_risk_scores for per-dimension transparency.",
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/migrations/20260215000002_add_deal_risk_scores.sql"
+        ],
+        "schema": [
+          "deal_risk_scores",
+          "deal_risk_aggregates",
+          "deal_risk_signals"
+        ]
+      },
+      "blocks": [
+        "RSK-002",
+        "RSK-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "deal_risk_scores gains score_breakdown JSONB column (engagement, champion, momentum, sentiment sub-scores)",
+        "calculate_deal_risk_aggregate updated with weighted formula instead of simple signal count addition",
+        "Stage-specific weight multipliers (later stages = higher weight for champion_silent, competitor_mention)",
+        "Migration is additive \u2014 no breaking changes to existing columns"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222200001_risk_scorer_weighted_model.sql"
+      ]
+    },
+    {
+      "id": "RSK-002",
+      "phase": "phase-1",
+      "title": "Config-driven scoring weights via PRD-01",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Create riskScorerConfig.ts shared module that reads scoring weights, risk thresholds, signal severity overrides, and alert settings from PRD-01 config engine (agent_config_org_overrides / agent_config_user_overrides). Falls back to sensible defaults if no config exists.",
+      "dependencies": {
+        "stories": [
+          "RSK-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/configEngine.ts"
+        ],
+        "schema": [
+          "agent_config_org_overrides",
+          "agent_config_user_overrides"
+        ]
+      },
+      "blocks": [
+        "RSK-004",
+        "RSK-006"
+      ],
+      "parallelWith": [
+        "RSK-003"
+      ],
+      "acceptance": [
+        "loadRiskScorerConfig(supabase, orgId) returns typed config with weights, thresholds, signal_weights, stage_baselines",
+        "Reads from agent_config_org_overrides where agent_type='deal_risk_scorer' with 5-minute cache TTL",
+        "Falls back to defaults matching PRD-04 spec (25/25/25/25 weights, 61/81 thresholds)",
+        "User-level overrides for alert threshold and quiet hours from agent_config_user_overrides"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/riskScorerConfig.ts"
+      ]
+    },
+    {
+      "id": "RSK-003",
+      "phase": "phase-1",
+      "title": "Upgrade deal-analyze-risk-signals with weighted scoring",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "description": "Modify the existing deal-analyze-risk-signals edge function to use the new weighted scoring model instead of simple signal count addition. Call loadRiskScorerConfig for org-specific weights. Compute per-dimension scores (engagement, champion, momentum, sentiment) and store in score_breakdown.",
+      "dependencies": {
+        "stories": [
+          "RSK-001"
+        ],
+        "files": [
+          "supabase/functions/deal-analyze-risk-signals/index.ts"
+        ],
+        "schema": [
+          "deal_risk_scores"
+        ]
+      },
+      "blocks": [
+        "RSK-005"
+      ],
+      "parallelWith": [
+        "RSK-002"
+      ],
+      "acceptance": [
+        "Risk score uses weighted formula: (engagement\u00d7w1 + champion\u00d7w2 + momentum\u00d7w3 + sentiment\u00d7w4)",
+        "Each dimension score (0-100) computed from relevant signal types",
+        "score_breakdown JSONB populated with {engagement, champion, momentum, sentiment} sub-scores",
+        "Existing signal detection patterns unchanged \u2014 only scoring aggregation upgraded"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/deal-analyze-risk-signals/index.ts"
+      ]
+    },
+    {
+      "id": "RSK-004",
+      "phase": "phase-2",
+      "title": "Fleet event route for daily risk scoring cron",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "description": "Add fleet event route for 'cron.deal_risk_scan' event type. Create agent-deal-risk-batch edge function that runs daily via orchestrator cron \u2014 calls get_deals_needing_risk_scan(), processes each deal through the weighted scoring engine, and upserts scores.",
+      "dependencies": {
+        "stories": [
+          "RSK-002",
+          "RSK-003"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/fleetRouter.ts",
+          "supabase/functions/deal-analyze-risk-signals/index.ts"
+        ],
+        "schema": [
+          "fleet_event_routes",
+          "fleet_sequence_definitions"
+        ]
+      },
+      "blocks": [
+        "RSK-010",
+        "RSK-012"
+      ],
+      "parallelWith": [
+        "RSK-005"
+      ],
+      "acceptance": [
+        "agent-deal-risk-batch edge function processes all stale deals for an org",
+        "Calls get_deals_needing_risk_scan(org_id, stale_hours=24) for deal list",
+        "Each deal scored via updated weighted model with score_breakdown",
+        "Returns { scored_deals, alerts_flagged, errors } for orchestrator logging",
+        "Respects circuit breaker \u2014 skips if circuit open for deal-risk adapter"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/agent-deal-risk-batch/index.ts"
+      ]
+    },
+    {
+      "id": "RSK-005",
+      "phase": "phase-2",
+      "title": "Fleet sequence definition for risk scoring pipeline",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "description": "Define fleet_sequence_definitions entry for risk_scoring sequence: step 1 = load config, step 2 = batch score deals, step 3 = evaluate alerts, step 4 = deliver alerts. Wire into fleet router with proper adapter mappings.",
+      "dependencies": {
+        "stories": [
+          "RSK-003"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/fleetRouter.ts"
+        ],
+        "schema": [
+          "fleet_sequence_definitions"
+        ]
+      },
+      "blocks": [
+        "RSK-008",
+        "RSK-012"
+      ],
+      "parallelWith": [
+        "RSK-004"
+      ],
+      "acceptance": [
+        "Fleet sequence 'risk_scoring' defined with 4 ordered steps",
+        "Adapter mapping added to fleetRouter.ts SKILL_AGENT_TYPE_MAP for risk scoring skills",
+        "Sequence context_requirements include org_id",
+        "Handoff route defined: risk_scoring.score_deals \u2192 alerts evaluation step"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/fleetRouter.ts"
+      ]
+    },
+    {
+      "id": "RSK-006",
+      "phase": "phase-3",
+      "title": "Intervention playbook engine",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "description": "Create riskPlaybooks.ts shared module that maps each risk signal type to a specific intervention playbook: suggested action, reason, confidence, expected outcome. Playbooks are context-aware \u2014 reference deal stage, champion name, specific evidence from signals.",
+      "dependencies": {
+        "stories": [
+          "RSK-002"
+        ],
+        "files": [],
+        "schema": [
+          "deal_risk_signals"
+        ]
+      },
+      "blocks": [
+        "RSK-007",
+        "RSK-008"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "getInterventionPlaybook(signal, dealContext) returns typed playbook with action, reason, evidence, confidence",
+        "10 playbook templates \u2014 one per signal type (timeline_slip, budget_concern, etc.)",
+        "Playbooks reference deal-specific data (champion name, days silent, competitor name, stage)",
+        "Configurable via PRD-01 config (playbook_preferences in user overrides)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/riskPlaybooks.ts"
+      ]
+    },
+    {
+      "id": "RSK-007",
+      "phase": "phase-3",
+      "title": "Integrate playbooks into deal_risk_aggregates",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "description": "Update calculate_deal_risk_aggregate to populate recommended_actions with intervention playbook suggestions. Each action includes action text, priority, rationale, and signal_type source.",
+      "dependencies": {
+        "stories": [
+          "RSK-006"
+        ],
+        "files": [
+          "supabase/functions/deal-analyze-risk-signals/index.ts"
+        ],
+        "schema": [
+          "deal_risk_aggregates"
+        ]
+      },
+      "blocks": [
+        "RSK-008"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "deal_risk_aggregates.recommended_actions populated with playbook-driven actions",
+        "Actions sorted by priority (high \u2192 medium \u2192 low)",
+        "Each action includes signal_type that triggered it for traceability",
+        "DealRiskPanel frontend automatically displays new playbook actions (existing UI)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/deal-analyze-risk-signals/index.ts"
+      ]
+    },
+    {
+      "id": "RSK-008",
+      "phase": "phase-4",
+      "title": "Rich Slack Block Kit alert builder",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "description": "Create riskAlertBlocks.ts that builds rich Slack Block Kit messages for high/critical risk deals: deal summary header, risk score with trend arrow, top 3 signals with evidence quotes, intervention playbook suggestion, and action buttons (Draft Check-in, View Analysis, Dismiss).",
+      "dependencies": {
+        "stories": [
+          "RSK-005",
+          "RSK-007"
+        ],
+        "files": [
+          "supabase/functions/_shared/slackBlocks.ts"
+        ],
+        "schema": [
+          "deal_risk_scores",
+          "deal_risk_aggregates"
+        ]
+      },
+      "blocks": [
+        "RSK-009"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "buildRiskAlertBlocks(deal, signals, playbook, config) returns Slack Block Kit array",
+        "Header: deal name, value, stage, days in stage",
+        "Risk score section with trend arrow (up/down/stable from previous_score delta)",
+        "Top 3 signals with severity emoji, title, and evidence quotes (max 150 chars each)",
+        "Intervention playbook section with suggested action",
+        "Action buttons: Draft Check-in (links to copilot), View Full Analysis (links to deal), Dismiss"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/riskAlertBlocks.ts"
+      ]
+    },
+    {
+      "id": "RSK-009",
+      "phase": "phase-4",
+      "title": "Alert delivery with suppression rules",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "description": "Upgrade slack-deal-risk-alert (or agent-deal-risk-batch step 3) to use new Block Kit builder, implement 24-hour suppression, quiet hours from user config, and threshold from org config. Replace basic risk conditions with weighted score thresholds.",
+      "dependencies": {
+        "stories": [
+          "RSK-008"
+        ],
+        "files": [
+          "supabase/functions/slack-deal-risk-alert/index.ts",
+          "supabase/functions/_shared/proactive/index.ts"
+        ],
+        "schema": [
+          "deal_risk_scores"
+        ]
+      },
+      "blocks": [
+        "RSK-012"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Alerts fire only when weighted score >= org-configured threshold (default 61 for high)",
+        "24-hour suppression: skip deals where alert_sent_at < 24 hours ago",
+        "Quiet hours: respect user-level quiet_hours from agent_config_user_overrides (default 6pm-8am)",
+        "Uses new rich Block Kit format instead of basic text",
+        "Marks alert_sent_at via mark_risk_alert_sent() RPC after delivery"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-deal-risk-alert/index.ts"
+      ]
+    },
+    {
+      "id": "RSK-010",
+      "phase": "phase-5",
+      "title": "Event-triggered re-scoring on meeting_ended",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "description": "Add fleet handoff route: after meeting_ended sequence completes post-meeting analysis, trigger deal risk re-scoring for the associated deal. Uses fleet_handoff_routes with condition has_deal_id=true.",
+      "dependencies": {
+        "stories": [
+          "RSK-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/runner.ts",
+          "supabase/functions/_shared/orchestrator/fleetRouter.ts"
+        ],
+        "schema": [
+          "fleet_handoff_routes"
+        ]
+      },
+      "blocks": [
+        "RSK-012"
+      ],
+      "parallelWith": [
+        "RSK-011"
+      ],
+      "acceptance": [
+        "Fleet handoff route: meeting_ended.post_meeting_analysis \u2192 deal_risk_rescore event",
+        "Handoff condition: step output must contain deal_id (has_deal_id check)",
+        "Context mapping passes deal_id and meeting_id from meeting_ended output to risk scorer",
+        "Re-scoring runs only for the specific deal, not full batch"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222200002_risk_scorer_fleet_routes.sql"
+      ]
+    },
+    {
+      "id": "RSK-011",
+      "phase": "phase-5",
+      "title": "Event-triggered re-scoring on CRM update",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "description": "Add fleet handoff route: after PRD-03 auto CRM update completes (stage change, amount change, close date change), trigger deal risk re-scoring. High-impact CRM field changes should immediately re-score.",
+      "dependencies": {
+        "stories": [
+          "RSK-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/fleetRouter.ts"
+        ],
+        "schema": [
+          "fleet_handoff_routes"
+        ]
+      },
+      "blocks": [
+        "RSK-012"
+      ],
+      "parallelWith": [
+        "RSK-010"
+      ],
+      "acceptance": [
+        "Fleet handoff route: crm_update_completed \u2192 deal_risk_rescore event",
+        "Handoff condition: crm_field_type in ['stage', 'amount', 'close_date'] (high-impact fields only)",
+        "Context mapping passes deal_id and changed_fields from CRM update output",
+        "Low-impact field updates (notes, next_steps) do NOT trigger re-scoring"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222200002_risk_scorer_fleet_routes.sql"
+      ]
+    },
+    {
+      "id": "RSK-012",
+      "phase": "phase-6",
+      "title": "Fleet seed data for risk scorer routes",
+      "type": "schema",
+      "status": "complete",
+      "priority": 12,
+      "description": "Seed fleet_event_routes, fleet_sequence_definitions, and fleet_handoff_routes for the deal risk scorer agent. Includes daily cron route, re-score event routes, and handoff routes from meeting_ended and CRM updates.",
+      "dependencies": {
+        "stories": [
+          "RSK-004",
+          "RSK-005",
+          "RSK-009",
+          "RSK-010",
+          "RSK-011"
+        ],
+        "files": [],
+        "schema": [
+          "fleet_event_routes",
+          "fleet_sequence_definitions",
+          "fleet_handoff_routes"
+        ]
+      },
+      "blocks": [
+        "RSK-013"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "fleet_event_routes: cron.deal_risk_scan, deal_risk_rescore entries",
+        "fleet_sequence_definitions: risk_scoring sequence with 4 steps",
+        "fleet_handoff_routes: meeting_ended \u2192 rescore, crm_update_completed \u2192 rescore",
+        "ON CONFLICT DO UPDATE for idempotent seeds (matches PRD-02 pattern)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222200003_risk_scorer_seed_data.sql"
+      ]
+    },
+    {
+      "id": "RSK-013",
+      "phase": "phase-6",
+      "title": "End-to-end verification",
+      "type": "verification",
+      "status": "complete",
+      "priority": 13,
+      "description": "Verify all PRD-04 files: lint check, import validation, migration SQL syntax, config engine integration paths, fleet router registrations, and Slack Block Kit structure.",
+      "dependencies": {
+        "stories": [
+          "RSK-012"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "All new files pass ESLint (Deno tsconfig warnings are pre-existing/expected)",
+        "All imports resolve correctly to existing shared modules",
+        "Migration SQL is syntactically valid with proper GRANT/RLS",
+        "Fleet routes reference valid sequence keys and adapter types",
+        "No regressions in existing deal-analyze-risk-signals functionality"
+      ],
+      "estimatedMinutes": 15,
+      "files": []
+    }
+  ],
+  "execution": {
+    "totalStories": 13,
+    "completedStories": 13,
+    "currentPhase": "complete",
+    "lastUpdated": "2026-02-21T23:30:00Z"
+  }
+}

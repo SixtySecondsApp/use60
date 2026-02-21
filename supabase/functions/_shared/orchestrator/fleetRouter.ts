@@ -55,6 +55,9 @@ const SKILL_AGENT_TYPE_MAP: Record<string, string> = {
   'score-deal-risks': 'deal_risk',
   'generate-risk-alerts': 'deal_risk',
   'deliver-risk-slack': 'deal_risk',
+  'batch-score-deals': 'deal_risk',
+  'evaluate-risk-alerts': 'deal_risk',
+  'rescore-deal': 'deal_risk',
   // Re-engagement skills
   'research-trigger-events': 'reengagement',
   'analyse-stall-reason': 'reengagement',
