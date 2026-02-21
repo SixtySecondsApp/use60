@@ -2,8 +2,8 @@
 // Creates a Stripe Checkout Session for subscription purchase
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+import { getCorsHeaders } from "../_shared/corsHelper.ts";
 import { getStripeClient, getOrCreateStripeCustomer, getSiteUrl } from "../_shared/stripe.ts";
 import { captureException } from "../_shared/sentryEdge.ts";
 
@@ -12,7 +12,8 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 
 interface CheckoutRequest {
   org_id: string;
-  plan_id: string;
+  plan_id?: string;      // Legacy: direct plan UUID
+  plan_slug?: string;    // New: 'basic' | 'pro'
   billing_cycle?: "monthly" | "yearly";
   success_url?: string;
   cancel_url?: string;
@@ -26,13 +27,13 @@ interface CheckoutResponse {
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: getCorsHeaders(req) });
   }
 
   if (req.method !== "POST") {
     return new Response(
       JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 405, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 
@@ -42,7 +43,7 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -55,20 +56,30 @@ serve(async (req) => {
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid authentication" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
     // Parse request body
     const body: CheckoutRequest = await req.json();
-    const { org_id, plan_id, billing_cycle = "monthly", success_url, cancel_url } = body;
+    const { org_id, plan_id, plan_slug, billing_cycle, success_url, cancel_url } = body;
 
-    if (!org_id || !plan_id) {
+    if (!org_id || (!plan_id && !plan_slug)) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: org_id, plan_id" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Missing required fields: org_id and either plan_id or plan_slug" }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
+
+    if (plan_slug && !['basic', 'pro'].includes(plan_slug)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid plan_slug. Must be 'basic' or 'pro'" }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      );
+    }
+
+    // Normalize billing_cycle: accept both 'yearly' and 'annual'
+    const normalizedCycle = billing_cycle === 'annual' ? 'yearly' : (billing_cycle || 'monthly');
 
     // Verify user has permission to manage this org's billing (owner or admin)
     const { data: membership, error: membershipError } = await supabase
@@ -81,34 +92,51 @@ serve(async (req) => {
     if (membershipError || !membership || !["owner", "admin"].includes(membership.role)) {
       return new Response(
         JSON.stringify({ error: "You do not have permission to manage billing for this organization" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
-    // Get the plan details
-    const { data: plan, error: planError } = await supabase
-      .from("subscription_plans")
-      .select("*")
-      .eq("id", plan_id)
-      .eq("is_active", true)
-      .single();
-
-    if (planError || !plan) {
-      return new Response(
-        JSON.stringify({ error: "Plan not found or inactive" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Get the plan details — by slug (preferred) or by ID (legacy)
+    let plan;
+    if (plan_slug) {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("id, slug, name, price_monthly, price_yearly, currency, trial_days, features, stripe_price_id_monthly, stripe_price_id_yearly, stripe_product_id")
+        .eq("slug", plan_slug)
+        .eq("is_active", true)
+        .single();
+      if (error || !data) {
+        return new Response(
+          JSON.stringify({ error: `Plan '${plan_slug}' not found or inactive` }),
+          { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+        );
+      }
+      plan = data;
+    } else {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("id, slug, name, price_monthly, price_yearly, currency, trial_days, features, stripe_price_id_monthly, stripe_price_id_yearly, stripe_product_id")
+        .eq("id", plan_id)
+        .eq("is_active", true)
+        .single();
+      if (error || !data) {
+        return new Response(
+          JSON.stringify({ error: "Plan not found or inactive" }),
+          { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+        );
+      }
+      plan = data;
     }
 
     // Get the Stripe price ID based on billing cycle
-    const priceId = billing_cycle === "yearly"
+    const priceId = normalizedCycle === "yearly"
       ? plan.stripe_price_id_yearly
       : plan.stripe_price_id_monthly;
 
     if (!priceId) {
       return new Response(
         JSON.stringify({ error: "No Stripe price configured for this plan" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -122,16 +150,18 @@ serve(async (req) => {
     if (orgError || !org) {
       return new Response(
         JSON.stringify({ error: "Organization not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
     // Check for existing subscription
     const { data: existingSub } = await supabase
       .from("organization_subscriptions")
-      .select("stripe_customer_id")
+      .select("stripe_customer_id, status")
       .eq("org_id", org_id)
-      .single();
+      .maybeSingle();
+
+    const isConvertingFromTrial = existingSub?.status === 'trialing';
 
     // Initialize Stripe
     const stripe = getStripeClient();
@@ -157,20 +187,23 @@ serve(async (req) => {
           quantity: 1,
         },
       ],
-      success_url: success_url || `${siteUrl}/team/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: cancel_url || `${siteUrl}/team/billing/cancel`,
+      success_url: success_url || `${siteUrl}/settings/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: cancel_url || `${siteUrl}/settings/billing?checkout=cancelled`,
       subscription_data: {
-        trial_period_days: plan.trial_days ?? 14,
+        trial_period_days: isConvertingFromTrial ? undefined : (plan.trial_days ?? 14),
         metadata: {
           org_id,
-          plan_id,
+          plan_id: plan.id,
           plan_slug: plan.slug,
+          billing_cycle: normalizedCycle,
+          converting_from_trial: isConvertingFromTrial ? 'true' : 'false',
         },
       },
       metadata: {
         org_id,
-        plan_id,
+        plan_id: plan.id,
         plan_slug: plan.slug,
+        billing_cycle: normalizedCycle,
         user_id: user.id,
       },
       // No card required during trial
@@ -215,10 +248,10 @@ serve(async (req) => {
       .upsert(
         {
           org_id,
-          plan_id,
+          plan_id: plan.id,
           stripe_customer_id: customer.id,
           status: "trialing",
-          billing_cycle,
+          billing_cycle: normalizedCycle,
           trial_ends_at: new Date(Date.now() + (plan.trial_days ?? 14) * 24 * 60 * 60 * 1000).toISOString(),
           trial_start_at: new Date().toISOString(),
           started_at: new Date().toISOString(),
@@ -241,7 +274,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(response),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
 
   } catch (error) {
@@ -255,7 +288,7 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 });

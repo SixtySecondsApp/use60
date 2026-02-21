@@ -228,6 +228,9 @@ serve(async (req) => {
     const apolloApiKey = (integration?.credentials as Record<string, string>)?.api_key
       || Deno.env.get('APOLLO_API_KEY')
 
+    // BYOK: if the org supplied their own key they pay Apollo directly — skip credit deduction
+    const usingOwnKey = !!( integration?.credentials as Record<string, string>)?.api_key
+
     if (!apolloApiKey) {
       return new Response(
         JSON.stringify({
@@ -334,7 +337,7 @@ serve(async (req) => {
     const people = (apolloData.people || []) as Record<string, unknown>[]
     const totalResults = (apolloData.pagination?.total_entries as number) || 0
 
-    if (!_skip_credit_deduction && membership.org_id) {
+    if (!_skip_credit_deduction && !usingOwnKey && membership.org_id) {
       await logFlatRateCostEvent(
         supabase,
         user.id,

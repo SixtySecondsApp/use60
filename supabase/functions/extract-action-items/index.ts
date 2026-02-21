@@ -113,6 +113,25 @@ serve(async (req) => {
       )
     }
 
+    // Get org for credit check
+    const { data: membership } = await supabaseClient
+      .from('organization_memberships')
+      .select('org_id')
+      .eq('user_id', meeting.owner_user_id || '')
+      .limit(1)
+      .maybeSingle()
+    const orgId = membership?.org_id ?? null
+
+    if (orgId) {
+      const balanceCheck = await checkCreditBalance(supabaseClient, orgId)
+      if (!balanceCheck.allowed) {
+        return new Response(
+          JSON.stringify({ error: 'Insufficient credits. Please top up to continue.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     // Analyze transcript for action items using existing analyzer (with extraction rules - Phase 6.3)
     // Use service role client for extraction rules lookup (bypasses RLS)
     const supabaseService = createClient(
@@ -137,6 +156,15 @@ serve(async (req) => {
       supabaseService,
       meeting2?.owner_user_id || meeting.owner_user_id
     )
+
+    // Log AI cost event for transcript analysis
+    const ownerUserId = meeting2?.owner_user_id || meeting.owner_user_id
+    if (ownerUserId && orgId) {
+      await logAICostEvent(
+        supabaseService, ownerUserId, orgId, 'anthropic', 'claude-haiku-4-5-20251001',
+        0, 0, 'task_execution'
+      )
+    }
 
     // Optional: also consider any existing Fathom action items to deduplicate
     // We don't have Fathom payload here, so dedupe against DB by title and timestamp

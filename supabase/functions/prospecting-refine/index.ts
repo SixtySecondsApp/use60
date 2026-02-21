@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.32.1'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
+import { logAICostEvent, checkCreditBalance, extractAnthropicUsage } from '../_shared/costTracking.ts'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,6 +96,12 @@ serve(async (req) => {
       return json({ error: 'AI provider not configured', code: 'AI_NOT_CONFIGURED' }, 500)
     }
 
+    // Check credit balance before AI call
+    const creditCheck = await checkCreditBalance(anonClient, membership.org_id)
+    if (!creditCheck.allowed) {
+      return json({ error: 'Insufficient credits', message: creditCheck.message, code: 'INSUFFICIENT_CREDITS' }, 402)
+    }
+
     const providerLabel = provider === 'ai_ark' ? 'AI Ark' : provider === 'apollo' ? 'Apollo.io' : 'the data provider'
     const actionLabel = action === 'company_search' ? 'company search' : 'people search'
 
@@ -134,7 +141,13 @@ Analyze the results and suggest 3-5 filter refinements to improve targeting qual
     })
 
     // ------------------------------------------------------------------
-    // 5. Parse response
+    // 5. Log cost event
+    // ------------------------------------------------------------------
+    const { inputTokens, outputTokens } = extractAnthropicUsage(message)
+    logAICostEvent(anonClient, user.id, membership.org_id, 'anthropic', 'claude-haiku-4-5-20251001', inputTokens, outputTokens, 'research_enrichment').catch(() => {})
+
+    // ------------------------------------------------------------------
+    // 6. Parse response
     // ------------------------------------------------------------------
     const responseText = message.content
       .filter((block: { type: string }) => block.type === 'text')
@@ -168,7 +181,7 @@ Analyze the results and suggest 3-5 filter refinements to improve targeting qual
     }
 
     // ------------------------------------------------------------------
-    // 6. Return suggestions
+    // 7. Return suggestions
     // ------------------------------------------------------------------
     return json({
       suggestions,

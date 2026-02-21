@@ -121,6 +121,7 @@ VALUES
   ('anthropic', 'claude-3-5-haiku-20241022', 'Claude 3.5 Haiku', 0.80, 4.00, 200000, 8192, true, true),
   ('anthropic', 'claude-3-opus-20240229', 'Claude 3 Opus', 15.00, 75.00, 200000, 4096, true, true),
   ('anthropic', 'claude-sonnet-4-5-20250929', 'Claude Sonnet 4.5', 3.00, 15.00, 200000, 64000, true, true),
+  ('anthropic', 'claude-sonnet-4-6-20250929', 'Claude Sonnet 4.6', 3.00, 15.00, 200000, 64000, true, true),
   ('anthropic', 'claude-haiku-4-5-20251001', 'Claude Haiku 4.5', 1.00, 5.00, 200000, 64000, true, true)
 ON CONFLICT (provider, model_id) DO UPDATE SET
   display_name = EXCLUDED.display_name,

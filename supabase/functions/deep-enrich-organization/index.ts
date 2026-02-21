@@ -17,17 +17,13 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { loadPrompt, interpolateVariables } from '../_shared/promptLoader.ts';
 import { invalidatePersonaCache } from '../_shared/salesCopilotPersona.ts';
 import { executeGeminiSearch } from '../_shared/geminiSearch.ts';
 import { executeExaSearch } from '../_shared/exaSearch.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { logAICostEvent, checkCreditBalance } from '../_shared/costTracking.ts';
 
 /**
  * Safely parse JSON from AI responses, handling common malformations:
@@ -436,14 +432,15 @@ Return ONLY valid JSON matching this exact structure (use null for fields you ca
 // ============================================================================
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
+
+  const cors = getCorsHeaders(req);
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     });
   }
 
@@ -489,6 +486,17 @@ serve(async (req) => {
 
     const userId = user?.id || null; // Allow null for service role testing
 
+    // Check credit balance for enrichment actions (start/manual/retry consume credits)
+    if (userId && organization_id && (action === 'start' || action === 'manual' || action === 'retry')) {
+      const creditCheck = await checkCreditBalance(supabase, organization_id);
+      if (!creditCheck.allowed) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Insufficient credits', message: creditCheck.message }),
+          { status: 402, headers: { ...cors, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     switch (action) {
       case 'start':
         response = await startEnrichment(supabase, userId, organization_id, domain, force);
@@ -510,8 +518,13 @@ serve(async (req) => {
         throw new Error(`Unknown action: ${action}`);
     }
 
+    // Log AI cost for enrichment actions (Gemini + Exa calls are made async in pipeline)
+    if (userId && organization_id && (action === 'start' || action === 'manual')) {
+      logAICostEvent(supabase, userId, organization_id, 'gemini', 'gemini-2.5-flash', 1000, 800, 'research_enrichment').catch(() => {});
+    }
+
     return new Response(JSON.stringify(response), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
@@ -529,7 +542,7 @@ serve(async (req) => {
       JSON.stringify({ success: false, error: errorMessage }),
       {
         status: statusCode,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       }
     );
   }

@@ -12,6 +12,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { logFlatRateCostEvent } from '../_shared/costTracking.ts';
 import {
   createMeetingBaaSClient,
   MeetingBaaSClient,
@@ -639,6 +640,34 @@ serve(async (req) => {
 
     // Increment usage count
     await incrementUsageCount(supabase, orgId);
+
+    // Deduct credits for notetaker bot (non-blocking — bot deployment is not gated on credits)
+    try {
+      const serviceClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+      const { data: menuEntry } = await serviceClient
+        .from('credit_menu')
+        .select('cost_low, cost_medium, cost_high, is_active, free_with_sub')
+        .eq('action_id', 'notetaker_bot')
+        .maybeSingle();
+
+      if (menuEntry?.is_active && !menuEntry.free_with_sub) {
+        const cost = (menuEntry.cost_medium as number) ?? 2.0;
+        await logFlatRateCostEvent(
+          serviceClient,
+          userId,
+          orgId,
+          'meetingbaas',
+          'notetaker-bot-deployment',
+          cost,
+          'notetaker_bot',
+        );
+      }
+    } catch (creditErr) {
+      console.error('[DeployBot] Credit deduction failed (non-blocking):', creditErr);
+    }
 
     console.log('[DeployBot] Bot deployed successfully:', {
       recordingId: recording.id,

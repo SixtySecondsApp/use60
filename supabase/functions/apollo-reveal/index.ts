@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders } from '../_shared/corsHelper.ts'
+import { logFlatRateCostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
 
 /**
  * apollo-reveal — Unmask Apollo search results by calling /people/bulk_match.
@@ -80,6 +81,15 @@ serve(async (req: Request) => {
       )
     }
 
+    // Credit balance pre-flight check
+    const balanceCheck = await checkCreditBalance(serviceClient, membership.org_id)
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS' }),
+        { status: 402, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      )
+    }
+
     const { apollo_ids } = await req.json() as { apollo_ids: string[] }
     if (!apollo_ids?.length) {
       return new Response(
@@ -123,6 +133,17 @@ serve(async (req: Request) => {
         }
       })
       .filter(Boolean)
+
+    // Deduct credits for successful reveal
+    await logFlatRateCostEvent(
+      serviceClient,
+      user.id,
+      membership.org_id,
+      'apollo',
+      'apollo-reveal',
+      0.3,
+      'apollo_enrichment',
+    )
 
     return new Response(
       JSON.stringify({ people }),

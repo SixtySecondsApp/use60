@@ -46,8 +46,21 @@ export interface StorageUsage {
   lastStorageDeductionDate: string | null;
 }
 
+export interface SubscriptionCredits {
+  balance: number;
+  expiry: string | null;
+}
+
+export interface OnboardingCredits {
+  balance: number;
+  complete: boolean;
+}
+
 export interface CreditBalance {
   balance: number;
+  subscriptionCredits: SubscriptionCredits;
+  onboardingCredits: OnboardingCredits;
+  packCredits: number;
   packInventory: PackInventory;
   dailyBurnRate: number;
   projectedDaysRemaining: number;
@@ -93,7 +106,16 @@ function getUtcStartOfDayDaysAgo(daysAgo: number): string {
 }
 
 interface BalanceResponseDto {
-  balance?: number;
+  balance_credits?: number;
+  subscription_credits?: {
+    balance: number;
+    expiry: string | null;
+  };
+  onboarding_credits?: {
+    balance: number;
+    complete: boolean;
+  };
+  pack_credits?: number;
   pack_inventory?: {
     active_packs: number;
     total_remaining: number;
@@ -160,7 +182,16 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
   if (!error && data) {
     const autoTopUpRaw = data?.auto_top_up;
     return {
-      balance: data?.balance ?? 0,
+      balance: data?.balance_credits ?? 0,
+      subscriptionCredits: {
+        balance: data?.subscription_credits?.balance ?? 0,
+        expiry: data?.subscription_credits?.expiry ?? null,
+      },
+      onboardingCredits: {
+        balance: data?.onboarding_credits?.balance ?? 0,
+        complete: data?.onboarding_credits?.complete ?? false,
+      },
+      packCredits: data?.pack_credits ?? 0,
       packInventory: {
         activePacks: data?.pack_inventory?.active_packs ?? 0,
         totalRemaining: data?.pack_inventory?.total_remaining ?? 0,
@@ -217,6 +248,9 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
 
     return {
       balance: row?.balance_credits ?? 0,
+      subscriptionCredits: { balance: 0, expiry: null },
+      onboardingCredits: { balance: 0, complete: false },
+      packCredits: 0,
       packInventory: { activePacks: 0, totalRemaining: 0 },
       dailyBurnRate: 0,
       projectedDaysRemaining: -1, // no usage data available from fallback
@@ -229,6 +263,9 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
   } catch {
     return {
       balance: 0,
+      subscriptionCredits: { balance: 0, expiry: null },
+      onboardingCredits: { balance: 0, complete: false },
+      packCredits: 0,
       packInventory: { activePacks: 0, totalRemaining: 0 },
       dailyBurnRate: 0,
       projectedDaysRemaining: -1,
@@ -502,6 +539,93 @@ export async function grantCredits(
   }
 
   return data as number; // new balance
+}
+
+// ============================================================================
+// Credit Menu (Pricing Catalogue)
+// ============================================================================
+
+export interface CreditMenuItem {
+  action_id: string;
+  display_name: string;
+  description: string;
+  unit: string;
+  free_with_sub: boolean;
+  is_flat_rate: boolean;
+  cost_low: number;
+  cost_medium: number;
+  cost_high: number;
+}
+
+export interface CreditMenu {
+  ai_actions: CreditMenuItem[];
+  agents: CreditMenuItem[];
+  integrations: CreditMenuItem[];
+  enrichment: CreditMenuItem[];
+  storage: CreditMenuItem[];
+  [key: string]: CreditMenuItem[];
+}
+
+/**
+ * Fetch the full credit menu (all tiers) from the get-credit-menu edge function.
+ * Optionally pass a tier to get resolved single-cost values instead.
+ */
+export async function getCreditMenu(tier?: 'low' | 'medium' | 'high'): Promise<CreditMenu> {
+  const query = tier ? `?tier=${tier}` : '';
+  const { data, error } = await supabase.functions.invoke<CreditMenu>(`get-credit-menu${query}`, {
+    method: 'GET',
+  });
+
+  if (error || !data) {
+    throw new Error(error?.message || 'Failed to fetch credit menu');
+  }
+
+  return data;
+}
+
+// ============================================================================
+// Budget Cap
+// ============================================================================
+
+export interface BudgetCapSettings {
+  capType: 'daily' | 'weekly' | 'unlimited';
+  capAmount: number | null;
+  currentPeriodSpent: number;
+  periodResetAt: string | null;
+}
+
+/**
+ * Get the budget cap settings for an org (org member access).
+ * Returns null if no cap is configured (treat as unlimited).
+ */
+export async function getBudgetCap(orgId: string): Promise<BudgetCapSettings | null> {
+  const { data, error } = await supabase.rpc('get_budget_cap', { p_org_id: orgId });
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) return null;
+  const row = data[0];
+  return {
+    capType: (row.cap_type as BudgetCapSettings['capType']) ?? 'unlimited',
+    capAmount: row.cap_amount ?? null,
+    currentPeriodSpent: Number(row.current_period_spent ?? 0),
+    periodResetAt: row.period_reset_at ?? null,
+  };
+}
+
+/**
+ * Set the budget cap for an org (org admin/owner only).
+ * Resets current period spend on change.
+ */
+export async function setBudgetCap(
+  orgId: string,
+  capType: 'daily' | 'weekly' | 'unlimited',
+  capAmount?: number
+): Promise<void> {
+  const { error } = await supabase.rpc('set_budget_cap', {
+    p_org_id: orgId,
+    p_cap_type: capType,
+    p_cap_amount: capType === 'unlimited' ? null : (capAmount ?? null),
+  });
+  if (error) throw new Error(error.message);
 }
 
 // ============================================================================

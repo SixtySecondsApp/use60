@@ -22,7 +22,7 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
-import { logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts';
+import { logAICostEvent, checkCreditBalance, extractAnthropicUsage } from '../_shared/costTracking.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -309,6 +309,12 @@ serve(async (req: Request) => {
     }
 
     if (action === 'analyze') {
+      // Check credit balance before running analysis
+      const creditCheck = await checkCreditBalance(supabase, tableWithOrg.org_id);
+      if (!creditCheck.allowed) {
+        return errorResponse('Insufficient credits', req, 402);
+      }
+
       // Get or compute behavioral patterns
       let { data: patterns } = await supabase
         .from('ops_behavioral_patterns')
@@ -369,6 +375,9 @@ serve(async (req: Request) => {
           console.error(`${LOG_PREFIX} Insert error:`, insertError);
         }
       }
+
+      // Log cost event for pattern analysis (rule-based, 0 tokens)
+      logAICostEvent(supabase, user.id, tableWithOrg.org_id, 'anthropic', ANTHROPIC_API_KEY ? 'claude-haiku-4-5-20251001' : 'rule-based', 0, 0, 'research_enrichment').catch(() => {});
 
       return jsonResponse({
         generated: allPredictions.length,

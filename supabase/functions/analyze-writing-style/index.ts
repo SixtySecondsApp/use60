@@ -13,6 +13,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getGoogleIntegration, refreshGoogleAccessToken } from '../_shared/googleOAuth.ts';
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -109,9 +110,36 @@ serve(async (req) => {
         response = await fetchSentEmails(supabase, user.id, requestBody.count || 20);
         break;
 
-      case 'analyze':
-        response = await analyzeEmails(requestBody.emails);
-        break;
+      case 'analyze': {
+        // Get org for credit check
+        const { data: membership } = await supabase
+          .from('organization_memberships')
+          .select('org_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle()
+        const orgId = membership?.org_id ?? null
+
+        if (orgId) {
+          const balanceCheck = await checkCreditBalance(supabase, orgId)
+          if (!balanceCheck.allowed) {
+            return new Response(JSON.stringify({ success: false, error: 'Insufficient credits. Please top up to continue.' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+          }
+        }
+
+        response = await analyzeEmails(requestBody.emails)
+
+        // Log AI cost event after successful analysis
+        if (orgId && response.success) {
+          await logAICostEvent(
+            supabase, user.id, orgId, 'anthropic', 'claude-sonnet-4-20250514',
+            0, 0, 'content_generation'
+          )
+        }
+        break
+      }
 
       case 'save':
         response = await saveStyle(supabase, user.id, requestBody);

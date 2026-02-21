@@ -6,8 +6,9 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { logAICostEvent, checkCreditBalance } from '../_shared/costTracking.ts';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const ANTHROPIC_API_BASE = 'https://api.anthropic.com/v1'
@@ -50,6 +51,8 @@ interface ParsedQuery {
     contact_name?: string
     has_action_items?: boolean
   }
+  inputTokens?: number
+  outputTokens?: number
 }
 
 interface SearchResult {
@@ -168,14 +171,18 @@ Respond with JSON only:
     const parsed = JSON.parse(content.replace(/```json\n?|\n?```/g, ''))
     return {
       semantic_query: parsed.semantic_query || query,
-      structured_filters: parsed.structured_filters || {}
+      structured_filters: parsed.structured_filters || {},
+      inputTokens: data.usage?.input_tokens || 0,
+      outputTokens: data.usage?.output_tokens || 0,
     }
   } catch (error) {
     console.error('Query parsing error:', error)
     // Fallback: treat entire query as semantic
     return {
       semantic_query: query,
-      structured_filters: {}
+      structured_filters: {},
+      inputTokens: 0,
+      outputTokens: 0,
     }
   }
 }
@@ -809,6 +816,19 @@ serve(async (req) => {
     let parsedQuery: ParsedQuery
     if (anthropicApiKey) {
       parsedQuery = await parseQueryWithClaude(query, anthropicApiKey)
+      // Log AI cost event for Claude query parsing
+      if (parsedQuery.inputTokens || parsedQuery.outputTokens) {
+        await logAICostEvent(
+          adminClient,
+          user.id,
+          orgId,
+          'anthropic',
+          'claude-sonnet-4-20250514',
+          parsedQuery.inputTokens || 0,
+          parsedQuery.outputTokens || 0,
+          'meeting_summary',
+        )
+      }
     } else {
       // Simple fallback parsing
       parsedQuery = {
@@ -823,6 +843,21 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'User is not a member of any organization' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Create admin client for credit tracking (anon client respects RLS)
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+
+    // Credit balance check before AI call
+    const balanceCheck = await checkCreditBalance(adminClient, orgId)
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 

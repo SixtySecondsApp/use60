@@ -62,7 +62,7 @@ const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const MODEL = 'claude-haiku-4-5';
+const MODEL = 'claude-sonnet-4-6-20250929';
 const MAX_ITERATIONS = 15;
 const MAX_TOKENS = 4096;
 
@@ -509,7 +509,32 @@ Returns relevant documentation articles with content snippets. Use the results t
       required: ['query'],
     },
   },
-  // 10. search_meeting_context - Proactive meeting context enrichment
+  // 10. query_credit_usage - User credit usage statistics
+  {
+    name: 'query_credit_usage',
+    description: 'Query the user\'s credit usage statistics. Use when the user asks about: how many credits they used today/this week/this month, their biggest credit expense, how long their credits will last, their burn rate, or which actions/meetings cost the most credits.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query_type: {
+          type: 'string',
+          enum: ['today', 'this_week', 'last_30_days', 'by_category', 'burn_rate', 'top_actions'],
+          description: 'Type of usage query to run',
+        },
+        filters: {
+          type: 'object',
+          properties: {
+            category: {
+              type: 'string',
+              description: 'Filter by category: ai_actions, agents, integrations, enrichment, storage',
+            },
+          },
+        },
+      },
+      required: ['query_type'],
+    },
+  },
+  // 11. search_meeting_context - Proactive meeting context enrichment
   {
     name: 'search_meeting_context',
     description: `Search for relevant meeting context when discussing deals, contacts, or companies. Call this PROACTIVELY when:
@@ -818,6 +843,20 @@ async function executeToolCall(
         { userAuthToken }
       );
       return result;
+    }
+
+    case 'query_credit_usage': {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      const result = await fetch(`${supabaseUrl}/functions/v1/get-credit-usage-summary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': userAuthToken ? `Bearer ${userAuthToken}` : '',
+        },
+        body: JSON.stringify(input),
+      });
+      const data = await result.json();
+      return data;
     }
 
     default:
@@ -1962,33 +2001,7 @@ serve(async (req: Request) => {
       console.log('[copilot-autonomous] Apify connected for org:', organizationId);
     }
 
-    // Fetch profile context and email personalization in parallel
-    const [profileContext, emailPersonalization] = await Promise.all([
-      (fact_profile_id || product_profile_id)
-        ? fetchProfileContext(supabase, fact_profile_id, product_profile_id)
-        : Promise.resolve(undefined),
-      fetchEmailPersonalization(supabase, userId),
-    ]);
-
-    // Build system prompt (no longer depends on per-skill tool defs)
-    const systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext, emailPersonalization);
-
-    // Use the tool architecture (expanded from original 4-tool to include CRM index and more)
-    const claudeTools = TOOL_DEFINITIONS;
-
-    // =========================================================================
-    // Multi-Agent Orchestration
-    // =========================================================================
-    // All orgs get multi-agent classification by default (loadAgentTeamConfig
-    // returns a default config when no DB row exists).
-    // Single-domain messages still route to a single specialist via the
-    // keyword pre-filter — no extra API call for clear intents.
-    // Fallback to the original single-agent path happens when:
-    //   - force_single_agent context flag is set (demo comparison page)
-    //   - Budget is exceeded
-    //   - Classification returns null
-    //   - Non-streaming request (testing only)
-
+    // Resolve org ID early — needed for credit checks, alerts, model config, and multi-agent
     const resolvedOrgForConfig = organizationId
       ? organizationId
       : await resolveOrgId(supabase, userId, null).catch(() => null);
@@ -2007,6 +2020,83 @@ serve(async (req: Request) => {
         );
       }
     }
+
+    // =========================================================================
+    // Proactive Credit Alerts (non-blocking)
+    // =========================================================================
+    // Call check-credit-alerts and pick the highest-priority alert (if any)
+    // to append as a brief note in the system prompt.
+    let creditAlertNote = '';
+    if (resolvedOrgForConfig && userId) {
+      try {
+        const alertResp = await fetch(`${SUPABASE_URL}/functions/v1/check-credit-alerts`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader || '',
+          },
+          body: JSON.stringify({ org_id: resolvedOrgForConfig, user_id: userId }),
+        });
+
+        if (alertResp.ok) {
+          const alertData = await alertResp.json();
+          const alerts = alertData?.alerts as Array<{ alert_type: string; message: string }> | undefined;
+
+          if (alerts && alerts.length > 0) {
+            // Priority order: negative_balance > budget_cap_hit > low_balance_10cr > low_balance_20pct > tier_upgrade_suggestion > weekly_digest
+            const PRIORITY_ORDER = [
+              'negative_balance', 'budget_cap_hit', 'low_balance_10cr',
+              'low_balance_20pct', 'tier_upgrade_suggestion', 'weekly_digest',
+            ];
+            const sorted = [...alerts].sort((a, b) => {
+              const aPri = PRIORITY_ORDER.indexOf(a.alert_type);
+              const bPri = PRIORITY_ORDER.indexOf(b.alert_type);
+              return (aPri === -1 ? 99 : aPri) - (bPri === -1 ? 99 : bPri);
+            });
+
+            // Surface only the single most urgent alert
+            const topAlert = sorted[0];
+            creditAlertNote = `\n\n## Credit Alert (surface this briefly at the START of your response)\n\nBefore answering the user's question, include this brief note:\nCredit alert: ${topAlert.message}\n\nKeep it to one short line -- do not elaborate unless the user asks follow-up questions about credits.\n`;
+            console.log(`[copilot-autonomous] Credit alert surfaced: ${topAlert.alert_type}`);
+          }
+        }
+      } catch (alertErr) {
+        // Non-fatal — never block copilot for alert failures
+        console.warn('[copilot-autonomous] Credit alert check failed (non-fatal):', alertErr);
+      }
+    }
+
+    // Fetch profile context and email personalization in parallel
+    const [profileContext, emailPersonalization] = await Promise.all([
+      (fact_profile_id || product_profile_id)
+        ? fetchProfileContext(supabase, fact_profile_id, product_profile_id)
+        : Promise.resolve(undefined),
+      fetchEmailPersonalization(supabase, userId),
+    ]);
+
+    // Build system prompt (no longer depends on per-skill tool defs)
+    let systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext, emailPersonalization);
+
+    // Append credit alert context to system prompt if one was surfaced
+    if (creditAlertNote) {
+      systemPrompt += creditAlertNote;
+    }
+
+    // Use the tool architecture (expanded from original 4-tool to include CRM index and more)
+    const claudeTools = TOOL_DEFINITIONS;
+
+    // =========================================================================
+    // Multi-Agent Orchestration
+    // =========================================================================
+    // All orgs get multi-agent classification by default (loadAgentTeamConfig
+    // returns a default config when no DB row exists).
+    // Single-domain messages still route to a single specialist via the
+    // keyword pre-filter — no extra API call for clear intents.
+    // Fallback to the original single-agent path happens when:
+    //   - force_single_agent context flag is set (demo comparison page)
+    //   - Budget is exceeded
+    //   - Classification returns null
+    //   - Non-streaming request (testing only)
 
     // Resolve planner/driver models from org config
     let plannerModel = MODEL; // default

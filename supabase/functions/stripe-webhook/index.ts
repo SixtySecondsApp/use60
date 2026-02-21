@@ -20,6 +20,20 @@ import {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+async function getOrgPlanSlug(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('organization_subscriptions')
+    .select('plan_id, subscription_plans!inner(slug)')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  // Handle the nested join result
+  const plans = (data as any)?.subscription_plans;
+  return plans?.slug ?? null;
+}
+
 interface WebhookResult {
   success: boolean;
   event_id: string;
@@ -427,6 +441,24 @@ async function handleSubscriptionCreated(
   }
 
   await syncSubscriptionToDatabase(supabase, orgId, subscription);
+
+  // Grant subscription credits for Pro plan
+  const planSlug = metadata.plan_slug || await getOrgPlanSlug(supabase, orgId);
+  if (planSlug === 'pro') {
+    const periodEnd = getPeriodDates(subscription).periodEnd.toISOString();
+    const { data: newBalance, error: creditError } = await supabase.rpc('grant_subscription_credits', {
+      p_org_id: orgId,
+      p_amount: 250,
+      p_period_end: periodEnd,
+    });
+    if (creditError) {
+      console.error('[Webhook] Error granting subscription credits:', creditError);
+    } else if (newBalance === -1) {
+      console.error(`[Webhook] grant_subscription_credits returned -1: org_credit_balance row not found for org ${orgId}`);
+    } else {
+      console.log(`[Webhook] Granted 250 subscription credits to org ${orgId}, new balance: ${newBalance}`);
+    }
+  }
 }
 
 // ============================================================================
@@ -489,6 +521,35 @@ async function handleSubscriptionUpdated(
     .is('org_id', null);
 
   await syncSubscriptionToDatabase(supabase, orgId, subscription);
+
+  // Check if plan changed (upgrade/downgrade)
+  const updatedMetadata = extractMetadata(subscription);
+  const newPlanSlug = updatedMetadata.plan_slug || await getOrgPlanSlug(supabase, orgId);
+  // If upgrading to Pro, grant subscription credits
+  if (newPlanSlug === 'pro') {
+    const periodEnd = getPeriodDates(subscription).periodEnd.toISOString();
+    // Check if credits already exist (avoid double-grant)
+    const { data: balance } = await supabase
+      .from('org_credit_balance')
+      .select('subscription_credits_balance')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (!balance || balance.subscription_credits_balance === 0) {
+      const { data: newBalance, error: grantError } = await supabase.rpc('grant_subscription_credits', {
+        p_org_id: orgId,
+        p_amount: 250,
+        p_period_end: periodEnd,
+      });
+      if (grantError) {
+        console.error('[Webhook] Error granting upgrade credits:', grantError);
+      } else if (newBalance === -1) {
+        console.error(`[Webhook] grant_subscription_credits returned -1: org_credit_balance row not found for org ${orgId}`);
+      } else {
+        console.log(`[Webhook] Granted 250 credits on upgrade to Pro for org ${orgId}, new balance: ${newBalance}`);
+      }
+    }
+  }
 }
 
 // ============================================================================
@@ -525,6 +586,16 @@ async function handleSubscriptionDeleted(
   if (error) {
     console.error("Error marking subscription as canceled:", error);
     throw error;
+  }
+
+  // Expire subscription credits when subscription is deleted/cancelled
+  const { error: expireError } = await supabase.rpc('expire_subscription_credits', {
+    p_org_id: existingSub.org_id,
+  });
+  if (expireError) {
+    console.error('[Webhook] Error expiring subscription credits:', expireError);
+  } else {
+    console.log(`[Webhook] Expired subscription credits for org ${existingSub.org_id}`);
   }
 
   // Create notification for org admins
@@ -640,6 +711,49 @@ async function handleInvoicePaid(
       : undefined,
     subscription_id: existingSub.id,
   });
+
+  // Handle Pro subscription credit refresh on renewal
+  const billingReason = (invoice as any).billing_reason;
+  if (billingReason === 'subscription_cycle') {
+    // This is a renewal invoice, not the first payment
+    const renewalSubscriptionId = typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : (invoice.subscription as any)?.id;
+
+    if (renewalSubscriptionId) {
+      // Find org for this subscription with plan details
+      const { data: sub } = await supabase
+        .from('organization_subscriptions')
+        .select('org_id, plan_id, subscription_plans!inner(slug, features)')
+        .eq('stripe_subscription_id', renewalSubscriptionId)
+        .maybeSingle();
+
+      const planSlug = (sub as any)?.subscription_plans?.slug;
+      const bundledCredits = (sub as any)?.subscription_plans?.features?.bundled_credits;
+
+      if (sub && planSlug === 'pro' && bundledCredits > 0) {
+        // Expire old subscription credits first
+        await supabase.rpc('expire_subscription_credits', { p_org_id: sub.org_id });
+
+        // Grant fresh subscription credits
+        const periodEnd = (invoice as any).lines?.data?.[0]?.period?.end
+          ? new Date((invoice as any).lines.data[0].period.end * 1000).toISOString()
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { error: grantError } = await supabase.rpc('grant_subscription_credits', {
+          p_org_id: sub.org_id,
+          p_amount: bundledCredits,
+          p_period_end: periodEnd,
+        });
+
+        if (grantError) {
+          console.error('[Webhook] Error refreshing subscription credits on renewal:', grantError);
+        } else {
+          console.log(`[Webhook] Refreshed ${bundledCredits} subscription credits for org ${sub.org_id}`);
+        }
+      }
+    }
+  }
 }
 
 // ============================================================================

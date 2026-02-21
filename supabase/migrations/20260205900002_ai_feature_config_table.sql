@@ -167,23 +167,23 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- First, we need to get model IDs. Using a DO block for this.
 DO $$
 DECLARE
-  v_claude_sonnet_id UUID;
+  v_claude_sonnet_46_id UUID;
   v_claude_haiku_id UUID;
   v_gemini_flash_id UUID;
   v_gemini_pro_id UUID;
 BEGIN
-  -- Get model IDs
-  SELECT id INTO v_claude_sonnet_id FROM ai_models WHERE provider = 'anthropic' AND model_id = 'claude-3-5-sonnet-20241022' LIMIT 1;
-  SELECT id INTO v_claude_haiku_id FROM ai_models WHERE provider = 'anthropic' AND model_id = 'claude-haiku-4-5-20250514' LIMIT 1;
+  -- Get model IDs (Sonnet 4.6 is the default Medium tier model)
+  SELECT id INTO v_claude_sonnet_46_id FROM ai_models WHERE provider = 'anthropic' AND model_id = 'claude-sonnet-4-6-20250929' LIMIT 1;
+  SELECT id INTO v_claude_haiku_id FROM ai_models WHERE provider = 'anthropic' AND model_id = 'claude-haiku-4-5-20251001' LIMIT 1;
   SELECT id INTO v_gemini_flash_id FROM ai_models WHERE provider = 'google' AND model_id = 'gemini-2.5-flash' LIMIT 1;
   SELECT id INTO v_gemini_pro_id FROM ai_models WHERE provider = 'google' AND model_id = 'gemini-2.5-pro' LIMIT 1;
 
-  -- Copilot Features
+  -- Copilot Features (Medium tier: Sonnet 4.6 primary, Haiku 4.5 fallback)
   INSERT INTO ai_feature_config (feature_key, display_name, description, category, primary_model_id, fallback_model_id, temperature)
   VALUES
-    ('copilot_chat', 'Copilot Chat', 'Main copilot conversation interface', 'Copilot', v_gemini_flash_id, v_claude_haiku_id, 0.7),
-    ('copilot_autonomous', 'Autonomous Skills', 'Autonomous skill execution with tool use', 'Copilot', v_claude_haiku_id, v_gemini_flash_id, 0.5),
-    ('entity_resolution', 'Entity Resolution', 'Resolve ambiguous person/company references', 'Copilot', v_gemini_flash_id, v_claude_haiku_id, 0.3)
+    ('copilot_chat', 'Copilot Chat', 'Main copilot conversation interface', 'Copilot', v_claude_sonnet_46_id, v_claude_haiku_id, 0.7),
+    ('copilot_autonomous', 'Autonomous Skills', 'Autonomous skill execution with tool use', 'Copilot', v_claude_sonnet_46_id, v_claude_haiku_id, 0.5),
+    ('entity_resolution', 'Entity Resolution', 'Resolve ambiguous person/company references', 'Copilot', v_claude_sonnet_46_id, v_claude_haiku_id, 0.3)
   ON CONFLICT (feature_key) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     description = EXCLUDED.description,
@@ -191,13 +191,13 @@ BEGIN
     primary_model_id = EXCLUDED.primary_model_id,
     fallback_model_id = EXCLUDED.fallback_model_id;
 
-  -- Enrichment Features
+  -- Enrichment Features (Medium tier: Sonnet 4.6 primary, Haiku 4.5 fallback)
   INSERT INTO ai_feature_config (feature_key, display_name, description, category, primary_model_id, fallback_model_id, temperature)
   VALUES
-    ('enrich_crm_record', 'CRM Record Enrichment', 'Enrich contact/company records with AI', 'Enrichment', v_gemini_flash_id, v_claude_haiku_id, 0.3),
-    ('enrich_organization', 'Organization Enrichment', 'Basic organization profile enrichment', 'Enrichment', v_gemini_flash_id, v_claude_haiku_id, 0.3),
-    ('deep_enrich_organization', 'Deep Organization Profile', 'Comprehensive organization profiling', 'Enrichment', v_gemini_flash_id, v_claude_haiku_id, 0.5),
-    ('enrich_dynamic_table', 'Dynamic Table Enrichment', 'Batch enrichment for ops tables', 'Enrichment', v_claude_haiku_id, v_gemini_flash_id, 0.3)
+    ('enrich_crm_record', 'CRM Record Enrichment', 'Enrich contact/company records with AI', 'Enrichment', v_claude_sonnet_46_id, v_claude_haiku_id, 0.3),
+    ('enrich_organization', 'Organization Enrichment', 'Basic organization profile enrichment', 'Enrichment', v_claude_sonnet_46_id, v_claude_haiku_id, 0.3),
+    ('deep_enrich_organization', 'Deep Organization Profile', 'Comprehensive organization profiling', 'Enrichment', v_claude_sonnet_46_id, v_claude_haiku_id, 0.5),
+    ('enrich_dynamic_table', 'Dynamic Table Enrichment', 'Batch enrichment for ops tables', 'Enrichment', v_claude_sonnet_46_id, v_claude_haiku_id, 0.3)
   ON CONFLICT (feature_key) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     description = EXCLUDED.description,
@@ -205,13 +205,13 @@ BEGIN
     primary_model_id = EXCLUDED.primary_model_id,
     fallback_model_id = EXCLUDED.fallback_model_id;
 
-  -- Meeting Features
+  -- Meeting Features (Medium tier: Sonnet 4.6 primary, Haiku 4.5 fallback)
   INSERT INTO ai_feature_config (feature_key, display_name, description, category, primary_model_id, fallback_model_id, temperature)
   VALUES
-    ('extract_action_items', 'Action Item Extraction', 'Extract action items from meeting transcripts', 'Meetings', v_claude_haiku_id, v_gemini_flash_id, 0.3),
-    ('analyze_action_item', 'Action Item Analysis', 'Analyze and categorize action items', 'Meetings', v_claude_haiku_id, v_gemini_flash_id, 0.3),
-    ('condense_meeting_summary', 'Meeting Summary', 'Condense meeting transcripts into summaries', 'Meetings', v_claude_haiku_id, v_gemini_flash_id, 0.5),
-    ('meeting_scorecard', 'Meeting Scorecard', 'Generate meeting quality scorecards', 'Meetings', v_claude_haiku_id, v_gemini_flash_id, 0.5)
+    ('extract_action_items', 'Action Item Extraction', 'Extract action items from meeting transcripts', 'Meetings', v_claude_sonnet_46_id, v_claude_haiku_id, 0.3),
+    ('analyze_action_item', 'Action Item Analysis', 'Analyze and categorize action items', 'Meetings', v_claude_sonnet_46_id, v_claude_haiku_id, 0.3),
+    ('condense_meeting_summary', 'Meeting Summary', 'Condense meeting transcripts into summaries', 'Meetings', v_claude_sonnet_46_id, v_claude_haiku_id, 0.5),
+    ('meeting_scorecard', 'Meeting Scorecard', 'Generate meeting quality scorecards', 'Meetings', v_claude_sonnet_46_id, v_claude_haiku_id, 0.5)
   ON CONFLICT (feature_key) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     description = EXCLUDED.description,
@@ -219,13 +219,13 @@ BEGIN
     primary_model_id = EXCLUDED.primary_model_id,
     fallback_model_id = EXCLUDED.fallback_model_id;
 
-  -- Content Features
+  -- Content Features (Medium tier: Sonnet 4.6 primary, Haiku 4.5 fallback)
   INSERT INTO ai_feature_config (feature_key, display_name, description, category, primary_model_id, fallback_model_id, temperature)
   VALUES
-    ('categorize_email', 'Email Categorization', 'Categorize emails by type and intent', 'Content', v_claude_haiku_id, v_gemini_flash_id, 0.3),
-    ('analyze_email', 'Email Analysis', 'Analyze email content and sentiment', 'Content', v_claude_haiku_id, v_gemini_flash_id, 0.5),
-    ('analyze_writing_style', 'Writing Style Analysis', 'Analyze user writing style for personalization', 'Content', v_claude_haiku_id, v_gemini_flash_id, 0.5),
-    ('generate_marketing_content', 'Marketing Content', 'Generate marketing copy and content', 'Content', v_claude_sonnet_id, v_gemini_pro_id, 0.7)
+    ('categorize_email', 'Email Categorization', 'Categorize emails by type and intent', 'Content', v_claude_sonnet_46_id, v_claude_haiku_id, 0.3),
+    ('analyze_email', 'Email Analysis', 'Analyze email content and sentiment', 'Content', v_claude_sonnet_46_id, v_claude_haiku_id, 0.5),
+    ('analyze_writing_style', 'Writing Style Analysis', 'Analyze user writing style for personalization', 'Content', v_claude_sonnet_46_id, v_claude_haiku_id, 0.5),
+    ('generate_marketing_content', 'Marketing Content', 'Generate marketing copy and content', 'Content', v_claude_sonnet_46_id, v_claude_haiku_id, 0.7)
   ON CONFLICT (feature_key) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     description = EXCLUDED.description,
@@ -233,10 +233,10 @@ BEGIN
     primary_model_id = EXCLUDED.primary_model_id,
     fallback_model_id = EXCLUDED.fallback_model_id;
 
-  -- Document Features
+  -- Document Features (Medium tier: Sonnet 4.6 primary, Haiku 4.5 fallback)
   INSERT INTO ai_feature_config (feature_key, display_name, description, category, primary_model_id, fallback_model_id, temperature)
   VALUES
-    ('generate_proposal', 'Proposal Generation', 'Generate sales proposals and quotes', 'Documents', v_claude_sonnet_id, v_gemini_pro_id, 0.7)
+    ('generate_proposal', 'Proposal Generation', 'Generate sales proposals and quotes', 'Documents', v_claude_sonnet_46_id, v_claude_haiku_id, 0.7)
   ON CONFLICT (feature_key) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     description = EXCLUDED.description,
@@ -244,10 +244,10 @@ BEGIN
     primary_model_id = EXCLUDED.primary_model_id,
     fallback_model_id = EXCLUDED.fallback_model_id;
 
-  -- Skills Features
+  -- Skills Features (Medium tier: Sonnet 4.6 primary, Haiku 4.5 fallback)
   INSERT INTO ai_feature_config (feature_key, display_name, description, category, primary_model_id, fallback_model_id, temperature)
   VALUES
-    ('skill_builder', 'Skill Builder', 'AI-assisted skill creation and refinement', 'Skills', v_claude_sonnet_id, v_gemini_pro_id, 0.7)
+    ('skill_builder', 'Skill Builder', 'AI-assisted skill creation and refinement', 'Skills', v_claude_sonnet_46_id, v_claude_haiku_id, 0.7)
   ON CONFLICT (feature_key) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     description = EXCLUDED.description,
@@ -255,10 +255,10 @@ BEGIN
     primary_model_id = EXCLUDED.primary_model_id,
     fallback_model_id = EXCLUDED.fallback_model_id;
 
-  -- Intelligence Features
+  -- Intelligence Features (Medium tier: Sonnet 4.6 primary, Haiku 4.5 fallback)
   INSERT INTO ai_feature_config (feature_key, display_name, description, category, primary_model_id, fallback_model_id, temperature)
   VALUES
-    ('suggest_next_actions', 'Next Actions Suggestion', 'Suggest next best actions for deals/contacts', 'Intelligence', v_claude_haiku_id, v_gemini_flash_id, 0.5)
+    ('suggest_next_actions', 'Next Actions Suggestion', 'Suggest next best actions for deals/contacts', 'Intelligence', v_claude_sonnet_46_id, v_claude_haiku_id, 0.5)
   ON CONFLICT (feature_key) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     description = EXCLUDED.description,
