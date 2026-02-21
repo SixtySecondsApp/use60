@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -283,6 +284,7 @@ serve(async (req) => {
     )
 
     let orgId: string | null = null
+    let authedUserId: string | null = null
     if (anonClient) {
       const { data: { user }, error: authError } = await anonClient.auth.getUser()
       if (authError || !user) {
@@ -291,6 +293,7 @@ serve(async (req) => {
         }
         console.warn(`${LOG_PREFIX} Auth invalid in non-prod, falling back to unauth mode:`, authError?.message)
       } else {
+        authedUserId = user.id
         const { data: membership } = await anonClient
           .from('organization_memberships')
           .select('org_id, role')
@@ -426,6 +429,14 @@ serve(async (req) => {
         return json({ error: 'Failed to start research', code: 'UPDATE_ERROR' }, 500)
       }
 
+      // Credit balance check before AI research
+      if (orgId) {
+        const balanceCheck = await checkCreditBalance(serviceClient, orgId)
+        if (!balanceCheck.allowed) {
+          return json({ error: 'Insufficient credits. Please top up to continue.', code: 'INSUFFICIENT_CREDITS' }, 402)
+        }
+      }
+
       try {
         // Scrape product URL if available
         const scrapedContent = existingProfile.product_url
@@ -484,6 +495,14 @@ serve(async (req) => {
         }
 
         console.log(`${LOG_PREFIX} Research complete for product "${existingProfile.name}" (${product_profile_id})`)
+
+        // Log AI cost event
+        if (orgId && authedUserId) {
+          await logAICostEvent(
+            serviceClient, authedUserId, orgId, 'gemini', GEMINI_MODEL,
+            0, 0, 'research_enrichment'
+          )
+        }
 
         return json({
           product_profile_id,

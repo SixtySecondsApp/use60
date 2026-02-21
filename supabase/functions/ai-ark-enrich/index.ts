@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
+import { logFlatRateCostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
 
 /**
  * ai-ark-enrich — Enrich Ops table rows via AI Ark People Reverse Lookup API.
@@ -264,6 +265,15 @@ serve(async (req: Request) => {
       )
     }
 
+    // Credit balance pre-flight check
+    const balanceCheck = await checkCreditBalance(serviceClient, orgId)
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
     // Parse request
     const body = await req.json()
     const { action } = body
@@ -309,6 +319,17 @@ serve(async (req: Request) => {
       }
 
       const { person, credits_consumed } = await callReverseLookup(aiArkApiKey, lookupBody)
+
+      // Deduct credits for the lookup
+      await logFlatRateCostEvent(
+        serviceClient,
+        user.id,
+        orgId,
+        'ai_ark',
+        'ai-ark-reverse-lookup',
+        1.25,
+        'ai_ark_people',
+      )
 
       return new Response(
         JSON.stringify({
@@ -566,6 +587,19 @@ serve(async (req: Request) => {
         if (i + CONCURRENT_BATCH_SIZE < matchableRows.length) {
           await sleep(BATCH_DELAY_MS)
         }
+      }
+
+      // Deduct credits for enrichment API calls made
+      if (stats.enriched > 0) {
+        await logFlatRateCostEvent(
+          serviceClient,
+          user.id,
+          orgId,
+          'ai_ark',
+          'ai-ark-bulk-enrich',
+          stats.enriched * 1.25,
+          'ai_ark_people',
+        )
       }
 
       return new Response(

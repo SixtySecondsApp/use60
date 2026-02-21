@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,6 +74,16 @@ serve(async (req) => {
     }
 
     const orgId = membership.org_id
+
+    // Credit balance check (pre-flight)
+    const balanceCheck = await checkCreditBalance(supabase, orgId)
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits. Please top up to continue.' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const body = await req.json().catch(() => ({}))
     const forceRegenerate = body?.force_regenerate === true
 
@@ -300,6 +311,13 @@ Return ONLY the JSON array, no markdown formatting.`
 
     const claudeData = await claudeResponse.json()
     const responseText = claudeData.content?.[0]?.text || '[]'
+
+    // Log AI cost event
+    await logAICostEvent(
+      supabase, user.id, orgId, 'anthropic', 'claude-sonnet-4-5-20250929',
+      claudeData.usage?.input_tokens || 0, claudeData.usage?.output_tokens || 0,
+      'research_enrichment'
+    )
 
     // Parse the JSON response (handle potential markdown wrapping)
     let profiles: ICPProfile[]

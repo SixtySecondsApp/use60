@@ -6,6 +6,7 @@
  * Uses ordered credit deduction via deduct_credits_ordered() (subscription → onboarding → packs).
  */
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getActionCost, deductCreditsOrdered, type IntelligenceTier } from './creditPacks.ts';
 
 // ---------------------------------------------------------------------------
@@ -378,6 +379,42 @@ async function deductAndMaybeTopUp(
 }
 
 // ---------------------------------------------------------------------------
+// Provider cost rate lookup (service-role, bypasses RLS)
+// ---------------------------------------------------------------------------
+
+/**
+ * Look up the per-million-token rates for a given provider+model from cost_rates.
+ * Uses service-role client to bypass RLS. Returns null if no row found or on error.
+ */
+async function getProviderCostRates(
+  provider: string,
+  model: string,
+): Promise<{ inputCostPerMillion: number; outputCostPerMillion: number } | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !serviceKey) return null;
+
+    const adminClient = createClient(supabaseUrl, serviceKey);
+    const { data, error } = await adminClient
+      .from('cost_rates')
+      .select('input_cost_per_million, output_cost_per_million')
+      .eq('provider', provider)
+      .eq('model', model)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    return {
+      inputCostPerMillion: Number(data.input_cost_per_million) || 0,
+      outputCostPerMillion: Number(data.output_cost_per_million) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // logAICostEvent — token-based AI calls (Anthropic, Gemini, etc.)
 // ---------------------------------------------------------------------------
 
@@ -421,6 +458,15 @@ export async function logAICostEvent(
     const tier = await getOrgIntelligenceTier(supabaseClient, orgId, feature ?? 'copilot_chat');
     const creditCost = await getActionCostFromDB(supabaseClient, feature ?? 'copilot_chat', tier);
 
+    // Look up actual provider cost rates to compute provider_cost_usd
+    const rates = await getProviderCostRates(provider, model);
+    let providerCostUsd: number | null = null;
+    if (rates) {
+      providerCostUsd =
+        (inputTokens / 1_000_000) * rates.inputCostPerMillion +
+        (outputTokens / 1_000_000) * rates.outputCostPerMillion;
+    }
+
     // Log to ai_cost_events table (estimated_cost now stores credit units)
     const { data: insertedCostEvent, error: insertError } = await supabaseClient
       .from('ai_cost_events')
@@ -433,6 +479,8 @@ export async function logAICostEvent(
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         estimated_cost: creditCost,
+        provider_cost_usd: providerCostUsd,
+        credits_charged: creditCost,
         metadata: metadata || null,
       })
       .select('id')
@@ -516,6 +564,8 @@ export async function logFlatRateCostEvent(
         input_tokens: 0,
         output_tokens: 0,
         estimated_cost: creditAmount,
+        provider_cost_usd: null,
+        credits_charged: creditAmount,
         metadata: metadata || null,
       })
       .select('id')

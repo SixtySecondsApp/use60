@@ -2,10 +2,11 @@
 // Posts Daily Standup Digest to Slack - triggered by cron or manual call
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { buildDailyDigestMessage, type DailyDigestData } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
+import { logAICostEvent, checkCreditBalance } from '../_shared/costTracking.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -399,10 +400,21 @@ async function generateInsights(
   overdueCount: number,
   dueTodayCount: number,
   staleDealsCount: number,
-  weekStats: DailyDigestData['weekStats']
+  weekStats: DailyDigestData['weekStats'],
+  supabase?: ReturnType<typeof createClient>,
+  orgId?: string
 ): Promise<string[]> {
   if (!anthropicApiKey) {
     return ['Review your pipeline for deals needing attention.'];
+  }
+
+  // Check credit balance before AI call
+  if (supabase && orgId) {
+    const creditCheck = await checkCreditBalance(supabase, orgId);
+    if (!creditCheck.allowed) {
+      console.warn('[slack-daily-digest] Insufficient credits, skipping AI insights');
+      return ['Review your pipeline and prioritize follow-ups with stale deals.'];
+    }
   }
 
   try {
@@ -441,6 +453,20 @@ Return JSON: { "insights": ["insight1", "insight2"] }`
     const content = result.content[0]?.text;
     const candidate = extractJsonObject(content) ?? content;
     const parsed = JSON.parse(candidate);
+
+    // Log AI cost event (fire-and-forget)
+    if (supabase && orgId) {
+      const inputTokens = result.usage?.input_tokens || 0;
+      const outputTokens = result.usage?.output_tokens || 0;
+      // Use first org member as user_id proxy (digest is org-wide)
+      supabase.from('organization_memberships').select('user_id').eq('org_id', orgId).limit(1).maybeSingle()
+        .then(({ data }) => {
+          if (data?.user_id) {
+            logAICostEvent(supabase, data.user_id, orgId, 'anthropic', 'claude-haiku-4-5-20251001', inputTokens, outputTokens, 'content_generation').catch(() => {});
+          }
+        }).catch(() => {});
+    }
+
     return parsed.insights || [];
   } catch (error) {
     console.error('Error generating insights:', error);
@@ -816,7 +842,9 @@ async function processOrgDigest(
       overdueTasks.length,
       dueTodayTasks.length,
       staleDeals.count,
-      weekStats
+      weekStats,
+      supabase,
+      org.orgId
     );
 
     const money = await getOrgMoneyConfig(supabase, org.orgId);

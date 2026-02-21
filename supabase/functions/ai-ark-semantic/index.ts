@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
+import { logFlatRateCostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
 
 const AI_ARK_API_BASE = 'https://api.ai-ark.com/api/developer-portal/v1'
 
@@ -192,6 +193,15 @@ serve(async (req) => {
       )
     }
 
+    // Credit balance pre-flight check
+    const balanceCheck = await checkCreditBalance(serviceClient, membership.org_id)
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Extract keywords from the natural language query
     const keywords = extractKeywords(natural_language_query)
     const clampedSize = Math.min(Math.max(max_results, 1), 100)
@@ -279,6 +289,17 @@ serve(async (req) => {
     // Parse credits consumed from response header
     const creditHeader = aiArkResponse.headers.get('x-credit')
     const creditsConsumed = creditHeader ? parseFloat(creditHeader) : null
+
+    // Deduct credits for the semantic search
+    await logFlatRateCostEvent(
+      serviceClient,
+      user.id,
+      membership.org_id,
+      'ai_ark',
+      'ai-ark-semantic',
+      0.25,
+      'ai_ark_company',
+    )
 
     // Normalize results from AI Ark's response shape
     const companies = (aiArkData.content || []) as Record<string, unknown>[]

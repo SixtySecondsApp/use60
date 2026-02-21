@@ -3,7 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/corsHelper.ts";
 import { getStripeClient, getOrCreateStripeCustomer, getSiteUrl } from "../_shared/stripe.ts";
 import { captureException } from "../_shared/sentryEdge.ts";
 
@@ -27,13 +27,13 @@ interface CheckoutResponse {
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: getCorsHeaders(req) });
   }
 
   if (req.method !== "POST") {
     return new Response(
       JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 405, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 
@@ -43,7 +43,7 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -56,7 +56,7 @@ serve(async (req) => {
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid authentication" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -67,14 +67,14 @@ serve(async (req) => {
     if (!org_id || (!plan_id && !plan_slug)) {
       return new Response(
         JSON.stringify({ error: "Missing required fields: org_id and either plan_id or plan_slug" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
     if (plan_slug && !['basic', 'pro'].includes(plan_slug)) {
       return new Response(
         JSON.stringify({ error: "Invalid plan_slug. Must be 'basic' or 'pro'" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -92,7 +92,7 @@ serve(async (req) => {
     if (membershipError || !membership || !["owner", "admin"].includes(membership.role)) {
       return new Response(
         JSON.stringify({ error: "You do not have permission to manage billing for this organization" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -108,7 +108,7 @@ serve(async (req) => {
       if (error || !data) {
         return new Response(
           JSON.stringify({ error: `Plan '${plan_slug}' not found or inactive` }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
         );
       }
       plan = data;
@@ -122,7 +122,7 @@ serve(async (req) => {
       if (error || !data) {
         return new Response(
           JSON.stringify({ error: "Plan not found or inactive" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
         );
       }
       plan = data;
@@ -136,7 +136,7 @@ serve(async (req) => {
     if (!priceId) {
       return new Response(
         JSON.stringify({ error: "No Stripe price configured for this plan" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -150,7 +150,7 @@ serve(async (req) => {
     if (orgError || !org) {
       return new Response(
         JSON.stringify({ error: "Organization not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -274,7 +274,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(response),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
 
   } catch (error) {
@@ -288,7 +288,7 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 });

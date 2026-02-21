@@ -24,6 +24,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { buildContentPrompt } from './prompts.ts'
+import { checkCreditBalance, logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts'
 
 // ============================================================================
 // Types & Interfaces
@@ -197,6 +198,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     const userId = user.id
+
+    // ========================================================================
+    // 2b. Get org membership for credit checks
+    // ========================================================================
+
+    const { data: membership } = await supabaseClient
+      .from('organization_memberships')
+      .select('org_id')
+      .eq('user_id', userId)
+      .limit(1)
+      .maybeSingle()
+
+    const orgId = membership?.org_id ?? null
+
+    // Credit balance check (pre-flight)
+    if (orgId) {
+      const balanceCheck = await checkCreditBalance(supabaseClient, orgId)
+      if (!balanceCheck.allowed) {
+        return jsonResponse<ErrorResponse>(
+          { success: false, error: 'Insufficient credits. Please top up to continue.' },
+          402
+        )
+      }
+    }
 
     // ========================================================================
     // 3. Check Cache (unless regenerate)
@@ -394,6 +419,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       inputTokens = data.usage?.input_tokens || 0
       outputTokens = data.usage?.output_tokens || 0
       tokensUsed = inputTokens + outputTokens
+
+      // Log AI cost event
+      if (orgId) {
+        await logAICostEvent(
+          supabaseClient, userId, orgId, 'anthropic', MODEL,
+          inputTokens, outputTokens, 'content_generation'
+        )
+      }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return jsonResponse<ErrorResponse>(

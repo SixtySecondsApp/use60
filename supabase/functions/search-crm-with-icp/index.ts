@@ -4,6 +4,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts'
+import { logFlatRateCostEvent } from '../_shared/costTracking.ts'
 
 interface ICPCriteria {
   industries?: string[];
@@ -313,6 +314,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const durationMs = Date.now() - startTime;
+
+    // Log flat-rate cost event for CRM search (0 credits — CRM search is free, tracked for analytics)
+    logFlatRateCostEvent(supabase, user.id, org_id, 'crm', 'search-crm-with-icp', 0, 'research_enrichment').catch(() => {});
 
     // Return in ProspectingSearchResult shape
     return jsonResponse({

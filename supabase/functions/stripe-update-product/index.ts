@@ -2,14 +2,10 @@
 // Updates an existing Stripe product and creates new prices if needed
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import { getStripeClient } from "../_shared/stripe.ts";
 import { captureException } from "../_shared/sentryEdge.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/corsHelper.ts";
 
 interface UpdateProductRequest {
   plan_id: string;
@@ -18,7 +14,7 @@ interface UpdateProductRequest {
 serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -78,7 +74,7 @@ serve(async (req: Request) => {
           success: true,
           message: "Free tier plans don't need Stripe products",
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -206,7 +202,7 @@ serve(async (req: Request) => {
         stripe_price_id_monthly: monthlyPriceId,
         stripe_price_id_yearly: yearlyPriceId,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Error updating Stripe product:", error);
@@ -222,7 +218,7 @@ serve(async (req: Request) => {
       JSON.stringify({ error: message }),
       {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       }
     );
   }
