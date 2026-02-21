@@ -1,0 +1,423 @@
+{
+  "project": {
+    "name": "Subscription Model & Billing Page Rebuild",
+    "template": "existing-codebase",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "payments": "stripe",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-02-21T00:00:00Z",
+    "branch": "feat/credit-tracking"
+  },
+
+  "features": [
+    {
+      "id": "sub-billing",
+      "name": "Two-Tier Subscription Model & Billing Page Rebuild",
+      "status": "pending",
+      "description": "Replace current single-plan structure with Basic (£29/mo) and Pro (£99/mo) tiers. Rebuild billing page UI with plan comparison, credit breakdown, trial tracking, and Stripe integration. Implement subscription lifecycle (trial → active → cancelled), credit expiry rules, and upgrade/downgrade logic.",
+      "brief": "Provided inline via 60/dev-plan command",
+      "createdAt": "2026-02-21T00:00:00Z"
+    }
+  ],
+
+  "existingInfrastructure": {
+    "note": "CRITICAL: Extend existing systems. Do NOT rebuild what's already working.",
+    "tables": [
+      "subscription_plans — Already exists in baseline. Has pricing, Stripe IDs, features JSONB, trial_days. Currently has old tier slugs (starter/growth/team/free). NEEDS: new 'basic' and 'pro' rows inserted, old rows deactivated.",
+      "org_subscriptions — Already exists in baseline. Has status, billing_cycle, trial dates, Stripe IDs, period dates, cancel logic. NEEDS: trial_meetings_used, trial_meetings_limit columns for meeting-based trial cap.",
+      "org_credit_balance — Has balance_credits, auto_topup settings. NEEDS: subscription_credits_balance, subscription_credits_expiry, onboarding_credits_balance, onboarding_complete columns.",
+      "credit_packs — FIFO inventory with pack types. Already has expiry support. NEEDS: subscription credit packs (auto-created on Pro renewal, auto-expired on cycle end).",
+      "credit_transactions — Immutable ledger. Already supports all needed types.",
+      "billing_event_log — Stripe webhook event log. Already working.",
+      "stripe-webhook edge function — Already handles checkout.session.completed, subscription.*, invoice.*. NEEDS: subscription credit grant/expiry logic, trial meeting tracking.",
+      "create-credit-checkout — One-time pack purchases via Stripe Checkout. Already working.",
+      "create-checkout-session — Subscription checkout. Already exists but needs plan ID updates.",
+      "create-portal-session — Stripe customer portal. Already working.",
+      "BillingSettingsPage.tsx — Current basic billing page. NEEDS: full rebuild per spec.",
+      "CreditsSettingsPage.tsx — Full credits management page. Already feature-complete.",
+      "subscriptionService.ts — Service layer with getOrgSubscription, trial status, usage limits, feature access. NEEDS: new plan tier checks, credit expiry awareness.",
+      "creditService.ts — Balance queries, pack purchases, auto top-up, grant. Already working.",
+      "subscription.ts types — Has PlanTier, SubscriptionStatus, all interfaces. NEEDS: new tier types, credit-aware subscription state."
+    ]
+  },
+
+  "stories": [
+
+    {
+      "id": "SUBBILL-001",
+      "feature": "sub-billing",
+      "title": "Migrate subscription_plans to Basic/Pro tiers and add subscription credit columns",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["subscription_plans", "org_subscriptions", "org_credit_balance"]
+      },
+      "blocks": ["SUBBILL-002", "SUBBILL-003", "SUBBILL-004", "SUBBILL-005", "SUBBILL-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "New subscription_plans rows: 'basic' (£29/mo, £290/yr, GBP, no bundled credits, no API) and 'pro' (£99/mo, £990/yr, GBP, 250 bundled credits, API access)",
+        "Old plan rows (starter/growth/team/free) set is_active=false, is_public=false (preserve for existing references)",
+        "org_subscriptions gets: trial_meetings_used (int default 0), trial_meetings_limit (int default 100)",
+        "org_credit_balance gets: subscription_credits_balance (decimal default 0), subscription_credits_expiry (timestamptz null), onboarding_credits_balance (decimal default 0), onboarding_complete (boolean default false)",
+        "subscription_plans.features JSONB includes: api_access, webhooks, advanced_analytics, coaching_digests, bundled_credits (int)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/2026XXXXXXXX_subscription_billing_rebuild.sql"
+      ],
+      "notes": "Single migration covering plan rows + column additions. Uses ALTER TABLE ADD COLUMN IF NOT EXISTS for safety. Inserts new plans with proper Stripe placeholder IDs (to be updated after Stripe product creation)."
+    },
+
+    {
+      "id": "SUBBILL-002",
+      "feature": "sub-billing",
+      "title": "Create subscription credit lifecycle RPCs (grant, expire, consume-ordered)",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["SUBBILL-001"],
+        "files": [],
+        "schema": ["org_credit_balance", "credit_transactions", "credit_packs"]
+      },
+      "blocks": ["SUBBILL-005", "SUBBILL-006"],
+      "parallelWith": ["SUBBILL-003", "SUBBILL-004"],
+      "acceptance": [
+        "grant_subscription_credits(org_id, amount, period_end) — sets subscription_credits_balance, subscription_credits_expiry, logs transaction",
+        "expire_subscription_credits(org_id) — zeros out subscription_credits_balance, logs expiry transaction if balance > 0",
+        "grant_onboarding_credits(org_id, amount) — sets onboarding_credits_balance, sets onboarding_complete=true, logs transaction. Idempotent (no-op if onboarding_complete already true)",
+        "deduct_credits_ordered(org_id, amount, action_id, tier, refs) — consumes in order: subscription_credits_balance → onboarding_credits_balance → pack credits (existing FIFO). Returns new total balance or -1 if insufficient.",
+        "All RPCs are atomic (SELECT FOR UPDATE on org_credit_balance), log to credit_transactions"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/2026XXXXXXXX_subscription_credit_rpcs.sql"
+      ],
+      "notes": "deduct_credits_ordered replaces deduct_credits_fifo as the primary deduction path. It calls deduct_credits_fifo for the pack portion after exhausting subscription and onboarding credits. Existing deduct_credits and deduct_credits_fifo remain as fallbacks."
+    },
+
+    {
+      "id": "SUBBILL-003",
+      "feature": "sub-billing",
+      "title": "Update TypeScript types and constants for Basic/Pro model",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["SUBBILL-001"],
+        "files": ["src/lib/types/subscription.ts", "src/lib/config/creditPacks.ts"],
+        "schema": []
+      },
+      "blocks": ["SUBBILL-007", "SUBBILL-008", "SUBBILL-009"],
+      "parallelWith": ["SUBBILL-002", "SUBBILL-004"],
+      "acceptance": [
+        "PlanTier type updated: 'basic' | 'pro' | 'trial' | 'cancelled' (old tiers preserved as deprecated aliases)",
+        "New CreditPackType values: 'signal' (100cr, £49), 'insight' (250cr, £99), 'intelligence' (500cr, £149) — aliased from existing starter/growth/scale",
+        "PlanFeatures interface extended with: bundled_credits (number), api_access (boolean), webhooks (boolean), advanced_analytics (boolean), coaching_digests (boolean)",
+        "New SubscriptionCreditState interface: subscription_credits_balance, subscription_credits_expiry, onboarding_credits_balance, onboarding_complete, total_balance (computed)",
+        "PLAN_DETAILS constant with Basic and Pro feature lists for UI rendering"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/types/subscription.ts",
+        "src/lib/config/creditPacks.ts",
+        "src/lib/config/planDetails.ts"
+      ],
+      "notes": "creditPacks.ts: update CREDIT_PACKS labels to match brief (Signal=£49, Insight=£99, Intelligence=£149). Note Insight is £99 in brief vs £89 currently — update price. Create new planDetails.ts for plan comparison UI data."
+    },
+
+    {
+      "id": "SUBBILL-004",
+      "feature": "sub-billing",
+      "title": "Update subscriptionService with Basic/Pro plan checks and credit-aware state",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["SUBBILL-001"],
+        "files": ["src/lib/services/subscriptionService.ts"],
+        "schema": []
+      },
+      "blocks": ["SUBBILL-007", "SUBBILL-008"],
+      "parallelWith": ["SUBBILL-002", "SUBBILL-003"],
+      "acceptance": [
+        "isProPlan(orgId) — checks if org's active plan slug is 'pro'",
+        "isBasicPlan(orgId) — checks if org's active plan slug is 'basic'",
+        "isTrialing(orgId) — checks status='trialing' and trial not expired",
+        "getTrialProgress(orgId) — returns { daysRemaining, daysTotal, meetingsUsed, meetingsLimit, percentUsed, isExpired }",
+        "hasApiAccess(orgId) — returns true only for Pro plan"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/subscriptionService.ts"
+      ],
+      "notes": "Build on existing getOrgSubscription, calculateTrialStatus, hasFeatureAccess. Add new methods without breaking existing callers."
+    },
+
+    {
+      "id": "SUBBILL-005",
+      "feature": "sub-billing",
+      "title": "Update stripe-webhook for subscription credit lifecycle events",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["SUBBILL-001", "SUBBILL-002"],
+        "files": ["supabase/functions/stripe-webhook/index.ts", "supabase/functions/_shared/stripe.ts"],
+        "schema": ["org_credit_balance"]
+      },
+      "blocks": ["SUBBILL-010"],
+      "parallelWith": ["SUBBILL-006"],
+      "acceptance": [
+        "customer.subscription.created: if Pro plan, call grant_subscription_credits(org_id, 250, period_end). Update org_subscriptions with plan_id matching Basic or Pro.",
+        "invoice.payment_succeeded (renewal): expire previous subscription credits, grant fresh 250 for Pro. No credit action for Basic.",
+        "customer.subscription.updated: handle plan changes — upgrade Basic→Pro grants prorated credits immediately; downgrade Pro→Basic sets cancel_at_period_end, credits expire at period end.",
+        "customer.subscription.deleted: call expire_subscription_credits(org_id), update status to 'canceled'.",
+        "checkout.session.completed: existing credit pack flow unchanged; add metadata check for subscription checkout vs pack checkout."
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/stripe-webhook/index.ts"
+      ],
+      "notes": "The webhook already handles these events. We're adding credit lifecycle logic to existing handlers. Use extractMetadata to distinguish Pro from Basic subscriptions. Must deploy with --no-verify-jwt to staging."
+    },
+
+    {
+      "id": "SUBBILL-006",
+      "feature": "sub-billing",
+      "title": "Update create-checkout-session for Basic/Pro plan selection with trial-to-paid flow",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["SUBBILL-001", "SUBBILL-002"],
+        "files": ["supabase/functions/create-checkout-session/index.ts"],
+        "schema": ["subscription_plans"]
+      },
+      "blocks": ["SUBBILL-008"],
+      "parallelWith": ["SUBBILL-005"],
+      "acceptance": [
+        "Accepts plan_slug ('basic' | 'pro') and billing_cycle ('monthly' | 'annual') instead of plan_id",
+        "Looks up correct Stripe price ID from subscription_plans table",
+        "Sets subscription_data.metadata with org_id, plan_slug for webhook processing",
+        "For trial-to-paid: creates subscription with no trial (trial already handled internally)",
+        "For new subscriptions: creates subscription with billing_cycle_anchor for immediate charge",
+        "Returns { url, session_id } for frontend redirect"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/create-checkout-session/index.ts"
+      ],
+      "notes": "Existing function already creates Stripe Checkout sessions. Update to use plan_slug lookup instead of direct plan_id. Annual pricing uses stripe_price_id_yearly column."
+    },
+
+    {
+      "id": "SUBBILL-007",
+      "feature": "sub-billing",
+      "title": "Rebuild BillingSettingsPage — Current Plan card with trial progress and plan comparison",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["SUBBILL-003", "SUBBILL-004"],
+        "files": ["src/pages/settings/BillingSettingsPage.tsx"],
+        "schema": []
+      },
+      "blocks": ["SUBBILL-009"],
+      "parallelWith": ["SUBBILL-008"],
+      "acceptance": [
+        "Current Plan card: plan name (Basic/Pro) with Active/Trial/Cancelled badge, monthly cost, billing cycle toggle display, next billing date. Trial state shows progress bar with days + meetings remaining.",
+        "Plan Comparison section: side-by-side Basic vs Pro cards with feature checklist, both monthly and annual pricing with savings callout, 'Upgrade to Pro' CTA for Basic users, 'Current Plan' indicator for active plan.",
+        "Uses existing useCurrentSubscription() hook data plus new subscriptionService methods",
+        "All Lucide icons, no emoji. Responsive grid layout. Dark mode support.",
+        "Monthly/Annual toggle in comparison section with price update animation"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/settings/BillingSettingsPage.tsx",
+        "src/lib/config/planDetails.ts"
+      ],
+      "notes": "Full rebuild of BillingSettingsPage.tsx. Keep the existing SettingsPageWrapper, StatusBadge pattern. The plan comparison data comes from planDetails.ts constant (not DB query — plan features are static for display)."
+    },
+
+    {
+      "id": "SUBBILL-008",
+      "feature": "sub-billing",
+      "title": "Add Credit Balance section and Subscription Management section to billing page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["SUBBILL-003", "SUBBILL-004", "SUBBILL-006"],
+        "files": ["src/pages/settings/BillingSettingsPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SUBBILL-007"],
+      "acceptance": [
+        "Credit Balance section: total balance with breakdown (subscription credits + expiry date for Pro, onboarding credits, pack credits). Daily burn rate and projected runway. Quick top-up buttons for Signal (£49), Insight (£99), Intelligence (£149) that open Stripe checkout.",
+        "Auto top-up toggle inline (shows current config, links to full settings on credits page)",
+        "Subscription Management section: 'Manage Subscription' button (Stripe portal) for connected customers. Update payment method, view invoices, switch billing cycle, cancel subscription — all via Stripe Customer Portal.",
+        "Transaction History section: tabular log of billing events (subscription charges, pack purchases, plan changes) with type filter and date range. Paginated, 20 per page.",
+        "Uses existing useCreditBalance() and creditService for data"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/settings/BillingSettingsPage.tsx",
+        "src/components/billing/CreditBalanceSection.tsx",
+        "src/components/billing/TransactionHistorySection.tsx"
+      ],
+      "notes": "Extract Credit Balance and Transaction History into separate components for cleanliness. Reuse existing CreditPurchaseModal for top-up flow. The CreditsSettingsPage already has detailed credit management — this billing page shows a summary view with links to the full credits page."
+    },
+
+    {
+      "id": "SUBBILL-009",
+      "feature": "sub-billing",
+      "title": "Implement plan upgrade/downgrade flow with Stripe proration",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["SUBBILL-003", "SUBBILL-007"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SUBBILL-010"],
+      "acceptance": [
+        "Upgrade Basic→Pro: confirmation modal showing prorated charge, immediate feature activation, 250 credits granted. Calls new upgrade-subscription edge function.",
+        "Downgrade Pro→Basic: confirmation modal explaining end-of-period switch, API access loss, credit expiry. Sets cancel_at_period_end on Stripe, shows 'Downgrading at end of period' state.",
+        "Monthly→Annual switch: confirmation modal showing new annual price and savings. Updates Stripe subscription price ID.",
+        "All plan changes logged to billing_event_log and credit_transactions",
+        "UI updates immediately after successful Stripe API call (optimistic with React Query invalidation)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/upgrade-subscription/index.ts",
+        "src/components/billing/PlanChangeModal.tsx",
+        "src/lib/services/subscriptionService.ts"
+      ],
+      "notes": "New edge function upgrade-subscription handles Stripe subscription.update() with proration_behavior: 'create_prorations'. The frontend modal collects confirmation, the edge function does the Stripe call, and the webhook handles the resulting subscription.updated event."
+    },
+
+    {
+      "id": "SUBBILL-010",
+      "feature": "sub-billing",
+      "title": "Implement trial mechanics — meeting tracking, 75% warning, and trial-end conversion modal",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["SUBBILL-005"],
+        "files": [],
+        "schema": ["org_subscriptions"]
+      },
+      "blocks": [],
+      "parallelWith": ["SUBBILL-009"],
+      "acceptance": [
+        "Trial meeting counter: increment trial_meetings_used in org_subscriptions when a meeting is processed (hook into existing meeting processing pipeline)",
+        "75% warning: when trial reaches 75 meetings or 10.5 days, show in-app notification banner with 'Choose your plan' CTA",
+        "Trial end: when 100 meetings or 14 days reached, show conversion modal — plan selection (Basic/Pro), billing cycle toggle, card capture via Stripe Checkout, onboarding credit carry-over messaging",
+        "Read-only lock: if trial expires and no plan selected, set subscription status to 'expired', show persistent banner blocking AI actions until plan selected",
+        "Onboarding credit grant: call grant_onboarding_credits(org_id, 100) when onboarding steps completed (idempotent)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/billing/TrialConversionModal.tsx",
+        "src/components/billing/TrialWarningBanner.tsx",
+        "src/lib/hooks/useTrialStatus.ts",
+        "supabase/functions/stripe-webhook/index.ts"
+      ],
+      "notes": "Trial meeting counting hooks into the existing meeting processing pipeline (meetingbaas-webhook or process-recording). The 75% warning is a client-side check in useTrialStatus hook that reads org_subscriptions. The conversion modal uses create-checkout-session with the selected plan."
+    },
+
+    {
+      "id": "SUBBILL-011",
+      "feature": "sub-billing",
+      "title": "Update creditService deduction to use ordered consumption and update credit widget",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["SUBBILL-002"],
+        "files": ["src/lib/services/creditService.ts", "src/components/credits/CreditWidget.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SUBBILL-005", "SUBBILL-006"],
+      "acceptance": [
+        "Edge functions that deduct credits now call deduct_credits_ordered instead of deduct_credits_fifo — subscription credits consumed first, then onboarding, then packs",
+        "get-credit-balance edge function returns subscription_credits_balance, subscription_credits_expiry, onboarding_credits_balance in response",
+        "CreditWidget dropdown shows credit breakdown: 'Sub: 142/250 (resets Mar 15)' for Pro, 'Onboarding: 45' if present, 'Pack: 230' for purchased",
+        "creditService.getBalance() exposes new fields in CreditBalance type"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/creditService.ts",
+        "src/components/credits/CreditWidget.tsx",
+        "src/components/credits/CreditWidgetDropdown.tsx",
+        "supabase/functions/get-credit-balance/index.ts",
+        "supabase/functions/_shared/creditPacks.ts"
+      ],
+      "notes": "The _shared/creditPacks.ts deduction helpers need to call deduct_credits_ordered RPC. The get-credit-balance function needs to SELECT the new columns from org_credit_balance. Frontend CreditWidget already has balance display — extend the dropdown to show the breakdown."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 11,
+    "completedStories": 0,
+    "currentFeature": "sub-billing",
+    "lastUpdated": "2026-02-21T00:00:00Z",
+    "estimatedTotalMinutes": 290,
+    "parallelGroups": [
+      {
+        "name": "Phase 1: Schema Foundation",
+        "stories": ["SUBBILL-001"],
+        "note": "Must complete first — all other stories depend on this"
+      },
+      {
+        "name": "Phase 2: Types + Services + RPCs",
+        "stories": ["SUBBILL-002", "SUBBILL-003", "SUBBILL-004", "SUBBILL-011"],
+        "note": "Can run in parallel after Phase 1"
+      },
+      {
+        "name": "Phase 3: Backend Webhook + Checkout",
+        "stories": ["SUBBILL-005", "SUBBILL-006"],
+        "note": "Depends on RPCs (SUBBILL-002)"
+      },
+      {
+        "name": "Phase 4: Billing Page UI",
+        "stories": ["SUBBILL-007", "SUBBILL-008"],
+        "note": "Depends on types/services (SUBBILL-003, SUBBILL-004)"
+      },
+      {
+        "name": "Phase 5: Upgrade/Downgrade + Trial",
+        "stories": ["SUBBILL-009", "SUBBILL-010"],
+        "note": "Final phase — depends on working billing page and webhooks"
+      }
+    ]
+  },
+
+  "outOfScope": [
+    "Stripe product/price creation in Stripe Dashboard — done manually or via Stripe CLI, not automated",
+    "Existing user migration (Option A/B/C from brief) — separate plan after billing system is live",
+    "Email notification system for trial milestones — depends on email service integration",
+    "Annual billing proration edge cases — handled by Stripe's built-in proration",
+    "Agency-tier plans — not in this brief, can be added later as new subscription_plans rows",
+    "Credit pack price change (Insight £89→£99) — separate migration, flagged in SUBBILL-003 notes"
+  ],
+
+  "risks": [
+    "Stripe price IDs need to be created in Stripe Dashboard first and inserted into subscription_plans before checkout flows work",
+    "Existing org_subscriptions rows reference old plan IDs — need data migration for active users",
+    "deduct_credits_ordered RPC must be thoroughly tested — incorrect consumption order could drain pack credits before subscription credits",
+    "Trial meeting counting adds a write to every meeting processing event — need to ensure it doesn't slow the pipeline"
+  ]
+}

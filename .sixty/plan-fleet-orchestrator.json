@@ -1,0 +1,406 @@
+{
+  "name": "PRD-02: Fleet Orchestrator & Event Router",
+  "version": "1.0",
+  "createdAt": "2026-02-21T22:00:00Z",
+  "description": "Upgrade the existing orchestrator from hardcoded sequences to a configurable fleet system with dynamic event routing, agent-to-agent handoff protocol, dead-letter queue, circuit breakers, and PRD-01 config engine integration.",
+  "source_prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-02",
+  "existing_infrastructure": {
+    "orchestrator_runner": "890-line runner.ts with parallel wave execution, HITL, retry, self-invocation, cost tracking — fully functional",
+    "event_sequences": "9 event types hardcoded in eventSequences.ts with 33 adapters",
+    "sequence_jobs": "Database-backed job tracking with status transitions, step_results, event chaining",
+    "settings_gates": "2-level preference system (org + user) with 3 RPCs",
+    "delivery": "Slack DM + in-app notification delivery via _shared/proactive/",
+    "triggers_and_schedules": "agent_triggers (7 event types) + agent_schedules (cron) — separate from orchestrator sequences",
+    "note": "PRD-02 extends the existing orchestrator, NOT replaces it. Key additions: configurable routing, dead-letter queue, circuit breakers, handoff protocol, config engine integration."
+  },
+  "definition_of_done": "Event routing is config-driven (DB table, not hardcoded). New event types can be added without code changes. Failed follow-ups land in a dead-letter table for retry/inspection. Circuit breaker prevents cascading failures. Orchestrator reads agent behaviour from PRD-01 config engine. All existing sequences continue working unchanged.",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Fleet Configuration Schema",
+      "description": "Database tables for fleet config, event routes, and handoff definitions — replacing hardcoded eventSequences.ts",
+      "priority": "critical",
+      "duration": "1 session",
+      "stories": ["FLT-001", "FLT-002", "FLT-003"]
+    },
+    {
+      "id": "phase-2",
+      "name": "Dynamic Event Router",
+      "description": "Replace hardcoded sequence lookup with DB-driven route resolution",
+      "priority": "critical",
+      "duration": "1 session",
+      "stories": ["FLT-004", "FLT-005"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Handoff Protocol & Agent Triggers Extension",
+      "description": "Structured agent-to-agent handoffs with context passing and extended trigger routing",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": ["FLT-006", "FLT-007"]
+    },
+    {
+      "id": "phase-4",
+      "name": "Reliability: Dead-Letter Queue & Circuit Breakers",
+      "description": "Failed event recovery and cascading failure prevention",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": ["FLT-008", "FLT-009", "FLT-010"]
+    },
+    {
+      "id": "phase-5",
+      "name": "Config Engine Integration & Seed Migration",
+      "description": "Wire PRD-01 config engine into orchestrator and seed fleet config from current hardcoded sequences",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": ["FLT-011", "FLT-012"]
+    },
+    {
+      "id": "phase-6",
+      "name": "Admin Edge Function & Verification",
+      "description": "Fleet management API and end-to-end verification",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": ["FLT-013", "FLT-014"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "FLT-001",
+      "title": "Create fleet_event_routes table for configurable event routing",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["FLT-002", "FLT-004", "FLT-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "fleet_event_routes table: id (uuid PK), org_id (uuid FK→organizations, nullable for platform defaults), event_type (text), sequence_key (text), is_active (boolean default true), priority (int default 0 — highest wins when multiple routes match), conditions (jsonb nullable — optional matching conditions like payload filters), created_at, updated_at",
+        "UNIQUE constraint on (org_id, event_type, sequence_key) with COALESCE for null org_id",
+        "Platform-default routes (org_id IS NULL) seeded for all 9 existing event types",
+        "RLS: service_role full access, org admins can manage their org routes, all authenticated can read platform defaults"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222100001_fleet_orchestrator.sql"
+      ]
+    },
+    {
+      "id": "FLT-002",
+      "title": "Create fleet_sequence_definitions table for DB-driven step definitions",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-001"], "files": [], "schema": ["fleet_event_routes"] },
+      "blocks": ["FLT-004", "FLT-005"],
+      "parallelWith": ["FLT-003"],
+      "acceptance": [
+        "fleet_sequence_definitions table: id (uuid PK), sequence_key (text), org_id (uuid nullable for platform defaults), version (int default 1), steps (jsonb NOT NULL — array of SequenceStep objects matching existing types.ts shape), context_requirements (jsonb — ContextTierSpec array), is_active (boolean default true), created_at, updated_at",
+        "UNIQUE constraint on (sequence_key, org_id, version) with COALESCE for null org_id",
+        "Steps JSONB validated with CHECK constraint (must be array with at least 1 element)",
+        "Seeded with all 9 existing sequences from eventSequences.ts as platform defaults (org_id IS NULL)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222100001_fleet_orchestrator.sql"
+      ]
+    },
+    {
+      "id": "FLT-003",
+      "title": "Create fleet_handoff_routes table for agent-to-agent handoffs",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-001"], "files": [], "schema": ["fleet_event_routes"] },
+      "blocks": ["FLT-006"],
+      "parallelWith": ["FLT-002"],
+      "acceptance": [
+        "fleet_handoff_routes table: id (uuid PK), org_id (uuid nullable), source_sequence_key (text), source_step_skill (text), target_event_type (text), context_mapping (jsonb — which outputs from source step map to target event payload), conditions (jsonb nullable — conditional handoff e.g. only if step output has certain fields), delay_minutes (int default 0), is_active (boolean default true), created_at",
+        "Seeded with existing intent-to-action mappings from intentActionRegistry.ts as platform defaults",
+        "RLS: same pattern as fleet_event_routes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222100001_fleet_orchestrator.sql"
+      ]
+    },
+    {
+      "id": "FLT-004",
+      "title": "Create resolve_event_route() and get_sequence_definition() Postgres functions",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-002"], "files": [], "schema": ["fleet_event_routes", "fleet_sequence_definitions"] },
+      "blocks": ["FLT-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "resolve_event_route(p_org_id uuid, p_event_type text) → TABLE(sequence_key text, priority int, conditions jsonb): returns matching routes with org override → platform default precedence, ordered by priority DESC",
+        "get_sequence_definition(p_org_id uuid, p_sequence_key text) → jsonb: returns steps array with org override → platform default precedence, latest version",
+        "get_handoff_routes(p_org_id uuid, p_source_sequence_key text, p_source_step_skill text) → TABLE: returns active handoff routes for a completed step",
+        "All functions STABLE SECURITY DEFINER with search_path 'public'"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222100001_fleet_orchestrator.sql"
+      ]
+    },
+    {
+      "id": "FLT-005",
+      "title": "Refactor runner.ts to use DB-driven route resolution instead of hardcoded eventSequences",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-004"], "files": ["supabase/functions/_shared/orchestrator/runner.ts", "supabase/functions/_shared/orchestrator/eventSequences.ts"], "schema": [] },
+      "blocks": ["FLT-006", "FLT-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "runSequence() calls resolve_event_route RPC to find the sequence_key, then get_sequence_definition RPC to load steps — instead of importing from eventSequences.ts",
+        "eventSequences.ts retained as fallback: if DB route not found, falls back to hardcoded sequences (graceful migration)",
+        "New shared loader: _shared/orchestrator/fleetRouter.ts with resolveRoute() and getSequenceSteps() functions",
+        "5-minute in-memory cache for route+definition lookups (matches PRD-01 pattern)",
+        "No behaviour change for existing users — seed data matches hardcoded sequences exactly"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/fleetRouter.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ]
+    },
+    {
+      "id": "FLT-006",
+      "title": "Implement structured handoff protocol in runner.ts using fleet_handoff_routes",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-003", "FLT-005"], "files": ["supabase/functions/_shared/orchestrator/runner.ts"], "schema": ["fleet_handoff_routes"] },
+      "blocks": ["FLT-014"],
+      "parallelWith": ["FLT-007"],
+      "acceptance": [
+        "After each step completes, runner checks fleet_handoff_routes via get_handoff_routes RPC for matching handoff definitions",
+        "DB-defined handoffs fire alongside existing queued_followups from step results (additive, not replacing)",
+        "context_mapping applied: source step outputs mapped to target event payload fields",
+        "Conditional handoffs evaluated: conditions JSONB checked against step output before firing",
+        "delay_minutes respected: handoffs with delay > 0 include delay metadata (future: pg_cron scheduling)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/_shared/orchestrator/fleetRouter.ts"
+      ]
+    },
+    {
+      "id": "FLT-007",
+      "title": "Extend agent_triggers table with handoff routing fields",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-001"], "files": [], "schema": ["agent_triggers"] },
+      "blocks": ["FLT-014"],
+      "parallelWith": ["FLT-006"],
+      "acceptance": [
+        "ALTER agent_triggers ADD COLUMN handoff_target_event text — optional event type to fire after trigger agent completes",
+        "ALTER agent_triggers ADD COLUMN handoff_context_mapping jsonb — how to map trigger agent output to orchestrator event payload",
+        "ALTER agent_triggers ADD COLUMN handoff_conditions jsonb — conditional handoff (only fire if agent output matches)",
+        "agent-trigger edge function updated: after specialist agent completes, checks handoff fields and fires agent-orchestrator event if defined",
+        "No existing triggers affected (new columns are nullable, default behaviour unchanged)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222100002_fleet_trigger_handoffs.sql",
+        "supabase/functions/agent-trigger/index.ts"
+      ]
+    },
+    {
+      "id": "FLT-008",
+      "title": "Create fleet_dead_letter_queue table for failed event recovery",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["FLT-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "fleet_dead_letter_queue table: id (uuid PK), org_id (uuid), user_id (uuid), event_type (text), event_payload (jsonb), source_job_id (uuid nullable — parent sequence_jobs.id), error_message (text), error_step (text nullable), retry_count (int default 0), max_retries (int default 3), status (text CHECK IN ('pending', 'retrying', 'resolved', 'abandoned')), next_retry_at (timestamptz nullable), created_at, resolved_at (timestamptz nullable)",
+        "Index on (status, next_retry_at) for efficient retry polling",
+        "Index on (org_id, created_at) for admin inspection",
+        "RLS: org admins can read their org's dead letters, service_role full access"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222100003_fleet_reliability.sql"
+      ]
+    },
+    {
+      "id": "FLT-009",
+      "title": "Wire dead-letter queue into runner.ts for failed follow-ups and sequence failures",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-008"], "files": ["supabase/functions/_shared/orchestrator/runner.ts"], "schema": ["fleet_dead_letter_queue"] },
+      "blocks": ["FLT-010", "FLT-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "When processFollowups() fire-and-forget fails (catch block), event written to fleet_dead_letter_queue instead of silently dropped",
+        "When a critical step fails after all retries exhausted, failed event written to dead-letter queue with error context",
+        "New shared helper: _shared/orchestrator/deadLetter.ts with enqueueDeadLetter() and retryDeadLetter() functions",
+        "retry-dead-letters cron handler added to agent-orchestrator: polls pending dead letters where next_retry_at <= now(), retries with exponential backoff"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/deadLetter.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/agent-orchestrator/index.ts"
+      ]
+    },
+    {
+      "id": "FLT-010",
+      "title": "Implement circuit breaker for agent adapters",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-009"], "files": [], "schema": [] },
+      "blocks": ["FLT-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "New file: _shared/orchestrator/circuitBreaker.ts — per-adapter circuit breaker with 3 states: closed (normal), open (failing, skip for cooldown), half-open (test single request)",
+        "Thresholds: 5 failures in 60s → open circuit, 30s cooldown → half-open, 1 success → closed",
+        "State stored in-memory per edge function invocation + persisted to sequence_jobs.context for cross-invocation state",
+        "When circuit is open, step returns { success: false, error: 'circuit_open', skipped: true } — best-effort steps skip, critical steps written to dead-letter queue for later retry",
+        "Circuit breaker stats exposed via fleetRouter.ts for admin inspection"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/circuitBreaker.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ]
+    },
+    {
+      "id": "FLT-011",
+      "title": "Wire PRD-01 config engine into orchestrator sequence execution",
+      "phase": "phase-5",
+      "priority": "P1",
+      "type": "integration",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-005"], "files": ["supabase/functions/_shared/config/agentConfigEngine.ts"], "schema": [] },
+      "blocks": ["FLT-014"],
+      "parallelWith": ["FLT-012"],
+      "acceptance": [
+        "runner.ts imports getAgentConfig from _shared/config/agentConfigEngine.ts",
+        "Before step execution, runner loads agent config for the step's agent_type (mapped from step.skill)",
+        "Config values injected into SequenceState.context so adapters can read agent-specific behaviour (thresholds, voice, playbook rules)",
+        "Skill-to-agent-type mapping defined in fleetRouter.ts (e.g., 'draft-followup-email' → 'crm_update', 'score-deal-risks' → 'deal_risk')",
+        "Graceful fallback: if config engine returns defaults (PRD-01 not yet seeded), existing behaviour unchanged"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/_shared/orchestrator/fleetRouter.ts"
+      ]
+    },
+    {
+      "id": "FLT-012",
+      "title": "Seed fleet tables from existing hardcoded sequences and intent registry",
+      "phase": "phase-5",
+      "priority": "P1",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-002", "FLT-003"], "files": [], "schema": ["fleet_sequence_definitions", "fleet_handoff_routes"] },
+      "blocks": ["FLT-014"],
+      "parallelWith": ["FLT-011"],
+      "acceptance": [
+        "Migration seeds fleet_event_routes with all 9 event types as platform defaults",
+        "Migration seeds fleet_sequence_definitions with all 9 sequences from eventSequences.ts, steps JSONB matching exact current shape",
+        "Migration seeds fleet_handoff_routes with all intent-to-action mappings from intentActionRegistry.ts",
+        "Verification query: SELECT count(*) from each table confirms expected row counts (9 routes, 9 definitions, ~15 handoff routes)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222100004_fleet_seed_data.sql"
+      ]
+    },
+    {
+      "id": "FLT-013",
+      "title": "Create fleet-admin edge function for route and sequence CRUD",
+      "phase": "phase-6",
+      "priority": "P2",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-005", "FLT-008"], "files": [], "schema": [] },
+      "blocks": ["FLT-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function: supabase/functions/fleet-admin/index.ts",
+        "Handlers: list_routes, get_route, create_route, update_route, delete_route, list_sequences, get_sequence, create_sequence, update_sequence, list_handoffs, list_dead_letters, retry_dead_letter, abandon_dead_letter",
+        "Auth: JWT-validated, org admin/owner role check for writes, member for reads",
+        "Uses getCorsHeaders(req) from corsHelper.ts",
+        "Dead-letter management: view failed events, manual retry, bulk abandon"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/fleet-admin/index.ts"
+      ]
+    },
+    {
+      "id": "FLT-014",
+      "title": "End-to-end verification: meeting_ended sequence via DB-driven routing",
+      "phase": "phase-6",
+      "priority": "P1",
+      "type": "verification",
+      "status": "pending",
+      "dependencies": { "stories": ["FLT-006", "FLT-009", "FLT-010", "FLT-011", "FLT-012", "FLT-013"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "meeting_ended event routes through DB lookup (not hardcoded), resolves to correct 14-step sequence",
+        "Steps execute in same parallel wave pattern as before (no behaviour regression)",
+        "Handoff routes fire correctly: detect-intents → proposal_generation and calendar_find_times as before",
+        "Simulated step failure lands in dead-letter queue with correct context",
+        "Circuit breaker activates after simulated repeated failures, recovers after cooldown",
+        "All existing sequence_jobs complete successfully with DB-driven routing"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    }
+  ],
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 0,
+    "currentFeature": "fleet-orchestrator",
+    "lastUpdated": "2026-02-21T22:00:00Z"
+  },
+  "parallel_groups": [
+    { "group": 1, "stories": ["FLT-001"], "note": "Base event routes table" },
+    { "group": 2, "stories": ["FLT-002", "FLT-003"], "note": "Sequence definitions + handoff routes in parallel" },
+    { "group": 3, "stories": ["FLT-004"], "note": "Resolution functions need tables" },
+    { "group": 4, "stories": ["FLT-005"], "note": "Runner refactor needs resolution functions" },
+    { "group": 5, "stories": ["FLT-006", "FLT-007", "FLT-008"], "note": "Handoff protocol, trigger extension, and dead-letter table can parallel" },
+    { "group": 6, "stories": ["FLT-009", "FLT-010"], "note": "Dead-letter wiring and circuit breaker (sequential, 009 first)" },
+    { "group": 7, "stories": ["FLT-011", "FLT-012"], "note": "Config engine wiring + seed data can parallel" },
+    { "group": 8, "stories": ["FLT-013"], "note": "Admin endpoint needs all tables" },
+    { "group": 9, "stories": ["FLT-014"], "note": "Final verification" }
+  ],
+  "cross_prd_dependencies": {
+    "PRD-01": {
+      "status": "planned",
+      "required_for": ["FLT-011"],
+      "note": "FLT-011 imports agentConfigEngine.ts from PRD-01. If PRD-01 not yet built, FLT-011 uses graceful fallback (hardcoded defaults). Can be wired later."
+    }
+  },
+  "migration_strategy": {
+    "approach": "Additive with fallback — DB-driven routing layered on top of existing hardcoded sequences",
+    "step_1": "Seed fleet tables with exact copies of hardcoded sequences",
+    "step_2": "Runner checks DB first, falls back to eventSequences.ts if not found",
+    "step_3": "Once verified, eventSequences.ts becomes dead code (kept as reference, not imported)",
+    "rollback": "If DB routing fails, hardcoded fallback ensures zero downtime"
+  }
+}
