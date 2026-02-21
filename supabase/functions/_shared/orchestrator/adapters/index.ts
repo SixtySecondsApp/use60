@@ -58,6 +58,7 @@ import {
 } from './dealRisk.ts';
 import { pingSlackChannelAdapter } from './pingSlackChannel.ts';
 import { updateDealTimelineAdapter } from './updateDealTimeline.ts';
+import { overnightSummaryAdapter } from './overnightSummary.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -148,6 +149,9 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
 
   // CRM intent updates (timeline_signal, pricing_request, competitive_mention, stakeholder_introduction)
   'update-deal-timeline': updateDealTimelineAdapter,
+
+  // Morning Briefing pipeline (BRF-006)
+  'overnight-summary': overnightSummaryAdapter,
 };
 
 /**
