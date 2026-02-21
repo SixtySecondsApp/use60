@@ -1,23 +1,38 @@
 /**
- * Proactive Pipeline Analysis Edge Function
+ * Proactive Pipeline Analysis Edge Function (enhanced — BRF-007)
  *
- * PROACTIVE-002: Daily analysis of pipeline health, sends insights via Slack.
- * AC-005: Also creates Action Centre items for HITL approval.
+ * Daily analysis of pipeline health with enhanced morning briefing:
+ * - Pipeline math (gap to target, coverage ratio, projected close)
+ * - Quarter phase context (build / progress / close)
+ * - Highest-leverage action recommendation
+ * - Overnight activity summary ("while you slept")
+ * - Existing signals: stale deals, overdue tasks, at-risk deals
  *
- * Runs as a cron job (daily at 9am, configurable per org) and:
- * 1. Analyzes each user's pipeline for stalling deals, overdue tasks
- * 2. Identifies opportunities where agent can add value
- * 3. Creates Action Centre items for user approval (AC-005)
- * 4. Sends summary to Slack with action options
- * 5. Tracks which insights get actioned
+ * Also creates Action Centre items for HITL approval (AC-005).
+ *
+ * Runs as a cron job and can be called directly for a single user.
  *
  * @see docs/PRD_PROACTIVE_AI_TEAMMATE.md
- * @see docs/project-requirements/PRD_ACTION_CENTRE.md
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import {
+  buildEnhancedMorningBriefMessage,
+  type EnhancedMorningBriefData,
+  type PipelineMathSummary,
+  type QuarterPhaseSummary,
+  type OvernightEventSummary,
+  type ActionRecommendationSummary,
+} from '../_shared/slackBlocks.ts';
+import {
+  detectQuarterPhase,
+  recommendHighestLeverageAction,
+  type DealSummary,
+  type PipelineMathInput,
+} from '../_shared/orchestrator/adapters/pipelineMath.ts';
+import { getOvernightSummary } from '../_shared/orchestrator/adapters/overnightSummary.ts';
 
 // ============================================================================
 // Types
@@ -48,6 +63,12 @@ interface UserPipelineSummary {
   staleDealCount: number;
   overdueTaskCount: number;
   meetingsToday: number;
+  // Enhanced fields (BRF-007)
+  pipelineMath: PipelineMathSummary | null;
+  quarterPhase: QuarterPhaseSummary | null;
+  topAction: ActionRecommendationSummary | null;
+  overnightEvents: OvernightEventSummary[];
+  briefingFormat: 'detailed' | 'summary';
 }
 
 // ============================================================================
@@ -61,7 +82,7 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-  
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -74,7 +95,6 @@ serve(async (req) => {
 
     switch (action) {
       case 'analyze':
-        // Analyze all users (cron mode) or specific user
         if (userId && organizationId) {
           response = await analyzeUserPipeline(supabase, userId, organizationId);
         } else {
@@ -107,10 +127,9 @@ serve(async (req) => {
 // Analyze All Users (Cron Mode)
 // ============================================================================
 
-async function analyzeAllUsers(supabase: any): Promise<{ success: boolean; summaries: UserPipelineSummary[] }> {
-  console.log('[Pipeline] Starting analysis for all users...');
+async function analyzeAllUsers(supabase: ReturnType<typeof createClient>): Promise<{ success: boolean; summaries: UserPipelineSummary[] }> {
+  console.log('[Pipeline] Starting enhanced analysis for all users...');
 
-  // Get all organization memberships first
   const { data: memberships, error: membershipsError } = await supabase
     .from('organization_memberships')
     .select('user_id, org_id');
@@ -119,7 +138,6 @@ async function analyzeAllUsers(supabase: any): Promise<{ success: boolean; summa
     throw new Error(`Failed to fetch memberships: ${membershipsError.message}`);
   }
 
-  // Deduplicate by user (take first org per user)
   const userOrgMap = new Map<string, string>();
   for (const m of memberships || []) {
     if (!userOrgMap.has(m.user_id)) {
@@ -133,10 +151,9 @@ async function analyzeAllUsers(supabase: any): Promise<{ success: boolean; summa
 
   for (const [userId, orgId] of userOrgMap) {
     if (!orgId) continue;
-
     try {
       const summary = await analyzeUserPipeline(supabase, userId, orgId);
-      if (summary.insights.length > 0) {
+      if (summary.insights.length > 0 || summary.pipelineMath) {
         summaries.push(summary);
       }
     } catch (err) {
@@ -146,7 +163,6 @@ async function analyzeAllUsers(supabase: any): Promise<{ success: boolean; summa
 
   console.log(`[Pipeline] Analysis complete. ${summaries.length} users with insights.`);
 
-  // Send notifications for users with insights
   if (summaries.length > 0) {
     await sendPipelineNotifications(supabase, summaries);
   }
@@ -155,27 +171,26 @@ async function analyzeAllUsers(supabase: any): Promise<{ success: boolean; summa
 }
 
 // ============================================================================
-// Analyze Single User Pipeline
+// Analyze Single User Pipeline (Enhanced — BRF-007)
 // ============================================================================
 
 async function analyzeUserPipeline(
-  supabase: any,
+  supabase: ReturnType<typeof createClient>,
   userId: string,
   organizationId: string
 ): Promise<UserPipelineSummary> {
-  console.log(`[Pipeline] Analyzing pipeline for user ${userId}...`);
+  console.log(`[Pipeline] Enhanced analysis for user ${userId}...`);
 
   // Fetch user profile
   const { data: profile } = await supabase
     .from('profiles')
     .select('first_name, last_name, email')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   const userName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'User';
   const userEmail = profile?.email || '';
 
-  // Initialize summary
   const summary: UserPipelineSummary = {
     userId,
     userName,
@@ -187,34 +202,151 @@ async function analyzeUserPipeline(
     staleDealCount: 0,
     overdueTaskCount: 0,
     meetingsToday: 0,
+    pipelineMath: null,
+    quarterPhase: null,
+    topAction: null,
+    overnightEvents: [],
+    briefingFormat: 'detailed',
   };
 
-  // 1. Find stale deals (no activity in 7+ days)
+  // -------------------------------------------------------------------------
+  // 1. Resolve briefing config from agent_config
+  // -------------------------------------------------------------------------
+  const [briefingFormatConfig, quarterStartConfig] = await Promise.all([
+    supabase.rpc('resolve_agent_config', {
+      p_org_id: organizationId,
+      p_user_id: userId,
+      p_agent_type: 'morning_briefing',
+      p_config_key: 'briefing_format',
+    }),
+    supabase.rpc('resolve_agent_config', {
+      p_org_id: organizationId,
+      p_user_id: userId,
+      p_agent_type: 'morning_briefing',
+      p_config_key: 'quarter_start_month',
+    }),
+  ]);
+
+  const rawFormat = briefingFormatConfig.data;
+  summary.briefingFormat =
+    (typeof rawFormat === 'string' && rawFormat.replace(/"/g, '') === 'summary')
+      ? 'summary'
+      : 'detailed';
+
+  const quarterStartMonth = quarterStartConfig.data
+    ? parseInt(String(quarterStartConfig.data).replace(/"/g, ''), 10) || 1
+    : 1;
+
+  // -------------------------------------------------------------------------
+  // 2. Calculate pipeline math via RPC (BRF-003)
+  // -------------------------------------------------------------------------
+  try {
+    const { data: mathData, error: mathError } = await supabase.rpc(
+      'calculate_pipeline_math',
+      {
+        p_org_id: organizationId,
+        p_user_id: userId,
+        p_period: 'quarterly',
+      }
+    );
+
+    if (mathError) {
+      console.warn(`[Pipeline] calculate_pipeline_math failed for user ${userId}:`, mathError.message);
+    } else if (mathData) {
+      const m = mathData as Record<string, unknown>;
+      summary.pipelineMath = {
+        target: (m.target as number) ?? null,
+        closed_so_far: (m.closed_so_far as number) ?? 0,
+        pct_to_target: (m.pct_to_target as number) ?? null,
+        total_pipeline: (m.total_pipeline as number) ?? 0,
+        weighted_pipeline: (m.weighted_pipeline as number) ?? 0,
+        coverage_ratio: (m.coverage_ratio as number) ?? null,
+        gap_amount: (m.gap_amount as number) ?? null,
+        projected_close: (m.projected_close as number) ?? null,
+        deals_at_risk: (m.deals_at_risk as number) ?? 0,
+      };
+      summary.totalPipelineValue = summary.pipelineMath.total_pipeline;
+      summary.dealsAtRisk = summary.pipelineMath.deals_at_risk;
+    }
+  } catch (mathErr) {
+    console.error(`[Pipeline] Pipeline math error for user ${userId}:`, mathErr);
+  }
+
+  // -------------------------------------------------------------------------
+  // 3. Detect quarter phase (BRF-004)
+  // -------------------------------------------------------------------------
+  const phaseResult = detectQuarterPhase(quarterStartMonth);
+  summary.quarterPhase = {
+    phase: phaseResult.phase,
+    label: phaseResult.label,
+    weekOfQuarter: phaseResult.weekOfQuarter,
+    weeksRemaining: phaseResult.weeksRemaining,
+    description: phaseResult.description,
+  };
+
+  // -------------------------------------------------------------------------
+  // 4. Get overnight summary (BRF-006)
+  // -------------------------------------------------------------------------
+  try {
+    const overnightResult = await getOvernightSummary(supabase, userId, organizationId);
+    summary.overnightEvents = overnightResult.events.slice(0, 5).map(e => ({
+      type: e.type,
+      description: e.description,
+      deal_name: e.deal_name,
+      severity: e.severity,
+    }));
+  } catch (overnightErr) {
+    console.warn(`[Pipeline] Overnight summary failed for user ${userId}:`, overnightErr);
+  }
+
+  // -------------------------------------------------------------------------
+  // 5. Standard pipeline signals: stale deals, overdue tasks, at-risk, closing soon
+  // -------------------------------------------------------------------------
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
   const { data: staleDeals } = await supabase
     .from('deals')
-    .select('id, name, value, stage_id, last_activity_at, deal_stages(name)')
-    .eq('user_id', userId)
-    .eq('organization_id', organizationId)
+    .select('id, name, value, stage_id, last_activity_at, deal_stages(name, default_probability)')
+    .eq('owner_id', userId)
+    .eq('org_id', organizationId)
     .not('status', 'eq', 'won')
     .not('status', 'eq', 'lost')
     .lt('last_activity_at', sevenDaysAgo.toISOString());
 
+  const dealSummaries: DealSummary[] = [];
+
   for (const deal of staleDeals || []) {
     summary.staleDealCount++;
-    summary.totalPipelineValue += deal.value || 0;
-    
-    const daysSinceActivity = Math.floor(
-      (Date.now() - new Date(deal.last_activity_at).getTime()) / (1000 * 60 * 60 * 24)
-    );
+    if (!summary.pipelineMath) summary.totalPipelineValue += deal.value || 0;
+
+    const daysSinceActivity = deal.last_activity_at
+      ? Math.floor((Date.now() - new Date(deal.last_activity_at).getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    dealSummaries.push({
+      deal_id: deal.id,
+      deal_name: deal.name,
+      deal_value: deal.value || 0,
+      current_stage: (deal.deal_stages as any)?.name || 'Unknown',
+      stage_probability: (deal.deal_stages as any)?.default_probability || 0,
+      expected_close_date: null,
+      days_since_last_activity: daysSinceActivity,
+      health_score: null,
+      risk_score: null,
+      company_name: null,
+      primary_contact_name: null,
+    });
 
     summary.insights.push({
       type: 'stale_deal',
-      severity: daysSinceActivity > 14 ? 'critical' : daysSinceActivity > 10 ? 'high' : 'medium',
-      title: `${deal.name} - No activity in ${daysSinceActivity} days`,
-      description: `This ${deal.deal_stages?.name || 'deal'} hasn't had any activity recently.`,
+      severity: daysSinceActivity && daysSinceActivity > 14
+        ? 'critical'
+        : daysSinceActivity && daysSinceActivity > 10
+        ? 'high'
+        : 'medium',
+      title: `${deal.name} - No activity in ${daysSinceActivity ?? '?'} days`,
+      description: `This ${(deal.deal_stages as any)?.name || 'deal'} hasn't had any activity recently.`,
       dealId: deal.id,
       dealName: deal.name,
       value: deal.value,
@@ -223,7 +355,7 @@ async function analyzeUserPipeline(
     });
   }
 
-  // 2. Find overdue tasks
+  // Overdue tasks
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -236,9 +368,8 @@ async function analyzeUserPipeline(
 
   for (const task of overdueTasks || []) {
     summary.overdueTaskCount++;
-    
-    const contactName = task.contacts 
-      ? `${task.contacts.first_name || ''} ${task.contacts.last_name || ''}`.trim()
+    const contactName = (task.contacts as any)
+      ? `${(task.contacts as any).first_name || ''} ${(task.contacts as any).last_name || ''}`.trim()
       : null;
 
     summary.insights.push({
@@ -247,36 +378,50 @@ async function analyzeUserPipeline(
       title: `Overdue: ${task.title}`,
       description: contactName ? `Task for ${contactName}` : 'Task is past due',
       contactId: task.contact_id,
-      contactName,
+      contactName: contactName ?? undefined,
       dealId: task.deal_id,
       suggestedAction: 'Complete or reschedule this task',
     });
   }
 
-  // 3. Find deals closing soon (within 7 days)
+  // Deals closing soon (within 7 days)
   const sevenDaysFromNow = new Date();
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
 
   const { data: closingSoon } = await supabase
     .from('deals')
-    .select('id, name, value, expected_close_date, deal_stages(name)')
-    .eq('user_id', userId)
-    .eq('organization_id', organizationId)
+    .select('id, name, value, expected_close_date, deal_stages(name, default_probability)')
+    .eq('owner_id', userId)
+    .eq('org_id', organizationId)
     .not('status', 'eq', 'won')
     .not('status', 'eq', 'lost')
-    .gte('expected_close_date', today.toISOString())
-    .lte('expected_close_date', sevenDaysFromNow.toISOString());
+    .gte('expected_close_date', today.toISOString().split('T')[0])
+    .lte('expected_close_date', sevenDaysFromNow.toISOString().split('T')[0]);
 
   for (const deal of closingSoon || []) {
     const daysUntilClose = Math.floor(
       (new Date(deal.expected_close_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     );
 
+    dealSummaries.push({
+      deal_id: deal.id,
+      deal_name: deal.name,
+      deal_value: deal.value || 0,
+      current_stage: (deal.deal_stages as any)?.name || 'Unknown',
+      stage_probability: (deal.deal_stages as any)?.default_probability || 50,
+      expected_close_date: deal.expected_close_date,
+      days_since_last_activity: null,
+      health_score: null,
+      risk_score: null,
+      company_name: null,
+      primary_contact_name: null,
+    });
+
     summary.insights.push({
       type: 'closing_soon',
       severity: daysUntilClose <= 2 ? 'critical' : 'high',
       title: `${deal.name} - Closing in ${daysUntilClose} days`,
-      description: `${deal.deal_stages?.name || 'Deal'} worth ${formatCurrency(deal.value)}`,
+      description: `${(deal.deal_stages as any)?.name || 'Deal'} worth $${(deal.value || 0).toLocaleString()}`,
       dealId: deal.id,
       dealName: deal.name,
       value: deal.value,
@@ -285,7 +430,7 @@ async function analyzeUserPipeline(
     });
   }
 
-  // 4. Count today's meetings
+  // Today's meetings
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
@@ -299,24 +444,38 @@ async function analyzeUserPipeline(
 
   summary.meetingsToday = meetingCount || 0;
 
-  // 5. Identify at-risk deals (based on health score if available)
+  // At-risk deals (health_score < 50)
   const { data: atRiskDeals } = await supabase
     .from('deals')
-    .select('id, name, value, health_score, deal_stages(name)')
-    .eq('user_id', userId)
-    .eq('organization_id', organizationId)
+    .select('id, name, value, health_score, risk_score, deal_stages(name, default_probability)')
+    .eq('owner_id', userId)
+    .eq('org_id', organizationId)
     .not('status', 'eq', 'won')
     .not('status', 'eq', 'lost')
     .lt('health_score', 50);
 
   for (const deal of atRiskDeals || []) {
-    summary.dealsAtRisk++;
-    
+    if (!summary.pipelineMath) summary.dealsAtRisk++;
+
+    dealSummaries.push({
+      deal_id: deal.id,
+      deal_name: deal.name,
+      deal_value: deal.value || 0,
+      current_stage: (deal.deal_stages as any)?.name || 'Unknown',
+      stage_probability: (deal.deal_stages as any)?.default_probability || 0,
+      expected_close_date: null,
+      days_since_last_activity: null,
+      health_score: deal.health_score,
+      risk_score: deal.risk_score,
+      company_name: null,
+      primary_contact_name: null,
+    });
+
     summary.insights.push({
       type: 'at_risk',
       severity: deal.health_score < 25 ? 'critical' : 'high',
       title: `${deal.name} - Health score ${deal.health_score}%`,
-      description: `This ${deal.deal_stages?.name || 'deal'} needs attention`,
+      description: `This ${(deal.deal_stages as any)?.name || 'deal'} needs attention`,
       dealId: deal.id,
       dealName: deal.name,
       value: deal.value,
@@ -325,16 +484,44 @@ async function analyzeUserPipeline(
     });
   }
 
+  // -------------------------------------------------------------------------
+  // 6. Top action recommendation (BRF-004)
+  // -------------------------------------------------------------------------
+  if (summary.pipelineMath && dealSummaries.length > 0) {
+    try {
+      const mathInput: PipelineMathInput = {
+        target: summary.pipelineMath.target,
+        closed_so_far: summary.pipelineMath.closed_so_far,
+        weighted_pipeline: summary.pipelineMath.weighted_pipeline,
+        total_pipeline: summary.pipelineMath.total_pipeline,
+        coverage_ratio: summary.pipelineMath.coverage_ratio,
+        gap_amount: summary.pipelineMath.gap_amount,
+        projected_close: summary.pipelineMath.projected_close,
+        deals_at_risk: summary.pipelineMath.deals_at_risk,
+        deals_by_stage: {},
+      };
+
+      const actionRec = recommendHighestLeverageAction(mathInput, phaseResult, dealSummaries);
+      summary.topAction = {
+        action: actionRec.action,
+        rationale: actionRec.rationale,
+        target_deal_name: actionRec.target_deal_name,
+        urgency: actionRec.urgency,
+        category: actionRec.category,
+      };
+    } catch (actionErr) {
+      console.warn(`[Pipeline] Action recommendation failed for user ${userId}:`, actionErr);
+    }
+  }
+
   // Sort insights by severity
   const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
   summary.insights.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
-
-  // Limit to top 10 insights
   summary.insights = summary.insights.slice(0, 10);
 
-  console.log(`[Pipeline] Found ${summary.insights.length} insights for user ${userId}`);
+  console.log(`[Pipeline] User ${userId}: ${summary.insights.length} insights, pipeline=${summary.totalPipelineValue}`);
 
-  // AC-005: Create Action Centre items for insights
+  // AC-005: Create Action Centre items
   if (summary.insights.length > 0) {
     await createActionCentreItems(supabase, summary);
   }
@@ -343,18 +530,17 @@ async function analyzeUserPipeline(
 }
 
 // ============================================================================
-// Send Slack Notifications
+// Send Slack Notifications (Enhanced)
 // ============================================================================
 
 async function sendPipelineNotifications(
-  supabase: any,
+  supabase: ReturnType<typeof createClient>,
   summaries: UserPipelineSummary[]
 ): Promise<{ success: boolean; notificationsSent: number }> {
   let notificationsSent = 0;
 
   for (const summary of summaries) {
     try {
-      // Check if user has Slack connected
       const { data: slackAuth } = await supabase
         .from('slack_auth')
         .select('access_token, channel_id')
@@ -366,10 +552,46 @@ async function sendPipelineNotifications(
         continue;
       }
 
-      // Build Slack message
-      const blocks = buildPipelineSlackMessage(summary);
+      // Build enhanced Slack message
+      const briefingData: EnhancedMorningBriefData = {
+        userName: summary.userName,
+        date: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+        meetings: [],  // Populated below from calendar_events if needed
+        tasks: {
+          overdue: summary.insights
+            .filter(i => i.type === 'overdue_task')
+            .map(i => ({
+              title: i.title.replace('Overdue: ', ''),
+              daysOverdue: 1,
+              dealName: i.dealName,
+              contactId: i.contactId,
+            })),
+          dueToday: [],
+        },
+        deals: summary.insights
+          .filter(i => i.dealId)
+          .map(i => ({
+            name: i.dealName || 'Unknown Deal',
+            id: i.dealId!,
+            value: i.value || 0,
+            stage: 'Unknown',
+            isAtRisk: i.type === 'at_risk',
+            daysSinceActivity: undefined,
+          })),
+        emailsToRespond: 0,
+        insights: [],
+        priorities: [],
+        appUrl: Deno.env.get('APP_URL') || 'https://app.use60.com',
+        // Enhanced fields
+        pipelineMath: summary.pipelineMath,
+        quarterPhase: summary.quarterPhase,
+        overnightEvents: summary.overnightEvents,
+        topAction: summary.topAction,
+        briefingFormat: summary.briefingFormat,
+      };
 
-      // Send to Slack
+      const message = buildEnhancedMorningBriefMessage(briefingData);
+
       const slackResponse = await fetch('https://slack.com/api/chat.postMessage', {
         method: 'POST',
         headers: {
@@ -378,27 +600,13 @@ async function sendPipelineNotifications(
         },
         body: JSON.stringify({
           channel: slackAuth.channel_id || summary.userId,
-          blocks,
-          text: `Pipeline Pulse: ${summary.insights.length} items need your attention`,
+          blocks: message.blocks,
+          text: message.text || `Pipeline Pulse: ${summary.insights.length} items need your attention`,
         }),
       });
 
       if (slackResponse.ok) {
         notificationsSent++;
-        
-        // Log engagement event
-        await supabase.rpc('log_copilot_engagement', {
-          p_org_id: summary.organizationId,
-          p_user_id: summary.userId,
-          p_event_type: 'message_sent',
-          p_trigger_type: 'proactive',
-          p_channel: 'slack',
-          p_metadata: {
-            insight_count: summary.insights.length,
-            stale_deals: summary.staleDealCount,
-            overdue_tasks: summary.overdueTaskCount,
-          },
-        });
       }
     } catch (err) {
       console.error(`[Pipeline] Failed to send notification to ${summary.userId}:`, err);
@@ -409,180 +617,31 @@ async function sendPipelineNotifications(
 }
 
 // ============================================================================
-// Build Slack Message
-// ============================================================================
-
-function buildPipelineSlackMessage(summary: UserPipelineSummary): any[] {
-  const blocks: any[] = [];
-
-  // Header
-  blocks.push({
-    type: 'header',
-    text: {
-      type: 'plain_text',
-      text: `🎯 Good morning, ${summary.userName.split(' ')[0]}!`,
-      emoji: true,
-    },
-  });
-
-  // Summary section
-  const summaryParts = [];
-  if (summary.meetingsToday > 0) {
-    summaryParts.push(`📅 ${summary.meetingsToday} meeting${summary.meetingsToday > 1 ? 's' : ''} today`);
-  }
-  if (summary.staleDealCount > 0) {
-    summaryParts.push(`⚠️ ${summary.staleDealCount} stale deal${summary.staleDealCount > 1 ? 's' : ''}`);
-  }
-  if (summary.overdueTaskCount > 0) {
-    summaryParts.push(`📋 ${summary.overdueTaskCount} overdue task${summary.overdueTaskCount > 1 ? 's' : ''}`);
-  }
-
-  if (summaryParts.length > 0) {
-    blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: summaryParts.join(' • '),
-      },
-    });
-  }
-
-  blocks.push({ type: 'divider' });
-
-  // Top insights (max 5)
-  const topInsights = summary.insights.slice(0, 5);
-  
-  for (const insight of topInsights) {
-    const severityEmoji = {
-      critical: '🔴',
-      high: '🟠',
-      medium: '🟡',
-      low: '🟢',
-    }[insight.severity];
-
-    blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `${severityEmoji} *${insight.title}*\n${insight.description}`,
-      },
-      accessory: insight.suggestedAction ? {
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: insight.suggestedAction.length > 20 
-            ? insight.suggestedAction.substring(0, 18) + '...' 
-            : insight.suggestedAction,
-          emoji: true,
-        },
-        action_id: `pipeline_action_${insight.dealId || insight.contactId || 'generic'}`,
-        value: JSON.stringify({
-          type: insight.type,
-          dealId: insight.dealId,
-          contactId: insight.contactId,
-          sequenceKey: insight.sequenceKey,
-        }),
-      } : undefined,
-    });
-  }
-
-  // Footer with more actions
-  if (summary.insights.length > 5) {
-    blocks.push({
-      type: 'context',
-      elements: [{
-        type: 'mrkdwn',
-        text: `_+${summary.insights.length - 5} more items need attention_`,
-      }],
-    });
-  }
-
-  // SS-002: Add "View in App" button linking to Action Centre
-  blocks.push({
-    type: 'actions',
-    elements: [
-      {
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: '📥 Action Centre',
-          emoji: true,
-        },
-        url: `https://app.use60.com/action-centre`,
-        action_id: 'open_action_centre',
-        style: 'primary',
-      },
-      {
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: '📊 Open Dashboard',
-          emoji: true,
-        },
-        url: `https://app.use60.com/pipeline`,
-        action_id: 'open_dashboard',
-      },
-      {
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: '💬 Ask Copilot',
-          emoji: true,
-        },
-        action_id: 'open_copilot',
-      },
-    ],
-  });
-
-  return blocks;
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function formatCurrency(value: number | null | undefined): string {
-  if (!value) return '$0';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-// ============================================================================
 // AC-005: Create Action Centre Items
 // ============================================================================
 
-/**
- * Creates Action Centre items for pipeline insights that need user action.
- * These appear in the user's personal Action Centre for HITL approval.
- */
 async function createActionCentreItems(
-  supabase: any,
+  supabase: ReturnType<typeof createClient>,
   summary: UserPipelineSummary
 ): Promise<number> {
   let itemsCreated = 0;
 
+  const actionTypeMap: Record<string, string> = {
+    stale_deal: 'alert',
+    overdue_task: 'task',
+    at_risk: 'alert',
+    closing_soon: 'alert',
+    no_activity: 'insight',
+  };
+
+  const riskLevelMap: Record<string, string> = {
+    critical: 'high',
+    high: 'medium',
+    medium: 'low',
+    low: 'info',
+  };
+
   for (const insight of summary.insights) {
-    // Map insight type to action type
-    const actionTypeMap: Record<string, string> = {
-      'stale_deal': 'alert',
-      'overdue_task': 'task',
-      'at_risk': 'alert',
-      'closing_soon': 'alert',
-      'no_activity': 'insight',
-    };
-
-    // Map severity to risk level
-    const riskLevelMap: Record<string, string> = {
-      'critical': 'high',
-      'high': 'medium',
-      'medium': 'low',
-      'low': 'info',
-    };
-
     try {
       const { error } = await supabase.rpc('create_action_centre_item', {
         p_user_id: summary.userId,
@@ -607,18 +666,10 @@ async function createActionCentreItems(
         p_contact_id: insight.contactId || null,
       });
 
-      if (!error) {
-        itemsCreated++;
-      } else {
-        console.error(`[Pipeline] Failed to create action centre item:`, error);
-      }
+      if (!error) itemsCreated++;
     } catch (err) {
       console.error(`[Pipeline] Error creating action centre item:`, err);
     }
-  }
-
-  if (itemsCreated > 0) {
-    console.log(`[Pipeline] Created ${itemsCreated} Action Centre items for user ${summary.userId}`);
   }
 
   return itemsCreated;

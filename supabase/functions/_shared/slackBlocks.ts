@@ -4476,3 +4476,270 @@ export const buildReengagementApprovalMessage = (data: ReengagementApprovalData)
     text: `Re-engagement opportunity: ${data.dealName} — ${data.signalSummary}`,
   };
 };
+
+// =============================================================================
+// Enhanced Morning Briefing (BRF-007)
+// Extends the standard morning brief with pipeline math, quarter phase,
+// coverage ratio, overnight summary, and action recommendation.
+// =============================================================================
+
+export interface PipelineMathSummary {
+  target: number | null;
+  closed_so_far: number;
+  pct_to_target: number | null;
+  total_pipeline: number;
+  weighted_pipeline: number;
+  coverage_ratio: number | null;
+  gap_amount: number | null;
+  projected_close: number | null;
+  deals_at_risk: number;
+}
+
+export interface QuarterPhaseSummary {
+  phase: 'build' | 'progress' | 'close';
+  label: string;
+  weekOfQuarter: number;
+  weeksRemaining: number;
+  description: string;
+}
+
+export interface OvernightEventSummary {
+  type: string;
+  description: string;
+  deal_name: string | null;
+  severity: 'info' | 'positive' | 'attention';
+}
+
+export interface ActionRecommendationSummary {
+  action: string;
+  rationale: string;
+  target_deal_name: string | null;
+  urgency: 'immediate' | 'today' | 'this_week';
+  category: string;
+}
+
+export interface EnhancedMorningBriefData extends MorningBriefData {
+  pipelineMath: PipelineMathSummary | null;
+  quarterPhase: QuarterPhaseSummary | null;
+  overnightEvents: OvernightEventSummary[];
+  topAction: ActionRecommendationSummary | null;
+  briefingFormat: 'detailed' | 'summary';
+}
+
+/**
+ * Build Enhanced Morning Briefing Slack message.
+ * Extends the standard morning brief with pipeline math, quarter phase,
+ * overnight summary, and top-action recommendation sections.
+ * Respects briefingFormat: 'summary' renders compact bullet form.
+ */
+export const buildEnhancedMorningBriefMessage = (data: EnhancedMorningBriefData): SlackMessage => {
+  const emBlocks: SlackBlock[] = [];
+  const isSummary = data.briefingFormat === 'summary';
+
+  const fmtCurrency = (v: number | null | undefined): string => {
+    if (v == null) return 'N/A';
+    if (!data.currencyCode) return `$${Math.round(v).toLocaleString()}`;
+    return new Intl.NumberFormat(data.currencyLocale || 'en-US', {
+      style: 'currency',
+      currency: data.currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(v);
+  };
+
+  const fmtPct = (v: number | null): string =>
+    v == null ? 'N/A' : `${Math.round(v * 100)}%`;
+
+  // --- Header ---
+  const phaseLabel = data.quarterPhase
+    ? ` — ${data.quarterPhase.label} Phase, Wk ${data.quarterPhase.weekOfQuarter}`
+    : '';
+  emBlocks.push(header(safeHeaderText(`Good morning, ${data.userName}${phaseLabel}`)));
+  emBlocks.push(divider());
+
+  // --- Pipeline Math ---
+  if (data.pipelineMath) {
+    const pm = data.pipelineMath;
+
+    if (isSummary) {
+      const parts: string[] = [];
+      if (pm.target !== null) {
+        parts.push(
+          `*Target:* ${fmtCurrency(pm.target)} | *Closed:* ${fmtCurrency(pm.closed_so_far)} (${fmtPct(pm.pct_to_target)})`
+        );
+      }
+      parts.push(
+        `*Pipeline:* ${fmtCurrency(pm.total_pipeline)} | *Weighted:* ${fmtCurrency(pm.weighted_pipeline)}`
+      );
+      if (pm.coverage_ratio !== null) {
+        const flag = pm.coverage_ratio < 2.0 ? ' LOW' : '';
+        parts.push(`*Coverage:* ${pm.coverage_ratio.toFixed(1)}x${flag}`);
+      }
+      emBlocks.push(section(safeMrkdwn(parts.join('\n'))));
+    } else {
+      const fields: Array<{ label: string; value: string }> = [];
+      if (pm.target !== null) {
+        fields.push({ label: 'Quota Target', value: fmtCurrency(pm.target) });
+        fields.push({
+          label: 'Closed So Far',
+          value: `${fmtCurrency(pm.closed_so_far)} (${fmtPct(pm.pct_to_target)})`,
+        });
+      }
+      fields.push({ label: 'Total Pipeline', value: fmtCurrency(pm.total_pipeline) });
+      fields.push({ label: 'Weighted Pipeline', value: fmtCurrency(pm.weighted_pipeline) });
+      if (pm.gap_amount !== null) {
+        fields.push({ label: 'Gap to Target', value: fmtCurrency(pm.gap_amount) });
+      }
+      if (pm.coverage_ratio !== null) {
+        const flag = pm.coverage_ratio < 2.0 ? ' — LOW' : pm.coverage_ratio >= 3.0 ? ' — GOOD' : '';
+        fields.push({ label: 'Coverage Ratio', value: `${pm.coverage_ratio.toFixed(1)}x${flag}` });
+      }
+      if (pm.projected_close !== null) {
+        fields.push({ label: 'Projected Close', value: fmtCurrency(pm.projected_close) });
+      }
+      if (pm.deals_at_risk > 0) {
+        fields.push({ label: 'Deals at Risk', value: `${pm.deals_at_risk}` });
+      }
+      emBlocks.push(section(safeMrkdwn('*Pipeline Snapshot*')));
+      if (fields.length > 0) {
+        emBlocks.push(sectionWithFields(fields));
+      }
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Quarter Phase (detailed only) ---
+  if (data.quarterPhase && !isSummary) {
+    const qp = data.quarterPhase;
+    const weeksText =
+      qp.weeksRemaining === 1 ? '1 week remaining' : `${qp.weeksRemaining} weeks remaining`;
+    emBlocks.push(
+      context([safeContextMrkdwn(`${weeksText} in quarter. ${truncate(qp.description, 100)}`)])
+    );
+    emBlocks.push(divider());
+  }
+
+  // --- Top Action ---
+  if (data.topAction) {
+    const ta = data.topAction;
+    const urgencyPrefix =
+      ta.urgency === 'immediate' ? 'IMMEDIATE: ' : ta.urgency === 'today' ? 'Today: ' : '';
+    emBlocks.push(
+      section(safeMrkdwn(`*Highest Leverage Action*\n${urgencyPrefix}${ta.action}`))
+    );
+    if (!isSummary && ta.rationale) {
+      emBlocks.push(context([safeContextMrkdwn(ta.rationale)]));
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Overnight Events ---
+  if (data.overnightEvents.length > 0) {
+    const attentionEvents = data.overnightEvents.filter(e => e.severity === 'attention');
+    const positiveEvents = data.overnightEvents.filter(e => e.severity === 'positive');
+    const infoEvents = data.overnightEvents.filter(e => e.severity === 'info');
+
+    if (isSummary) {
+      const parts: string[] = [];
+      if (attentionEvents.length > 0)
+        parts.push(`${attentionEvents.length} signal${attentionEvents.length > 1 ? 's' : ''} need attention`);
+      if (positiveEvents.length > 0)
+        parts.push(`${positiveEvents.length} positive event${positiveEvents.length > 1 ? 's' : ''}`);
+      if (infoEvents.length > 0)
+        parts.push(`${infoEvents.length} enrichment${infoEvents.length > 1 ? 's' : ''} completed`);
+      emBlocks.push(context([`While you slept: ${parts.join(', ')}`]));
+    } else {
+      emBlocks.push(
+        section(safeMrkdwn(`*While you slept (${data.overnightEvents.length} update${data.overnightEvents.length > 1 ? 's' : ''})*`))
+      );
+      const prioritised = [
+        ...attentionEvents,
+        ...positiveEvents,
+        ...infoEvents,
+      ].slice(0, 3);
+      for (const ev of prioritised) {
+        const badge =
+          ev.severity === 'attention' ? 'Attention' :
+          ev.severity === 'positive' ? 'Good news' : 'Info';
+        const dealCtx = ev.deal_name ? ` — _${truncate(ev.deal_name, 40)}_` : '';
+        emBlocks.push(
+          context([`[${badge}] ${truncate(ev.description, 120)}${dealCtx}`])
+        );
+      }
+      if (data.overnightEvents.length > 3) {
+        emBlocks.push(context([`+${data.overnightEvents.length - 3} more overnight updates`]));
+      }
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Today's Meetings ---
+  if (data.meetings.length > 0) {
+    emBlocks.push(section(safeMrkdwn(`*Meetings today (${data.meetings.length})*`)));
+    data.meetings.slice(0, 3).forEach(m => {
+      const dealCtx = m.dealValue ? ` — ${fmtCurrency(m.dealValue)}` : '';
+      const companyCtx = m.companyName ? ` at ${m.companyName}` : '';
+      emBlocks.push(
+        context([`${m.time} — *${truncate(m.title, 60)}*${companyCtx}${dealCtx}`])
+      );
+    });
+    if (data.meetings.length > 3) {
+      emBlocks.push(context([`+${data.meetings.length - 3} more meetings`]));
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Urgent Deals ---
+  const urgentDeals = data.deals
+    .filter(d => d.isAtRisk || (d.daysSinceActivity && d.daysSinceActivity > 7))
+    .slice(0, 3);
+  if (urgentDeals.length > 0) {
+    emBlocks.push(section(safeMrkdwn('*Deals needing attention*')));
+    for (const d of urgentDeals) {
+      const staleLabel =
+        d.daysSinceActivity && d.daysSinceActivity > 7 ? ` — ${d.daysSinceActivity}d dark` : '';
+      emBlocks.push(context([`${truncate(d.name, 50)} — ${fmtCurrency(d.value)}${staleLabel}`]));
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Overdue Tasks ---
+  if (data.tasks.overdue.length > 0) {
+    const taskSummary = data.tasks.overdue
+      .slice(0, 3)
+      .map(t =>
+        `${truncate(t.title, 60)} (${t.daysOverdue}d overdue${t.dealName ? ` — ${t.dealName}` : ''})`
+      )
+      .join('\n');
+    emBlocks.push(
+      section(safeMrkdwn(`*Overdue tasks (${data.tasks.overdue.length})*\n${taskSummary}`))
+    );
+    emBlocks.push(divider());
+  }
+
+  // --- Footer actions ---
+  emBlocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Open Pipeline'), emoji: false },
+        action_id: 'open_pipeline',
+        url: `${data.appUrl}/pipeline`,
+        style: 'primary',
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Ask Copilot'), emoji: false },
+        action_id: 'open_copilot',
+        url: `${data.appUrl}/copilot`,
+      },
+    ],
+  });
+
+  const fallbackText = data.pipelineMath?.target
+    ? `Good morning ${data.userName} — Pipeline: ${fmtCurrency(data.pipelineMath.total_pipeline)}, Target: ${fmtCurrency(data.pipelineMath.target)}`
+    : `Good morning ${data.userName} — Pipeline: ${fmtCurrency(data.pipelineMath?.total_pipeline ?? 0)}`;
+
+  return { blocks: emBlocks, text: fallbackText };
+};
