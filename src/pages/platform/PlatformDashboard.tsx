@@ -52,6 +52,7 @@ import {
   PhoneCall,
   Mic,
   LifeBuoy,
+  Coins,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -135,6 +136,15 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: BarChart3,
       href: '/platform/cost-analysis',
       color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30',
+      badge: 'New',
+    },
+    {
+      id: 'credit-menu',
+      title: 'Credit Menu',
+      description: 'Manage credit pricing for all platform actions — set Low/Medium/High tier costs',
+      icon: Coins,
+      href: '/platform/credit-menu',
+      color: 'text-[#37bd7e] bg-green-100 dark:bg-green-900/30',
       badge: 'New',
     },
     {

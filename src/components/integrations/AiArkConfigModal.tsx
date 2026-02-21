@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { KeyRound, Database, AlertTriangle } from 'lucide-react';
+import { KeyRound, Database, AlertTriangle, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 
@@ -88,6 +88,16 @@ export function AiArkConfigModal({ open, onOpenChange }: AiArkConfigModalProps) 
               placeholder="Paste AI Ark API key"
               type="password"
             />
+            {isConnected ? (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Check className="h-3 w-3" />
+                Credits free — using your own API key
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No key configured — platform key used, credits apply
+              </p>
+            )}
           </div>
           <Button
             type="button"

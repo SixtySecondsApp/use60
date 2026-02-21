@@ -400,6 +400,9 @@ serve(async (req) => {
     const aiArkApiKey = (integration?.credentials as Record<string, string>)?.api_key
       || Deno.env.get('AI_ARK_API_KEY')
 
+    // BYOK: if the org supplied their own key they pay AI Ark directly — skip credit deduction
+    const usingOwnKey = !!(integration?.credentials as Record<string, string>)?.api_key
+
     if (!aiArkApiKey) {
       return new Response(
         JSON.stringify({
@@ -489,7 +492,7 @@ serve(async (req) => {
 
     const aiArkData = await aiArkResponse.json()
 
-    if (!_skip_credit_deduction && membership.org_id && creditsConsumed > 0) {
+    if (!_skip_credit_deduction && !usingOwnKey && membership.org_id && creditsConsumed > 0) {
       await logFlatRateCostEvent(
         supabase,
         user.id,
