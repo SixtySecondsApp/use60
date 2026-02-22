@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>60 / Architecture Diagrams V2</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0a0f; --surf: #111118; --surf2: #1a1a24;
+      --bdr: #2a2a3a; --acc: #6366f1; --acc2: #8b5cf6;
+      --txt: #e2e8f0; --mut: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--txt); font-family: 'Inter', -apple-system, sans-serif; }
+
+    header {
+      background: var(--surf); border-bottom: 1px solid var(--bdr);
+      padding: 15px 28px; display: flex; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--acc), var(--acc2));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; color: #fff;
+    }
+    .lt { font-size: 16px; font-weight: 700; }
+    .ls { font-size: 11px; color: var(--mut); }
+    .hsep { width: 1px; height: 24px; background: var(--bdr); }
+    .htl { font-size: 13px; font-weight: 600; }
+    .hbg { margin-left: auto; font-size: 11px; color: var(--mut); background: var(--surf2); border: 1px solid var(--bdr); padding: 3px 10px; border-radius: 20px; }
+
+    .tabs { background: var(--surf); border-bottom: 1px solid var(--bdr); padding: 0 28px; display: flex; }
+    .tab { padding: 12px 16px; font-size: 13px; font-weight: 500; color: var(--mut); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .tab:hover { color: var(--txt); }
+    .tab.act { color: var(--txt); border-bottom-color: var(--acc); }
+    .td { width: 6px; height: 6px; border-radius: 50%; background: var(--mut); }
+    .tab.act .td { background: var(--acc); }
+
+    main { padding: 28px; }
+    .tp { display: none; }
+    .tp.act { display: block; }
+    .stl { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .sds { font-size: 13px; color: var(--mut); line-height: 1.6; max-width: 760px; }
+
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+    .pill { display: flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); transition: all .15s; user-select: none; }
+    .pill:hover { color: var(--txt); }
+    .pill.act { color: #fff; border-color: transparent; }
+    .pill[data-f="overview"].act    { background: #374151; }
+    .pill[data-f="frontend"].act    { background: #1d4ed8; }
+    .pill[data-f="copilot"].act     { background: #6d28d9; }
+    .pill[data-f="skills"].act      { background: #0369a1; }
+    .pill[data-f="recording"].act   { background: #0f766e; }
+    .pill[data-f="backend"].act     { background: #b45309; }
+    .pill[data-f="ai"].act          { background: #be185d; }
+    .pill[data-f="integrations"].act { background: #166534; }
+    .pill[data-f="cmdcentre"].act  { background: #7c3aed; }
+    .pill[data-f="autonomy"].act   { background: #059669; }
+    .pill[data-f="proactive"].act  { background: #dc2626; }
+    .pill[data-f="slackcopilot"].act { background: #4338ca; }
+    .pill[data-f="demo"].act       { background: #a16207; }
+    .pill[data-f="credits"].act    { background: #e11d48; }
+
+    .card { background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; overflow: hidden; }
+    .cbar { padding: 10px 14px; border-bottom: 1px solid var(--bdr); background: var(--surf2); display: flex; align-items: center; gap: 7px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dr { background: #ff5f57; } .dy { background: #ffbd2e; } .dg { background: #28c840; }
+    .cfn { font-size: 11px; color: var(--mut); margin-left: 4px; font-family: monospace; }
+
+    .zc { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+    .zb { background: var(--bg); border: 1px solid var(--bdr); color: var(--txt); width: 24px; height: 24px; border-radius: 5px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .zb:hover { background: var(--surf); }
+    .zp { font-size: 11px; color: var(--mut); min-width: 34px; text-align: center; font-family: monospace; }
+    .fsb { background: var(--bg); border: 1px solid var(--bdr); color: var(--mut); padding: 3px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; margin-left: 4px; }
+    .fsb:hover { color: var(--txt); }
+
+    .cbody { overflow: auto; background: var(--surf); cursor: grab; position: relative; min-height: 400px; }
+    .cbody:active { cursor: grabbing; }
+    .dstage { display: inline-block; padding: 28px 24px; transform-origin: 0 0; min-width: 100%; }
+    .dstage svg { display: block; max-width: none !important; }
+
+    .fv { display: none; }
+    .fv.vis { display: block; }
+    .fvh { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .fvb { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #fff; }
+    .fvt { font-size: 15px; font-weight: 600; }
+    .fvd { font-size: 12px; color: var(--mut); margin-top: 2px; }
+
+    .fso { display: none; position: fixed; inset: 0; z-index: 9999; background: var(--bg); flex-direction: column; }
+    .fso.open { display: flex; }
+    .fsh { background: var(--surf); border-bottom: 1px solid var(--bdr); padding: 10px 18px; display: flex; align-items: center; gap: 10px; }
+    .fstl { font-size: 13px; font-weight: 600; }
+    .fscl { margin-left: auto; background: none; border: 1px solid var(--bdr); color: var(--txt); padding: 4px 12px; border-radius: 5px; font-size: 11px; cursor: pointer; }
+    .fsbd { flex: 1; overflow: auto; cursor: grab; padding: 28px; display: flex; align-items: flex-start; }
+    .fsbd:active { cursor: grabbing; }
+    .fsst { transform-origin: 0 0; display: inline-block; }
+    .fszb { background: var(--surf); border-top: 1px solid var(--bdr); padding: 9px 18px; display: flex; align-items: center; gap: 7px; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 18px; padding: 16px 20px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; }
+    .lgt { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--mut); margin-bottom: 8px; }
+    .lgi { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 5px; }
+    .lgc { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+
+    table.kt { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 18px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 10px; overflow: hidden; }
+    table.kt th { background: var(--surf2); padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); border-bottom: 1px solid var(--bdr); }
+    table.kt td { padding: 10px 14px; border-bottom: 1px solid var(--bdr); color: var(--txt); vertical-align: top; }
+    table.kt tr:last-child td { border-bottom: none; }
+    table.kt td:first-child { font-family: monospace; font-size: 11px; color: var(--acc); white-space: nowrap; }
+    .b { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 500; }
+    .bp { background: rgba(99,102,241,.15); color: #a5b4fc; }
+    .bb { background: rgba(59,130,246,.15); color: #93c5fd; }
+    .bg { background: rgba(34,197,94,.15); color: #86efac; }
+    .by { background: rgba(234,179,8,.15); color: #fde047; }
+    .bx { background: rgba(100,116,139,.15); color: #94a3b8; }
+
+    .loading { color: var(--mut); font-size: 13px; padding: 60px; text-align: center; }
+    .merr { color: #f87171; font-size: 12px; padding: 20px; font-family: monospace; white-space: pre-wrap; background: #1a0a0a; border-radius: 8px; margin: 20px; }
+
+    /* Version toggle & V2 highlight system */
+    .ver-toggle { display: flex; align-items: center; gap: 6px; margin-left: 12px; }
+    .ver-btn { font-size: 11px; padding: 3px 10px; border-radius: 4px; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); transition: all .15s; }
+    .ver-btn.act { background: var(--acc); color: #fff; border-color: var(--acc); }
+    .hl-btn { font-size: 11px; padding: 3px 10px; border-radius: 20px; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); margin-left: 8px; transition: all .15s; display: flex; align-items: center; gap: 4px; }
+    .hl-btn.act { background: rgba(34,197,94,.15); color: #86efac; border-color: #22c55e; }
+    .v2-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(34,197,94,.15); color: #86efac; font-weight: 600; margin-left: 5px; vertical-align: middle; letter-spacing: .03em; }
+    .v2-only { display: none; }
+    .show-v2 .v2-only { display: block; }
+    .show-v2 .tab.v2-only { display: flex; }
+    .show-v2 .pill.v2-only { display: flex; }
+    .show-v2 .fv.v2-only.vis { display: block; }
+    /* V2 Only mode — hide V1 content */
+    body.v2-exclusive .v1-content { display: none !important; }
+    body.v2-exclusive .tp.v1-content { display: none !important; }
+    body.hl-v2 .v2-card { box-shadow: 0 0 0 2px #22c55e, 0 0 20px rgba(34,197,94,.2); }
+    body.hl-v2 .v2-badge { animation: v2pulse 1.5s ease-in-out infinite; }
+    body.hl-v2 .v2-row { background: rgba(34,197,94,.06); }
+    body.hl-v2 .pill.v2-only { box-shadow: 0 0 0 1px #22c55e; }
+    body.hl-v2 .tab.v2-only { box-shadow: inset 0 -2px 0 #22c55e; }
+    @keyframes v2pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">60</div>
+  <div><div class="lt">use60.com</div><div class="ls">Sales Intelligence Platform</div></div>
+  <div class="hsep"></div>
+  <div class="htl">Architecture Diagrams</div>
+  <div class="ver-toggle">
+    <button class="ver-btn" onclick="setVer('v1',this)">V1</button>
+    <button class="ver-btn act" onclick="setVer('v2',this)">V2</button>
+    <button class="ver-btn" onclick="setVer('v2only',this)">V2 Only</button>
+  </div>
+  <button class="hl-btn" id="hl-btn" onclick="toggleHL()"><span style="font-size:9px">&#9679;</span> Highlight V2</button>
+  <div class="hbg">feat/always_on branch</div>
+</header>
+
+<div class="tabs">
+  <div class="tab act" data-tab="system"    onclick="switchTab('system')"   ><span class="td"></span>System Architecture</div>
+  <div class="tab v1-content" data-tab="copilot"   onclick="switchTab('copilot')"  ><span class="td"></span>Copilot Lifecycle</div>
+  <div class="tab v1-content" data-tab="recording" onclick="switchTab('recording')"><span class="td"></span>Recording Pipeline</div>
+  <div class="tab v1-content" data-tab="skills"    onclick="switchTab('skills')"   ><span class="td"></span>Skills System</div>
+  <div class="tab v2-only" data-tab="cmdcentre" onclick="switchTab('cmdcentre')"><span class="td"></span>Command Centre <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="autonomy"  onclick="switchTab('autonomy')" ><span class="td"></span>Autonomy System <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="proactive" onclick="switchTab('proactive')"><span class="td"></span>Proactive Agents <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="credits"   onclick="switchTab('credits')"  ><span class="td"></span>Credit Governance <span class="v2-badge">V2</span></div>
+</div>
+
+<main>
+
+<!-- TAB 1: System Architecture -->
+<div id="tab-system" class="tp act">
+  <div class="stl">System Architecture</div>
+  <div class="sds">Full platform overview. Click a feature pill to see a focused diagram for that subsystem.</div>
+
+  <div class="pills">
+    <div class="pill act v1-content" data-f="overview"     onclick="showF('overview')"    >Overview</div>
+    <div class="pill v1-content"     data-f="frontend"     onclick="showF('frontend')"    >Frontend</div>
+    <div class="pill v1-content"     data-f="copilot"      onclick="showF('copilot')"     >Copilot AI</div>
+    <div class="pill v1-content"     data-f="skills"       onclick="showF('skills')"      >Skills System</div>
+    <div class="pill v1-content"     data-f="recording"    onclick="showF('recording')"   >Recording Pipeline</div>
+    <div class="pill v1-content"     data-f="backend"      onclick="showF('backend')"     >Supabase Backend</div>
+    <div class="pill v1-content"     data-f="ai"           onclick="showF('ai')"          >AI Providers</div>
+    <div class="pill v1-content"     data-f="integrations" onclick="showF('integrations')">Integrations</div>
+    <div class="pill v2-only" data-f="cmdcentre"    onclick="showF('cmdcentre')"   >Command Centre <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="autonomy"     onclick="showF('autonomy')"    >Autonomy <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="proactive"    onclick="showF('proactive')"   >Proactive Fleet <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="slackcopilot" onclick="showF('slackcopilot')">Slack Copilot <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="demo"         onclick="showF('demo')"        >Demo Experience <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="credits"      onclick="showF('credits')"     >Credit Governance <span class="v2-badge">V2</span></div>
+  </div>
+
+  <div id="fv-overview" class="fv vis v1-content">
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">system-overview.mermaid</span><div class="zc"><button class="zb" onclick="zD('ov',-0.15)">-</button><span class="zp" id="ov-pct">100%</span><button class="zb" onclick="zD('ov',0.15)">+</button><button class="zb" onclick="rD('ov')">R</button><button class="fsb" onclick="openFS('ov','System Overview')">Fullscreen</button></div></div>
+      <div class="cbody" id="ov-body"><div class="dstage" id="ov-stage"><div id="ov-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-frontend" class="fv v1-content">
+    <div class="fvh"><div class="fvb" style="background:#1d4ed8">Frontend</div><div><div class="fvt">React 18 + TypeScript + Vite + Tailwind</div><div class="fvd">Component hierarchy, state layers, core feature pages</div></div></div>
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">frontend.mermaid</span><div class="zc"><button class="zb" onclick="zD('fe',-0.15)">-</button><span class="zp" id="fe-pct">100%</span><button class="zb" onclick="zD('fe',0.15)">+</button><button class="zb" onclick="rD('fe')">R</button><button class="fsb" onclick="openFS('fe','Frontend')">Fullscreen</button></div></div>
+      <div class="cbody" id="fe-body"><div class="dstage" id="fe-stage"><div id="fe-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-copilot" class="fv v1-content">
+    <div class="fvh"><div class="fvb" style="background:#6d28d9">Copilot AI</div><div><div class="fvt">3-Mode Copilot with Smart Routing</div><div class="fvd">Autonomous (Claude), Regular (Gemini), 3-step skill discovery</div></div></div>
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">copilot-system.mermaid</span><div class="zc"><button class="zb" onclick="zD('cp',-0.15)">-</button><span class="zp" id="cp-pct">100%</span><button class="zb" onclick="zD('cp',0.15)">+</button><button class="zb" onclick="rD('cp')">R</button><button class="fsb" onclick="openFS('cp','Copilot AI')">Fullscreen</button></div></div>
+      <div class="cbody" id="cp-body"><div class="dstage" id="cp-stage"><div id="cp-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-skills" class="fv v1-content">
+    <div class="fvh"><div class="fvb" style="background:#0369a1">Skills System</div><div><div class="fvt">30 Skills - 18 Atomic + 12 Sequences</div><div class="fvd">SKILL.md files synced, compiled per org, embedded, discovered at runtime</div></div></div>
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">skills-system.mermaid</span><div class="zc"><button class="zb" onclick="zD('sk',-0.15)">-</button><span class="zp" id="sk-pct">100%</span><button class="zb" onclick="zD('sk',0.15)">+</button><button class="zb" onclick="rD('sk')">R</button><button class="fsb" onclick="openFS('sk','Skills System')">Fullscreen</button></div></div>
+      <div class="cbody" id="sk-body"><div class="dstage" id="sk-stage"><div id="sk-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-recording" class="fv v1-content">
+    <div class="fvh"><div class="fvb" style="background:#0f766e">Recording Pipeline</div><div><div class="fvt">60 Notetaker - 4-Phase Pipeline</div><div class="fvd">Bot deploy, S3 upload with retry, transcription, Claude AI analysis</div></div></div>
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">recording-feature.mermaid</span><div class="zc"><button class="zb" onclick="zD('rf',-0.15)">-</button><span class="zp" id="rf-pct">100%</span><button class="zb" onclick="zD('rf',0.15)">+</button><button class="zb" onclick="rD('rf')">R</button><button class="fsb" onclick="openFS('rf','Recording Pipeline')">Fullscreen</button></div></div>
+      <div class="cbody" id="rf-body"><div class="dstage" id="rf-stage"><div id="rf-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-backend" class="fv v1-content">
+    <div class="fvh"><div class="fvb" style="background:#b45309">Supabase Backend</div><div><div class="fvt">PostgreSQL + RLS + pgvector + Edge Functions</div><div class="fvd">Tables with row-level security, realtime, edge function groups</div></div></div>
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">backend.mermaid</span><div class="zc"><button class="zb" onclick="zD('be',-0.15)">-</button><span class="zp" id="be-pct">100%</span><button class="zb" onclick="zD('be',0.15)">+</button><button class="zb" onclick="rD('be')">R</button><button class="fsb" onclick="openFS('be','Supabase Backend')">Fullscreen</button></div></div>
+      <div class="cbody" id="be-body"><div class="dstage" id="be-stage"><div id="be-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-ai" class="fv v1-content">
+    <div class="fvh"><div class="fvb" style="background:#be185d">AI Providers</div><div><div class="fvt">Multi-Provider AI Architecture</div><div class="fvd">Which features use which models and how keys are stored securely</div></div></div>
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">ai-providers.mermaid</span><div class="zc"><button class="zb" onclick="zD('ai',-0.15)">-</button><span class="zp" id="ai-pct">100%</span><button class="zb" onclick="zD('ai',0.15)">+</button><button class="zb" onclick="rD('ai')">R</button><button class="fsb" onclick="openFS('ai','AI Providers')">Fullscreen</button></div></div>
+      <div class="cbody" id="ai-body"><div class="dstage" id="ai-stage"><div id="ai-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-integrations" class="fv v1-content">
+    <div class="fvh"><div class="fvb" style="background:#166534">Integrations</div><div><div class="fvt">External Service Integrations</div><div class="fvd">All external platforms and data flow directions</div></div></div>
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">integrations.mermaid</span><div class="zc"><button class="zb" onclick="zD('ig',-0.15)">-</button><span class="zp" id="ig-pct">100%</span><button class="zb" onclick="zD('ig',0.15)">+</button><button class="zb" onclick="rD('ig')">R</button><button class="fsb" onclick="openFS('ig','Integrations')">Fullscreen</button></div></div>
+      <div class="cbody" id="ig-body"><div class="dstage" id="ig-stage"><div id="ig-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-cmdcentre" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#7c3aed">Command Centre <span class="v2-badge">V2</span></div><div><div class="fvt">Unified Proactive Inbox with Enrichment Pipeline</div><div class="fvd">Enrich, prioritize, confidence-score, auto-execute or suggest. 9 source agents, 9 item types.</div></div></div>
+    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">command-centre.mermaid</span><div class="zc"><button class="zb" onclick="zD('cc',-0.15)">-</button><span class="zp" id="cc-pct">100%</span><button class="zb" onclick="zD('cc',0.15)">+</button><button class="zb" onclick="rD('cc')">R</button><button class="fsb" onclick="openFS('cc','Command Centre')">Fullscreen</button></div></div>
+      <div class="cbody" id="cc-body"><div class="dstage" id="cc-stage"><div id="cc-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-autonomy" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#059669">Autonomy System <span class="v2-badge">V2</span></div><div><div class="fvt">Graduated Autonomy with Policy Resolution</div><div class="fvd">4-tier policies, preset system, promotion engine, analytics tracking</div></div></div>
+    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-system.mermaid</span><div class="zc"><button class="zb" onclick="zD('au',-0.15)">-</button><span class="zp" id="au-pct">100%</span><button class="zb" onclick="zD('au',0.15)">+</button><button class="zb" onclick="rD('au')">R</button><button class="fsb" onclick="openFS('au','Autonomy System')">Fullscreen</button></div></div>
+      <div class="cbody" id="au-body"><div class="dstage" id="au-stage"><div id="au-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-proactive" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#dc2626">Proactive Fleet <span class="v2-badge">V2</span></div><div><div class="fvt">8 Autonomous Agent Fleet with Fleet Router</div><div class="fvd">Morning brief, EOD synthesis, meeting prep, deal risk, re-engagement, coaching, competitive intel, email signals</div></div></div>
+    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet.mermaid</span><div class="zc"><button class="zb" onclick="zD('pf',-0.15)">-</button><span class="zp" id="pf-pct">100%</span><button class="zb" onclick="zD('pf',0.15)">+</button><button class="zb" onclick="rD('pf')">R</button><button class="fsb" onclick="openFS('pf','Proactive Fleet')">Fullscreen</button></div></div>
+      <div class="cbody" id="pf-body"><div class="dstage" id="pf-stage"><div id="pf-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-slackcopilot" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#4338ca">Slack Copilot <span class="v2-badge">V2</span></div><div><div class="fvt">In-Channel CRM Agent with Assertive Messaging</div><div class="fvd">Thread-based queries, 8 intent handlers, assertive 3-part notifications</div></div></div>
+    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">slack-copilot.mermaid</span><div class="zc"><button class="zb" onclick="zD('sc',-0.15)">-</button><span class="zp" id="sc-pct">100%</span><button class="zb" onclick="zD('sc',0.15)">+</button><button class="zb" onclick="rD('sc')">R</button><button class="fsb" onclick="openFS('sc','Slack Copilot')">Fullscreen</button></div></div>
+      <div class="cbody" id="sc-body"><div class="dstage" id="sc-stage"><div id="sc-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-demo" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#a16207">Demo Experience <span class="v2-badge">V2</span></div><div><div class="fvt">5-Act Always-On Interactive Narrative</div><div class="fvd">Product demo at /settings/demo showing the full agent journey from pain to autonomy</div></div></div>
+    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">demo-experience.mermaid</span><div class="zc"><button class="zb" onclick="zD('dm',-0.15)">-</button><span class="zp" id="dm-pct">100%</span><button class="zb" onclick="zD('dm',0.15)">+</button><button class="zb" onclick="rD('dm')">R</button><button class="fsb" onclick="openFS('dm','Demo Experience')">Fullscreen</button></div></div>
+      <div class="cbody" id="dm-body"><div class="dstage" id="dm-stage"><div id="dm-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-credits" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Governance <span class="v2-badge">V2</span></div><div><div class="fvt">AI Credit Metering, Budgets, and Circuit Breakers</div><div class="fvd">Every AI call metered through creditLedger. Per-user budgets, org ceilings, fleet throttling, and real-time usage visibility.</div></div></div>
+    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance.mermaid</span><div class="zc"><button class="zb" onclick="zD('cg',-0.15)">-</button><span class="zp" id="cg-pct">100%</span><button class="zb" onclick="zD('cg',0.15)">+</button><button class="zb" onclick="rD('cg')">R</button><button class="fsb" onclick="openFS('cg','Credit Governance')">Fullscreen</button></div></div>
+      <div class="cbody" id="cg-body"><div class="dstage" id="cg-stage"><div id="cg-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div><div class="lgt">Arrows</div><div class="lgi"><div class="lgc" style="background:#e2e8f0"></div>Solid - direct data flow</div><div class="lgi"><div class="lgc" style="background:#64748b"></div>Dashed - integration or optional</div></div>
+    <div><div class="lgt">DB columns</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>meetings - owner_user_id</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>deals and contacts - owner_id</div></div>
+    <div><div class="lgt">Security</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>Copilot convos - user-private only</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>AI keys - user_settings, never VITE_</div></div>
+    <div><div class="lgt">V2 Credits</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>All AI calls metered via creditLedger</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>Fleet agents throttled by budget</div></div>
+  </div>
+</div>
+
+<!-- TAB 2: Copilot Lifecycle -->
+<div id="tab-copilot" class="tp v1-content">
+  <div class="stl">Copilot Request Lifecycle</div>
+  <div class="sds">Sequence from user message through routing, skill lazy-loading, Claude tool execution, and streaming response.</div>
+  <div style="margin-top:20px">
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">copilot-lifecycle.mermaid</span><div class="zc"><button class="zb" onclick="zD('sq',-0.15)">-</button><span class="zp" id="sq-pct">100%</span><button class="zb" onclick="zD('sq',0.15)">+</button><button class="zb" onclick="rD('sq')">R</button><button class="fsb" onclick="openFS('sq','Copilot Lifecycle')">Fullscreen</button></div></div>
+      <div class="cbody" id="sq-body"><div class="dstage" id="sq-stage"><div id="sq-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+    <table class="kt">
+      <thead><tr><th>Tool</th><th>Mode</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>list_skills</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Lists available skills for the active organization</td></tr>
+        <tr><td>get_skill</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Retrieves compiled skill content, lazy-loaded on demand to save tokens</td></tr>
+        <tr><td>execute_action</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Executes CRM actions and runs skills or sequences</td></tr>
+        <tr><td>resolve_entity</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Resolves ambiguous person references such as first-name-only lookups</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 3: Recording Pipeline -->
+<div id="tab-recording" class="tp v1-content">
+  <div class="stl">60 Notetaker - Recording Pipeline</div>
+  <div class="sds">Four-phase flow: bot deployment, S3 upload with retry, async transcription, then Claude AI analysis synced to the CRM.</div>
+  <div style="margin-top:20px">
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">recording-pipeline.mermaid</span><div class="zc"><button class="zb" onclick="zD('rp',-0.15)">-</button><span class="zp" id="rp-pct">100%</span><button class="zb" onclick="zD('rp',0.15)">+</button><button class="zb" onclick="rD('rp')">R</button><button class="fsb" onclick="openFS('rp','Recording Pipeline')">Fullscreen</button></div></div>
+      <div class="cbody" id="rp-body"><div class="dstage" id="rp-stage"><div id="rp-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+    <table class="kt">
+      <thead><tr><th>Edge Function</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>auto-join-scheduler</td><td><span class="b bb">cron</span></td><td>Scans calendar_events and deploys bots for upcoming meetings</td></tr>
+        <tr><td>deploy-recording-bot</td><td><span class="b bx">http</span></td><td>Calls MeetingBaaS API to join a specific meeting URL</td></tr>
+        <tr><td>meetingbaas-webhook</td><td><span class="b by">webhook</span></td><td>Receives bot completion callbacks, triggers upload queue</td></tr>
+        <tr><td>poll-s3-upload-queue</td><td><span class="b bb">cron</span></td><td>Uploads video and audio to S3 in 5MB chunks with exponential-backoff retry</td></tr>
+        <tr><td>poll-transcription-queue</td><td><span class="b bb">cron</span></td><td>Checks AssemblyAI and Gladia job status until transcript is ready</td></tr>
+        <tr><td>process-recording</td><td><span class="b bx">http</span></td><td>Claude-powered analysis: summary, highlights, action items, speaker ID</td></tr>
+        <tr><td>_shared/recordingCompleteSync.ts</td><td><span class="b bg">shared</span></td><td>Syncs recording results to meetings, contacts, and tasks tables</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 4: Skills System -->
+<div id="tab-skills" class="tp v1-content">
+  <div class="stl">Skills System</div>
+  <div class="sds">SKILL.md files sync to Supabase, compile per org with variable resolution, embed with pgvector, discovered at runtime via 3-step routing.</div>
+  <div style="margin-top:20px">
+    <div class="card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">skills-full.mermaid</span><div class="zc"><button class="zb" onclick="zD('sf',-0.15)">-</button><span class="zp" id="sf-pct">100%</span><button class="zb" onclick="zD('sf',0.15)">+</button><button class="zb" onclick="rD('sf')">R</button><button class="fsb" onclick="openFS('sf','Skills System')">Fullscreen</button></div></div>
+      <div class="cbody" id="sf-body"><div class="dstage" id="sf-stage"><div id="sf-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+    <table class="kt">
+      <thead><tr><th>File or Table</th><th>Role</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>skills/**/SKILL.md</td><td><span class="b bg">source</span></td><td>Gray-matter YAML frontmatter and markdown content. 18 atomic and 12 sequences.</td></tr>
+        <tr><td>scripts/sync-skills.ts</td><td><span class="b bb">CLI</span></td><td>Parse, validate, upsert, compile orgs, generate embeddings. Supports --dry-run and --skill flags.</td></tr>
+        <tr><td>platform_skills</td><td><span class="b by">DB</span></td><td>Master template store with variable placeholders. Admin-only writes.</td></tr>
+        <tr><td>organization_skills</td><td><span class="b by">DB</span></td><td>Runtime compiled per org with variables resolved. Read by all copilot paths.</td></tr>
+        <tr><td>description_embedding</td><td><span class="b bp">pgvector</span></td><td>1536-dim vector on platform_skills. Queried via match_skills_by_embedding RPC.</td></tr>
+        <tr><td>autonomousExecutor.ts</td><td><span class="b bp">runtime</span></td><td>Converts org skills to Claude tool definitions. Lazy-loads content tier on demand.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 5: Command Centre (V2) -->
+<div id="tab-cmdcentre" class="tp v2-only">
+  <div class="stl">Command Centre <span class="v2-badge">V2</span></div>
+  <div class="sds">Unified proactive inbox. Source agents emit items, enrichment pipeline scores confidence, autonomy resolver decides auto-execute vs approve vs suggest.</div>
+  <div style="margin-top:20px">
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">command-centre-pipeline.mermaid</span><div class="zc"><button class="zb" onclick="zD('ccp',-0.15)">-</button><span class="zp" id="ccp-pct">100%</span><button class="zb" onclick="zD('ccp',0.15)">+</button><button class="zb" onclick="rD('ccp')">R</button><button class="fsb" onclick="openFS('ccp','Command Centre Pipeline')">Fullscreen</button></div></div>
+      <div class="cbody" id="ccp-body"><div class="dstage" id="ccp-stage"><div id="ccp-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+    <table class="kt">
+      <thead><tr><th>Edge Function</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr class="v2-row"><td>cc-enrich</td><td><span class="b bp">pipeline</span></td><td>Runs context loaders (calendar, CRM, email, pipeline, transcript) to enrich items</td></tr>
+        <tr class="v2-row"><td>cc-prioritise</td><td><span class="b bp">pipeline</span></td><td>AI confidence scoring and priority ranking of enriched items</td></tr>
+        <tr class="v2-row"><td>cc-auto-execute</td><td><span class="b by">cron</span></td><td>Executes high-confidence items per autonomy policy</td></tr>
+        <tr class="v2-row"><td>cc-daily-cleanup</td><td><span class="b bb">cron</span></td><td>Archive stale items, deduplicate, maintain queue health</td></tr>
+        <tr class="v2-row"><td>cc-auto-report</td><td><span class="b bg">report</span></td><td>Daily summary of autonomous actions taken and outcomes</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 6: Autonomy System (V2) -->
+<div id="tab-autonomy" class="tp v2-only">
+  <div class="stl">Graduated Autonomy System <span class="v2-badge">V2</span></div>
+  <div class="sds">4-tier policy resolution: user policy, org policy, preset, default. Automatic promotion and demotion based on agent behavior and user trust signals.</div>
+  <div style="margin-top:20px">
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-resolution.mermaid</span><div class="zc"><button class="zb" onclick="zD('aur',-0.15)">-</button><span class="zp" id="aur-pct">100%</span><button class="zb" onclick="zD('aur',0.15)">+</button><button class="zb" onclick="rD('aur')">R</button><button class="fsb" onclick="openFS('aur','Autonomy Resolution')">Fullscreen</button></div></div>
+      <div class="cbody" id="aur-body"><div class="dstage" id="aur-stage"><div id="aur-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+    <table class="kt">
+      <thead><tr><th>Component</th><th>Role</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr class="v2-row"><td>autonomyResolver.ts</td><td><span class="b bp">engine</span></td><td>Resolves effective policy: user, org, preset, default (5-min cache)</td></tr>
+        <tr class="v2-row"><td>promotionEngine.ts</td><td><span class="b bg">engine</span></td><td>Evaluates trust signals for tier promotion (474 lines)</td></tr>
+        <tr class="v2-row"><td>demotionEngine.ts</td><td><span class="b by">engine</span></td><td>Demotes on violations like undo frequency (491 lines)</td></tr>
+        <tr class="v2-row"><td>autonomy-promotion-notify</td><td><span class="b bb">edge fn</span></td><td>Slack notification when agent earns a new tier</td></tr>
+        <tr class="v2-row"><td>autonomy_policies</td><td><span class="b bx">table</span></td><td>Per-action-type policy storage with presets</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 7: Proactive Agents (V2) -->
+<div id="tab-proactive" class="tp v2-only">
+  <div class="stl">Proactive Agent Fleet <span class="v2-badge">V2</span></div>
+  <div class="sds">8 autonomous agents triggered by cron or events. Fleet router orchestrates parallel execution with deduplication into Command Centre.</div>
+  <div style="margin-top:20px">
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet-detail.mermaid</span><div class="zc"><button class="zb" onclick="zD('pfd',-0.15)">-</button><span class="zp" id="pfd-pct">100%</span><button class="zb" onclick="zD('pfd',0.15)">+</button><button class="zb" onclick="rD('pfd')">R</button><button class="fsb" onclick="openFS('pfd','Proactive Fleet Detail')">Fullscreen</button></div></div>
+      <div class="cbody" id="pfd-body"><div class="dstage" id="pfd-stage"><div id="pfd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+    <table class="kt">
+      <thead><tr><th>Agent</th><th>Trigger</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr class="v2-row"><td>agent-morning-briefing</td><td><span class="b bb">cron 7am</span></td><td>Pipeline analysis, fleet routes, priority actions for the day</td></tr>
+        <tr class="v2-row"><td>agent-eod-synthesis</td><td><span class="b bb">cron 6pm</span></td><td>Day scorecard, deal health, relationship scoring, overnight plan</td></tr>
+        <tr class="v2-row"><td>proactive-meeting-prep</td><td><span class="b by">event</span></td><td>Type-specific prep (1:1, QBR, pipeline review, standup)</td></tr>
+        <tr class="v2-row"><td>agent-deal-risk</td><td><span class="b bb">cron</span></td><td>Temperature scoring, risk factor detection, automated alerts</td></tr>
+        <tr class="v2-row"><td>agent-reengagement</td><td><span class="b bb">cron</span></td><td>At-risk contact detection, Apollo/Apify signals, cooldown enforcement</td></tr>
+        <tr class="v2-row"><td>agent-coaching</td><td><span class="b by">event</span></td><td>Post-meeting coaching insights, skill progression tracking</td></tr>
+        <tr class="v2-row"><td>agent-competitive-intel</td><td><span class="b bb">cron</span></td><td>Competitor monitoring, battlecard generation, Slack alerts</td></tr>
+        <tr class="v2-row"><td>agent-email-signals</td><td><span class="b by">event</span></td><td>Email activity signal extraction, classification, recommendations</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 8: Credit Governance (V2) -->
+<div id="tab-credits" class="tp v2-only">
+  <div class="stl">Credit Governance <span class="v2-badge">V2</span></div>
+  <div class="sds">Every AI call — fleet agents, copilot, enrichment, scoring, Slack copilot — is metered through a central credit ledger. Per-user budgets, org ceilings, fleet circuit breakers, and real-time usage dashboards prevent runaway consumption.</div>
+  <div style="margin-top:20px">
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance-detail.mermaid</span><div class="zc"><button class="zb" onclick="zD('cgd',-0.15)">-</button><span class="zp" id="cgd-pct">100%</span><button class="zb" onclick="zD('cgd',0.15)">+</button><button class="zb" onclick="rD('cgd')">R</button><button class="fsb" onclick="openFS('cgd','Credit Governance Detail')">Fullscreen</button></div></div>
+      <div class="cbody" id="cgd-body"><div class="dstage" id="cgd-stage"><div id="cgd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+    <table class="kt">
+      <thead><tr><th>Component</th><th>Role</th><th>Credit Impact</th></tr></thead>
+      <tbody>
+        <tr class="v2-row"><td>creditLedger.ts</td><td><span class="b bp">core</span></td><td>Central metering — logs provider, model, tokens, cost per call</td></tr>
+        <tr class="v2-row"><td>creditBudgetService.ts</td><td><span class="b bg">service</span></td><td>Per-user daily/monthly budgets, org-wide ceilings, alert thresholds</td></tr>
+        <tr class="v2-row"><td>fleetThrottle.ts</td><td><span class="b by">guard</span></td><td>Circuit breaker — pauses non-critical fleet agents when budget &gt;80%</td></tr>
+        <tr class="v2-row"><td>modelRouter.ts</td><td><span class="b bb">router</span></td><td>Routes to cheapest capable model per task type (Haiku for triage, Sonnet for drafts)</td></tr>
+        <tr class="v2-row"><td>credit_ledger</td><td><span class="b bx">table</span></td><td>Append-only log: user_id, org_id, provider, model, tokens_in, tokens_out, cost_usd, source_agent</td></tr>
+        <tr class="v2-row"><td>credit_budgets</td><td><span class="b bx">table</span></td><td>Budget configs: user or org scope, daily_limit_usd, monthly_limit_usd, alert_pct</td></tr>
+        <tr class="v2-row"><td>credit-usage-rollup</td><td><span class="b bb">cron</span></td><td>Hourly rollup into credit_usage_daily for fast dashboard queries</td></tr>
+        <tr class="v2-row"><td>credit-budget-alert</td><td><span class="b by">trigger</span></td><td>Slack alert when user or org hits 80% / 100% of budget</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</main>
+
+<!-- Fullscreen overlay -->
+<div class="fso" id="fso">
+  <div class="fsh"><div class="logo" style="width:28px;height:28px;font-size:12px">60</div><div class="fstl" id="fstl">Diagram</div><button class="fscl" onclick="closeFS()">Close x</button></div>
+  <div class="fsbd" id="fsbd"><div class="fsst" id="fsst"></div></div>
+  <div class="fszb"><button class="zb" onclick="zFS(-0.2)">-</button><span class="zp" id="fs-pct">100%</span><button class="zb" onclick="zFS(0.2)">+</button><button class="zb" onclick="rFS()">R</button><span style="font-size:11px;color:var(--mut);margin-left:10px">Scroll to zoom - Drag to pan - Esc to close</span></div>
+</div>
+
+<script>
+// ── All diagram text stored as JS strings (bypasses HTML parser entirely) ──────
+
+var DIAGRAMS = {
+
+ov: [
+  'flowchart LR',
+  '    subgraph USR["User"]',
+  '        WEB["app.use60.com"]',
+  '        LAND["www.use60.com"]',
+  '    end',
+  '    subgraph FE["Frontend"]',
+  '        SA["Supabase Auth"]',
+  '        ZS["Zustand UI State"]',
+  '        RQ["React Query Server"]',
+  '        PL["Pipeline"]',
+  '        CO["Contacts"]',
+  '        ME["Meetings"]',
+  '        TA["Tasks"]',
+  '        CH["Chat Shell"]',
+  '        PA["48 Panels"]',
+  '        SKB["Skill Builder"]',
+  '    end',
+  '    subgraph ROUTE["Copilot Routing"]',
+  '        MS["sendMessage()"]',
+  '        R1["Sequence 0.7+"]',
+  '        R2["Skill Trigger 0.5+"]',
+  '        R3["Embedding 0.6+"]',
+  '        MS --> R1 --> R2 --> R3',
+  '    end',
+  '    subgraph AUTO["Autonomous Mode - Default"]',
+  '        AEF["copilot-autonomous"]',
+  '        CAI["Claude Haiku 4.5"]',
+  '        EXC["autonomousExecutor"]',
+  '        AEF --> CAI --> EXC',
+  '    end',
+  '    subgraph REG["Regular Mode - Fallback"]',
+  '        AC["api-copilot"]',
+  '        GM["Gemini 2.5 Flash"]',
+  '        AC --> GM',
+  '    end',
+  '    subgraph SKLS["Skills 30 total"]',
+  '        SM["SKILL.md files"]',
+  '        SY["sync-skills.ts"]',
+  '        PS["platform_skills"]',
+  '        OS["organization_skills"]',
+  '        EM["Embeddings OpenAI"]',
+  '        SM --> SY --> PS --> OS',
+  '        PS --> EM',
+  '    end',
+  '    subgraph SB["Supabase Backend"]',
+  '        DC["meetings deals contacts tasks"]',
+  '        EC["Copilot edge functions"]',
+  '        ER["Recording edge functions"]',
+  '        RT["Realtime"]',
+  '    end',
+  '    subgraph REC["Recording Pipeline"]',
+  '        BD["Bot Deploy MeetingBaaS"]',
+  '        S3["S3 Upload 5MB chunks"]',
+  '        TR["Transcription AssemblyAI"]',
+  '        PR["AI Processing Claude"]',
+  '        BD --> S3 --> TR --> PR',
+  '    end',
+  '    subgraph AIP["AI Providers"]',
+  '        AN["Anthropic Claude"]',
+  '        GO["Google Gemini"]',
+  '        OA["OpenAI Embeddings"]',
+  '    end',
+  '    subgraph INT["Integrations"]',
+  '        FA["Fathom"]',
+  '        GC["Google Calendar"]',
+  '        SL["Slack"]',
+  '        HB["HubSpot"]',
+  '        AT["Attio"]',
+  '        IN["Instantly"]',
+  '    end',
+  '    LAND --> WEB',
+  '    WEB --> FE',
+  '    CH --> ROUTE',
+  '    R1 --> AUTO',
+  '    R2 --> AUTO',
+  '    R3 --> AUTO',
+  '    R1 -.-> REG',
+  '    OS -->|RPC| ROUTE',
+  '    EXC -->|4 tools| EC',
+  '    EC --> DC',
+  '    ER --> DC',
+  '    PR -->|sync| DC',
+  '    GC -->|events| BD',
+  '    AN --> AEF',
+  '    AN -->|analysis| PR',
+  '    GO --> AC',
+  '    OA --> EM',
+  '    FA -->|transcripts| DC',
+  '    SL -.->|alerts| EC',
+  '    HB -.->|CRM sync| EC',
+  '    AT -.->|CRM sync| EC',
+  '    IN -.->|campaigns| EC',
+  '    AUTO -->|streaming| CH',
+  '    REG -->|streaming| CH',
+  '    RT --> RQ',
+  '    REC -->|ready| ME',
+  '    subgraph CMDCTR["Command Centre V2"]',
+  '        CCQ["Proactive Inbox"]',
+  '        CCE["Enrich Pipeline"]',
+  '        CCA["Autonomy Gate"]',
+  '        CCQ --> CCE --> CCA',
+  '    end',
+  '    subgraph FLEET["Proactive Fleet V2"]',
+  '        MBR["Morning Brief"]',
+  '        EOD["EOD Synthesis"]',
+  '        IMP["Meeting Prep"]',
+  '        DRK["Deal Risk"]',
+  '        REG["Re-Engagement"]',
+  '        COC["Coaching"]',
+  '        CCI["Competitive Intel"]',
+  '        ESG["Email Signals"]',
+  '    end',
+  '    subgraph SLKCP["Slack Copilot V2"]',
+  '        SCV["slack-copilot"]',
+  '        ICL["Intent Classifier"]',
+  '        ASM["Assertive Messages"]',
+  '        SCV --> ICL --> ASM',
+  '    end',
+  '    subgraph CRGOV["Credit Governance V2"]',
+  '        CLGR["creditLedger\\nmeters all AI calls"]',
+  '        CBGT["Budget Enforcement\\nuser + org limits"]',
+  '        FTHR["Fleet Throttle\\ncircuit breaker at 80%"]',
+  '        MROUTE["Model Router\\ncheapest capable model"]',
+  '        CLGR --> CBGT --> FTHR',
+  '    end',
+  '    FLEET -->|items| CCQ',
+  '    CCA -->|auto| DC',
+  '    CCA -->|notify| ASM',
+  '    SL -->|events| SCV',
+  '    ASM --> SL',
+  '    FLEET -.->|metered| CLGR',
+  '    AEF -.->|metered| CLGR',
+  '    CCE -.->|metered| CLGR',
+  '    SCV -.->|metered| CLGR',
+  '    FTHR -.->|throttle| FLEET',
+  '    MROUTE -.->|route| AIP'
+].join('\n'),
+
+fe: [
+  'flowchart TB',
+  '    subgraph AUTH["Authentication"]',
+  '        SA["Supabase Auth - JWT sessions"]',
+  '        CL["Clerk - alternative provider"]',
+  '    end',
+  '    subgraph STATE["State Management"]',
+  '        ZS["Zustand - UI State\\norg sidebar modals preferences"]',
+  '        RQ["React Query - Server Data\\ncaching invalidation realtime"]',
+  '        SL["ServiceLocator - DI container\\nuseServices hook"]',
+  '    end',
+  '    subgraph PAGES["Core Feature Pages"]',
+  '        PIP["Pipeline\\nKanban and table views"]',
+  '        CON["Contacts\\nPeople and companies"]',
+  '        MTG["Meetings\\nRecordings and AI summary"]',
+  '        TSK["Tasks\\nAction items and follow-ups"]',
+  '        SET["Settings\\nIntegrations and Skill builder"]',
+  '    end',
+  '    subgraph COP["Copilot UI"]',
+  '        AS["AssistantShell - main container"]',
+  '        ML["Message list - streaming"]',
+  '        PN["48 Response Panels\\nDeals Contacts Tasks Meetings"]',
+  '        PST["Progress Stepper\\ntool execution steps"]',
+  '        SKB["Skill Builder - SKILL.md editor"]',
+  '    end',
+  '    subgraph HOOKS["Hooks Layer"]',
+  '        UC["useCopilotChat\\nstreaming and tool tracking"]',
+  '        USS["useServices\\nservice locator access"]',
+  '        UT["useToast via Sonner\\nuser feedback"]',
+  '    end',
+  '    AUTH --> STATE',
+  '    PAGES --> STATE',
+  '    COP --> STATE',
+  '    HOOKS --> STATE',
+  '    AS --> ML',
+  '    AS --> PN',
+  '    AS --> PST',
+  '    SET --> SKB'
+].join('\n'),
+
+cp: [
+  'flowchart TD',
+  '    MSG(["User message"])',
+  '    subgraph CTX["CopilotContext.sendMessage()"]',
+  '        CHK["autonomous mode check"]',
+  '    end',
+  '    subgraph ROUTING["copilotRoutingService.routeToSkill()"]',
+  '        S1["Step 1 - Sequence triggers\\nconfidence 0.7+ agent-sequence category"]',
+  '        S2["Step 2 - Skill triggers\\nconfidence 0.5+ standard skills"]',
+  '        S3["Step 3 - Semantic fallback\\ncosine 0.6+ pgvector similarity"]',
+  '        S1 -->|no match| S2',
+  '        S2 -->|no match| S3',
+  '    end',
+  '    subgraph AUTOM["Autonomous Mode - DEFAULT"]',
+  '        AEF["copilot-autonomous edge function"]',
+  '        CLD["Claude Haiku 4.5 - native tool_use"]',
+  '        T1["list_skills - discover available skills"]',
+  '        T2["get_skill - fetch content on demand"]',
+  '        T3["execute_action - CRM and skills"]',
+  '        T4["resolve_entity - ambiguous names"]',
+  '        AEF --> CLD',
+  '        CLD --> T1',
+  '        CLD --> T2',
+  '        CLD --> T3',
+  '        CLD --> T4',
+  '    end',
+  '    subgraph REGM["Regular Mode - Fallback"]',
+  '        ACOP["api-copilot edge function"]',
+  '        GMN["Gemini 2.5 Flash - function calling"]',
+  '        PANS["48 rich response panels"]',
+  '        HITL["Preview then Confirm - HITL"]',
+  '        ACOP --> GMN --> PANS --> HITL',
+  '    end',
+  '    subgraph MEM["Memory and Sessions"]',
+  '        CM["copilotMemoryService\\nstore recall extract"]',
+  '        CS["copilotSessionService\\ncompact at 80k tokens"]',
+  '    end',
+  '    MSG --> CTX',
+  '    CTX -->|autonomous on| ROUTING',
+  '    ROUTING -->|skill hint| AUTOM',
+  '    CTX -.->|fallthrough| REGM',
+  '    MEM --> ROUTING',
+  '    AUTOM -->|streaming SSE| RESP(["Response to UI"])',
+  '    REGM -->|streaming| RESP'
+].join('\n'),
+
+sk: [
+  'flowchart TD',
+  '    subgraph SRC["Source of Truth"]',
+  '        MD["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n30 total - YAML frontmatter + markdown"]',
+  '    end',
+  '    subgraph SYNC["Sync Paths"]',
+  '        CLI["sync-skills.ts\\nnpm run sync-skills\\nlocal dev and CI"]',
+  '        GHW["sync-skills-from-github\\nedge function\\nGitHub push webhook"]',
+  '    end',
+  '    subgraph PT["platform_skills - Master Templates"]',
+  '        PTR["skill_key and category\\ncontent with variable placeholders\\ndescription for embedding generation"]',
+  '    end',
+  '    subgraph EMBG["Embedding Generation"]',
+  '        ES["generateEmbeddings.ts\\nOpenAI text-embedding-3-small\\n1536 dimensions batch processing"]',
+  '        GE["generate-embedding edge function\\nruntime query embedding"]',
+  '    end',
+  '    subgraph OT["organization_skills - Runtime Compiled"]',
+  '        OTR["skill_key and is_enabled\\nfrontmatter with variables resolved\\ncontent ready to execute"]',
+  '    end',
+  '    subgraph RPC["get_organization_skills_for_agent RPC"]',
+  '        RPR["Returns per org with is_enabled filter\\nskill_key category frontmatter content"]',
+  '    end',
+  '    subgraph DISC["3-Step Runtime Discovery"]',
+  '        D1["Sequence triggers\\nconfidence 0.7+\\nagent-sequence category"]',
+  '        D2["Skill triggers\\nconfidence 0.5+\\nstandard skills"]',
+  '        D3["Semantic fallback\\ncosine 0.6+\\nmatch_skills_by_embedding RPC"]',
+  '        D1 -->|no match| D2',
+  '        D2 -->|no match| D3',
+  '    end',
+  '    subgraph EXEC["autonomousExecutor.ts - Lazy Loading"]',
+  '        E1["initialize()\\nmetadata tier only\\nall keys and frontmatter"]',
+  '        E2["executeTool()\\ninstructions tier\\nlazy-loaded on demand"]',
+  '        E3["Claude tool definitions\\nnative tool_use format"]',
+  '        E1 --> E2 --> E3',
+  '    end',
+  '    MD --> CLI',
+  '    MD --> GHW',
+  '    CLI --> PT',
+  '    GHW --> PT',
+  '    PT --> ES',
+  '    ES -->|upsert embedding| PT',
+  '    PT -->|compile per org| OT',
+  '    OT --> RPC',
+  '    RPC --> DISC',
+  '    RPC --> EXEC',
+  '    GE -->|embed user query| D3'
+].join('\n'),
+
+rf: [
+  'flowchart TD',
+  '    START(["Meeting scheduled\\nGoogle Calendar sync"])',
+  '    subgraph P1["Phase 1 - Bot Deployment"]',
+  '        SCH["auto-join-scheduler\\ncron every 2 min"]',
+  '        BOT["deploy-recording-bot\\nMeetingBaaS API"]',
+  '        RCV["Bot recording active"]',
+  '        SCH --> BOT --> RCV',
+  '    end',
+  '    subgraph P2["Phase 2 - S3 Upload"]',
+  '        MEND["Meeting ends\\nbot signals complete"]',
+  '        POL["poll-s3-upload-queue\\n5MB multipart chunks"]',
+  '        UOK["S3 Upload Complete"]',
+  '        UFX["Upload Failed"]',
+  '        MEND --> POL',
+  '        POL -->|success| UOK',
+  '        POL -->|error| UFX',
+  '        UFX -->|exponential backoff retry| POL',
+  '    end',
+  '    subgraph P3["Phase 3 - Transcription"]',
+  '        WHK["meetingbaas-webhook\\nsignals ready"]',
+  '        PTR["poll-transcription-queue"]',
+  '        ASS["AssemblyAI - primary"]',
+  '        GLA["Gladia - fallback"]',
+  '        TRY["Transcript Ready"]',
+  '        WHK --> PTR',
+  '        PTR --> ASS',
+  '        PTR --> GLA',
+  '        ASS --> TRY',
+  '        GLA --> TRY',
+  '    end',
+  '    subgraph P4["Phase 4 - AI Processing"]',
+  '        PRC["process-recording\\nedge function"]',
+  '        CLD["Claude Haiku\\ntranscript analysis"]',
+  '        RES["Summary + Highlights\\nAction Items + Speaker ID"]',
+  '        PRC --> CLD --> RES',
+  '    end',
+  '    SYNC["syncRecordingToMeeting()"]',
+  '    CRM["CRM Updated"]',
+  '    SLK["Slack Notified"]',
+  '    THB["Thumbnail Lambda"]',
+  '    START --> SCH',
+  '    RCV --> MEND',
+  '    UOK --> WHK',
+  '    TRY --> PRC',
+  '    RES --> SYNC',
+  '    SYNC --> CRM',
+  '    SYNC --> SLK',
+  '    SYNC --> THB'
+].join('\n'),
+
+be: [
+  'flowchart LR',
+  '    subgraph AUTH2["Auth Tables"]',
+  '        AU["auth.users\\nSupabase managed"]',
+  '        ORG["organizations\\nmemberships"]',
+  '        US["user_settings\\nAI keys per user\\nno VITE_ prefix"]',
+  '    end',
+  '    subgraph CRM2["CRM Tables"]',
+  '        MT["meetings\\nowner_user_id"]',
+  '        DL["deals\\nowner_id"]',
+  '        CT["contacts\\nowner_id"]',
+  '        TK["tasks\\nassigned_to and owner_id"]',
+  '        AC["activities\\nuser_id"]',
+  '    end',
+  '    subgraph COPDB["Copilot Tables - user-private"]',
+  '        CV["copilot_conversations\\nuser_id - admins cannot read"]',
+  '        CM["copilot_memories\\nuser_id"]',
+  '        CS["copilot_sessions\\ncompacted at 80k tokens"]',
+  '    end',
+  '    subgraph SKDB["Skills Tables"]',
+  '        PS["platform_skills\\nmaster templates"]',
+  '        OS["organization_skills\\ncompiled per org"]',
+  '        PE["description_embedding\\npgvector 1536 dimensions"]',
+  '    end',
+  '    subgraph RLS2["Row Level Security"]',
+  '        RL1["Users see own data only"]',
+  '        RL2["Admins see org data"]',
+  '        RL3["Copilot convos user-private\\nCHECK constraint enforced"]',
+  '    end',
+  '    subgraph EFG["Edge Functions - Deno runtime"]',
+  '        CE1["copilot-autonomous\\nClaude native tool_use"]',
+  '        CE2["api-copilot\\nGemini function calling"]',
+  '        RE1["auto-join-scheduler cron"]',
+  '        RE2["meetingbaas-webhook"]',
+  '        RE3["poll queues - cron"]',
+  '        RE5["process-recording"]',
+  '        UE1["generate-embedding"]',
+  '        CORS["corsHelper.ts\\ngetCorsHeaders origin-validated"]',
+  '    end',
+  '    RLS2 --> CRM2',
+  '    RLS2 --> COPDB',
+  '    AUTH2 --> CRM2',
+  '    PS --> OS',
+  '    PE --> PS',
+  '    CE1 --> CRM2',
+  '    CE1 --> COPDB',
+  '    CE1 --> SKDB',
+  '    RE5 --> CRM2'
+].join('\n'),
+
+ai: [
+  'flowchart TB',
+  '    subgraph ANT["Anthropic Claude"]',
+  '        H45["Claude Haiku 4.5\\nnative tool_use"]',
+  '        HREC["Claude Haiku\\nRecording analysis"]',
+  '    end',
+  '    subgraph GGL["Google Gemini"]',
+  '        G25["Gemini 2.5 Flash\\nfunction calling"]',
+  '    end',
+  '    subgraph OAI["OpenAI"]',
+  '        TE3["text-embedding-3-small\\n1536 dimensions"]',
+  '    end',
+  '    subgraph ORT["OpenRouter"]',
+  '        OR["Multi-model router\\nper user config\\nWorkflow AI nodes"]',
+  '    end',
+  '    subgraph USE["Feature Usage"]',
+  '        U1["Autonomous Copilot\\ncopilot-autonomous\\nDefault mode"]',
+  '        U2["Regular Copilot\\napi-copilot\\n48 rich panels"]',
+  '        U3["Skill Embeddings\\nplatform_skills\\ndescription_embedding"]',
+  '        U4["Query Embeddings\\ngenerate-embedding\\nsemantic skill search"]',
+  '        U5["Recording Analysis\\nprocess-recording\\nsummary and speaker ID"]',
+  '        U6["Workflow AI Nodes\\nconfigurable per user"]',
+  '        U7["Keys in user_settings\\nNever in VITE_ env vars"]',
+  '    end',
+  '    H45 --> U1',
+  '    G25 --> U2',
+  '    TE3 --> U3',
+  '    TE3 --> U4',
+  '    HREC --> U5',
+  '    OR --> U6',
+  '    U7 -.-> U1',
+  '    U7 -.-> U2',
+  '    U7 -.-> U6'
+].join('\n'),
+
+ig: [
+  'flowchart LR',
+  '    subgraph MEET["Meeting Integrations"]',
+  '        FTH["Fathom\\nMeeting transcripts\\nauto-indexed for AI"]',
+  '        MBS["MeetingBaaS - 60 Notetaker\\nBot-based recording\\npermanent S3 storage"]',
+  '        GCL["Google Calendar\\nManual sync\\nevents stored locally"]',
+  '    end',
+  '    subgraph CRMX["CRM Sync"]',
+  '        HBS["HubSpot\\nContacts and deals\\nbidirectional sync"]',
+  '        ATT["Attio\\nContacts and deals\\nbidirectional sync"]',
+  '    end',
+  '    subgraph OUT["Outreach"]',
+  '        INS["Instantly\\nEmail campaigns\\nReply detection"]',
+  '    end',
+  '    subgraph NOTIF["Notifications"]',
+  '        SLK2["Slack\\nPipeline alerts\\nWin/loss notifications\\nHITL approvals"]',
+  '    end',
+  '    subgraph DB3["Platform Database"]',
+  '        MTG2["meetings table"]',
+  '        CAL2["calendar_events table"]',
+  '        CRMT["CRM tables"]',
+  '        ACTT["activities table"]',
+  '    end',
+  '    FTH -->|transcript import| MTG2',
+  '    MBS -->|recordings and transcripts| MTG2',
+  '    GCL -->|calendar events| CAL2',
+  '    HBS -->|contacts and deals| CRMT',
+  '    CRMT -->|sync back| HBS',
+  '    ATT -->|contacts and deals| CRMT',
+  '    CRMT -->|sync back| ATT',
+  '    INS -->|campaign status| ACTT',
+  '    SLK2 -->|webhooks and alerts| DB3',
+  '    DB3 -->|pipeline notifications| SLK2'
+].join('\n'),
+
+sq: [
+  'sequenceDiagram',
+  '    actor User',
+  '    participant UI as Copilot UI',
+  '    participant Ctx as CopilotContext',
+  '    participant Router as copilotRoutingService',
+  '    participant EF as copilot-autonomous',
+  '    participant RPC as get-agent-skills RPC',
+  '    participant DB as organization_skills',
+  '    participant Claude as Claude Haiku 4.5',
+  '    participant Tools as Tool Handlers',
+  '    User->>UI: Send message',
+  '    UI->>Ctx: sendMessage()',
+  '    Ctx->>Router: routeToSkill(message, orgId)',
+  '    Note over Router: 3-step routing sequences 0.7+ skills 0.5+ embeddings 0.6+',
+  '    Router-->>Ctx: SkillMatch or null',
+  '    Ctx->>EF: POST with skill hint and message',
+  '    EF->>RPC: get_organization_skills_for_agent()',
+  '    RPC->>DB: SELECT compiled skills for org',
+  '    DB-->>RPC: skill rows key frontmatter content',
+  '    RPC-->>EF: skills as Claude tool definitions',
+  '    EF->>Claude: messages and tools metadata tier',
+  '    Note over Claude: Inspects tool definitions',
+  '    Claude-->>EF: tool_use get_skill skill_key',
+  '    Note over EF: Lazy-load full instructions on demand',
+  '    EF->>RPC: Fetch full skill content',
+  '    RPC-->>EF: complete skill instructions',
+  '    EF->>Claude: tool_result with content',
+  '    Claude-->>EF: tool_use execute_action',
+  '    EF->>Tools: Run CRM action or fetch data',
+  '    Tools-->>EF: action result',
+  '    Claude-->>EF: Final text response',
+  '    EF-->>Ctx: Streaming chunks via SSE',
+  '    Ctx-->>UI: Update messages and progress steps',
+  '    UI-->>User: Response displayed'
+].join('\n'),
+
+rp: [
+  'flowchart TD',
+  '    START(["Meeting scheduled - Google Calendar sync"])',
+  '    subgraph P1["Phase 1 - Bot Deployment"]',
+  '        SCH2["auto-join-scheduler\\ncron every 2 min\\nscans calendar_events"]',
+  '        BOT2["deploy-recording-bot\\nMeetingBaaS API\\nZoom Meet Teams"]',
+  '        RCV2["Bot recording active\\nmeeting in progress"]',
+  '        SCH2 --> BOT2 --> RCV2',
+  '    end',
+  '    subgraph P2["Phase 2 - S3 Upload"]',
+  '        MEND2["Meeting ends\\nbot signals complete"]',
+  '        POL2["poll-s3-upload-queue\\n5MB multipart chunks"]',
+  '        UOK2["S3 Upload Complete"]',
+  '        UFX2["Upload Failed max 3 retries"]',
+  '        MEND2 --> POL2',
+  '        POL2 -->|success| UOK2',
+  '        POL2 -->|error| UFX2',
+  '        UFX2 -->|exponential backoff| POL2',
+  '    end',
+  '    subgraph P3["Phase 3 - Transcription"]',
+  '        WHK2["meetingbaas-webhook\\nsignals ready"]',
+  '        PTR2["poll-transcription-queue"]',
+  '        ASS2["AssemblyAI - primary provider"]',
+  '        GLA2["Gladia - fallback provider"]',
+  '        TRY2["Transcript Ready"]',
+  '        WHK2 --> PTR2',
+  '        PTR2 --> ASS2',
+  '        PTR2 --> GLA2',
+  '        ASS2 --> TRY2',
+  '        GLA2 --> TRY2',
+  '    end',
+  '    subgraph P4["Phase 4 - AI Processing"]',
+  '        PRC2["process-recording\\nedge function"]',
+  '        CLD2["Claude Haiku\\ntranscript analysis\\nspeaker identification"]',
+  '        RES2["Summary and Highlights\\nAction Items and Speaker ID\\nCRM field updates"]',
+  '        PRC2 --> CLD2 --> RES2',
+  '    end',
+  '    SYNC2["syncRecordingToMeeting()"]',
+  '    CRM2["CRM Updated\\nmeetings contacts tasks"]',
+  '    SLK2["Slack Notified"]',
+  '    THB2["Thumbnail - Lambda\\npresigned S3 URL"]',
+  '    START --> SCH2',
+  '    RCV2 --> MEND2',
+  '    UOK2 --> WHK2',
+  '    TRY2 --> PRC2',
+  '    RES2 --> SYNC2',
+  '    SYNC2 --> CRM2',
+  '    SYNC2 --> SLK2',
+  '    SYNC2 --> THB2'
+].join('\n'),
+
+sf: [
+  'flowchart TD',
+  '    subgraph SRC2["Source of Truth"]',
+  '        MD2["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n30 total - 18 atomic + 12 sequences"]',
+  '    end',
+  '    subgraph SYNC2["Sync Paths"]',
+  '        CLI2["sync-skills.ts\\nnpm run sync-skills\\nlocal dev and CI"]',
+  '        GHW2["sync-skills-from-github\\nedge function\\nGitHub push webhook"]',
+  '    end',
+  '    subgraph PT2["platform_skills - Master Templates"]',
+  '        PTR2["skill_key and category\\ncontent with variable placeholders\\ndescription used for embedding"]',
+  '    end',
+  '    subgraph EMBG2["Embedding Generation"]',
+  '        ES2["generateEmbeddings.ts\\nOpenAI text-embedding-3-small\\n1536 dimensions batch processing"]',
+  '        GE2["generate-embedding edge function\\nruntime query embedding"]',
+  '    end',
+  '    subgraph OT2["organization_skills - Runtime Compiled"]',
+  '        OTR2["skill_key and is_enabled\\nfrontmatter with variables resolved\\ncontent ready for execution"]',
+  '    end',
+  '    subgraph RPCL2["get_organization_skills_for_agent RPC"]',
+  '        RPR2["Returns per org filtered by is_enabled\\nskill_key category frontmatter content"]',
+  '    end',
+  '    subgraph DISC2["3-Step Runtime Discovery"]',
+  '        D12["Sequence triggers\\nconfidence 0.7+\\nagent-sequence category"]',
+  '        D22["Skill triggers\\nconfidence 0.5+\\nstandard skill categories"]',
+  '        D32["Semantic fallback\\ncosine 0.6+\\nmatch_skills_by_embedding RPC"]',
+  '        D12 -->|no match| D22',
+  '        D22 -->|no match| D32',
+  '    end',
+  '    subgraph EXCT2["autonomousExecutor.ts - Lazy Loading"]',
+  '        E12["initialize()\\nmetadata tier\\nall keys and frontmatter"]',
+  '        E22["executeTool()\\ninstructions tier\\nlazy-loaded on demand"]',
+  '        E32["Claude tool definitions\\nnative tool_use format"]',
+  '        E12 --> E22 --> E32',
+  '    end',
+  '    MD2 --> CLI2',
+  '    MD2 --> GHW2',
+  '    CLI2 --> PT2',
+  '    GHW2 --> PT2',
+  '    PT2 --> ES2',
+  '    ES2 -->|upsert description_embedding| PT2',
+  '    PT2 -->|compile org variables| OT2',
+  '    OT2 --> RPCL2',
+  '    RPCL2 --> DISC2',
+  '    RPCL2 --> EXCT2',
+  '    GE2 -->|embed user query| D32'
+].join('\n')
+
+// ── V2 Diagrams (feat/always_on branch) ────────────────────────
+
+,cc: [
+  'flowchart TD',
+  '    subgraph SRC["Source Agents - 8 total"]',
+  '        A1["Morning Briefing"]',
+  '        A2["EOD Synthesis"]',
+  '        A3["Meeting Prep"]',
+  '        A4["Deal Risk"]',
+  '        A5["Re-Engagement"]',
+  '        A6["Coaching"]',
+  '        A7["Competitive Intel"]',
+  '        A8["Email Signals"]',
+  '    end',
+  '    subgraph CC["Command Centre Pipeline"]',
+  '        INB["Inbox\\n9 item types\\n8 statuses"]',
+  '        ENR["cc-enrich\\nCalendar CRM Email\\nPipeline Transcript"]',
+  '        PRI["cc-prioritise\\nAI confidence scoring\\npriority ranking"]',
+  '        INB --> ENR --> PRI',
+  '    end',
+  '    subgraph AUT["Autonomy Gate"]',
+  '        RES["autonomyResolver\\nUser Org Preset Default"]',
+  '        PRI --> RES',
+  '    end',
+  '    subgraph ACT["Action Paths"]',
+  '        EXE["Auto-Execute\\nhigh confidence + auto policy"]',
+  '        APR["Approve\\nmedium confidence or approve policy"]',
+  '        SUG["Suggest\\nlow confidence or suggest policy"]',
+  '        RES -->|auto| EXE',
+  '        RES -->|approve| APR',
+  '        RES -->|suggest| SUG',
+  '    end',
+  '    subgraph OUT["Outputs"]',
+  '        CRM["CRM Updates"]',
+  '        SLK["Slack Assertive Messages\\nAction + Evidence + Escape"]',
+  '        TSK["Tasks Created"]',
+  '        EML["Email Drafts"]',
+  '    end',
+  '    subgraph CRED["Credit Governance"]',
+  '        CLG["creditLedger\\nmeters enrichment + scoring"]',
+  '        CBG["Budget Check\\nbefore each AI call"]',
+  '        FTH2["Fleet Throttle\\nskip non-critical if over budget"]',
+  '        CLG --> CBG --> FTH2',
+  '    end',
+  '    SRC --> INB',
+  '    ENR -.->|AI call metered| CLG',
+  '    PRI -.->|AI call metered| CLG',
+  '    FTH2 -.->|throttle low-priority items| INB',
+  '    EXE --> OUT',
+  '    APR -->|user confirms| OUT',
+  '    SUG -->|user acts| OUT'
+].join('\n'),
+
+au: [
+  'flowchart TD',
+  '    subgraph TIERS["4 Autonomy Tiers"]',
+  '        T1["disabled\\nAgent cannot act"]',
+  '        T2["suggest\\nAgent suggests only"]',
+  '        T3["approve\\nAgent drafts user confirms"]',
+  '        T4["auto\\nAgent acts user can undo"]',
+  '        T1 --> T2 --> T3 --> T4',
+  '    end',
+  '    subgraph PRESETS["Preset Configurations"]',
+  '        PC["Conservative\\nmost actions suggest"]',
+  '        PB["Balanced\\nmix of approve and auto"]',
+  '        PA["Autonomous\\nmost actions auto"]',
+  '    end',
+  '    subgraph RESOLVE["Policy Resolution - 5 min cache"]',
+  '        R1["1. User Policy\\nper action type override"]',
+  '        R2["2. Org Policy\\norganization defaults"]',
+  '        R3["3. Preset\\nconservative balanced autonomous"]',
+  '        R4["4. Default\\nbuilt-in fallback"]',
+  '        R1 -->|not set| R2',
+  '        R2 -->|not set| R3',
+  '        R3 -->|not set| R4',
+  '    end',
+  '    subgraph PROMO["Promotion Engine"]',
+  '        TS["Trust Signals\\nundo rate approval rate usage"]',
+  '        PE["promotionEngine.ts\\nevaluate threshold"]',
+  '        SN["Slack Notification\\nautonomy-promotion-notify"]',
+  '        TS --> PE -->|threshold met| SN',
+  '    end',
+  '    subgraph DEMO["Demotion Engine"]',
+  '        VIO["Violations\\nfrequent undo rejections"]',
+  '        DE["demotionEngine.ts\\nauto-downgrade"]',
+  '        VIO --> DE -->|tier down| TIERS',
+  '    end',
+  '    subgraph ANALYTICS["Autonomy Analytics"]',
+  '        AA["autonomy_analytics table\\nactions per tier"]',
+  '        AB["autonomy_audit_log\\nall promotions demotions"]',
+  '    end',
+  '    PRESETS --> RESOLVE',
+  '    PE --> ANALYTICS',
+  '    DE --> ANALYTICS'
+].join('\n'),
+
+pf: [
+  'flowchart LR',
+  '    subgraph TRIGGER["Triggers"]',
+  '        CR["Cron Scheduler"]',
+  '        EV["Event Hooks\\nmeeting end deal update"]',
+  '    end',
+  '    subgraph FLEET["Fleet Router"]',
+  '        FR["Route to N agents\\nparallel execution\\ndeduplication"]',
+  '    end',
+  '    subgraph AGENTS["Agent Fleet"]',
+  '        MB["Morning Brief\\npipeline + fleet routes"]',
+  '        EOD["EOD Synthesis\\nscorecard + overnight plan"]',
+  '        MP["Meeting Prep\\ntype-specific 1:1 QBR standup"]',
+  '        DR["Deal Risk\\ntemperature + risk factors"]',
+  '        RE["Re-Engagement\\nApollo + Apify signals"]',
+  '        CO["Coaching\\nskill progression"]',
+  '        CI["Competitive Intel\\nbattlecards + monitoring"]',
+  '        ES["Email Signals\\nextraction + classification"]',
+  '    end',
+  '    subgraph ASSERT["Assertive Messaging"]',
+  '        AM["3-Part Pattern"]',
+  '        ACT2["Action - past tense verb"]',
+  '        EVI["Evidence - trigger + source"]',
+  '        ESC["Escape Hatch - tier buttons"]',
+  '        AM --> ACT2',
+  '        AM --> EVI',
+  '        AM --> ESC',
+  '    end',
+  '    subgraph CRED2["Credit Governance"]',
+  '        MR2["Model Router\\ncheapest model per task"]',
+  '        FT2["Fleet Throttle\\npause non-critical at 80%"]',
+  '        LG2["creditLedger\\nper-agent cost tracking"]',
+  '    end',
+  '    subgraph DEST["Destinations"]',
+  '        CCQ["Command Centre Queue"]',
+  '        SLK3["Slack Channels"]',
+  '    end',
+  '    TRIGGER --> FR',
+  '    FR --> FT2',
+  '    FT2 -->|budget ok| AGENTS',
+  '    FT2 -.->|over budget skip non-critical| DEST',
+  '    AGENTS --> MR2',
+  '    MR2 -->|cheapest capable model| AGENTS',
+  '    AGENTS -.->|metered| LG2',
+  '    AGENTS --> CCQ',
+  '    AGENTS --> ASSERT',
+  '    ASSERT --> SLK3'
+].join('\n'),
+
+sc: [
+  'flowchart TD',
+  '    USR(["Slack User Message"])  ',
+  '    subgraph EVENTS["slack-events edge function"]',
+  '        EV["Event receiver\\napp_mention + message"]',
+  '        TH["Thread detection\\nreply vs new thread"]',
+  '        EV --> TH',
+  '    end',
+  '    subgraph COPILOT["slack-copilot edge function"]',
+  '        IC["Intent Classifier\\n8 query types"]',
+  '        D1["Deals handler"]',
+  '        D2["Contacts handler"]',
+  '        D3["Pipeline handler"]',
+  '        D4["History handler"]',
+  '        D5["Coaching handler"]',
+  '        D6["Competitive handler"]',
+  '        D7["Actions handler"]',
+  '        D8["General handler"]',
+  '        IC --> D1',
+  '        IC --> D2',
+  '        IC --> D3',
+  '        IC --> D4',
+  '        IC --> D5',
+  '        IC --> D6',
+  '        IC --> D7',
+  '        IC --> D8',
+  '    end',
+  '    subgraph MEM["Thread Memory"]',
+  '        TM["slack_copilot_threads\\ncontext per thread\\n180 line service"]',
+  '    end',
+  '    subgraph INTER["slack-interactive"]',
+  '        AT2["Autonomy toggle handler"]',
+  '        CQ["Config question answer"]',
+  '        AP["Promotion approval"]',
+  '    end',
+  '    USR --> EVENTS',
+  '    TH --> COPILOT',
+  '    MEM --> COPILOT',
+  '    COPILOT -->|Block Kit response| USR',
+  '    USR -->|button click| INTER'
+].join('\n'),
+
+dm: [
+  'flowchart TD',
+  '    subgraph SHELL["DemoShell.tsx - /settings/demo"]',
+  '        NAV["Act navigation\\n5 acts progressive"]',
+  '    end',
+  '    subgraph A1["Act 1 - Before 60"]',
+  '        PAIN["The Pain\\nmanual CRM no prep\\nlost context"]',
+  '    end',
+  '    subgraph A2["Act 2 - Onboarding"]',
+  '        OB["90-Second Setup\\nauto-advance steps\\ncalendar + Slack + CRM"]',
+  '    end',
+  '    subgraph A3["Act 3 - Day 1 - 10 Scenes"]',
+  '        S1["Morning Brief"]',
+  '        S2["Meeting Prep"]',
+  '        S3["Live Meeting"]',
+  '        S4["Post-Meeting Follow-up"]',
+  '        S5["Pipeline Review"]',
+  '        S6["Deal Risk Alert"]',
+  '        S7["Proposal Generation"]',
+  '        S8["CRM Auto-Update"]',
+  '        S9["Coaching Insights"]',
+  '        S10["EOD Synthesis"]',
+  '        S1 --> S2 --> S3 --> S4 --> S5',
+  '        S5 --> S6 --> S7 --> S8 --> S9 --> S10',
+  '    end',
+  '    subgraph A4["Act 4 - Week 2 - Learning"]',
+  '        L1["Pattern Recognition"]',
+  '        L2["Autonomy Promotion"]',
+  '        L3["Relationship Graph"]',
+  '        L4["Team Insights"]',
+  '    end',
+  '    subgraph A5["Act 5 - Month 1 - Full Autonomy"]',
+  '        F1["Proactive Re-engagement"]',
+  '        F2["Competitive Battlecards"]',
+  '        F3["Fleet Dashboard"]',
+  '        F4["ROI Report"]',
+  '    end',
+  '    SHELL --> A1 --> A2 --> A3 --> A4 --> A5'
+].join('\n'),
+
+// V2 tab diagrams
+ccp: [
+  'sequenceDiagram',
+  '    participant Agent as Source Agent',
+  '    participant CC as Command Centre',
+  '    participant Budget as creditBudgetService',
+  '    participant Router as modelRouter',
+  '    participant Enrich as cc-enrich',
+  '    participant Score as cc-prioritise',
+  '    participant Ledger as creditLedger',
+  '    participant Policy as autonomyResolver',
+  '    participant Exec as cc-auto-execute',
+  '    participant Slack as Assertive Message',
+  '    participant User as User',
+  '    Agent->>CC: Emit item (deal_risk meeting_prep etc)',
+  '    CC->>Budget: Check remaining credit budget',
+  '    alt budget exhausted and item non-critical',
+  '        Budget-->>CC: THROTTLED - defer to next cycle',
+  '    else budget available',
+  '        Budget-->>CC: OK - proceed',
+  '    end',
+  '    CC->>Router: Select model for enrichment',
+  '    Router-->>CC: Cheapest capable model',
+  '    CC->>Enrich: Load context loaders',
+  '    Note over Enrich: Calendar CRM Email Pipeline Transcript',
+  '    Enrich-->>CC: Enriched item with context',
+  '    Enrich->>Ledger: Log enrichment AI cost',
+  '    CC->>Score: AI confidence scoring',
+  '    Score-->>CC: confidence 0-1 and priority rank',
+  '    Score->>Ledger: Log scoring AI cost',
+  '    CC->>Policy: Resolve autonomy for action type',
+  '    Note over Policy: User > Org > Preset > Default',
+  '    alt auto policy and high confidence',
+  '        Policy-->>Exec: Auto-execute',
+  '        Exec->>Slack: Action + Evidence + Undo button',
+  '        Slack-->>User: Assertive notification',
+  '    else approve policy',
+  '        Policy-->>Slack: Draft + Approve button',
+  '        Slack-->>User: Approval request',
+  '        User->>Exec: Confirm',
+  '    else suggest policy',
+  '        Policy-->>User: Suggestion card in CC inbox',
+  '    end'
+].join('\n'),
+
+aur: [
+  'flowchart TD',
+  '    subgraph INPUT["Action Request"]',
+  '        ACT["Action type\\ncreate_task send_email update_deal\\npost_slack generate_proposal"]',
+  '    end',
+  '    subgraph CACHE["Resolution Cache - 5 min TTL"]',
+  '        CK["Cache key\\nuser_id + org_id + action_type"]',
+  '    end',
+  '    subgraph CHAIN["Resolution Chain"]',
+  '        U["User Policy\\nautonomy_policies WHERE user_id"]',
+  '        O["Org Policy\\nautonomy_policies WHERE org_id"]',
+  '        P["Preset Lookup\\nconservative balanced autonomous"]',
+  '        D["Default\\nbuilt-in suggest"]',
+  '        U -->|null| O',
+  '        O -->|null| P',
+  '        P -->|null| D',
+  '    end',
+  '    subgraph CEIL["Policy Ceilings"]',
+  '        MC["Manager Ceiling\\nmax tier per action type"]',
+  '        OC["Org Ceiling\\norg-wide max tier"]',
+  '    end',
+  '    subgraph RESULT["Resolved Policy"]',
+  '        EFF["Effective tier\\nmin(resolved ceiling)"]',
+  '    end',
+  '    ACT --> CK',
+  '    CK -->|miss| CHAIN',
+  '    CK -->|hit| RESULT',
+  '    CHAIN --> CEIL',
+  '    CEIL --> RESULT'
+].join('\n'),
+
+pfd: [
+  'flowchart TD',
+  '    subgraph CRON["Cron Triggers"]',
+  '        AM["7:00 AM\\nMorning Brief"]',
+  '        MID["Throughout Day\\nDeal Risk + Re-Engagement"]',
+  '        PM["6:00 PM\\nEOD Synthesis"]',
+  '    end',
+  '    subgraph EVENT["Event Triggers"]',
+  '        ME2["Meeting Ends\\nCoaching + Follow-up"]',
+  '        DE2["Deal Updated\\nRisk Recalculation"]',
+  '        EM2["Email Received\\nSignal Extraction"]',
+  '    end',
+  '    subgraph ROUTER["Fleet Router"]',
+  '        RT["Parallel Dispatch\\nall eligible agents"]',
+  '        DD["Deduplication\\ncross-agent item merge"]',
+  '    end',
+  '    subgraph MORNING["Morning Brief Agent"]',
+  '        MBP["Pipeline analysis\\n590 lines"]',
+  '        MBR["Fleet routes\\n162 lines"]',
+  '        MBS2["Priority actions"]',
+  '    end',
+  '    subgraph EOD2["EOD Synthesis Agent"]',
+  '        EODS["Day scorecard"]',
+  '        EODR["Relationship scoring"]',
+  '        EODP["Overnight plan"]',
+  '    end',
+  '    subgraph MEETP["Meeting Prep Agent"]',
+  '        MPC["Type classifier\\n1:1 QBR pipeline standup"]',
+  '        MPT["Type templates\\n731 lines"]',
+  '        MPI["Internal detector\\n340 lines"]',
+  '    end',
+  '    subgraph RISK["Deal Risk Agent"]',
+  '        DRT["Temperature scoring"]',
+  '        DRF["Risk factor detection"]',
+  '        DRA["Automated alerts"]',
+  '    end',
+  '    DEST2["Command Centre"]',
+  '    CRON --> ROUTER',
+  '    EVENT --> ROUTER',
+  '    ROUTER --> MORNING',
+  '    ROUTER --> EOD2',
+  '    ROUTER --> MEETP',
+  '    ROUTER --> RISK',
+  '    MORNING --> DD',
+  '    EOD2 --> DD',
+  '    MEETP --> DD',
+  '    RISK --> DD',
+  '    DD --> DEST2'
+].join('\n'),
+
+// ── Credit Governance diagrams ────────────────────────────────
+
+cg: [
+  'flowchart TD',
+  '    subgraph CONSUMERS["AI Credit Consumers"]',
+  '        FC["Fleet Agents x8\\ncron + event triggered"]',
+  '        CP2["Copilot Chat\\nautonomous + regular"]',
+  '        CCE2["CC Enrichment\\nAI confidence scoring"]',
+  '        SCP["Slack Copilot\\nin-channel queries"]',
+  '        REC2["Recording Analysis\\nClaude transcript processing"]',
+  '        EMB["Embedding Generation\\nOpenAI skill + query"]',
+  '    end',
+  '    subgraph ROUTER2["Model Router"]',
+  '        MR["modelRouter.ts\\ntask type to model mapping"]',
+  '        MH["Haiku - triage classify\\nlowest cost"]',
+  '        MS["Sonnet - drafts analysis\\nbalanced"]',
+  '        MO["Opus - complex reasoning\\nhighest cost"]',
+  '        MG["Gemini Flash - copilot\\nfunction calling"]',
+  '        MR --> MH',
+  '        MR --> MS',
+  '        MR --> MO',
+  '        MR --> MG',
+  '    end',
+  '    subgraph LEDGER["Credit Ledger"]',
+  '        CL2["creditLedger.ts\\nlog every AI call"]',
+  '        TBL["credit_ledger table\\nuser org provider model\\ntokens cost source_agent"]',
+  '        CL2 --> TBL',
+  '    end',
+  '    subgraph BUDGET["Budget Enforcement"]',
+  '        BS["creditBudgetService.ts"]',
+  '        UB["User daily and monthly limits"]',
+  '        OB2["Org-wide ceiling"]',
+  '        BS --> UB',
+  '        BS --> OB2',
+  '    end',
+  '    subgraph GUARD["Circuit Breakers"]',
+  '        FT["fleetThrottle.ts\\npause non-critical at 80%"]',
+  '        AL["credit-budget-alert\\nSlack at 80% and 100%"]',
+  '        KB["Hard kill at 100%\\nonly critical paths proceed"]',
+  '    end',
+  '    subgraph VIS["Visibility"]',
+  '        RU["credit-usage-rollup\\nhourly cron"]',
+  '        DASH["Usage Dashboard\\nper agent per model\\ndaily monthly trends"]',
+  '        RU --> DASH',
+  '    end',
+  '    CONSUMERS --> MR',
+  '    MR -->|all calls| CL2',
+  '    TBL --> BS',
+  '    BS -->|over threshold| GUARD',
+  '    FT -->|throttle| FC',
+  '    TBL --> RU'
+].join('\n'),
+
+cgd: [
+  'sequenceDiagram',
+  '    participant Agent as Any AI Consumer',
+  '    participant Router as modelRouter',
+  '    participant Provider as AI Provider',
+  '    participant Ledger as creditLedger',
+  '    participant Budget as creditBudgetService',
+  '    participant Throttle as fleetThrottle',
+  '    participant Alert as Slack Alert',
+  '    Agent->>Router: Request AI call with task type',
+  '    Router->>Budget: Check remaining budget',
+  '    alt budget exhausted',
+  '        Budget-->>Router: DENIED - over limit',
+  '        Router-->>Agent: CreditExhaustedError',
+  '    else budget available',
+  '        Budget-->>Router: OK - proceed',
+  '        Router->>Router: Select cheapest capable model',
+  '        Note over Router: Haiku for triage and classify\\nSonnet for drafts and analysis\\nGemini for copilot chat',
+  '        Router->>Provider: API call with selected model',
+  '        Provider-->>Router: Response + usage metadata',
+  '        Router->>Ledger: Log tokens model cost source_agent',
+  '        Ledger->>Budget: Update running totals',
+  '        alt approaching limit 80%',
+  '            Budget->>Throttle: Engage fleet throttle',
+  '            Throttle->>Throttle: Pause non-critical agents',
+  '            Budget->>Alert: Slack warning to user and manager',
+  '        end',
+  '        Router-->>Agent: AI response',
+  '    end'
+].join('\n')
+
+}; // end DIAGRAMS
+
+// ── Mermaid setup ──────────────────────────────────────────────
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#1e1e2e', primaryBorderColor: '#6366f1',
+    primaryTextColor: '#e2e8f0', secondaryColor: '#16162a',
+    tertiaryColor: '#1a1a2e', background: '#111118',
+    mainBkg: '#1e1e2e', nodeBorder: '#3a3a4a',
+    clusterBkg: '#16162a', clusterBorder: '#2a2a3a',
+    titleColor: '#e2e8f0', edgeLabelBackground: '#1a1a24',
+    lineColor: '#6366f1', textColor: '#e2e8f0',
+    fontFamily: 'Inter,-apple-system,sans-serif', fontSize: '13px',
+    actorBorder: '#6366f1', actorBkg: '#1e1e2e', actorTextColor: '#e2e8f0',
+    signalColor: '#a5b4fc', signalTextColor: '#e2e8f0',
+    noteBorderColor: '#8b5cf6', noteBkgColor: '#1e1a2e', noteTextColor: '#e2e8f0',
+    activationBorderColor: '#8b5cf6', activationBkgColor: '#1e1a2e',
+  }
+});
+
+var rendered = {};
+
+async function renderDiagram(key) {
+  if (rendered[key]) return;
+  var container = document.getElementById(key + '-container');
+  if (!container) return;
+  var text = DIAGRAMS[key];
+  if (!text) return;
+  try {
+    var result = await mermaid.render('mer-svg-' + key, text);
+    container.innerHTML = result.svg;
+    if (result.bindFunctions) result.bindFunctions(container);
+    rendered[key] = true;
+  } catch(e) {
+    container.innerHTML = '<div class="merr">Error rendering ' + key + ':\n' + e.message + '</div>';
+    console.error('Mermaid error [' + key + ']:', e.message, '\n\nDiagram text:\n', text);
+  }
+}
+
+// Render all diagrams on load
+window.addEventListener('DOMContentLoaded', function() {
+  Object.keys(DIAGRAMS).forEach(function(k) { renderDiagram(k); });
+});
+
+// ── Tab switching ──────────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('act'); });
+  document.querySelectorAll('.tp').forEach(function(p){ p.classList.remove('act'); });
+  document.querySelector('[data-tab="'+id+'"]').classList.add('act');
+  document.getElementById('tab-'+id).classList.add('act');
+}
+
+// ── Feature pill switching ─────────────────────────────────────
+function showF(f) {
+  document.querySelectorAll('.pill').forEach(function(p){ p.classList.remove('act'); });
+  document.querySelector('[data-f="'+f+'"]').classList.add('act');
+  document.querySelectorAll('.fv').forEach(function(v){ v.classList.remove('vis'); });
+  document.getElementById('fv-'+f).classList.add('vis');
+}
+
+// ── Zoom / pan ─────────────────────────────────────────────────
+var DS = {};
+['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd'].forEach(function(k){ DS[k]={s:1,tx:0,ty:0}; });
+
+function applyT(k) {
+  var d = DS[k], st = document.getElementById(k+'-stage');
+  if (!st) return;
+  st.style.transform = 'translate('+d.tx+'px,'+d.ty+'px) scale('+d.s+')';
+  var p = document.getElementById(k+'-pct');
+  if (p) p.textContent = Math.round(d.s*100)+'%';
+}
+
+function zD(k, delta) { DS[k].s = Math.min(4, Math.max(0.2, DS[k].s + delta)); applyT(k); }
+function rD(k) { DS[k]={s:1,tx:0,ty:0}; applyT(k); }
+
+['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd'].forEach(function(k) {
+  var el = document.getElementById(k+'-body');
+  if (!el) return;
+  el.addEventListener('wheel', function(e) {
+    e.preventDefault(); zD(k, e.deltaY < 0 ? 0.1 : -0.1);
+  }, {passive:false});
+  var drag=false, sx=0, sy=0;
+  el.addEventListener('mousedown', function(e){ drag=true; sx=e.clientX; sy=e.clientY; el.style.userSelect='none'; });
+  window.addEventListener('mousemove', function(e){
+    if(!drag) return;
+    DS[k].tx+=e.clientX-sx; DS[k].ty+=e.clientY-sy;
+    sx=e.clientX; sy=e.clientY; applyT(k);
+  });
+  window.addEventListener('mouseup', function(){ drag=false; el.style.userSelect=''; });
+});
+
+// ── Fullscreen ─────────────────────────────────────────────────
+var fsS=1, fsTx=0, fsTy=0;
+
+function openFS(k, title) {
+  fsS=1; fsTx=0; fsTy=0;
+  var container = document.getElementById(k+'-container');
+  var stage = document.getElementById('fsst');
+  stage.innerHTML = '';
+  if (container) {
+    var svg = container.querySelector('svg');
+    if (svg) {
+      var cl = svg.cloneNode(true);
+      cl.style.maxWidth = 'none';
+      stage.appendChild(cl);
+    }
+  }
+  document.getElementById('fstl').textContent = title || k;
+  document.getElementById('fso').classList.add('open');
+  applyFsT();
+}
+
+function closeFS() { document.getElementById('fso').classList.remove('open'); document.getElementById('fsst').innerHTML = ''; }
+function applyFsT() { document.getElementById('fsst').style.transform='translate('+fsTx+'px,'+fsTy+'px) scale('+fsS+')'; document.getElementById('fs-pct').textContent=Math.round(fsS*100)+'%'; }
+function zFS(d) { fsS=Math.min(5,Math.max(0.15,fsS+d)); applyFsT(); }
+function rFS() { fsS=1;fsTx=0;fsTy=0; applyFsT(); }
+
+var fsbd=document.getElementById('fsbd');
+fsbd.addEventListener('wheel', function(e){ e.preventDefault(); fsS=Math.min(5,Math.max(0.15,fsS+(e.deltaY<0?0.12:-0.12))); applyFsT(); }, {passive:false});
+var fsDrag=false, fsSx=0, fsSy=0;
+fsbd.addEventListener('mousedown', function(e){ fsDrag=true; fsSx=e.clientX; fsSy=e.clientY; fsbd.style.userSelect='none'; });
+window.addEventListener('mousemove', function(e){ if(!fsDrag)return; fsTx+=e.clientX-fsSx; fsTy+=e.clientY-fsSy; fsSx=e.clientX; fsSy=e.clientY; applyFsT(); });
+window.addEventListener('mouseup', function(){ fsDrag=false; fsbd.style.userSelect=''; });
+window.addEventListener('keydown', function(e){ if(e.key==='Escape') closeFS(); });
+
+// ── V1 / V2 / V2 Only  Toggle ────────────────────────────────────
+function setVer(ver, btn) {
+  document.querySelectorAll('.ver-btn').forEach(function(b){ b.classList.remove('act'); });
+  if (btn) btn.classList.add('act');
+
+  // Reset all mode classes
+  document.body.classList.remove('show-v2', 'v2-exclusive', 'hl-v2');
+  document.getElementById('hl-btn').classList.remove('act');
+
+  if (ver === 'v1') {
+    // V1 only — no V2 content shown, V1 content visible (default DOM state)
+    fallbackToV1View();
+  } else if (ver === 'v2') {
+    // V2 — show everything (V1 + V2)
+    document.body.classList.add('show-v2');
+  } else if (ver === 'v2only') {
+    // V2 Only — show V2, hide V1
+    document.body.classList.add('show-v2', 'v2-exclusive');
+    fallbackToV2View();
+  }
+}
+
+// When switching to V1, ensure we're not stranded on a V2-only view
+function fallbackToV1View() {
+  var activeTab = document.querySelector('.tab.act');
+  if (activeTab && activeTab.classList.contains('v2-only')) switchTab('system');
+  var activePill = document.querySelector('.pill.act');
+  if (activePill && activePill.classList.contains('v2-only')) showF('overview');
+}
+
+// When switching to V2 Only, ensure we're not stranded on a V1-only view
+function fallbackToV2View() {
+  var activeTab = document.querySelector('.tab.act');
+  if (activeTab && activeTab.classList.contains('v1-content')) switchTab('cmdcentre');
+  var activePill = document.querySelector('.pill.act');
+  if (activePill && activePill.classList.contains('v1-content')) {
+    // Auto-select first V2 pill
+    var firstV2Pill = document.querySelector('.pill.v2-only');
+    if (firstV2Pill) showF(firstV2Pill.getAttribute('data-f'));
+  }
+}
+
+function toggleHL() {
+  var btn = document.getElementById('hl-btn');
+  if (document.body.classList.contains('hl-v2')) {
+    document.body.classList.remove('hl-v2');
+    btn.classList.remove('act');
+  } else {
+    // Ensure V2 content is visible (works in both 'v2' and 'v2only' modes)
+    if (!document.body.classList.contains('show-v2')) {
+      setVer('v2', document.querySelectorAll('.ver-btn')[1]);
+    }
+    document.body.classList.add('hl-v2');
+    btn.classList.add('act');
+  }
+}
+
+// Default to V2 on load
+document.body.classList.add('show-v2');
+</script>
+</body>
+</html>
