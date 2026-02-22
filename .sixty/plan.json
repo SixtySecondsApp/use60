@@ -155,6 +155,22 @@
       "prd": "Command Centre Enhancement Plan",
       "planFile": ".sixty/plan-command-centre-enhancement.json",
       "createdAt": "2026-02-21T00:00:00Z"
+    },
+    {
+      "id": "signal-intelligence",
+      "name": "Phase 4: Signal Intelligence (PRD-13, PRD-14, PRD-15)",
+      "status": "pending",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#Phase-4",
+      "planFile": ".sixty/plan-signal-intelligence.json",
+      "createdAt": "2026-02-22T15:00:00Z"
+    },
+    {
+      "id": "knowledge-memory",
+      "name": "Phase 5: Knowledge & Memory (PRD-16, PRD-17, PRD-18)",
+      "status": "pending",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#Phase-5",
+      "planFile": ".sixty/plan-knowledge-memory.json",
+      "createdAt": "2026-02-22T20:00:00Z"
     }
   ],
   "stories": [

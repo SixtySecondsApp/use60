@@ -775,6 +775,15 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     navSection: 'settings',
     order: 89,
   },
+  // Knowledge & Memory (Org Admin)
+  {
+    path: '/settings/knowledge-memory',
+    access: 'orgAdmin',
+    label: 'Knowledge & Memory',
+    showInNav: false,
+    navSection: 'settings',
+    order: 90,
+  },
   // Slack Settings (Org Admin)
   {
     path: '/settings/integrations/slack',

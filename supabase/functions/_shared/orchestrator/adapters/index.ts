@@ -65,6 +65,9 @@ import { meetingTypeClassifierAdapter } from './meetingTypeClassifier.ts';
 import { internalPrepTemplatesAdapter } from './internalPrepTemplates.ts';
 import { eodOpenItemsAdapter, eodTomorrowPreviewAdapter, eodSignalSummaryAdapter } from './eodSynthesis.ts';
 import { eodOvernightPlanAdapter } from './eodOvernight.ts';
+import { buildRelationshipGraphAdapter, enrichRelationshipGraphAdapter } from './relationshipGraph.ts';
+import { extractCompetitiveMentionsAdapter, aggregateCompetitorProfileAdapter, deliverCompetitiveIntelSlackAdapter } from './competitiveIntelSlack.ts';
+import { analysePipelinePatternsAdapter, deliverPatternSlackAdapter } from './pipelinePatternSlack.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -170,6 +173,19 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'eod-tomorrow-preview': eodTomorrowPreviewAdapter,
   'eod-overnight-plan': eodOvernightPlanAdapter,
   'eod-signal-summary': eodSignalSummaryAdapter,
+
+  // Relationship Graph (KNW-002/003 — PRD-16)
+  'build-relationship-graph': buildRelationshipGraphAdapter,
+  'enrich-relationship-graph': enrichRelationshipGraphAdapter,
+
+  // Competitive Intelligence (KNW-006/007 — PRD-17)
+  'extract-competitive-mentions': extractCompetitiveMentionsAdapter,
+  'aggregate-competitor-profile': aggregateCompetitorProfileAdapter,
+  'deliver-competitive-intel-slack': deliverCompetitiveIntelSlackAdapter,
+
+  // Pipeline Patterns (KNW-010/011 — PRD-18)
+  'analyse-pipeline-patterns': analysePipelinePatternsAdapter,
+  'deliver-pattern-slack': deliverPatternSlackAdapter,
 };
 
 /**

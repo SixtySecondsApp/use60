@@ -94,7 +94,7 @@ import {
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings,
+  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
   CreditPurchaseSuccess, CreditsSettingsPage, BillingSettingsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
   OrgBilling,
@@ -601,6 +601,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/crm-field-mapping" element={<OrgAdminRouteGuard><AppLayout><CRMFieldMappingSettings /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/custom-sops" element={<OrgAdminRouteGuard><AppLayout><CustomSOPBuilderPage /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/signal-intelligence" element={<OrgAdminRouteGuard><AppLayout><SignalIntelligenceSettings /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/knowledge-memory" element={<OrgAdminRouteGuard><AppLayout><KnowledgeMemorySettings /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/sales-coaching" element={<AppLayout><SalesCoachingPage /></AppLayout>} />
                 <Route path="/settings/api-keys" element={<AppLayout><APIKeysPage /></AppLayout>} />
                 <Route path="/settings/email-sync" element={<AppLayout><EmailSyncPage /></AppLayout>} />
