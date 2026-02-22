@@ -891,7 +891,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     }
     
     // Contact/email queries - check for email addresses or contact names
-    const emailPattern = /[\w\.-]+@[\w\.-]+\.\w+/;
+    const emailPattern = /[\w.-]+@[\w.-]+\.\w+/;
     const hasEmail = emailPattern.test(message);
     const contactKeywords = ['contact', 'person', 'about', 'info on', 'tell me about', 'show me', 'lookup', 'find'];
     const hasContactKeyword = contactKeywords.some(keyword => lowerMessage.includes(keyword));
@@ -1217,7 +1217,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   }, []);
 
   const sendMessage = useCallback(
-    async (message: string, options?: { silent?: boolean }) => {
+    async (message: string, options?: { silent?: boolean; entities?: Array<{ id: string; type: string; name: string }>; skillCommand?: string }) => {
       const isModeLoading = autonomousModeEnabled
         ? autonomousCopilot.isThinking || autonomousCopilot.isStreaming
         : agentModeEnabled
@@ -1229,6 +1229,71 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       // This enables context data fetching (HubSpot, Fathom, Calendar) in all modes
       const contextTypes = detectRelevantContextTypes(message);
       setRelevantContextTypes(contextTypes);
+
+      // =============================================================================
+      // @ Mention Entity Context Injection & /Skill Command Handling
+      // =============================================================================
+      let enrichedMessage = message;
+      let entityContextBlock = '';
+
+      // Resolve entity context if entities are provided
+      if (options?.entities && options.entities.length > 0) {
+        try {
+          const { resolveEntityContexts, formatEntityContextForPrompt } = await import('@/lib/services/entityContextService');
+          const contexts = await resolveEntityContexts(options.entities as any);
+          entityContextBlock = formatEntityContextForPrompt(contexts);
+          logger.log(`[CopilotContext] Resolved entity context for ${options.entities.length} entities`);
+        } catch (err) {
+          logger.error('[CopilotContext] Failed to resolve entity context:', err);
+        }
+      }
+
+      // Handle /skill command if present
+      if (options?.skillCommand) {
+        try {
+          const { parseSkillCommand, validateSkillEntities, buildSkillPrompt } = await import('@/lib/copilot/skillCommandParser');
+          const parsed = parseSkillCommand({
+            text: message,
+            entities: options.entities || [],
+            skillCommand: options.skillCommand,
+          });
+
+          if (parsed) {
+            // Validate entity requirements
+            const validationError = validateSkillEntities(parsed.command, parsed.entities);
+            if (validationError) {
+              // Show validation error as an assistant message
+              logger.warn('[CopilotContext] Skill validation failed:', validationError.message);
+              // Still send but prepend the validation hint
+              enrichedMessage = `${entityContextBlock}\n\n${message}\n\n[Note: ${validationError.message}]`;
+            } else {
+              // Build the enriched skill prompt
+              enrichedMessage = buildSkillPrompt(parsed, entityContextBlock);
+              logger.log(`[CopilotContext] Built skill prompt for /${parsed.command}`);
+
+              // Track execution (fire and forget)
+              if (activeOrgId) {
+                supabase.auth.getUser().then(({ data }) => {
+                  if (data?.user?.id) {
+                    supabase.from('copilot_skill_executions').insert({
+                      skill_key: parsed.skillKey,
+                      user_id: data.user.id,
+                      org_id: activeOrgId,
+                      entities_referenced: parsed.entities,
+                      input_text: message,
+                    });
+                  }
+                }).catch(() => {});
+              }
+            }
+          }
+        } catch (err) {
+          logger.error('[CopilotContext] Failed to parse skill command:', err);
+        }
+      } else if (entityContextBlock) {
+        // No skill command but has entity context — just prepend context
+        enrichedMessage = `${entityContextBlock}\n\n${message}`;
+      }
 
       // =============================================================================
       // Autonomous Copilot Mode Routing (new skill-based tool use)
@@ -1289,7 +1354,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         }
 
         logger.log('[CopilotContext] Routing to autonomous copilot mode');
-        await autonomousCopilot.sendMessage(message, options);
+        await autonomousCopilot.sendMessage(enrichedMessage, options);
         return;
       }
 
@@ -1298,7 +1363,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       // =============================================================================
       if (agentModeEnabled) {
         logger.log('[CopilotContext] Routing to agent mode');
-        await agent.sendMessage(message);
+        await agent.sendMessage(enrichedMessage);
         return;
       }
 
@@ -1482,7 +1547,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
           const conversationIdToSend = isConversationPersisted ? state.conversationId : undefined;
 
           response = await Promise.race([
-            CopilotService.sendMessage(message, apiContext, conversationIdToSend),
+            CopilotService.sendMessage(enrichedMessage, apiContext, conversationIdToSend),
             timeoutPromise
           ]) as Awaited<ReturnType<typeof CopilotService.sendMessage>>;
         } catch (err: any) {

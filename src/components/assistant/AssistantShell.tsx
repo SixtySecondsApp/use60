@@ -5,9 +5,13 @@ import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { ChatMessage } from '@/components/copilot/ChatMessage';
 import { CopilotEmpty } from '@/components/copilot/CopilotEmpty';
 import { AgentWorkingIndicator } from '@/components/copilot/AgentWorkingIndicator';
+import { RichCopilotInput, type RichCopilotInputHandle } from '@/components/copilot/RichCopilotInput';
+import { EntityMentionDropdown } from '@/components/copilot/EntityMentionDropdown';
+import { SkillCommandDropdown } from '@/components/copilot/SkillCommandDropdown';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useEventEmitter } from '@/lib/communication/EventBus';
+import type { RichInputPayload, EntityReference } from '@/lib/types/entitySearch';
 
 type AssistantShellMode = 'overlay' | 'page';
 
@@ -22,8 +26,17 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const richInputRef = useRef<RichCopilotInputHandle>(null);
   const navigate = useNavigate();
   const emit = useEventEmitter();
+
+  // @ mention dropdown state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionCaretRect, setMentionCaretRect] = useState<DOMRect | null>(null);
+
+  // /skill command dropdown state
+  const [skillQuery, setSkillQuery] = useState<string | null>(null);
+  const [skillCaretRect, setSkillCaretRect] = useState<DOMRect | null>(null);
 
   const isEmpty = messages.length === 0 && !isLoading;
 
@@ -80,6 +93,7 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
         !document.activeElement?.getAttribute('contenteditable')
       ) {
         e.preventDefault();
+        richInputRef.current?.focus();
         inputRef.current?.focus();
       }
 
@@ -102,6 +116,31 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
     sendMessage(inputValue);
     setInputValue('');
   };
+
+  /** Handle submit from the RichCopilotInput */
+  const handleRichSubmit = useCallback((payload: RichInputPayload) => {
+    if (isLoading) return;
+    // Send message with entity metadata — CopilotContext will resolve context
+    sendMessage(payload.text, {
+      entities: payload.entities,
+      skillCommand: payload.skillCommand,
+    } as any);
+    richInputRef.current?.clear();
+  }, [isLoading, sendMessage]);
+
+  /** Entity selected from @ mention dropdown */
+  const handleEntitySelect = useCallback((entity: EntityReference) => {
+    richInputRef.current?.insertEntityChip(entity);
+    setMentionQuery(null);
+    setMentionCaretRect(null);
+  }, []);
+
+  /** Skill command selected from / dropdown */
+  const handleSkillSelect = useCallback((command: string) => {
+    richInputRef.current?.insertSkillCommand(command);
+    setSkillQuery(null);
+    setSkillCaretRect(null);
+  }, []);
 
   const handleActionClick = async (action: any) => {
     const actionName = typeof action === 'string' ? action : action?.callback || action?.action || action?.type;
@@ -344,27 +383,60 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   // UX-004: Shared input renderer for both empty and active states
   // ---------------------------------------------------------------------------
   const renderInput = () => (
-    <div className="flex-shrink-0 px-5 py-4 border-t border-gray-800/50 bg-gray-900/80 backdrop-blur-sm">
+    <div className="flex-shrink-0 px-5 py-4 border-t border-gray-800/50 bg-gray-900/80 backdrop-blur-sm relative">
+      {/* @ Mention autocomplete dropdown */}
+      {mentionQuery !== null && (
+        <EntityMentionDropdown
+          query={mentionQuery}
+          caretRect={mentionCaretRect}
+          onSelect={handleEntitySelect}
+          onDismiss={() => { setMentionQuery(null); setMentionCaretRect(null); }}
+        />
+      )}
+
+      {/* /Skill command autocomplete dropdown */}
+      {skillQuery !== null && (
+        <SkillCommandDropdown
+          query={skillQuery}
+          caretRect={skillCaretRect}
+          onSelect={handleSkillSelect}
+          onDismiss={() => { setSkillQuery(null); setSkillCaretRect(null); }}
+        />
+      )}
+
       <div className="flex items-end gap-3 bg-gray-800/60 border border-gray-700/40 rounded-xl px-4 py-3 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
-        <textarea
-          ref={inputRef}
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask me to create, find, or prep anything..."
-          rows={1}
-          data-testid="copilot-input"
-          className="flex-1 bg-transparent resize-none text-sm text-gray-100 placeholder-gray-500 focus:outline-none max-h-32"
-          style={{ minHeight: '24px' }}
+        <RichCopilotInput
+          ref={richInputRef}
+          disabled={isLoading}
+          onSubmit={handleRichSubmit}
+          onMentionTrigger={(query, rect) => {
+            setMentionQuery(query);
+            setMentionCaretRect(rect);
+          }}
+          onMentionDismiss={() => {
+            setMentionQuery(null);
+            setMentionCaretRect(null);
+          }}
+          onSkillTrigger={(query, rect) => {
+            setSkillQuery(query);
+            setSkillCaretRect(rect);
+          }}
+          onSkillDismiss={() => {
+            setSkillQuery(null);
+            setSkillCaretRect(null);
+          }}
         />
 
         <button
           type="button"
-          onClick={handleSend}
-          disabled={!inputValue.trim() || isLoading}
+          onClick={() => {
+            const payload = richInputRef.current?.getPayload();
+            if (payload) handleRichSubmit(payload);
+          }}
+          disabled={isLoading}
           className={cn(
             'p-2 rounded-lg transition-all',
-            inputValue.trim() && !isLoading
+            !isLoading
               ? 'bg-violet-500 text-white hover:bg-violet-600'
               : 'text-gray-600 cursor-not-allowed',
           )}

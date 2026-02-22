@@ -1,0 +1,580 @@
+{
+  "name": "Copilot @ Mentions & /Skills",
+  "version": "1.0",
+  "createdAt": "2026-02-22T12:00:00Z",
+  "description": "Entity-aware chat input with @ mentions for contacts/companies/deals and /skills for structured workflow execution. Transforms copilot from generic AI chat to context-aware command interface.",
+  "prd": "PRD provided inline via 60/dev-plan command",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Entity Search & @ Mention Foundation",
+      "description": "Unified entity search edge function, rich chat input with contenteditable, @ mention autocomplete dropdown, entity chip rendering, and context injection into AI prompts",
+      "priority": "critical",
+      "duration": "5-7 days",
+      "stories": ["MENT-001", "MENT-002", "MENT-003", "MENT-004", "MENT-005", "MENT-006", "MENT-007"]
+    },
+    {
+      "id": "phase-2",
+      "name": "/Skills Engine & Autocomplete",
+      "description": "Skill command parsing, / autocomplete dropdown, skill validation & execution pipeline, structured output cards with action buttons",
+      "priority": "critical",
+      "duration": "5-7 days",
+      "stories": ["SKILL-001", "SKILL-002", "SKILL-003", "SKILL-004", "SKILL-005", "SKILL-006"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Built-in Skills & Context Assembly",
+      "description": "Implement the 10 launch skills (/proposal, /followup, /research, /summary, /objection, /battlecard, /handoff, /chase, /agenda, /win) with per-skill context requirements",
+      "priority": "high",
+      "duration": "5-6 days",
+      "stories": ["BSKILL-001", "BSKILL-002", "BSKILL-003", "BSKILL-004", "BSKILL-005"]
+    },
+    {
+      "id": "phase-4",
+      "name": "Polish, NLU Intent Detection & Slack",
+      "description": "Natural language intent recognition for skill suggestion, Slack @ mention resolution, interactive entity chips, credit metering",
+      "priority": "medium",
+      "duration": "4-5 days",
+      "stories": ["POL-001", "POL-002", "POL-003", "POL-004"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "MENT-001",
+      "title": "Create entity-search edge function",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "estimate": "3h",
+      "description": "New Supabase edge function that provides unified search across contacts, companies, and deals. Queries all three tables with fuzzy text matching (ilike), ranks by recency-weighted scoring (name match 40%, last interaction 30%, frequency 20%, deal value 10%), and returns a unified result set with deduplication by email/domain.",
+      "acceptance_criteria": [
+        "POST /entity-search accepts { query, types?, limit?, org_id }",
+        "Returns { results: [{ id, type, name, subtitle, avatar_url, metadata, relevance_score }] }",
+        "Fuzzy search across contacts (first_name, last_name, email), companies (name, domain), deals (name)",
+        "Results ranked by weighted scoring algorithm (recency + frequency + match + deal value)",
+        "Max 8 results, grouped by entity type (contacts first, companies, deals)"
+      ],
+      "files": [
+        "supabase/functions/entity-search/index.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "MENT-002",
+      "title": "Create useEntitySearch React Query hook",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "1.5h",
+      "description": "React hook wrapping the entity-search edge function with 150ms debounce, caching, and abort controller for in-flight requests. Returns typed results ready for the autocomplete dropdown.",
+      "acceptance_criteria": [
+        "useEntitySearch(query, options) hook with 150ms debounce",
+        "Cancels previous in-flight requests on new keystroke",
+        "Returns { results, isLoading, error } with proper TypeScript types",
+        "Caches recent queries via React Query (30s stale time)"
+      ],
+      "files": [
+        "src/lib/hooks/useEntitySearch.ts",
+        "src/lib/types/entitySearch.ts"
+      ],
+      "dependencies": ["MENT-001"],
+      "blockedBy": ["MENT-001"]
+    },
+    {
+      "id": "MENT-003",
+      "title": "Build EntityMentionDropdown autocomplete component",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "3h",
+      "description": "Floating autocomplete dropdown triggered by @ character in the chat input. Shows up to 8 results grouped by entity type with Lucide icons (User, Building2, Briefcase), subtitle text, and keyboard navigation (arrow keys + Enter to select, Escape to dismiss).",
+      "acceptance_criteria": [
+        "Dropdown appears when @ is typed at any position in input",
+        "Results grouped by type with Lucide icons (User, Building2, Briefcase)",
+        "Arrow keys navigate, Enter selects, Escape dismisses",
+        "Click on item selects it",
+        "Dropdown positioned relative to cursor/caret position"
+      ],
+      "files": [
+        "src/components/copilot/EntityMentionDropdown.tsx"
+      ],
+      "dependencies": ["MENT-002"],
+      "blockedBy": ["MENT-002"]
+    },
+    {
+      "id": "MENT-004",
+      "title": "Replace textarea with RichCopilotInput (contenteditable)",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "4h",
+      "description": "Replace the plain <textarea> in AssistantShell.tsx with a contenteditable div that supports inline entity chips and plain text. Must preserve all existing keyboard behavior (Enter sends, Shift+Enter newline, / to focus, Escape to cancel). Entity chips render as styled inline pill elements with name + type icon. Backspace removes entire chip. Extract plain text + entity references on submit.",
+      "acceptance_criteria": [
+        "contenteditable div replaces textarea in AssistantShell.tsx",
+        "All existing keyboard shortcuts preserved (Enter, Shift+Enter, Escape, /)",
+        "Auto-expanding height behavior maintained (max-h-32)",
+        "Entity chips render inline as styled pills with icon + name",
+        "Backspace on chip removes entire chip (not character-by-character)",
+        "Submit extracts { text, entities: [{ id, type, name }] } payload"
+      ],
+      "files": [
+        "src/components/copilot/RichCopilotInput.tsx",
+        "src/components/assistant/AssistantShell.tsx"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "MENT-005",
+      "title": "Wire EntityMentionDropdown into RichCopilotInput",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "2h",
+      "description": "Connect the autocomplete dropdown to the rich input. Detect @ trigger character, show dropdown, on selection insert entity chip at caret position and dismiss dropdown. Handle edge cases: @ at start/middle/end of text, multiple @ mentions, deletion of @ trigger text.",
+      "acceptance_criteria": [
+        "Typing @ triggers dropdown with search results",
+        "Selecting entity inserts chip at correct caret position",
+        "Multiple @ mentions supported in single message",
+        "Deleting text after @ updates search query",
+        "Clicking outside or pressing Escape dismisses dropdown"
+      ],
+      "files": [
+        "src/components/copilot/RichCopilotInput.tsx"
+      ],
+      "dependencies": ["MENT-003", "MENT-004"],
+      "blockedBy": ["MENT-003", "MENT-004"]
+    },
+    {
+      "id": "MENT-006",
+      "title": "Build entity context resolver service",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "3h",
+      "description": "Service that resolves entity IDs to rich context payloads for AI prompt injection. For contacts: profile + last 5 activities + last 3 call summaries + deal associations. For companies: profile + contacts + deals + enrichment data. For deals: properties + contacts + timeline + proposals. Caps each entity context at ~2000 tokens. Fetches from existing services (apiContactService, companyService, contactRecordService) in parallel.",
+      "acceptance_criteria": [
+        "resolveEntityContext(entities) returns structured context per entity",
+        "Contact context includes profile, activities, calls, deals",
+        "Company context includes profile, contacts, deals, enrichment",
+        "Deal context includes properties, contacts, timeline, proposals",
+        "Each entity context capped at configurable token budget (~2000 tokens)",
+        "Parallel fetching for multiple entities"
+      ],
+      "files": [
+        "src/lib/services/entityContextService.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "MENT-007",
+      "title": "Inject entity context into copilot sendMessage",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "2h",
+      "description": "Modify CopilotContext.tsx sendMessage flow to detect entity references in the submitted message, resolve their context via entityContextService, and prepend structured context blocks to the AI prompt. Works for both autonomous (copilot-autonomous) and regular (api-copilot) modes. The entity context is invisible to the user but gives the AI full awareness.",
+      "acceptance_criteria": [
+        "sendMessage detects entities from RichCopilotInput payload",
+        "Entity context resolved and prepended to message as structured block",
+        "Works with autonomous mode (copilot-autonomous edge function)",
+        "Max 3 entities per message (6000 tokens entity context budget)",
+        "Entity references stored in message metadata for analytics"
+      ],
+      "files": [
+        "src/lib/contexts/CopilotContext.tsx",
+        "src/lib/hooks/useCopilotChat.ts"
+      ],
+      "dependencies": ["MENT-005", "MENT-006"],
+      "blockedBy": ["MENT-005", "MENT-006"]
+    },
+    {
+      "id": "SKILL-001",
+      "title": "Create copilot_skill_executions tracking table",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "schema",
+      "estimate": "1h",
+      "description": "Migration to create copilot_skill_executions table for tracking skill invocations via / commands. Stores skill_key, user_id, org_id, entities_referenced (jsonb), input_text, output_text, execution_time_ms, created_at. RLS policy scoped to user's org. Note: copilot_skills registry is NOT needed — skills already exist in platform_skills/organization_skills tables with frontmatter that contains all needed metadata.",
+      "acceptance_criteria": [
+        "copilot_skill_executions table created with proper columns",
+        "RLS policies: users can read/write own org executions",
+        "Indexes on user_id, org_id, skill_key, created_at",
+        "Foreign key relationships where applicable"
+      ],
+      "files": [
+        "supabase/migrations/20260222_copilot_skill_executions.sql"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "SKILL-002",
+      "title": "Build SkillCommandDropdown autocomplete component",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "2.5h",
+      "description": "Floating autocomplete dropdown triggered by / character at the start of input (or after newline). Shows available skills from organization_skills grouped by category (writing, research, pipeline, coaching, outreach). Each item shows skill name, one-line description, and accepted entity types. Filters as user continues typing. Uses existing get-agent-skills RPC data.",
+      "acceptance_criteria": [
+        "Dropdown appears when / is typed at start of message",
+        "Skills loaded from organization_skills via existing hook/service",
+        "Grouped by category with Lucide icons per category",
+        "Filters as user types (e.g., /pro shows /proposal first)",
+        "Keyboard navigation (arrows + Enter) and click selection",
+        "Shows required entity types per skill as subtle tag/badge"
+      ],
+      "files": [
+        "src/components/copilot/SkillCommandDropdown.tsx"
+      ],
+      "dependencies": ["MENT-004"],
+      "blockedBy": ["MENT-004"]
+    },
+    {
+      "id": "SKILL-003",
+      "title": "Wire / trigger into RichCopilotInput",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "1.5h",
+      "description": "Detect / trigger in RichCopilotInput and show SkillCommandDropdown. On selection, insert skill command as a styled highlight at the beginning of the message. Only one /command per message (first one wins). The skill command is extracted separately from plain text on submit.",
+      "acceptance_criteria": [
+        "Typing / at start of input triggers SkillCommandDropdown",
+        "Selecting skill inserts styled command highlight",
+        "Only one /command per message enforced",
+        "Submit payload includes { skill_command?, text, entities }",
+        "/ at non-start positions treated as regular text"
+      ],
+      "files": [
+        "src/components/copilot/RichCopilotInput.tsx"
+      ],
+      "dependencies": ["SKILL-002", "MENT-005"],
+      "blockedBy": ["SKILL-002", "MENT-005"]
+    },
+    {
+      "id": "SKILL-004",
+      "title": "Build skill command parser and validator",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "2h",
+      "description": "Parse the submitted message to extract /command, entity references, and free-text parameters. Validate required entity types against the skill's frontmatter requirements (required_context / inputs). If validation fails, return a structured error prompting the user (e.g., '/proposal needs a company or deal').",
+      "acceptance_criteria": [
+        "parseSkillCommand(payload) extracts { command, entities, freeText }",
+        "validateSkillEntities(command, entities) checks required types",
+        "Returns user-friendly error messages for missing entities",
+        "Handles edge cases: wrong entity type, no entities, extra text",
+        "Maps skill command string to skill_key in organization_skills"
+      ],
+      "files": [
+        "src/lib/copilot/skillCommandParser.ts"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "SKILL-005",
+      "title": "Build skill execution pipeline in sendMessage",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "frontend",
+      "estimate": "3h",
+      "description": "When a message contains a /command, intercept in CopilotContext.sendMessage to run the skill execution pipeline: parse command → validate entities → gather context (entity context + skill-specific context_requirements from frontmatter) → build prompt (merge skill content_template with entity context + org context + free text) → send to copilot-autonomous with skill context prepended → track execution in copilot_skill_executions. Reuses existing autonomous mode streaming.",
+      "acceptance_criteria": [
+        "Skill commands intercepted before regular sendMessage flow",
+        "Entity context resolved per skill's context_requirements",
+        "Skill template + entity context + free text assembled into prompt",
+        "Sent to copilot-autonomous edge function with enriched context",
+        "Execution tracked: skill_key, entities, timing, org_id",
+        "Error handling: validation failures shown as chat messages"
+      ],
+      "files": [
+        "src/lib/contexts/CopilotContext.tsx",
+        "src/lib/copilot/skillExecutionPipeline.ts"
+      ],
+      "dependencies": ["SKILL-004", "MENT-006", "MENT-007"],
+      "blockedBy": ["SKILL-004", "MENT-006", "MENT-007"]
+    },
+    {
+      "id": "SKILL-006",
+      "title": "Build SkillOutputCard structured response component",
+      "phase": "phase-2",
+      "priority": "P1",
+      "type": "frontend",
+      "estimate": "3h",
+      "description": "New structured response component for skill outputs. Renders as an expandable card with: header (skill name + entity chips), body (generated content with markdown), and footer action buttons (Send Email, Create Task, Copy, Edit, Regenerate). Tabbed variant for multi-part outputs (e.g., /research with tabs for Overview, Stakeholders, Talking Points). Integrates with existing onActionClick handler in AssistantShell.",
+      "acceptance_criteria": [
+        "SkillOutputCard renders with header (skill name + entities), body, actions",
+        "Action buttons: Copy, Send Email, Create Task, Regenerate",
+        "Tabbed variant for multi-section outputs",
+        "Integrates with AssistantShell onActionClick handler",
+        "Responsive design matching existing response card patterns"
+      ],
+      "files": [
+        "src/components/copilot/responses/SkillOutputCard.tsx",
+        "src/components/copilot/ChatMessage.tsx"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "BSKILL-001",
+      "title": "Create skill definitions: /proposal and /followup",
+      "phase": "phase-3",
+      "priority": "P0",
+      "type": "skill",
+      "estimate": "3h",
+      "description": "Create SKILL.md files for /proposal (generate tailored proposal from deal/company context + templates + pricing) and /followup (draft follow-up email from recent meeting/activity). Each skill defines frontmatter with: command trigger, required_context, inputs (entity types), outputs, prompt template with entity placeholders. Follow existing SKILL_FRONTMATTER_GUIDE.md V2 format.",
+      "acceptance_criteria": [
+        "skills/atomic/copilot-proposal/SKILL.md with complete frontmatter",
+        "skills/atomic/copilot-followup/SKILL.md with complete frontmatter",
+        "Triggers include /proposal and /followup patterns",
+        "required_context specifies entity types (company|deal, contact|deal)",
+        "Prompt templates reference {{entity_context}} and {{free_text}}",
+        "Both pass npm run validate-skills"
+      ],
+      "files": [
+        "skills/atomic/copilot-proposal/SKILL.md",
+        "skills/atomic/copilot-followup/SKILL.md"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "BSKILL-002",
+      "title": "Create skill definitions: /research and /summary",
+      "phase": "phase-3",
+      "priority": "P0",
+      "type": "skill",
+      "estimate": "3h",
+      "description": "Create SKILL.md files for /research (pre-meeting research brief with company intel, stakeholder mapping, talking points — requires @Company or @Contact) and /summary (deal summary with status, risks, next steps, relationship health — requires @Deal). Include structured output format definitions for tabbed card rendering.",
+      "acceptance_criteria": [
+        "skills/atomic/copilot-research/SKILL.md with complete frontmatter",
+        "skills/atomic/copilot-summary/SKILL.md with complete frontmatter",
+        "Triggers include /research and /summary patterns",
+        "/research outputs defined as tabbed: Overview, Stakeholders, Talking Points, Risks",
+        "/summary outputs: status, risks, next_steps, relationship_health",
+        "Both pass npm run validate-skills"
+      ],
+      "files": [
+        "skills/atomic/copilot-research/SKILL.md",
+        "skills/atomic/copilot-summary/SKILL.md"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "BSKILL-003",
+      "title": "Create skill definitions: /objection, /battlecard, /handoff",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "skill",
+      "estimate": "3h",
+      "description": "Create SKILL.md files for /objection (surface past objection handling + draft response), /battlecard (competitive positioning for a deal), and /handoff (full context brief for deal transfer). Each maps to existing copilot capabilities but with structured /command triggers.",
+      "acceptance_criteria": [
+        "skills/atomic/copilot-objection/SKILL.md created",
+        "skills/atomic/copilot-battlecard/SKILL.md created",
+        "skills/atomic/copilot-handoff/SKILL.md created",
+        "/objection accepts @Contact|@Deal + free text (objection)",
+        "/battlecard accepts @Deal + competitor name",
+        "/handoff accepts @Deal (required)"
+      ],
+      "files": [
+        "skills/atomic/copilot-objection/SKILL.md",
+        "skills/atomic/copilot-battlecard/SKILL.md",
+        "skills/atomic/copilot-handoff/SKILL.md"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "BSKILL-004",
+      "title": "Create skill definitions: /chase, /agenda, /win",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "skill",
+      "estimate": "2h",
+      "description": "Create SKILL.md files for the remaining 3 launch skills: /chase (gentle re-engagement email for quiet deals), /agenda (structured meeting agenda from deal stage + open items), /win (deal-won Slack announcement with key stats). Note: /chase and /agenda may partially overlap with existing seq-deal-reengagement and seq-next-meeting-command-center — differentiate by making these lightweight single-shot commands vs multi-step sequences.",
+      "acceptance_criteria": [
+        "skills/atomic/copilot-chase/SKILL.md created",
+        "skills/atomic/copilot-agenda/SKILL.md created",
+        "skills/atomic/copilot-win/SKILL.md created",
+        "Triggers include /chase, /agenda, /win patterns",
+        "Differentiated from existing sequences (simpler, single-shot)"
+      ],
+      "files": [
+        "skills/atomic/copilot-chase/SKILL.md",
+        "skills/atomic/copilot-agenda/SKILL.md",
+        "skills/atomic/copilot-win/SKILL.md"
+      ],
+      "dependencies": [],
+      "blockedBy": []
+    },
+    {
+      "id": "BSKILL-005",
+      "title": "Sync new skills and verify end-to-end execution",
+      "phase": "phase-3",
+      "priority": "P0",
+      "type": "integration",
+      "estimate": "2h",
+      "description": "Run npm run sync-skills to upsert all 10 new skill definitions into platform_skills and compile into organization_skills. Verify end-to-end: type /proposal @[company] in copilot → skill parsed → entity context resolved → skill template loaded → AI generates structured output → SkillOutputCard renders with action buttons.",
+      "acceptance_criteria": [
+        "All 10 skills pass npm run validate-skills",
+        "npm run sync-skills upserts without errors",
+        "organization_skills compiled for test org",
+        "End-to-end test: /proposal with @ mention produces structured output",
+        "SkillOutputCard renders correctly with actions"
+      ],
+      "files": [],
+      "dependencies": ["BSKILL-001", "BSKILL-002", "BSKILL-003", "BSKILL-004", "SKILL-005", "SKILL-006"],
+      "blockedBy": ["BSKILL-001", "BSKILL-002", "BSKILL-003", "BSKILL-004", "SKILL-005", "SKILL-006"]
+    },
+    {
+      "id": "POL-001",
+      "title": "Add natural language intent detection for skill suggestion",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "frontend",
+      "estimate": "3h",
+      "description": "When a user types a natural language message that matches a skill intent (e.g., 'write a proposal for Meridian'), detect the intent client-side using keyword matching against skill triggers, resolve mentioned entities via fuzzy name match, and suggest: 'I can run /proposal for @Meridian Business Solutions. Shall I go ahead?' Uses existing copilotRoutingService trigger matching logic adapted for pre-send suggestion.",
+      "acceptance_criteria": [
+        "Detect skill intent from natural language (keyword + trigger matching)",
+        "Show inline suggestion banner below input with skill name + resolved entities",
+        "User can accept (executes skill) or dismiss (sends as regular message)",
+        "Uses existing trigger matching logic from copilotRoutingService",
+        "Does not block or slow down regular message sending"
+      ],
+      "files": [
+        "src/lib/copilot/skillIntentDetector.ts",
+        "src/components/copilot/SkillSuggestionBanner.tsx",
+        "src/components/copilot/RichCopilotInput.tsx"
+      ],
+      "dependencies": ["SKILL-005"],
+      "blockedBy": ["SKILL-005"]
+    },
+    {
+      "id": "POL-002",
+      "title": "Add interactive entity chip expansion",
+      "phase": "phase-4",
+      "priority": "P2",
+      "type": "frontend",
+      "estimate": "2h",
+      "description": "Make entity chips in chat messages clickable. Clicking a chip in a sent message expands an inline summary popover showing key entity details (contact: name, title, company, last interaction; company: name, industry, size, deal count; deal: name, stage, value, close date). Uses existing entity data from context resolution.",
+      "acceptance_criteria": [
+        "Entity chips in sent messages are clickable",
+        "Click shows popover with key entity summary",
+        "Contact: name, title, company, last interaction date",
+        "Company: name, industry, size, active deals count",
+        "Deal: name, stage, value, expected close date",
+        "Popover dismisses on click outside"
+      ],
+      "files": [
+        "src/components/copilot/EntityChipPopover.tsx",
+        "src/components/copilot/ChatMessage.tsx"
+      ],
+      "dependencies": ["MENT-007"],
+      "blockedBy": ["MENT-007"]
+    },
+    {
+      "id": "POL-003",
+      "title": "Add Slack @ mention resolution for entity references",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "backend",
+      "estimate": "3h",
+      "description": "Extend the existing Slack copilot interaction to support entity references in DM messages. When a user mentions a contact/company name in Slack (no chip UI available), use fuzzy matching via the entity-search edge function to resolve. If ambiguous (multiple matches), reply with a disambiguation prompt in Slack. Confirmed entity context is injected into the AI prompt.",
+      "acceptance_criteria": [
+        "Slack DM messages parsed for potential entity references",
+        "Fuzzy matching via entity-search edge function",
+        "Ambiguous matches: Slack block kit buttons for disambiguation",
+        "Resolved entity context injected into AI prompt",
+        "Confirmation message shows resolved entity details"
+      ],
+      "files": [
+        "supabase/functions/slack-copilot-actions/index.ts",
+        "supabase/functions/_shared/slackEntityResolver.ts"
+      ],
+      "dependencies": ["MENT-001"],
+      "blockedBy": ["MENT-001"]
+    },
+    {
+      "id": "POL-004",
+      "title": "Add stale data warnings and CRM sync status to entity chips",
+      "phase": "phase-4",
+      "priority": "P2",
+      "type": "frontend",
+      "estimate": "1.5h",
+      "description": "Show subtle warning indicator on entity chips when CRM data is stale (last sync > 24 hours). Add a refresh button that triggers CRM re-sync for the entity. Show 'deleted from CRM' ghost chip state for entities that no longer exist in HubSpot.",
+      "acceptance_criteria": [
+        "Entity chips show warning icon when CRM sync > 24h old",
+        "Tooltip shows 'Last synced X ago' on hover",
+        "Refresh button triggers re-sync for that entity",
+        "Deleted CRM records show ghost chip with strikethrough style",
+        "Warning state derived from entity's updated_at vs CRM sync timestamp"
+      ],
+      "files": [
+        "src/components/copilot/EntityChip.tsx",
+        "src/components/copilot/RichCopilotInput.tsx"
+      ],
+      "dependencies": ["MENT-005"],
+      "blockedBy": ["MENT-005"]
+    }
+  ],
+  "execution": {
+    "totalStories": 22,
+    "completedStories": 0,
+    "currentPhase": "phase-1",
+    "parallelGroups": [
+      {
+        "group": "Phase 1 — Independent foundations",
+        "parallel": ["MENT-001", "MENT-004", "MENT-006"],
+        "note": "Entity search API, rich input component, and context resolver can all be built simultaneously"
+      },
+      {
+        "group": "Phase 1 — Wiring",
+        "parallel": ["MENT-003", "MENT-002"],
+        "note": "Dropdown and hook can be built in parallel after their dependencies"
+      },
+      {
+        "group": "Phase 2 — Independent foundations",
+        "parallel": ["SKILL-001", "SKILL-002", "SKILL-004", "SKILL-006"],
+        "note": "DB migration, dropdown, parser, and output card are independent"
+      },
+      {
+        "group": "Phase 3 — All skill definitions",
+        "parallel": ["BSKILL-001", "BSKILL-002", "BSKILL-003", "BSKILL-004"],
+        "note": "All skill SKILL.md files can be written simultaneously"
+      },
+      {
+        "group": "Phase 4 — Polish",
+        "parallel": ["POL-001", "POL-002", "POL-003", "POL-004"],
+        "note": "All polish items are independent of each other"
+      }
+    ],
+    "lastUpdated": "2026-02-22T12:00:00Z"
+  },
+  "architecturalDecisions": [
+    {
+      "decision": "Reuse existing platform_skills/organization_skills instead of new copilot_skills table",
+      "rationale": "The PRD proposed a separate copilot_skills registry, but the codebase already has a mature 2-table skill system (platform_skills → organization_skills) with frontmatter that contains all needed fields: command triggers, descriptions, categories, required_context, inputs/outputs. Adding a 3rd table would create data drift. Instead, the 10 new /command skills are standard SKILL.md files with trigger patterns matching /command syntax."
+    },
+    {
+      "decision": "Client-side skill command parsing (not edge function)",
+      "rationale": "The /command is a UX primitive — parsing happens in the frontend before message submission. The parsed command routes to the existing copilot-autonomous pipeline with enriched context. This avoids creating a new edge function for skill dispatch and reuses the existing Claude tool_use agentic loop."
+    },
+    {
+      "decision": "contenteditable div instead of Slate/TipTap/ProseMirror",
+      "rationale": "The input needs chips + plain text — not full rich text editing. A lightweight contenteditable approach (similar to Slack's composer) avoids a heavy dependency. If complexity grows (e.g., markdown formatting in input), can upgrade to Slate later."
+    },
+    {
+      "decision": "Entity context injected client-side before sending to edge function",
+      "rationale": "Entity resolution uses existing frontend services (apiContactService, companyService, contactRecordService) which already have auth context, caching, and React Query integration. Sending pre-resolved context avoids duplicating data fetching logic in the edge function."
+    },
+    {
+      "decision": "No credit system changes in initial build",
+      "rationale": "The PRD defines a credit consumption model, but the existing codebase has no credit/metering system implemented yet. Adding credit deduction would be a separate feature. Skills execute via the existing copilot path which has its own usage tracking via copilot_skill_executions."
+    }
+  ]
+}
