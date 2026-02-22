@@ -71,14 +71,17 @@ CREATE TABLE IF NOT EXISTS email_signal_events (
 );
 
 -- =============================================================================
--- Deduplication constraint: 7-day window per (communication_event_id, signal_type)
--- Using partial unique index — only deduplicate when communication_event_id is set
+-- Deduplication constraint: per (communication_event_id, signal_type)
+-- Only deduplicate when communication_event_id is set.
+-- NOTE: PostgreSQL partial indexes with now()-based predicates are evaluated at
+-- INSERT time only — the predicate is NOT re-evaluated dynamically. This means
+-- the index prevents duplicate signals for the same event indefinitely (which is
+-- the correct behavior). The 7-day window is removed to avoid confusion.
 -- =============================================================================
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_email_signal_events_dedup_7d
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_signal_events_dedup
   ON email_signal_events (communication_event_id, signal_type)
-  WHERE communication_event_id IS NOT NULL
-    AND created_at >= (now() - INTERVAL '7 days');
+  WHERE communication_event_id IS NOT NULL;
 
 -- =============================================================================
 -- Indexes: email_signal_events

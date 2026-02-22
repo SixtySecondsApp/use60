@@ -323,7 +323,7 @@ export function DealIntelligenceSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         hideClose
-        className="md:!top-16 md:!h-[calc(100vh-4rem)] !top-0 !h-screen w-full md:w-[500px] md:max-w-[600px] p-0 border-l border-gray-200/80 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] backdrop-blur-xl overflow-hidden"
+        className="!top-16 !h-[calc(100vh-4rem)] w-full md:w-[500px] md:max-w-[600px] p-0 border-l border-gray-200/80 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] backdrop-blur-xl overflow-hidden"
       >
         {/* ============================================================= */}
         {/* CHAT MODE                                                      */}

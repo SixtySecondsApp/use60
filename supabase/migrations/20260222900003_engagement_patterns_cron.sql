@@ -56,6 +56,15 @@ DO UPDATE SET
 -- 3. pg_cron schedule — Weekly Sunday 2am UTC
 -- ---------------------------------------------------------------------------
 
+-- Idempotent: unschedule first to avoid duplicate job error on re-run
+DO $$
+BEGIN
+  PERFORM cron.unschedule('engagement-patterns-weekly-batch');
+EXCEPTION WHEN OTHERS THEN
+  -- Job doesn't exist yet — safe to ignore
+  NULL;
+END $$;
+
 SELECT cron.schedule(
   'engagement-patterns-weekly-batch',   -- job name (unique)
   '0 2 * * 0',                          -- every Sunday at 02:00 UTC

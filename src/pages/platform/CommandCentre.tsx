@@ -9,6 +9,7 @@
  */
 
 import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowUp,
@@ -21,9 +22,17 @@ import {
   Loader2,
   RefreshCw,
   RotateCcw,
+  Signal,
+  TrendingDown,
+  TrendingUp,
+  Minus,
   X,
   Zap,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
+import { DealTemperatureGauge } from '@/components/signals/DealTemperatureGauge';
+import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -493,11 +502,200 @@ function StatsBar({
 }
 
 // ============================================================================
+// Signal Watch — hot deals panel
+// ============================================================================
+
+interface HotDeal {
+  deal_id: string;
+  deal_name: string;
+  deal_value: number | null;
+  owner_name: string | null;
+  temperature: number;
+  trend: 'rising' | 'falling' | 'stable';
+  last_signal: string | null;
+  signal_count_24h: number;
+  signal_count_7d: number;
+  top_signals: unknown[];
+}
+
+function HotDealCard({ deal }: { deal: HotDeal }) {
+  const tempScore = Math.round((deal.temperature ?? 0) * 100);
+  const TrendIcon =
+    deal.trend === 'rising' ? TrendingUp :
+    deal.trend === 'falling' ? TrendingDown : Minus;
+  const trendColor =
+    deal.trend === 'rising' ? 'text-emerald-500' :
+    deal.trend === 'falling' ? 'text-red-400' : 'text-gray-400';
+
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-gray-700/60 bg-white dark:bg-gray-900/60 hover:border-slate-300 dark:hover:border-gray-600 transition-colors">
+      {/* Temperature badge */}
+      <div className="flex-shrink-0 pt-0.5">
+        <DealTemperatureGauge temperature={tempScore} trend={deal.trend} size="sm" />
+      </div>
+
+      {/* Deal info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-800 dark:text-gray-100 truncate">
+            {deal.deal_name}
+          </p>
+          {deal.deal_value != null && (
+            <span className="text-xs font-medium text-slate-500 dark:text-gray-400 flex-shrink-0 tabular-nums">
+              {deal.deal_value >= 1_000_000
+                ? `$${(deal.deal_value / 1_000_000).toFixed(1)}M`
+                : deal.deal_value >= 1_000
+                ? `$${(deal.deal_value / 1_000).toFixed(0)}K`
+                : `$${deal.deal_value}`}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-400 dark:text-gray-500 flex-wrap">
+          <div className="flex items-center gap-1">
+            <TrendIcon className={cn('h-3 w-3', trendColor)} />
+            <span className="capitalize">{deal.trend}</span>
+          </div>
+          <span>{deal.signal_count_24h} signals today</span>
+          <span>{deal.signal_count_7d} this week</span>
+          {deal.last_signal && (
+            <span>Last: {formatDistanceToNow(new Date(deal.last_signal), { addSuffix: true })}</span>
+          )}
+          {deal.owner_name && (
+            <span className="text-slate-300 dark:text-gray-600">· {deal.owner_name}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignalWatchPanel() {
+  const orgId = useActiveOrgId();
+
+  const { data: hotDeals, isLoading: hotLoading } = useQuery({
+    queryKey: ['signal-watch-hot-deals', orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data, error } = await supabase.rpc('get_hot_deals', {
+        p_org_id: orgId,
+        p_threshold: 0.6,
+        p_limit: 15,
+      });
+      if (error) throw error;
+      return (data ?? []) as HotDeal[];
+    },
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: coldDeals, isLoading: coldLoading } = useQuery({
+    queryKey: ['signal-watch-cold-deals', orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data, error } = await supabase
+        .from('deal_signal_temperature')
+        .select('deal_id, temperature, trend, last_signal, signal_count_24h, signal_count_7d, deals!inner(name, value, owner_id)')
+        .eq('org_id', orgId)
+        .lte('temperature', 0.3)
+        .order('temperature', { ascending: true })
+        .limit(10);
+      if (error) throw error;
+      return (data ?? []).map((row: { deal_id: string; temperature: number; trend: 'rising' | 'falling' | 'stable'; last_signal: string | null; signal_count_24h: number; signal_count_7d: number; deals: { name: string; value: number | null; owner_id: string | null } | null }) => ({
+        deal_id: row.deal_id,
+        deal_name: row.deals?.name ?? 'Unknown Deal',
+        deal_value: row.deals?.value ?? null,
+        owner_name: null,
+        temperature: row.temperature,
+        trend: row.trend,
+        last_signal: row.last_signal,
+        signal_count_24h: row.signal_count_24h,
+        signal_count_7d: row.signal_count_7d,
+        top_signals: [],
+      })) as HotDeal[];
+    },
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Hot deals */}
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-6 w-6 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+            <TrendingUp className="h-3.5 w-3.5 text-red-500" />
+          </div>
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-gray-200">Hot Deals</h2>
+          {hotDeals && hotDeals.length > 0 && (
+            <Badge className="h-4 min-w-4 px-1 text-[10px] bg-red-500 text-white">
+              {hotDeals.length}
+            </Badge>
+          )}
+          <span className="text-xs text-slate-400 dark:text-gray-500 ml-auto">Temperature &gt; 60</span>
+        </div>
+
+        {hotLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
+          </div>
+        ) : hotDeals && hotDeals.length > 0 ? (
+          <div className="space-y-2">
+            {hotDeals.map((deal) => (
+              <HotDealCard key={deal.deal_id} deal={deal} />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Signal className="h-8 w-8 text-slate-200 dark:text-gray-700 mb-2" />
+            <p className="text-sm text-slate-500 dark:text-gray-400">No hot deals right now</p>
+            <p className="text-xs text-slate-400 dark:text-gray-500 mt-0.5">Deals with strong buying signals will appear here.</p>
+          </div>
+        )}
+      </section>
+
+      {/* Cold deals */}
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-6 w-6 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+            <TrendingDown className="h-3.5 w-3.5 text-blue-500" />
+          </div>
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-gray-200">Cold Deals</h2>
+          {coldDeals && coldDeals.length > 0 && (
+            <Badge className="h-4 min-w-4 px-1 text-[10px] bg-blue-500 text-white">
+              {coldDeals.length}
+            </Badge>
+          )}
+          <span className="text-xs text-slate-400 dark:text-gray-500 ml-auto">Temperature &lt; 30</span>
+        </div>
+
+        {coldLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
+          </div>
+        ) : coldDeals && coldDeals.length > 0 ? (
+          <div className="space-y-2">
+            {coldDeals.map((deal) => (
+              <HotDealCard key={deal.deal_id} deal={deal} />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Minus className="h-8 w-8 text-slate-200 dark:text-gray-700 mb-2" />
+            <p className="text-sm text-slate-500 dark:text-gray-400">No cold deals</p>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// ============================================================================
 // Main page
 // ============================================================================
 
 export default function CommandCentre() {
-  const [tab, setTab] = useState<'active' | 'auto-completed' | 'resolved' | 'pipeline'>('active');
+  const [tab, setTab] = useState<'active' | 'auto-completed' | 'resolved' | 'pipeline' | 'signal-watch'>('active');
   const [urgencyFilter, setUrgencyFilter] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
@@ -710,6 +908,13 @@ export default function CommandCentre() {
                   </Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger
+                value="signal-watch"
+                className="h-8 px-3 text-xs data-[state=active]:bg-slate-100 dark:data-[state=active]:bg-gray-800 rounded-md"
+              >
+                <Signal className="h-3 w-3 mr-1" />
+                Signal Watch
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -774,6 +979,11 @@ export default function CommandCentre() {
               onViewDetail={handleViewDetail}
               pendingIds={pendingIds}
             />
+          </TabsContent>
+
+          {/* ---- Signal Watch ---- */}
+          <TabsContent value="signal-watch" className="flex-1 overflow-y-auto p-6 mt-0">
+            <SignalWatchPanel />
           </TabsContent>
         </Tabs>
       </div>
