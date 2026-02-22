@@ -485,7 +485,32 @@ async function analyzeUserPipeline(
   }
 
   // -------------------------------------------------------------------------
-  // 6. Top action recommendation (BRF-004)
+  // 6. Forecast calibration (PRD-21 — CTI-010)
+  //    Fetch rep_calibration from most recent pipeline snapshot metadata
+  // -------------------------------------------------------------------------
+  let repCalibration: Record<string, unknown> | null = null;
+  try {
+    const { data: calibrationData } = await supabase.rpc('get_rep_calibration', {
+      p_org_id: organizationId,
+      p_user_id: userId,
+    });
+    if (calibrationData && typeof calibrationData === 'object') {
+      repCalibration = calibrationData as Record<string, unknown>;
+    }
+  } catch (calErr) {
+    console.warn(`[Pipeline] Calibration fetch failed for user ${userId}:`, calErr);
+  }
+
+  // Augment pipeline math with calibrated forecast if available
+  if (summary.pipelineMath && repCalibration && repCalibration.calibrated_pipeline != null) {
+    (summary.pipelineMath as any).calibrated_pipeline = repCalibration.calibrated_pipeline;
+    (summary.pipelineMath as any).optimism_factor = repCalibration.overall_optimism_factor;
+    (summary.pipelineMath as any).calibration_note = repCalibration.overall_note;
+    (summary.pipelineMath as any).calibration_weeks = repCalibration.weeks_of_data;
+  }
+
+  // -------------------------------------------------------------------------
+  // 7. Top action recommendation (BRF-004)
   // -------------------------------------------------------------------------
   if (summary.pipelineMath && dealSummaries.length > 0) {
     try {

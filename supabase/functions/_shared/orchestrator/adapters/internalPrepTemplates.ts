@@ -267,10 +267,32 @@ async function buildPipelineReviewPrep(
       `**Coverage ratio:** ${pipelineMath.coverage_ratio != null ? Number(pipelineMath.coverage_ratio).toFixed(2) + 'x' : 'N/A'}`,
       `**Deals at risk:** ${pipelineMath.deals_at_risk ?? 'N/A'}`,
     ];
+
+    // CTI-010: Add calibrated forecast if available (PRD-21)
+    let repCalibration: Record<string, unknown> | null = null;
+    try {
+      const { data: calibrationData } = await supabase.rpc('get_rep_calibration', {
+        p_org_id: orgId,
+        p_user_id: userId,
+      });
+      if (calibrationData && typeof calibrationData === 'object') {
+        repCalibration = calibrationData as Record<string, unknown>;
+      }
+    } catch { /* non-fatal — calibration is best-effort */ }
+
+    if (repCalibration && repCalibration.calibrated_pipeline != null) {
+      lines.push('');
+      lines.push(`**Calibrated forecast:** ${fmt(repCalibration.calibrated_pipeline)}`);
+      if (repCalibration.overall_note) {
+        lines.push(`_${repCalibration.overall_note}_`);
+      }
+      lines.push(`_Based on ${repCalibration.weeks_of_data || 4} weeks of history_`);
+    }
+
     sections.push({
       title: 'Pipeline Math Summary',
       body: lines.join('\n'),
-      data: pipelineMath,
+      data: { ...pipelineMath, rep_calibration: repCalibration },
     });
 
     // Deals by stage
@@ -426,12 +448,28 @@ async function buildQBRPrep(
     });
     if (!error && data) {
       const pm = data as Record<string, unknown>;
-      nextQProjection = [
+      const projLines = [
         `**Current open pipeline:** $${Number(pm.total_pipeline || 0).toLocaleString()}`,
         `**Weighted pipeline:** $${Number(pm.weighted_pipeline || 0).toLocaleString()}`,
         `**Coverage ratio:** ${pm.coverage_ratio != null ? Number(pm.coverage_ratio).toFixed(2) + 'x' : 'N/A'}`,
         `**Projected close:** $${Number(pm.projected_close || 0).toLocaleString()}`,
-      ].join('\n');
+      ];
+
+      // CTI-010: Add calibrated forecast to QBR projection (PRD-21)
+      try {
+        const { data: calData } = await supabase.rpc('get_rep_calibration', {
+          p_org_id: orgId,
+          p_user_id: userId,
+        });
+        if (calData && typeof calData === 'object' && (calData as any).calibrated_pipeline != null) {
+          projLines.push(`**Calibrated forecast:** $${Number((calData as any).calibrated_pipeline).toLocaleString()}`);
+          if ((calData as any).overall_note) {
+            projLines.push(`_${(calData as any).overall_note}_`);
+          }
+        }
+      } catch { /* non-fatal */ }
+
+      nextQProjection = projLines.join('\n');
     }
   } catch { /* non-fatal */ }
 

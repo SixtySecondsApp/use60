@@ -43,6 +43,7 @@ interface SnapshotRow {
   target: number | null;
   coverage_ratio: number | null;
   forecast_accuracy_trailing: number | null;
+  metadata?: Record<string, any> | null;
 }
 
 interface DealRow {
@@ -276,7 +277,69 @@ async function captureUserSnapshot(
   }
 
   // -------------------------------------------------------------------------
-  // 6. Upsert snapshot row
+  // 6. Per-stage forecast calibration (PRD-21)
+  //    Compare last 4 snapshots' stage predictions vs actual outcomes
+  // -------------------------------------------------------------------------
+  let repCalibration: Record<string, any> | null = null;
+  const { data: recentSnapshots } = await supabase
+    .from('pipeline_snapshots')
+    .select('snapshot_date, deals_by_stage, closed_this_period, weighted_pipeline_value, forecast_accuracy_trailing')
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
+    .order('snapshot_date', { ascending: false })
+    .limit(4);
+
+  if (recentSnapshots && recentSnapshots.length >= 4) {
+    // Calculate per-stage optimism factor
+    const stageAccuracies: Record<string, { predicted: number; count: number }> = {};
+    let totalPredicted = 0;
+    let totalActual = 0;
+
+    for (const snap of recentSnapshots) {
+      totalPredicted += snap.weighted_pipeline_value || 0;
+      totalActual += snap.closed_this_period || 0;
+
+      const stages = snap.deals_by_stage || {};
+      for (const [stageName, stageData] of Object.entries(stages)) {
+        const sd = stageData as { count: number; total_value: number };
+        if (!stageAccuracies[stageName]) {
+          stageAccuracies[stageName] = { predicted: 0, count: 0 };
+        }
+        stageAccuracies[stageName].predicted += sd.total_value;
+        stageAccuracies[stageName].count += sd.count;
+      }
+    }
+
+    const overallOptimism = totalPredicted > 0 ? totalActual / totalPredicted : 1;
+
+    repCalibration = {
+      overall_optimism_factor: Math.round(overallOptimism * 100) / 100,
+      overall_note: overallOptimism < 0.8
+        ? `You tend to be ${Math.round((1 - overallOptimism) * 100)}% optimistic in your pipeline predictions`
+        : overallOptimism > 1.1
+        ? `Your pipeline predictions are conservative — you close ${Math.round((overallOptimism - 1) * 100)}% more than predicted`
+        : 'Your pipeline predictions are well-calibrated',
+      weeks_of_data: recentSnapshots.length,
+      calibrated_pipeline: Math.round(weightedPipelineValue * overallOptimism * 100) / 100,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // 7. Upsert coaching_skill_progression with forecast accuracy
+  // -------------------------------------------------------------------------
+  if (forecastAccuracyTrailing !== null) {
+    const weekStart = getWeekStart(today);
+    await supabase.from('coaching_skill_progression').upsert({
+      org_id: orgId,
+      user_id: userId,
+      week_start: weekStart,
+      forecast_accuracy: forecastAccuracyTrailing,
+      metadata: { calibration: repCalibration },
+    }, { onConflict: 'org_id,user_id,week_start' });
+  }
+
+  // -------------------------------------------------------------------------
+  // 8. Upsert snapshot row
   // -------------------------------------------------------------------------
   const row: SnapshotRow = {
     org_id: orgId,
@@ -293,6 +356,7 @@ async function captureUserSnapshot(
     forecast_accuracy_trailing: forecastAccuracyTrailing !== null
       ? Math.round(forecastAccuracyTrailing * 10000) / 10000
       : null,
+    metadata: repCalibration ? { rep_calibration: repCalibration } : null,
   };
 
   const { error: upsertError } = await supabase
@@ -316,6 +380,15 @@ async function captureUserSnapshot(
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/** Returns ISO date string for Monday of the given date's week. */
+function getWeekStart(date: Date): string {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return d.toISOString().split('T')[0];
+}
 
 /**
  * Returns the Monday of the current week (or last Monday if today is not Monday).

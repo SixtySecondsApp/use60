@@ -5725,3 +5725,162 @@ export function buildAutonomyPromotionMessage(data: AutonomyPromotionData): Slac
     ],
   };
 }
+
+// =============================================================================
+// Enhanced Coaching Digest Blocks (Phase 6: PRD-19)
+// =============================================================================
+
+export interface EnhancedCoachingDigestData {
+  repName: string;
+  weekOf: string;
+  meetingsAnalyzed: number;
+  overallScore: number | null;
+  talkRatio: number | null;
+  questionQuality: number | null;
+  objectionHandling: number | null;
+  discoveryDepth: number | null;
+  weeklyWins: string[];
+  dataBackedInsights: Array<{ insight: string; evidence: string; action: string }>;
+  pipelinePatterns: Array<{ title: string; severity: string; pattern_type: string }>;
+  competitiveTrends: Array<{ name: string; mentions: number; win_rate: number | null }>;
+  progressionComparison: {
+    status: string;
+    vs_last_week?: { improving: string[]; declining: string[]; overall_trend: string };
+    weeks_tracked?: number;
+  };
+  teamIntelligenceTip: string | null;
+  forecastAccuracy: number | null;
+}
+
+export function buildEnhancedCoachingDigestBlocks(data: EnhancedCoachingDigestData): SlackMessage {
+  const blocks: SlackBlock[] = [];
+
+  // Header
+  blocks.push({
+    type: 'header',
+    text: { type: 'plain_text', text: safeHeaderText(`Weekly Coaching Digest — ${data.weekOf}`), emoji: false },
+  });
+
+  // Score summary
+  const scoreEmoji = (data.overallScore || 0) >= 0.7 ? ':star:' : (data.overallScore || 0) >= 0.5 ? ':chart_with_upwards_trend:' : ':target:';
+  const trendText = data.progressionComparison?.vs_last_week?.overall_trend === 'improving'
+    ? ' :arrow_up: Improving'
+    : data.progressionComparison?.vs_last_week?.overall_trend === 'declining'
+    ? ' :small_red_triangle_down: Needs attention'
+    : ' :left_right_arrow: Stable';
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: safeMrkdwn(
+        `${scoreEmoji} *${data.repName}* — ${data.meetingsAnalyzed} meetings analyzed this week${data.overallScore != null ? `\nOverall Score: *${Math.round(data.overallScore * 100)}%*${trendText}` : ''}`,
+      ),
+    },
+  });
+
+  // Metrics grid
+  if (data.talkRatio != null) {
+    const talkNote = data.talkRatio < 50 ? ':white_check_mark:' : data.talkRatio < 60 ? ':warning:' : ':x:';
+    blocks.push({
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: safeFieldText(`*Talk Ratio*\n${Math.round(data.talkRatio)}% ${talkNote} (target: 43%)`) },
+        { type: 'mrkdwn', text: safeFieldText(`*Question Quality*\n${Math.round((data.questionQuality || 0) * 100)}%`) },
+        { type: 'mrkdwn', text: safeFieldText(`*Objection Handling*\n${Math.round((data.objectionHandling || 0) * 100)}%`) },
+        { type: 'mrkdwn', text: safeFieldText(`*Discovery Depth*\n${Math.round((data.discoveryDepth || 0) * 100)}%`) },
+      ],
+    });
+  }
+
+  blocks.push({ type: 'divider' });
+
+  // Weekly Wins
+  if (data.weeklyWins.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: safeMrkdwn(`:trophy: *Weekly Wins*\n${data.weeklyWins.map(w => `• ${w}`).join('\n')}`),
+      },
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  // Data-Backed Insights
+  if (data.dataBackedInsights.length > 0) {
+    const insightText = data.dataBackedInsights.slice(0, 3).map(i =>
+      `*${i.insight}*\n_Evidence:_ ${i.evidence}\n_Action:_ ${i.action}`,
+    ).join('\n\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`:brain: *Coaching Insights*\n\n${insightText}`) },
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  // Pipeline Patterns
+  if (data.pipelinePatterns.length > 0) {
+    const severityIcon: Record<string, string> = { critical: ':rotating_light:', warning: ':warning:', info: ':information_source:' };
+    const patternText = data.pipelinePatterns.map(p =>
+      `${severityIcon[p.severity] || ':information_source:'} ${p.title}`,
+    ).join('\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`:bar_chart: *Pipeline Patterns*\n${patternText}`) },
+    });
+  }
+
+  // Competitive Trends
+  if (data.competitiveTrends.length > 0) {
+    const compText = data.competitiveTrends.map(c =>
+      `• *${c.name}*: ${c.mentions} mentions${c.win_rate != null ? `, ${Math.round(c.win_rate * 100)}% win rate` : ''}`,
+    ).join('\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`:crossed_swords: *Competitive Trends*\n${compText}`) },
+    });
+  }
+
+  // Team Intelligence Tip
+  if (data.teamIntelligenceTip) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`:bulb: *From Your Team*\n${data.teamIntelligenceTip}`) },
+    });
+  }
+
+  // Forecast Accuracy
+  if (data.forecastAccuracy != null) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        { type: 'mrkdwn', text: safeContextMrkdwn(`:dart: Forecast Accuracy: ${Math.round(data.forecastAccuracy * 100)}%`) },
+      ],
+    });
+  }
+
+  // Progression note
+  if (data.progressionComparison?.status === 'has_history') {
+    const vs = data.progressionComparison.vs_last_week;
+    const parts: string[] = [];
+    if (vs?.improving.length) parts.push(`:arrow_up: Improved: ${vs.improving.join(', ')}`);
+    if (vs?.declining.length) parts.push(`:small_red_triangle_down: Needs work: ${vs.declining.join(', ')}`);
+    if (parts.length > 0) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: safeContextMrkdwn(`Week ${data.progressionComparison.weeks_tracked} of tracking | ${parts.join(' | ')}`) }],
+      });
+    }
+  } else if (data.progressionComparison?.status === 'first_week') {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: safeContextMrkdwn(':seedling: First coaching week — tracking starts now. Next week you\'ll see trends.') }],
+    });
+  }
+
+  return {
+    blocks,
+    text: `Weekly Coaching Digest for ${data.repName} — ${data.weekOf}`,
+  };
+}
