@@ -642,7 +642,22 @@ export async function calculateDealHealth(dealId: string): Promise<DealHealthSco
       risk_factors: riskFactors,
       risk_level: riskLevel,
       predicted_close_probability: predictedProbability,
-      predicted_days_to_close: null, // TODO: Implement predictive model
+      // Heuristic placeholder: estimate days to close from stage velocity and deal recency.
+      // Uses average stage duration thresholds inversely scaled by current health score.
+      // Replace with a trained predictive model once sufficient historical close-date data exists.
+      predicted_days_to_close: (() => {
+        const stageAvgDays: Record<string, number> = {
+          SQL: 10,
+          Opportunity: 30,
+          Verbal: 14,
+        };
+        const stageAvg = stageAvgDays[stageName] ?? 21;
+        // Remaining days in stage = average minus time already spent, floored at 0
+        const remainingInStage = Math.max(0, stageAvg - metrics.daysInStage);
+        // Low health score implies more friction → scale up remaining time
+        const frictionMultiplier = overallScore > 0 ? 100 / overallScore : 2;
+        return Math.round(remainingInStage * frictionMultiplier);
+      })(),
       last_calculated_at: new Date().toISOString(),
     };
 

@@ -12,7 +12,7 @@ export interface OpsRule {
     operator?: string;
     value?: string;
   };
-  action_type: 'update_cell' | 'run_enrichment' | 'push_to_hubspot' | 'add_tag' | 'notify';
+  action_type: 'update_cell' | 'run_enrichment' | 'push_to_hubspot' | 'add_tag' | 'notify' | 'webhook';
   action_config: Record<string, any>;
   is_enabled: boolean;
   consecutive_failures: number;

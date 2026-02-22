@@ -205,13 +205,46 @@ export function useCompanies(options: UseCompaniesOptions = {}): UseCompaniesRet
         throw error;
       }
 
-      // Process companies (for now without stats since edge function is broken)
-      const processedCompanies = (companies || []).map(company => ({
+      // Process companies with real stats from related tables (RLS-scoped via user JWT)
+      let processedCompanies = (companies || []).map(company => ({
         ...company,
-        contactCount: 0, // TODO: Add proper contact count query
-        dealsCount: 0,   // TODO: Add proper deals count query  
-        dealsValue: 0    // TODO: Add proper deals value query
+        contactCount: 0,
+        dealsCount: 0,
+        dealsValue: 0,
       }));
+
+      if (companies && companies.length > 0) {
+        try {
+          processedCompanies = await Promise.all(
+            companies.map(async (company) => {
+              try {
+                const { count: contactCount } = await supabase
+                  .from('contacts')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('company_id', company.id);
+
+                const { data: deals } = await supabase
+                  .from('deals')
+                  .select('value')
+                  .eq('company_id', company.id);
+
+                return {
+                  ...company,
+                  contactCount: contactCount || 0,
+                  dealsCount: deals?.length || 0,
+                  dealsValue: deals?.reduce((sum: number, deal: any) => sum + (Number(deal.value) || 0), 0) || 0,
+                };
+              } catch (statError) {
+                logger.warn(`⚠️ Stats error for company ${company.id}:`, statError);
+                return { ...company, contactCount: 0, dealsCount: 0, dealsValue: 0 };
+              }
+            })
+          );
+        } catch (statsError) {
+          logger.warn('⚠️ Error getting company stats:', statsError);
+          // Continue with companies without stats
+        }
+      }
 
       setCompanies(processedCompanies);
       setTotalCount(count || 0);

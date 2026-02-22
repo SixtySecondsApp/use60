@@ -706,7 +706,18 @@ export async function calculateRelationshipHealth(
       is_ghost_risk: isGhostRisk,
       ghost_signals: null, // Will be populated by ghost detection service
       ghost_probability_percent: isGhostRisk ? Math.max(60, 100 - overallScore) : null,
-      days_until_predicted_ghost: null, // TODO: Implement predictive model
+      // Heuristic placeholder: estimate days until ghost based on days-since-last-contact
+      // and ghost probability. High probability => fewer days remaining before full ghost.
+      // Replace with a trained predictive model once sufficient data exists.
+      days_until_predicted_ghost: isGhostRisk
+        ? Math.max(
+            1,
+            Math.round(
+              (metrics.daysSinceLastContact !== null ? Math.max(0, 30 - metrics.daysSinceLastContact) : 14) *
+                (1 - Math.max(60, 100 - overallScore) / 100)
+            )
+          )
+        : null,
 
       sentiment_trend: metrics.sentimentTrend,
       avg_sentiment_last_3_interactions: metrics.avgSentiment,
