@@ -35,7 +35,7 @@ AS $$
   FROM deals d
   LEFT JOIN deal_stages ds ON ds.id = d.stage_id
   WHERE d.owner_id = p_user_id
-    AND d.org_id   = p_org_id
+    AND d.clerk_org_id = p_org_id::TEXT
     AND d.status NOT IN ('won', 'lost');
 $$;
 
@@ -66,6 +66,7 @@ COMMENT ON FUNCTION get_weighted_pipeline IS 'Returns weighted pipeline value fo
 --   snapshot_date          — today's date (calendar day of the call)
 -- ============================================================================
 
+DROP TYPE IF EXISTS pipeline_math_result CASCADE;
 CREATE TYPE pipeline_math_result AS (
   target                 NUMERIC(18, 2),
   closed_so_far          NUMERIC(18, 2),
@@ -173,7 +174,7 @@ BEGIN
   INTO v_closed_so_far
   FROM deals d
   WHERE d.owner_id = p_user_id
-    AND d.org_id   = p_org_id
+    AND d.clerk_org_id = p_org_id::TEXT
     AND d.status   = 'won'
     AND d.closed_won_date >= v_period_start
     AND d.closed_won_date <= v_period_end;
@@ -185,7 +186,7 @@ BEGIN
   INTO v_total_pipeline
   FROM deals d
   WHERE d.owner_id = p_user_id
-    AND d.org_id   = p_org_id
+    AND d.clerk_org_id = p_org_id::TEXT
     AND d.status NOT IN ('won', 'lost');
 
   -- ------------------------------------------------------------------
@@ -201,7 +202,7 @@ BEGIN
   INTO v_deals_at_risk
   FROM deals d
   WHERE d.owner_id = p_user_id
-    AND d.org_id   = p_org_id
+    AND d.clerk_org_id = p_org_id::TEXT
     AND d.status NOT IN ('won', 'lost')
     AND (d.health_score IS NULL OR d.health_score < 50);
 
@@ -226,7 +227,7 @@ BEGIN
       SUM(d.value)       AS total
     FROM deals d
     WHERE d.owner_id = p_user_id
-      AND d.org_id   = p_org_id
+      AND d.clerk_org_id = p_org_id::TEXT
       AND d.status NOT IN ('won', 'lost')
     GROUP BY d.stage_id
   ) stage_counts

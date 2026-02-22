@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS crm_field_mappings (
 -- ============================================================
 -- crm_write_policies table
 -- ============================================================
-CREATE TYPE IF NOT EXISTS crm_write_policy_enum AS ENUM ('auto', 'approval', 'suggest', 'disabled');
+DO $$ BEGIN CREATE TYPE crm_write_policy_enum AS ENUM ('auto', 'approval', 'suggest', 'disabled'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS crm_write_policies (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

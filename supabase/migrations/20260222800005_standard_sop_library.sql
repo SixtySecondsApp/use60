@@ -24,8 +24,8 @@ BEGIN
   LIMIT 1;
 
   IF v_platform_org_id IS NULL THEN
-    INSERT INTO organizations (name, slug)
-    VALUES ('__platform_defaults__', '__platform_defaults__')
+    INSERT INTO organizations (name)
+    VALUES ('__platform_defaults__')
     RETURNING id INTO v_platform_org_id;
   END IF;
 

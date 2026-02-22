@@ -97,7 +97,7 @@ CREATE POLICY "custom_sops_select"
   USING (
     is_platform_default = true
     OR org_id IN (
-      SELECT org_id FROM organization_members
+      SELECT org_id FROM organization_memberships
       WHERE user_id = auth.uid()
     )
   );
@@ -107,7 +107,7 @@ CREATE POLICY "custom_sops_insert"
   ON custom_sops FOR INSERT
   WITH CHECK (
     org_id IN (
-      SELECT org_id FROM organization_members
+      SELECT org_id FROM organization_memberships
       WHERE user_id = auth.uid()
         AND role IN ('owner', 'admin')
     )
@@ -119,7 +119,7 @@ CREATE POLICY "custom_sops_update"
   USING (
     is_platform_default = false
     AND org_id IN (
-      SELECT org_id FROM organization_members
+      SELECT org_id FROM organization_memberships
       WHERE user_id = auth.uid()
         AND role IN ('owner', 'admin')
     )
@@ -131,7 +131,7 @@ CREATE POLICY "custom_sops_delete"
   USING (
     is_platform_default = false
     AND org_id IN (
-      SELECT org_id FROM organization_members
+      SELECT org_id FROM organization_memberships
       WHERE user_id = auth.uid()
         AND role IN ('owner', 'admin')
     )
@@ -146,7 +146,7 @@ CREATE POLICY "sop_steps_select"
       SELECT id FROM custom_sops
       WHERE is_platform_default = true
         OR org_id IN (
-          SELECT org_id FROM organization_members
+          SELECT org_id FROM organization_memberships
           WHERE user_id = auth.uid()
         )
     )
@@ -159,7 +159,7 @@ CREATE POLICY "sop_steps_insert"
     sop_id IN (
       SELECT id FROM custom_sops
       WHERE org_id IN (
-        SELECT org_id FROM organization_members
+        SELECT org_id FROM organization_memberships
         WHERE user_id = auth.uid()
           AND role IN ('owner', 'admin')
       )
@@ -174,7 +174,7 @@ CREATE POLICY "sop_steps_update"
       SELECT id FROM custom_sops
       WHERE is_platform_default = false
         AND org_id IN (
-          SELECT org_id FROM organization_members
+          SELECT org_id FROM organization_memberships
           WHERE user_id = auth.uid()
             AND role IN ('owner', 'admin')
         )
@@ -189,7 +189,7 @@ CREATE POLICY "sop_steps_delete"
       SELECT id FROM custom_sops
       WHERE is_platform_default = false
         AND org_id IN (
-          SELECT org_id FROM organization_members
+          SELECT org_id FROM organization_memberships
           WHERE user_id = auth.uid()
             AND role IN ('owner', 'admin')
         )
