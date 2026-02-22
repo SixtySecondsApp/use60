@@ -83,7 +83,7 @@
     {
       "id": "reengagement-trigger",
       "name": "PRD-05: Re-engagement Trigger Agent",
-      "status": "pending",
+      "status": "complete",
       "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-05",
       "planFile": ".sixty/plan-reengagement-trigger.json",
       "createdAt": "2026-02-21T00:00:00Z"
@@ -91,7 +91,7 @@
     {
       "id": "enhanced-morning-briefing",
       "name": "PRD-06: Enhanced Morning Briefing",
-      "status": "pending",
+      "status": "complete",
       "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-06",
       "planFile": ".sixty/plan-enhanced-morning-briefing.json",
       "createdAt": "2026-02-21T00:00:00Z"
@@ -99,7 +99,7 @@
     {
       "id": "eod-synthesis",
       "name": "PRD-07: End-of-Day Synthesis",
-      "status": "pending",
+      "status": "complete",
       "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-07",
       "planFile": ".sixty/plan-eod-synthesis.json",
       "createdAt": "2026-02-21T00:00:00Z"
@@ -107,15 +107,51 @@
     {
       "id": "internal-meeting-prep",
       "name": "PRD-08: Internal Meeting Prep",
-      "status": "pending",
+      "status": "complete",
       "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-08",
       "planFile": ".sixty/plan-internal-meeting-prep.json",
       "createdAt": "2026-02-21T00:00:00Z"
     },
     {
+      "id": "methodology-settings",
+      "name": "PRD-09: Sales Methodology & Process Settings",
+      "status": "complete",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-09",
+      "planFile": ".sixty/plan-methodology-settings.json",
+      "createdAt": "2026-02-22T00:00:00Z",
+      "completedAt": "2026-02-22T12:00:00Z"
+    },
+    {
+      "id": "autonomy-settings",
+      "name": "PRD-10: Autonomy & Approval Policy Settings",
+      "status": "complete",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-10",
+      "planFile": ".sixty/plan-autonomy-settings.json",
+      "createdAt": "2026-02-22T00:00:00Z",
+      "completedAt": "2026-02-22T00:00:00Z"
+    },
+    {
+      "id": "crm-field-mapping",
+      "name": "PRD-11: CRM Field Mapping & Write Policies",
+      "status": "complete",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-11",
+      "planFile": ".sixty/plan-crm-field-mapping.json",
+      "createdAt": "2026-02-22T00:00:00Z",
+      "completedAt": "2026-02-22T10:35:00Z"
+    },
+    {
+      "id": "custom-sop-builder",
+      "name": "PRD-12: Custom SOP Builder",
+      "status": "complete",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-12",
+      "planFile": ".sixty/plan-custom-sop-builder.json",
+      "createdAt": "2026-02-22T00:00:00Z",
+      "completedAt": "2026-02-22T02:30:00Z"
+    },
+    {
       "id": "command-centre-enhancement",
       "name": "Command Centre Enhancement — Shared Inbox (Phases 8-12)",
-      "status": "pending",
+      "status": "complete",
       "prd": "Command Centre Enhancement Plan",
       "planFile": ".sixty/plan-command-centre-enhancement.json",
       "createdAt": "2026-02-21T00:00:00Z"
@@ -733,8 +769,7 @@
         "src/components/ops/WebhookSetupInstructions.tsx",
         "src/components/ops/WebhookTestConsole.tsx"
       ]
-    }
-  ],
+    },
     {
       "id": "AQF-001",
       "feature": "audit-quick-fixes",
@@ -1032,8 +1067,8 @@
   ],
   "execution": {
     "totalStories": 82,
-    "completedStories": 18,
-    "currentFeature": "settings-page-fixes",
-    "lastUpdated": "2026-02-22T00:00:00Z"
+    "completedStories": 47,
+    "currentFeature": "custom-sop-builder",
+    "lastUpdated": "2026-02-22T14:30:00Z"
   }
 }

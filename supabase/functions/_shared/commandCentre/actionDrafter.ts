@@ -1,8 +1,11 @@
 /**
  * Command Centre Action Drafter
  *
- * Calls Claude Haiku to synthesise enrichment context into a brief summary
- * and draft the most appropriate action for a Command Centre item.
+ * Synthesises enrichment context into a brief summary and drafts the most
+ * appropriate action for a Command Centre item.
+ *
+ * Model resolution: user intelligence settings → CLAUDE_MODEL env → Haiku default.
+ * Supports Anthropic, OpenAI, and Gemini providers via user_ai_feature_settings.
  *
  * Principle: "aggressive on context, conservative on assumptions"
  * — surface facts, don't conclude intent.
@@ -22,9 +25,11 @@ export interface DraftResult {
   drafted_action: DraftedAction;
 }
 
-interface ClaudeMessage {
-  role: 'user' | 'assistant';
-  content: string;
+interface ResolvedModelConfig {
+  provider: 'anthropic' | 'openai' | 'gemini';
+  model: string;
+  temperature: number;
+  maxTokens: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -32,9 +37,65 @@ interface ClaudeMessage {
 // ---------------------------------------------------------------------------
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_MODEL = Deno.env.get('CLAUDE_MODEL') || 'claude-haiku-4-5-20251001';
+const FEATURE_KEY = 'cc_action_drafter';
+
+// ---------------------------------------------------------------------------
+// Model resolution — respects user intelligence settings
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the AI model config for the CC action drafter.
+ * Resolution order: user_ai_feature_settings → CLAUDE_MODEL env → hardcoded Haiku.
+ */
+async function resolveModelConfig(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<ResolvedModelConfig> {
+  try {
+    const { data, error } = await supabase.rpc('get_user_feature_model_config', {
+      p_user_id: userId,
+      p_feature_key: FEATURE_KEY,
+    });
+
+    if (!error && data && data.length > 0) {
+      const setting = data[0];
+      const provider = setting.provider as ResolvedModelConfig['provider'];
+
+      // Verify we have the API key for the chosen provider
+      const keyAvailable =
+        (provider === 'anthropic' && ANTHROPIC_API_KEY) ||
+        (provider === 'openai' && OPENAI_API_KEY) ||
+        (provider === 'gemini' && GEMINI_API_KEY);
+
+      if (keyAvailable) {
+        console.log(`[cc-drafter] Using user intelligence setting: ${provider}/${setting.model}`);
+        return {
+          provider,
+          model: setting.model,
+          temperature: Number(setting.temperature) || 0.4,
+          maxTokens: Number(setting.max_tokens) || 1024,
+        };
+      }
+      console.warn(`[cc-drafter] User selected ${provider} but API key missing — falling back`);
+    }
+  } catch (err) {
+    // RPC may not exist in all environments — fall through silently
+    console.warn('[cc-drafter] resolveModelConfig RPC failed:', String(err));
+  }
+
+  // Fallback: env var or hardcoded default (always Anthropic)
+  return {
+    provider: 'anthropic',
+    model: DEFAULT_MODEL,
+    temperature: 0.4,
+    maxTokens: 1024,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Prompt builders
@@ -134,13 +195,124 @@ function buildFallbackResult(item: CommandCentreItem): DraftResult {
 }
 
 // ---------------------------------------------------------------------------
+// Provider-specific AI calls
+// ---------------------------------------------------------------------------
+
+async function callAnthropic(
+  config: ResolvedModelConfig,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY!,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: config.model,
+      max_tokens: config.maxTokens,
+      temperature: config.temperature,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data?.content?.[0]?.text ?? '';
+}
+
+async function callOpenAI(
+  config: ResolvedModelConfig,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      temperature: config.temperature,
+      max_tokens: config.maxTokens,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data?.choices?.[0]?.message?.content ?? '';
+}
+
+async function callGemini(
+  config: ResolvedModelConfig,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+        generationConfig: {
+          temperature: config.temperature,
+          maxOutputTokens: config.maxTokens,
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+}
+
+async function callProvider(
+  config: ResolvedModelConfig,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
+  switch (config.provider) {
+    case 'anthropic':
+      return callAnthropic(config, systemPrompt, userPrompt);
+    case 'openai':
+      return callOpenAI(config, systemPrompt, userPrompt);
+    case 'gemini':
+      return callGemini(config, systemPrompt, userPrompt);
+    default:
+      throw new Error(`Unsupported provider: ${config.provider}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
 /**
- * Calls Claude Haiku to synthesise enrichment context and draft the best action
- * for a Command Centre item. On AI failure, returns a minimal fallback result
- * so downstream processing can continue.
+ * Synthesises enrichment context and drafts the best action for a Command
+ * Centre item. Respects user intelligence settings (provider + model).
+ * On AI failure, returns a minimal fallback result so downstream continues.
  *
  * Also persists the result back to command_centre_items (status -> 'ready').
  */
@@ -148,8 +320,9 @@ export async function synthesiseAndDraft(
   item: CommandCentreItem,
   enrichmentContext: Record<string, unknown>,
 ): Promise<DraftResult> {
-  if (!ANTHROPIC_API_KEY) {
-    console.warn('[cc-drafter] ANTHROPIC_API_KEY not set — using fallback result');
+  // We need at least one provider key
+  if (!ANTHROPIC_API_KEY && !OPENAI_API_KEY && !GEMINI_API_KEY) {
+    console.warn('[cc-drafter] No AI API keys configured — using fallback result');
     const fallback = buildFallbackResult(item);
     await persistDraftResult(item.id, fallback, null);
     return fallback;
@@ -158,35 +331,17 @@ export async function synthesiseAndDraft(
   let result: DraftResult;
 
   try {
-    const messages: ClaudeMessage[] = [
-      { role: 'user', content: buildUserPrompt(item, enrichmentContext) },
-    ];
+    // Resolve model from user intelligence settings
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const modelConfig = await resolveModelConfig(supabase, item.user_id);
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: HAIKU_MODEL,
-        max_tokens: 1024,
-        system: buildSystemPrompt(),
-        messages,
-      }),
-    });
+    const systemPrompt = buildSystemPrompt();
+    const userPrompt = buildUserPrompt(item, enrichmentContext);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Anthropic API error ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    const rawText: string = data?.content?.[0]?.text ?? '';
+    const rawText = await callProvider(modelConfig, systemPrompt, userPrompt);
 
     if (!rawText) {
-      throw new Error('Empty response from Claude');
+      throw new Error(`Empty response from ${modelConfig.provider}`);
     }
 
     // Strip any accidental markdown code fences before parsing
@@ -209,6 +364,8 @@ export async function synthesiseAndDraft(
 
     console.log('[cc-drafter] AI synthesis complete', {
       item_id: item.id,
+      provider: modelConfig.provider,
+      model: modelConfig.model,
       action_type: draftedAction.type,
       confidence: draftedAction.confidence,
     });
