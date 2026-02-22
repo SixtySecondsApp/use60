@@ -10,6 +10,13 @@ import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 import { getAgentConfig, invalidateConfigCache } from '../_shared/config/agentConfigEngine.ts';
 import type { AgentType } from '../_shared/config/types.ts';
 import { handleConfirmBootstrapConfig } from './handlers/bootstrapConfig.ts';
+import {
+  handleGetAutonomyCeilings,
+  handleSetAutonomyCeiling,
+  handleGetRepAutonomy,
+  handleSetRepAutonomyOverride,
+  handleGetTeamAutonomyAnalytics,
+} from './handlers/managerControls.ts';
 
 serve(async (req) => {
   const preflightResponse = handleCorsPreflightRequest(req);
@@ -329,6 +336,93 @@ serve(async (req) => {
 
       invalidateConfigCache(org_id);
       return jsonResponse({ success: true, ...result }, req);
+    }
+
+    // -------------------------------------------------------------------------
+    // get_autonomy_ceilings — admin/owner
+    // -------------------------------------------------------------------------
+    if (action === 'get_autonomy_ceilings') {
+      const { org_id } = params;
+      if (!org_id) {
+        return errorResponse('org_id is required', req, 400);
+      }
+
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+
+      const result = await handleGetAutonomyCeilings(serviceClient, org_id);
+      return jsonResponse(result, req);
+    }
+
+    // -------------------------------------------------------------------------
+    // set_autonomy_ceiling — admin/owner
+    // -------------------------------------------------------------------------
+    if (action === 'set_autonomy_ceiling') {
+      const { org_id, action_type, max_ceiling, auto_promotion_eligible } = params;
+      if (!org_id) {
+        return errorResponse('org_id is required', req, 400);
+      }
+
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+
+      const result = await handleSetAutonomyCeiling(serviceClient, org_id, authContext.userId, {
+        action_type,
+        max_ceiling,
+        auto_promotion_eligible,
+      });
+
+      invalidateConfigCache(org_id);
+      return jsonResponse(result, req);
+    }
+
+    // -------------------------------------------------------------------------
+    // get_rep_autonomy — admin/owner
+    // -------------------------------------------------------------------------
+    if (action === 'get_rep_autonomy') {
+      const { org_id } = params;
+      if (!org_id) {
+        return errorResponse('org_id is required', req, 400);
+      }
+
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+
+      const result = await handleGetRepAutonomy(serviceClient, org_id);
+      return jsonResponse(result, req);
+    }
+
+    // -------------------------------------------------------------------------
+    // set_rep_autonomy_override — admin/owner
+    // -------------------------------------------------------------------------
+    if (action === 'set_rep_autonomy_override') {
+      const { org_id, user_id, action_type: rep_action_type, policy } = params;
+      if (!org_id) {
+        return errorResponse('org_id is required', req, 400);
+      }
+
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+
+      const result = await handleSetRepAutonomyOverride(serviceClient, org_id, authContext.userId, {
+        user_id,
+        action_type: rep_action_type,
+        policy,
+      });
+
+      invalidateConfigCache(org_id, user_id);
+      return jsonResponse(result, req);
+    }
+
+    // -------------------------------------------------------------------------
+    // get_team_autonomy_analytics — admin/owner
+    // -------------------------------------------------------------------------
+    if (action === 'get_team_autonomy_analytics') {
+      const { org_id, window_days } = params;
+      if (!org_id) {
+        return errorResponse('org_id is required', req, 400);
+      }
+
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+
+      const result = await handleGetTeamAutonomyAnalytics(serviceClient, org_id, window_days ?? 30);
+      return jsonResponse(result, req);
     }
 
     return errorResponse(`Unknown action: ${action}`, req, 400);

@@ -152,3 +152,82 @@
 **Learnings**: 18 templates across 5 categories. seed_config_questions_for_org RPC uses two separate INSERTs (org vs user scope) due to NULL user_id dedup issue. initialize-onboarding seeds if org membership exists, defers otherwise.
 
 ---
+
+### 2026-02-22 — CONV-001 through CONV-010 ✅
+**Story**: Conversational Slack Interface (PRD-22) — all 10 stories
+**Files**:
+- supabase/migrations/20260223200001_slack_copilot_threads.sql (schema)
+- supabase/functions/slack-copilot/index.ts (orchestrator)
+- supabase/functions/slack-events/index.ts (DM handler routing)
+- supabase/functions/_shared/slack-copilot/types.ts, intentClassifier.ts, contextAssembler.ts, threadMemory.ts, responseFormatter.ts, rateLimiter.ts
+- supabase/functions/_shared/slack-copilot/handlers/ (7 handlers: deal, pipeline, history, contact, action, competitive, coaching)
+- supabase/functions/_shared/slack-copilot/templates/errorStates.ts (error states + help)
+**Gates**: deploy ✅
+**Learnings**:
+- DM detection: `event.channel_type === 'im' && !event.bot_id && !event.subtype`
+- Thread identity: `(slack_channel_id, slack_thread_ts)` tuple with UNIQUE constraint
+- Intent classification: Claude Haiku AI-first with regex fallback, always returns a type (never null)
+- Context assembly: intent-driven data loading (deal queries don't load meetings, etc.)
+- Rate limiting: 30 queries/hour per user, checked against slack_command_analytics
+- Deno bundler string issue: single quotes inside single-quoted strings cause parse errors — use double quotes for strings containing apostrophes
+
+---
+
+### 2026-02-22 — GRAD-001 ✅
+**Story**: Build approval rate analytics and tracking system
+**Files**: supabase/migrations/20260223400001_autonomy_analytics.sql, supabase/functions/_shared/orchestrator/autonomyAnalytics.ts
+**Gates**: deploy ✅
+**Learnings**: crm_approval_queue uses field_name not action_type — need map_field_to_action_type() helper. Multi-source aggregation: CRM from crm_approval_queue + crm_field_updates, non-CRM from agent_activity.metadata. 1-hour staleness threshold for cached stats.
+
+---
+
+### 2026-02-22 — GRAD-002 ✅
+**Story**: Implement promotion rules engine
+**Files**: supabase/migrations/20260223400002_autonomy_promotion_queue.sql, supabase/functions/_shared/orchestrator/promotionEngine.ts
+**Gates**: deploy ✅
+**Learnings**: Policy ladder: disabled → suggest → approve → auto. Never skip levels. Promotion thresholds: 30 min approvals, 5% max rejection, 14 days active. Demotion: 15% rejection in 7d window. 30-day cooldown after demotion.
+
+---
+
+### 2026-02-22 — GRAD-003 ✅
+**Story**: Build promotion suggestion delivery via Slack and settings UI
+**Files**: supabase/functions/autonomy-promotion-notify/index.ts, supabase/functions/slack-interactive/handlers/autonomyPromotion.ts, src/components/settings/AutonomyPromotionBanner.tsx
+**Gates**: deploy ✅
+**Learnings**: Uses `notified_at` guard to prevent duplicate sends. Action IDs: autonomy_promotion_approve/reject/snooze. Snooze = 30 days.
+
+---
+
+### 2026-02-22 — GRAD-004 ✅
+**Story**: Implement demotion handling and safety net
+**Files**: supabase/migrations/20260223400003_autonomy_audit_log.sql, supabase/functions/_shared/orchestrator/demotionHandler.ts, supabase/functions/_shared/slackBlocks.ts (added demotion message)
+**Gates**: deploy ✅
+**Learnings**: Demotion reverts one level down the policy ladder. 30-day cooldown in autonomy_cooldowns + audit_log. clearExpiredCooldowns() runs daily before evaluations.
+
+---
+
+### 2026-02-22 — GRAD-005 ✅
+**Story**: Build autonomy progression dashboard in settings UI
+**Files**: src/components/settings/AutonomyProgressionDashboard.tsx, src/components/settings/AutonomyActionCard.tsx, src/lib/hooks/useAutonomyAnalytics.ts
+**Gates**: review ✅
+**Learnings**: 8 canonical action types with icons, colors, descriptions. Sparkline SVG polylines for approval rate trends. Promotion eligibility indicator: green when ≥90% approval + ≥10 actions.
+
+---
+
+### 2026-02-22 — GRAD-006 ✅
+**Story**: Add manager controls for org-wide autonomy policies
+**Files**: src/components/settings/ManagerAutonomyControls.tsx, supabase/functions/agent-config-admin/handlers/managerControls.ts, src/lib/hooks/useManagerAutonomy.ts
+**Gates**: deploy ✅
+**Learnings**: Ceilings stored as `autonomy.ceiling.{action_type}` and `autonomy.eligible.{action_type}` in agent_config_org_overrides. Per-rep overrides in agent_config_user_overrides. Admin role check via requireOrgRole().
+
+---
+
+## Feature Completion Summary
+
+| Feature | Stories | Status |
+|---------|---------|--------|
+| Progressive Learning (PRD-23 Revised) | 10/10 | ✅ Complete |
+| Conversational Slack Interface (PRD-22) | 10/10 | ✅ Complete |
+| Graduated Autonomy (PRD-24) | 6/6 | ✅ Complete |
+| **Total** | **26/26** | **✅ All Complete** |
+
+---

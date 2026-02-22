@@ -41,6 +41,7 @@ import { handleHITLAction } from './handlers/hitl.ts';
 import { handleSupportAction } from './handlers/support.ts';
 import { handleAutonomyAction } from './handlers/autonomy.ts';
 import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
+import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -7542,7 +7543,33 @@ serve(async (req) => {
           }
         }
 
-        // Handle autonomy promotion actions (autonomy_promote_*)
+        // GRAD-003: Handle autonomy promotion actions (autonomy_promotion_*)
+        if (action.action_id.startsWith('autonomy_promotion_')) {
+          console.log('[AutonomyPromotion] Processing action:', action.action_id);
+          const result = await handleAutonomyPromotion(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await updateMessage(payload.response_url, result.responseBlocks);
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to process autonomy promotion action',
+              });
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        // Handle legacy autonomy promotion actions (autonomy_promote_*)
         if (action.action_id.startsWith('autonomy_promote_')) {
           console.log('[Autonomy] Processing action:', action.action_id);
           const result = await handleAutonomyAction(action.action_id, payload, action);

@@ -5727,6 +5727,98 @@ export function buildAutonomyPromotionMessage(data: AutonomyPromotionData): Slac
 }
 
 // =============================================================================
+// buildAutonomyDemotionMessage — GRAD-004
+// =============================================================================
+
+export interface AutonomyDemotionData {
+  orgId: string;
+  actionType: string;
+  actionLabel: string;
+  fromPolicy: string;
+  toPolicy: string;
+  rejectionRate: number; // 0–100
+  cooldownDays: number;
+  reason: string;
+}
+
+/**
+ * Build a Slack DM notifying org admin that an action type was auto-demoted
+ * due to a rejection rate spike post-promotion.
+ */
+export function buildAutonomyDemotionMessage(data: AutonomyDemotionData): SlackMessage {
+  const {
+    actionLabel,
+    fromPolicy,
+    toPolicy,
+    rejectionRate,
+    cooldownDays,
+    reason,
+  } = data;
+
+  const rejectionPct = Math.round(rejectionRate);
+  const summaryText = `*${actionLabel}* has been demoted from *${fromPolicy}* to *${toPolicy}* due to elevated rejection rates.`;
+
+  return {
+    text: `Safety demotion: ${actionLabel} reverted from ${fromPolicy} to ${toPolicy} (${rejectionPct}% rejection rate)`,
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: safeHeaderText('Autonomy Safety Demotion'),
+          emoji: false,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(summaryText),
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Action Type*\n${actionLabel}`),
+          },
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Rejection Rate (7d)*\n${rejectionPct}%`),
+          },
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Policy Change*\n${fromPolicy} -> ${toPolicy}`),
+          },
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Cooldown*\n${cooldownDays} days`),
+          },
+        ],
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(`*Reason:* ${reason}`),
+        },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: safeContextMrkdwn(`This action cannot be re-promoted for ${cooldownDays} days. You can review this in Settings > Autonomy & Approvals.`),
+          },
+        ],
+      },
+    ],
+  };
+}
+
+// =============================================================================
 // Enhanced Coaching Digest Blocks (Phase 6: PRD-19)
 // =============================================================================
 

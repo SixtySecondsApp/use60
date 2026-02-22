@@ -15,6 +15,7 @@ import { handleActionRequest } from '../_shared/slack-copilot/handlers/actionHan
 import { handleCompetitiveQuery } from '../_shared/slack-copilot/handlers/competitiveQueryHandler.ts';
 import { handleCoachingQuery } from '../_shared/slack-copilot/handlers/coachingQueryHandler.ts';
 import { checkRateLimit, trackUsage } from '../_shared/slack-copilot/rateLimiter.ts';
+import { rateLimitedResponse, generalErrorResponse, helpResponse } from '../_shared/slack-copilot/templates/errorStates.ts';
 import type { HandlerResult, CopilotIntentType } from '../_shared/slack-copilot/types.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -51,7 +52,7 @@ serve(async (req) => {
     // Rate limiting
     const rateLimitResult = await checkRateLimit(supabase, userId, orgId);
     if (!rateLimitResult.allowed) {
-      await postSlackMessage(botToken, channelId, threadTs, rateLimitResult.message!);
+      await postSlackResponse(botToken, channelId, threadTs, { blocks: rateLimitedResponse(rateLimitResult.message!) });
       return new Response(JSON.stringify({ ok: true, rateLimited: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -92,7 +93,7 @@ serve(async (req) => {
       result = await routeToHandler(intent.type, intent, queryContext, anthropicApiKey);
     } catch (err) {
       console.error('[slack-copilot] Handler error:', err);
-      result = { text: "Sorry, I had trouble processing that. Could you rephrase your question?" };
+      result = { blocks: generalErrorResponse() };
     }
 
     // Post response to Slack
@@ -186,21 +187,7 @@ async function handleGeneralChat(
 
   // Help
   if (/^(?:help|what can you do|\?|commands?)$/i.test(lower)) {
-    return {
-      blocks: [
-        { type: 'section', text: { type: 'mrkdwn', text: '*Here\'s what I can help with:*' } },
-        { type: 'section', text: { type: 'mrkdwn', text: [
-          ':mag: *Deal Intel* — "What\'s happening with [deal]?" / "Which deals are at risk?"',
-          ':bar_chart: *Pipeline* — "Am I on track for Q1?" / "Show my pipeline"',
-          ':bust_in_silhouette: *Contacts* — "Tell me about [person]" / "When did I last talk to [name]?"',
-          ':calendar: *Schedule* — "Show my meetings this week"',
-          ':email: *Actions* — "Draft a follow-up for [deal]" / "Create a task to [action]"',
-          ':crossed_swords: *Competitive* — "What works against [competitor]?"',
-          ':chart_with_upwards_trend: *Coaching* — "How am I doing?" / "How should I handle [objection]?"',
-        ].join('\n') } },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: 'Just type naturally — I\'ll figure out what you need.' }] },
-      ],
-    };
+    return { blocks: helpResponse() };
   }
 
   // Greetings
