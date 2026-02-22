@@ -24,7 +24,6 @@ import {
   Sparkles,
   MessageSquare,
   Mail,
-  CheckSquare,
   Key,
   ChevronRight,
   Users,
@@ -36,11 +35,11 @@ import {
   Brain,
   Briefcase,
   Zap,
-  Eye,
   Wallet,
-  Bot,
   Plug,
   BookOpen,
+  ShieldCheck,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -80,6 +79,22 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'autonomy',
+      label: 'Autonomy & Approvals',
+      icon: ShieldCheck,
+      description: 'Control how the AI agent executes actions and requires approval',
+      path: '/settings/autonomy',
+      requiresOrgAdmin: true,
+    },
+    {
+      id: 'methodology',
+      label: 'Sales Methodology',
+      icon: BookOpen,
+      description: 'Configure the sales framework your AI agent uses to qualify deals and coach reps',
+      path: '/settings/methodology',
+      requiresOrgAdmin: true,
+    },
+    {
       id: 'ai-personalization',
       label: 'AI Personalization',
       icon: Sparkles,
@@ -109,11 +124,12 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
-      id: 'task-sync',
-      label: 'Task Auto-Sync',
-      icon: CheckSquare,
-      description: 'AI-powered automatic task creation from action items',
-      path: '/settings/task-sync',
+      id: 'custom-sops',
+      label: 'Custom Playbooks (SOPs)',
+      icon: Workflow,
+      description: 'Define automated playbooks that fire on transcript phrases, CRM changes, or a schedule',
+      path: '/settings/custom-sops',
+      requiresOrgAdmin: true,
     },
     {
       id: 'fathom',
@@ -182,6 +198,14 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'crm-field-mapping',
+      label: 'CRM Field Mapping',
+      icon: ArrowRightLeft,
+      description: 'Map CRM fields to sixty fields and configure write policies',
+      path: '/settings/crm-field-mapping',
+      requiresOrgAdmin: true,
+    },
+    {
       id: 'attio',
       label: 'Attio',
       icon: Users,
@@ -203,21 +227,6 @@ export default function Settings() {
       icon: Zap,
       description: 'Email outreach campaigns, lead push, and engagement sync',
       path: '/settings/integrations/instantly',
-      requiresOrgAdmin: true,
-    },
-    {
-      id: 'smart-listening',
-      label: 'Smart Listening',
-      icon: Eye,
-      description: 'Monitor key accounts for job changes, funding, news, and custom research',
-      path: '/settings/smart-listening',
-    },
-    {
-      id: 'proactive-agent',
-      label: 'Proactive Agent',
-      icon: Bot,
-      description: 'Configure autonomous AI workflows that monitor your pipeline and take action',
-      path: '/settings/proactive-agent',
       requiresOrgAdmin: true,
     },
     {
@@ -263,14 +272,9 @@ export default function Settings() {
   // Filter sections based on permissions
   const settingsSections = useMemo(() => {
     // When viewing as external/customer, treat as a non-admin external user regardless of actual permissions
-    const effectivePlatformAdmin = isPlatformAdmin && !isViewingAsExternal;
     const effectiveCanManage = !isViewingAsExternal && (permissions.canManageTeam || permissions.canManageSettings || isPlatformAdmin);
 
     return allSettingsSections.filter(section => {
-      // Non-functional sections — hidden from external users, visible to platform admins.
-      if (['task-sync', 'smart-listening', 'proactive-agent'].includes(section.id)) {
-        return effectivePlatformAdmin;
-      }
       if (section.requiresOrgAdmin) {
         // Allow org admins AND platform admins to see team settings (not when viewing as external)
         return effectiveCanManage;
@@ -284,10 +288,10 @@ export default function Settings() {
       ['account', 'appearance'].includes(s.id)
     );
     const aiSections = settingsSections.filter(s =>
-      ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types', 'smart-listening', 'proactive-agent'].includes(s.id)
+      ['ai-intelligence', 'autonomy', 'methodology', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'call-types', 'custom-sops'].includes(s.id)
     );
     const integrationSections = settingsSections.filter(s =>
-      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'attio', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
+      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'crm-field-mapping', 'attio', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
       ['organization-management', 'credits', 'billing'].includes(s.id)

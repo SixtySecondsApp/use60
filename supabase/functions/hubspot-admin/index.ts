@@ -4,7 +4,7 @@ import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelpe
 import { HubSpotClient } from '../_shared/hubspot.ts'
 
 // HubSpot Admin Edge Function - v3 (added update actions)
-type Action = 'status' | 'enqueue' | 'save_settings' | 'get_properties' | 'get_pipelines' | 'get_forms' | 'get_lists' | 'preview_contacts' | 'trigger_sync' | 'create_contact' | 'create_deal' | 'create_task' | 'update_contact' | 'update_deal' | 'update_task' | 'delete_contact' | 'delete_deal' | 'delete_task'
+type Action = 'status' | 'enqueue' | 'save_settings' | 'get_properties' | 'get_pipelines' | 'get_forms' | 'get_lists' | 'preview_contacts' | 'trigger_sync' | 'create_contact' | 'create_deal' | 'create_task' | 'update_contact' | 'update_deal' | 'update_task' | 'delete_contact' | 'delete_deal' | 'delete_task' | 'detect_fields' | 'test_mapping'
 
 /**
  * Get a valid HubSpot access token, refreshing if expired or about to expire
@@ -1325,6 +1325,193 @@ serve(async (req) => {
     } catch (e: any) {
       console.error('[hubspot-admin] Failed to delete task:', e)
       return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to delete task' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+  }
+
+  // ============================================================================
+  // Detect Fields — fetches HubSpot properties and auto-classifies mappings
+  // ============================================================================
+
+  if (action === 'detect_fields') {
+    const objectType = typeof body.object_type === 'string' ? body.object_type : 'contacts'
+
+    const { accessToken, error: tokenError } = await getValidAccessToken(svc, orgId)
+    if (!accessToken) {
+      return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const client = new HubSpotClient({ accessToken })
+
+    try {
+      const propertiesResponse = await client.request<{ results: any[] }>({
+        method: 'GET',
+        path: `/crm/v3/properties/${objectType}`,
+      })
+
+      const properties = propertiesResponse.results || []
+
+      // Auto-classification: map HubSpot field names to sixty field names with confidence
+      const sixtyFieldMap: Record<string, { sixty_field: string; confidence: number }> = {
+        // Contact fields
+        email: { sixty_field: 'email', confidence: 1.0 },
+        firstname: { sixty_field: 'first_name', confidence: 1.0 },
+        lastname: { sixty_field: 'last_name', confidence: 1.0 },
+        phone: { sixty_field: 'phone', confidence: 1.0 },
+        mobilephone: { sixty_field: 'mobile_phone', confidence: 1.0 },
+        company: { sixty_field: 'company_name', confidence: 1.0 },
+        jobtitle: { sixty_field: 'job_title', confidence: 1.0 },
+        website: { sixty_field: 'website', confidence: 1.0 },
+        city: { sixty_field: 'city', confidence: 1.0 },
+        country: { sixty_field: 'country', confidence: 1.0 },
+        linkedin_url: { sixty_field: 'linkedin_url', confidence: 1.0 },
+        // Deal fields
+        dealname: { sixty_field: 'name', confidence: 1.0 },
+        amount: { sixty_field: 'value', confidence: 1.0 },
+        dealstage: { sixty_field: 'stage', confidence: 1.0 },
+        pipeline: { sixty_field: 'pipeline', confidence: 1.0 },
+        closedate: { sixty_field: 'expected_close_date', confidence: 1.0 },
+        description: { sixty_field: 'description', confidence: 0.9 },
+        hs_next_step: { sixty_field: 'next_steps', confidence: 1.0 },
+        hubspot_owner_id: { sixty_field: 'owner_id', confidence: 0.8 },
+        // Fuzzy matches (common patterns)
+        notes: { sixty_field: 'notes', confidence: 0.9 },
+        hs_deal_stage_probability: { sixty_field: 'stage_probability', confidence: 0.8 },
+        num_associated_contacts: { sixty_field: 'contacts_count', confidence: 0.7 },
+      }
+
+      const classifiedFields = properties.map((prop: any) => {
+        const fieldName: string = prop.name || ''
+        const exactMatch = sixtyFieldMap[fieldName]
+        let sixtyField: string | null = null
+        let confidence = 0
+
+        if (exactMatch) {
+          sixtyField = exactMatch.sixty_field
+          confidence = exactMatch.confidence
+        } else {
+          // Fuzzy matching: check for partial name overlaps
+          for (const [hsName, mapping] of Object.entries(sixtyFieldMap)) {
+            const normalHs = hsName.toLowerCase().replace(/[_-]/g, '')
+            const normalField = fieldName.toLowerCase().replace(/[_-]/g, '')
+            if (normalField.includes(normalHs) || normalHs.includes(normalField)) {
+              if (mapping.confidence > confidence) {
+                sixtyField = mapping.sixty_field
+                confidence = mapping.confidence * 0.7 // Discount for fuzzy match
+              }
+            }
+          }
+        }
+
+        return {
+          crm_field_name: fieldName,
+          crm_field_type: prop.type || 'string',
+          crm_field_label: prop.label || fieldName,
+          group_name: prop.groupName || '',
+          sixty_field_name: sixtyField,
+          confidence,
+          is_required: prop.fieldType === 'required' || false,
+          options: prop.options || [],
+        }
+      })
+
+      // Sort: high confidence first
+      classifiedFields.sort((a: any, b: any) => b.confidence - a.confidence)
+
+      return new Response(
+        JSON.stringify({ success: true, fields: classifiedFields, total: classifiedFields.length }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    } catch (e: any) {
+      console.error('[hubspot-admin] detect_fields error:', e.message)
+      return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to detect fields' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+  }
+
+  // ============================================================================
+  // Test Mapping — fetches 5 sample records and tests current field mapping
+  // ============================================================================
+
+  if (action === 'test_mapping') {
+    const objectType = typeof body.object_type === 'string' ? body.object_type : 'contacts'
+    const mappings: Array<{ crm_field_name: string; sixty_field_name: string }> = Array.isArray(body.mappings) ? body.mappings : []
+
+    const { accessToken, error: tokenError } = await getValidAccessToken(svc, orgId)
+    if (!accessToken) {
+      return new Response(JSON.stringify({ success: false, error: tokenError || 'HubSpot not connected' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const client = new HubSpotClient({ accessToken })
+
+    try {
+      // Fetch 5 sample records from HubSpot
+      const propertiesToFetch = mappings.map((m) => m.crm_field_name).filter(Boolean)
+
+      const sampleResponse = await client.request<{ results: any[] }>({
+        method: 'POST',
+        path: `/crm/v3/objects/${objectType}/search`,
+        body: {
+          filterGroups: [],
+          properties: propertiesToFetch.length > 0 ? propertiesToFetch : ['email', 'firstname', 'lastname'],
+          limit: 5,
+        },
+      })
+
+      const records = sampleResponse.results || []
+
+      // Test each mapping against the sample records
+      const fieldResults = mappings.map((mapping) => {
+        const { crm_field_name, sixty_field_name } = mapping
+        let successCount = 0
+        let nullCount = 0
+        const sampleValues: unknown[] = []
+
+        for (const record of records) {
+          const value = record.properties?.[crm_field_name]
+          if (value !== null && value !== undefined && value !== '') {
+            successCount++
+            sampleValues.push(value)
+          } else {
+            nullCount++
+          }
+        }
+
+        return {
+          crm_field_name,
+          sixty_field_name,
+          status: records.length === 0 ? 'no_data' : successCount > 0 ? 'pass' : 'empty',
+          success_count: successCount,
+          null_count: nullCount,
+          sample_values: sampleValues.slice(0, 3),
+          total_records_checked: records.length,
+        }
+      })
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          object_type: objectType,
+          records_sampled: records.length,
+          field_results: fieldResults,
+          pass_count: fieldResults.filter((r) => r.status === 'pass').length,
+          fail_count: fieldResults.filter((r) => r.status === 'empty').length,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    } catch (e: any) {
+      console.error('[hubspot-admin] test_mapping error:', e.message)
+      return new Response(JSON.stringify({ success: false, error: e.message || 'Failed to test mapping' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })

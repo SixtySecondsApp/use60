@@ -1,0 +1,211 @@
+{
+  "feature": {
+    "id": "custom-sop-builder",
+    "name": "PRD-12: Custom SOP Builder",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-12",
+    "status": "complete",
+    "phase": "Phase 3 — Personalisation & Settings UI",
+    "effort": "2-3 weeks",
+    "dependencies": ["PRD-01 (config)", "PRD-02 (orchestrator executes SOPs)", "PRD-09 (SOPs reference methodology)"],
+    "createdAt": "2026-02-22T00:00:00Z",
+    "completedAt": "2026-02-22T02:30:00Z"
+  },
+  "stories": [
+    {
+      "id": "SOP-001",
+      "feature": "custom-sop-builder",
+      "title": "Create custom_sops and sop_steps tables with version tracking",
+      "type": "schema",
+      "status": "complete",
+      "completedAt": "2026-02-22T01:00:00Z",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["SOP-003", "SOP-004", "SOP-005"],
+      "parallelWith": ["SOP-002"],
+      "acceptance": [
+        "custom_sops table: id, org_id, name, description, trigger_type (enum: transcript_phrase/crm_field_change/email_pattern/time_based/manual), trigger_config (jsonb), is_active (boolean), is_platform_default (boolean), version (int), credit_cost_estimate (numeric), created_by, created_at, updated_at",
+        "sop_steps table: id, sop_id (FK), step_order (int), action_type (enum: crm_action/draft_email/alert_rep/alert_manager/enrich_contact/create_task/custom), action_config (jsonb), requires_approval (boolean), created_at",
+        "Unique constraint on (org_id, name, version) for custom_sops",
+        "RLS: org admins manage, members read active SOPs"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222800004_custom_sop_schema.sql"
+      ]
+    },
+    {
+      "id": "SOP-002",
+      "feature": "custom-sop-builder",
+      "title": "Seed standard SOP library (no-show, competitor, proposal, champion quiet)",
+      "type": "schema",
+      "status": "complete",
+      "completedAt": "2026-02-22T01:05:00Z",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["SOP-004"],
+      "parallelWith": ["SOP-001"],
+      "acceptance": [
+        "4 platform-default SOPs seeded with is_platform_default=true:",
+        "1. No-Show Handling: trigger=time_based (5min after meeting start, no join), steps: check calendar -> draft reschedule email -> create follow-up task -> alert rep",
+        "2. Competitor Mentioned: trigger=transcript_phrase (competitor names), steps: log competitive mention -> enrich competitor -> alert rep with battlecard",
+        "3. Proposal Requested: trigger=transcript_phrase (proposal/pricing/quote), steps: create proposal task -> draft proposal outline -> alert rep",
+        "4. Champion Gone Quiet: trigger=time_based (14 days no activity from champion contact), steps: check recent activity -> draft check-in email -> alert rep",
+        "Migration is idempotent"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222800005_standard_sop_library.sql"
+      ]
+    },
+    {
+      "id": "SOP-003",
+      "feature": "custom-sop-builder",
+      "title": "Build trigger condition selector component",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T01:30:00Z",
+      "priority": 2,
+      "dependencies": { "stories": ["SOP-001"], "files": [], "schema": [] },
+      "blocks": ["SOP-005"],
+      "parallelWith": ["SOP-004"],
+      "acceptance": [
+        "TriggerConditionSelector.tsx in src/components/agent/ with 4 trigger type cards:",
+        "Transcript Phrase: text input for phrases/keywords with OR logic, optional regex toggle",
+        "CRM Field Change: object selector + field selector + condition (changed_to/changed_from/any_change)",
+        "Email Pattern: subject/body keyword match + sender/recipient filter",
+        "Time-Based: schedule builder (days since event, recurring, specific time)",
+        "Each type renders its own config form, outputs trigger_config JSONB"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/agent/TriggerConditionSelector.tsx",
+        "src/components/agent/triggers/TranscriptTriggerForm.tsx",
+        "src/components/agent/triggers/CRMFieldTriggerForm.tsx",
+        "src/components/agent/triggers/EmailTriggerForm.tsx",
+        "src/components/agent/triggers/TimeTriggerForm.tsx"
+      ]
+    },
+    {
+      "id": "SOP-004",
+      "feature": "custom-sop-builder",
+      "title": "Build step builder with drag-and-drop reordering",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T01:45:00Z",
+      "priority": 2,
+      "dependencies": { "stories": ["SOP-001", "SOP-002"], "files": [], "schema": [] },
+      "blocks": ["SOP-005"],
+      "parallelWith": ["SOP-003"],
+      "acceptance": [
+        "SOPStepBuilder.tsx in src/components/agent/ renders ordered list of steps with add/remove/reorder",
+        "Step types: CRM Action, Draft Email, Alert Rep, Alert Manager, Enrich Contact, Create Task — each with type-specific config form",
+        "Per-step approval toggle (requires_approval checkbox)",
+        "Drag-and-drop via existing DnD pattern or simple up/down arrows",
+        "Credit cost estimate shown per step and total"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/agent/SOPStepBuilder.tsx",
+        "src/components/agent/steps/CRMActionStep.tsx",
+        "src/components/agent/steps/EmailDraftStep.tsx",
+        "src/components/agent/steps/AlertStep.tsx",
+        "src/components/agent/steps/EnrichStep.tsx",
+        "src/components/agent/steps/TaskStep.tsx"
+      ]
+    },
+    {
+      "id": "SOP-005",
+      "feature": "custom-sop-builder",
+      "title": "Build CustomSOPBuilderPage with CRUD and SOP library",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T02:00:00Z",
+      "priority": 3,
+      "dependencies": { "stories": ["SOP-003", "SOP-004"], "files": [], "schema": [] },
+      "blocks": ["SOP-007"],
+      "parallelWith": ["SOP-006"],
+      "acceptance": [
+        "CustomSOPBuilderPage.tsx at src/pages/settings/ registered in routeConfig.ts + Settings.tsx",
+        "SOP Library tab: list of all SOPs (platform defaults + org custom) with enable/disable toggle, edit, delete",
+        "Create/Edit dialog: name + description -> TriggerConditionSelector -> SOPStepBuilder -> save",
+        "Platform default SOPs shown as read-only templates with 'Duplicate & Customize' button",
+        "Org admin only"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/settings/CustomSOPBuilderPage.tsx",
+        "src/lib/hooks/useCustomSOPs.ts",
+        "src/lib/routes/routeConfig.ts",
+        "src/pages/Settings.tsx"
+      ]
+    },
+    {
+      "id": "SOP-006",
+      "feature": "custom-sop-builder",
+      "title": "Build SOP test harness with historical transcript replay",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T02:10:00Z",
+      "priority": 3,
+      "dependencies": { "stories": ["SOP-001"], "files": [], "schema": [] },
+      "blocks": ["SOP-007"],
+      "parallelWith": ["SOP-005"],
+      "acceptance": [
+        "SOPTestHarness.tsx in src/components/agent/ — 'Test with Example' feature",
+        "Select a past meeting transcript from meetings table",
+        "Dry-run SOP trigger evaluation against transcript content",
+        "Show which steps would fire and with what data (preview mode)",
+        "Results panel shows: trigger matched (yes/no), steps that would execute, estimated credits"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/SOPTestHarness.tsx"
+      ]
+    },
+    {
+      "id": "SOP-007",
+      "feature": "custom-sop-builder",
+      "title": "Wire SOP execution into fleet orchestrator",
+      "type": "integration",
+      "status": "complete",
+      "completedAt": "2026-02-22T02:20:00Z",
+      "priority": 4,
+      "dependencies": { "stories": ["SOP-005", "SOP-006"], "files": ["supabase/functions/_shared/orchestrator/fleetRouter.ts"], "schema": [] },
+      "blocks": ["SOP-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Fleet router evaluates custom_sops triggers on relevant events (meeting_ended, crm_field_changed, email_received)",
+        "Matching SOP converted to fleet sequence steps dynamically",
+        "Per-step approval flag respected (creates HITL approval if required)",
+        "SOP execution logged to existing workflow_executions table with sop_id reference",
+        "Credit usage tracked per SOP execution"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/fleetRouter.ts",
+        "supabase/functions/_shared/orchestrator/sopExecutor.ts"
+      ]
+    },
+    {
+      "id": "SOP-008",
+      "feature": "custom-sop-builder",
+      "title": "Integration test for custom SOP creation and execution",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-22T02:30:00Z",
+      "priority": 5,
+      "dependencies": { "stories": ["SOP-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Vitest suite: SOP CRUD, trigger evaluation (all 4 types), step execution, approval enforcement, test harness dry-run",
+        "Test scenarios: no-show triggers correctly, competitor phrase detected, custom SOP with approval step, disabled SOP skipped, credit estimation matches execution"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/settings/__tests__/CustomSOPBuilder.test.tsx",
+        "supabase/functions/_shared/orchestrator/__tests__/sopExecutor.test.ts"
+      ]
+    }
+  ]
+}

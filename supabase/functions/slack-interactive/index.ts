@@ -39,6 +39,7 @@ import {
 } from './handlers/phase5.ts';
 import { handleHITLAction } from './handlers/hitl.ts';
 import { handleSupportAction } from './handlers/support.ts';
+import { handleAutonomyAction } from './handlers/autonomy.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -7537,6 +7538,32 @@ serve(async (req) => {
               return handleHITLReject(supabase, payload, action, hitlAction);
             case 'edit':
               return handleHITLEdit(supabase, payload, action, hitlAction);
+          }
+        }
+
+        // Handle autonomy promotion actions (autonomy_promote_*)
+        if (action.action_id.startsWith('autonomy_promote_')) {
+          console.log('[Autonomy] Processing action:', action.action_id);
+          const result = await handleAutonomyAction(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await updateMessage(payload.response_url, result.responseBlocks);
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to process autonomy action',
+              });
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
           }
         }
 

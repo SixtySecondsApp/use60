@@ -10,6 +10,14 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { SequenceStep, EventType } from './types.ts';
 import { getSequenceForEvent } from './eventSequences.ts';
+import {
+  resolveAutonomyPolicy,
+  getActionTypeForSkill,
+  type AutonomyPolicy,
+  type PolicyResolution,
+} from './autonomyResolver.ts';
+
+export type { AutonomyPolicy, PolicyResolution };
 
 // =============================================================================
 // Cache (5-minute TTL, matches PRD-01 pattern)
@@ -307,3 +315,47 @@ export function invalidateRouteCache(): void {
   routeCache.clear();
   definitionCache.clear();
 }
+
+// =============================================================================
+// Autonomy Policy Integration (AUT-007)
+// =============================================================================
+
+/**
+ * Check the autonomy policy for a skill before the fleet runner executes it.
+ *
+ * Returns the resolved policy so the runner can decide:
+ * - 'auto'     → proceed with execution
+ * - 'approve'  → pause and create a HITL approval request
+ * - 'suggest'  → store as a suggestion, do not execute
+ * - 'disabled' → skip the step
+ */
+export async function checkAutonomyPolicy(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId: string | null,
+  skillName: string,
+): Promise<PolicyResolution> {
+  const actionType = getActionTypeForSkill(skillName);
+  if (!actionType) {
+    // Skill has no policy mapping — default to auto (internal/read-only skills)
+    return { policy: 'auto', source: 'default' };
+  }
+
+  return resolveAutonomyPolicy(supabase, orgId, userId, actionType);
+}
+
+// =============================================================================
+// Custom SOP Integration (SOP-007)
+// =============================================================================
+
+export {
+  evaluateSOPsForEvent,
+  evaluateTrigger as evaluateSOPTrigger,
+  logSOPExecution,
+  updateSOPExecution,
+  invalidateSOPCache,
+  type SOPRecord,
+  type SOPStepRecord,
+  type EventPayload as SOPEventPayload,
+  type SOPMatchResult,
+} from './sopExecutor.ts';

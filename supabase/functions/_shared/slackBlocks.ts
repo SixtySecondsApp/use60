@@ -5564,3 +5564,107 @@ export function buildAutoExecutionReport(items: AutoExecReportItem[]): any[] {
 
   return blocks;
 }
+
+// =============================================================================
+// buildAutonomyPromotionMessage — AUT-005
+// =============================================================================
+
+export interface AutonomyPromotionData {
+  orgId: string;
+  actionType: string;
+  actionLabel: string;
+  approvedCount: number;
+  totalCount: number;
+  rejectionRate: number; // 0–1
+  adminSlackUserId?: string;
+}
+
+/**
+ * Build a Slack DM to org admin suggesting they promote an action type to auto-approve.
+ * Sent when an action has >= 20 approvals with < 5% rejection over 30 days.
+ */
+export function buildAutonomyPromotionMessage(data: AutonomyPromotionData): SlackMessage {
+  const {
+    orgId,
+    actionType,
+    actionLabel,
+    approvedCount,
+    totalCount,
+    rejectionRate,
+    adminSlackUserId,
+  } = data;
+
+  const rejectionPercent = Math.round(rejectionRate * 100);
+  const greeting = adminSlackUserId ? `<@${adminSlackUserId}> ` : '';
+  const summaryText = `${greeting}*${actionLabel}* has been approved ${approvedCount}/${totalCount} times this month with ${rejectionPercent}% corrections. Your team is ready to auto-approve this action.`;
+
+  return {
+    text: `Automation opportunity: ${actionLabel} — ${approvedCount} approvals, ${rejectionPercent}% rejection rate`,
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: safeHeaderText('Automation Opportunity'),
+          emoji: false,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(summaryText),
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Action Type*\n${actionLabel}`),
+          },
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Approval Rate*\n${approvedCount}/${totalCount} (${100 - rejectionPercent}%)`),
+          },
+        ],
+      },
+      { type: 'divider' },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: safeButtonText('Enable Auto-Approve'),
+              emoji: false,
+            },
+            style: 'primary',
+            action_id: 'autonomy_promote_approve',
+            value: safeButtonValue(JSON.stringify({ org_id: orgId, action_type: actionType, policy: 'auto' })),
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: safeButtonText('Dismiss'),
+              emoji: false,
+            },
+            action_id: 'autonomy_promote_dismiss',
+            value: safeButtonValue(JSON.stringify({ org_id: orgId, action_type: actionType })),
+          },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: safeContextMrkdwn('You can always adjust this in Settings > Autonomy & Approvals.'),
+          },
+        ],
+      },
+    ],
+  };
+}

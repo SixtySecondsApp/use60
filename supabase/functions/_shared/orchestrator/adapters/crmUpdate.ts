@@ -17,6 +17,7 @@
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient } from './contextEnrichment.ts';
 import { crmFieldExtractorAdapter } from './crmFieldExtractor.ts';
+import { CRMFieldResolver } from './crmFieldResolver.ts';
 
 // =============================================================================
 // Types
@@ -129,6 +130,43 @@ export const crmUpdateAdapter: SkillAdapter = {
 
       console.log(`[update-crm-from-meeting] Processing ${fieldsChanged.length} field changes for deal ${currentDeal.name}`);
 
+      // --- Resolve field names and apply write policies ---
+      const resolver = new CRMFieldResolver(supabase);
+      const orgId = state.event.org_id;
+
+      // Build sixty field changes map from the extraction output
+      const sixtyFieldChanges: Record<string, unknown> = {};
+      for (const change of fieldsChanged) {
+        sixtyFieldChanges[change.field_name] = change.new_value;
+      }
+
+      let resolution;
+      try {
+        resolution = await resolver.resolveFields(orgId, 'hubspot', 'deal', sixtyFieldChanges, 'auto');
+        if (resolution.approvalFields.length > 0) {
+          console.log(
+            `[update-crm-from-meeting] ${resolution.approvalFields.length} fields require approval:`,
+            resolution.approvalFields.map((f) => f.sixty_field_name).join(', ')
+          );
+        }
+        if (resolution.suggestFields.length > 0) {
+          console.log(
+            `[update-crm-from-meeting] ${resolution.suggestFields.length} fields are suggestions only:`,
+            resolution.suggestFields.map((f) => f.sixty_field_name).join(', ')
+          );
+        }
+        if (resolution.skippedFields.length > 0) {
+          console.log(
+            `[update-crm-from-meeting] ${resolution.skippedFields.length} fields skipped (disabled/unmapped):`,
+            resolution.skippedFields.join(', ')
+          );
+        }
+      } catch (resolverErr) {
+        // If resolver fails (e.g. tables not yet created), fall through to legacy behavior
+        console.warn('[update-crm-from-meeting] Field resolver error, using legacy mapping:', resolverErr);
+        resolution = null;
+      }
+
       // --- Process field changes ---
       const updates: Record<string, unknown> = {};
       const auditRecords: Array<{
@@ -156,9 +194,33 @@ export const crmUpdateAdapter: SkillAdapter = {
 
       let notesAdditions: string[] = [];
 
-      for (const change of fieldsChanged) {
+      // When field resolver is available, only process fields allowed by write policy
+      // (auto fields). Approval/suggest/disabled fields are logged but not written.
+      const fieldsToProcess = resolution
+        ? fieldsChanged.filter((change) => {
+            const sixtyField = change.field_name;
+            // Check if this field is in autoFields (by looking if its resolved CRM name appears)
+            return (
+              Object.keys(resolution.autoFields).some((crmKey) => {
+                // Compare by finding the mapping
+                return sixtyField in sixtyFieldChanges &&
+                  !(resolution.approvalFields.some((f) => f.sixty_field_name === sixtyField)) &&
+                  !(resolution.suggestFields.some((f) => f.sixty_field_name === sixtyField)) &&
+                  !resolution.skippedFields.includes(sixtyField);
+              }) ||
+              // Always process notes-appending fields unless explicitly disabled
+              (APPEND_TO_NOTES_FIELDS.includes(sixtyField) && !resolution.skippedFields.includes(sixtyField))
+            );
+          })
+        : fieldsChanged;
+
+      for (const change of fieldsToProcess) {
         const fieldName = change.field_name;
-        const dealColumn = FIELD_MAPPING[fieldName];
+        // Use resolved CRM field name if resolver returned one, else fall back to FIELD_MAPPING
+        const resolvedCrmField = resolution?.autoFields
+          ? Object.entries(resolution.autoFields).find(([, v]) => v === change.new_value)?.[0]
+          : undefined;
+        const dealColumn = resolvedCrmField ?? FIELD_MAPPING[fieldName];
 
         if (!dealColumn) {
           console.warn(`[update-crm-from-meeting] Unknown field: ${fieldName}, skipping`);
@@ -343,6 +405,18 @@ export const crmUpdateAdapter: SkillAdapter = {
           new_value: r.new_value,
           confidence: r.confidence,
         })),
+        // Policy-gated fields (not written but included in summary for HITL flows)
+        pending_approval: resolution?.approvalFields.map((f) => ({
+          field: f.sixty_field_name,
+          crm_field: f.crm_field_name,
+          value: f.value,
+        })) ?? [],
+        suggestions: resolution?.suggestFields.map((f) => ({
+          field: f.sixty_field_name,
+          crm_field: f.crm_field_name,
+          value: f.value,
+        })) ?? [],
+        skipped_fields: resolution?.skippedFields ?? [],
       };
 
       console.log(

@@ -1,0 +1,201 @@
+{
+  "feature": {
+    "id": "autonomy-settings",
+    "name": "PRD-10: Autonomy & Approval Policy Settings",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-10",
+    "status": "complete",
+    "phase": "Phase 3 — Personalisation & Settings UI",
+    "effort": "2 weeks",
+    "dependencies": ["PRD-01 (config engine)", "PRD-03 (CRM approval tracking)"],
+    "createdAt": "2026-02-22T00:00:00Z",
+    "completedAt": "2026-02-22T00:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "AUT-001",
+      "feature": "autonomy-settings",
+      "title": "Create autonomy_policies and approval_statistics tables",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["hitl_pending_approvals"] },
+      "blocks": ["AUT-003", "AUT-004", "AUT-005"],
+      "parallelWith": ["AUT-002"],
+      "acceptance": [
+        "autonomy_policies table: org_id, user_id (nullable for org-wide), action_type (text), policy (enum: auto/approve/suggest/disabled), preset_name (text nullable), created_at, updated_at",
+        "approval_statistics table: org_id, user_id, action_type, period (date), approved_count, rejected_count, auto_count, avg_approval_time_seconds, created_at",
+        "Unique constraint on (org_id, COALESCE(user_id, '00...'), action_type) for autonomy_policies",
+        "RLS: org admins manage policies, users read their own stats"
+      ],
+      "estimatedMinutes": 20,
+      "completedAt": "2026-02-22T00:00:00Z",
+      "files": [
+        "supabase/migrations/20260222800001_autonomy_policies_schema.sql"
+      ]
+    },
+    {
+      "id": "AUT-002",
+      "feature": "autonomy-settings",
+      "title": "Seed agent_config_defaults for autonomy presets",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["AUT-003"],
+      "parallelWith": ["AUT-001"],
+      "acceptance": [
+        "agent_config_defaults seeded for agent_type='global' with key 'autonomy.preset' (default: 'balanced')",
+        "Preset definitions stored as config: conservative (all approve), balanced (low-risk auto, high-risk approve), autonomous (most auto, destructive approve), custom (individual toggles)",
+        "Action type catalog seeded: crm_stage_change, crm_field_update, crm_contact_create, send_email, send_slack, create_task, enrich_contact, draft_proposal",
+        "Migration is idempotent"
+      ],
+      "estimatedMinutes": 20,
+      "completedAt": "2026-02-22T00:00:00Z",
+      "files": [
+        "supabase/migrations/20260222800002_autonomy_presets_config.sql"
+      ]
+    },
+    {
+      "id": "AUT-003",
+      "feature": "autonomy-settings",
+      "title": "Build AutonomySettingsPage with preset selector and action toggle grid",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["AUT-001", "AUT-002"], "files": [], "schema": [] },
+      "blocks": ["AUT-006"],
+      "parallelWith": ["AUT-004"],
+      "acceptance": [
+        "AutonomySettingsPage.tsx at src/pages/settings/ registered in routeConfig.ts + Settings.tsx",
+        "Preset selector: 4 cards (Conservative/Balanced/Autonomous/Custom) with clear descriptions",
+        "Action toggle grid below: rows = action types, columns = Auto/Approve/Suggest/Disabled radio",
+        "Selecting a preset pre-fills the grid; changing any individual toggle switches preset to 'Custom'",
+        "Org admin only (canManageSettings guard)"
+      ],
+      "estimatedMinutes": 30,
+      "completedAt": "2026-02-22T00:00:00Z",
+      "files": [
+        "src/pages/settings/AutonomySettingsPage.tsx",
+        "src/components/agent/ActionPolicyGrid.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/pages/Settings.tsx"
+      ]
+    },
+    {
+      "id": "AUT-004",
+      "feature": "autonomy-settings",
+      "title": "Build approval statistics dashboard with promotion suggestions",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["AUT-001"], "files": [], "schema": ["approval_statistics"] },
+      "blocks": ["AUT-005"],
+      "parallelWith": ["AUT-003"],
+      "acceptance": [
+        "ApprovalStatsDashboard.tsx in src/components/agent/ shows per-action-type stats: approved, rejected, auto-executed, avg time to approve",
+        "Summary line: '48 auto-approved, 0 corrections this month'",
+        "Bar chart or table showing approval rates by action type over last 30 days",
+        "Sources data from approval_statistics table + hitl_pending_approvals"
+      ],
+      "estimatedMinutes": 25,
+      "completedAt": "2026-02-22T00:00:00Z",
+      "files": [
+        "src/components/agent/ApprovalStatsDashboard.tsx",
+        "src/lib/hooks/useApprovalStats.ts"
+      ]
+    },
+    {
+      "id": "AUT-005",
+      "feature": "autonomy-settings",
+      "title": "Build graduated autonomy engine with Slack promotion suggestions",
+      "type": "integration",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["AUT-001", "AUT-004"], "files": ["supabase/functions/_shared/slackBlocks.ts"], "schema": [] },
+      "blocks": ["AUT-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Background tracker aggregates approval_statistics daily from hitl_pending_approvals",
+        "Promotion rules: if action_type has >= 20 approvals with < 5% rejection over 30 days, suggest auto-approve",
+        "Slack DM to org admin: 'CRM field updates have been approved 23/23 times this month. Want to auto-approve this action type?'",
+        "Approve/Dismiss buttons in Slack; approve writes to autonomy_policies",
+        "buildAutonomyPromotionMessage() added to slackBlocks.ts"
+      ],
+      "estimatedMinutes": 30,
+      "completedAt": "2026-02-22T00:00:00Z",
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/autonomyTracker.ts",
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/handlers/autonomy.ts"
+      ]
+    },
+    {
+      "id": "AUT-006",
+      "feature": "autonomy-settings",
+      "title": "Build user-level override permissions UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["AUT-003"], "files": [], "schema": ["agent_config_user_overridable"] },
+      "blocks": ["AUT-007"],
+      "parallelWith": ["AUT-005"],
+      "acceptance": [
+        "Section in AutonomySettingsPage: 'User Override Permissions'",
+        "Toggle grid: which action types can reps override at user level",
+        "Writes to agent_config_user_overridable table",
+        "Non-admin users see their personal override toggles (for allowed keys only)"
+      ],
+      "estimatedMinutes": 20,
+      "completedAt": "2026-02-22T00:00:00Z",
+      "files": [
+        "src/pages/settings/AutonomySettingsPage.tsx",
+        "src/components/agent/UserOverridePermissions.tsx"
+      ]
+    },
+    {
+      "id": "AUT-007",
+      "feature": "autonomy-settings",
+      "title": "Wire autonomy policy into orchestrator execution and add tests",
+      "type": "integration",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["AUT-005", "AUT-006"], "files": ["supabase/functions/_shared/orchestrator/fleetRouter.ts"], "schema": [] },
+      "blocks": ["AUT-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Fleet router checks autonomy_policies before executing each step: auto -> execute, approve -> create HITL approval, suggest -> create suggestion only, disabled -> skip",
+        "Policy resolution: user-level -> org-level -> preset default",
+        "Existing HITL flows (CRM approval, reengagement) respect new policy table"
+      ],
+      "estimatedMinutes": 25,
+      "completedAt": "2026-02-22T00:00:00Z",
+      "files": [
+        "supabase/functions/_shared/orchestrator/fleetRouter.ts",
+        "supabase/functions/_shared/orchestrator/autonomyResolver.ts"
+      ]
+    },
+    {
+      "id": "AUT-008",
+      "feature": "autonomy-settings",
+      "title": "Integration test for autonomy policy enforcement",
+      "type": "test",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["AUT-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Vitest suite: preset selection, custom toggle overrides, policy resolution (user > org > default), orchestrator enforcement",
+        "Test scenarios: conservative blocks auto-execute, balanced allows low-risk, autonomous allows most, graduated promotion triggers",
+        "Manual Slack test guide for promotion flow"
+      ],
+      "estimatedMinutes": 20,
+      "completedAt": "2026-02-22T00:00:00Z",
+      "files": [
+        "src/pages/settings/__tests__/AutonomySettings.test.tsx",
+        "supabase/functions/_shared/orchestrator/__tests__/autonomyResolver.test.ts"
+      ]
+    }
+  ]
+}

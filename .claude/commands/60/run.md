@@ -83,16 +83,21 @@
 
 ### 1. Find Next Executable Story
 
+**Load stories from the correct source.** Check each feature in `.sixty/plan.json`:
+- If the feature has a `planFile` field → load stories from that separate file (e.g. `.sixty/plan-methodology-settings.json`)
+- If no `planFile` → stories are inline in the main `plan.json` `stories[]` array
+- Only consider features with `status: "pending"` or `status: "in_progress"`
+
 ```javascript
 // Priority order:
 // 1. Stories with all dependencies complete
 // 2. Lower priority number first
 // 3. No file conflicts with in-progress work
 
-function canExecute(story, plan) {
-  // All dependency stories must be complete
+function canExecute(story, allStories) {
+  // All dependency stories must be complete (check across ALL plan files)
   for (const depId of story.dependencies.stories) {
-    const dep = plan.stories.find(s => s.id === depId);
+    const dep = allStories.find(s => s.id === depId);
     if (!dep || dep.status !== 'complete') return false;
   }
   return true;
@@ -138,9 +143,40 @@ npx vitest run --changed HEAD --passWithNoTests
 
 ### 4. Update Tracking
 
-- Mark story as complete in plan.json
-- Append to progress.md
-- Increment completed count
+**You MUST update ALL of the following after each story completes:**
+
+#### 4.1 Update the story status in the correct plan file
+
+Stories live in one of two places — check the feature entry in `.sixty/plan.json`:
+
+- **If the feature has a `planFile` field** (e.g. `"planFile": ".sixty/plan-methodology-settings.json"`):
+  - Open that separate plan file and set the story's `status` to `"complete"`, add `completedAt` timestamp
+  - **Also** check if ALL stories in that plan file are now complete. If yes, update the feature's `status` to `"complete"` in the **main** `.sixty/plan.json` `features[]` array
+
+- **If the feature has NO `planFile` field** (stories are inline in `plan.json`):
+  - Update the story's `status` to `"complete"` directly in `.sixty/plan.json` `stories[]`
+  - **Also** check if ALL stories for that feature are now complete. If yes, update the feature's `status` to `"complete"` in the `features[]` array
+
+#### 4.2 Update execution counters in `.sixty/plan.json`
+
+```json
+{
+  "execution": {
+    "completedStories": <increment by 1>,
+    "lastUpdated": "<current ISO timestamp>"
+  }
+}
+```
+
+#### 4.3 Update feature status when all stories are done
+
+When every story in a feature has `status: "complete"`:
+- Set `features[].status` to `"complete"` in `.sixty/plan.json`
+- If feature had `"in_progress"` status, this means the feature is now done
+
+#### 4.4 Append to progress.md
+
+Add a brief entry to `.sixty/progress.md` with story ID, title, files changed, and gate results.
 
 ### 4a. Update Dev Hub Task (post-completion)
 

@@ -413,6 +413,22 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
   // Org/team management is now accessed via the main Settings page (role-gated cards).
   // We keep legacy redirects for /team/* paths elsewhere.
   {
+    path: '/settings/autonomy',
+    access: 'orgAdmin',
+    label: 'Autonomy & Approvals',
+    showInNav: false,
+    navSection: 'settings',
+    order: 86,
+  },
+  {
+    path: '/settings/methodology',
+    access: 'orgAdmin',
+    label: 'Sales Methodology',
+    showInNav: false,
+    navSection: 'settings',
+    order: 85,
+  },
+  {
     path: '/agent/marketplace',
     access: 'orgAdmin',
     label: 'Agent Marketplace',
@@ -730,6 +746,25 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false,
     navSection: 'platform',
     order: 55,
+  },
+  // CRM Field Mapping (Org Admin)
+  {
+    path: '/settings/crm-field-mapping',
+    access: 'orgAdmin',
+    label: 'CRM Field Mapping',
+    showInNav: false,
+    navSection: 'settings',
+    order: 87,
+  },
+  // Custom SOPs / Playbooks (Org Admin)
+  {
+    path: '/settings/custom-sops',
+    access: 'orgAdmin',
+    label: 'Custom Playbooks (SOPs)',
+    icon: Workflow,
+    showInNav: false,
+    navSection: 'settings',
+    order: 88,
   },
   // Slack Settings (Org Admin)
   {

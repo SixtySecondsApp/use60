@@ -1,0 +1,178 @@
+{
+  "feature": {
+    "id": "methodology-settings",
+    "name": "PRD-09: Sales Methodology & Process Settings",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-09",
+    "status": "complete",
+    "phase": "Phase 3 — Personalisation & Settings UI",
+    "effort": "1.5-2 weeks",
+    "dependencies": ["PRD-01 (config engine)", "PRD-04 (risk scorer uses methodology)"],
+    "createdAt": "2026-02-22T00:00:00Z",
+    "completedAt": "2026-02-22T12:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "MTH-001",
+      "feature": "methodology-settings",
+      "title": "Create MethodologySelector component with preview cards",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T12:00:00Z",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["src/pages/Settings.tsx"], "schema": ["agent_methodology_templates"] },
+      "blocks": ["MTH-003"],
+      "parallelWith": ["MTH-002"],
+      "acceptance": [
+        "MethodologySelector.tsx in src/components/agent/ renders 5 cards: Generic, MEDDIC, BANT, SPIN, Challenger",
+        "Each card shows: name, description, key qualification criteria preview, coaching focus summary",
+        "Selected methodology highlighted with emerald ring, current methodology badge",
+        "Fetches templates from agent_methodology_templates via agent-config-admin edge function",
+        "Responsive grid layout (2 cols mobile, 3 cols desktop), glassmorphism card style"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/MethodologySelector.tsx",
+        "src/lib/hooks/useAgentConfig.ts"
+      ]
+    },
+    {
+      "id": "MTH-002",
+      "feature": "methodology-settings",
+      "title": "Create useAgentConfig hook for 3-layer config resolution UI",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T12:00:00Z",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["agent_config_defaults", "agent_config_org_overrides"] },
+      "blocks": ["MTH-003", "MTH-004", "MTH-005"],
+      "parallelWith": ["MTH-001"],
+      "acceptance": [
+        "useAgentConfig(orgId, userId, agentType) hook returns { config, isLoading, updateOrgConfig, updateUserConfig, revertToDefault }",
+        "Calls resolve_agent_config_all RPC and returns config with source layer (user/org/default)",
+        "updateOrgConfig writes to agent_config_org_overrides via agent-config-admin",
+        "Optimistic updates via React Query mutation + invalidation",
+        "SourceBadge helper component shows provenance (default/org/user) per config key"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useAgentConfig.ts",
+        "src/components/agent/SourceBadge.tsx"
+      ]
+    },
+    {
+      "id": "MTH-003",
+      "feature": "methodology-settings",
+      "title": "Build SalesMethodologySettings page with apply + preview flow",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T12:00:00Z",
+      "priority": 2,
+      "dependencies": { "stories": ["MTH-001", "MTH-002"], "files": [], "schema": [] },
+      "blocks": ["MTH-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "SalesMethodologySettings.tsx at src/pages/settings/ registered in routeConfig.ts + Settings.tsx",
+        "Page layout: header with current methodology badge -> MethodologySelector -> 'Preview Changes' button -> confirmation dialog",
+        "'Preview Changes' dialog shows diff of config keys that will change (old vs new values)",
+        "Apply calls apply_methodology RPC, shows toast with count of updated config keys",
+        "Org admin only (canManageSettings guard), non-admin sees read-only current methodology"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/settings/SalesMethodologySettings.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/pages/Settings.tsx"
+      ]
+    },
+    {
+      "id": "MTH-004",
+      "feature": "methodology-settings",
+      "title": "Build stage mapping editor with CRM pipeline sync",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T12:00:00Z",
+      "priority": 3,
+      "dependencies": { "stories": ["MTH-002"], "files": [], "schema": [] },
+      "blocks": ["MTH-006"],
+      "parallelWith": ["MTH-005"],
+      "acceptance": [
+        "StageMappingEditor.tsx in src/components/agent/ shows CRM stages (from HubSpot or local deal_stages) mapped to agent stage definitions",
+        "Two-column layout: CRM stages (left) -> agent stages (right) with select dropdowns",
+        "Detects unmapped stages and shows warning badge",
+        "Saves to agent_config_org_overrides with key 'stage_mapping'",
+        "Respects methodology's default stage rules as initial mapping"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/StageMappingEditor.tsx"
+      ]
+    },
+    {
+      "id": "MTH-005",
+      "feature": "methodology-settings",
+      "title": "Build qualification criteria editor per methodology",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T12:00:00Z",
+      "priority": 3,
+      "dependencies": { "stories": ["MTH-002", "MTH-003"], "files": [], "schema": [] },
+      "blocks": ["MTH-006"],
+      "parallelWith": ["MTH-004"],
+      "acceptance": [
+        "QualificationCriteriaEditor.tsx in src/components/agent/ renders methodology-specific criteria",
+        "MEDDIC: 6 element cards (Metrics, Economic Buyer, Decision Criteria, Decision Process, Identify Pain, Champion) with completeness thresholds",
+        "BANT: 4 elements with scoring weight sliders",
+        "Generic/Custom: free-form criteria list with add/remove",
+        "Saves to agent_config_org_overrides with key 'qualification_criteria'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/QualificationCriteriaEditor.tsx"
+      ]
+    },
+    {
+      "id": "MTH-006",
+      "feature": "methodology-settings",
+      "title": "Build custom methodology creation flow",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T12:00:00Z",
+      "priority": 4,
+      "dependencies": { "stories": ["MTH-004", "MTH-005"], "files": [], "schema": [] },
+      "blocks": ["MTH-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "'Create Custom' option in MethodologySelector opens multi-step dialog",
+        "Step 1: Name + description, Step 2: Pick base methodology to fork from, Step 3: Edit qualification criteria, Step 4: Edit stage rules",
+        "Custom methodology saved as new row in agent_methodology_templates (org-scoped via org_id column if exists, or as org override)",
+        "Custom methodology appears in selector alongside platform defaults"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/agent/CustomMethodologyWizard.tsx",
+        "src/pages/settings/SalesMethodologySettings.tsx"
+      ]
+    },
+    {
+      "id": "MTH-007",
+      "feature": "methodology-settings",
+      "title": "Add methodology audit trail and integration test",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-22T12:00:00Z",
+      "priority": 5,
+      "dependencies": { "stories": ["MTH-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Methodology changes logged to security_audit_log (who changed, from what, to what)",
+        "Vitest suite: methodology selection, config preview diff, apply flow, custom creation, stage mapping persistence",
+        "Test scenarios: switch MEDDIC->BANT, create custom, revert to default, non-admin blocked"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/settings/__tests__/SalesMethodologySettings.test.tsx"
+      ]
+    }
+  ]
+}
