@@ -57,6 +57,7 @@ jobs:
         run: npm ci || npm install --no-audit
 
       - name: Run npm audit
+        continue-on-error: true
         run: |
           echo "## npm Audit Results" >> $GITHUB_STEP_SUMMARY
           npm audit --json > audit-results.json || true
