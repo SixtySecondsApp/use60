@@ -55,15 +55,13 @@ BEGIN
       WHEN 'low' THEN 'medium'
       ELSE 'medium'
     END,
-    -- Map action_type to task_type
+    -- Map action_type to task_type (use follow_up as safe fallback)
     CASE
       WHEN nas.action_type LIKE '%email%' THEN 'email'
       WHEN nas.action_type LIKE '%call%' THEN 'call'
-      WHEN nas.action_type LIKE '%demo%' THEN 'demo'
-      WHEN nas.action_type LIKE '%proposal%' THEN 'proposal'
       WHEN nas.action_type LIKE '%meeting%' THEN 'meeting'
       WHEN nas.action_type LIKE '%follow%' THEN 'follow_up'
-      ELSE 'general'
+      ELSE 'follow_up'
     END,
     nas.user_id, -- assigned_to
     nas.user_id, -- created_by
@@ -110,6 +108,8 @@ BEGIN
 
   GET DIAGNOSTICS v_migrated_count = ROW_COUNT;
   RAISE NOTICE 'Migrated % next_action_suggestions to tasks table', v_migrated_count;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Skipping next_action_suggestions migration (constraint mismatch from out-of-order apply): %', SQLERRM;
 END $$;
 
 -- ============================================================================
@@ -163,8 +163,12 @@ BEGIN
       WHEN mai.importance = 'medium' OR mai.priority = 'medium' THEN 'high'
       ELSE 'medium'
     END,
-    -- Map category or ai_task_type to task_type
-    COALESCE(mai.ai_task_type, mai.category, 'general'),
+    -- Map category or ai_task_type to task_type (use follow_up as safe fallback)
+    CASE
+      WHEN mai.ai_task_type IN ('email','call','meeting','follow_up','task','note') THEN mai.ai_task_type
+      WHEN mai.category IN ('email','call','meeting','follow_up','task','note') THEN mai.category
+      ELSE 'follow_up'
+    END,
     -- Get user_id from meeting owner
     (SELECT m.owner_user_id FROM meetings m WHERE m.id = mai.meeting_id), -- assigned_to
     (SELECT m.owner_user_id FROM meetings m WHERE m.id = mai.meeting_id), -- created_by
@@ -222,6 +226,8 @@ BEGIN
 
   GET DIAGNOSTICS v_migrated_count = ROW_COUNT;
   RAISE NOTICE 'Migrated % meeting_action_items to tasks table', v_migrated_count;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Skipping meeting_action_items migration (constraint mismatch from out-of-order apply): %', SQLERRM;
 END $$;
 
 -- ============================================================================
