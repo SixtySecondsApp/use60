@@ -5,34 +5,10 @@
 -- Enums
 -- =====================================================
 
-CREATE TYPE support_ticket_category AS ENUM (
-  'bug',
-  'feature_request',
-  'billing',
-  'how_to',
-  'other'
-);
-
-CREATE TYPE support_ticket_priority AS ENUM (
-  'low',
-  'medium',
-  'high',
-  'urgent'
-);
-
-CREATE TYPE support_ticket_status AS ENUM (
-  'open',
-  'in_progress',
-  'waiting_on_customer',
-  'resolved',
-  'closed'
-);
-
-CREATE TYPE support_message_sender_type AS ENUM (
-  'user',
-  'agent',
-  'system'
-);
+DO $$ BEGIN CREATE TYPE support_ticket_category AS ENUM ('bug','feature_request','billing','how_to','other'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE support_ticket_priority AS ENUM ('low','medium','high','urgent'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE support_ticket_status AS ENUM ('open','in_progress','waiting_on_customer','resolved','closed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE support_message_sender_type AS ENUM ('user','agent','system'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =====================================================
 -- Tables
@@ -85,6 +61,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS support_tickets_updated_at ON public.support_tickets;
 CREATE TRIGGER support_tickets_updated_at
   BEFORE UPDATE ON public.support_tickets
   FOR EACH ROW
@@ -100,12 +77,14 @@ ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
 -- Support tickets policies
 
 -- Users can see their own tickets
+DROP POLICY IF EXISTS "support_tickets_user_select" ON public.support_tickets;
 CREATE POLICY "support_tickets_user_select"
   ON public.support_tickets
   FOR SELECT
   USING (user_id = auth.uid());
 
 -- Org admins can see all tickets in their org
+DROP POLICY IF EXISTS "support_tickets_org_admin_select" ON public.support_tickets;
 CREATE POLICY "support_tickets_org_admin_select"
   ON public.support_tickets
   FOR SELECT
@@ -118,12 +97,14 @@ CREATE POLICY "support_tickets_org_admin_select"
   );
 
 -- Users can insert their own tickets
+DROP POLICY IF EXISTS "support_tickets_user_insert" ON public.support_tickets;
 CREATE POLICY "support_tickets_user_insert"
   ON public.support_tickets
   FOR INSERT
   WITH CHECK (user_id = auth.uid());
 
 -- Users can update their own open tickets
+DROP POLICY IF EXISTS "support_tickets_user_update" ON public.support_tickets;
 CREATE POLICY "support_tickets_user_update"
   ON public.support_tickets
   FOR UPDATE
@@ -131,6 +112,7 @@ CREATE POLICY "support_tickets_user_update"
   WITH CHECK (user_id = auth.uid());
 
 -- Org admins can update any ticket in their org
+DROP POLICY IF EXISTS "support_tickets_org_admin_update" ON public.support_tickets;
 CREATE POLICY "support_tickets_org_admin_update"
   ON public.support_tickets
   FOR UPDATE
@@ -145,6 +127,7 @@ CREATE POLICY "support_tickets_org_admin_update"
 -- Support messages policies
 
 -- Users can see messages on their tickets
+DROP POLICY IF EXISTS "support_messages_user_select" ON public.support_messages;
 CREATE POLICY "support_messages_user_select"
   ON public.support_messages
   FOR SELECT
@@ -155,6 +138,7 @@ CREATE POLICY "support_messages_user_select"
   );
 
 -- Org admins can see all messages in their org's tickets
+DROP POLICY IF EXISTS "support_messages_org_admin_select" ON public.support_messages;
 CREATE POLICY "support_messages_org_admin_select"
   ON public.support_messages
   FOR SELECT
@@ -168,6 +152,7 @@ CREATE POLICY "support_messages_org_admin_select"
   );
 
 -- Users can insert messages on their tickets
+DROP POLICY IF EXISTS "support_messages_user_insert" ON public.support_messages;
 CREATE POLICY "support_messages_user_insert"
   ON public.support_messages
   FOR INSERT
@@ -179,6 +164,7 @@ CREATE POLICY "support_messages_user_insert"
   );
 
 -- Org admins can insert messages on any org ticket (as agent)
+DROP POLICY IF EXISTS "support_messages_org_admin_insert" ON public.support_messages;
 CREATE POLICY "support_messages_org_admin_insert"
   ON public.support_messages
   FOR INSERT

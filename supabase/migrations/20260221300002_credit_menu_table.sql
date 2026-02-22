@@ -173,23 +173,27 @@ ALTER TABLE credit_menu_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE price_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- credit_menu: authenticated users read active entries; platform admins read/write all
+DROP POLICY IF EXISTS "credit_menu_read_active" ON credit_menu;
 CREATE POLICY "credit_menu_read_active"
   ON credit_menu FOR SELECT
   TO authenticated
   USING (is_active = true AND deleted_at IS NULL);
 
+DROP POLICY IF EXISTS "credit_menu_admin_all" ON credit_menu;
 CREATE POLICY "credit_menu_admin_all"
   ON credit_menu FOR ALL
   TO service_role
   USING (true) WITH CHECK (true);
 
 -- credit_menu_history: admins only via service_role
+DROP POLICY IF EXISTS "credit_menu_history_admin" ON credit_menu_history;
 CREATE POLICY "credit_menu_history_admin"
   ON credit_menu_history FOR SELECT
   TO service_role
   USING (true);
 
 -- price_snapshots: service_role only
+DROP POLICY IF EXISTS "price_snapshots_service" ON price_snapshots;
 CREATE POLICY "price_snapshots_service"
   ON price_snapshots FOR ALL
   TO service_role

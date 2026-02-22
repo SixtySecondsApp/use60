@@ -56,6 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_relationship_milestones_deal
 ALTER TABLE relationship_milestones ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read milestones for their org
+DROP POLICY IF EXISTS "Org members can view milestones" ON relationship_milestones;
 CREATE POLICY "Org members can view milestones"
   ON relationship_milestones FOR SELECT
   USING (
@@ -66,6 +67,7 @@ CREATE POLICY "Org members can view milestones"
   );
 
 -- Service role can do everything (for cron scanner)
+DROP POLICY IF EXISTS "Service role full access" ON relationship_milestones;
 CREATE POLICY "Service role full access"
   ON relationship_milestones FOR ALL
   USING (auth.role() = 'service_role');

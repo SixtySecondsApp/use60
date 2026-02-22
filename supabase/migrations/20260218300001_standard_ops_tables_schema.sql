@@ -119,6 +119,7 @@ COMMENT ON COLUMN public.organizations.ops_tables_provisioned IS
 
 -- RESTRICTIVE policy: Block deletion of system columns
 -- (works alongside existing permissive "Users can manage columns of own tables" policy)
+DROP POLICY IF EXISTS "Block deletion of system columns" ON public.dynamic_table_columns;
 CREATE POLICY "Block deletion of system columns"
   ON public.dynamic_table_columns
   AS RESTRICTIVE
@@ -130,6 +131,7 @@ COMMENT ON POLICY "Block deletion of system columns" ON public.dynamic_table_col
 
 -- RESTRICTIVE policy: Block deletion of standard tables
 -- (works alongside existing permissive "Users can delete own dynamic tables" policy)
+DROP POLICY IF EXISTS "Block deletion of standard tables" ON public.dynamic_tables;
 CREATE POLICY "Block deletion of standard tables"
   ON public.dynamic_tables
   AS RESTRICTIVE
