@@ -108,6 +108,7 @@ import {
 
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
+const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -638,6 +639,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/smart-listening" element={<AppLayout><SmartListeningSettings /></AppLayout>} />
                 {/* Proactive Agent Settings - admin only */}
                 <Route path="/settings/proactive-agent" element={<AppLayout><ProactiveAgentSettings /></AppLayout>} />
+                <Route path="/settings/demo" element={<InternalRouteGuard><AppLayout><DemoExperiencePage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/bullhorn" element={<Navigate to="/settings/integrations/bullhorn" replace />} />
                 {/* Google Workspace Settings - visible only when Google is connected (enforced inside page) */}
                 <Route path="/settings/integrations/google-workspace" element={<AppLayout><GoogleWorkspaceIntegrationPage /></AppLayout>} />
