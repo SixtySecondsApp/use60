@@ -17,6 +17,7 @@
     "dev:all": "concurrently \"npm run dev:api\" \"npm run dev\"",
     "dev:all-optimized": "concurrently \"npm run dev:api-optimized\" \"npm run dev\"",
     "dev:all:analytics": "concurrently -n mt,app \"cd meeting-translation && npm run server\" \"VITE_MEETING_ANALYTICS_API_URL=http://localhost:3000 npm run dev\"",
+    "typecheck": "node --stack-size=8192 ./node_modules/.bin/tsc --noEmit",
     "build": "vite build",
     "build:check": "tsc && vite build",
     "build:check:strict": "tsc --project tsconfig.strict.json --noEmit",
