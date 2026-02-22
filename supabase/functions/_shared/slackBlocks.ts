@@ -5462,3 +5462,105 @@ export const buildCommandCentreDigest = (data: CCDigestDataBlock): SlackMessage 
 
   return { blocks, text: fallbackText };
 };
+
+// ============================================================================
+// CC12-003: Auto-execution overnight report
+// ============================================================================
+
+export interface AutoExecReportItem {
+  id: string;
+  title: string;
+  item_type: string;
+  drafted_action_type: string;
+  drafted_action_display_text: string;
+  confidence_score: number;
+  resolved_at: string;
+}
+
+/**
+ * Build a Slack summary of items auto-completed overnight by the CC engine.
+ *
+ * Format:
+ *   use60 auto-completed N items overnight
+ *   \u2705 Updated Acme Corp deal stage \u2192 Proposal
+ *   \u2705 Created follow-up task: Call Sarah Chen (due Monday)
+ *   ...
+ *   All changes reversible for 24hrs.
+ *   [View in Command Centre \u2192]  [Undo any \u2192]
+ *
+ * Stays within the 50-block limit (MAX_BLOCKS = 50).
+ * Action IDs: cc_open_command_centre, cc_undo_menu.
+ */
+export function buildAutoExecutionReport(items: AutoExecReportItem[]): any[] {
+  const MAX_BLOCKS = 50;
+  const blocks: SlackBlock[] = [];
+
+  const n = items.length;
+  if (n === 0) return blocks;
+
+  // ---- Header ----
+  blocks.push(
+    section(
+      safeMrkdwn(
+        `\u2705 *use60 auto-completed ${n} item${n !== 1 ? 's' : ''} overnight*`,
+      ),
+    ),
+  );
+  blocks.push(divider());
+
+  // ---- One line per item ---- (cap at MAX_BLOCKS - 5 to leave room for footer)
+  for (let i = 0; i < items.length; i++) {
+    if (blocks.length >= MAX_BLOCKS - 5) {
+      const remaining = items.length - i;
+      blocks.push(
+        context([
+          safeContextMrkdwn(
+            `+${remaining} more item${remaining !== 1 ? 's' : ''} — open Command Centre to see all`,
+          ),
+        ]),
+      );
+      break;
+    }
+
+    const item = items[i];
+    const displayText = item.drafted_action_display_text
+      ? truncate(item.drafted_action_display_text, 120)
+      : truncate(item.title, 120);
+
+    blocks.push(section(safeMrkdwn(`\u2705 ${displayText}`)));
+  }
+
+  // ---- Footer note ----
+  blocks.push(divider());
+  blocks.push(context([safeContextMrkdwn('All changes reversible for 24hrs.')]));
+
+  // ---- CTA buttons ----
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: safeButtonText('View in Command Centre \u2192'),
+          emoji: false,
+        },
+        action_id: 'cc_open_command_centre',
+        url: CC_APP_URL,
+        style: 'primary',
+      },
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: safeButtonText('Undo any \u2192'),
+          emoji: false,
+        },
+        action_id: 'cc_undo_menu',
+        value: 'undo_menu',
+      },
+    ],
+  });
+
+  return blocks;
+}

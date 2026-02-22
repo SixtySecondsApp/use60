@@ -111,5 +111,17 @@ export function useCommandCentreItemMutations() {
     },
   });
 
-  return { approveItem, dismissItem, snoozeItem, undoItem };
+  const updateDraftedAction = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: Record<string, unknown> }) =>
+      commandCentreItemsService.updateDraftedAction(id, action),
+    onSuccess: () => {
+      toast.success('Action updated');
+      invalidate();
+    },
+    onError: () => {
+      toast.error('Failed to update action');
+    },
+  });
+
+  return { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction };
 }
