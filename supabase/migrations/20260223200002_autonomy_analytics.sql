@@ -25,7 +25,7 @@ ALTER TABLE public.autonomy_analytics ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Org members can view autonomy analytics"
   ON public.autonomy_analytics FOR SELECT
   USING (org_id IN (
-    SELECT om.org_id FROM public.organization_members om WHERE om.user_id = auth.uid()
+    SELECT om.org_id FROM public.organization_memberships om WHERE om.user_id = auth.uid()
   ));
 
 CREATE POLICY "Service role full access to autonomy_analytics"

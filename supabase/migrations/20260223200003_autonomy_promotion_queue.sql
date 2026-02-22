@@ -56,15 +56,15 @@ ALTER TABLE public.autonomy_cooldowns ENABLE ROW LEVEL SECURITY;
 -- Org members can view
 CREATE POLICY "Org members can view promotion queue"
   ON public.autonomy_promotion_queue FOR SELECT
-  USING (org_id IN (SELECT om.org_id FROM public.organization_members om WHERE om.user_id = auth.uid()));
+  USING (org_id IN (SELECT om.org_id FROM public.organization_memberships om WHERE om.user_id = auth.uid()));
 
 CREATE POLICY "Org members can view audit log"
   ON public.autonomy_audit_log FOR SELECT
-  USING (org_id IN (SELECT om.org_id FROM public.organization_members om WHERE om.user_id = auth.uid()));
+  USING (org_id IN (SELECT om.org_id FROM public.organization_memberships om WHERE om.user_id = auth.uid()));
 
 CREATE POLICY "Org members can view cooldowns"
   ON public.autonomy_cooldowns FOR SELECT
-  USING (org_id IN (SELECT om.org_id FROM public.organization_members om WHERE om.user_id = auth.uid()));
+  USING (org_id IN (SELECT om.org_id FROM public.organization_memberships om WHERE om.user_id = auth.uid()));
 
 -- Service role full access
 CREATE POLICY "Service role full access to promotion_queue" ON public.autonomy_promotion_queue FOR ALL USING (auth.role() = 'service_role');
