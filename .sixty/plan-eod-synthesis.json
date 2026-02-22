@@ -1,0 +1,185 @@
+{
+  "feature": {
+    "id": "eod-synthesis",
+    "name": "PRD-07: End-of-Day Synthesis",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-07",
+    "status": "complete",
+    "phase": "Phase 2 — Daily Rhythm",
+    "effort": "1-1.5 weeks",
+    "dependencies": ["PRD-01 (config)", "PRD-02 (orchestrator)"],
+    "createdAt": "2026-02-21T00:00:00Z",
+    "completedAt": "2026-02-22T00:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "EOD-001",
+      "feature": "eod-synthesis",
+      "title": "Create user_time_preferences table and EOD delivery tracking",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["EOD-003", "EOD-007"],
+      "parallelWith": ["EOD-002"],
+      "acceptance": [
+        "user_time_preferences table: user_id, org_id, timezone, eod_time (default 17:00), morning_time (default 08:00), working_days (jsonb array, default Mon-Fri)",
+        "eod_deliveries table: user_id, org_id, delivery_date, delivered_at, scorecard (jsonb), open_items (jsonb), tomorrow_preview (jsonb), overnight_plan (jsonb)",
+        "Unique constraint on (user_id, delivery_date) for eod_deliveries",
+        "RLS policies: users read/update their own time preferences"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222600001_eod_synthesis_schema.sql"
+      ]
+    },
+    {
+      "id": "EOD-002",
+      "feature": "eod-synthesis",
+      "title": "Seed agent_config_defaults for eod_synthesis agent type",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["EOD-007"],
+      "parallelWith": ["EOD-001"],
+      "acceptance": [
+        "agent_config_defaults seeded: eod_enabled (true), delivery_method (slack_dm), detail_level (full), include_overnight_plan (true), include_tomorrow_preview (true)",
+        "Methodology overrides: MEDDIC adds deal_qualification_recap to scorecard",
+        "Migration is idempotent"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222600002_eod_synthesis_agent_config.sql"
+      ]
+    },
+    {
+      "id": "EOD-003",
+      "feature": "eod-synthesis",
+      "title": "Build today's scorecard aggregator RPC",
+      "type": "logic",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["EOD-001"], "files": [], "schema": ["activities", "deals", "calendar_events", "tasks"] },
+      "blocks": ["EOD-007"],
+      "parallelWith": ["EOD-004", "EOD-005"],
+      "acceptance": [
+        "get_daily_scorecard(user_id, date) returns: meetings_completed, meetings_noshow, emails_sent, crm_updates_count, tasks_completed, deals_created (count + value), pipeline_value_change",
+        "Sources: calendar_events (completed meetings), activities (emails, CRM), tasks (status changes), deals (created_at, value changes)",
+        "Handles timezone-aware date boundaries using user_time_preferences",
+        "Returns structured JSONB for Slack block rendering"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222600003_daily_scorecard_rpc.sql"
+      ]
+    },
+    {
+      "id": "EOD-004",
+      "feature": "eod-synthesis",
+      "title": "Build open items detector and tomorrow preview builder",
+      "type": "logic",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["EOD-001"], "files": [], "schema": [] },
+      "blocks": ["EOD-007"],
+      "parallelWith": ["EOD-003", "EOD-005"],
+      "acceptance": [
+        "getOpenItems(user_id) returns: pending_replies (emails awaiting response), unsent_drafts (drafted but not sent), incomplete_actions (action items from today's meetings not yet done), overdue_tasks",
+        "getTomorrowPreview(user_id) returns: calendar events with attendee details, prep_status (queued/ready/none), attention_flags (at-risk deals on agenda, first meeting with new contact)",
+        "Both functions in _shared/orchestrator/adapters/eodSynthesis.ts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/eodSynthesis.ts"
+      ]
+    },
+    {
+      "id": "EOD-005",
+      "feature": "eod-synthesis",
+      "title": "Build overnight plan generator",
+      "type": "logic",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["EOD-001"], "files": [], "schema": [] },
+      "blocks": ["EOD-007"],
+      "parallelWith": ["EOD-003", "EOD-004"],
+      "acceptance": [
+        "generateOvernightPlan(user_id) determines what agent will do overnight: pending enrichments, signal monitoring targets, scheduled campaign processing, pipeline analysis",
+        "Plan items sourced from: enrichment queue, reengagement watchlist, campaign schedules, tomorrow's meeting attendees needing research",
+        "Returns structured list with estimated completion items",
+        "Links to morning brief: 'Results will appear in your morning briefing'"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/eodOvernight.ts"
+      ]
+    },
+    {
+      "id": "EOD-006",
+      "feature": "eod-synthesis",
+      "title": "Build Slack Block Kit EOD message and interaction handlers",
+      "type": "integration",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["EOD-003", "EOD-004", "EOD-005"], "files": ["supabase/functions/_shared/slackBlocks.ts"], "schema": [] },
+      "blocks": ["EOD-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "buildEODSynthesisMessage() in slackBlocks.ts renders: scorecard, open items, tomorrow preview, overnight plan sections",
+        "Action buttons: Looks Good, Adjust Priorities, Add a Task",
+        "Interaction routing in slack-interactive for eod_* action_id prefix",
+        "50-block limit enforced (prioritise scorecard + open items if over limit)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    {
+      "id": "EOD-007",
+      "feature": "eod-synthesis",
+      "title": "Create agent-eod-synthesis edge function with timezone-aware cron",
+      "type": "integration",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["EOD-001", "EOD-002", "EOD-006"], "files": [], "schema": ["user_time_preferences"] },
+      "blocks": ["EOD-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "agent-eod-synthesis edge function: queries users whose eod_time falls within current 15-min window (timezone-aware), generates and delivers EOD wrap",
+        "Cron runs every 15 minutes to catch users across timezones",
+        "Fleet event route: cron.eod_synthesis -> eod_synthesis sequence",
+        "4-step sequence: aggregate-scorecard -> detect-open-items -> build-tomorrow-preview -> generate-overnight-plan -> deliver-eod-slack",
+        "Stores delivery in eod_deliveries table for morning brief cross-reference"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/agent-eod-synthesis/index.ts",
+        "supabase/migrations/20260222600004_eod_synthesis_fleet_routes.sql",
+        "supabase/migrations/20260222600005_schedule_eod_synthesis_cron.sql"
+      ]
+    },
+    {
+      "id": "EOD-008",
+      "feature": "eod-synthesis",
+      "title": "Integration test for end-of-day synthesis pipeline",
+      "type": "test",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["EOD-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Vitest suite: scorecard aggregation, open items detection, tomorrow preview, overnight plan generation",
+        "Test scenarios: busy day (many activities), quiet day (minimal), no meetings tomorrow, weekend detection (skip delivery)",
+        "Manual Slack test guide in TESTING.md"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/agent-eod-synthesis/test.ts",
+        "supabase/functions/agent-eod-synthesis/TESTING.md"
+      ]
+    }
+  ]
+}

@@ -14,6 +14,13 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
+export interface EngagementPattern {
+  avg_response_time_hours: number | null;
+  best_email_day: string | null;
+  best_email_hour: number | null;
+  response_trend: 'improving' | 'stable' | 'declining' | null;
+}
+
 export interface EmailEnrichment {
   last_sent_date: string | null;
   last_received_date: string | null;
@@ -22,6 +29,7 @@ export interface EmailEnrichment {
   open_rate_pct: number | null;
   emails_sent_30d: number;
   emails_received_30d: number;
+  engagementPattern: EngagementPattern | null;
 }
 
 const EMPTY: EmailEnrichment = {
@@ -32,12 +40,13 @@ const EMPTY: EmailEnrichment = {
   open_rate_pct: null,
   emails_sent_30d: 0,
   emails_received_30d: 0,
+  engagementPattern: null,
 };
 
 export async function loadEmailContext(
   supabase: ReturnType<typeof createClient>,
   contactId?: string | null,
-  _orgId?: string | null,
+  orgId?: string | null,
 ): Promise<EmailEnrichment> {
   if (!contactId) {
     console.log('[cc-loader:email] No contactId — returning empty enrichment');
@@ -95,6 +104,30 @@ export async function loadEmailContext(
       ? Math.round((openedCount / sentEvents.length) * 100)
       : null;
 
+    // Load engagement pattern for this contact (graceful fallback if none exists)
+    let engagementPattern: EngagementPattern | null = null;
+    if (orgId) {
+      try {
+        const { data: pattern } = await supabase
+          .from('contact_engagement_patterns')
+          .select('avg_response_time_hours, best_email_day, best_email_hour, response_trend')
+          .eq('contact_id', contactId)
+          .eq('org_id', orgId)
+          .maybeSingle();
+
+        if (pattern) {
+          engagementPattern = {
+            avg_response_time_hours: pattern.avg_response_time_hours ?? null,
+            best_email_day: pattern.best_email_day ?? null,
+            best_email_hour: pattern.best_email_hour ?? null,
+            response_trend: pattern.response_trend ?? null,
+          };
+        }
+      } catch (patternErr) {
+        console.warn('[cc-loader:email] Could not load engagement pattern:', patternErr);
+      }
+    }
+
     const enrichment: EmailEnrichment = {
       last_sent_date: lastSent?.event_timestamp ?? null,
       last_received_date: lastReceived?.event_timestamp ?? null,
@@ -103,10 +136,11 @@ export async function loadEmailContext(
       open_rate_pct: openRatePct,
       emails_sent_30d: outbound.length,
       emails_received_30d: inbound.length,
+      engagementPattern,
     };
 
     console.log(
-      `[cc-loader:email] contact=${contactId} sent=${outbound.length} received=${inbound.length} reply_pending=${replyPending}`,
+      `[cc-loader:email] contact=${contactId} sent=${outbound.length} received=${inbound.length} reply_pending=${replyPending} pattern=${engagementPattern ? 'loaded' : 'none'}`,
     );
 
     return enrichment;

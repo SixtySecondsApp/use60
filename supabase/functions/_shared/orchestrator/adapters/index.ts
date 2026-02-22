@@ -63,7 +63,7 @@ import { overnightSummaryAdapter } from './overnightSummary.ts';
 import { internalMeetingDetectorAdapter } from './internalMeetingDetector.ts';
 import { meetingTypeClassifierAdapter } from './meetingTypeClassifier.ts';
 import { internalPrepTemplatesAdapter } from './internalPrepTemplates.ts';
-import { eodOpenItemsAdapter, eodTomorrowPreviewAdapter } from './eodSynthesis.ts';
+import { eodOpenItemsAdapter, eodTomorrowPreviewAdapter, eodSignalSummaryAdapter } from './eodSynthesis.ts';
 import { eodOvernightPlanAdapter } from './eodOvernight.ts';
 
 // =============================================================================
@@ -165,10 +165,11 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'classify-meeting-types': meetingTypeClassifierAdapter,
   'generate-internal-prep': internalPrepTemplatesAdapter,
 
-  // EOD Synthesis pipeline (EOD-004, EOD-005)
+  // EOD Synthesis pipeline (EOD-004, EOD-005, SIG-010)
   'eod-open-items': eodOpenItemsAdapter,
   'eod-tomorrow-preview': eodTomorrowPreviewAdapter,
   'eod-overnight-plan': eodOvernightPlanAdapter,
+  'eod-signal-summary': eodSignalSummaryAdapter,
 };
 
 /**

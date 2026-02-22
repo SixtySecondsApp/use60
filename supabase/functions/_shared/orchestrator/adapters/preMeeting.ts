@@ -467,6 +467,38 @@ export const pullCrmHistoryAdapter: SkillAdapter = {
         console.warn('[pull-crm-history] Failed to fetch objections:', err);
       }
 
+      // Load engagement pattern for this contact (graceful fallback if not available)
+      let engagementPattern: {
+        avg_response_time_hours: number | null;
+        best_email_day: string | null;
+        best_email_hour: number | null;
+        response_trend: string | null;
+      } | null = null;
+
+      const orgId = state.event.org_id;
+      if (orgId) {
+        try {
+          const { data: pattern } = await supabase
+            .from('contact_engagement_patterns')
+            .select('avg_response_time_hours, best_email_day, best_email_hour, response_trend')
+            .eq('contact_id', contactId)
+            .eq('org_id', orgId)
+            .maybeSingle();
+
+          if (pattern) {
+            engagementPattern = {
+              avg_response_time_hours: pattern.avg_response_time_hours ?? null,
+              best_email_day: pattern.best_email_day ?? null,
+              best_email_hour: pattern.best_email_hour ?? null,
+              response_trend: pattern.response_trend ?? null,
+            };
+            console.log(`[pull-crm-history] Engagement pattern loaded for contact=${contactId}`);
+          }
+        } catch (patternErr) {
+          console.warn('[pull-crm-history] Could not load engagement pattern:', patternErr);
+        }
+      }
+
       enrichment = {
         contact: contactEnrichment.contact,
         recent_meetings: contactEnrichment.recentMeetings,
@@ -475,12 +507,14 @@ export const pullCrmHistoryAdapter: SkillAdapter = {
         previous_objections: previousObjections,
         deal: contactEnrichment.dealContext,
         meeting_count: count || 0,
+        engagement_pattern: engagementPattern,
       };
 
       console.log(
         `[pull-crm-history] Complete: ${enrichment.recent_meetings.length} meetings, ` +
         `${enrichment.recent_emails.length} emails, ${formattedActionItems.length} action items, ` +
-        `${previousObjections.length} objections, total meetings=${count}`
+        `${previousObjections.length} objections, total meetings=${count}, ` +
+        `pattern=${engagementPattern ? 'loaded' : 'none'}`
       );
 
       return { success: true, output: enrichment, duration_ms: Date.now() - start };
@@ -1282,6 +1316,33 @@ export const generateBriefingAdapter: SkillAdapter = {
         }
       }
 
+      // Contact engagement pattern
+      const engagementPattern = crmHistoryOutput?.engagement_pattern;
+      if (engagementPattern) {
+        promptSections.push('## Contact Email Engagement Patterns');
+        if (engagementPattern.avg_response_time_hours != null) {
+          promptSections.push(
+            `- Avg response time: ${engagementPattern.avg_response_time_hours.toFixed(1)} hours`
+          );
+        }
+        if (engagementPattern.best_email_day && engagementPattern.best_email_hour != null) {
+          const hour = engagementPattern.best_email_hour;
+          const ampm = hour >= 12 ? 'pm' : 'am';
+          const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+          promptSections.push(
+            `- Best time to email: ${engagementPattern.best_email_day} at ${hour12}${ampm}`
+          );
+        } else if (engagementPattern.best_email_day) {
+          promptSections.push(`- Best day to email: ${engagementPattern.best_email_day}`);
+        }
+        if (engagementPattern.response_trend) {
+          promptSections.push(
+            `- Response trend: ${engagementPattern.response_trend} (compared to prior 30 days)`
+          );
+        }
+        promptSections.push('');
+      }
+
       // Risk signals
       if (riskSignals.length > 0) {
         promptSections.push('## Deal Risk Signals');
@@ -1306,6 +1367,14 @@ export const generateBriefingAdapter: SkillAdapter = {
       promptSections.push('- action_item_followups: array of action items to reference');
       promptSections.push('- company_snapshot: 2-3 sentence company overview');
       promptSections.push('- attendee_notes: key points about attendees');
+      if (engagementPattern) {
+        promptSections.push(
+          '- optimal_followup_time: recommended day/time for post-meeting follow-up email based on engagement patterns (e.g. "Tuesday at 9am")'
+        );
+        promptSections.push(
+          '- engagement_insight: 1 sentence note about this contact\'s email responsiveness (e.g. "Sarah typically responds within 3.2 hours, trending positively")'
+        );
+      }
       if (leadProfile) {
         promptSections.push('- attendee_deep_profile: object with {name, title, seniority, decision_authority, background, linkedin_url}');
         promptSections.push('- connection_points: array of {point, tier, suggested_opener} — the best conversation starters ranked by tier (1=direct relevance, 2=contextual, 3=light personalization)');
@@ -1400,6 +1469,35 @@ export const generateBriefingAdapter: SkillAdapter = {
   },
 };
 
+// Helper: Format engagement pattern as a human-readable insight string
+function formatEngagementInsight(pattern: {
+  avg_response_time_hours: number | null;
+  best_email_day: string | null;
+  best_email_hour: number | null;
+  response_trend: string | null;
+} | null): string | null {
+  if (!pattern) return null;
+
+  const parts: string[] = [];
+
+  if (pattern.avg_response_time_hours != null) {
+    parts.push(`typically responds within ${pattern.avg_response_time_hours.toFixed(1)} hours`);
+  }
+
+  if (pattern.best_email_day && pattern.best_email_hour != null) {
+    const hour = pattern.best_email_hour;
+    const ampm = hour >= 12 ? 'pm' : 'am';
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    parts.push(`best reached on ${pattern.best_email_day} at ${hour12}${ampm}`);
+  }
+
+  if (pattern.response_trend && pattern.response_trend !== 'stable') {
+    parts.push(`response speed trending ${pattern.response_trend}`);
+  }
+
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
 // Helper: Generate fallback briefing from raw data
 function generateFallbackBriefing(
   attendeesOutput: any,
@@ -1437,6 +1535,9 @@ function generateFallbackBriefing(
     questions.push('Are there any concerns we should address?');
   }
 
+  const pattern = crmOutput?.engagement_pattern ?? null;
+  const engagementInsight = formatEngagementInsight(pattern);
+
   const briefing: any = {
     meeting_type_label: classification.meeting_type || 'General Meeting',
     relationship_label: classification.relationship || 'Prospect',
@@ -1454,6 +1555,17 @@ function generateFallbackBriefing(
       ?.map((a: any) => `${a.name}${a.title ? ` (${a.title})` : ''}`)
       .join(', ') || 'No attendee information.',
   };
+
+  // Add engagement insight and optimal follow-up time if pattern data is available
+  if (engagementInsight) {
+    briefing.engagement_insight = engagementInsight;
+  }
+  if (pattern?.best_email_day && pattern?.best_email_hour != null) {
+    const hour = pattern.best_email_hour;
+    const ampm = hour >= 12 ? 'pm' : 'am';
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    briefing.optimal_followup_time = `${pattern.best_email_day} at ${hour12}${ampm}`;
+  }
 
   // Add lead profile data if available
   if (leadProfile) {

@@ -141,6 +141,7 @@ export async function getOvernightSummary(
   const { data: signalChanges, error: signalsError } = await supabase
     .from('deal_signal_temperature')
     .select('id, deal_id, signal_type, temperature, detected_at, expires_at, metadata')
+    .eq('org_id', orgId)
     .gte('detected_at', since)
     .order('detected_at', { ascending: false })
     .limit(20);
@@ -148,9 +149,9 @@ export async function getOvernightSummary(
   if (signalsError) {
     console.warn('[overnight-summary] Failed to fetch signal temperature:', signalsError.message);
   } else {
-    // Fetch deal names for signal records (may overlap with activities)
+    // Fetch deal names for signal records
     const signalDealIds = [...new Set((signalChanges || []).map((s: any) => s.deal_id).filter(Boolean))];
-    const missingIds = signalDealIds.filter(id => !(id in Object.keys({})));
+    const signalDealNameMap: Record<string, string> = {};
 
     if (signalDealIds.length > 0) {
       const { data: signalDeals } = await supabase
@@ -158,47 +159,34 @@ export async function getOvernightSummary(
         .select('id, name')
         .in('id', signalDealIds);
       for (const d of signalDeals || []) {
-        // Augment dealIdToName (safe even if already populated from activities)
-        if (!Object.prototype.hasOwnProperty.call({}, d.id)) {
-          // Just build a local map — dealIdToName scope is in activity block above
-        }
-      }
-
-      // Build fresh lookup for signals
-      const signalDealNameMap: Record<string, string> = {};
-      const { data: signalDealRows } = await supabase
-        .from('deals')
-        .select('id, name')
-        .in('id', signalDealIds);
-      for (const d of signalDealRows || []) {
         signalDealNameMap[d.id] = d.name;
       }
+    }
 
-      for (const signal of signalChanges || []) {
-        const dealName = signal.deal_id ? signalDealNameMap[signal.deal_id] : null;
-        const temperature = signal.temperature as number ?? 0;
-        const isNewSignal = isRecentSignal(signal.detected_at, since);
-        const eventType: OvernightEventType = isNewSignal ? 'signal_new' : 'signal_elevated';
-        const signalTypeFmt = formatSignalType(signal.signal_type as string);
+    for (const signal of signalChanges || []) {
+      const dealName = signal.deal_id ? signalDealNameMap[signal.deal_id] : null;
+      const temperature = signal.temperature as number ?? 0;
+      const isNewSignal = isRecentSignal(signal.detected_at, since);
+      const eventType: OvernightEventType = isNewSignal ? 'signal_new' : 'signal_elevated';
+      const signalTypeFmt = formatSignalType(signal.signal_type as string);
 
-        events.push({
-          type: eventType,
-          description: dealName
-            ? `${signalTypeFmt} signal detected for ${dealName} (temperature: ${temperature})`
-            : `${signalTypeFmt} signal detected`,
-          timestamp: signal.detected_at as string,
-          deal_id: signal.deal_id || null,
-          deal_name: dealName,
-          contact_name: null,
-          severity: temperature >= 70 ? 'attention' : 'info',
-          metadata: {
-            signal_type: signal.signal_type,
-            temperature,
-            expires_at: signal.expires_at,
-            ...(typeof signal.metadata === 'object' && signal.metadata !== null ? signal.metadata as Record<string, unknown> : {}),
-          },
-        });
-      }
+      events.push({
+        type: eventType,
+        description: dealName
+          ? `${signalTypeFmt} signal detected for ${dealName} (temperature: ${temperature})`
+          : `${signalTypeFmt} signal detected`,
+        timestamp: signal.detected_at as string,
+        deal_id: signal.deal_id || null,
+        deal_name: dealName,
+        contact_name: null,
+        severity: temperature >= 70 ? 'attention' : 'info',
+        metadata: {
+          signal_type: signal.signal_type,
+          temperature,
+          expires_at: signal.expires_at,
+          ...(typeof signal.metadata === 'object' && signal.metadata !== null ? signal.metadata as Record<string, unknown> : {}),
+        },
+      });
     }
   }
 

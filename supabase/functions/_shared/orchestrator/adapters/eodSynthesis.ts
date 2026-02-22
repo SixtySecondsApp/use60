@@ -548,3 +548,140 @@ export const eodTomorrowPreviewAdapter: SkillAdapter = {
     }
   },
 };
+
+// =============================================================================
+// SIG-010: getSignalSummary — email signals detected today + overnight deal count
+// =============================================================================
+
+export interface SignalSummaryResult {
+  /** Total email signals detected since today_start */
+  signals_today: number;
+  /** How many of those have been actioned */
+  signals_actioned: number;
+  /** Percentage actioned (0–100) */
+  action_rate_pct: number;
+  /** Number of deals currently being monitored for signal changes overnight */
+  deals_monitored_overnight: number;
+  /** Human-readable summary line */
+  summary_line: string;
+  /** Overnight plan reference line */
+  overnight_plan_line: string;
+}
+
+/**
+ * SIG-010: Gather email signal counts for today and the overnight deal-monitoring count.
+ *
+ * Gracefully returns zeroed result if signal tables don't exist yet.
+ */
+export async function getSignalSummary(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<SignalSummaryResult> {
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
+  let signalsToday = 0;
+  let signalsActioned = 0;
+  let dealsMonitored = 0;
+
+  // 1. Count email signals detected today (total and actioned)
+  try {
+    const { count: totalCount, error: totalErr } = await supabase
+      .from('email_signal_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .gte('created_at', todayStart.toISOString());
+
+    if (totalErr) {
+      if (!totalErr.message.includes('relation') && !totalErr.message.includes('does not exist')) {
+        console.warn('[eod-signal-summary] signals today count error:', totalErr.message);
+      }
+    } else {
+      signalsToday = totalCount ?? 0;
+    }
+
+    if (signalsToday > 0) {
+      const { count: actionedCount, error: actionedErr } = await supabase
+        .from('email_signal_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .gte('created_at', todayStart.toISOString())
+        .eq('actioned', true);
+
+      if (!actionedErr) {
+        signalsActioned = actionedCount ?? 0;
+      }
+    }
+  } catch (e) {
+    console.warn('[eod-signal-summary] email_signal_events query threw (non-fatal):', e);
+  }
+
+  // 2. Count deals currently tracked in deal_signal_temperature (overnight monitoring)
+  try {
+    const { count: dealCount, error: dealErr } = await supabase
+      .from('deal_signal_temperature')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId);
+
+    if (dealErr) {
+      if (!dealErr.message.includes('relation') && !dealErr.message.includes('does not exist')) {
+        console.warn('[eod-signal-summary] deal_signal_temperature count error:', dealErr.message);
+      }
+    } else {
+      dealsMonitored = dealCount ?? 0;
+    }
+  } catch (e) {
+    console.warn('[eod-signal-summary] deal_signal_temperature query threw (non-fatal):', e);
+  }
+
+  const actionRatePct = signalsToday > 0
+    ? Math.round((signalsActioned / signalsToday) * 100)
+    : 0;
+
+  const summaryLine = signalsToday === 0
+    ? 'No email signals detected today.'
+    : `${signalsToday} email signal${signalsToday !== 1 ? 's' : ''} detected today, ` +
+      `${signalsActioned} actioned (${actionRatePct}%)`;
+
+  const overnightPlanLine = dealsMonitored === 0
+    ? 'No deals currently tracked for overnight signal monitoring.'
+    : `Monitoring ${dealsMonitored} deal${dealsMonitored !== 1 ? 's' : ''} for signal changes overnight.`;
+
+  return {
+    signals_today: signalsToday,
+    signals_actioned: signalsActioned,
+    action_rate_pct: actionRatePct,
+    deals_monitored_overnight: dealsMonitored,
+    summary_line: summaryLine,
+    overnight_plan_line: overnightPlanLine,
+  };
+}
+
+export const eodSignalSummaryAdapter: SkillAdapter = {
+  name: 'eod-signal-summary',
+
+  async execute(state: SequenceState, _step: SequenceStep): Promise<StepResult> {
+    const start = Date.now();
+    try {
+      console.log('[eod-signal-summary] Gathering email signal summary...');
+      const supabase = getServiceClient();
+      const orgId = state.event.org_id;
+
+      if (!orgId) {
+        throw new Error('org_id is required in event payload');
+      }
+
+      const result = await getSignalSummary(supabase, orgId);
+
+      console.log(
+        `[eod-signal-summary] ${result.summary_line} | ${result.overnight_plan_line}`
+      );
+
+      return { success: true, output: result, duration_ms: Date.now() - start };
+    } catch (err) {
+      console.error('[eod-signal-summary] Error:', err);
+      return { success: false, error: String(err), duration_ms: Date.now() - start };
+    }
+  },
+};

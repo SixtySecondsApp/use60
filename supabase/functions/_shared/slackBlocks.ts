@@ -1548,6 +1548,12 @@ export interface MorningBriefData {
     dealValue?: number;
     dealStage?: string;
     isImportant?: boolean;
+    engagementPattern?: {
+      avg_response_time_hours: number | null;
+      best_email_day: string | null;
+      best_email_hour: number | null;
+      response_trend: string | null;
+    } | null;
   }>;
   tasks: {
     overdue: Array<{
@@ -1587,6 +1593,25 @@ export interface MorningBriefData {
     completionPct: number;
     isNotable: boolean;
   }>;
+  // SIG-010: Signal Watch — top heating and cooling deals
+  signalWatch?: {
+    heatingUp: Array<{
+      deal_id: string;
+      deal_name: string;
+      deal_value: number | null;
+      temperature: number;
+      trend: string;
+      signal_count_24h: number;
+    }>;
+    coolingDown: Array<{
+      deal_id: string;
+      deal_name: string;
+      deal_value: number | null;
+      temperature: number;
+      trend: string;
+      signal_count_24h: number;
+    }>;
+  };
   appUrl: string;
 }
 
@@ -1751,6 +1776,38 @@ export const buildMorningBriefMessage = (data: MorningBriefData): SlackMessage =
     });
 
     blocks.push(section(safeMrkdwn(`*Campaigns*\n\n${campaignLines.join('\n')}`)));
+  }
+
+  // ─── SIGNAL WATCH section (SIG-010: heating-up / cooling-down deals) ───
+  if (data.signalWatch) {
+    const { heatingUp, coolingDown } = data.signalWatch;
+    const hasSignals = heatingUp.length > 0 || coolingDown.length > 0;
+    if (hasSignals) {
+      const signalLines: string[] = [];
+
+      if (heatingUp.length > 0) {
+        signalLines.push('*Heating up* :fire:');
+        heatingUp.slice(0, 3).forEach(d => {
+          const tempPct = Math.round(d.temperature * 100);
+          const valueStr = d.deal_value != null ? ` — ${formatCurrency(d.deal_value)}` : '';
+          const signalsStr = d.signal_count_24h > 0 ? ` _(${d.signal_count_24h} signal${d.signal_count_24h !== 1 ? 's' : ''} today)_` : '';
+          signalLines.push(`  • *${truncate(d.deal_name, 40)}*${valueStr} · ${tempPct}% temp${signalsStr}`);
+        });
+      }
+
+      if (coolingDown.length > 0) {
+        if (heatingUp.length > 0) signalLines.push('');
+        signalLines.push('*Cooling down* :snowflake:');
+        coolingDown.slice(0, 3).forEach(d => {
+          const tempPct = Math.round(d.temperature * 100);
+          const valueStr = d.deal_value != null ? ` — ${formatCurrency(d.deal_value)}` : '';
+          signalLines.push(`  • *${truncate(d.deal_name, 40)}*${valueStr} · ${tempPct}% temp`);
+        });
+      }
+
+      blocks.push(divider());
+      blocks.push(section(safeMrkdwn(`*Signal Watch*\n\n${signalLines.join('\n')}`)));
+    }
   }
 
   // ─── EMAILS ───

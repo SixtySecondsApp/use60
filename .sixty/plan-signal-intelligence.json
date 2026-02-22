@@ -1,0 +1,408 @@
+{
+  "feature": {
+    "id": "signal-intelligence",
+    "name": "Phase 4: Signal Intelligence (PRD-13, PRD-14, PRD-15)",
+    "phase": 4,
+    "status": "complete",
+    "completedAt": "2026-02-22T12:45:00Z",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#Phase-4",
+    "description": "Fill the gaps between meetings. Email signal processing, contact engagement pattern tracking, and unified deal temperature scoring make the copilot truly 'always-on'.",
+    "createdAt": "2026-02-22T15:00:00Z",
+    "dependencies": {
+      "completed": [
+        "PRD-01: Agent Configuration Engine",
+        "PRD-02: Fleet Orchestrator & Event Router",
+        "PRD-03: Auto CRM Update Agent",
+        "PRD-05: Re-engagement Trigger Agent",
+        "PRD-06: Enhanced Morning Briefing",
+        "PRD-07: End-of-Day Synthesis",
+        "PRD-08: Internal Meeting Prep",
+        "PRD-09: Sales Methodology Settings",
+        "PRD-10: Autonomy & Approval Policy Settings",
+        "PRD-11: CRM Field Mapping",
+        "PRD-12: Custom SOP Builder"
+      ],
+      "existingInfrastructure": [
+        "communication_events table (emails with AI analysis: sentiment, topics, urgency, ghost_risk)",
+        "3 email pipelines: Gmail Pub/Sub real-time, 15-min cron, manual sync",
+        "deal_signal_temperature table (from REN-001, has temperature, trend, top_signals)",
+        "proactive-signal-scanner + task-signal-processor edge functions",
+        "agent_config_defaults seeded for email_signals agent type",
+        "Fleet orchestrator with event routing + sequence chaining",
+        "pipeline_snapshots + pipeline math RPCs",
+        "email_send_log for outbound tracking",
+        "account_signals + account_watchlist tables (Smart Listening)",
+        "analyze-email + categorize-email edge functions (Claude Haiku 4.5)",
+        "emailLoader.ts in Command Centre (30-day rolling email context)"
+      ]
+    }
+  },
+
+  "stories": [
+    {
+      "id": "SIG-001",
+      "prd": "PRD-13",
+      "title": "Create contact_engagement_patterns table and baseline calculation RPC",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["communication_events"] },
+      "blocks": ["SIG-003", "SIG-004", "SIG-005"],
+      "parallelWith": ["SIG-002"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "contact_engagement_patterns table created: contact_id, org_id, avg_response_time_hours, best_email_day, best_email_hour, response_trend (improving|stable|declining), emails_sent_30d, emails_received_30d, last_calculated, created_at, updated_at",
+        "Unique constraint on (contact_id, org_id)",
+        "RPC calculate_contact_engagement_patterns(p_org_id, p_contact_id) queries communication_events to compute baselines",
+        "RPC batch_recalculate_engagement_patterns(p_org_id) recalculates all contacts with email activity in last 90 days",
+        "RLS: org-isolated SELECT for authenticated, service_role full access",
+        "Indexes on (org_id, contact_id) and (org_id, last_calculated)"
+      ],
+      "files": [
+        "supabase/migrations/20260222900001_contact_engagement_patterns.sql"
+      ]
+    },
+    {
+      "id": "SIG-002",
+      "prd": "PRD-13",
+      "title": "Create email_signal_events table and signal classification enum",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["communication_events", "deals"] },
+      "blocks": ["SIG-003", "SIG-006"],
+      "parallelWith": ["SIG-001"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "email_signal_events table created: id, org_id, user_id, contact_id, deal_id (nullable), communication_event_id (FK), signal_type (enum), confidence (0-1), context (text), metadata (jsonb), actioned (boolean default false), created_at",
+        "signal_type enum: meeting_request, pricing_question, positive_buying_signal, objection, competitor_mention, introduction_offer, forward_detected, silence_detected, fast_reply, slow_reply, out_of_office, new_cc_contact",
+        "RLS: user sees own org signals, service_role full access",
+        "Indexes on (org_id, deal_id, created_at), (org_id, signal_type, created_at), (communication_event_id)",
+        "7-day deduplication constraint on (communication_event_id, signal_type)"
+      ],
+      "files": [
+        "supabase/migrations/20260222900002_email_signal_events.sql"
+      ]
+    },
+    {
+      "id": "SIG-003",
+      "prd": "PRD-13",
+      "title": "Build email signal classifier edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["SIG-001", "SIG-002"], "files": [], "schema": ["email_signal_events", "contact_engagement_patterns"] },
+      "blocks": ["SIG-005", "SIG-006", "SIG-007"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent-email-signals edge function created",
+        "Accepts event payload: { communication_event_id, org_id, user_id } or batch mode { org_id, since_hours: 1 }",
+        "Loads email from communication_events (subject, body_preview, sentiment_score, urgency, response_required, direction, contact_id, deal_id)",
+        "Classifies into signal_type using existing AI analysis + rule-based logic (no extra LLM call for most signals)",
+        "LLM call (Claude Haiku) only for ambiguous signals needing deeper classification (objection vs pricing question)",
+        "Compares response time against contact_engagement_patterns.avg_response_time_hours for fast_reply/slow_reply/silence detection",
+        "Writes classified signals to email_signal_events table",
+        "Returns array of detected signals with confidence scores",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts"
+      ],
+      "files": [
+        "supabase/functions/agent-email-signals/index.ts"
+      ]
+    },
+    {
+      "id": "SIG-004",
+      "prd": "PRD-14",
+      "title": "Build engagement pattern calculation job (scheduled + event-triggered)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["SIG-001"], "files": [], "schema": ["contact_engagement_patterns", "communication_events"] },
+      "blocks": ["SIG-008"],
+      "parallelWith": ["SIG-005", "SIG-006"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "agent-engagement-patterns edge function created",
+        "Two modes: batch (weekly full recalc for org) and incremental (single contact after new email)",
+        "Calculates from communication_events: avg response time (inbound→outbound gap), best day/hour, sent/received counts, response trend (30d vs prior 30d)",
+        "Optimal send time: weighted by reply speed — hour+day combos with fastest replies ranked highest",
+        "Response trend: compare last-30d avg_response_time vs prior-30d; if >20% slower → declining, >20% faster → improving, else stable",
+        "Cron schedule: weekly Sunday 2am UTC via fleet_event_routes",
+        "Incremental trigger: called by orchestrator after email_received events"
+      ],
+      "files": [
+        "supabase/functions/agent-engagement-patterns/index.ts",
+        "supabase/migrations/20260222900003_engagement_patterns_cron.sql"
+      ]
+    },
+    {
+      "id": "SIG-005",
+      "prd": "PRD-13",
+      "title": "Wire email signals into fleet orchestrator event routing",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["SIG-001", "SIG-003"], "files": [], "schema": ["fleet_event_routes"] },
+      "blocks": ["SIG-007"],
+      "parallelWith": ["SIG-004", "SIG-006"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "Fleet event route: email_received → agent-email-signals (classify) → signal routing",
+        "Fleet event route: email_signal.meeting_request → offer calendar times (existing find-available-slots)",
+        "Fleet event route: email_signal.silence_detected → update deal_signal_temperature + risk score",
+        "Fleet event route: email_signal.forward_detected → log multi-threading signal in deal_signal_temperature",
+        "Fleet event route: email_signal.positive_buying_signal → reduce risk score, bump temperature",
+        "Fleet sequence: email_signal_processing (3 steps: classify → route signals → deliver alerts)",
+        "Migration adds routes to fleet_event_routes and fleet_sequence_definitions tables"
+      ],
+      "files": [
+        "supabase/migrations/20260222900004_email_signal_fleet_routes.sql"
+      ]
+    },
+    {
+      "id": "SIG-006",
+      "prd": "PRD-13",
+      "title": "Build email signal Slack delivery with action buttons",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["SIG-002", "SIG-003"], "files": [], "schema": ["email_signal_events"] },
+      "blocks": ["SIG-010"],
+      "parallelWith": ["SIG-007", "SIG-008"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Orchestrator adapter emailSignalSlack.ts created in _shared/orchestrator/adapters/",
+        "Formats Slack Block Kit messages per signal type (matching existing Slack Block Kit patterns in codebase)",
+        "Signal-specific templates: fast reply (positive), slow reply (warning), forward detected (multi-threading), meeting request (scheduling), pricing question (draft response), silence (risk alert)",
+        "Action buttons per signal type (e.g. [Draft response] [Note in CRM] [Dismiss] for pricing question)",
+        "Rate limiting: max 5 signal alerts per hour per user (batch remaining into digest)",
+        "Batch mode: if >3 signals in 30 min window, combine into single digest message",
+        "Uses existing Slack delivery from _shared/proactive/ subsystem"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/emailSignalSlack.ts"
+      ]
+    },
+    {
+      "id": "SIG-007",
+      "prd": "PRD-15",
+      "title": "Build deal temperature aggregation engine",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["SIG-003", "SIG-005"], "files": [], "schema": ["deal_signal_temperature", "email_signal_events"] },
+      "blocks": ["SIG-009", "SIG-010"],
+      "parallelWith": ["SIG-006", "SIG-008"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent-deal-temperature edge function created",
+        "Aggregates signals from: email_signal_events (email engagement), communication_events (opens/clicks/replies), email_send_log (outbound), account_signals (smart listening)",
+        "Signal weighting: email_reply (10pts), email_forward (15pts), fast_reply (8pts), proposal_opened (12pts), pricing_question (10pts), meeting_request (20pts), positive_buying (15pts), silence (-10pts/day, 72hr decay)",
+        "Temperature calculation: 0-100 scale, weighted sum with 72-hour decay on all positive signals",
+        "Trend detection: compare current 24hr signal count vs 7-day average — rising if >150%, falling if <50%, stable otherwise",
+        "Updates deal_signal_temperature via existing upsert_signal_temperature RPC",
+        "Threshold crossing detection: fires event when temperature crosses 30 (cold→warm), 60 (warm→hot), or drops below 30 (warm→cold)",
+        "Two modes: single deal recalc (after new signal) and batch (daily morning pre-briefing)"
+      ],
+      "files": [
+        "supabase/functions/agent-deal-temperature/index.ts"
+      ]
+    },
+    {
+      "id": "SIG-008",
+      "prd": "PRD-14",
+      "title": "Integrate engagement patterns into morning briefing and pre-meeting prep",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["SIG-004"], "files": [], "schema": ["contact_engagement_patterns"] },
+      "blocks": [],
+      "parallelWith": ["SIG-009", "SIG-010"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "Enhanced morning briefing loads engagement patterns for today's meeting contacts",
+        "Pre-meeting prep includes contact response patterns: 'Sarah typically responds within 3.2 hours, best day: Tuesday 9am'",
+        "Follow-up email drafts include optimal send time recommendation from patterns",
+        "emailLoader.ts in Command Centre enhanced with engagement pattern data",
+        "Graceful fallback: if no pattern data exists for contact, omit section (no errors)"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/loaders/emailLoader.ts",
+        "supabase/functions/_shared/orchestrator/adapters/morningBriefing.ts",
+        "supabase/functions/_shared/orchestrator/adapters/preMeetingPrep.ts"
+      ]
+    },
+    {
+      "id": "SIG-009",
+      "prd": "PRD-15",
+      "title": "Build deal temperature threshold alerts (heating up / cooling down)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["SIG-007"], "files": [], "schema": ["deal_signal_temperature"] },
+      "blocks": ["SIG-011"],
+      "parallelWith": ["SIG-008", "SIG-010"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Orchestrator adapter dealTemperatureSlack.ts created in _shared/orchestrator/adapters/",
+        "Heating up alert: fires when temperature crosses 60 threshold upward, lists aggregated signals from last 24-48h",
+        "Cooling down alert: fires when temperature drops below 30 from above, lists missing/negative signals",
+        "Template: deal name, temperature gauge (numeric + emoji thermometer), signal summary, trend arrow, action buttons",
+        "Action buttons: [Draft check-in] for heating up, [Try different channel] [Draft break-up email] for cooling down",
+        "Cooldown: max 1 temperature alert per deal per 48 hours (prevents alert spam on oscillation)",
+        "Fleet event route: deal_temperature.threshold_crossed → dealTemperatureSlack adapter"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/dealTemperatureSlack.ts",
+        "supabase/migrations/20260222900005_deal_temperature_fleet_routes.sql"
+      ]
+    },
+    {
+      "id": "SIG-010",
+      "prd": "PRD-15",
+      "title": "Integrate deal temperature into daily briefing and EOD synthesis",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["SIG-006", "SIG-007"], "files": [], "schema": ["deal_signal_temperature"] },
+      "blocks": ["SIG-012"],
+      "parallelWith": ["SIG-011"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "Morning briefing includes 'Signal Watch' section: top 3 heating-up deals and top 3 cooling-down deals",
+        "EOD synthesis includes signal summary: 'X email signals detected today, Y actioned'",
+        "EOD overnight plan references: 'Monitoring N deals for signal changes overnight'",
+        "Deal risk scorer reads deal_signal_temperature to adjust risk scores (temperature < 30 adds +15 risk points)",
+        "Existing get_hot_deals RPC used for morning briefing query"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/morningBriefing.ts",
+        "supabase/functions/_shared/orchestrator/adapters/eodSynthesis.ts"
+      ]
+    },
+    {
+      "id": "SIG-011",
+      "prd": "PRD-13/14/15",
+      "title": "Build Signal Intelligence settings UI panel",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["SIG-009"], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["SIG-012"],
+      "parallelWith": ["SIG-010"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "SignalIntelligenceSettings.tsx created in src/pages/settings/",
+        "Route /settings/signal-intelligence registered in routeConfig.ts under Agent Configuration section",
+        "Master toggle: Email Signal Monitoring enabled/disabled (writes agent_config_org_overrides)",
+        "Signal type toggles: enable/disable individual signal types (meeting_request, pricing_question, etc.)",
+        "Alert preferences: Slack alert threshold (all/high-confidence-only), batch window (immediate/15min/30min)",
+        "Engagement patterns: show/hide in briefings toggle, recalculation frequency (weekly/daily)",
+        "Deal temperature: alert thresholds (hot >60, cold <30 — adjustable sliders), cooldown hours",
+        "Uses existing settings page patterns (SettingsPageWrapper, glassmorphism cards)",
+        "Reads/writes via agent config resolution chain (defaults → org overrides)"
+      ],
+      "files": [
+        "src/pages/settings/SignalIntelligenceSettings.tsx",
+        "src/lib/routes/routeConfig.ts"
+      ]
+    },
+    {
+      "id": "SIG-012",
+      "prd": "PRD-15",
+      "title": "Build deal temperature dashboard widget and pipeline integration",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["SIG-010", "SIG-011"], "files": [], "schema": ["deal_signal_temperature"] },
+      "blocks": ["SIG-013"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "DealTemperatureGauge.tsx component: small inline gauge (0-100) with color gradient (blue→yellow→red), trend arrow",
+        "DealTemperatureSummary.tsx component: card showing top signals, signal count 24h/7d, trend description",
+        "Pipeline board integration: temperature gauge shown on deal cards in pipeline view",
+        "Deal detail sheet: temperature section with full signal history (last 10 signals with timestamps)",
+        "Command Centre sidebar: 'Signal Watch' section with hot/cold deals (uses get_hot_deals RPC)",
+        "Components use existing design patterns (glassmorphism, Lucide icons, light/dark mode)"
+      ],
+      "files": [
+        "src/components/signals/DealTemperatureGauge.tsx",
+        "src/components/signals/DealTemperatureSummary.tsx",
+        "src/components/pipeline/DealCard.tsx",
+        "src/components/deals/DealDetailSheet.tsx"
+      ]
+    },
+    {
+      "id": "SIG-013",
+      "prd": "PRD-13/14/15",
+      "title": "Deploy to staging and run E2E integration test",
+      "type": "test",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["SIG-012"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "All 4 new edge functions deployed to staging with --no-verify-jwt",
+        "All migrations applied to staging",
+        "E2E test: insert test communication_event → agent-email-signals classifies → email_signal_events row created → deal_signal_temperature updated → Slack alert mock verified",
+        "E2E test: batch_recalculate_engagement_patterns runs for test org without errors",
+        "E2E test: agent-deal-temperature batch mode recalculates all org deals without errors",
+        "Frontend: Signal Intelligence settings page loads, toggles persist",
+        "Frontend: temperature gauge renders on pipeline deal cards",
+        "Build passes: npm run build with no TypeScript errors"
+      ],
+      "files": []
+    }
+  ],
+
+  "execution": {
+    "totalStories": 13,
+    "completedStories": 0,
+    "estimatedHours": "5-7 hours (with parallel execution)",
+    "parallelGroups": [
+      { "group": 1, "stories": ["SIG-001", "SIG-002"], "description": "Schema: engagement patterns + signal events tables" },
+      { "group": 2, "stories": ["SIG-003"], "description": "Core: email signal classifier" },
+      { "group": 3, "stories": ["SIG-004", "SIG-005", "SIG-006"], "description": "Wiring: patterns job + fleet routes + Slack delivery" },
+      { "group": 4, "stories": ["SIG-007", "SIG-008"], "description": "Temperature engine + briefing integration" },
+      { "group": 5, "stories": ["SIG-009", "SIG-010", "SIG-011"], "description": "Alerts + daily integration + settings UI" },
+      { "group": 6, "stories": ["SIG-012"], "description": "Frontend: temperature dashboard + pipeline integration" },
+      { "group": 7, "stories": ["SIG-013"], "description": "Deploy + E2E test" }
+    ]
+  },
+
+  "architectureNotes": {
+    "designDecisions": [
+      "NO extra LLM calls for most email signals — leverage existing AI analysis in communication_events (sentiment, urgency, response_required, ghost_risk, is_sales_related) plus rule-based classification. Claude Haiku call only for ambiguous cases.",
+      "Build ON TOP of existing tables — communication_events already has email data, deal_signal_temperature already exists from REN-001. Add email_signal_events as the new classification layer and contact_engagement_patterns for baselines.",
+      "Rate-limit alerts aggressively — max 5 per hour per user, batch if >3 in 30 min. The PRD explicitly warns against notification spam.",
+      "72-hour signal decay — positive signals decay over 3 days in temperature calculation. This prevents stale signals from inflating temperature.",
+      "Temperature thresholds not individual signals — the PRD is explicit: don't alert on every email open. Only alert when aggregated temperature crosses a boundary (30 or 60)."
+    ],
+    "existingCodeToModify": [
+      "emailLoader.ts — add engagement pattern data to Command Centre context",
+      "morningBriefing.ts adapter — add Signal Watch section and engagement patterns",
+      "eodSynthesis.ts adapter — add signal summary to daily wrap",
+      "preMeetingPrep.ts adapter — add contact response patterns",
+      "DealCard.tsx — add temperature gauge inline",
+      "DealDetailSheet.tsx — add temperature section"
+    ],
+    "newEdgeFunctions": [
+      "agent-email-signals — classify emails into buying signals (SIG-003)",
+      "agent-engagement-patterns — calculate contact engagement baselines (SIG-004)",
+      "agent-deal-temperature — aggregate signals into deal temperature (SIG-007)"
+    ],
+    "newTables": [
+      "contact_engagement_patterns — per-contact response time baselines and optimal send times (SIG-001)",
+      "email_signal_events — classified email signals linked to contacts and deals (SIG-002)"
+    ],
+    "reusePatterns": [
+      "Slack delivery: reuse _shared/proactive/ delivery subsystem and Block Kit patterns from reengagementSlack.ts",
+      "Fleet routing: follow exact pattern from 20260222400003 (reengagement fleet routes)",
+      "Agent config: email_signals agent type already seeded in agent_config_defaults",
+      "Temperature RPC: upsert_signal_temperature and get_hot_deals already exist"
+    ]
+  }
+}

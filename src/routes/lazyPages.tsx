@@ -194,6 +194,7 @@ export const AutonomySettingsPage = lazyWithRetry(() => import('@/pages/settings
 export const SalesMethodologySettings = lazyWithRetry(() => import('@/pages/settings/SalesMethodologySettings'));
 export const CRMFieldMappingSettings = lazyWithRetry(() => import('@/pages/settings/CRMFieldMappingSettings'));
 export const CustomSOPBuilderPage = lazyWithRetry(() => import('@/pages/settings/CustomSOPBuilderPage'));
+export const SignalIntelligenceSettings = lazyWithRetry(() => import('@/pages/settings/SignalIntelligenceSettings'));
 export const JustCallSettings = lazyWithRetry(() => import('@/pages/settings/JustCallSettings'));
 export const HubSpotSettings = lazyWithRetry(() => import('@/pages/settings/HubSpotSettings'));
 export const AttioSettings = lazyWithRetry(() => import('@/pages/settings/AttioSettings'));

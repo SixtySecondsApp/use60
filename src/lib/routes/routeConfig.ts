@@ -766,6 +766,15 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     navSection: 'settings',
     order: 88,
   },
+  // Signal Intelligence (Org Admin)
+  {
+    path: '/settings/signal-intelligence',
+    access: 'orgAdmin',
+    label: 'Signal Intelligence',
+    showInNav: false,
+    navSection: 'settings',
+    order: 89,
+  },
   // Slack Settings (Org Admin)
   {
     path: '/settings/integrations/slack',
