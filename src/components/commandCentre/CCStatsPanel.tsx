@@ -245,7 +245,7 @@ export function CCStatsPanel({ items, stats, statsLoading, onUndo, pendingIds }:
         <div className="flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-slate-500 dark:text-gray-400" />
           <span className="text-sm font-semibold text-slate-700 dark:text-gray-200">
-            Today's Activity
+            Today&apos;s Activity
           </span>
           {!statsLoading && autoCompletedToday > 0 && (
             <Badge className="h-4 px-1.5 text-[10px] bg-emerald-600 text-white">
