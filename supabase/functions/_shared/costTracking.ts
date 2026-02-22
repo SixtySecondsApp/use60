@@ -9,6 +9,17 @@
 import { getActionCost, type IntelligenceTier } from './creditPacks.ts';
 
 // ---------------------------------------------------------------------------
+// CreditLogContext — optional audit context for credit_logs writes
+// ---------------------------------------------------------------------------
+
+export interface CreditLogContext {
+  source?: 'user_initiated' | 'agent_automated' | 'sequence_step' | 'scheduled';
+  agentType?: string;
+  contextSummary?: string;
+  contextRefs?: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
 // Intelligence tier lookup
 // ---------------------------------------------------------------------------
 
@@ -110,6 +121,144 @@ async function maybeEnqueueAutoTopUp(
 }
 
 // ---------------------------------------------------------------------------
+// DB-backed action cost lookup (falls back to hardcoded table)
+// ---------------------------------------------------------------------------
+
+async function getActionCostFromDB(
+  supabaseClient: any,
+  actionId: string,
+  tier: IntelligenceTier
+): Promise<number> {
+  try {
+    const { data, error } = await supabaseClient.rpc('get_action_credit_cost', {
+      p_action_id: actionId,
+      p_tier: tier,
+    });
+    if (!error && typeof data === 'number' && data >= 0) return data;
+  } catch {
+    // Fall through to hardcoded fallback
+  }
+  return getActionCost(actionId, tier);
+}
+
+// ---------------------------------------------------------------------------
+// credit_logs write helper — fire-and-forget, never throws
+// ---------------------------------------------------------------------------
+
+async function writeCreditLog(
+  supabaseClient: any,
+  params: {
+    userId: string;
+    orgId: string;
+    actionId: string;
+    displayName: string;
+    creditsCharged: number;
+    tier: IntelligenceTier;
+    balanceBefore: number;
+    balanceAfter: number;
+    logContext?: CreditLogContext;
+  }
+): Promise<void> {
+  try {
+    await supabaseClient.from('credit_logs').insert({
+      user_id: params.userId,
+      org_id: params.orgId,
+      action_id: params.actionId,
+      display_name: params.displayName,
+      credits_charged: params.creditsCharged,
+      intelligence_tier: params.tier,
+      balance_before: params.balanceBefore,
+      balance_after: params.balanceAfter,
+      context_summary: params.logContext?.contextSummary ?? null,
+      context_refs: params.logContext?.contextRefs ?? {},
+      source: params.logContext?.source ?? 'agent_automated',
+      agent_type: params.logContext?.agentType ?? null,
+      status: 'completed',
+    });
+  } catch (err) {
+    // NEVER block the main charge path — log warning only
+    console.warn('[CostTracking] credit_logs write failed (non-fatal):', err instanceof Error ? err.message : err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Budget Cap Check (credit_budget_caps)
+// ---------------------------------------------------------------------------
+
+export interface BudgetCapResult {
+  allowed: boolean;
+  spent: number;
+  cap: number | null;
+  capType: 'daily' | 'weekly' | 'unlimited';
+  resetsAt: string | null;
+}
+
+/**
+ * Check if the org is within its configured budget cap.
+ * Calls the check_budget_cap RPC. If no cap is configured (no row), treats as unlimited.
+ * Never throws — returns allowed=true on any error (backward compat).
+ */
+export async function checkBudgetCap(
+  client: any,
+  orgId: string
+): Promise<BudgetCapResult> {
+  const unlimitedDefault: BudgetCapResult = {
+    allowed: true,
+    spent: 0,
+    cap: null,
+    capType: 'unlimited',
+    resetsAt: null,
+  };
+
+  try {
+    const { data, error } = await client.rpc('check_budget_cap', {
+      p_org_id: orgId,
+    });
+
+    if (error) {
+      if (
+        error.message.includes('relation') ||
+        error.message.includes('does not exist') ||
+        error.message.includes('function')
+      ) {
+        return unlimitedDefault;
+      }
+      console.warn('[CostTracking] check_budget_cap RPC error:', error);
+      return unlimitedDefault;
+    }
+
+    // No row returned means no cap configured — treat as unlimited
+    if (!data) {
+      return unlimitedDefault;
+    }
+
+    const capType = data.cap_type as BudgetCapResult['capType'] ?? 'unlimited';
+
+    // cap_type='unlimited' always allows
+    if (capType === 'unlimited') {
+      return {
+        allowed: true,
+        spent: Number(data.spent) || 0,
+        cap: data.cap != null ? Number(data.cap) : null,
+        capType: 'unlimited',
+        resetsAt: data.resets_at ?? null,
+      };
+    }
+
+    return {
+      allowed: data.allowed ?? true,
+      spent: Number(data.spent) || 0,
+      cap: data.cap != null ? Number(data.cap) : null,
+      capType,
+      resetsAt: data.resets_at ?? null,
+    };
+  } catch (err) {
+    console.warn('[CostTracking] checkBudgetCap exception:', err);
+    return unlimitedDefault;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Shared deduction helper
 // ---------------------------------------------------------------------------
 
@@ -120,9 +269,56 @@ async function deductAndMaybeTopUp(
   description: string,
   featureKey: string | null,
   costEventId: string | null,
-): Promise<void> {
-  if (creditAmount <= 0) return;
+  userId?: string,
+  actionId?: string,
+  displayName?: string,
+  tier?: IntelligenceTier,
+  logContext?: CreditLogContext,
+): Promise<{ blocked?: boolean; blockReason?: string }> {
+  if (creditAmount <= 0) return {};
   try {
+    // Budget cap pre-flight check
+    const capResult = await checkBudgetCap(supabaseClient, orgId);
+    if (!capResult.allowed) {
+      // Log a failed credit_logs entry so admins can see blocked actions
+      if (userId && actionId) {
+        try {
+          await supabaseClient.from('credit_logs').insert({
+            user_id: userId,
+            org_id: orgId,
+            action_id: actionId,
+            display_name: displayName ?? actionId,
+            credits_charged: creditAmount,
+            intelligence_tier: tier ?? 'medium',
+            balance_before: 0,
+            balance_after: 0,
+            context_summary: 'Blocked by budget cap',
+            context_refs: logContext?.contextRefs ?? {},
+            source: logContext?.source ?? 'agent_automated',
+            agent_type: logContext?.agentType ?? null,
+            status: 'failed',
+          });
+        } catch (logErr) {
+          console.warn('[CostTracking] Failed to write blocked credit_log entry:', logErr instanceof Error ? logErr.message : logErr);
+        }
+      }
+      return {
+        blocked: true,
+        blockReason: `Budget cap exceeded (${capResult.spent.toFixed(1)}/${capResult.cap?.toFixed(1) ?? '∞'} credits, resets ${capResult.resetsAt ?? 'N/A'})`,
+      };
+    }
+
+    // Fetch balance before deduction for credit_logs audit trail
+    let balanceBefore = 0;
+    try {
+      const { data: bal } = await supabaseClient
+        .from('org_credit_balance')
+        .select('balance_credits')
+        .eq('org_id', orgId)
+        .maybeSingle();
+      balanceBefore = bal?.balance_credits ?? 0;
+    } catch { /* non-fatal */ }
+
     const { data: newBalance, error: deductError } = await supabaseClient.rpc('deduct_credits_fifo', {
       p_org_id: orgId,
       p_amount: creditAmount,
@@ -139,17 +335,47 @@ async function deductAndMaybeTopUp(
       ) {
         console.warn('[CostTracking] FIFO credit deduction error:', deductError);
       }
-      return;
+      return {};
     }
 
     // newBalance is the remaining balance after deduction (or -1 for insufficient)
     if (typeof newBalance === 'number' && newBalance >= 0) {
       await maybeEnqueueAutoTopUp(supabaseClient, orgId, newBalance);
+
+      // Write credit_logs audit entry if we have enough context
+      if (userId && actionId) {
+        await writeCreditLog(supabaseClient, {
+          userId,
+          orgId,
+          actionId,
+          displayName: displayName ?? actionId,
+          creditsCharged: creditAmount,
+          tier: tier ?? 'medium',
+          balanceBefore,
+          balanceAfter: newBalance,
+          logContext,
+        });
+      }
+
+      // Increment budget cap spent counter — fire-and-forget
+      try {
+        supabaseClient.rpc('increment_budget_spent', {
+          p_org_id: orgId,
+          p_amount: creditAmount,
+        }).then(() => {}).catch((err: unknown) => {
+          console.warn('[CostTracking] increment_budget_spent failed (non-fatal):', err);
+        });
+      } catch {
+        // Non-fatal — never block the deduction path
+      }
     }
+
+    return {};
   } catch (err) {
     if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
       console.warn('[CostTracking] deductAndMaybeTopUp exception:', err);
     }
+    return {};
   }
 }
 
@@ -171,7 +397,8 @@ export async function logAICostEvent(
   inputTokens: number,
   outputTokens: number,
   feature?: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  logContext?: CreditLogContext
 ): Promise<void> {
   try {
     // If no orgId provided, try to get it from user
@@ -194,7 +421,7 @@ export async function logAICostEvent(
 
     // Determine credit cost using feature key + org intelligence tier
     const tier = await getOrgIntelligenceTier(supabaseClient, orgId, feature ?? 'copilot_chat');
-    const creditCost = getActionCost(feature ?? 'copilot_chat', tier);
+    const creditCost = await getActionCostFromDB(supabaseClient, feature ?? 'copilot_chat', tier);
 
     // Log to ai_cost_events table (estimated_cost now stores credit units)
     const { data: insertedCostEvent, error: insertError } = await supabaseClient
@@ -227,6 +454,11 @@ export async function logAICostEvent(
       `AI usage: ${feature || 'unknown'} [${tier}]`,
       feature || null,
       insertedCostEvent?.id ?? null,
+      userId,
+      feature,
+      feature,
+      tier,
+      logContext,
     );
   } catch (err) {
     if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
@@ -270,7 +502,8 @@ export async function logFlatRateCostEvent(
   model: string,
   creditAmount: number,
   feature?: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  logContext?: CreditLogContext
 ): Promise<void> {
   try {
     // Log to ai_cost_events for usage analytics (estimated_cost = credit units)
@@ -304,6 +537,11 @@ export async function logFlatRateCostEvent(
       `${provider} usage: ${feature || 'unknown'}`,
       feature || null,
       insertedCostEvent?.id ?? null,
+      userId,
+      feature,
+      `${provider} ${feature || 'unknown'}`,
+      undefined,
+      logContext,
     );
   } catch (err) {
     if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
@@ -381,6 +619,7 @@ export async function checkAgentBudget(
 export interface CreditCheckResult {
   allowed: boolean;
   balance: number;
+  inGrace?: boolean;
   message?: string;
 }
 
@@ -395,7 +634,7 @@ export async function checkCreditBalance(
   try {
     const { data, error } = await supabaseClient
       .from('org_credit_balance')
-      .select('balance_credits')
+      .select('balance_credits, grace_threshold_credits')
       .eq('org_id', orgId)
       .maybeSingle();
 
@@ -414,16 +653,27 @@ export async function checkCreditBalance(
     }
 
     const balance = data.balance_credits || 0;
+    const graceThreshold = data.grace_threshold_credits ?? 10;
 
-    if (balance <= 0) {
+    // Match DB deduct_credits_fifo: blocks when new_balance < -threshold (strict less-than)
+    if (balance < -graceThreshold) {
       return {
         allowed: false,
         balance,
-        message: 'Your organization has run out of AI credits. Please top up to continue.',
+        message: 'Credit balance exceeds grace threshold. Please top up.',
       };
     }
 
-    return { allowed: true, balance };
+    if (balance < 0) {
+      return {
+        allowed: true,
+        balance,
+        inGrace: true,
+        message: `Balance is ${balance.toFixed(2)} credits (in grace zone).`,
+      };
+    }
+
+    return { allowed: true, balance, inGrace: false };
   } catch (err) {
     console.warn('[CostTracking] Credit check exception:', err);
     return { allowed: true, balance: 0 };
