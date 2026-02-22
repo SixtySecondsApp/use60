@@ -40,6 +40,7 @@ import {
 import { handleHITLAction } from './handlers/hitl.ts';
 import { handleSupportAction } from './handlers/support.ts';
 import { handleAutonomyAction } from './handlers/autonomy.ts';
+import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -7565,6 +7566,38 @@ serve(async (req) => {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
+        }
+
+        // =====================================================================
+        // LEARN-001: Route config question answer actions
+        // =====================================================================
+        if (action.action_id === 'config_question_answer') {
+          console.log('[ConfigQuestion] Processing answer action');
+          const result = await handleConfigQuestionAnswer(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: result.responseBlocks,
+                text: 'Setting saved.',
+              });
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed to save setting: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to save setting',
+              });
+            }
+          }
+
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
 
         // Check if this is a sequence HITL action (new format: hitl_*)

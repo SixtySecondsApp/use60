@@ -36,6 +36,7 @@ import type { AgentConfigMap } from '../config/types.ts';
 import { resolveRoute, getSequenceSteps, getHandoffRoutes, evaluateHandoffConditions, applyContextMapping, getAgentTypeForSkill } from './fleetRouter.ts';
 import { enqueueDeadLetter } from './deadLetter.ts';
 import { isCircuitAllowed, recordSuccess, recordFailure, loadPersistedState, getStateToPersist } from './circuitBreaker.ts';
+import { maybeEvaluateConfigQuestion } from '../config/questionTriggerHook.ts';
 
 // Steps that should only run for sales calls (Discovery, Demo, Close)
 const SALES_ONLY_STEPS = new Set([
@@ -473,6 +474,9 @@ async function executeStepsParallel(
 
         await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
 
+        // Fire question trigger evaluation after successful step (fire-and-forget)
+        maybeEvaluateConfigQuestion(supabase, state.event.org_id, state.event.user_id, step.skill);
+
       } else {
         recordFailure(step.skill);
 
@@ -628,6 +632,9 @@ async function executeStepsSequential(
       }
 
       await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
+
+      // Fire question trigger evaluation after successful step (fire-and-forget)
+      maybeEvaluateConfigQuestion(supabase, state.event.org_id, state.event.user_id, step.skill);
 
     } else {
       if (step.criticality === 'critical') {

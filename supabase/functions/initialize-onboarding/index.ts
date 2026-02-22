@@ -76,6 +76,55 @@ export default async (req: Request) => {
       );
     }
 
+    // ------------------------------------------------------------------
+    // Seed contextual config questions for the user's org (non-fatal).
+    // We look up the first org the user belongs to via organization_members.
+    // This covers the common path where the org is created before onboarding
+    // is initialised (e.g. invite flow or auto-org creation at sign-up).
+    // If no org membership exists yet, seeding is skipped here and should be
+    // triggered separately when org membership is established.
+    // ------------------------------------------------------------------
+    try {
+      const { data: memberRow } = await supabaseAdmin
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+
+      if (memberRow?.organization_id) {
+        const { error: seedError } = await supabaseAdmin.rpc(
+          "seed_config_questions_for_org",
+          {
+            p_org_id: memberRow.organization_id,
+            p_user_id: userId,
+          }
+        );
+        if (seedError) {
+          console.warn(
+            "[initialize-onboarding] Config question seeding failed (non-fatal):",
+            seedError.message
+          );
+        } else {
+          console.log(
+            "[initialize-onboarding] Config questions seeded for org",
+            memberRow.organization_id
+          );
+        }
+      } else {
+        console.log(
+          "[initialize-onboarding] No org membership found for user",
+          userId,
+          "— config question seeding deferred."
+        );
+      }
+    } catch (seedErr) {
+      console.warn(
+        "[initialize-onboarding] Config question seeding threw (non-fatal):",
+        seedErr instanceof Error ? seedErr.message : seedErr
+      );
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

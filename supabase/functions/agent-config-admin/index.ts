@@ -9,6 +9,7 @@ import {
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 import { getAgentConfig, invalidateConfigCache } from '../_shared/config/agentConfigEngine.ts';
 import type { AgentType } from '../_shared/config/types.ts';
+import { handleConfirmBootstrapConfig } from './handlers/bootstrapConfig.ts';
 
 serve(async (req) => {
   const preflightResponse = handleCorsPreflightRequest(req);
@@ -309,6 +310,25 @@ serve(async (req) => {
 
       invalidateConfigCache(org_id);
       return jsonResponse({ success: true, methodology_key, keys_written: data ?? 0 }, req);
+    }
+
+    // -------------------------------------------------------------------------
+    // confirm_bootstrap_config — admin/owner
+    // -------------------------------------------------------------------------
+    if (action === 'confirm_bootstrap_config') {
+      const { org_id, items } = params;
+      if (!org_id) {
+        return errorResponse('org_id is required', req, 400);
+      }
+
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+
+      const result = await handleConfirmBootstrapConfig(serviceClient, org_id, authContext.userId, {
+        items,
+      });
+
+      invalidateConfigCache(org_id);
+      return jsonResponse({ success: true, ...result }, req);
     }
 
     return errorResponse(`Unknown action: ${action}`, req, 400);

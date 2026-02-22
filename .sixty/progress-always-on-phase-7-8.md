@@ -61,10 +61,94 @@
 ## Codebase Patterns
 <!-- Reusable learnings across all stories -->
 
-*(Will be populated during execution)*
+- `agent_config_org_overrides` unique constraint: `(org_id, agent_type, config_key)` — use `onConflict` for upserts
+- `agent_config_questions` unique constraint: `(org_id, user_id, config_key)` — NULL user_id requires special handling (WHERE NOT EXISTS instead of ON CONFLICT)
+- Slack interactive action routing: match `action_id` in the `block_actions` handler, return blocks for ephemeral response
+- Fire-and-forget pattern in orchestrator: synchronous entry function that internally calls `fetch().catch()` — never blocks the caller
+- `getSlackRecipient()` returns null when no Slack mapping exists — use this as the signal to fall back to in-app delivery
+- Meetings table uses `owner_user_id` (not `user_id`) — critical for quiet hours / meeting cooldown checks
+- Config engine RPC `get_next_config_question` handles 24h rate limiting + priority ordering at the DB level
 
 ---
 
 ## Session Log
 
-*(No sessions yet — run `60/dev-run` to begin execution)*
+### 2026-02-22 — LEARN-001 ✅
+**Story**: Create agent_config_questions table and completeness tracking schema
+**Files**: supabase/migrations/20260223300001_agent_config_questions.sql
+**Gates**: schema review ✅
+**Learnings**: 3 tables (templates, questions, log) + 2 RPCs (get_config_completeness, get_next_config_question)
+
+---
+
+### 2026-02-22 — LEARN-002 ✅
+**Story**: Extend research step to infer agent configuration from webscrape
+**Files**: supabase/functions/_shared/enrichment/agentConfigInference.ts
+**Gates**: review ✅
+**Learnings**: 5-pass inference strategy (enrichment → CRM → country → Gemini → fallback). Same Gemini JSON repair as enrich-organization.
+
+---
+
+### 2026-02-22 — LEARN-005 ✅
+**Story**: Build contextual question trigger evaluation engine
+**Files**: supabase/functions/evaluate-config-questions/index.ts, supabase/functions/_shared/config/questionEvaluator.ts
+**Gates**: review ✅
+**Learnings**: 3 delivery gate checks in parallel (quiet hours, meeting cooldown, inactivity). All fail open.
+
+---
+
+### 2026-02-22 — LEARN-009 ✅
+**Story**: Build config completeness indicator for settings page
+**Files**: src/components/settings/ConfigCompletenessCard.tsx, src/lib/hooks/useConfigCompleteness.ts
+**Gates**: review ✅
+**Learnings**: Tier color mapping: functional=blue, tuned=violet, optimised=emerald, learning=amber. Category icons mapped from CATEGORY_META.
+
+---
+
+### 2026-02-22 — LEARN-003 ✅
+**Story**: Build bootstrap confirmation screen after onboarding enrichment
+**Files**: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx, OnboardingV2.tsx (edited), EnrichmentResultStep.tsx (edited), onboardingV2Store.ts (edited)
+**Gates**: review ✅
+**Learnings**: New onboarding flow: enrichment_result → agent_config_confirm → skills_config. Supports inline editing with 4 input types (dropdown, tags, number, text).
+
+---
+
+### 2026-02-22 — LEARN-006 ✅
+**Story**: Deliver contextual questions via Slack DM or in-app notification
+**Files**: supabase/functions/_shared/config/questionDelivery.ts, questionBlockKit.ts, questionInApp.ts
+**Gates**: review ✅
+**Learnings**: Slack Block Kit action_id must be "config_question_answer" (exact match). Slack fallback to in-app on any delivery failure.
+
+---
+
+### 2026-02-22 — LEARN-010 ✅
+**Story**: Wire question engine into orchestrator event hooks
+**Files**: supabase/functions/_shared/config/questionTriggerHook.ts, supabase/functions/_shared/orchestrator/runner.ts (edited)
+**Gates**: review ✅
+**Learnings**: Synchronous entry point, async fire-and-forget internally. Hooked into both executeStepsParallel and executeStepsSequential after rpcUpdateStep 'completed'.
+
+---
+
+### 2026-02-22 — LEARN-004 ✅
+**Story**: Write inferred config to config engine on bootstrap confirm
+**Files**: supabase/functions/agent-config-admin/handlers/bootstrapConfig.ts, agent-config-admin/index.ts (edited)
+**Gates**: review ✅
+**Learnings**: Batch upsert with onConflict. Conditional apply_methodology RPC for high-confidence methodology. Skips pending questions matching written config_keys.
+
+---
+
+### 2026-02-22 — LEARN-007 ✅
+**Story**: Handle contextual question answers from Slack and in-app
+**Files**: supabase/functions/slack-interactive/handlers/configQuestionAnswer.ts, supabase/functions/answer-config-question/index.ts, slack-interactive/index.ts (edited)
+**Gates**: review ✅
+**Learnings**: Slack handler sends ephemeral confirmation. In-app handler uses JWT auth with RLS. Both write to same config tables via scope-based routing.
+
+---
+
+### 2026-02-22 — LEARN-008 ✅
+**Story**: Seed all contextual question templates into the question queue
+**Files**: supabase/migrations/20260223300002_seed_config_question_templates.sql, supabase/functions/initialize-onboarding/index.ts (edited)
+**Gates**: review ✅
+**Learnings**: 18 templates across 5 categories. seed_config_questions_for_org RPC uses two separate INSERTs (org vs user scope) due to NULL user_id dedup issue. initialize-onboarding seeds if org membership exists, defers otherwise.
+
+---
