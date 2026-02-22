@@ -78,6 +78,7 @@ function RuleItem({
     run_enrichment: 'Run enrichment',
     notify: 'Notify',
     push_to_hubspot: 'Push to HubSpot',
+    webhook: 'Webhook',
   };
 
   return (

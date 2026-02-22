@@ -1,0 +1,765 @@
+{
+  "feature": {
+    "id": "command-centre-enhancement",
+    "name": "Command Centre Enhancement — Shared Inbox for Reps & AI Agents (Phases 8-12)",
+    "status": "pending",
+    "prd": "Command Centre Enhancement Plan (PRD Phases 8-12)",
+    "prerequisite": "Master Plan PRDs 1-4 complete. Existing plan-command-centre.json covers V1 unified task system.",
+    "phases": [
+      { "id": "phase-8", "name": "Shared Backlog", "estimate": "1-2 weeks", "description": "One queue. Every agent writes to it." },
+      { "id": "phase-9", "name": "Cleanup & Reconciliation", "estimate": "1 week", "description": "Dedup, cross-channel resolution, context refresh." },
+      { "id": "phase-10", "name": "Enrichment", "estimate": "2-3 weeks", "description": "Make every item decision-ready with cross-system context." },
+      { "id": "phase-11", "name": "Confidence Gates", "estimate": "1-2 weeks", "description": "Progressive autonomy — agents earn the right to act." },
+      { "id": "phase-12", "name": "Autonomous Execution & View", "estimate": "2-3 weeks", "description": "Auto-exec loop, undo, full web UI, reporting." }
+    ],
+    "codebaseNotes": {
+      "tableNameFix": "PRD says 'organisations' — codebase uses 'organizations'. All stories use 'organizations'.",
+      "existingActionCentre": "action_centre_items table already exists (migration 20260125000001). command_centre_items is the evolution.",
+      "existingCommandCentreUI": "Pages exist at /platform/CommandCentre with stores (commandCentreStore.ts) and hooks (useCommandCentreTasks.ts). Phase 12 extends these.",
+      "existingAgents": "7 active agents: slack-morning-brief, proactive-pipeline-analysis, agent-deal-risk-batch, process-reengagement, agent-crm-heartbeat, agent-crm-update, agent-orchestrator",
+      "existingSlackHelpers": "slackBlocks.ts has builders + safety helpers (safeMrkdwn, safeHeaderText, safeButtonText)",
+      "existingOrchestrator": "Fleet orchestrator with fleetRouter.ts, runner.ts, contextLoader.ts, 35+ adapters",
+      "existingConfigEngine": "3-layer config: agent_config_defaults -> agent_config_org_overrides -> (user overrides)"
+    },
+    "createdAt": "2026-02-21T00:00:00Z"
+  },
+
+  "stories": [
+
+    {
+      "id": "CC8-001",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-8",
+      "title": "Create command_centre_items table with indexes and RLS",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations"] },
+      "blocks": ["CC8-002", "CC8-003", "CC8-004", "CC8-005", "CC8-006", "CC8-007", "CC8-008"],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "command_centre_items table created per PRD schema: source_agent, source_event_id, item_type, title, summary, context JSONB, priority_score NUMERIC(5,2), priority_factors JSONB, urgency TEXT, due_date, enrichment_status, enrichment_context JSONB, drafted_action JSONB, confidence_score NUMERIC(3,2), confidence_factors JSONB, requires_human_input TEXT[], status, resolution_channel, timestamps (created_at, updated_at, enriched_at, resolved_at), deal_id UUID, contact_id UUID, parent_item_id UUID self-ref FK",
+        "org_id references organizations(id), user_id references auth.users(id)",
+        "4 partial indexes: idx_cc_user_open (user_id, status WHERE IN open/ready), idx_cc_enrichment (enrichment_status WHERE pending), idx_cc_priority (user_id, priority_score DESC WHERE ready), idx_cc_deal (deal_id WHERE NOT NULL)",
+        "RLS: users SELECT/UPDATE own items, org admins SELECT all org items",
+        "updated_at auto-trigger on UPDATE"
+      ],
+      "files": [
+        "supabase/migrations/20260222600001_command_centre_items.sql"
+      ]
+    },
+
+    {
+      "id": "CC8-002",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-8",
+      "title": "Create CC helper RPCs (insert item, bulk update, get view)",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["CC8-001"], "files": [], "schema": ["command_centre_items"] },
+      "blocks": ["CC8-004", "CC8-005"],
+      "parallelWith": ["CC8-003"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "RPC insert_command_centre_item(params JSONB) — validates required fields (org_id, user_id, source_agent, item_type, title), sets defaults, returns item ID",
+        "RPC bulk_update_cc_status(item_ids UUID[], new_status TEXT, resolution_channel TEXT) — batch status transitions with resolved_at timestamp",
+        "RPC get_command_centre_view(p_user_id UUID) — returns items grouped by status bucket (needs_input, ready_to_action, auto_completed_today, externally_resolved, at_risk_deals)",
+        "All RPCs SECURITY DEFINER with internal user_id verification"
+      ],
+      "files": [
+        "supabase/migrations/20260222600002_command_centre_rpcs.sql"
+      ]
+    },
+
+    {
+      "id": "CC8-003",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-8",
+      "title": "Create CC write adapter for orchestrator agents",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["CC8-001"], "files": ["supabase/functions/_shared/orchestrator/runner.ts"], "schema": ["command_centre_items"] },
+      "blocks": ["CC8-005", "CC8-006"],
+      "parallelWith": ["CC8-002"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "New shared module supabase/functions/_shared/commandCentre/writeAdapter.ts",
+        "writeToCommandCentre({ org_id, user_id, source_agent, item_type, title, summary, context, deal_id, contact_id }) inserts via service role client",
+        "writeMultipleItems(items[]) for batch writes (e.g. post-meeting creates multiple items)",
+        "Source agent enum: 'post_meeting' | 'deal_risk' | 'pipeline_scan' | 'reengagement' | 'coaching' | 'intent_detection' | 'campaign_monitoring' | 'crm_update' | 'pre_meeting'",
+        "Types module at _shared/commandCentre/types.ts with CommandCentreItem, DraftedAction, EnrichmentContext interfaces"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/writeAdapter.ts",
+        "supabase/functions/_shared/commandCentre/types.ts"
+      ]
+    },
+
+    {
+      "id": "CC8-004",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-8",
+      "title": "Build prioritisation engine (shared module + edge function)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["CC8-001", "CC8-002"], "files": [], "schema": ["command_centre_items", "deals"] },
+      "blocks": ["CC8-006", "CC8-007"],
+      "parallelWith": ["CC8-005"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Shared module _shared/commandCentre/prioritisation.ts with calculatePriority(item, dealContext) returning 0-100 score",
+        "5 weighted factors: time_sensitivity (30% — deadlines, decay, meeting proximity), deal_value (25% — weighted by stage probability), signal_strength (20% — buying signals, engagement, risk indicators), strategic_alignment (15% — ICP fit, target account), effort_required (10% — one-click vs needs drafting)",
+        "Edge function cc-prioritise callable on single item (creation) or batch (daily re-score)",
+        "Writes priority_score and priority_factors JSONB to each item",
+        "Uses getCorsHeaders(req), pinned @supabase/supabase-js@2.43.4"
+      ],
+      "files": [
+        "supabase/functions/cc-prioritise/index.ts",
+        "supabase/functions/_shared/commandCentre/prioritisation.ts"
+      ]
+    },
+
+    {
+      "id": "CC8-005",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-8",
+      "title": "Wire existing agents to write CC items (dual-write)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["CC8-002", "CC8-003"], "files": ["supabase/functions/_shared/commandCentre/writeAdapter.ts"], "schema": ["command_centre_items"] },
+      "blocks": ["CC8-006"],
+      "parallelWith": ["CC8-004"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent-deal-risk-batch: after scoring, writes risk alert items (source_agent='deal_risk', item_type='deal_action') with deal_id, score in context",
+        "process-reengagement: writes opportunity items (source_agent='reengagement', item_type='outreach') with signal data in context",
+        "agent-crm-update: writes CRM update items (source_agent='crm_update', item_type='crm_update') with proposed field changes",
+        "All agents dual-write (CC items + existing Slack) — not replacing Slack yet",
+        "Each populates deal_id/contact_id for grouping, source_event_id for traceability"
+      ],
+      "files": [
+        "supabase/functions/agent-deal-risk-batch/index.ts",
+        "supabase/functions/process-reengagement/index.ts",
+        "supabase/functions/agent-crm-update/index.ts"
+      ]
+    },
+
+    {
+      "id": "CC8-006",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-8",
+      "title": "Refactor morning brief to read from CC items",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["CC8-003", "CC8-004", "CC8-005"], "files": ["supabase/functions/slack-morning-brief/index.ts"], "schema": ["command_centre_items"] },
+      "blocks": ["CC8-007"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Morning brief queries command_centre_items WHERE status IN ('open','ready') AND user_id = p_user_id ORDER BY priority_score DESC LIMIT 15",
+        "Groups items by urgency tier (critical, high, normal) for Slack rendering",
+        "Falls back to existing standalone analysis if CC has <3 items (transition safety net)",
+        "Existing pipeline math and quarter phase detection output preserved",
+        "Config flag 'morning_brief_source' in agent_config_defaults: 'command_centre' | 'legacy' (default: 'legacy' for safe rollout)"
+      ],
+      "files": [
+        "supabase/functions/slack-morning-brief/index.ts",
+        "supabase/functions/_shared/commandCentre/briefingAdapter.ts"
+      ]
+    },
+
+    {
+      "id": "CC8-007",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-8",
+      "title": "Build Slack CC digest with HITL action buttons",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["CC8-004", "CC8-006"], "files": ["supabase/functions/_shared/slackBlocks.ts"], "schema": ["command_centre_items"] },
+      "blocks": [],
+      "parallelWith": ["CC8-008"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "New buildCommandCentreDigest(items[], stats) function in slackBlocks.ts",
+        "Groups by urgency: CRITICAL (red circle), HIGH (orange circle), NORMAL (show count + [Show all] button)",
+        "Each critical/high item: title, summary snippet (safeMrkdwn 200 chars), action buttons [Send] [Edit] [Later] [Dismiss]",
+        "Footer stats: total items, auto-completed overnight count, pipeline value sum, proposals awaiting response",
+        "[Open Command Centre] button links to app.use60.com/command-centre",
+        "All text uses safeMrkdwn(), safeHeaderText(), safeButtonText() for Slack block limits"
+      ],
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/commandCentre/digestBuilder.ts"
+      ]
+    },
+
+    {
+      "id": "CC8-008",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-8",
+      "title": "Create CC items frontend service and React Query hooks",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["CC8-001"], "files": ["src/lib/services/ServiceLocator.tsx"], "schema": ["command_centre_items"] },
+      "blocks": ["CC12-004", "CC12-005", "CC12-006", "CC12-007"],
+      "parallelWith": ["CC8-007"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "commandCentreItemsService.ts in src/lib/services/ — getItems(filters), getStats(), approveItem(id), dismissItem(id), snoozeItem(id, until), undoItem(id)",
+        "useCommandCentreItemsQuery(filters) hook — React Query with staleTime, filters by status/urgency/source_agent/deal_id/contact_id",
+        "useCommandCentreStatsQuery() — counts by status bucket for meta-view header",
+        "useCommandCentreItemMutations() — approve, dismiss, snooze, undo with optimistic updates and cache invalidation",
+        "Service registered in ServiceLocator.tsx via useServices()"
+      ],
+      "files": [
+        "src/lib/services/commandCentreItemsService.ts",
+        "src/lib/hooks/useCommandCentreItemsQuery.ts",
+        "src/lib/services/ServiceLocator.tsx"
+      ]
+    },
+
+
+    {
+      "id": "CC9-001",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-9",
+      "title": "Add reconciliation and dedup columns + indexes",
+      "type": "schema",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["CC8-001"], "files": [], "schema": ["command_centre_items"] },
+      "blocks": ["CC9-002", "CC9-003", "CC9-004"],
+      "parallelWith": [],
+      "estimatedMinutes": 15,
+      "acceptance": [
+        "ALTER TABLE adds: reconciled_by TEXT, reconciled_event_id UUID, merged_from UUID[] DEFAULT '{}'",
+        "Dedup index: idx_cc_dedup ON (user_id, deal_id, item_type) WHERE status IN ('open','ready') AND deal_id IS NOT NULL",
+        "Contact dedup index: idx_cc_contact_dedup ON (user_id, contact_id, item_type) WHERE status IN ('open','ready') AND contact_id IS NOT NULL",
+        "Migration is additive only — no data loss, no column drops"
+      ],
+      "files": [
+        "supabase/migrations/20260222600003_cc_reconciliation_columns.sql"
+      ]
+    },
+
+    {
+      "id": "CC9-002",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-9",
+      "title": "Build cross-channel reconciliation engine",
+      "type": "backend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["CC9-001"], "files": ["supabase/functions/_shared/commandCentre/writeAdapter.ts"], "schema": ["command_centre_items"] },
+      "blocks": [],
+      "parallelWith": ["CC9-003"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Module _shared/commandCentre/reconciler.ts with reconcileItem(event) function",
+        "Handles event types: email_sent, crm_updated, calendar_created, slack_action_taken",
+        "Matches open CC items by (deal_id OR contact_id) + compatible item_type mapping",
+        "Auto-resolves: status='auto_resolved', resolution_channel='external_{email|crm|calendar}', resolved_at=now()",
+        "Callable from: email send webhooks, HubSpot property change webhooks, calendar sync, Slack interaction handler"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/reconciler.ts"
+      ]
+    },
+
+    {
+      "id": "CC9-003",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-9",
+      "title": "Build deduplication matcher for CC items",
+      "type": "backend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["CC9-001"], "files": ["supabase/functions/_shared/commandCentre/writeAdapter.ts"], "schema": ["command_centre_items"] },
+      "blocks": [],
+      "parallelWith": ["CC9-002"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Module _shared/commandCentre/deduplicator.ts with checkForDuplicate(newItem) function",
+        "Checks existing open items with same (deal_id + compatible item_type) or (contact_id + compatible item_type)",
+        "Compatible type map: deal_risk <-> stale_deal, follow_up <-> outreach, crm_update <-> crm_update",
+        "On duplicate found: merges context JSONB (union keys), keeps higher priority_score, records merged_from UUID array on winner",
+        "Integrated into writeAdapter.ts — runs before insert; also available as daily sweep batch"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/deduplicator.ts",
+        "supabase/functions/_shared/commandCentre/writeAdapter.ts"
+      ]
+    },
+
+    {
+      "id": "CC9-004",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-9",
+      "title": "Build daily cleanup cron (context refresh + re-score + auto-resolve stale)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": ["CC9-001", "CC8-004"], "files": ["supabase/functions/_shared/commandCentre/prioritisation.ts", "supabase/functions/_shared/commandCentre/reconciler.ts"], "schema": ["command_centre_items"] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Edge function cc-daily-cleanup with cron schedule (daily 6am UTC, before morning brief)",
+        "Items open >24h: re-check deal stage (changed?), contact activity (replied?), email status (sent?)",
+        "Auto-resolve items where underlying action is done (deal closed, contact responded, meeting booked)",
+        "Re-score priority for all open items via prioritisation.ts calculatePriority()",
+        "Log cleanup stats: items refreshed, auto-resolved, re-scored",
+        "Cron registration migration included"
+      ],
+      "files": [
+        "supabase/functions/cc-daily-cleanup/index.ts",
+        "supabase/migrations/20260222600004_schedule_cc_cleanup_cron.sql"
+      ]
+    },
+
+
+    {
+      "id": "CC10-001",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-10",
+      "title": "Create enrichment orchestrator edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["CC8-001", "CC9-004"], "files": [], "schema": ["command_centre_items"] },
+      "blocks": ["CC10-002", "CC10-003", "CC10-004"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Edge function cc-enrich queries items WHERE enrichment_status='pending' ORDER BY priority_score DESC LIMIT 20",
+        "For each item: determines required context sources based on item_type (deal-related -> CRM+pipeline, follow_up -> email+transcript, outreach -> Apollo)",
+        "Calls context loaders in parallel where independent (CRM + email + calendar concurrent)",
+        "Merges loader results into enrichment_context JSONB",
+        "Updates: enrichment_status='enriched' (or 'failed'), enriched_at timestamp",
+        "Cost-aware: checks org credit tier before external enrichments (Apollo)"
+      ],
+      "files": [
+        "supabase/functions/cc-enrich/index.ts",
+        "supabase/functions/_shared/commandCentre/enrichmentRouter.ts"
+      ]
+    },
+
+    {
+      "id": "CC10-002",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-10",
+      "title": "Build CRM + meeting transcript context loaders",
+      "type": "backend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["CC10-001"], "files": ["supabase/functions/_shared/orchestrator/contextLoader.ts"], "schema": [] },
+      "blocks": ["CC10-005"],
+      "parallelWith": ["CC10-003", "CC10-004"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "loadCRMContext(deal_id, contact_id, org_id) — returns deal stage, amount, close date, recent activities, property change history from local tables + HubSpot",
+        "loadTranscriptContext(deal_id, contact_id) — returns key quotes, objections, commitments, attendee info from recent meeting transcripts (last 3 meetings)",
+        "Reuses existing contextLoader.ts Tier2 patterns for deal/contact loading",
+        "Batch-friendly: shared entity loaded once when multiple CC items reference same deal/contact",
+        "Returns typed EnrichmentContext partials ready for JSONB merge"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/loaders/crmLoader.ts",
+        "supabase/functions/_shared/commandCentre/loaders/transcriptLoader.ts"
+      ]
+    },
+
+    {
+      "id": "CC10-003",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-10",
+      "title": "Build email history + calendar context loaders",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["CC10-001"], "files": [], "schema": [] },
+      "blocks": ["CC10-005"],
+      "parallelWith": ["CC10-002", "CC10-004"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "loadEmailContext(contact_id, org_id) — returns last sent/received dates, open tracking data, thread subject, reply pending status from email sync tables",
+        "loadCalendarContext(contact_id, deal_id) — returns upcoming meetings with this contact, days since last meeting, next scheduled touchpoint",
+        "Handles gracefully: email not connected (returns partial), no calendar events (returns empty), missing contact_id (skips)",
+        "Returns typed EnrichmentContext partials for JSONB merge"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/loaders/emailLoader.ts",
+        "supabase/functions/_shared/commandCentre/loaders/calendarLoader.ts"
+      ]
+    },
+
+    {
+      "id": "CC10-004",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-10",
+      "title": "Build pipeline comparison + previous items history loader",
+      "type": "backend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["CC10-001"], "files": ["supabase/functions/_shared/orchestrator/adapters/pipelineMath.ts"], "schema": [] },
+      "blocks": ["CC10-005"],
+      "parallelWith": ["CC10-002", "CC10-003"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "loadPipelineContext(deal_id) — returns deal comparison to similar deals at same stage: avg days in stage, stage win rate, velocity percentile",
+        "loadPreviousItems(deal_id, contact_id) — returns past CC items for this entity with their resolutions (what was done before, when, outcome)",
+        "Reuses pipeline math RPCs from BRF-007 (pipeline_snapshot_daily, compute_coverage_ratio)",
+        "Returns typed EnrichmentContext partials"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/loaders/pipelineLoader.ts",
+        "supabase/functions/_shared/commandCentre/loaders/historyLoader.ts"
+      ]
+    },
+
+    {
+      "id": "CC10-005",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-10",
+      "title": "Build AI synthesis + action drafter",
+      "type": "backend",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": ["CC10-002", "CC10-003", "CC10-004"], "files": [], "schema": ["command_centre_items"] },
+      "blocks": ["CC10-006"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "synthesiseAndDraft(item, enrichmentContext) calls Claude Haiku 4.5 to: (a) generate 2-3 sentence enriched summary from all context, (b) draft the action as DraftedAction JSONB",
+        "DraftedAction shape: { type: 'send_email'|'update_crm'|'create_task'|'schedule_meeting', payload: { to?, subject?, body?, field_updates?, suggested_times? }, display_text, editable_fields[], confidence, reasoning }",
+        "Prompt principle: 'aggressive on context, conservative on assumptions' — surface facts, don't conclude intent",
+        "Calculates confidence_score (0.0-1.0): data_completeness (0-0.30) + pattern_match (0-0.30) + template_confidence (0-0.20) + recency (0-0.10) + trust_history (0-0.10)",
+        "Updates item: enrichment_status='enriched', status='ready', drafted_action, confidence_score, confidence_factors"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/actionDrafter.ts",
+        "supabase/functions/_shared/commandCentre/confidenceScorer.ts"
+      ]
+    },
+
+    {
+      "id": "CC10-006",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-10",
+      "title": "Add credit tier alignment to enrichment depth",
+      "type": "backend",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": { "stories": ["CC10-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "enrichmentRouter.ts checks org credit tier before selecting context loaders",
+        "Signal tier: CRM loader only, no AI synthesis, basic suggestion text in summary field",
+        "Insight tier: CRM + email + meeting loaders, AI synthesis, basic drafted action",
+        "Intelligence tier: all loaders including Apollo + pipeline comparison, full AI synthesis, high-confidence drafted action",
+        "Tier resolved from org subscription level via existing org settings pattern"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/enrichmentRouter.ts",
+        "supabase/functions/_shared/commandCentre/tierConfig.ts"
+      ]
+    },
+
+
+    {
+      "id": "CC11-001",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-11",
+      "title": "Create action_trust_scores table with seed data",
+      "type": "schema",
+      "status": "pending",
+      "priority": 19,
+      "dependencies": { "stories": ["CC8-001"], "files": [], "schema": [] },
+      "blocks": ["CC11-002", "CC11-003"],
+      "parallelWith": [],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "action_trust_scores table: user_id UUID, action_type TEXT, auto_threshold NUMERIC(3,2) DEFAULT 0.95, total_presented INT DEFAULT 0, approved_without_edit INT DEFAULT 0, approved_with_edit INT DEFAULT 0, rejected INT DEFAULT 0, consecutive_approvals INT DEFAULT 0, last_rejection_at TIMESTAMPTZ, threshold_history JSONB DEFAULT '[]', updated_at TIMESTAMPTZ",
+        "UNIQUE(user_id, action_type) constraint",
+        "Default rows seeded per PRD: crm_update (0.90/0.70), task_create (0.90/0.75), meeting_schedule (0.95/0.85), follow_up_email (0.95/0.85), reengagement_outreach (0.98/0.90), proposal_send (0.98/0.90)",
+        "RLS: users see/update own trust scores only",
+        "RPC get_or_create_trust_score(p_user_id, p_action_type) returns existing or creates with default threshold"
+      ],
+      "files": [
+        "supabase/migrations/20260222600005_action_trust_scores.sql"
+      ]
+    },
+
+    {
+      "id": "CC11-002",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-11",
+      "title": "Build confidence scoring engine",
+      "type": "backend",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": { "stories": ["CC11-001", "CC10-005"], "files": ["supabase/functions/_shared/commandCentre/confidenceScorer.ts"], "schema": ["action_trust_scores"] },
+      "blocks": ["CC11-003"],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Refine confidenceScorer.ts calculateConfidence(item, action) with full 5-factor scoring",
+        "data_completeness (0-0.30): checks which enrichment sources populated vs expected for item_type",
+        "pattern_match (0-0.30): compares to historical outcomes (e.g. 'last 10 times deal had 3+ meetings → stage updated to Proposal')",
+        "template_confidence (0-0.20): templated/structured fields score higher than free-form text",
+        "recency (0-0.10): fresher enrichment data scores higher",
+        "trust_history (0-0.10): reads action_trust_scores for user+action_type, higher threshold = less trust bonus"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/confidenceScorer.ts"
+      ]
+    },
+
+    {
+      "id": "CC11-003",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-11",
+      "title": "Build three-tier routing and trust threshold drift processor",
+      "type": "backend",
+      "status": "pending",
+      "priority": 21,
+      "dependencies": { "stories": ["CC11-002"], "files": [], "schema": ["action_trust_scores", "command_centre_items"] },
+      "blocks": ["CC12-001"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "tierRouter.ts routeToTier(item) returns: 'autonomous' (confidence >= user threshold for action_type), 'one_click' (confidence 0.70 to threshold), 'needs_input' (confidence < 0.70)",
+        "trustDrift.ts updateTrustScore(user_id, action_type, outcome) handles: 'approved_no_edit', 'approved_with_edit', 'rejected'",
+        "Drift rules per PRD: 50 consecutive approvals without edit -> threshold -0.05; any rejection -> threshold resets to starting value + consecutive_approvals resets; any edit -> consecutive count resets, threshold stays",
+        "Floor enforcement: 0.80 minimum for external-facing (email, outreach, proposal), 0.70 for internal (CRM, task); ceiling: 0.99",
+        "threshold_history JSONB array appended on every change: { from, to, reason, at }"
+      ],
+      "files": [
+        "supabase/functions/_shared/commandCentre/tierRouter.ts",
+        "supabase/functions/_shared/commandCentre/trustDrift.ts"
+      ]
+    },
+
+
+    {
+      "id": "CC12-001",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-12",
+      "title": "Build autonomous execution loop edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 22,
+      "dependencies": { "stories": ["CC11-003"], "files": ["supabase/functions/_shared/orchestrator/runner.ts"], "schema": ["command_centre_items", "action_trust_scores"] },
+      "blocks": ["CC12-002", "CC12-003"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Edge function cc-auto-execute queries items WHERE status='ready' and joins action_trust_scores to check confidence >= auto_threshold",
+        "Re-verifies confidence before executing (re-checks if underlying data changed since enrichment)",
+        "Executes via orchestrator runner: send_email -> email-send-as-rep, update_crm -> agent-crm-update, create_task -> direct insert",
+        "Stores rollback_payload JSONB on item at execution time (for undo)",
+        "Rate limits: max 10 auto-actions/rep/day, max 3 external-facing/rep/day (configurable via agent_config_defaults)",
+        "Pause if any auto-action undone in last hour for that user"
+      ],
+      "files": [
+        "supabase/functions/cc-auto-execute/index.ts",
+        "supabase/functions/_shared/commandCentre/autoExecutor.ts"
+      ]
+    },
+
+    {
+      "id": "CC12-002",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-12",
+      "title": "Build undo/rollback capability for auto-executed items",
+      "type": "backend",
+      "status": "pending",
+      "priority": 23,
+      "dependencies": { "stories": ["CC12-001"], "files": [], "schema": ["command_centre_items"] },
+      "blocks": ["CC12-004"],
+      "parallelWith": ["CC12-003"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Edge function cc-undo accepts item_id, reverses executed action using rollback_payload JSONB",
+        "Undo handlers: delete created task, revert CRM field to previous value, recall/unsend email draft",
+        "24-hour undo window enforced — rejects undo after window expires",
+        "Updates item: status back to 'ready', resolution_channel cleared, resolved_at cleared",
+        "Undo triggers trust score impact (treated as rejection via trustDrift.ts)"
+      ],
+      "files": [
+        "supabase/functions/cc-undo/index.ts",
+        "supabase/functions/_shared/commandCentre/undoRegistry.ts"
+      ]
+    },
+
+    {
+      "id": "CC12-003",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-12",
+      "title": "Build auto-execution Slack batch report",
+      "type": "backend",
+      "status": "pending",
+      "priority": 24,
+      "dependencies": { "stories": ["CC12-001"], "files": ["supabase/functions/_shared/slackBlocks.ts"], "schema": ["command_centre_items"] },
+      "blocks": [],
+      "parallelWith": ["CC12-002"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "buildAutoExecutionReport(completedItems[]) in slackBlocks.ts — batch report of auto-completed items",
+        "Each item: checkmark + one-line description of what was done",
+        "Footer: 'All changes reversible for 24hrs' + [View in Command Centre] + [Undo any] buttons",
+        "Sent as single Slack message after auto-execution batch completes (not per-item)",
+        "Integrated into cc-auto-execute post-execution flow via send-slack-message"
+      ],
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/commandCentre/autoExecReport.ts"
+      ]
+    },
+
+    {
+      "id": "CC12-004",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-12",
+      "title": "Build Command Centre page — active items list with inline actions",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 25,
+      "dependencies": { "stories": ["CC8-008", "CC12-002"], "files": ["src/lib/stores/commandCentreStore.ts", "src/pages/platform/CommandCentre.tsx"], "schema": [] },
+      "blocks": ["CC12-007"],
+      "parallelWith": ["CC12-005", "CC12-006"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Extend existing CommandCentre page with new data source (commandCentreItemsService)",
+        "Active items tab: prioritised list filtered by urgency, source_agent, deal, contact",
+        "Each item card: title, enriched summary, urgency badge (Lucide icons), source agent tag, tier indicator (autonomous/one-click/needs-input)",
+        "Inline action buttons: [Approve] [Edit] [Snooze] [Dismiss] — mapped to useCommandCentreItemMutations()",
+        "Edit action opens drafted_action in editable form (email: to/subject/body, CRM: field values)",
+        "Uses Lucide React icons throughout, no emoji"
+      ],
+      "files": [
+        "src/components/platform/CommandCentreItemCard.tsx",
+        "src/components/platform/CommandCentreActiveList.tsx",
+        "src/pages/platform/CommandCentre.tsx"
+      ]
+    },
+
+    {
+      "id": "CC12-005",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-12",
+      "title": "Build Command Centre — auto-completed and resolved tabs",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 26,
+      "dependencies": { "stories": ["CC8-008"], "files": ["src/pages/platform/CommandCentre.tsx"], "schema": [] },
+      "blocks": ["CC12-007"],
+      "parallelWith": ["CC12-004", "CC12-006"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Auto-completed tab: items where resolution_channel='auto_exec', grouped by date",
+        "Each shows: what was done, when, reasoning text, [Undo] button (only within 24h window, disabled after)",
+        "Externally resolved tab: items with resolution_channel starting 'external_' — shows how/where resolved (email, CRM, calendar)",
+        "Demonstrates CC isn't creating false work — validates reconciliation is working",
+        "Follows existing glassmorphism styling (bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl)"
+      ],
+      "files": [
+        "src/components/platform/CommandCentreAutoCompleted.tsx",
+        "src/components/platform/CommandCentreResolved.tsx"
+      ]
+    },
+
+    {
+      "id": "CC12-006",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-12",
+      "title": "Build Command Centre — pipeline grouped view",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 27,
+      "dependencies": { "stories": ["CC8-008"], "files": ["src/pages/platform/CommandCentre.tsx"], "schema": [] },
+      "blocks": ["CC12-007"],
+      "parallelWith": ["CC12-004", "CC12-005"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Pipeline view tab: items grouped by deal_id showing full picture per opportunity",
+        "Deal header: name, stage badge, value, risk score (from deal_risk_scores if available)",
+        "Under each deal: pending items, completed items, at-risk signals — collapsible sections",
+        "Sorted by total priority_score of open items per deal (highest-need deals first)",
+        "Deals with no open items collapsed by default, expandable to see history"
+      ],
+      "files": [
+        "src/components/platform/CommandCentrePipelineView.tsx"
+      ]
+    },
+
+    {
+      "id": "CC12-007",
+      "feature": "command-centre-enhancement",
+      "phase": "phase-12",
+      "title": "Build Command Centre — stats dashboard and meta-view header",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 28,
+      "dependencies": { "stories": ["CC12-004", "CC12-005", "CC12-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Meta-view header (always visible): 3 answer cards — 'What's blocked?' (Tier 3 needs-input count), 'What's next?' (top Tier 2 item title + action), 'What happened?' (today's auto-completed + resolved count)",
+        "Stats section: items per day trend (line chart), auto-completion rate (%), avg time-to-action, top action types (bar chart)",
+        "KPI cards row: total active items, auto-completion %, avg response time, undo rate <5% target",
+        "Uses existing Recharts with ResponsiveContainer + proper dark mode theming",
+        "Full light/dark mode support following existing glassmorphism patterns"
+      ],
+      "files": [
+        "src/components/platform/CommandCentreMetaHeader.tsx",
+        "src/components/platform/CommandCentreStats.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 28,
+    "completedStories": 0,
+    "phaseBreakdown": {
+      "phase-8": { "storyCount": 8, "prefix": "CC8", "estimate": "1-2 weeks", "storyIds": ["CC8-001", "CC8-002", "CC8-003", "CC8-004", "CC8-005", "CC8-006", "CC8-007", "CC8-008"] },
+      "phase-9": { "storyCount": 4, "prefix": "CC9", "estimate": "1 week", "storyIds": ["CC9-001", "CC9-002", "CC9-003", "CC9-004"] },
+      "phase-10": { "storyCount": 6, "prefix": "CC10", "estimate": "2-3 weeks", "storyIds": ["CC10-001", "CC10-002", "CC10-003", "CC10-004", "CC10-005", "CC10-006"] },
+      "phase-11": { "storyCount": 3, "prefix": "CC11", "estimate": "1-2 weeks", "storyIds": ["CC11-001", "CC11-002", "CC11-003"] },
+      "phase-12": { "storyCount": 7, "prefix": "CC12", "estimate": "2-3 weeks", "storyIds": ["CC12-001", "CC12-002", "CC12-003", "CC12-004", "CC12-005", "CC12-006", "CC12-007"] }
+    },
+    "parallelGroups": [
+      { "phase": "phase-8", "groups": [["CC8-002", "CC8-003"], ["CC8-004", "CC8-005"], ["CC8-007", "CC8-008"]] },
+      { "phase": "phase-9", "groups": [["CC9-002", "CC9-003"]] },
+      { "phase": "phase-10", "groups": [["CC10-002", "CC10-003", "CC10-004"]] },
+      { "phase": "phase-12", "groups": [["CC12-002", "CC12-003"], ["CC12-004", "CC12-005", "CC12-006"]] }
+    ],
+    "criticalPath": [
+      "CC8-001 → CC8-002 → CC8-005 → CC8-006 → CC8-007",
+      "CC8-001 → CC9-001 → CC9-004 → CC10-001 → CC10-002 → CC10-005 → CC10-006",
+      "CC10-005 → CC11-001 → CC11-002 → CC11-003 → CC12-001 → CC12-002 → CC12-004 → CC12-007"
+    ],
+    "successMetrics": [
+      { "metric": "Items created per rep per day", "target": "5-15", "phase": "phase-8" },
+      { "metric": "Items auto-resolved by reconciliation", "target": ">20%", "phase": "phase-9" },
+      { "metric": "Enrichment within 2 hours", "target": ">90%", "phase": "phase-10" },
+      { "metric": "One-click approval rate (no edit)", "target": ">60%", "phase": "phase-10" },
+      { "metric": "Action types drifting to autonomous", "target": "2-3 per rep within 60 days", "phase": "phase-11" },
+      { "metric": "Rep time saved per week", "target": "8+ hours", "phase": "phase-12" },
+      { "metric": "Command Centre daily engagement", "target": ">80% of reps", "phase": "phase-12" },
+      { "metric": "Auto-execution undo rate", "target": "<5%", "phase": "phase-12" }
+    ],
+    "lastUpdated": "2026-02-21T00:00:00Z"
+  }
+}

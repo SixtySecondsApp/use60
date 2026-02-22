@@ -36,6 +36,7 @@ import type { PipelineDeal } from './hooks/usePipelineData';
 import { DealRiskFactors } from './DealRiskFactors';
 import { useDealCopilotChat } from './hooks/useDealCopilotChat';
 import { useOrgStore } from '@/lib/stores/orgStore';
+import { DealTemperatureSummary } from '@/components/signals/DealTemperatureSummary';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 
@@ -322,7 +323,7 @@ export function DealIntelligenceSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         hideClose
-        className="md:!top-16 md:!h-[calc(100vh-4rem)] !top-0 !h-screen w-full md:w-[500px] md:max-w-[600px] p-0 border-l border-gray-200/80 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] backdrop-blur-xl overflow-hidden"
+        className="!top-16 !h-[calc(100vh-4rem)] w-full md:w-[500px] md:max-w-[600px] p-0 border-l border-gray-200/80 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] backdrop-blur-xl overflow-hidden"
       >
         {/* ============================================================= */}
         {/* CHAT MODE                                                      */}
@@ -674,6 +675,20 @@ export function DealIntelligenceSheet({
                   })()}
                 </div>
               </div>
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Deal Temperature                                                  */}
+              {/* ---------------------------------------------------------------- */}
+              {activeOrgId && (
+                <div>
+                  <h3 className="text-[10.5px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3 after:content-[''] after:flex-1 after:h-px after:bg-gray-200 dark:after:bg-white/[0.06]">
+                    Signal Temperature
+                  </h3>
+                  <div className="p-3 rounded-xl bg-gray-50 dark:bg-white/[0.02] border border-gray-200/80 dark:border-white/[0.06]">
+                    <DealTemperatureSummary dealId={deal.id} orgId={activeOrgId} />
+                  </div>
+                </div>
+              )}
 
               {/* ---------------------------------------------------------------- */}
               {/* Risk Signals                                                      */}

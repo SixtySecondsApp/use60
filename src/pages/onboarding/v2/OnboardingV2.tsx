@@ -28,6 +28,7 @@ import { OrganizationSelectionStep } from './OrganizationSelectionStep';
 import { PendingApprovalStep } from './PendingApprovalStep';
 import { EnrichmentLoadingStep } from './EnrichmentLoadingStep';
 import { EnrichmentResultStep } from './EnrichmentResultStep';
+import { AgentConfigConfirmStep } from './AgentConfigConfirmStep';
 import { SkillsConfigStep } from './SkillsConfigStep';
 import { PlatformSkillConfigStep } from './PlatformSkillConfigStep';
 import { CompletionStep } from './CompletionStep';
@@ -44,6 +45,7 @@ const VALID_STEPS: OnboardingV2Step[] = [
   'pending_approval',
   'enrichment_loading',
   'enrichment_result',
+  'agent_config_confirm',
   'skills_config',
   'complete',
 ];
@@ -55,7 +57,7 @@ interface OnboardingV2Props {
 }
 
 // Steps where resume/start-fresh choice should be shown
-const RESUMABLE_STEPS: OnboardingV2Step[] = ['enrichment_loading', 'enrichment_result', 'skills_config'];
+const RESUMABLE_STEPS: OnboardingV2Step[] = ['enrichment_loading', 'enrichment_result', 'agent_config_confirm', 'skills_config'];
 
 export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2Props) {
   const navigate = useNavigate();
@@ -429,6 +431,8 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
         );
       case 'enrichment_result':
         return <EnrichmentResultStep key="result" />;
+      case 'agent_config_confirm':
+        return <AgentConfigConfirmStep key="agent-config-confirm" />;
       case 'skills_config':
         // Phase 7: Use platform skills if feature flag is enabled
         return USE_PLATFORM_SKILLS ? (

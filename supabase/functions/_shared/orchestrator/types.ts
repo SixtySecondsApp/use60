@@ -240,6 +240,8 @@ export interface SequenceState {
   started_at: string;
   updated_at: string;
   error?: string;
+  /** Resolved agent config entries from config engine (null if engine unavailable) */
+  agentConfig: Record<string, { config_key: string; config_value: unknown; source: string }> | null;
 }
 
 export interface StepResult {

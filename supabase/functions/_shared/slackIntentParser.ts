@@ -170,7 +170,7 @@ export function parseIntent(text: string): ParseResult {
  */
 export function buildCapabilityList(): string {
   return [
-    "Here's what I can help with:",
+    "Available commands:",
     '',
     '*Follow-ups*',
     '`@60 draft a follow-up for Sarah Chen`',

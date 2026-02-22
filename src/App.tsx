@@ -94,7 +94,7 @@ import {
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings,
+  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
   CreditPurchaseSuccess, CreditsSettingsPage, BillingSettingsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
   OrgBilling,
@@ -108,6 +108,7 @@ import {
 
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
+const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -588,7 +589,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/payments" element={<Navigate to="/clients" replace />} />
                 <Route path="/clients" element={<InternalRouteGuard><AppLayout><Clients /></AppLayout></InternalRouteGuard>} />
                 <Route path="/subscriptions" element={<Navigate to="/clients" replace />} />
-                <Route path="/profile" element={<AppLayout><Profile /></AppLayout>} />
+                <Route path="/profile" element={<Navigate to="/settings/account" replace />} />
                 <Route path="/preferences" element={<Navigate to="/settings" replace />} />
                 <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
                 <Route path="/settings/account" element={<AppLayout><AccountSettings /></AppLayout>} />
@@ -596,6 +597,12 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/proposals" element={<Navigate to="/settings/follow-ups" replace />} />
                 <Route path="/settings/ai-personalization" element={<AppLayout><AIPersonalizationPage /></AppLayout>} />
                 <Route path="/settings/ai-intelligence" element={<AppLayout><AIIntelligencePage /></AppLayout>} />
+                <Route path="/settings/autonomy" element={<OrgAdminRouteGuard><AppLayout><AutonomySettingsPage /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/crm-field-mapping" element={<OrgAdminRouteGuard><AppLayout><CRMFieldMappingSettings /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/custom-sops" element={<OrgAdminRouteGuard><AppLayout><CustomSOPBuilderPage /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/signal-intelligence" element={<OrgAdminRouteGuard><AppLayout><SignalIntelligenceSettings /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/knowledge-memory" element={<OrgAdminRouteGuard><AppLayout><KnowledgeMemorySettings /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/sales-coaching" element={<AppLayout><SalesCoachingPage /></AppLayout>} />
                 <Route path="/settings/api-keys" element={<AppLayout><APIKeysPage /></AppLayout>} />
                 <Route path="/settings/email-sync" element={<AppLayout><EmailSyncPage /></AppLayout>} />
@@ -632,6 +639,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/smart-listening" element={<AppLayout><SmartListeningSettings /></AppLayout>} />
                 {/* Proactive Agent Settings - admin only */}
                 <Route path="/settings/proactive-agent" element={<AppLayout><ProactiveAgentSettings /></AppLayout>} />
+                <Route path="/settings/demo" element={<InternalRouteGuard><AppLayout><DemoExperiencePage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/bullhorn" element={<Navigate to="/settings/integrations/bullhorn" replace />} />
                 {/* Google Workspace Settings - visible only when Google is connected (enforced inside page) */}
                 <Route path="/settings/integrations/google-workspace" element={<AppLayout><GoogleWorkspaceIntegrationPage /></AppLayout>} />

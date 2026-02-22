@@ -1,0 +1,164 @@
+{
+  "feature": {
+    "id": "internal-meeting-prep",
+    "name": "PRD-08: Internal Meeting Prep",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-08",
+    "status": "complete",
+    "phase": "Phase 2 — Daily Rhythm",
+    "effort": "1.5-2 weeks",
+    "dependencies": ["PRD-01 (config)", "PRD-06 (pipeline math)"],
+    "createdAt": "2026-02-21T00:00:00Z",
+    "completedAt": "2026-02-22T00:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "IMP-001",
+      "feature": "internal-meeting-prep",
+      "title": "Add meeting_type and is_internal columns to calendar_events",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["calendar_events"] },
+      "blocks": ["IMP-003", "IMP-004"],
+      "parallelWith": ["IMP-002"],
+      "acceptance": [
+        "calendar_events gains: is_internal BOOLEAN DEFAULT NULL, meeting_type TEXT DEFAULT NULL CHECK (meeting_type IN ('one_on_one', 'pipeline_review', 'qbr', 'standup', 'external', 'other'))",
+        "Index on (user_id, is_internal) WHERE is_internal = true for efficient internal meeting queries",
+        "Backfill function: classify_existing_meetings() runs once to tag historical events",
+        "No breaking changes to existing queries (columns are nullable)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222700001_internal_meeting_columns.sql"
+      ]
+    },
+    {
+      "id": "IMP-002",
+      "feature": "internal-meeting-prep",
+      "title": "Seed agent_config_defaults for internal_meeting_prep agent type",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["IMP-006"],
+      "parallelWith": ["IMP-001"],
+      "acceptance": [
+        "agent_config_defaults seeded: internal_prep_enabled (true), one_on_one_enabled (true), pipeline_review_enabled (true), qbr_enabled (true), standup_enabled (true), prep_detail_level (full), manager_preread_enabled (true)",
+        "Config per meeting type allows orgs to disable specific prep types",
+        "Migration is idempotent"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222700002_internal_meeting_prep_config.sql"
+      ]
+    },
+    {
+      "id": "IMP-003",
+      "feature": "internal-meeting-prep",
+      "title": "Build internal meeting detector with domain-based attendee classification",
+      "type": "logic",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["IMP-001"], "files": ["supabase/functions/proactive-meeting-prep/index.ts"], "schema": [] },
+      "blocks": ["IMP-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "detectInternalMeeting(event) checks: all attendee emails share same domain as user's org domain",
+        "Handles edge cases: external guests in otherwise internal meetings (treated as external), shared domain aliases",
+        "Org domain sourced from organizations table or user email domain",
+        "Returns { is_internal: boolean, internal_attendees: string[], external_attendees: string[] }"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/internalMeetingDetector.ts"
+      ]
+    },
+    {
+      "id": "IMP-004",
+      "feature": "internal-meeting-prep",
+      "title": "Build meeting type classifier (1:1, pipeline review, QBR, standup)",
+      "type": "logic",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["IMP-001", "IMP-003"], "files": [], "schema": [] },
+      "blocks": ["IMP-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "classifyMeetingType(event, attendees) returns: one_on_one | pipeline_review | qbr | standup | other",
+        "Detection rules: 1:1 = 2-person with manager (from org hierarchy); pipeline_review = title contains pipeline/forecast/review; qbr = title contains QBR/quarterly; standup = recurring 3+ team + title contains standup/sync/huddle",
+        "Manager detection: checks organization_memberships for reporting relationships or falls back to title-based heuristics",
+        "Updates calendar_events.meeting_type and is_internal columns"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/meetingTypeClassifier.ts"
+      ]
+    },
+    {
+      "id": "IMP-005",
+      "feature": "internal-meeting-prep",
+      "title": "Build type-specific prep templates (1:1, pipeline review, QBR, standup)",
+      "type": "logic",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["IMP-004"], "files": [], "schema": [] },
+      "blocks": ["IMP-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "generateInternalPrep(user_id, event, meeting_type) produces type-specific prep content",
+        "1:1: pipeline changes since last 1:1, coaching points (from deal_risk_scores), wins, blockers to raise",
+        "Pipeline review: full pipeline by stage with movement, forecast vs target (uses BRF-003 pipeline math), risk summary",
+        "QBR: quarter performance, win/loss analysis, competitive mentions, next quarter projection",
+        "Standup: personal update bullets, deals needing help, wins since last standup"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/internalPrepTemplates.ts"
+      ]
+    },
+    {
+      "id": "IMP-006",
+      "feature": "internal-meeting-prep",
+      "title": "Wire internal prep into proactive-meeting-prep and add manager pre-read action",
+      "type": "integration",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["IMP-002", "IMP-005"], "files": ["supabase/functions/proactive-meeting-prep/index.ts", "supabase/functions/_shared/slackBlocks.ts"], "schema": [] },
+      "blocks": ["IMP-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "proactive-meeting-prep now detects internal meetings and routes to internal prep templates instead of external copilot prep",
+        "Slack message includes 'Send to manager as pre-read' button (action_id: imp_send_preread::{event_id})",
+        "Interaction handler in slack-interactive forwards to manager's DM with formatted prep content",
+        "Respects per-meeting-type enable/disable from agent config"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/proactive-meeting-prep/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    {
+      "id": "IMP-007",
+      "feature": "internal-meeting-prep",
+      "title": "Integration test for internal meeting prep pipeline",
+      "type": "test",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["IMP-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Vitest suite: internal detection (same domain, mixed domain, solo), type classification (1:1, pipeline review, QBR, standup), prep generation per type",
+        "Test scenarios: manager 1:1 with pipeline changes, pipeline review with at-risk deals, QBR at end of quarter, standup with recent wins",
+        "Manual Slack test guide in TESTING.md"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/proactive-meeting-prep/test-internal.ts",
+        "supabase/functions/proactive-meeting-prep/TESTING-INTERNAL.md"
+      ]
+    }
+  ]
+}

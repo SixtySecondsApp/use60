@@ -13,6 +13,9 @@ interface CoachingAnalysisRequest {
   meeting_id?: string;
   transcript?: string;
   analysis_type?: 'per_meeting' | 'weekly';
+  mode?: 'correlate_win_loss' | 'generate_digest';
+  weekly_metrics?: any;
+  win_loss_correlation?: any;
   context?: {
     rep_name?: string;
     org_name?: string;
@@ -311,8 +314,33 @@ serve(async (req) => {
         .gte('created_at', oneWeekAgo)
         .order('created_at', { ascending: false });
 
-      const digest = generateWeeklyDigest(analyses || []);
+      // Fetch Phase 5 data for enhanced digest
+      const [patternsResult, competitiveResult, progressionResult] = await Promise.all([
+        // Active pipeline patterns for this org
+        supabase.rpc('get_active_pipeline_patterns', { p_org_id: org_id, p_limit: 3 }),
+        // Competitive trends — recent competitor profiles
+        supabase
+          .from('competitor_profiles')
+          .select('competitor_name, mention_count, win_count, loss_count, win_rate, common_strengths, common_weaknesses, last_mentioned_at')
+          .eq('org_id', org_id)
+          .order('last_mentioned_at', { ascending: false })
+          .limit(5),
+        // Coaching skill progression — last 8 weeks for this rep
+        supabase.rpc('get_coaching_progression', { p_org_id: org_id, p_user_id: user_id, p_weeks: 8 }),
+      ]);
 
+      const pipelinePatterns = patternsResult.data || [];
+      const competitiveProfiles = competitiveResult.data || [];
+      const skillProgression = progressionResult.data || [];
+
+      const digest = generateEnhancedWeeklyDigest(
+        analyses || [],
+        pipelinePatterns,
+        competitiveProfiles,
+        skillProgression,
+      );
+
+      // Store weekly digest
       await supabase.from('coaching_analyses').insert({
         user_id,
         org_id,
@@ -320,12 +348,54 @@ serve(async (req) => {
         ...digest,
       });
 
+      // Upsert coaching_skill_progression for this week
+      const weekStart = getWeekStart(new Date());
+      const meetingsAnalysed = (analyses || []).length;
+      if (meetingsAnalysed > 0) {
+        await supabase.from('coaching_skill_progression').upsert({
+          org_id,
+          user_id,
+          week_start: weekStart,
+          talk_ratio: digest.talk_ratio,
+          question_quality_score: digest.question_quality_score,
+          objection_handling_score: digest.objection_handling_score,
+          discovery_depth_score: digest.discovery_depth_score,
+          overall_score: digest.overall_score,
+          meetings_analysed: meetingsAnalysed,
+          metadata: {
+            pipeline_patterns_count: pipelinePatterns.length,
+            competitive_profiles_count: competitiveProfiles.length,
+          },
+        }, { onConflict: 'org_id,user_id,week_start' });
+      }
+
       return new Response(JSON.stringify(digest), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    return new Response(JSON.stringify({ error: 'Invalid analysis_type' }), {
+    // Mode-based handlers for orchestrator adapter compatibility
+    const { mode, weekly_metrics, win_loss_correlation } = await Promise.resolve({
+      mode: (await req.clone().json()).mode,
+      weekly_metrics: (await req.clone().json()).weekly_metrics,
+      win_loss_correlation: (await req.clone().json()).win_loss_correlation,
+    }).catch(() => ({ mode: undefined, weekly_metrics: undefined, win_loss_correlation: undefined }));
+
+    if (mode === 'correlate_win_loss') {
+      const correlation = await correlateWinLoss(supabase, org_id, user_id, weekly_metrics);
+      return new Response(JSON.stringify(correlation), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (mode === 'generate_digest') {
+      const digest = await generateAIDigest(supabase, org_id, user_id, weekly_metrics, win_loss_correlation);
+      return new Response(JSON.stringify(digest), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: 'Invalid analysis_type or mode' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -480,18 +550,44 @@ async function analyzeMeeting(
 }
 
 // =============================================================================
-// Generate weekly coaching digest from multiple analyses
+// Generate enhanced weekly coaching digest with Phase 5 data
 // =============================================================================
 
-function generateWeeklyDigest(analyses: any[]) {
+function getWeekStart(date: Date): string {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  d.setDate(diff);
+  return d.toISOString().split('T')[0];
+}
+
+function generateEnhancedWeeklyDigest(
+  analyses: any[],
+  pipelinePatterns: any[],
+  competitiveProfiles: any[],
+  skillProgression: any[],
+) {
   if (analyses.length === 0) {
     return {
       talk_ratio: null,
       question_quality_score: null,
       objection_handling_score: null,
       discovery_depth_score: null,
+      overall_score: null,
       insights: [],
       recommendations: [],
+      pipeline_patterns: pipelinePatterns.map(p => ({
+        title: p.title,
+        description: p.description,
+        severity: p.severity,
+        pattern_type: p.pattern_type,
+      })),
+      competitive_trends: competitiveProfiles.map(c => ({
+        name: c.competitor_name,
+        mentions: c.mention_count,
+        win_rate: c.win_rate,
+      })),
+      skill_progression: skillProgression,
       raw_metrics: {
         meetings_analyzed: 0,
         period: '7_days',
@@ -503,6 +599,7 @@ function generateWeeklyDigest(analyses: any[]) {
   const avgQuestionQuality = analyses.reduce((sum, a) => sum + (a.question_quality_score || 0), 0) / analyses.length;
   const avgObjectionHandling = analyses.reduce((sum, a) => sum + (a.objection_handling_score || 0), 0) / analyses.length;
   const avgDiscoveryDepth = analyses.reduce((sum, a) => sum + (a.discovery_depth_score || 0), 0) / analyses.length;
+  const overallScore = avgQuestionQuality * 0.25 + avgObjectionHandling * 0.25 + avgDiscoveryDepth * 0.30 + (1 - Math.abs(avgTalkRatio - 43) / 57) * 0.20;
 
   const allInsights = analyses.flatMap(a => a.insights || []);
   const topInsights = allInsights
@@ -517,16 +614,214 @@ function generateWeeklyDigest(analyses: any[]) {
     .sort((a, b) => (a.priority || 5) - (b.priority || 5))
     .slice(0, 5);
 
+  // Build progression comparison
+  const progressionComparison = buildProgressionComparison(
+    { talk_ratio: avgTalkRatio, question_quality_score: avgQuestionQuality, objection_handling_score: avgObjectionHandling, discovery_depth_score: avgDiscoveryDepth },
+    skillProgression,
+  );
+
+  // Build competitive trend summary
+  const competitiveTrends = competitiveProfiles.map(c => ({
+    name: c.competitor_name,
+    mentions: c.mention_count,
+    win_rate: c.win_rate,
+    top_strengths: (c.common_strengths || []).slice(0, 3),
+    top_weaknesses: (c.common_weaknesses || []).slice(0, 3),
+  }));
+
+  // Build pattern summary
+  const patternSummary = pipelinePatterns.map(p => ({
+    title: p.title,
+    description: p.description,
+    severity: p.severity,
+    pattern_type: p.pattern_type,
+    affected_deals_count: (p.affected_deal_ids || []).length,
+  }));
+
   return {
     talk_ratio: Math.round(avgTalkRatio * 100) / 100,
     question_quality_score: Math.round(avgQuestionQuality * 100) / 100,
     objection_handling_score: Math.round(avgObjectionHandling * 100) / 100,
     discovery_depth_score: Math.round(avgDiscoveryDepth * 100) / 100,
+    overall_score: Math.round(overallScore * 100) / 100,
     insights: topInsights,
     recommendations: topRecommendations,
+    pipeline_patterns: patternSummary,
+    competitive_trends: competitiveTrends,
+    skill_progression: skillProgression,
+    progression_comparison: progressionComparison,
     raw_metrics: {
       meetings_analyzed: analyses.length,
       period: '7_days',
     },
   };
+}
+
+function buildProgressionComparison(
+  current: { talk_ratio: number; question_quality_score: number; objection_handling_score: number; discovery_depth_score: number },
+  history: any[],
+): any {
+  if (history.length === 0) {
+    return { status: 'first_week', message: 'This is your first coaching analysis — tracking starts now.' };
+  }
+
+  const prev = history[0]; // Most recent prior week
+  const fourWeekAvg = history.length >= 4
+    ? {
+        talk_ratio: history.slice(0, 4).reduce((s, h) => s + (h.talk_ratio || 0), 0) / 4,
+        question_quality_score: history.slice(0, 4).reduce((s, h) => s + (h.question_quality_score || 0), 0) / 4,
+        objection_handling_score: history.slice(0, 4).reduce((s, h) => s + (h.objection_handling_score || 0), 0) / 4,
+        discovery_depth_score: history.slice(0, 4).reduce((s, h) => s + (h.discovery_depth_score || 0), 0) / 4,
+      }
+    : null;
+
+  const metrics = ['question_quality_score', 'objection_handling_score', 'discovery_depth_score'] as const;
+  const improving: string[] = [];
+  const declining: string[] = [];
+
+  for (const metric of metrics) {
+    const diff = (current[metric] || 0) - (prev[metric] || 0);
+    const label = metric.replace(/_score$/, '').replace(/_/g, ' ');
+    if (diff > 0.05) improving.push(label);
+    else if (diff < -0.05) declining.push(label);
+  }
+
+  // Talk ratio: closer to 43% is better
+  const talkDiff = Math.abs(current.talk_ratio - 43) - Math.abs((prev.talk_ratio || 50) - 43);
+  if (talkDiff < -3) improving.push('talk ratio');
+  else if (talkDiff > 3) declining.push('talk ratio');
+
+  return {
+    status: 'has_history',
+    weeks_tracked: history.length,
+    vs_last_week: {
+      improving,
+      declining,
+      talk_ratio_delta: Math.round((current.talk_ratio - (prev.talk_ratio || 50)) * 100) / 100,
+      overall_trend: improving.length > declining.length ? 'improving' : declining.length > improving.length ? 'declining' : 'stable',
+    },
+    four_week_avg: fourWeekAvg,
+  };
+}
+
+// =============================================================================
+// Correlate win/loss patterns with coaching metrics
+// =============================================================================
+
+async function correlateWinLoss(supabase: any, orgId: string, userId: string, weeklyMetrics: any) {
+  // Fetch recent closed deals for this user
+  const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: closedDeals } = await supabase
+    .from('deals')
+    .select('id, name, stage, amount, close_date, status')
+    .eq('owner_id', userId)
+    .gte('updated_at', threeMonthsAgo)
+    .in('status', ['closed_won', 'closed_lost']);
+
+  const wins = (closedDeals || []).filter((d: any) => d.status === 'closed_won');
+  const losses = (closedDeals || []).filter((d: any) => d.status === 'closed_lost');
+
+  return {
+    period: '90_days',
+    total_closed: (closedDeals || []).length,
+    wins: wins.length,
+    losses: losses.length,
+    win_rate: (closedDeals || []).length > 0 ? wins.length / (closedDeals || []).length : null,
+    total_value_won: wins.reduce((s: number, d: any) => s + (d.amount || 0), 0),
+    total_value_lost: losses.reduce((s: number, d: any) => s + (d.amount || 0), 0),
+    weekly_metrics: weeklyMetrics,
+  };
+}
+
+// =============================================================================
+// Generate AI-powered coaching digest with all context
+// =============================================================================
+
+async function generateAIDigest(supabase: any, orgId: string, userId: string, weeklyMetrics: any, winLossCorrelation: any) {
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!anthropicKey) {
+    return { summary: 'AI digest unavailable — API key not configured', blocks: [] };
+  }
+
+  // Fetch org learning insights
+  const { data: orgInsights } = await supabase.rpc('get_active_org_insights', { p_org_id: orgId, p_limit: 5 });
+
+  const prompt = `You are generating a weekly coaching digest for a sales rep. Create a concise, actionable summary.
+
+WEEKLY METRICS:
+${JSON.stringify(weeklyMetrics, null, 2)}
+
+WIN/LOSS CORRELATION (last 90 days):
+${JSON.stringify(winLossCorrelation, null, 2)}
+
+ORG LEARNING INSIGHTS (anonymised team intelligence):
+${JSON.stringify(orgInsights || [], null, 2)}
+
+Generate a JSON response with:
+{
+  "summary": "2-3 sentence executive summary of this week's coaching",
+  "weekly_wins": ["specific positive moments to celebrate"],
+  "data_backed_insights": [
+    {
+      "insight": "specific, data-backed coaching insight referencing actual metrics",
+      "evidence": "the data that supports this",
+      "action": "concrete next step"
+    }
+  ],
+  "competitive_note": "brief note on competitive trends if relevant, or null",
+  "pipeline_note": "brief note on pipeline patterns if relevant, or null",
+  "team_intelligence_tip": "anonymised tip from org learning insights if available, or null",
+  "overall_score": 0.0-1.0,
+  "trend": "improving|stable|declining"
+}`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Anthropic API returned ${response.status}`);
+    }
+
+    const aiResult = await response.json();
+
+    // Cost tracking
+    const usage = extractAnthropicUsage(aiResult);
+    await logAICostEvent(
+      supabase, userId, orgId,
+      'anthropic', 'claude-haiku-4-5-20251001',
+      usage.inputTokens, usage.outputTokens,
+      'coaching-analysis-digest',
+      {},
+    );
+
+    const text = aiResult.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in AI digest response');
+
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    console.error('[coaching-analysis] AI digest generation failed:', error);
+    return {
+      summary: `This week: ${weeklyMetrics?.raw_metrics?.meetings_analyzed || 0} meetings analyzed.`,
+      weekly_wins: [],
+      data_backed_insights: [],
+      competitive_note: null,
+      pipeline_note: null,
+      team_intelligence_tip: null,
+      overall_score: weeklyMetrics?.overall_score || null,
+      trend: 'stable',
+    };
+  }
 }

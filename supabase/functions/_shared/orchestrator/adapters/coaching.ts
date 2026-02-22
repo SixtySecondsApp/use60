@@ -25,6 +25,8 @@ import {
 } from './contextEnrichment.ts';
 import { deliverToSlack } from '../../proactive/deliverySlack.ts';
 import type { ProactiveNotificationPayload } from '../../proactive/types.ts';
+import { buildEnhancedCoachingDigestBlocks } from '../../slackBlocks.ts';
+import type { EnhancedCoachingDigestData } from '../../slackBlocks.ts';
 
 export const coachingMicroFeedbackAdapter: SkillAdapter = {
   name: 'coaching-micro-feedback',
@@ -195,6 +197,34 @@ export const generateCoachingDigestAdapter: SkillAdapter = {
     try {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = getServiceClient();
+
+      // CTI-011: Fetch forecast accuracy data for coaching digest (PRD-21)
+      let forecastAccuracyData: Record<string, unknown> | null = null;
+      try {
+        const { data: calData } = await supabase.rpc('get_rep_calibration', {
+          p_org_id: state.event.org_id,
+          p_user_id: state.event.user_id,
+        });
+        if (calData && typeof calData === 'object') {
+          forecastAccuracyData = calData as Record<string, unknown>;
+        }
+      } catch (calErr) {
+        console.warn('[generate-coaching-digest] Calibration fetch failed:', calErr);
+      }
+
+      // CTI-011: Fetch org learning insights for team intelligence section (PRD-20)
+      let orgInsights: unknown[] = [];
+      try {
+        const { data: insights } = await supabase.rpc('get_active_org_insights', {
+          p_org_id: state.event.org_id,
+        });
+        if (insights && Array.isArray(insights)) {
+          orgInsights = insights.slice(0, 3);
+        }
+      } catch (insErr) {
+        console.warn('[generate-coaching-digest] Org insights fetch failed:', insErr);
+      }
 
       const response = await fetch(`${supabaseUrl}/functions/v1/coaching-analysis`, {
         method: 'POST',
@@ -208,6 +238,8 @@ export const generateCoachingDigestAdapter: SkillAdapter = {
           mode: 'generate_digest',
           weekly_metrics: state.outputs['aggregate-weekly-metrics'],
           win_loss_correlation: state.outputs['correlate-win-loss'],
+          forecast_calibration: forecastAccuracyData,
+          org_learning_insights: orgInsights,
         }),
       });
 
@@ -216,6 +248,23 @@ export const generateCoachingDigestAdapter: SkillAdapter = {
       }
 
       const output = await response.json();
+
+      // CTI-011: Augment digest output with forecast accuracy for Slack delivery
+      if (forecastAccuracyData) {
+        output.forecast_accuracy = {
+          optimism_factor: forecastAccuracyData.overall_optimism_factor,
+          calibrated_pipeline: forecastAccuracyData.calibrated_pipeline,
+          note: forecastAccuracyData.overall_note,
+          weeks_of_data: forecastAccuracyData.weeks_of_data,
+        };
+      }
+
+      // CTI-011: Augment with team intelligence tip from org insights
+      if (orgInsights.length > 0) {
+        const topInsight = orgInsights[0] as any;
+        output.team_intelligence_tip = `${topInsight.title}: ${topInsight.description}`;
+      }
+
       return { success: true, output, duration_ms: Date.now() - start };
     } catch (err) {
       return { success: false, error: String(err), duration_ms: Date.now() - start };
@@ -260,16 +309,34 @@ export const deliverCoachingSlackAdapter: SkillAdapter = {
         console.warn('[deliver-coaching-slack] No Slack user mapping found');
         deliveryError = 'No Slack user mapping';
       } else {
-        // Build Slack blocks from coaching digest
-        const blocks = digest.blocks || [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `*Weekly Coaching Digest*\n${digest.summary || 'Your weekly coaching insights'}`,
-            },
-          },
-        ];
+        // Build enhanced Slack blocks from coaching digest
+        const weekOf = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const repName = state.context?.tier1?.user?.name || 'Rep';
+
+        const digestData: EnhancedCoachingDigestData = {
+          repName,
+          weekOf,
+          meetingsAnalyzed: digest.raw_metrics?.meetings_analyzed || 0,
+          overallScore: digest.overall_score || null,
+          talkRatio: digest.talk_ratio,
+          questionQuality: digest.question_quality_score,
+          objectionHandling: digest.objection_handling_score,
+          discoveryDepth: digest.discovery_depth_score,
+          weeklyWins: digest.weekly_wins || digest.quick_wins || [],
+          dataBackedInsights: digest.data_backed_insights || (digest.recommendations || []).slice(0, 3).map((r: any) => ({
+            insight: r.action || r.category,
+            evidence: r.rationale || '',
+            action: r.action || '',
+          })),
+          pipelinePatterns: digest.pipeline_patterns || [],
+          competitiveTrends: digest.competitive_trends || [],
+          progressionComparison: digest.progression_comparison || { status: 'first_week' },
+          teamIntelligenceTip: digest.team_intelligence_tip || null,
+          forecastAccuracy: digest.forecast_accuracy || null,
+        };
+
+        const slackMessage = buildEnhancedCoachingDigestBlocks(digestData);
+        const blocks = slackMessage.blocks;
 
         // Route through proactive delivery layer (handles quiet hours + rate limiting)
         const payload: ProactiveNotificationPayload = {

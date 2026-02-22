@@ -28,6 +28,11 @@ import {
 import { buildMorningBriefMessage, type MorningBriefData } from '../_shared/slackBlocks.ts';
 import { runSkill } from '../_shared/skillsRuntime.ts';
 import { InstantlyClient } from '../_shared/instantly.ts';
+import {
+  loadCCBriefItems,
+  convertCCItemsToPriorities,
+  convertCCItemsToInsights,
+} from '../_shared/commandCentre/briefingAdapter.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -155,35 +160,76 @@ serve(async (req) => {
               continue; // No data to show (all clear)
             }
 
-            // Generate AI insights using skills
+            // CC8-006: Check config flag to decide source for priorities/insights
+            // When 'command_centre' source is active and CC has 3+ items, skip the
+            // legacy AI skill so CC-derived priorities are not overwritten.
+            let ccSourceActive = false;
             try {
-              const skillResult = await runSkill(
-                supabase,
-                'suggest_next_actions',
-                {
-                  activityContext: JSON.stringify(briefData),
-                  recentActivities: JSON.stringify(briefData.meetings.slice(0, 5)),
-                  existingTasks: JSON.stringify([...briefData.tasks.overdue, ...briefData.tasks.dueToday]),
-                },
-                org.org_id,
-                recipient.userId
-              );
+              const { data: morningBriefSourceConfig } = await supabase.rpc('resolve_agent_config', {
+                p_org_id: org.org_id,
+                p_user_id: recipient.userId,
+                p_agent_type: 'morning_briefing',
+                p_config_key: 'morning_brief_source',
+              });
 
-              if (skillResult.success && skillResult.output) {
-                if (Array.isArray(skillResult.output)) {
-                  briefData.priorities = skillResult.output
-                    .slice(0, 3)
-                    .map((item: any) => item.title || item.action || String(item));
-                } else if (skillResult.output.priorities) {
-                  briefData.priorities = skillResult.output.priorities;
-                }
-                if (skillResult.output.insights) {
-                  briefData.insights = skillResult.output.insights;
+              const briefSource: string = morningBriefSourceConfig ?? 'legacy';
+
+              if (briefSource === 'command_centre') {
+                // Load CC items and use them if there are enough to be meaningful
+                try {
+                  const ccItems = await loadCCBriefItems(supabase, recipient.userId, 15);
+                  if (ccItems.total >= 3) {
+                    briefData.priorities = convertCCItemsToPriorities(ccItems);
+                    briefData.insights = convertCCItemsToInsights(ccItems);
+                    ccSourceActive = true;
+                    console.log(
+                      `[slack-morning-brief] CC source: ${ccItems.total} items (${ccItems.critical.length} critical, ${ccItems.high.length} high, ${ccItems.normal.length} normal) for user ${recipient.userId}`,
+                    );
+                  } else {
+                    // Fall back to legacy if CC has fewer than 3 items (transition safety net)
+                    console.log(
+                      `[slack-morning-brief] CC source: only ${ccItems.total} items — falling back to legacy for user ${recipient.userId}`,
+                    );
+                  }
+                } catch (ccError) {
+                  console.warn('[slack-morning-brief] CC items load failed, falling back to legacy:', ccError);
                 }
               }
-            } catch (skillError) {
-              console.warn('[slack-morning-brief] Skill execution failed, using defaults:', skillError);
+            } catch (configError) {
+              console.warn('[slack-morning-brief] Config flag read failed, using legacy path:', configError);
             }
+
+            // Generate AI insights using skills (legacy path — skipped when CC source is active)
+            if (!ccSourceActive) {
+              try {
+                const skillResult = await runSkill(
+                  supabase,
+                  'suggest_next_actions',
+                  {
+                    activityContext: JSON.stringify(briefData),
+                    recentActivities: JSON.stringify(briefData.meetings.slice(0, 5)),
+                    existingTasks: JSON.stringify([...briefData.tasks.overdue, ...briefData.tasks.dueToday]),
+                  },
+                  org.org_id,
+                  recipient.userId
+                );
+
+                if (skillResult.success && skillResult.output) {
+                  if (Array.isArray(skillResult.output)) {
+                    briefData.priorities = skillResult.output
+                      .slice(0, 3)
+                      .map((item: any) => item.title || item.action || String(item));
+                  } else if (skillResult.output.priorities) {
+                    briefData.priorities = skillResult.output.priorities;
+                  }
+                  if (skillResult.output.insights) {
+                    briefData.insights = skillResult.output.insights;
+                  }
+                }
+              } catch (skillError) {
+                console.warn('[slack-morning-brief] Skill execution failed, using defaults:', skillError);
+              }
+            } // end if (!ccSourceActive)
 
             // Build Slack message
             const slackMessage = buildMorningBriefMessage(briefData);
@@ -506,6 +552,113 @@ interface BriefingSnapshot {
 }
 
 /**
+ * SIG-010: Fetch signal watch data for the morning brief.
+ *
+ * Returns top 3 heating-up deals (via get_hot_deals RPC) and top 3
+ * cooling-down deals (falling trend, lowest temperature first).
+ * Gracefully returns empty arrays if the signal tables don't exist yet.
+ */
+async function getSignalWatchData(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+): Promise<MorningBriefData['signalWatch']> {
+  interface HotDealRow {
+    deal_id: string;
+    deal_name: string;
+    deal_value: number | null;
+    temperature: number;
+    trend: string;
+    signal_count_24h: number;
+  }
+
+  interface TemperatureRow {
+    deal_id: string;
+    org_id: string;
+    temperature: number;
+    trend: string;
+    signal_count_24h: number;
+  }
+
+  // 1. Hot (heating-up) deals: use existing get_hot_deals RPC
+  const heatingUp: NonNullable<MorningBriefData['signalWatch']>['heatingUp'] = [];
+  try {
+    const { data: hotDeals, error: hotErr } = await supabase.rpc('get_hot_deals', {
+      p_org_id: orgId,
+      p_threshold: 0.5,
+      p_limit: 3,
+    }) as { data: HotDealRow[] | null; error: { message: string } | null };
+
+    if (hotErr) {
+      if (!hotErr.message.includes('relation') && !hotErr.message.includes('does not exist') && !hotErr.message.includes('function')) {
+        console.warn('[slack-morning-brief] get_hot_deals error:', hotErr.message);
+      }
+    } else {
+      for (const d of hotDeals ?? []) {
+        heatingUp.push({
+          deal_id: d.deal_id,
+          deal_name: d.deal_name,
+          deal_value: d.deal_value ?? null,
+          temperature: d.temperature,
+          trend: d.trend,
+          signal_count_24h: d.signal_count_24h ?? 0,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[slack-morning-brief] get_hot_deals threw (non-fatal):', e);
+  }
+
+  // 2. Cooling-down deals: falling trend, lowest temperature first
+  const coolingDown: NonNullable<MorningBriefData['signalWatch']>['coolingDown'] = [];
+  try {
+    const { data: coolingRows, error: coolErr } = await supabase
+      .from('deal_signal_temperature')
+      .select('deal_id, org_id, temperature, trend, signal_count_24h')
+      .eq('org_id', orgId)
+      .eq('trend', 'falling')
+      .order('temperature', { ascending: true })
+      .limit(3) as { data: TemperatureRow[] | null; error: { message: string } | null };
+
+    if (coolErr) {
+      if (!coolErr.message.includes('relation') && !coolErr.message.includes('does not exist')) {
+        console.warn('[slack-morning-brief] cooling deals query error:', coolErr.message);
+      }
+    } else if ((coolingRows ?? []).length > 0) {
+      const coolingDealIds = (coolingRows ?? []).map((r) => r.deal_id);
+      const { data: dealRows } = await supabase
+        .from('deals')
+        .select('id, name, value')
+        .in('id', coolingDealIds);
+
+      const dealNameMap = new Map<string, { name: string; value: number | null }>();
+      for (const d of dealRows ?? []) {
+        dealNameMap.set(d.id, { name: d.name, value: d.value ?? null });
+      }
+
+      for (const r of coolingRows ?? []) {
+        const dealInfo = dealNameMap.get(r.deal_id);
+        coolingDown.push({
+          deal_id: r.deal_id,
+          deal_name: dealInfo?.name ?? 'Unknown deal',
+          deal_value: dealInfo?.value ?? null,
+          temperature: r.temperature,
+          trend: r.trend,
+          signal_count_24h: r.signal_count_24h ?? 0,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[slack-morning-brief] cooling deals query threw (non-fatal):', e);
+  }
+
+  if (heatingUp.length === 0 && coolingDown.length === 0) {
+    return undefined;
+  }
+
+  return { heatingUp, coolingDown };
+}
+
+/**
  * Build morning brief data for a user
  */
 async function buildMorningBriefData(
@@ -539,7 +692,7 @@ async function buildMorningBriefData(
         title,
         start_time,
         end_time,
-        contacts:contact_id (full_name, companies:company_id (name)),
+        contacts:contact_id (id, full_name, companies:company_id (name)),
         deals:deal_id (id, title, value, stage)
       `)
       .eq('user_id', userId)
@@ -593,6 +746,44 @@ async function buildMorningBriefData(
   const deals = dealsResult.data;
   const emailsToRespond = emailsResult.count;
 
+  // Load engagement patterns for today's meeting contacts (non-blocking, best-effort)
+  // Maps contact_id → engagement pattern for use in meeting formatting
+  const meetingContactEngagementMap = new Map<string, {
+    avg_response_time_hours: number | null;
+    best_email_day: string | null;
+    best_email_hour: number | null;
+    response_trend: string | null;
+  }>();
+
+  try {
+    // Extract unique contact IDs from today's meetings
+    const meetingContactIds = (meetings || [])
+      .flatMap((m: any) => m.contacts ?? [])
+      .map((c: any) => c?.id)
+      .filter((id: string | undefined): id is string => !!id);
+
+    const uniqueContactIds = [...new Set(meetingContactIds)];
+
+    if (uniqueContactIds.length > 0) {
+      const { data: patterns } = await supabase
+        .from('contact_engagement_patterns')
+        .select('contact_id, avg_response_time_hours, best_email_day, best_email_hour, response_trend')
+        .eq('org_id', orgId)
+        .in('contact_id', uniqueContactIds);
+
+      for (const p of patterns || []) {
+        meetingContactEngagementMap.set(p.contact_id, {
+          avg_response_time_hours: p.avg_response_time_hours ?? null,
+          best_email_day: p.best_email_day ?? null,
+          best_email_hour: p.best_email_hour ?? null,
+          response_trend: p.response_trend ?? null,
+        });
+      }
+    }
+  } catch (patternErr) {
+    console.warn('[slack-morning-brief] Could not load meeting contact engagement patterns:', patternErr);
+  }
+
   // Get last activity date per deal for staleness detection (SLACK-014)
   const dealIds = (deals || []).map((d: any) => d.id);
   let dealLastActivity: Record<string, Date> = {};
@@ -620,11 +811,24 @@ async function buildMorningBriefData(
     // Skip campaigns if fetch fails
   }
 
+  // SIG-010: Fetch signal watch data (heating-up and cooling-down deals)
+  let signalWatch: MorningBriefData['signalWatch'];
+  try {
+    signalWatch = await getSignalWatchData(supabase, orgId);
+  } catch (sigErr) {
+    console.warn('[slack-morning-brief] Could not load signal watch data (non-fatal):', sigErr);
+  }
+
   // Format meetings (include IDs for actionable buttons - SLACK-003)
   const formattedMeetings = (meetings || []).map((m: any) => {
     const startTime = new Date(m.start_time);
     const contact = m.contacts?.[0];
     const deal = m.deals?.[0];
+
+    // Attach engagement pattern if available for this meeting's primary contact
+    const contactEngagement = contact?.id
+      ? meetingContactEngagementMap.get(contact.id) ?? null
+      : null;
 
     return {
       id: m.id,
@@ -635,6 +839,7 @@ async function buildMorningBriefData(
       dealValue: deal?.value,
       dealStage: deal?.stage,
       isImportant: deal?.stage === 'proposal' || deal?.stage === 'negotiation',
+      engagementPattern: contactEngagement,
     };
   });
 
@@ -736,6 +941,7 @@ async function buildMorningBriefData(
     insights: [],
     priorities: [],
     campaigns,
+    signalWatch,
     appUrl: APP_URL,
   };
 }

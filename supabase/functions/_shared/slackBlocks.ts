@@ -496,8 +496,13 @@ export const buildActionConfirmation = (data: ActionConfirmationData): SlackMess
 export const buildMeetingDebriefMessage = (data: MeetingDebriefData): SlackMessage => {
   const blocks: SlackBlock[] = [];
 
-  // Header with meeting title
-  blocks.push(header(`🎯 Meeting Debrief: ${truncate(data.meetingTitle, 100)}`));
+  // Header — assertive past-tense
+  blocks.push(header(`✅ Meeting Complete | ${truncate(data.meetingTitle, 100)}`));
+
+  // Evidence line
+  blocks.push(context([
+    `Trigger: ${data.actionItems.length} action item${data.actionItems.length !== 1 ? 's' : ''} detected, ${data.sentiment} sentiment`,
+  ]));
 
   // Key metrics as fields
   blocks.push(sectionWithFields([
@@ -696,6 +701,14 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   blocks.push(header(`📅 Meeting ${timeLabel}`));
   blocks.push(section(`*${truncate(data.meetingTitle, 100)}*\n${userMention}`));
 
+  // Evidence line
+  const evidenceParts: string[] = [`Trigger: Meeting starts ${timeLabel}`];
+  const critRisks = data.riskSignals?.filter(r => r.severity === 'critical' || r.severity === 'high') || [];
+  if (critRisks.length > 0) {
+    evidenceParts.push(`${critRisks.length} deal risk${critRisks.length !== 1 ? 's' : ''} flagged`);
+  }
+  blocks.push(context(evidenceParts));
+
   // Risk Alerts (if critical/high)
   const criticalRisks = data.riskSignals?.filter(r => r.severity === 'critical' || r.severity === 'high') || [];
   if (criticalRisks.length > 0) {
@@ -822,6 +835,11 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   buttonRow.push({ text: '📋 Full Prep', actionId: 'view_meeting', value: data.meetingId, url: `${data.appUrl}/meetings/${data.meetingId}` });
 
   blocks.push(actions(buttonRow.slice(0, 3)));
+
+  // Escape hatch — dismiss
+  blocks.push(actions([
+    { text: 'Dismiss', actionId: 'dismiss_meeting_prep', value: data.meetingId },
+  ]));
 
   // Context
   if (data.attendees.length > 1) {
@@ -1548,6 +1566,12 @@ export interface MorningBriefData {
     dealValue?: number;
     dealStage?: string;
     isImportant?: boolean;
+    engagementPattern?: {
+      avg_response_time_hours: number | null;
+      best_email_day: string | null;
+      best_email_hour: number | null;
+      response_trend: string | null;
+    } | null;
   }>;
   tasks: {
     overdue: Array<{
@@ -1587,6 +1611,25 @@ export interface MorningBriefData {
     completionPct: number;
     isNotable: boolean;
   }>;
+  // SIG-010: Signal Watch — top heating and cooling deals
+  signalWatch?: {
+    heatingUp: Array<{
+      deal_id: string;
+      deal_name: string;
+      deal_value: number | null;
+      temperature: number;
+      trend: string;
+      signal_count_24h: number;
+    }>;
+    coolingDown: Array<{
+      deal_id: string;
+      deal_name: string;
+      deal_value: number | null;
+      temperature: number;
+      trend: string;
+      signal_count_24h: number;
+    }>;
+  };
   appUrl: string;
 }
 
@@ -1751,6 +1794,38 @@ export const buildMorningBriefMessage = (data: MorningBriefData): SlackMessage =
     });
 
     blocks.push(section(safeMrkdwn(`*Campaigns*\n\n${campaignLines.join('\n')}`)));
+  }
+
+  // ─── SIGNAL WATCH section (SIG-010: heating-up / cooling-down deals) ───
+  if (data.signalWatch) {
+    const { heatingUp, coolingDown } = data.signalWatch;
+    const hasSignals = heatingUp.length > 0 || coolingDown.length > 0;
+    if (hasSignals) {
+      const signalLines: string[] = [];
+
+      if (heatingUp.length > 0) {
+        signalLines.push('*Heating up* :fire:');
+        heatingUp.slice(0, 3).forEach(d => {
+          const tempPct = Math.round(d.temperature * 100);
+          const valueStr = d.deal_value != null ? ` — ${formatCurrency(d.deal_value)}` : '';
+          const signalsStr = d.signal_count_24h > 0 ? ` _(${d.signal_count_24h} signal${d.signal_count_24h !== 1 ? 's' : ''} today)_` : '';
+          signalLines.push(`  • *${truncate(d.deal_name, 40)}*${valueStr} · ${tempPct}% temp${signalsStr}`);
+        });
+      }
+
+      if (coolingDown.length > 0) {
+        if (heatingUp.length > 0) signalLines.push('');
+        signalLines.push('*Cooling down* :snowflake:');
+        coolingDown.slice(0, 3).forEach(d => {
+          const tempPct = Math.round(d.temperature * 100);
+          const valueStr = d.deal_value != null ? ` — ${formatCurrency(d.deal_value)}` : '';
+          signalLines.push(`  • *${truncate(d.deal_name, 40)}*${valueStr} · ${tempPct}% temp`);
+        });
+      }
+
+      blocks.push(divider());
+      blocks.push(section(safeMrkdwn(`*Signal Watch*\n\n${signalLines.join('\n')}`)));
+    }
   }
 
   // ─── EMAILS ───
@@ -4101,3 +4176,1824 @@ export const buildSupportStatusChange = (data: {
     context([`Changed by ${data.changedBy}`]),
   ];
 };
+
+// =============================================================================
+// CRM-006: CRM Auto-Update HITL Approval Message
+// =============================================================================
+
+export interface CRMAppliedChange {
+  field_name: string;
+  new_value: unknown;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface CRMPendingApproval {
+  id: string;
+  field_name: string;
+  old_value: unknown;
+  new_value: unknown;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning?: string;
+}
+
+export interface CRMSkippedField {
+  field_name: string;
+  reasoning?: string;
+}
+
+export interface CRMApprovalMessageData {
+  dealId: string;
+  dealName: string;
+  meetingId: string;
+  meetingTitle: string;
+  autoApplied: CRMAppliedChange[];
+  pendingApprovals: CRMPendingApproval[];
+  skippedFields: CRMSkippedField[];
+  appUrl: string;
+}
+
+/**
+ * Format a CRM field value for display in Slack
+ */
+const formatCRMValue = (value: unknown, fieldName: string): string => {
+  if (value === null || value === undefined) return '_empty_';
+  const str = String(value);
+  if (str.length === 0) return '_empty_';
+
+  // Truncate long values
+  const display = str.length > 80 ? str.slice(0, 79) + '…' : str;
+
+  // Currency formatting for deal_value
+  if (fieldName === 'deal_value' || fieldName === 'value') {
+    const num = parseFloat(str.replace(/[$,]/g, ''));
+    if (!isNaN(num)) return `$${num.toLocaleString()}`;
+  }
+
+  return display;
+};
+
+/**
+ * Confidence badge — plain text labels safe for mrkdwn
+ */
+const crmConfidenceBadge = (confidence: 'high' | 'medium' | 'low'): string => {
+  switch (confidence) {
+    case 'high': return '[HIGH]';
+    case 'medium': return '[MED]';
+    case 'low': return '[LOW]';
+    default: return '';
+  }
+};
+
+/**
+ * Build CRM Approval Message
+ *
+ * Slack Block Kit message sent after a meeting ends when CRM fields were
+ * extracted. Summarises auto-applied changes and presents pending fields
+ * for per-field or bulk approve/reject/edit.
+ *
+ * Stays within the Slack 50-block limit by capping pending fields shown.
+ */
+export const buildCRMApprovalMessage = (data: CRMApprovalMessageData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+
+  // --- Header ---
+  const headerText = `CRM Update — ${truncate(data.dealName, 60)} from ${truncate(data.meetingTitle, 40)}`;
+  blocks.push(header(headerText));
+
+  // --- Context: deal + meeting links ---
+  const contextParts: string[] = [];
+  if (data.appUrl) {
+    contextParts.push(`<${data.appUrl}/deals/${data.dealId}|View Deal>`);
+    contextParts.push(`<${data.appUrl}/meetings/${data.meetingId}|View Meeting>`);
+  }
+  if (contextParts.length > 0) {
+    blocks.push(context(contextParts));
+  }
+
+  // --- Auto-applied section ---
+  if (data.autoApplied.length > 0) {
+    blocks.push(divider());
+    const autoLines = data.autoApplied.slice(0, 8).map((c) => {
+      const displayValue = formatCRMValue(c.new_value, c.field_name);
+      const fieldLabel = c.field_name.replace(/_/g, ' ');
+      return `*${fieldLabel}:* ${displayValue}`;
+    });
+    blocks.push(section(`*Auto-applied (${data.autoApplied.length} field${data.autoApplied.length !== 1 ? 's' : ''})*\n${autoLines.join('\n')}`));
+  }
+
+  // --- Per-field approvals ---
+  if (data.pendingApprovals.length > 0) {
+    blocks.push(divider());
+    blocks.push(section(`*Needs your review (${data.pendingApprovals.length} field${data.pendingApprovals.length !== 1 ? 's' : ''})*`));
+
+    // Budget: header(1) + context(1) + divider(up to 2) + auto section(up to 2) +
+    //         review header(1) + divider(1) + approve-all row(1) + skipped(up to 2) = ~11 fixed blocks
+    // Remaining: 50 - 11 = 39. Each field costs 2 blocks (section + actions).
+    const MAX_FIELD_BLOCKS = 36; // 18 fields max
+    const maxFields = Math.floor(MAX_FIELD_BLOCKS / 2);
+    const fieldsToShow = data.pendingApprovals.slice(0, maxFields);
+
+    for (const field of fieldsToShow) {
+      const fieldLabel = field.field_name.replace(/_/g, ' ');
+      const oldDisplay = formatCRMValue(field.old_value, field.field_name);
+      const newDisplay = formatCRMValue(field.new_value, field.field_name);
+      const badge = crmConfidenceBadge(field.confidence);
+      const reasoning = field.reasoning ? `\n_${truncate(field.reasoning, 80)}_` : '';
+
+      blocks.push(
+        section(
+          `*${fieldLabel}* ${badge}\n${oldDisplay} → *${newDisplay}*${reasoning}`
+        )
+      );
+
+      // Per-field action buttons: action_id format: crm_{action}::{field_name}::{queue_id}
+      const queueValue = safeButtonValue(JSON.stringify({ queueId: field.id, fieldName: field.field_name }));
+      blocks.push({
+        type: 'actions',
+        block_id: `crm_field_actions::${field.id}`,
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Approve'), emoji: false },
+            style: 'primary',
+            action_id: `crm_approve::${field.field_name}::${field.id}`,
+            value: queueValue,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Reject'), emoji: false },
+            style: 'danger',
+            action_id: `crm_reject::${field.field_name}::${field.id}`,
+            value: queueValue,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Edit'), emoji: false },
+            action_id: `crm_edit::${field.field_name}::${field.id}`,
+            value: queueValue,
+          },
+        ],
+      });
+    }
+
+    if (data.pendingApprovals.length > maxFields) {
+      blocks.push(
+        context([`+ ${data.pendingApprovals.length - maxFields} more field(s) — view in app`])
+      );
+    }
+  }
+
+  // --- Approve All / Reject All ---
+  if (data.pendingApprovals.length > 0) {
+    blocks.push(divider());
+    const allQueueIds = data.pendingApprovals.map((f) => f.id);
+    const bulkValue = safeButtonValue(JSON.stringify({ queueIds: allQueueIds, dealId: data.dealId }));
+    blocks.push({
+      type: 'actions',
+      block_id: `crm_bulk_actions::${data.dealId}`,
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Approve All'), emoji: false },
+          style: 'primary',
+          action_id: `crm_approve_all::${data.dealId}`,
+          value: bulkValue,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Reject All'), emoji: false },
+          style: 'danger',
+          action_id: `crm_reject_all::${data.dealId}`,
+          value: bulkValue,
+        },
+      ],
+    });
+  }
+
+  // --- Low-confidence skipped fields ---
+  if (data.skippedFields.length > 0) {
+    const skippedNames = data.skippedFields
+      .slice(0, 5)
+      .map((f) => f.field_name.replace(/_/g, ' '))
+      .join(', ');
+    const suffix = data.skippedFields.length > 5 ? ` +${data.skippedFields.length - 5} more` : '';
+    blocks.push(context([`Noted (low confidence, not applied): ${skippedNames}${suffix}`]));
+  }
+
+  const pendingCount = data.pendingApprovals.length;
+  const autoCount = data.autoApplied.length;
+  const fallbackText =
+    `CRM Update for ${data.dealName}: ${autoCount} auto-applied, ${pendingCount} awaiting approval`;
+
+  return { blocks, text: fallbackText };
+};
+
+// =============================================================================
+// RE-ENGAGEMENT HITL APPROVAL (REN-006)
+// =============================================================================
+
+export interface ReengagementSignal {
+  type: string;
+  source: string;
+  description: string;
+  score_delta: number;
+  detected_at: string;
+  url?: string;
+}
+
+export interface ReengagementApprovalData {
+  dealId: string;
+  dealName: string;
+  dealValue: number | null;
+  companyName: string | null;
+  contactName: string;
+  contactEmail: string;
+  ownerName: string | null;
+  ownerSlackUserId?: string;
+  // Signal context
+  score: number;
+  temperature: number;
+  daysSinceClose: number;
+  lossReason: string | null;
+  topSignals: ReengagementSignal[];
+  // Draft email
+  emailSubject: string;
+  emailBody: string;
+  signalSummary: string;
+  // Routing
+  appUrl: string;
+}
+
+/**
+ * Build Re-engagement HITL Approval Message
+ *
+ * Sent to a rep's DM when the re-engagement pipeline finds a hot deal.
+ * Buttons use `reengagement_*::deal_id` convention — routed in slack-interactive.
+ *
+ * Action IDs:
+ *   reengagement_send::{dealId}    — approve and mark as converted
+ *   reengagement_edit::{dealId}    — placeholder (edit in-app)
+ *   reengagement_snooze::{dealId}  — snooze 14 days
+ *   reengagement_remove::{dealId}  — remove from watchlist
+ */
+export const buildReengagementApprovalMessage = (data: ReengagementApprovalData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+
+  // --- Header — assertive low-tier ---
+  const headerText = safeHeaderText(`💡 Opportunity Spotted | ${data.dealName}`);
+  blocks.push(header(headerText));
+
+  // --- Deal + contact context ---
+  const dealValueStr = data.dealValue
+    ? `$${Number(data.dealValue).toLocaleString()}`
+    : 'value unknown';
+
+  const contextParts: string[] = [
+    `Company: *${truncate(data.companyName || 'Unknown', 50)}*`,
+    `Value: *${dealValueStr}*`,
+    `Lost: *${data.daysSinceClose} days ago*`,
+  ];
+  if (data.lossReason) {
+    contextParts.push(`Reason: ${data.lossReason.replace(/_/g, ' ')}`);
+  }
+
+  blocks.push(section(safeMrkdwn(contextParts.join(' • '))));
+
+  // --- Evidence ---
+  blocks.push(context([`Trigger: ${truncate(data.signalSummary, 200)}`]));
+
+  // --- Signal summary ---
+  blocks.push(divider());
+
+  const signalSummaryText = safeMrkdwn(
+    `*Why now?* ${data.signalSummary}\n\n` +
+    `Relevance score: *${data.score}/100* • Temperature: *${(data.temperature * 100).toFixed(0)}%*`
+  );
+  blocks.push(section(signalSummaryText));
+
+  // Top signals (max 3)
+  if (data.topSignals.length > 0) {
+    const signalLines = data.topSignals
+      .slice(0, 3)
+      .map((s) => {
+        const typeLabel = s.type.replace(/_/g, ' ');
+        const desc = truncate(s.description, 120);
+        return `• *[${typeLabel}]* ${desc}`;
+      })
+      .join('\n');
+
+    blocks.push(section(safeMrkdwn(`*Signals detected:*\n${signalLines}`)));
+  }
+
+  // --- Draft email preview ---
+  blocks.push(divider());
+
+  blocks.push(section(safeMrkdwn(
+    `*Draft email to ${truncate(data.contactName, 50)}* (${truncate(data.contactEmail, 80)})`
+  )));
+
+  blocks.push(section(safeMrkdwn(
+    `*Subject:* ${truncate(data.emailSubject, 200)}`
+  )));
+
+  blocks.push(section(safeMrkdwn(
+    `*Message:*\n${truncate(data.emailBody, 700)}`
+  )));
+
+  // --- Action buttons ---
+  blocks.push(divider());
+
+  const dealIdSafe = truncate(data.dealId, 36); // UUID length
+
+  blocks.push({
+    type: 'actions',
+    block_id: `reengage_actions::${dealIdSafe}`,
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Approve & Send'), emoji: false },
+        style: 'primary',
+        action_id: `reengagement_send::${dealIdSafe}`,
+        value: safeButtonValue(JSON.stringify({
+          dealId: data.dealId,
+          contactEmail: data.contactEmail,
+          contactName: data.contactName,
+        })),
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Edit Draft'), emoji: false },
+        action_id: `reengagement_edit::${dealIdSafe}`,
+        value: safeButtonValue(JSON.stringify({ dealId: data.dealId })),
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Snooze 30d'), emoji: false },
+        action_id: `reengagement_snooze::${dealIdSafe}`,
+        value: safeButtonValue(JSON.stringify({ dealId: data.dealId, snoozeDays: 30 })),
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Dismiss'), emoji: false },
+        style: 'danger',
+        action_id: `reengagement_remove::${dealIdSafe}`,
+        value: safeButtonValue(JSON.stringify({ dealId: data.dealId })),
+      },
+    ],
+  });
+
+  // --- Footer context ---
+  blocks.push(context([
+    safeContextMrkdwn(
+      `Re-engagement pipeline • <${data.appUrl}/deals/${data.dealId}|View deal>`
+    ),
+  ]));
+
+  return {
+    blocks,
+    text: `Re-engagement opportunity: ${data.dealName} — ${data.signalSummary}`,
+  };
+};
+
+// =============================================================================
+// Enhanced Morning Briefing (BRF-007)
+// Extends the standard morning brief with pipeline math, quarter phase,
+// coverage ratio, overnight summary, and action recommendation.
+// =============================================================================
+
+export interface PipelineMathSummary {
+  target: number | null;
+  closed_so_far: number;
+  pct_to_target: number | null;
+  total_pipeline: number;
+  weighted_pipeline: number;
+  coverage_ratio: number | null;
+  gap_amount: number | null;
+  projected_close: number | null;
+  deals_at_risk: number;
+}
+
+export interface QuarterPhaseSummary {
+  phase: 'build' | 'progress' | 'close';
+  label: string;
+  weekOfQuarter: number;
+  weeksRemaining: number;
+  description: string;
+}
+
+export interface OvernightEventSummary {
+  type: string;
+  description: string;
+  deal_name: string | null;
+  severity: 'info' | 'positive' | 'attention';
+}
+
+export interface ActionRecommendationSummary {
+  action: string;
+  rationale: string;
+  target_deal_name: string | null;
+  urgency: 'immediate' | 'today' | 'this_week';
+  category: string;
+}
+
+export interface EnhancedMorningBriefData extends MorningBriefData {
+  pipelineMath: PipelineMathSummary | null;
+  quarterPhase: QuarterPhaseSummary | null;
+  overnightEvents: OvernightEventSummary[];
+  topAction: ActionRecommendationSummary | null;
+  briefingFormat: 'detailed' | 'summary';
+}
+
+/**
+ * Build Enhanced Morning Briefing Slack message.
+ * Extends the standard morning brief with pipeline math, quarter phase,
+ * overnight summary, and top-action recommendation sections.
+ * Respects briefingFormat: 'summary' renders compact bullet form.
+ */
+export const buildEnhancedMorningBriefMessage = (data: EnhancedMorningBriefData): SlackMessage => {
+  const emBlocks: SlackBlock[] = [];
+  const isSummary = data.briefingFormat === 'summary';
+
+  const fmtCurrency = (v: number | null | undefined): string => {
+    if (v == null) return 'N/A';
+    if (!data.currencyCode) return `$${Math.round(v).toLocaleString()}`;
+    return new Intl.NumberFormat(data.currencyLocale || 'en-US', {
+      style: 'currency',
+      currency: data.currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(v);
+  };
+
+  const fmtPct = (v: number | null): string =>
+    v == null ? 'N/A' : `${Math.round(v * 100)}%`;
+
+  // --- Header ---
+  const phaseLabel = data.quarterPhase
+    ? ` — ${data.quarterPhase.label} Phase, Wk ${data.quarterPhase.weekOfQuarter}`
+    : '';
+  emBlocks.push(header(safeHeaderText(`Good morning, ${data.userName}${phaseLabel}`)));
+  emBlocks.push(divider());
+
+  // --- Pipeline Math ---
+  if (data.pipelineMath) {
+    const pm = data.pipelineMath;
+
+    if (isSummary) {
+      const parts: string[] = [];
+      if (pm.target !== null) {
+        parts.push(
+          `*Target:* ${fmtCurrency(pm.target)} | *Closed:* ${fmtCurrency(pm.closed_so_far)} (${fmtPct(pm.pct_to_target)})`
+        );
+      }
+      parts.push(
+        `*Pipeline:* ${fmtCurrency(pm.total_pipeline)} | *Weighted:* ${fmtCurrency(pm.weighted_pipeline)}`
+      );
+      if (pm.coverage_ratio !== null) {
+        const flag = pm.coverage_ratio < 2.0 ? ' LOW' : '';
+        parts.push(`*Coverage:* ${pm.coverage_ratio.toFixed(1)}x${flag}`);
+      }
+      emBlocks.push(section(safeMrkdwn(parts.join('\n'))));
+    } else {
+      const fields: Array<{ label: string; value: string }> = [];
+      if (pm.target !== null) {
+        fields.push({ label: 'Quota Target', value: fmtCurrency(pm.target) });
+        fields.push({
+          label: 'Closed So Far',
+          value: `${fmtCurrency(pm.closed_so_far)} (${fmtPct(pm.pct_to_target)})`,
+        });
+      }
+      fields.push({ label: 'Total Pipeline', value: fmtCurrency(pm.total_pipeline) });
+      fields.push({ label: 'Weighted Pipeline', value: fmtCurrency(pm.weighted_pipeline) });
+      if (pm.gap_amount !== null) {
+        fields.push({ label: 'Gap to Target', value: fmtCurrency(pm.gap_amount) });
+      }
+      if (pm.coverage_ratio !== null) {
+        const flag = pm.coverage_ratio < 2.0 ? ' — LOW' : pm.coverage_ratio >= 3.0 ? ' — GOOD' : '';
+        fields.push({ label: 'Coverage Ratio', value: `${pm.coverage_ratio.toFixed(1)}x${flag}` });
+      }
+      if (pm.projected_close !== null) {
+        fields.push({ label: 'Projected Close', value: fmtCurrency(pm.projected_close) });
+      }
+      if (pm.deals_at_risk > 0) {
+        fields.push({ label: 'Deals at Risk', value: `${pm.deals_at_risk}` });
+      }
+      emBlocks.push(section(safeMrkdwn('*Pipeline Snapshot*')));
+      if (fields.length > 0) {
+        emBlocks.push(sectionWithFields(fields));
+      }
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Quarter Phase (detailed only) ---
+  if (data.quarterPhase && !isSummary) {
+    const qp = data.quarterPhase;
+    const weeksText =
+      qp.weeksRemaining === 1 ? '1 week remaining' : `${qp.weeksRemaining} weeks remaining`;
+    emBlocks.push(
+      context([safeContextMrkdwn(`${weeksText} in quarter. ${truncate(qp.description, 100)}`)])
+    );
+    emBlocks.push(divider());
+  }
+
+  // --- Top Action ---
+  if (data.topAction) {
+    const ta = data.topAction;
+    const urgencyPrefix =
+      ta.urgency === 'immediate' ? 'IMMEDIATE: ' : ta.urgency === 'today' ? 'Today: ' : '';
+    emBlocks.push(
+      section(safeMrkdwn(`*Highest Leverage Action*\n${urgencyPrefix}${ta.action}`))
+    );
+    if (!isSummary && ta.rationale) {
+      emBlocks.push(context([safeContextMrkdwn(ta.rationale)]));
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Overnight Events ---
+  if (data.overnightEvents.length > 0) {
+    const attentionEvents = data.overnightEvents.filter(e => e.severity === 'attention');
+    const positiveEvents = data.overnightEvents.filter(e => e.severity === 'positive');
+    const infoEvents = data.overnightEvents.filter(e => e.severity === 'info');
+
+    if (isSummary) {
+      const parts: string[] = [];
+      if (attentionEvents.length > 0)
+        parts.push(`${attentionEvents.length} signal${attentionEvents.length > 1 ? 's' : ''} need attention`);
+      if (positiveEvents.length > 0)
+        parts.push(`${positiveEvents.length} positive event${positiveEvents.length > 1 ? 's' : ''}`);
+      if (infoEvents.length > 0)
+        parts.push(`${infoEvents.length} enrichment${infoEvents.length > 1 ? 's' : ''} completed`);
+      emBlocks.push(context([`While you slept: ${parts.join(', ')}`]));
+    } else {
+      emBlocks.push(
+        section(safeMrkdwn(`*While you slept (${data.overnightEvents.length} update${data.overnightEvents.length > 1 ? 's' : ''})*`))
+      );
+      const prioritised = [
+        ...attentionEvents,
+        ...positiveEvents,
+        ...infoEvents,
+      ].slice(0, 3);
+      for (const ev of prioritised) {
+        const badge =
+          ev.severity === 'attention' ? 'Attention' :
+          ev.severity === 'positive' ? 'Good news' : 'Info';
+        const dealCtx = ev.deal_name ? ` — _${truncate(ev.deal_name, 40)}_` : '';
+        emBlocks.push(
+          context([`[${badge}] ${truncate(ev.description, 120)}${dealCtx}`])
+        );
+      }
+      if (data.overnightEvents.length > 3) {
+        emBlocks.push(context([`+${data.overnightEvents.length - 3} more overnight updates`]));
+      }
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Today's Meetings ---
+  if (data.meetings.length > 0) {
+    emBlocks.push(section(safeMrkdwn(`*Meetings today (${data.meetings.length})*`)));
+    data.meetings.slice(0, 3).forEach(m => {
+      const dealCtx = m.dealValue ? ` — ${fmtCurrency(m.dealValue)}` : '';
+      const companyCtx = m.companyName ? ` at ${m.companyName}` : '';
+      emBlocks.push(
+        context([`${m.time} — *${truncate(m.title, 60)}*${companyCtx}${dealCtx}`])
+      );
+    });
+    if (data.meetings.length > 3) {
+      emBlocks.push(context([`+${data.meetings.length - 3} more meetings`]));
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Urgent Deals ---
+  const urgentDeals = data.deals
+    .filter(d => d.isAtRisk || (d.daysSinceActivity && d.daysSinceActivity > 7))
+    .slice(0, 3);
+  if (urgentDeals.length > 0) {
+    emBlocks.push(section(safeMrkdwn('*Deals needing attention*')));
+    for (const d of urgentDeals) {
+      const staleLabel =
+        d.daysSinceActivity && d.daysSinceActivity > 7 ? ` — ${d.daysSinceActivity}d dark` : '';
+      emBlocks.push(context([`${truncate(d.name, 50)} — ${fmtCurrency(d.value)}${staleLabel}`]));
+    }
+    emBlocks.push(divider());
+  }
+
+  // --- Overdue Tasks ---
+  if (data.tasks.overdue.length > 0) {
+    const taskSummary = data.tasks.overdue
+      .slice(0, 3)
+      .map(t =>
+        `${truncate(t.title, 60)} (${t.daysOverdue}d overdue${t.dealName ? ` — ${t.dealName}` : ''})`
+      )
+      .join('\n');
+    emBlocks.push(
+      section(safeMrkdwn(`*Overdue tasks (${data.tasks.overdue.length})*\n${taskSummary}`))
+    );
+    emBlocks.push(divider());
+  }
+
+  // --- Footer actions ---
+  emBlocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Open Pipeline'), emoji: false },
+        action_id: 'open_pipeline',
+        url: `${data.appUrl}/pipeline`,
+        style: 'primary',
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Ask Copilot'), emoji: false },
+        action_id: 'open_copilot',
+        url: `${data.appUrl}/copilot`,
+      },
+    ],
+  });
+
+  const fallbackText = data.pipelineMath?.target
+    ? `Good morning ${data.userName} — Pipeline: ${fmtCurrency(data.pipelineMath.total_pipeline)}, Target: ${fmtCurrency(data.pipelineMath.target)}`
+    : `Good morning ${data.userName} — Pipeline: ${fmtCurrency(data.pipelineMath?.total_pipeline ?? 0)}`;
+
+  return { blocks: emBlocks, text: fallbackText };
+};
+
+// =============================================================================
+// Internal Meeting Prep — IMP-006
+// =============================================================================
+
+export interface InternalPrepMessageData {
+  eventId: string;
+  meetingTitle: string;
+  meetingType: 'one_on_one' | 'pipeline_review' | 'qbr' | 'standup' | 'other';
+  startTime: string;          // ISO string
+  sections: Array<{ title: string; body: string }>;
+  managerPrereadEnabled: boolean;
+  appUrl: string;
+}
+
+/**
+ * Build a Slack Block Kit message for an internal meeting prep briefing.
+ * Includes a "Send to manager as pre-read" button when enabled.
+ */
+export const buildInternalPrepMessage = (data: InternalPrepMessageData): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+
+  const typeLabel: Record<string, string> = {
+    one_on_one: '1:1',
+    pipeline_review: 'Pipeline Review',
+    qbr: 'QBR',
+    standup: 'Standup',
+    other: 'Internal Meeting',
+  };
+
+  const label = typeLabel[data.meetingType] || 'Internal Meeting';
+  const startDate = new Date(data.startTime).toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  // Header
+  blocks.push(headerBlock(safeHeaderText(`${label} Prep: ${data.meetingTitle}`)));
+  blocks.push(contextBlock([safeContextMrkdwn(`${startDate} — auto-generated by 60 Copilot`)]));
+  blocks.push(divider());
+
+  // Sections (render up to 5 to stay within Slack's 50-block limit)
+  const visibleSections = data.sections.slice(0, 5);
+  for (const sec of visibleSections) {
+    const body = safeMrkdwn(`*${sec.title}*\n${sec.body}`);
+    blocks.push(section(body));
+    blocks.push(divider());
+  }
+
+  // Action buttons
+  const elements: SlackBlock[] = [
+    {
+      type: 'button',
+      text: { type: 'plain_text', text: safeButtonText('View Full Prep'), emoji: false },
+      action_id: 'view_brief',
+      url: `${data.appUrl}/calendar`,
+      style: 'primary',
+    },
+  ];
+
+  if (data.managerPrereadEnabled) {
+    elements.push({
+      type: 'button',
+      text: {
+        type: 'plain_text',
+        text: safeButtonText('Send to manager as pre-read'),
+        emoji: false,
+      },
+      action_id: safeButtonValue(`imp_send_preread::${data.eventId}`),
+      value: safeButtonValue(data.eventId),
+    });
+  }
+
+  blocks.push({ type: 'actions', elements });
+
+  blocks.push(contextBlock([
+    safeContextMrkdwn(
+      '_Internal meeting prep — visible only to you. ' +
+      'Use the button above to share a condensed pre-read with your manager._'
+    ),
+  ]));
+
+  const fallback = `${label} prep ready: ${data.meetingTitle} at ${startDate}`;
+  return { blocks, text: safeMrkdwn(fallback) };
+};
+
+/**
+ * Build a condensed manager pre-read DM for an internal meeting.
+ * Sent when the rep clicks "Send to manager as pre-read".
+ */
+export const buildManagerPrereadMessage = (data: {
+  repName: string;
+  meetingTitle: string;
+  meetingType: string;
+  startTime: string;
+  sections: Array<{ title: string; body: string }>;
+  appUrl: string;
+}): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+
+  const startDate = new Date(data.startTime).toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  blocks.push(headerBlock(safeHeaderText(`Pre-read: ${data.meetingTitle}`)));
+  blocks.push(section(safeMrkdwn(
+    `*Sent by:* ${data.repName}\n` +
+    `*Time:* ${startDate}\n` +
+    `*Type:* ${data.meetingType}`
+  )));
+  blocks.push(divider());
+
+  // Show first 3 sections in the pre-read (condensed)
+  for (const sec of data.sections.slice(0, 3)) {
+    blocks.push(section(safeMrkdwn(`*${sec.title}*\n${safeMrkdwn(sec.body)}`)));
+  }
+
+  blocks.push(contextBlock([
+    safeContextMrkdwn(`_Pre-read shared by ${data.repName} via 60 Copilot_`),
+  ]));
+
+  return {
+    blocks,
+    text: `Meeting pre-read from ${data.repName}: ${data.meetingTitle}`,
+  };
+};
+
+// =============================================================================
+// EOD Synthesis Message (EOD-006)
+// =============================================================================
+
+export interface EODScorecardData {
+  date: string;
+  timezone: string;
+  meetings_completed: number;
+  meetings_no_show: number;
+  emails_sent: number;
+  crm_updates_count: number;
+  tasks_completed: number;
+  deals_created_count: number;
+  deals_created_value: number;
+  pipeline_value_today: number;
+  pipeline_value_change: number;
+}
+
+export interface EODOpenItemData {
+  pending_replies: Array<{
+    contact_name: string | null;
+    subject: string | null;
+    hours_waiting: number;
+    deal_name: string | null;
+  }>;
+  unsent_drafts: number;
+  incomplete_actions: Array<{
+    description: string;
+    meeting_title: string | null;
+    deal_name: string | null;
+  }>;
+  overdue_tasks: Array<{
+    title: string;
+    days_overdue: number;
+    deal_name: string | null;
+    priority: string | null;
+  }>;
+  total_attention_items: number;
+}
+
+export interface EODTomorrowMeetingData {
+  title: string;
+  start_time: string;
+  attendees_count: number;
+  deal_name: string | null;
+  prep_status: 'ready' | 'queued' | 'none';
+  attention_flags: Array<{
+    type: string;
+    description: string;
+    severity: 'high' | 'medium' | 'low';
+  }>;
+}
+
+export interface EODTomorrowPreviewData {
+  date: string;
+  meetings: EODTomorrowMeetingData[];
+  total_meetings: number;
+  high_attention_count: number;
+  suggested_first_action: string | null;
+}
+
+export interface EODOvernightPlanItemData {
+  type: string;
+  label: string;
+  description: string;
+  count: number;
+  will_appear_in_briefing: boolean;
+}
+
+export interface EODOvernightPlanData {
+  plan_items: EODOvernightPlanItemData[];
+  total_items: number;
+  morning_briefing_preview: string;
+}
+
+export interface EODSynthesisData {
+  userName: string;
+  slackUserId?: string;
+  date: string;
+  scorecard: EODScorecardData;
+  openItems: EODOpenItemData;
+  tomorrowPreview?: EODTomorrowPreviewData;
+  overnightPlan?: EODOvernightPlanData;
+  detailLevel?: 'full' | 'summary';
+  currencyCode?: string;
+  currencyLocale?: string;
+  appUrl: string;
+}
+
+/**
+ * Build the EOD Synthesis Slack message.
+ *
+ * Slack limit: 50 blocks maximum.
+ * Priority order if over limit:
+ *   1. Header + Scorecard (always shown)
+ *   2. Open Items (high-attention) — shown if space
+ *   3. Tomorrow Preview — shown if space
+ *   4. Overnight Plan — shown if space
+ *   5. Footer actions — always included at end
+ */
+export const buildEODSynthesisMessage = (data: EODSynthesisData): SlackMessage => {
+  const MAX_BLOCKS = 50;
+  const isSummary = data.detailLevel === 'summary';
+
+  const fmtCurrency = (v: number | null | undefined): string => {
+    if (v == null) return 'N/A';
+    if (!data.currencyCode) return `$${Math.round(v).toLocaleString()}`;
+    return new Intl.NumberFormat(data.currencyLocale || 'en-US', {
+      style: 'currency',
+      currency: data.currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(v);
+  };
+
+  const fmtTime = (isoStr: string): string => {
+    try {
+      return new Date(isoStr).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return isoStr;
+    }
+  };
+
+  const sc = data.scorecard;
+  const oi = data.openItems;
+
+  // ---- Section builders (each returns SlackBlock[]) ----
+
+  const buildScorecard = (): SlackBlock[] => {
+    const blocks: SlackBlock[] = [];
+    const userMention = data.slackUserId ? `<@${data.slackUserId}>` : data.userName;
+    blocks.push(header(safeHeaderText(`End of day, ${userMention}`)));
+    blocks.push(divider());
+
+    if (isSummary) {
+      const parts: string[] = [];
+      if (sc.meetings_completed > 0) parts.push(`*Meetings:* ${sc.meetings_completed}`);
+      if (sc.emails_sent > 0) parts.push(`*Emails:* ${sc.emails_sent}`);
+      if (sc.tasks_completed > 0) parts.push(`*Tasks done:* ${sc.tasks_completed}`);
+      if (sc.deals_created_count > 0)
+        parts.push(`*Deals created:* ${sc.deals_created_count} (${fmtCurrency(sc.deals_created_value)})`);
+      const pipelineSign = sc.pipeline_value_change >= 0 ? '+' : '';
+      parts.push(`*Pipeline:* ${fmtCurrency(sc.pipeline_value_today)} (${pipelineSign}${fmtCurrency(sc.pipeline_value_change)})`);
+      blocks.push(section(safeMrkdwn(`*Today at a glance*\n${parts.join(' | ')}`)));
+    } else {
+      const fields: Array<{ label: string; value: string }> = [
+        {
+          label: 'Meetings',
+          value: `${sc.meetings_completed}${sc.meetings_no_show > 0 ? ` (${sc.meetings_no_show} no-show)` : ''}`,
+        },
+        { label: 'Emails Sent', value: `${sc.emails_sent}` },
+        { label: 'CRM Updates', value: `${sc.crm_updates_count}` },
+        { label: 'Tasks Completed', value: `${sc.tasks_completed}` },
+      ];
+      if (sc.deals_created_count > 0) {
+        fields.push({
+          label: 'Deals Created',
+          value: `${sc.deals_created_count} — ${fmtCurrency(sc.deals_created_value)}`,
+        });
+      }
+      const pipelineSign = sc.pipeline_value_change >= 0 ? '+' : '';
+      fields.push({
+        label: 'Pipeline Today',
+        value: `${fmtCurrency(sc.pipeline_value_today)} (${pipelineSign}${fmtCurrency(sc.pipeline_value_change)} vs yesterday)`,
+      });
+      blocks.push(section(safeMrkdwn("*Today's scorecard*")));
+      blocks.push(sectionWithFields(fields));
+    }
+    blocks.push(divider());
+    return blocks;
+  };
+
+  const buildOpenItems = (): SlackBlock[] => {
+    if (oi.total_attention_items === 0) return [];
+    const blks: SlackBlock[] = [];
+
+    if (isSummary) {
+      const parts: string[] = [];
+      if (oi.pending_replies.length > 0)
+        parts.push(`${oi.pending_replies.length} pending repl${oi.pending_replies.length > 1 ? 'ies' : 'y'}`);
+      if (oi.overdue_tasks.length > 0)
+        parts.push(`${oi.overdue_tasks.length} overdue task${oi.overdue_tasks.length > 1 ? 's' : ''}`);
+      if (oi.incomplete_actions.length > 0)
+        parts.push(`${oi.incomplete_actions.length} incomplete action item${oi.incomplete_actions.length > 1 ? 's' : ''}`);
+      blks.push(section(safeMrkdwn(`*Before you wrap up:* ${parts.join(', ')}`)));
+    } else {
+      blks.push(section(safeMrkdwn(`*Open items (${oi.total_attention_items})*`)));
+
+      // Pending replies (top 3)
+      for (const reply of oi.pending_replies.slice(0, 3)) {
+        const who = reply.contact_name || 'Unknown sender';
+        const subj = reply.subject ? ` — "${truncate(reply.subject, 50)}"` : '';
+        const dealCtx = reply.deal_name ? ` · _${truncate(reply.deal_name, 30)}_` : '';
+        blks.push(context([`Reply pending: ${truncate(who, 30)}${subj} · ${reply.hours_waiting}h ago${dealCtx}`]));
+      }
+
+      // Overdue tasks (top 3)
+      for (const task of oi.overdue_tasks.slice(0, 3)) {
+        const dealCtx = task.deal_name ? ` — _${truncate(task.deal_name, 30)}_` : '';
+        blks.push(context([`Overdue task: ${truncate(task.title, 60)} (${task.days_overdue}d)${dealCtx}`]));
+      }
+
+      // Incomplete actions (top 2)
+      for (const actionItem of oi.incomplete_actions.slice(0, 2)) {
+        const meetingCtx = actionItem.meeting_title
+          ? ` from "${truncate(actionItem.meeting_title, 40)}"`
+          : '';
+        blks.push(context([`Action item${meetingCtx}: ${truncate(actionItem.description, 80)}`]));
+      }
+
+      if (oi.unsent_drafts > 0) {
+        blks.push(context([`${oi.unsent_drafts} email draft${oi.unsent_drafts > 1 ? 's' : ''} unsent`]));
+      }
+    }
+    blks.push(divider());
+    return blks;
+  };
+
+  const buildTomorrowPreview = (): SlackBlock[] => {
+    if (!data.tomorrowPreview || data.tomorrowPreview.total_meetings === 0) return [];
+    const tp = data.tomorrowPreview;
+    const blks: SlackBlock[] = [];
+
+    if (isSummary) {
+      const flagNote = tp.high_attention_count > 0
+        ? ` — ${tp.high_attention_count} attention flag${tp.high_attention_count > 1 ? 's' : ''}`
+        : '';
+      blks.push(section(safeMrkdwn(
+        `*Tomorrow:* ${tp.total_meetings} meeting${tp.total_meetings > 1 ? 's' : ''}${flagNote}`
+      )));
+    } else {
+      blks.push(section(safeMrkdwn(`*Tomorrow\'s meetings (${tp.total_meetings})*`)));
+
+      for (const m of tp.meetings.slice(0, 4)) {
+        const time = fmtTime(m.start_time);
+        const prepBadge =
+          m.prep_status === 'ready' ? 'Brief ready' :
+          m.prep_status === 'queued' ? 'Brief queued' : 'No brief';
+        const dealCtx = m.deal_name ? ` · _${truncate(m.deal_name, 30)}_` : '';
+        const flagNote = m.attention_flags.length > 0
+          ? ` · ${truncate(m.attention_flags[0].description, 60)}`
+          : '';
+        blks.push(context([`${time} — *${truncate(m.title, 50)}*${dealCtx} · ${prepBadge}${flagNote}`]));
+      }
+
+      if (tp.meetings.length > 4) {
+        blks.push(context([`+${tp.meetings.length - 4} more meeting${tp.meetings.length - 4 > 1 ? 's' : ''} tomorrow`]));
+      }
+
+      if (tp.suggested_first_action) {
+        blks.push(section(safeMrkdwn(
+          `*Suggested first action:* ${truncate(tp.suggested_first_action, 200)}`
+        )));
+      }
+    }
+    blks.push(divider());
+    return blks;
+  };
+
+  const buildOvernightPlan = (): SlackBlock[] => {
+    if (!data.overnightPlan || data.overnightPlan.total_items === 0) return [];
+    const op = data.overnightPlan;
+    const blks: SlackBlock[] = [];
+
+    if (isSummary) {
+      blks.push(context([safeContextMrkdwn(op.morning_briefing_preview)]));
+    } else {
+      const briefingItems = op.plan_items.filter(i => i.will_appear_in_briefing);
+      if (briefingItems.length > 0) {
+        const itemList = briefingItems
+          .slice(0, 4)
+          .map(i => `• ${i.label}: ${truncate(i.description, 80)}`)
+          .join('\n');
+        blks.push(section(safeMrkdwn(`*Tonight the agent will:*\n${itemList}`)));
+      }
+      blks.push(context([safeContextMrkdwn(op.morning_briefing_preview)]));
+    }
+    blks.push(divider());
+    return blks;
+  };
+
+  // ---- Assemble sections with 50-block limit enforcement ----
+
+  const scorecardBlocks = buildScorecard();
+  const openItemBlocks = buildOpenItems();
+  const tomorrowBlocks = buildTomorrowPreview();
+  const overnightBlocks = buildOvernightPlan();
+
+  // Footer actions block (always included — counts as 1 block)
+  const footerBlock: SlackBlock = {
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Looks Good'), emoji: false },
+        action_id: 'eod_looks_good',
+        value: safeButtonValue(`eod::${data.date}`),
+        style: 'primary',
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Adjust Priorities'), emoji: false },
+        action_id: 'eod_adjust_priorities',
+        value: safeButtonValue(`eod::${data.date}`),
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Add a Task'), emoji: false },
+        action_id: 'eod_add_task',
+        value: safeButtonValue(`eod::${data.date}`),
+      },
+    ],
+  };
+
+  // Reserve 1 slot for footer; fill remaining slots in priority order
+  const available = MAX_BLOCKS - 1;
+  const allBlocks: SlackBlock[] = [];
+
+  for (const b of scorecardBlocks) {
+    if (allBlocks.length < available) allBlocks.push(b);
+  }
+  for (const b of openItemBlocks) {
+    if (allBlocks.length < available) allBlocks.push(b);
+  }
+  for (const b of tomorrowBlocks) {
+    if (allBlocks.length < available) allBlocks.push(b);
+  }
+  for (const b of overnightBlocks) {
+    if (allBlocks.length < available) allBlocks.push(b);
+  }
+
+  allBlocks.push(footerBlock);
+
+  // Fallback text for notifications
+  const activitySummary = [
+    sc.meetings_completed > 0 ? `${sc.meetings_completed} meeting${sc.meetings_completed > 1 ? 's' : ''}` : null,
+    sc.emails_sent > 0 ? `${sc.emails_sent} email${sc.emails_sent > 1 ? 's' : ''}` : null,
+    sc.tasks_completed > 0 ? `${sc.tasks_completed} task${sc.tasks_completed > 1 ? 's' : ''} done` : null,
+  ].filter(Boolean).join(', ') || 'See your EOD summary';
+
+  const attentionNote = oi.total_attention_items > 0
+    ? ` ${oi.total_attention_items} item${oi.total_attention_items > 1 ? 's' : ''} need attention.`
+    : '';
+
+  const fallbackText = `End of day, ${data.userName} — ${activitySummary}.${attentionNote}`.trim();
+
+  return { blocks: allBlocks, text: fallbackText };
+};
+
+// =============================================================================
+// Command Centre Digest — CC8-007
+// =============================================================================
+
+export interface CCDigestItemBlock {
+  id: string;
+  title: string;
+  summary: string;
+  urgency: 'critical' | 'high' | 'normal' | 'low';
+  item_type: string;
+  has_drafted_action: boolean;
+  drafted_action_display?: string;
+}
+
+export interface CCDigestTierBlock {
+  items: CCDigestItemBlock[];
+  total_count: number;
+}
+
+export interface CCDigestDataBlock {
+  critical: CCDigestTierBlock;
+  high: CCDigestTierBlock;
+  normal_count: number;
+  stats: {
+    total_items: number;
+    auto_completed_count: number;
+    pipeline_value_sum: number;
+    currency_code?: string;
+    currency_locale?: string;
+    proposals_awaiting: number;
+  };
+}
+
+const CC_APP_URL = 'https://app.use60.com/command-centre';
+
+const URGENCY_EMOJI: Record<string, string> = {
+  critical: '\uD83D\uDD34', // 🔴
+  high: '\uD83D\uDFE0',     // 🟠
+  normal: '\uD83D\uDFE1',   // 🟡
+  low: '\uD83D\uDFE2',      // 🟢
+};
+
+/**
+ * Build a Slack digest message for the Command Centre.
+ * Groups items into critical / high tiers with HITL action buttons,
+ * then shows a summary count for normal/low items and footer stats.
+ *
+ * Stays within Slack's 50-block limit by capping critical to 5 and high to 3.
+ * Action IDs: cc_approve, cc_edit, cc_snooze, cc_dismiss.
+ */
+export const buildCommandCentreDigest = (data: CCDigestDataBlock): SlackMessage => {
+  const blocks: SlackBlock[] = [];
+  const MAX_BLOCKS = 50;
+
+  const fmtCurrency = (value: number): string => {
+    const code = (data.stats.currency_code || 'GBP').toUpperCase();
+    const locale =
+      data.stats.currency_locale ||
+      (code === 'USD' ? 'en-US' : code === 'EUR' ? 'en-IE' : code === 'AUD' ? 'en-AU' : code === 'CAD' ? 'en-CA' : 'en-GB');
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  // ---- Header ----
+  blocks.push(header(safeHeaderText('Command Centre — Action Required')));
+  blocks.push(
+    context([
+      safeContextMrkdwn(
+        `${data.stats.total_items} item${data.stats.total_items !== 1 ? 's' : ''} need your attention — generated by 60 Copilot`,
+      ),
+    ]),
+  );
+  blocks.push(divider());
+
+  // ---- Helper: render one item with HITL buttons ----
+  const renderItem = (item: CCDigestItemBlock): void => {
+    const emoji = URGENCY_EMOJI[item.urgency] || '';
+    const summaryLine = item.summary
+      ? `\n${truncate(item.summary, 200)}`
+      : '';
+    const draftLine = item.has_drafted_action && item.drafted_action_display
+      ? `\n_Suggested: ${truncate(item.drafted_action_display, 120)}_`
+      : '';
+
+    blocks.push(
+      section(
+        safeMrkdwn(
+          `${emoji} *${truncate(item.title, 100)}*${summaryLine}${draftLine}`,
+        ),
+      ),
+    );
+
+    blocks.push(
+      actions([
+        {
+          text: safeButtonText('Send'),
+          actionId: `cc_approve::${item.id}`,
+          value: item.id,
+          style: 'primary',
+        },
+        {
+          text: safeButtonText('Edit'),
+          actionId: `cc_edit::${item.id}`,
+          value: item.id,
+        },
+        {
+          text: safeButtonText('Later'),
+          actionId: `cc_snooze::${item.id}`,
+          value: item.id,
+        },
+        {
+          text: safeButtonText('Dismiss'),
+          actionId: `cc_dismiss::${item.id}`,
+          value: item.id,
+          style: 'danger',
+        },
+      ]),
+    );
+  };
+
+  // ---- Critical tier ----
+  if (data.critical.total_count > 0) {
+    blocks.push(section(safeMrkdwn(`*${URGENCY_EMOJI.critical} Critical — ${data.critical.total_count} item${data.critical.total_count !== 1 ? 's' : ''}*`)));
+
+    for (const item of data.critical.items) {
+      if (blocks.length >= MAX_BLOCKS - 5) break; // keep room for footer
+      renderItem(item);
+    }
+
+    if (data.critical.total_count > data.critical.items.length) {
+      const more = data.critical.total_count - data.critical.items.length;
+      blocks.push(
+        context([safeContextMrkdwn(`+${more} more critical item${more !== 1 ? 's' : ''} — open Command Centre to see all`)]),
+      );
+    }
+
+    blocks.push(divider());
+  }
+
+  // ---- High tier ----
+  if (data.high.total_count > 0) {
+    blocks.push(section(safeMrkdwn(`*${URGENCY_EMOJI.high} High — ${data.high.total_count} item${data.high.total_count !== 1 ? 's' : ''}*`)));
+
+    for (const item of data.high.items) {
+      if (blocks.length >= MAX_BLOCKS - 5) break;
+      renderItem(item);
+    }
+
+    if (data.high.total_count > data.high.items.length) {
+      const more = data.high.total_count - data.high.items.length;
+      blocks.push(
+        context([safeContextMrkdwn(`+${more} more high-priority item${more !== 1 ? 's' : ''} — open Command Centre to see all`)]),
+      );
+    }
+
+    blocks.push(divider());
+  }
+
+  // ---- Normal / Low summary ----
+  if (data.normal_count > 0) {
+    blocks.push(
+      section(
+        safeMrkdwn(
+          `${URGENCY_EMOJI.normal} *${data.normal_count} normal/low item${data.normal_count !== 1 ? 's' : ''}*`,
+        ),
+      ),
+    );
+    blocks.push(
+      actions([
+        {
+          text: safeButtonText(`Show all ${data.normal_count}`),
+          actionId: 'cc_show_all_normal',
+          value: 'normal',
+          url: CC_APP_URL,
+        },
+      ]),
+    );
+    blocks.push(divider());
+  }
+
+  // ---- Footer stats ----
+  const statParts: string[] = [
+    `*Total:* ${data.stats.total_items} item${data.stats.total_items !== 1 ? 's' : ''}`,
+  ];
+  if (data.stats.auto_completed_count > 0) {
+    statParts.push(`*Auto-completed overnight:* ${data.stats.auto_completed_count}`);
+  }
+  if (data.stats.pipeline_value_sum > 0) {
+    statParts.push(`*Pipeline at stake:* ${fmtCurrency(data.stats.pipeline_value_sum)}`);
+  }
+  if (data.stats.proposals_awaiting > 0) {
+    statParts.push(
+      `*Proposals awaiting response:* ${data.stats.proposals_awaiting}`,
+    );
+  }
+  blocks.push(context([safeContextMrkdwn(statParts.join('  |  '))]));
+
+  // ---- Open Command Centre CTA ----
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: safeButtonText('Open Command Centre'),
+          emoji: false,
+        },
+        action_id: 'cc_open_command_centre',
+        url: CC_APP_URL,
+        style: 'primary',
+      },
+    ],
+  });
+
+  // Fallback notification text
+  const criticalNote =
+    data.critical.total_count > 0
+      ? ` ${data.critical.total_count} critical item${data.critical.total_count !== 1 ? 's' : ''} need immediate attention.`
+      : '';
+  const fallbackText = safeMrkdwn(
+    `Command Centre: ${data.stats.total_items} item${data.stats.total_items !== 1 ? 's' : ''} require action.${criticalNote}`,
+  );
+
+  return { blocks, text: fallbackText };
+};
+
+// ============================================================================
+// CC12-003: Auto-execution overnight report
+// ============================================================================
+
+export interface AutoExecReportItem {
+  id: string;
+  title: string;
+  item_type: string;
+  drafted_action_type: string;
+  drafted_action_display_text: string;
+  confidence_score: number;
+  resolved_at: string;
+}
+
+/**
+ * Build a Slack summary of items auto-completed overnight by the CC engine.
+ *
+ * Format:
+ *   use60 auto-completed N items overnight
+ *   \u2705 Updated Acme Corp deal stage \u2192 Proposal
+ *   \u2705 Created follow-up task: Call Sarah Chen (due Monday)
+ *   ...
+ *   All changes reversible for 24hrs.
+ *   [View in Command Centre \u2192]  [Undo any \u2192]
+ *
+ * Stays within the 50-block limit (MAX_BLOCKS = 50).
+ * Action IDs: cc_open_command_centre, cc_undo_menu.
+ */
+export function buildAutoExecutionReport(items: AutoExecReportItem[]): any[] {
+  const MAX_BLOCKS = 50;
+  const blocks: SlackBlock[] = [];
+
+  const n = items.length;
+  if (n === 0) return blocks;
+
+  // ---- Header ----
+  blocks.push(
+    section(
+      safeMrkdwn(
+        `\u2705 *use60 auto-completed ${n} item${n !== 1 ? 's' : ''} overnight*`,
+      ),
+    ),
+  );
+  blocks.push(divider());
+
+  // ---- One line per item ---- (cap at MAX_BLOCKS - 5 to leave room for footer)
+  for (let i = 0; i < items.length; i++) {
+    if (blocks.length >= MAX_BLOCKS - 5) {
+      const remaining = items.length - i;
+      blocks.push(
+        context([
+          safeContextMrkdwn(
+            `+${remaining} more item${remaining !== 1 ? 's' : ''} — open Command Centre to see all`,
+          ),
+        ]),
+      );
+      break;
+    }
+
+    const item = items[i];
+    const displayText = item.drafted_action_display_text
+      ? truncate(item.drafted_action_display_text, 120)
+      : truncate(item.title, 120);
+
+    blocks.push(section(safeMrkdwn(`\u2705 ${displayText}`)));
+  }
+
+  // ---- Footer note ----
+  blocks.push(divider());
+  blocks.push(context([safeContextMrkdwn('All changes reversible for 24hrs.')]));
+
+  // ---- CTA buttons ----
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: safeButtonText('View in Command Centre \u2192'),
+          emoji: false,
+        },
+        action_id: 'cc_open_command_centre',
+        url: CC_APP_URL,
+        style: 'primary',
+      },
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: safeButtonText('Undo any \u2192'),
+          emoji: false,
+        },
+        action_id: 'cc_undo_menu',
+        value: 'undo_menu',
+      },
+    ],
+  });
+
+  return blocks;
+}
+
+// =============================================================================
+// buildAutonomyPromotionMessage — AUT-005
+// =============================================================================
+
+export interface AutonomyPromotionData {
+  orgId: string;
+  actionType: string;
+  actionLabel: string;
+  approvedCount: number;
+  totalCount: number;
+  rejectionRate: number; // 0–1
+  adminSlackUserId?: string;
+}
+
+/**
+ * Build a Slack DM to org admin suggesting they promote an action type to auto-approve.
+ * Sent when an action has >= 20 approvals with < 5% rejection over 30 days.
+ */
+export function buildAutonomyPromotionMessage(data: AutonomyPromotionData): SlackMessage {
+  const {
+    orgId,
+    actionType,
+    actionLabel,
+    approvedCount,
+    totalCount,
+    rejectionRate,
+    adminSlackUserId,
+  } = data;
+
+  const rejectionPercent = Math.round(rejectionRate * 100);
+  const greeting = adminSlackUserId ? `<@${adminSlackUserId}> ` : '';
+  const summaryText = `${greeting}*${actionLabel}* has been approved ${approvedCount}/${totalCount} times this month with ${rejectionPercent}% corrections. Your team is ready to auto-approve this action.`;
+
+  return {
+    text: `Automation opportunity: ${actionLabel} — ${approvedCount} approvals, ${rejectionPercent}% rejection rate`,
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: safeHeaderText('Automation Opportunity'),
+          emoji: false,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(summaryText),
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Action Type*\n${actionLabel}`),
+          },
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Approval Rate*\n${approvedCount}/${totalCount} (${100 - rejectionPercent}%)`),
+          },
+        ],
+      },
+      { type: 'divider' },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: safeButtonText('Enable Auto-Approve'),
+              emoji: false,
+            },
+            style: 'primary',
+            action_id: 'autonomy_promote_approve',
+            value: safeButtonValue(JSON.stringify({ org_id: orgId, action_type: actionType, policy: 'auto' })),
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: safeButtonText('Dismiss'),
+              emoji: false,
+            },
+            action_id: 'autonomy_promote_dismiss',
+            value: safeButtonValue(JSON.stringify({ org_id: orgId, action_type: actionType })),
+          },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: safeContextMrkdwn('You can always adjust this in Settings > Autonomy & Approvals.'),
+          },
+        ],
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// buildAutonomyDemotionMessage — GRAD-004
+// =============================================================================
+
+export interface AutonomyDemotionData {
+  orgId: string;
+  actionType: string;
+  actionLabel: string;
+  fromPolicy: string;
+  toPolicy: string;
+  rejectionRate: number; // 0–100
+  cooldownDays: number;
+  reason: string;
+}
+
+/**
+ * Build a Slack DM notifying org admin that an action type was auto-demoted
+ * due to a rejection rate spike post-promotion.
+ */
+export function buildAutonomyDemotionMessage(data: AutonomyDemotionData): SlackMessage {
+  const {
+    actionLabel,
+    fromPolicy,
+    toPolicy,
+    rejectionRate,
+    cooldownDays,
+    reason,
+  } = data;
+
+  const rejectionPct = Math.round(rejectionRate);
+  const summaryText = `*${actionLabel}* has been demoted from *${fromPolicy}* to *${toPolicy}* due to elevated rejection rates.`;
+
+  return {
+    text: `Safety demotion: ${actionLabel} reverted from ${fromPolicy} to ${toPolicy} (${rejectionPct}% rejection rate)`,
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: safeHeaderText('Autonomy Safety Demotion'),
+          emoji: false,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(summaryText),
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Action Type*\n${actionLabel}`),
+          },
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Rejection Rate (7d)*\n${rejectionPct}%`),
+          },
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Policy Change*\n${fromPolicy} -> ${toPolicy}`),
+          },
+          {
+            type: 'mrkdwn',
+            text: safeFieldText(`*Cooldown*\n${cooldownDays} days`),
+          },
+        ],
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(`*Reason:* ${reason}`),
+        },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: safeContextMrkdwn(`This action cannot be re-promoted for ${cooldownDays} days. You can review this in Settings > Autonomy & Approvals.`),
+          },
+        ],
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// Enhanced Coaching Digest Blocks (Phase 6: PRD-19)
+// =============================================================================
+
+export interface EnhancedCoachingDigestData {
+  repName: string;
+  weekOf: string;
+  meetingsAnalyzed: number;
+  overallScore: number | null;
+  talkRatio: number | null;
+  questionQuality: number | null;
+  objectionHandling: number | null;
+  discoveryDepth: number | null;
+  weeklyWins: string[];
+  dataBackedInsights: Array<{ insight: string; evidence: string; action: string }>;
+  pipelinePatterns: Array<{ title: string; severity: string; pattern_type: string }>;
+  competitiveTrends: Array<{ name: string; mentions: number; win_rate: number | null }>;
+  progressionComparison: {
+    status: string;
+    vs_last_week?: { improving: string[]; declining: string[]; overall_trend: string };
+    weeks_tracked?: number;
+  };
+  teamIntelligenceTip: string | null;
+  forecastAccuracy: number | null;
+}
+
+export function buildEnhancedCoachingDigestBlocks(data: EnhancedCoachingDigestData): SlackMessage {
+  const blocks: SlackBlock[] = [];
+
+  // Header
+  blocks.push({
+    type: 'header',
+    text: { type: 'plain_text', text: safeHeaderText(`Weekly Coaching Digest — ${data.weekOf}`), emoji: false },
+  });
+
+  // Score summary
+  const scoreEmoji = (data.overallScore || 0) >= 0.7 ? ':star:' : (data.overallScore || 0) >= 0.5 ? ':chart_with_upwards_trend:' : ':target:';
+  const trendText = data.progressionComparison?.vs_last_week?.overall_trend === 'improving'
+    ? ' :arrow_up: Improving'
+    : data.progressionComparison?.vs_last_week?.overall_trend === 'declining'
+    ? ' :small_red_triangle_down: Needs attention'
+    : ' :left_right_arrow: Stable';
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: safeMrkdwn(
+        `${scoreEmoji} *${data.repName}* — ${data.meetingsAnalyzed} meetings analyzed this week${data.overallScore != null ? `\nOverall Score: *${Math.round(data.overallScore * 100)}%*${trendText}` : ''}`,
+      ),
+    },
+  });
+
+  // Metrics grid
+  if (data.talkRatio != null) {
+    const talkNote = data.talkRatio < 50 ? ':white_check_mark:' : data.talkRatio < 60 ? ':warning:' : ':x:';
+    blocks.push({
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: safeFieldText(`*Talk Ratio*\n${Math.round(data.talkRatio)}% ${talkNote} (target: 43%)`) },
+        { type: 'mrkdwn', text: safeFieldText(`*Question Quality*\n${Math.round((data.questionQuality || 0) * 100)}%`) },
+        { type: 'mrkdwn', text: safeFieldText(`*Objection Handling*\n${Math.round((data.objectionHandling || 0) * 100)}%`) },
+        { type: 'mrkdwn', text: safeFieldText(`*Discovery Depth*\n${Math.round((data.discoveryDepth || 0) * 100)}%`) },
+      ],
+    });
+  }
+
+  blocks.push({ type: 'divider' });
+
+  // Weekly Wins
+  if (data.weeklyWins.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: safeMrkdwn(`:trophy: *Weekly Wins*\n${data.weeklyWins.map(w => `• ${w}`).join('\n')}`),
+      },
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  // Data-Backed Insights
+  if (data.dataBackedInsights.length > 0) {
+    const insightText = data.dataBackedInsights.slice(0, 3).map(i =>
+      `*${i.insight}*\n_Evidence:_ ${i.evidence}\n_Action:_ ${i.action}`,
+    ).join('\n\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`:brain: *Coaching Insights*\n\n${insightText}`) },
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  // Pipeline Patterns
+  if (data.pipelinePatterns.length > 0) {
+    const severityIcon: Record<string, string> = { critical: ':rotating_light:', warning: ':warning:', info: ':information_source:' };
+    const patternText = data.pipelinePatterns.map(p =>
+      `${severityIcon[p.severity] || ':information_source:'} ${p.title}`,
+    ).join('\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`:bar_chart: *Pipeline Patterns*\n${patternText}`) },
+    });
+  }
+
+  // Competitive Trends
+  if (data.competitiveTrends.length > 0) {
+    const compText = data.competitiveTrends.map(c =>
+      `• *${c.name}*: ${c.mentions} mentions${c.win_rate != null ? `, ${Math.round(c.win_rate * 100)}% win rate` : ''}`,
+    ).join('\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`:crossed_swords: *Competitive Trends*\n${compText}`) },
+    });
+  }
+
+  // Team Intelligence Tip
+  if (data.teamIntelligenceTip) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`:bulb: *From Your Team*\n${data.teamIntelligenceTip}`) },
+    });
+  }
+
+  // Forecast Accuracy
+  if (data.forecastAccuracy != null) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        { type: 'mrkdwn', text: safeContextMrkdwn(`:dart: Forecast Accuracy: ${Math.round(data.forecastAccuracy * 100)}%`) },
+      ],
+    });
+  }
+
+  // Progression note
+  if (data.progressionComparison?.status === 'has_history') {
+    const vs = data.progressionComparison.vs_last_week;
+    const parts: string[] = [];
+    if (vs?.improving.length) parts.push(`:arrow_up: Improved: ${vs.improving.join(', ')}`);
+    if (vs?.declining.length) parts.push(`:small_red_triangle_down: Needs work: ${vs.declining.join(', ')}`);
+    if (parts.length > 0) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: safeContextMrkdwn(`Week ${data.progressionComparison.weeks_tracked} of tracking | ${parts.join(' | ')}`) }],
+      });
+    }
+  } else if (data.progressionComparison?.status === 'first_week') {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: safeContextMrkdwn(':seedling: First coaching week — tracking starts now. Next week you\'ll see trends.') }],
+    });
+  }
+
+  return {
+    blocks,
+    text: `Weekly Coaching Digest for ${data.repName} — ${data.weekOf}`,
+  };
+}

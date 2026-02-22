@@ -42,7 +42,15 @@ import {
 import { notifySlackSummaryAdapter } from './notifySlackSummary.ts';
 import { crmFieldExtractorAdapter } from './crmFieldExtractor.ts';
 import { crmUpdateAdapter } from './crmUpdate.ts';
+import { crmFieldClassifierAdapter } from './crmFieldClassifier.ts';
+import { crmAutoApplyAdapter } from './crmAutoApply.ts';
+import { crmHubSpotSyncAdapter } from './crmHubSpotSync.ts';
+import { crmSlackNotifyAdapter } from './crmSlackNotify.ts';
 import { researchTriggerEventsAdapter, analyseStallReasonAdapter, draftReengagementAdapter } from './reengagement.ts';
+import { apolloSignalAdapter } from './reengagementApollo.ts';
+import { apifyNewsAdapter } from './reengagementApify.ts';
+import { signalRelevanceScorerAdapter } from './reengagementScorer.ts';
+import { reengagementSlackAdapter } from './reengagementSlack.ts';
 import {
   scanActiveDealsAdapter,
   scoreDealRisksAdapter,
@@ -51,6 +59,15 @@ import {
 } from './dealRisk.ts';
 import { pingSlackChannelAdapter } from './pingSlackChannel.ts';
 import { updateDealTimelineAdapter } from './updateDealTimeline.ts';
+import { overnightSummaryAdapter } from './overnightSummary.ts';
+import { internalMeetingDetectorAdapter } from './internalMeetingDetector.ts';
+import { meetingTypeClassifierAdapter } from './meetingTypeClassifier.ts';
+import { internalPrepTemplatesAdapter } from './internalPrepTemplates.ts';
+import { eodOpenItemsAdapter, eodTomorrowPreviewAdapter, eodSignalSummaryAdapter } from './eodSynthesis.ts';
+import { eodOvernightPlanAdapter } from './eodOvernight.ts';
+import { buildRelationshipGraphAdapter, enrichRelationshipGraphAdapter } from './relationshipGraph.ts';
+import { extractCompetitiveMentionsAdapter, aggregateCompetitorProfileAdapter, deliverCompetitiveIntelSlackAdapter } from './competitiveIntelSlack.ts';
+import { analysePipelinePatternsAdapter, deliverPatternSlackAdapter } from './pipelinePatternSlack.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -91,10 +108,16 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'correlate-win-loss': correlateWinLossAdapter,
   'generate-coaching-digest': generateCoachingDigestAdapter,
   'deliver-coaching-slack': deliverCoachingSlackAdapter,
-  // CRM field extraction
+  // CRM field extraction + update pipeline (legacy direct-write path)
   'extract-crm-fields': crmFieldExtractorAdapter,
   'update-crm-from-meeting': crmUpdateAdapter,
   'notify-slack-summary': notifySlackSummaryAdapter,
+
+  // CRM Auto-Update Agent pipeline (PRD-03: classify → auto-apply → HubSpot sync → Slack HITL)
+  'classify-crm-fields': crmFieldClassifierAdapter,
+  'auto-apply-crm-fields': crmAutoApplyAdapter,
+  'hubspot-sync-crm-fields': crmHubSpotSyncAdapter,
+  'slack-crm-notify': crmSlackNotifyAdapter,
 
   // Pre-Meeting Briefing (pre_meeting_90min sequence)
   'enrich-attendees': enrichAttendeesAdapter,
@@ -119,6 +142,12 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'analyse-stall-reason': analyseStallReasonAdapter,
   'draft-reengagement': draftReengagementAdapter,
 
+  // Re-engagement signal pipeline (reengagement_trigger sequence — REN-003, REN-004, REN-005, REN-006)
+  'apollo-signal-scan': apolloSignalAdapter,
+  'apify-news-scan': apifyNewsAdapter,
+  'score-reengagement-signals': signalRelevanceScorerAdapter,
+  'deliver-reengagement-slack': reengagementSlackAdapter,
+
   // Deal Risk Scan (deal_risk_scan sequence)
   'scan-active-deals': scanActiveDealsAdapter,
   'score-deal-risks': scoreDealRisksAdapter,
@@ -130,6 +159,33 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
 
   // CRM intent updates (timeline_signal, pricing_request, competitive_mention, stakeholder_introduction)
   'update-deal-timeline': updateDealTimelineAdapter,
+
+  // Morning Briefing pipeline (BRF-006)
+  'overnight-summary': overnightSummaryAdapter,
+
+  // Internal Meeting Prep pipeline (IMP-003, IMP-004, IMP-005)
+  'detect-internal-meetings': internalMeetingDetectorAdapter,
+  'classify-meeting-types': meetingTypeClassifierAdapter,
+  'generate-internal-prep': internalPrepTemplatesAdapter,
+
+  // EOD Synthesis pipeline (EOD-004, EOD-005, SIG-010)
+  'eod-open-items': eodOpenItemsAdapter,
+  'eod-tomorrow-preview': eodTomorrowPreviewAdapter,
+  'eod-overnight-plan': eodOvernightPlanAdapter,
+  'eod-signal-summary': eodSignalSummaryAdapter,
+
+  // Relationship Graph (KNW-002/003 — PRD-16)
+  'build-relationship-graph': buildRelationshipGraphAdapter,
+  'enrich-relationship-graph': enrichRelationshipGraphAdapter,
+
+  // Competitive Intelligence (KNW-006/007 — PRD-17)
+  'extract-competitive-mentions': extractCompetitiveMentionsAdapter,
+  'aggregate-competitor-profile': aggregateCompetitorProfileAdapter,
+  'deliver-competitive-intel-slack': deliverCompetitiveIntelSlackAdapter,
+
+  // Pipeline Patterns (KNW-010/011 — PRD-18)
+  'analyse-pipeline-patterns': analysePipelinePatternsAdapter,
+  'deliver-pattern-slack': deliverPatternSlackAdapter,
 };
 
 /**

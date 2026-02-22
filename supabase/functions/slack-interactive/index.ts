@@ -18,6 +18,7 @@ import {
   divider,
   actions as actionsBlock,
   header as headerBlock,
+  buildManagerPrereadMessage,
 } from '../_shared/slackBlocks.ts';
 import {
   handleMomentumSetNextStep,
@@ -38,6 +39,9 @@ import {
 } from './handlers/phase5.ts';
 import { handleHITLAction } from './handlers/hitl.ts';
 import { handleSupportAction } from './handlers/support.ts';
+import { handleAutonomyAction } from './handlers/autonomy.ts';
+import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
+import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -726,7 +730,7 @@ async function handleDraftFollowupAction(
   // Generate email draft via Claude
   let emailDraft = {
     subject: `Following up — ${dealContext || recipientName}`,
-    body: `Hi ${recipientName || 'there'},\n\nI wanted to follow up on our recent conversation. Looking forward to hearing your thoughts.\n\nBest regards`,
+    body: `Hi ${recipientName || 'there'},\n\nFollowing up on our recent conversation. Here are the key points:\n\n[Add key points]\n\nBest regards`,
   };
 
   try {
@@ -7278,6 +7282,191 @@ async function handleDebriefAddAllTasks(
   });
 }
 
+// =============================================================================
+// IMP-006: Handle "Send to manager as pre-read" button
+// action_id: imp_send_preread::{event_id}
+//
+// Looks up the event's prep content from the orchestrator job outputs,
+// resolves the manager's Slack user ID (admin/owner in same org),
+// and sends a condensed pre-read DM.
+// =============================================================================
+
+async function handleImpSendPreread(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction,
+): Promise<Response> {
+  const corsHeaders = getCorsHeaders({ headers: new Headers() } as Request);
+
+  try {
+    const parts = action.action_id.split('::');
+    const eventId = parts[1];
+
+    if (!eventId) {
+      console.error('[IMP] imp_send_preread: missing event_id in action_id');
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 1. Resolve requesting user's org
+    const { data: slackUser } = await supabase
+      .from('slack_auth')
+      .select('user_id, access_token')
+      .eq('slack_user_id', payload.user.id)
+      .maybeSingle();
+
+    if (!slackUser?.user_id || !slackUser?.access_token) {
+      console.error('[IMP] imp_send_preread: could not resolve user from slack_user_id');
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const { data: membership } = await supabase
+      .from('organization_memberships')
+      .select('org_id')
+      .eq('user_id', slackUser.user_id)
+      .maybeSingle();
+
+    const orgId = membership?.org_id;
+    if (!orgId) {
+      console.error('[IMP] imp_send_preread: org not found for user');
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 2. Fetch the calendar event title and start_time
+    const { data: calEvent } = await supabase
+      .from('calendar_events')
+      .select('id, title, start_time, meeting_type')
+      .eq('id', eventId)
+      .maybeSingle();
+
+    if (!calEvent) {
+      console.error('[IMP] imp_send_preread: event not found:', eventId);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 3. Fetch prep content from orchestrator job outputs
+    //    Look for the most recent successful agent job for this event
+    const { data: jobRow } = await supabase
+      .from('agent_jobs')
+      .select('id, outputs')
+      .eq('org_id', orgId)
+      .contains('payload', { meeting_id: eventId })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Extract prep sections from job outputs if available
+    let sections: Array<{ title: string; body: string }> = [];
+    if (jobRow?.outputs) {
+      const outputs = jobRow.outputs as Record<string, unknown>;
+      const prepOutput = outputs['generate-internal-prep'] as { prep_documents?: Array<{ sections?: Array<{ title: string; body: string }> }> } | undefined;
+      sections = prepOutput?.prep_documents?.[0]?.sections || [];
+    }
+
+    // Fallback sections if no job output found
+    if (sections.length === 0) {
+      sections = [
+        { title: 'Meeting', body: calEvent.title || 'Internal meeting' },
+        { title: 'Note', body: 'Prep content generated — see the full briefing in the app.' },
+      ];
+    }
+
+    // 4. Resolve manager: find an admin/owner in the org who has Slack connected
+    const { data: adminMemberships } = await supabase
+      .from('organization_memberships')
+      .select('user_id, role')
+      .eq('org_id', orgId)
+      .in('role', ['admin', 'owner'])
+      .neq('user_id', slackUser.user_id)
+      .limit(5);
+
+    let managerSlackUserId: string | null = null;
+    for (const admin of adminMemberships || []) {
+      const { data: adminSlack } = await supabase
+        .from('slack_auth')
+        .select('slack_user_id')
+        .eq('user_id', admin.user_id)
+        .maybeSingle();
+      if (adminSlack?.slack_user_id) {
+        managerSlackUserId = adminSlack.slack_user_id;
+        break;
+      }
+    }
+
+    // 5. Resolve rep display name
+    const { data: repProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name, email')
+      .eq('id', slackUser.user_id)
+      .maybeSingle();
+
+    const repName = repProfile
+      ? [repProfile.first_name, repProfile.last_name].filter(Boolean).join(' ') || repProfile.email || 'Your rep'
+      : 'Your rep';
+
+    // 6. Build and send the pre-read message
+    const prereadMsg = buildManagerPrereadMessage({
+      repName,
+      meetingTitle: calEvent.title || 'Internal Meeting',
+      meetingType: calEvent.meeting_type || 'internal',
+      startTime: calEvent.start_time,
+      sections,
+      appUrl,
+    });
+
+    // Send DM to manager (or acknowledgment DM to rep if no manager found)
+    const targetSlackUserId = managerSlackUserId || payload.user.id;
+    const channelToOpen = managerSlackUserId
+      ? managerSlackUserId
+      : payload.user.id;
+
+    // Open DM channel with the target user
+    const openDmRes = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${slackUser.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ users: channelToOpen }),
+    });
+    const openDm = await openDmRes.json() as { ok: boolean; channel?: { id: string } };
+
+    if (openDm.ok && openDm.channel?.id) {
+      await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${slackUser.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: openDm.channel.id,
+          blocks: prereadMsg.blocks,
+          text: prereadMsg.text,
+        }),
+      });
+
+      console.log(
+        `[IMP] Pre-read sent for event ${eventId} to Slack user ${targetSlackUserId}`
+      );
+    } else {
+      console.error('[IMP] Failed to open DM channel:', openDm);
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[IMP] handleImpSendPreread error:', err);
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   const corsPreflightResponse = handleCorsPreflightRequest(req);
@@ -7354,6 +7543,90 @@ serve(async (req) => {
           }
         }
 
+        // GRAD-003: Handle autonomy promotion actions (autonomy_promotion_*)
+        if (action.action_id.startsWith('autonomy_promotion_')) {
+          console.log('[AutonomyPromotion] Processing action:', action.action_id);
+          const result = await handleAutonomyPromotion(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await updateMessage(payload.response_url, result.responseBlocks);
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to process autonomy promotion action',
+              });
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        // Handle legacy autonomy promotion actions (autonomy_promote_*)
+        if (action.action_id.startsWith('autonomy_promote_')) {
+          console.log('[Autonomy] Processing action:', action.action_id);
+          const result = await handleAutonomyAction(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await updateMessage(payload.response_url, result.responseBlocks);
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to process autonomy action',
+              });
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        // =====================================================================
+        // LEARN-001: Route config question answer actions
+        // =====================================================================
+        if (action.action_id === 'config_question_answer') {
+          console.log('[ConfigQuestion] Processing answer action');
+          const result = await handleConfigQuestionAnswer(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: result.responseBlocks,
+                text: 'Setting saved.',
+              });
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed to save setting: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to save setting',
+              });
+            }
+          }
+
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Check if this is a sequence HITL action (new format: hitl_*)
         if (action.action_id.startsWith('hitl_')) {
           console.log('[Sequence HITL] Processing action:', action.action_id);
@@ -7408,6 +7681,34 @@ serve(async (req) => {
             }
           }
 
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // CRM-007: Route CRM approval actions (crm_*) to agent-crm-approval
+        // =====================================================================
+        if (action.action_id.startsWith('crm_approve::') ||
+            action.action_id.startsWith('crm_reject::') ||
+            action.action_id.startsWith('crm_edit::') ||
+            action.action_id.startsWith('crm_approve_all::') ||
+            action.action_id.startsWith('crm_reject_all::')) {
+          console.log('[CRM Approval] Forwarding action to agent-crm-approval:', action.action_id);
+          // Forward the raw form body to agent-crm-approval (it handles its own Slack verification)
+          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              // Forward Slack signing headers for verification
+              'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
+              'x-slack-signature': req.headers.get('x-slack-signature') || '',
+            },
+            body: `payload=${encodeURIComponent(payloadStr)}`,
+          }).catch(err => console.error('[CRM Approval] Forward error:', err));
+          // Acknowledge immediately (agent-crm-approval handles async response)
           return new Response(JSON.stringify({ ok: true }), {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -7787,6 +8088,68 @@ serve(async (req) => {
           });
         }
 
+        // =====================================================================
+        // IMP-006: Internal Meeting Prep — manager pre-read forwarding
+        // Format: imp_send_preread::{event_id}
+        // =====================================================================
+        else if (action.action_id.startsWith('imp_send_preread::')) {
+          return handleImpSendPreread(supabase, payload, action);
+        }
+
+        // =====================================================================
+        // EOD-006: End-of-Day Synthesis interaction handlers
+        // action_id prefix: eod_*
+        // Buttons: eod_looks_good, eod_adjust_priorities, eod_add_task
+        // =====================================================================
+        else if (action.action_id === 'eod_looks_good') {
+          // User confirmed EOD looks good — log feedback and acknowledge
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId) {
+            await logSlackInteraction(supabase, {
+              userId: ctx.userId,
+              orgId: ctx.orgId || null,
+              actionType: 'eod_acknowledged',
+              actionCategory: 'eod_synthesis',
+              metadata: { action: 'looks_good', value: action.value },
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else if (action.action_id === 'eod_adjust_priorities') {
+          // Deep-link user to copilot with EOD context pre-loaded
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId) {
+            await logSlackInteraction(supabase, {
+              userId: ctx.userId,
+              orgId: ctx.orgId || null,
+              actionType: 'eod_adjust_priorities',
+              actionCategory: 'eod_synthesis',
+              metadata: { value: action.value },
+            });
+          }
+          // Respond with ephemeral message directing user to the app
+          if (payload.response_url) {
+            await fetch(payload.response_url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                response_type: 'ephemeral',
+                text: `Open the copilot to adjust your priorities: ${appUrl}/copilot`,
+                replace_original: false,
+              }),
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else if (action.action_id === 'eod_add_task') {
+          // Open the add-task modal (reuse existing modal handler)
+          return handleOpenAddTaskModal(supabase, payload);
+        }
+
         // Unknown action - just acknowledge
         console.log('Unknown action_id:', action.action_id);
         return new Response(JSON.stringify({ ok: true }), {
@@ -7800,6 +8163,20 @@ serve(async (req) => {
         console.log('View submission:', payload.view?.callback_id);
         if (payload.view?.callback_id === 'log_activity_modal') {
           return handleLogActivitySubmission(supabase, payload);
+        }
+        if (payload.view?.callback_id === 'crm_edit_modal_submit') {
+          console.log('[CRM Approval] Forwarding edit modal submission to agent-crm-approval');
+          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
+              'x-slack-signature': req.headers.get('x-slack-signature') || '',
+            },
+            body: `payload=${encodeURIComponent(JSON.stringify(payload))}`,
+          }).catch(err => console.error('[CRM Approval] Forward error:', err));
+          return new Response('', { status: 200, headers: corsHeaders });
         }
         if (payload.view?.callback_id === 'hitl_edit_modal') {
           return handleHITLEditSubmission(supabase, payload);

@@ -412,7 +412,7 @@ async function sendTaskNotification(
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '💡 *I can help with:*',
+          text: '💡 *Recommended actions:*',
         },
       });
 

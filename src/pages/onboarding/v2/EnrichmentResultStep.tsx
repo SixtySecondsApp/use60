@@ -50,8 +50,8 @@ export function EnrichmentResultStep() {
   }, [organizationId, enrichment, setEnrichment]);
 
   const handleContinue = () => {
-    // Go to skills_config where user can verify/amend AI-generated skill data
-    setStep('skills_config');
+    // Go to agent_config_confirm where user reviews AI-inferred agent settings
+    setStep('agent_config_confirm');
   };
 
   if (!enrichment) {

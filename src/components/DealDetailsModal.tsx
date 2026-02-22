@@ -33,6 +33,8 @@ import { useCompanyLogo } from '@/lib/hooks/useCompanyLogo';
 import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useNavigate } from 'react-router-dom';
 import { AiArkSimilaritySearch } from '@/components/prospecting/AiArkSimilaritySearch';
+import { DealTemperatureSummary } from '@/components/signals/DealTemperatureSummary';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
 
 interface DealDetailsModalProps {
   isOpen: boolean;
@@ -79,6 +81,7 @@ export function DealDetailsModal({ isOpen, onClose, dealId }: DealDetailsModalPr
   const [showSimilaritySearch, setShowSimilaritySearch] = useState(false);
   const navigate = useNavigate();
   const { isConnected: aiArkConnected } = useAiArkIntegration();
+  const orgId = useActiveOrgId();
 
   // Extract domain for logo
   const domainForLogo = useMemo(() => {
@@ -525,6 +528,13 @@ export function DealDetailsModal({ isOpen, onClose, dealId }: DealDetailsModalPr
                 )}
               </div>
             </div>
+
+            {/* Signal Temperature Section */}
+            {dealId && orgId && (
+              <div className="mb-8">
+                <DealTemperatureSummary dealId={dealId} orgId={orgId} />
+              </div>
+            )}
 
             {/* Footer */}
             <DialogFooter className="p-6 pt-4 border-t border-gray-800/50 flex items-center justify-between">

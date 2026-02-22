@@ -520,11 +520,11 @@ function buildFallbackDraft(input: {
       month: 'short',
       day: 'numeric',
     });
-    opening = `Thanks again for your time on ${meetingDate}. I wanted to follow up on our conversation.`;
+    opening = `Following up on our ${meetingDate} conversation.`;
   } else if (input.deal) {
-    opening = `I wanted to check in on ${input.deal.name} and see how things are progressing on your end.`;
+    opening = `Checking in on ${input.deal.name}. What's the latest on your end?`;
   } else {
-    opening = `I hope this message finds you well. I wanted to follow up and see how things are going.`;
+    opening = `Following up — wanted to get an update.`;
   }
 
   let nextSteps = '';
@@ -532,7 +532,7 @@ function buildFallbackDraft(input: {
     nextSteps = `\n\nAs discussed, here are the next steps:\n${input.lastMeeting.actionItems.slice(0, 3).map(a => `• ${a}`).join('\n')}`;
   }
 
-  const closing = `\n\nPlease let me know if you have any questions or if there's anything I can help with.`;
+  const closing = `\n\nWhat questions do you have?`;
   const signoff = `\n\nBest,`;
 
   return `${greeting}\n\n${opening}${nextSteps}${closing}${signoff}`;

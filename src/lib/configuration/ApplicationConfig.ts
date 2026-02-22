@@ -222,13 +222,6 @@ export class ApplicationConfig implements IApplicationConfig {
           config: {
             strict_mode: false
           }
-        },
-        autonomous_copilot: {
-          enabled: false,
-          config: {
-            max_iterations: 10,
-            model: 'claude-sonnet-4-20250514'
-          }
         }
       },
       business: {

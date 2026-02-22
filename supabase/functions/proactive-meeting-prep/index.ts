@@ -13,7 +13,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // ============================================================================
@@ -30,6 +30,9 @@ interface UpcomingMeeting {
   meeting_url?: string;
   user_id: string;
   external_id?: string;
+  // IMP-001: classification columns
+  is_internal?: boolean | null;
+  meeting_type?: string | null;
 }
 
 interface MeetingPrepResult {
@@ -168,17 +171,10 @@ async function checkAndPrepAllUsers(supabase: any): Promise<{
   // Find all calendar events in the prep window with 2+ attendees
   const { data: meetings, error: meetingsError } = await supabase
     .from('calendar_events')
-    .select(`
-      id,
-      title,
-      start_time,
-      end_time,
-      attendees,
-      attendees_count,
-      meeting_url,
-      user_id,
-      external_id
-    `)
+    .select(
+      'id, title, start_time, end_time, attendees, attendees_count, ' +
+      'meeting_url, user_id, external_id, is_internal, meeting_type'
+    )
     .gte('start_time', windowStart.toISOString())
     .lte('start_time', windowEnd.toISOString())
     .gt('attendees_count', 1) // Real meetings only
@@ -240,7 +236,10 @@ async function prepMeetingsForUser(
   // Find this user's upcoming meetings
   const { data: meetings, error } = await supabase
     .from('calendar_events')
-    .select('*')
+    .select(
+      'id, title, start_time, end_time, attendees, attendees_count, ' +
+      'meeting_url, user_id, external_id, is_internal, meeting_type'
+    )
     .eq('user_id', userId)
     .gte('start_time', windowStart.toISOString())
     .lte('start_time', windowEnd.toISOString())
@@ -279,7 +278,110 @@ async function prepMeetingsForUserInternal(
         continue;
       }
 
-      // Check business relevance before generating prep
+      // Get org_id for the user (needed for internal meeting check and orchestrator)
+      const { data: membership } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+      const orgId = membership?.org_id;
+
+      // ── IMP-006: Internal meeting routing ──────────────────────────────────
+      // If the event is classified as internal (is_internal = true), check
+      // whether internal_meeting_prep is enabled for this org and route to the
+      // internal prep orchestrator sequence instead of the external prep flow.
+      if (meeting.is_internal === true) {
+        console.log(`[MeetingPrep] Internal meeting detected: ${meeting.title}`);
+
+        // Check agent config: internal_prep_enabled (default: true)
+        let internalPrepEnabled = true;
+        if (orgId) {
+          try {
+            const { data: configVal } = await supabase.rpc('resolve_agent_config', {
+              p_org_id: orgId,
+              p_user_id: userId,
+              p_agent_type: 'internal_meeting_prep',
+              p_config_key: 'internal_prep_enabled',
+            });
+            if (configVal === false || configVal === 'false') {
+              internalPrepEnabled = false;
+            }
+          } catch { /* non-fatal: default to enabled */ }
+        }
+
+        if (!internalPrepEnabled) {
+          console.log(`[MeetingPrep] internal_prep_enabled=false — skipping internal prep for: ${meeting.title}`);
+          results.push({
+            meetingId: meeting.id,
+            title: meeting.title,
+            prepGenerated: false,
+            slackNotified: false,
+          });
+          continue;
+        }
+
+        // Trigger orchestrator with internal_meeting_prep event type
+        if (orgId) {
+          try {
+            const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+            const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+            await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'internal_meeting_prep',
+                source: 'cron:proactive-meeting-prep',
+                org_id: orgId,
+                user_id: userId,
+                payload: {
+                  meeting_id: meeting.id,
+                  title: meeting.title,
+                  start_time: meeting.start_time,
+                  meeting_type: meeting.meeting_type,
+                  attendees: meeting.attendees,
+                  lookahead_hours: 4,
+                },
+                idempotency_key: `internal_prep:${meeting.id}`,
+              }),
+            });
+
+            console.log(`[MeetingPrep] Internal prep orchestrator triggered for: ${meeting.title}`);
+            results.push({
+              meetingId: meeting.id,
+              title: meeting.title,
+              prepGenerated: true,
+              slackNotified: false, // Orchestrator handles delivery
+            });
+          } catch (err) {
+            console.error('[MeetingPrep] Failed to trigger internal prep orchestrator:', err);
+            results.push({
+              meetingId: meeting.id,
+              title: meeting.title,
+              prepGenerated: false,
+              slackNotified: false,
+              error: String(err),
+            });
+          }
+        } else {
+          console.warn(`[MeetingPrep] No org_id for user ${userId} — cannot trigger internal prep`);
+          results.push({
+            meetingId: meeting.id,
+            title: meeting.title,
+            prepGenerated: false,
+            slackNotified: false,
+          });
+        }
+        continue;
+      }
+      // ── END: Internal meeting routing ──────────────────────────────────────
+
+      // Check business relevance before generating external meeting prep
       const { hasKnownContacts, hasDeal } = await quickRelevanceCheck(supabase, meeting);
       const relevance = classifyMeetingRelevance(meeting.title, hasKnownContacts, hasDeal);
 
@@ -314,16 +416,6 @@ async function prepMeetingsForUserInternal(
         try {
           const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
           const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-          // Get org_id for the user
-          const { data: membership } = await supabase
-            .from('organization_memberships')
-            .select('org_id')
-            .eq('user_id', userId)
-            .limit(1)
-            .maybeSingle();
-
-          const orgId = membership?.org_id;
 
           if (orgId) {
             await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
@@ -497,7 +589,7 @@ async function sendRelevanceQuestion(
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `You have *${meeting.title}* coming up at ${timeStr}. Would you like me to prepare a brief for this meeting?`,
+          text: `Research brief ready for *${meeting.title}* at ${timeStr}. 3 talking points prepared.`,
         },
       },
       {

@@ -20,6 +20,7 @@ import { IRepository } from '../interfaces/IDataRepository';
 import { DealWithRelationships } from '../hooks/deals/types/dealTypes';
 import { OpsTableService } from './opsTableService';
 import { productProfileService } from './productProfileService';
+import { commandCentreItemsService } from './commandCentreItemsService';
 import { supabase } from '@/lib/supabase/clientV2';
 
 /**
@@ -103,6 +104,11 @@ export class ServiceLocator {
   // Product Profile Service (standalone export, accessed via ServiceLocator for consistency)
   get productProfileService() {
     return productProfileService;
+  }
+
+  // Command Centre Items Service (standalone singleton export)
+  get commandCentreItemsService() {
+    return commandCentreItemsService;
   }
 
   /**

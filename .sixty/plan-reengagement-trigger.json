@@ -1,0 +1,190 @@
+{
+  "feature": {
+    "id": "reengagement-trigger",
+    "name": "PRD-05: Re-engagement Trigger Agent",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-05",
+    "status": "complete",
+    "phase": "Phase 1 — Core Agents",
+    "effort": "2-3 weeks",
+    "dependencies": ["PRD-01 (config)", "PRD-02 (orchestrator)", "PRD-04 (risk scorer)"],
+    "createdAt": "2026-02-21T00:00:00Z",
+    "completedAt": "2026-02-22T00:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "REN-001",
+      "feature": "reengagement-trigger",
+      "title": "Create deal_signal_temperature table and add cooldown columns to reengagement_watchlist",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["reengagement_watchlist"] },
+      "blocks": ["REN-003", "REN-004", "REN-005"],
+      "parallelWith": ["REN-002"],
+      "acceptance": [
+        "deal_signal_temperature table created with columns: deal_id, temperature, trend, last_signal, signal_count_24h, signal_count_7d, top_signals, updated_at",
+        "reengagement_watchlist gains cooldown columns: max_attempts, attempt_count, cooldown_until, unsubscribed",
+        "RLS policies for org isolation on deal_signal_temperature",
+        "RPC: upsert_signal_temperature() and get_hot_deals(threshold, limit)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222400001_reengagement_signal_temperature.sql"
+      ]
+    },
+    {
+      "id": "REN-002",
+      "feature": "reengagement-trigger",
+      "title": "Seed agent_config_defaults for reengagement agent type",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["REN-005", "REN-006"],
+      "parallelWith": ["REN-001"],
+      "acceptance": [
+        "agent_config_defaults seeded with keys: signal_sources, min_days_since_close (default 30), max_attempts (default 3), cooldown_days (default 90), signal_relevance_threshold (0.6), tone_of_voice, reengagement_enabled",
+        "Methodology overrides: MEDDIC adds champion_focus_weight, Challenger adds insight_led_approach",
+        "Migration is idempotent with ON CONFLICT DO UPDATE"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222400002_reengagement_agent_config.sql"
+      ]
+    },
+    {
+      "id": "REN-003",
+      "feature": "reengagement-trigger",
+      "title": "Build Apollo signal adapter for job changes and funding events",
+      "type": "integration",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["REN-001"], "files": ["supabase/functions/apollo-search/index.ts"], "schema": ["deal_signal_temperature"] },
+      "blocks": ["REN-005"],
+      "parallelWith": ["REN-004"],
+      "acceptance": [
+        "apolloSignalAdapter detects job changes for champion contacts on closed-lost deals",
+        "Detects company funding events via Apollo company enrichment",
+        "Results written to deal_signal_temperature via upsert_signal_temperature()",
+        "Rate limiting: max 100 Apollo API calls per scan cycle",
+        "Adapter registered in orchestrator adapters/index.ts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/reengagementApollo.ts",
+        "supabase/functions/_shared/orchestrator/adapters/index.ts"
+      ]
+    },
+    {
+      "id": "REN-004",
+      "feature": "reengagement-trigger",
+      "title": "Build Apify company news adapter for buying signals",
+      "type": "integration",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["REN-001"], "files": [], "schema": ["deal_signal_temperature"] },
+      "blocks": ["REN-005"],
+      "parallelWith": ["REN-003"],
+      "acceptance": [
+        "apifyNewsAdapter queries Apify actors for company news (product launches, leadership changes, expansion)",
+        "Signal results scored and written to deal_signal_temperature",
+        "Handles Apify rate limits and actor run polling",
+        "Adapter registered in orchestrator adapters/index.ts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/reengagementApify.ts",
+        "supabase/functions/_shared/orchestrator/adapters/index.ts"
+      ]
+    },
+    {
+      "id": "REN-005",
+      "feature": "reengagement-trigger",
+      "title": "Build signal relevance scorer and cooldown enforcement",
+      "type": "logic",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["REN-001", "REN-002", "REN-003", "REN-004"], "files": [], "schema": ["deal_signal_temperature", "reengagement_watchlist"] },
+      "blocks": ["REN-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "signalRelevanceScorer scores each signal against original loss reason (budget/timing/champion_left/competitor/bad_fit/went_dark)",
+        "Scoring dimensions: signal_strength (40pts), timing (20pts), relationship (20pts), reason_compatibility (20pts)",
+        "Cooldown enforcement: respects min_days_since_close, max_attempts, cooldown_until, unsubscribed flag",
+        "Only signals scoring >= config threshold passed to outreach drafting"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/reengagementScorer.ts"
+      ]
+    },
+    {
+      "id": "REN-006",
+      "feature": "reengagement-trigger",
+      "title": "Build Slack HITL approval blocks for re-engagement outreach",
+      "type": "integration",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["REN-005"], "files": ["supabase/functions/_shared/slackBlocks.ts"], "schema": [] },
+      "blocks": ["REN-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "buildReengagementApprovalMessage() in slackBlocks.ts with signal summary, deal history, draft email preview",
+        "Action buttons: Approve & Send, Edit Draft, Snooze 30d, Dismiss",
+        "Slack interaction routing in slack-interactive for reengage_* action_id prefix",
+        "Approved emails forwarded to email-send adapter; dismissed signals logged"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/orchestrator/adapters/reengagementSlack.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    {
+      "id": "REN-007",
+      "feature": "reengagement-trigger",
+      "title": "Register fleet routes, sequence, and agent-reengagement edge function",
+      "type": "integration",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["REN-006"], "files": [], "schema": ["fleet_event_routes", "fleet_sequence_definitions"] },
+      "blocks": ["REN-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Fleet event route: cron.reengagement_scan -> reengagement_scoring sequence",
+        "Fleet event route: deal_closed_lost -> reengagement_watchlist_add (handoff from risk scorer)",
+        "6-step sequence: scan-signals -> score-relevance -> analyse-opportunity -> draft-outreach -> slack-present -> track-outcome",
+        "agent-reengagement edge function deployed with CRON_SECRET auth",
+        "Cron migration: daily at 6am (before morning briefing)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222400003_reengagement_fleet_routes.sql",
+        "supabase/migrations/20260222400004_schedule_reengagement_cron.sql",
+        "supabase/functions/agent-reengagement/index.ts"
+      ]
+    },
+    {
+      "id": "REN-008",
+      "feature": "reengagement-trigger",
+      "title": "End-to-end integration test for re-engagement pipeline",
+      "type": "test",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["REN-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Vitest suite covering: signal detection -> relevance scoring -> cooldown filtering -> outreach drafting -> Slack presentation",
+        "Test scenarios: champion job change, company funding, cooldown respected, unsubscribed skipped, low-relevance filtered",
+        "Manual Slack HITL test guide in TESTING.md"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/agent-reengagement/test.ts",
+        "supabase/functions/agent-reengagement/TESTING.md"
+      ]
+    }
+  ]
+}

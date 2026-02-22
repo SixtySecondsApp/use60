@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, Check, Sparkles, PenTool, Save, Mail, Zap } from 'lucide-react';
+import { Plus, Trash2, Check, Sparkles, PenTool, Save, Mail, Zap, Bot, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +11,7 @@ import { SalesTemplateService, type UserWritingStyle } from '@/lib/services/sale
 import { EmailTrainingWizard } from '@/components/ai-voice';
 import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
+import { useCopilot } from '@/lib/contexts/CopilotContext';
 
 export default function AIPersonalizationSettings() {
   const [styles, setStyles] = useState<UserWritingStyle[]>([]);
@@ -24,6 +25,14 @@ export default function AIPersonalizationSettings() {
     tone_description: '',
     examples: ['']
   });
+
+  // CPT-003: Copilot engine preference
+  const {
+    copilotEnginePreference,
+    setCopilotEnginePreference,
+    isLoadingEnginePreference,
+  } = useCopilot();
+  const [engineSaving, setEngineSaving] = useState(false);
 
   useEffect(() => {
     fetchStyles();
@@ -79,6 +88,24 @@ export default function AIPersonalizationSettings() {
       toast.error('Failed to load writing styles');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // CPT-003: Save engine preference
+  const handleEngineChange = async (pref: 'autonomous' | 'classic') => {
+    if (pref === copilotEnginePreference) return;
+    setEngineSaving(true);
+    try {
+      await setCopilotEnginePreference(pref);
+      toast.success(
+        pref === 'autonomous'
+          ? 'Switched to Autonomous engine (Claude)'
+          : 'Switched to Classic engine (Gemini)'
+      );
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save copilot engine preference');
+    } finally {
+      setEngineSaving(false);
     }
   };
 
@@ -145,6 +172,96 @@ export default function AIPersonalizationSettings() {
           </Button>
         )}
       </div>
+
+      {/* CPT-003: Copilot Engine */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <div className="p-2 rounded-lg bg-[#37bd7e]/10">
+              <Bot className="w-5 h-5 text-[#37bd7e]" />
+            </div>
+            Copilot Engine
+          </CardTitle>
+          <CardDescription>
+            Choose which AI engine powers your copilot. Switching engines starts a fresh conversation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingEnginePreference ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Loading preference...</div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Autonomous option */}
+              <button
+                type="button"
+                disabled={engineSaving}
+                onClick={() => handleEngineChange('autonomous')}
+                className={[
+                  'flex-1 flex items-start gap-3 rounded-lg border p-4 text-left transition-all',
+                  copilotEnginePreference === 'autonomous'
+                    ? 'border-[#37bd7e] bg-[#37bd7e]/5 ring-1 ring-[#37bd7e]'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-[#37bd7e]/50 hover:bg-[#37bd7e]/5',
+                  engineSaving ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer',
+                ].join(' ')}
+              >
+                <div className="mt-0.5 flex-shrink-0">
+                  <Sparkles className="w-5 h-5 text-[#37bd7e]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      Autonomous
+                    </span>
+                    <Badge variant="outline" className="bg-[#37bd7e]/10 text-[#37bd7e] border-[#37bd7e]/20 text-xs">
+                      Claude
+                    </Badge>
+                    {copilotEnginePreference === 'autonomous' && (
+                      <Check className="w-4 h-4 text-[#37bd7e] ml-auto" />
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Powered by Anthropic Claude. Uses native tool-use for agentic actions, skill-first execution, and streaming responses. Recommended for most users.
+                  </p>
+                </div>
+              </button>
+
+              {/* Classic option */}
+              <button
+                type="button"
+                disabled={engineSaving}
+                onClick={() => handleEngineChange('classic')}
+                className={[
+                  'flex-1 flex items-start gap-3 rounded-lg border p-4 text-left transition-all',
+                  copilotEnginePreference === 'classic'
+                    ? 'border-blue-500 bg-blue-500/5 ring-1 ring-blue-500'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-500/50 hover:bg-blue-500/5',
+                  engineSaving ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer',
+                ].join(' ')}
+              >
+                <div className="mt-0.5 flex-shrink-0">
+                  <Cpu className="w-5 h-5 text-blue-500" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      Classic
+                    </span>
+                    <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs">
+                      Gemini
+                    </Badge>
+                    {copilotEnginePreference === 'classic' && (
+                      <Check className="w-4 h-4 text-blue-500 ml-auto" />
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Powered by Google Gemini. Features 48 rich response panels, deterministic workflow routing, and the full preview-confirm HITL pattern.
+                  </p>
+                </div>
+              </button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Email Sign-Off */}
       <Card>

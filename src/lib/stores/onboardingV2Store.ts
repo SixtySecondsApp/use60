@@ -221,14 +221,15 @@ export const SKILLS: SkillMeta[] = [
  * 4. Existing org (join request): website_input → pending_approval (awaiting admin approval)
  */
 export type OnboardingV2Step =
-  | 'website_input'        // Ask for website URL (personal email users)
-  | 'manual_enrichment'    // Q&A fallback (no website available)
+  | 'website_input'           // Ask for website URL (personal email users)
+  | 'manual_enrichment'       // Q&A fallback (no website available)
   | 'organization_selection'  // Fuzzy match found - choose to join or create new
-  | 'pending_approval'     // Awaiting admin approval of join request
-  | 'enrichment_loading'   // AI analyzing company
-  | 'enrichment_result'    // Show what we learned
-  | 'skills_config'        // Configure 5 skills
-  | 'complete';            // All done!
+  | 'pending_approval'        // Awaiting admin approval of join request
+  | 'enrichment_loading'      // AI analyzing company
+  | 'enrichment_result'       // Show what we learned
+  | 'agent_config_confirm'    // Confirm AI-inferred agent configuration
+  | 'skills_config'           // Configure 5 skills
+  | 'complete';               // All done!
 
 // Legacy type alias for backward compatibility
 export type OnboardingStep = OnboardingV2Step;

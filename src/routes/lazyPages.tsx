@@ -190,6 +190,12 @@ export const OrganizationSettingsPage = lazyWithRetry(() => import('@/pages/sett
 export const LogoSettings = lazyWithRetry(() => import('@/pages/settings/LogoSettings'));
 export const SlackSettings = lazyWithRetry(() => import('@/pages/settings/SlackSettings'));
 export const ProactiveAgentSettings = lazyWithRetry(() => import('@/pages/settings/ProactiveAgentSettings'));
+export const AutonomySettingsPage = lazyWithRetry(() => import('@/pages/settings/AutonomySettingsPage'));
+export const SalesMethodologySettings = lazyWithRetry(() => import('@/pages/settings/SalesMethodologySettings'));
+export const CRMFieldMappingSettings = lazyWithRetry(() => import('@/pages/settings/CRMFieldMappingSettings'));
+export const CustomSOPBuilderPage = lazyWithRetry(() => import('@/pages/settings/CustomSOPBuilderPage'));
+export const SignalIntelligenceSettings = lazyWithRetry(() => import('@/pages/settings/SignalIntelligenceSettings'));
+export const KnowledgeMemorySettings = lazyWithRetry(() => import('@/pages/settings/KnowledgeMemorySettings'));
 export const JustCallSettings = lazyWithRetry(() => import('@/pages/settings/JustCallSettings'));
 export const HubSpotSettings = lazyWithRetry(() => import('@/pages/settings/HubSpotSettings'));
 export const AttioSettings = lazyWithRetry(() => import('@/pages/settings/AttioSettings'));

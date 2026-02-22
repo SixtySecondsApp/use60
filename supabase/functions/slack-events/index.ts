@@ -291,9 +291,12 @@ async function handleEvent(
       break;
 
     case 'message':
-      // A message was posted - we might handle slash command responses here
-      // For now, just log
-      console.log('Message event received in channel:', event.channel);
+      // Route DM messages to the Slack copilot (PRD-22)
+      if (event.channel_type === 'im' && !event.bot_id && !event.subtype) {
+        await handleDirectMessage(supabase, event, teamId);
+      } else {
+        console.log('Message event received in channel:', event.channel);
+      }
       break;
 
     case 'app_mention':
@@ -312,6 +315,154 @@ async function handleEvent(
 
     default:
       console.log('Unhandled event type:', event.type);
+  }
+}
+
+/**
+ * PRD-22: Handle direct messages to the bot in Slack DMs.
+ * Routes to the slack-copilot edge function for conversational processing.
+ */
+async function handleDirectMessage(
+  supabase: ReturnType<typeof createClient>,
+  event: {
+    type: string;
+    user?: string;
+    channel?: string;
+    text?: string;
+    ts?: string;
+    thread_ts?: string;
+    event_id?: string;
+    channel_type?: string;
+    [key: string]: unknown;
+  },
+  teamId: string
+) {
+  const slackUserId = event.user;
+  const channel = event.channel;
+  const messageTs = event.ts;
+  const threadTs = event.thread_ts || event.ts; // Use message ts as thread root if not in a thread
+  const text = (event.text || '').trim();
+
+  if (!slackUserId || !channel || !text) {
+    console.warn('[slack-events] DM missing user, channel, or text');
+    return;
+  }
+
+  // Resolve org and bot token
+  const { data: orgSettings } = await supabase
+    .from('slack_org_settings')
+    .select('org_id, bot_access_token')
+    .eq('slack_team_id', teamId)
+    .eq('is_connected', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (!orgSettings?.bot_access_token) {
+    console.warn('[slack-events] No connected org for team:', teamId);
+    return;
+  }
+
+  const botToken = orgSettings.bot_access_token;
+  const orgId = orgSettings.org_id;
+
+  // Resolve Slack user to Sixty user
+  const { data: userMapping } = await supabase
+    .from('slack_user_mappings')
+    .select('sixty_user_id')
+    .eq('org_id', orgId)
+    .eq('slack_user_id', slackUserId)
+    .maybeSingle();
+
+  if (!userMapping?.sixty_user_id) {
+    await postSlackMessage(botToken, channel, threadTs,
+      "I don't recognize your account yet. Please link your Slack in *Settings > Integrations > Slack > Personal Slack*.");
+    return;
+  }
+
+  const userId = userMapping.sixty_user_id;
+
+  // Idempotency: check if we already processed this event
+  const eventId = (event as Record<string, unknown>).client_msg_id as string || `${channel}-${messageTs}`;
+  const { data: existingMsg } = await supabase
+    .from('slack_copilot_messages')
+    .select('id')
+    .eq('slack_ts', messageTs)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMsg) {
+    console.log('[slack-events] Duplicate DM event, skipping:', eventId);
+    return;
+  }
+
+  // Post typing indicator
+  try {
+    await fetch('https://slack.com/api/reactions.add', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel,
+        timestamp: messageTs,
+        name: 'eyes',
+      }),
+    });
+  } catch {
+    // Non-critical
+  }
+
+  // Invoke the slack-copilot edge function for processing
+  try {
+    const copilotUrl = `${supabaseUrl}/functions/v1/slack-copilot`;
+    const response = await fetch(copilotUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({
+        orgId,
+        userId,
+        slackUserId,
+        slackTeamId: teamId,
+        channelId: channel,
+        threadTs,
+        messageTs,
+        text,
+        botToken,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[slack-events] slack-copilot invocation failed:', response.status, errText);
+      await postSlackMessage(botToken, channel, threadTs,
+        "Sorry, I'm having trouble processing that right now. Please try again in a moment.");
+    }
+  } catch (err) {
+    console.error('[slack-events] Error invoking slack-copilot:', err);
+    await postSlackMessage(botToken, channel, threadTs,
+      "Something went wrong. Please try again or use `/sixty help`.");
+  }
+
+  // Remove typing indicator
+  try {
+    await fetch('https://slack.com/api/reactions.remove', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel,
+        timestamp: messageTs,
+        name: 'eyes',
+      }),
+    });
+  } catch {
+    // Non-critical
   }
 }
 

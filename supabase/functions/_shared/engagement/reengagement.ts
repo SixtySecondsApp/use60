@@ -172,8 +172,8 @@ export function buildReengagementSlackBlocks(
           text: {
             type: "mrkdwn",
             text: tone === "friendly"
-              ? `Hey ${firstName}! 👋 Haven't seen you in a bit. Just wanted to check in and let you know there are *${context.daysInactive} days* of activity waiting for you.`
-              : `Hi ${firstName}, you've got some pipeline activity that might need attention. Your deals have been moving while you were away.`,
+              ? `Hey ${firstName}! 👋 *${context.daysInactive} days* of pipeline activity waiting. Here's what moved:`
+              : `Hi ${firstName}, pipeline activity needs attention. Your deals have been moving while you were away.`,
           },
         },
         {
@@ -213,8 +213,8 @@ export function buildReengagementSlackBlocks(
             text: {
               type: "mrkdwn",
               text: meeting.prepReady
-                ? "✅ Your meeting prep is ready. Want me to send it over?"
-                : "I can prepare some talking points if you'd like.",
+                ? "✅ Meeting prep ready. Talking points prepared."
+                : "Talking points prepared.",
             },
           },
           {

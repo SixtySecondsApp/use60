@@ -38,6 +38,9 @@ import { getStepDurationEstimate } from '@/lib/utils/toolUtils';
 import { useCopilotChat, type ToolCall as AutonomousToolCall, type ActiveAgent, type ChatMessage as AutonomousChatMessage } from '@/lib/hooks/useCopilotChat';
 import { detectMissingInfo, enrichPromptWithAnswers, isWorkflowPrompt, isCampaignPrompt, detectCampaignMissingInfo, generateCampaignName } from '@/lib/utils/prospectingDetector';
 
+// Key used to store copilot engine preference in user_settings.preferences JSON
+const COPILOT_ENGINE_PREF_KEY = 'copilot_engine'; // 'autonomous' | 'classic'
+
 // =============================================================================
 // Agent Mode Types
 // =============================================================================
@@ -126,6 +129,14 @@ interface CopilotContextValue {
   autonomousMessages: import('@/lib/hooks/useCopilotChat').ChatMessage[];
   enableAutonomousMode: () => void;
   disableAutonomousMode: () => void;
+
+  // CPT-003: Copilot engine preference
+  /** Current engine preference: 'autonomous' (Claude) | 'classic' (Gemini) */
+  copilotEnginePreference: 'autonomous' | 'classic';
+  /** Set engine preference and persist to user_settings */
+  setCopilotEnginePreference: (pref: 'autonomous' | 'classic') => Promise<void>;
+  /** Whether the engine preference is being loaded from the database */
+  isLoadingEnginePreference: boolean;
 }
 
 const CopilotContext = createContext<CopilotContextValue | undefined>(undefined);
@@ -167,7 +178,11 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   // =============================================================================
 
   const [agentModeEnabled, setAgentModeEnabled] = useState(false);
-  const [autonomousModeEnabled, setAutonomousModeEnabled] = useState(true); // Enabled by default
+  // CPT-003: autonomousModeEnabled is now derived from the user's persisted engine preference.
+  // Default to true (autonomous) until the preference is loaded from the database.
+  const [autonomousModeEnabled, setAutonomousModeEnabled] = useState(true);
+  const [copilotEnginePreference, setCopilotEnginePreferenceState] = useState<'autonomous' | 'classic'>('autonomous');
+  const [isLoadingEnginePreference, setIsLoadingEnginePreference] = useState(true);
 
   // Initialize autonomous copilot (new skill-based tool use)
   const autonomousCopilot = useCopilotChat({
@@ -251,6 +266,41 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     };
     initContext();
   }, []);
+
+  // CPT-003: Load copilot engine preference from user_settings on mount (after auth is set)
+  React.useEffect(() => {
+    if (!context.userId) return;
+
+    const loadEnginePreference = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_settings')
+          .select('preferences')
+          .eq('user_id', context.userId)
+          .maybeSingle();
+
+        if (error) {
+          logger.warn('[CopilotContext] Could not load engine preference:', error.message);
+          return;
+        }
+
+        const prefs = (data?.preferences as Record<string, unknown> | null) ?? {};
+        const saved = prefs[COPILOT_ENGINE_PREF_KEY];
+
+        if (saved === 'classic' || saved === 'autonomous') {
+          setCopilotEnginePreferenceState(saved);
+          setAutonomousModeEnabled(saved === 'autonomous');
+        }
+        // If no preference saved, stay with default (autonomous = true)
+      } catch (err) {
+        logger.warn('[CopilotContext] Error loading engine preference:', err);
+      } finally {
+        setIsLoadingEnginePreference(false);
+      }
+    };
+
+    loadEnginePreference();
+  }, [context.userId]);
 
   // Keep orgId in Copilot context (org-scoped assistant)
   // Clear org-scoped context (contactId, dealIds) when org changes to avoid stale references
@@ -382,6 +432,69 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     autonomousCopilot.clearMessages();
   }, [autonomousCopilot]);
 
+  // CPT-003: Persist engine preference to user_settings and switch mode
+  const setCopilotEnginePreference = useCallback(async (pref: 'autonomous' | 'classic') => {
+    const isCurrentlyInConversation = autonomousModeEnabled
+      ? autonomousCopilot.messages.length > 0
+      : state.messages.length > 0;
+
+    if (isCurrentlyInConversation) {
+      toast.warning('Copilot engine changed — starting a new conversation.');
+    }
+
+    // Update local state
+    setCopilotEnginePreferenceState(pref);
+    const newAutonomous = pref === 'autonomous';
+    setAutonomousModeEnabled(newAutonomous);
+
+    // Clear current session for a clean switch
+    if (newAutonomous) {
+      setAgentModeEnabled(false);
+      autonomousCopilot.clearMessages();
+    } else {
+      autonomousCopilot.clearMessages();
+    }
+    setState(prev => ({
+      ...prev,
+      messages: [],
+      conversationId: undefined,
+      mode: 'empty',
+      isLoading: false,
+    }));
+
+    // Persist to user_settings
+    try {
+      if (!context.userId) return;
+
+      // Read current preferences first to merge (avoid overwriting other prefs)
+      const { data: existing } = await supabase
+        .from('user_settings')
+        .select('preferences')
+        .eq('user_id', context.userId)
+        .maybeSingle();
+
+      const currentPrefs = (existing?.preferences as Record<string, unknown> | null) ?? {};
+      const updatedPrefs = { ...currentPrefs, [COPILOT_ENGINE_PREF_KEY]: pref };
+
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert({
+          user_id: context.userId,
+          preferences: updatedPrefs,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (error) {
+        logger.error('[CopilotContext] Failed to save engine preference:', error);
+        toast.error('Failed to save copilot preference');
+      } else {
+        logger.log('[CopilotContext] Engine preference saved:', pref);
+      }
+    } catch (err) {
+      logger.error('[CopilotContext] Error saving engine preference:', err);
+    }
+  }, [autonomousModeEnabled, autonomousCopilot, state.messages.length, context.userId]);
+
   // Derived autonomous mode state
   const autonomousMode = {
     enabled: autonomousModeEnabled,
@@ -391,6 +504,91 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     toolsUsed: autonomousCopilot.toolsUsed,
     activeAgents: autonomousCopilot.activeAgents,
   };
+
+  // =============================================================================
+  // CPT-002: HITL Preview → Confirm flow for autonomous mode
+  // Track structured responses with isSimulation=true in the action items store,
+  // exactly as regular mode does. The confirm/cancel buttons in response
+  // components call sendMessage('Confirm') / sendMessage("Cancel, I don't need this")
+  // which routes through autonomousCopilot.sendMessage in autonomous mode.
+  // =============================================================================
+  const trackedSimulationIdsRef = useRef<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    if (!autonomousModeEnabled) return;
+
+    for (let i = autonomousCopilot.messages.length - 1; i >= 0; i--) {
+      const msg = autonomousCopilot.messages[i];
+      if (msg.role !== 'assistant' || !msg.structuredResponse) continue;
+
+      const sr = msg.structuredResponse as any;
+      const data = sr?.data;
+      if (!data?.isSimulation || !data?.sequenceKey) continue;
+
+      // Deduplicate: only track each execution once
+      const trackingKey = data.executionId || `${data.sequenceKey}-${msg.id}`;
+      if (trackedSimulationIdsRef.current.has(trackingKey)) break;
+      trackedSimulationIdsRef.current.add(trackingKey);
+
+      const actionItemsStore = useActionItemsStore.getState();
+      const taskPreview = data.taskPreview || data.prepTaskPreview;
+
+      const typeMap: Record<string, ActionItemType> = {
+        'seq-pipeline-focus-tasks': 'task',
+        'seq-deal-rescue-pack': 'task',
+        'seq-next-meeting-command-center': 'meeting',
+        'seq-post-meeting-followup-pack': 'email',
+        'seq-deal-map-builder': 'task',
+        'seq-daily-focus-plan': 'task',
+        'seq-followup-zero-inbox': 'email',
+        'seq-deal-slippage-guardrails': 'slack',
+      };
+      const itemType = typeMap[data.sequenceKey] || 'other';
+
+      const item = createActionItemFromStep(
+        data.sequenceKey,
+        data.executionId || `autonomous-preview-${Date.now()}`,
+        {
+          type: itemType,
+          title: taskPreview?.title || `${String(sr.type || '').replace(/_/g, ' ')} preview`,
+          description: taskPreview?.description || sr.summary,
+          contactId: data.contact?.id,
+          contactName: data.contact?.name,
+          dealId: data.deal?.id,
+          dealName: data.deal?.name,
+          previewData: data,
+        }
+      );
+
+      actionItemsStore.addItem(item);
+      logger.log('[CopilotContext] CPT-002: Tracked autonomous simulation as action item:', data.sequenceKey);
+      break; // Only process the most recent simulation
+    }
+  }, [autonomousModeEnabled, autonomousCopilot.messages]);
+
+  // When autonomous mode re-executes with isSimulation=false, mark pending items confirmed
+  React.useEffect(() => {
+    if (!autonomousModeEnabled) return;
+
+    for (let i = autonomousCopilot.messages.length - 1; i >= 0; i--) {
+      const msg = autonomousCopilot.messages[i];
+      if (msg.role !== 'assistant' || !msg.structuredResponse) continue;
+
+      const sr = msg.structuredResponse as any;
+      const data = sr?.data;
+      if (!data || data.isSimulation !== false || !data.sequenceKey) continue;
+
+      const actionItemsStore = useActionItemsStore.getState();
+      const pendingItems = actionItemsStore.getItemsBySequence(data.sequenceKey);
+      pendingItems
+        .filter(item => item.status === 'pending')
+        .forEach(item => {
+          actionItemsStore.confirmItem(item.id);
+          logger.log('[CopilotContext] CPT-002: Confirmed autonomous action item:', item.id);
+        });
+      break;
+    }
+  }, [autonomousModeEnabled, autonomousCopilot.messages]);
 
   // =============================================================================
   // Extract resolved entity from autonomous tool calls for right panel
@@ -693,7 +891,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     }
     
     // Contact/email queries - check for email addresses or contact names
-    const emailPattern = /[\w\.-]+@[\w\.-]+\.\w+/;
+    const emailPattern = /[\w.-]+@[\w.-]+\.\w+/;
     const hasEmail = emailPattern.test(message);
     const contactKeywords = ['contact', 'person', 'about', 'info on', 'tell me about', 'show me', 'lookup', 'find'];
     const hasContactKeyword = contactKeywords.some(keyword => lowerMessage.includes(keyword));
@@ -1019,7 +1217,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   }, []);
 
   const sendMessage = useCallback(
-    async (message: string, options?: { silent?: boolean }) => {
+    async (message: string, options?: { silent?: boolean; entities?: Array<{ id: string; type: string; name: string }>; skillCommand?: string }) => {
       const isModeLoading = autonomousModeEnabled
         ? autonomousCopilot.isThinking || autonomousCopilot.isStreaming
         : agentModeEnabled
@@ -1031,6 +1229,71 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       // This enables context data fetching (HubSpot, Fathom, Calendar) in all modes
       const contextTypes = detectRelevantContextTypes(message);
       setRelevantContextTypes(contextTypes);
+
+      // =============================================================================
+      // @ Mention Entity Context Injection & /Skill Command Handling
+      // =============================================================================
+      let enrichedMessage = message;
+      let entityContextBlock = '';
+
+      // Resolve entity context if entities are provided
+      if (options?.entities && options.entities.length > 0) {
+        try {
+          const { resolveEntityContexts, formatEntityContextForPrompt } = await import('@/lib/services/entityContextService');
+          const contexts = await resolveEntityContexts(options.entities as any);
+          entityContextBlock = formatEntityContextForPrompt(contexts);
+          logger.log(`[CopilotContext] Resolved entity context for ${options.entities.length} entities`);
+        } catch (err) {
+          logger.error('[CopilotContext] Failed to resolve entity context:', err);
+        }
+      }
+
+      // Handle /skill command if present
+      if (options?.skillCommand) {
+        try {
+          const { parseSkillCommand, validateSkillEntities, buildSkillPrompt } = await import('@/lib/copilot/skillCommandParser');
+          const parsed = parseSkillCommand({
+            text: message,
+            entities: options.entities || [],
+            skillCommand: options.skillCommand,
+          });
+
+          if (parsed) {
+            // Validate entity requirements
+            const validationError = validateSkillEntities(parsed.command, parsed.entities);
+            if (validationError) {
+              // Show validation error as an assistant message
+              logger.warn('[CopilotContext] Skill validation failed:', validationError.message);
+              // Still send but prepend the validation hint
+              enrichedMessage = `${entityContextBlock}\n\n${message}\n\n[Note: ${validationError.message}]`;
+            } else {
+              // Build the enriched skill prompt
+              enrichedMessage = buildSkillPrompt(parsed, entityContextBlock);
+              logger.log(`[CopilotContext] Built skill prompt for /${parsed.command}`);
+
+              // Track execution (fire and forget)
+              if (activeOrgId) {
+                supabase.auth.getUser().then(({ data }) => {
+                  if (data?.user?.id) {
+                    supabase.from('copilot_skill_executions').insert({
+                      skill_key: parsed.skillKey,
+                      user_id: data.user.id,
+                      org_id: activeOrgId,
+                      entities_referenced: parsed.entities,
+                      input_text: message,
+                    });
+                  }
+                }).catch(() => {});
+              }
+            }
+          }
+        } catch (err) {
+          logger.error('[CopilotContext] Failed to parse skill command:', err);
+        }
+      } else if (entityContextBlock) {
+        // No skill command but has entity context — just prepend context
+        enrichedMessage = `${entityContextBlock}\n\n${message}`;
+      }
 
       // =============================================================================
       // Autonomous Copilot Mode Routing (new skill-based tool use)
@@ -1091,7 +1354,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         }
 
         logger.log('[CopilotContext] Routing to autonomous copilot mode');
-        await autonomousCopilot.sendMessage(message, options);
+        await autonomousCopilot.sendMessage(enrichedMessage, options);
         return;
       }
 
@@ -1100,7 +1363,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       // =============================================================================
       if (agentModeEnabled) {
         logger.log('[CopilotContext] Routing to agent mode');
-        await agent.sendMessage(message);
+        await agent.sendMessage(enrichedMessage);
         return;
       }
 
@@ -1284,7 +1547,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
           const conversationIdToSend = isConversationPersisted ? state.conversationId : undefined;
 
           response = await Promise.race([
-            CopilotService.sendMessage(message, apiContext, conversationIdToSend),
+            CopilotService.sendMessage(enrichedMessage, apiContext, conversationIdToSend),
             timeoutPromise
           ]) as Awaited<ReturnType<typeof CopilotService.sendMessage>>;
         } catch (err: any) {
@@ -1787,6 +2050,11 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     autonomousMessages: autonomousCopilot.messages,
     enableAutonomousMode,
     disableAutonomousMode,
+
+    // CPT-003: Copilot engine preference
+    copilotEnginePreference,
+    setCopilotEnginePreference,
+    isLoadingEnginePreference,
   };
 
   return <CopilotContext.Provider value={value}>{children}</CopilotContext.Provider>;

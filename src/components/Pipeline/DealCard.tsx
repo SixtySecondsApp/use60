@@ -9,6 +9,12 @@
 import React, { useState } from 'react';
 import { CircleDot, Users, Clock, TrendingUp, TrendingDown, Minus, AlertTriangle, ListTodo, Calendar } from 'lucide-react';
 import type { PipelineDeal } from './hooks/usePipelineData';
+import { DealTemperatureGauge } from '@/components/signals/DealTemperatureGauge';
+
+export interface DealTemperatureData {
+  temperature: number; // 0.0–1.0 (multiply ×100 for display)
+  trend: 'rising' | 'falling' | 'stable';
+}
 
 interface DealCardProps {
   deal: PipelineDeal;
@@ -23,6 +29,8 @@ interface DealCardProps {
   healthScore?: any;
   sentimentData?: any;
   wasDragRecent?: () => boolean;
+  /** Optional pre-fetched temperature data — only rendered if present */
+  temperatureData?: DealTemperatureData | null;
 }
 
 /**
@@ -116,6 +124,7 @@ export const DealCard = React.memo<DealCardProps>(({
   logoUrl,
   onClick,
   isDragging = false,
+  temperatureData,
 }) => {
   const [logoError, setLogoError] = useState(false);
   const healthBar = getHealthBarStyles(deal.health_status);
@@ -188,7 +197,7 @@ export const DealCard = React.memo<DealCardProps>(({
       </div>
 
       {/* Tags */}
-      {(deal.risk_factors?.length || deal.pending_actions_count > 0 || deal.health_status) && (
+      {(deal.risk_factors?.length || deal.pending_actions_count > 0 || deal.health_status || temperatureData) && (
         <div className="relative z-[1] px-3 pb-2 flex flex-wrap gap-1">
           {deal.risk_factors && deal.risk_factors.length > 0 && (
             <span className="text-[10px] font-semibold px-[7px] py-[2.5px] rounded-[5px] bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/10">
@@ -204,6 +213,14 @@ export const DealCard = React.memo<DealCardProps>(({
             <span className="text-[10px] font-semibold px-[7px] py-[2.5px] rounded-[5px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/10">
               {deal.pending_actions_count} Action{deal.pending_actions_count !== 1 ? 's' : ''}
             </span>
+          )}
+          {/* Deal temperature gauge — only shown when data is available */}
+          {temperatureData && (
+            <DealTemperatureGauge
+              temperature={Math.round(temperatureData.temperature * 100)}
+              trend={temperatureData.trend}
+              size="sm"
+            />
           )}
         </div>
       )}
