@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { logFlatRateCostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -123,6 +124,17 @@ serve(async (req) => {
           code: 'INSTANTLY_NOT_CONFIGURED',
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // -----------------------------------------------------------------------
+    // Credit balance pre-flight check
+    // -----------------------------------------------------------------------
+    const balanceCheck = await checkCreditBalance(serviceClient, membership.org_id)
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -383,6 +395,19 @@ serve(async (req) => {
 
     const leadsPushed = pushData.leads_added ?? pushData.uploaded ?? leads.length
     const failedLeads = pushData.leads_failed ?? pushData.failed ?? 0
+
+    // -----------------------------------------------------------------------
+    // Deduct credits after successful push
+    // -----------------------------------------------------------------------
+    await logFlatRateCostEvent(
+      serviceClient,
+      user.id,
+      membership.org_id,
+      'instantly',
+      'instantly-push',
+      1,
+      'email_send',
+    )
 
     // -----------------------------------------------------------------------
     // 8. Return result

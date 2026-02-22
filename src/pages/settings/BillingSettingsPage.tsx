@@ -1,33 +1,46 @@
 /**
  * BillingSettingsPage — Billing & Subscription management under Settings.
  *
- * Layout:
- *   - Current Plan section: plan name, status badge, next billing date
- *   - Stripe Integration: manage subscription button or "coming soon" placeholder
- *   - Credit Packs section: link to credits page / top-up
+ * Sections (SUBBILL-007):
+ *   1. Current Plan Card: plan name, status, cost, billing cycle, trial progress
+ *   2. Plan Comparison: monthly/annual toggle, side-by-side Basic vs Pro cards
+ *
+ * Sections to be added by SUBBILL-008:
+ *   - Credit Balance
+ *   - Transaction History
+ *   - Subscription Management / Stripe portal
  */
 
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import {
   useCurrentSubscription,
-  useCreatePortalSession,
+  useCreateCheckoutSession,
 } from '@/lib/hooks/useSubscription';
-import {
-  CreditCard,
-  Wallet,
-  ExternalLink,
-  CheckCircle,
-  AlertCircle,
-  Clock,
-  Loader2,
-  ArrowRight,
-  Building2,
-} from 'lucide-react';
+import { PLAN_DETAILS, ANNUAL_SAVINGS } from '@/lib/config/planDetails';
+import { CreditBalanceSection } from '@/components/billing/CreditBalanceSection';
+import { TransactionHistorySection } from '@/components/billing/TransactionHistorySection';
+import { PlanChangeModal } from '@/components/billing/PlanChangeModal';
+import type { PlanSlug, BillingCycle as ModalBillingCycle } from '@/components/billing/PlanChangeModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+  Check,
+  X,
+  Crown,
+  Zap,
+  Building2,
+  Clock,
+  CreditCard,
+  Loader2,
+  ArrowRight,
+  Sparkles,
+  AlertCircle,
+  ArrowDown,
+  RefreshCw,
+} from 'lucide-react';
 
 // ============================================================================
 // Status badge
@@ -74,27 +87,26 @@ function StatusBadge({ status }: { status: string }) {
 // ============================================================================
 
 export default function BillingSettingsPage() {
-  const navigate = useNavigate();
   const { activeOrgId: organizationId } = useOrg();
   const { subscription, trial, isLoading, error } = useCurrentSubscription();
-  const createPortalSession = useCreatePortalSession();
+  const createCheckoutSession = useCreateCheckoutSession();
+
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+
+  // PlanChangeModal state: null = closed
+  const [planChangeTarget, setPlanChangeTarget] = useState<{
+    slug: PlanSlug;
+    cycle: ModalBillingCycle;
+  } | null>(null);
 
   const currentPlan = subscription?.plan;
-  const hasStripeCustomer = Boolean(subscription?.stripe_customer_id);
+  const currentPlanSlug = (currentPlan?.slug ?? 'basic') as PlanSlug;
+  const isBasicUser = currentPlanSlug === 'basic' || currentPlan?.is_free_tier;
+  const hasStripeSubscription = !!subscription?.stripe_subscription_id;
+  const currentBillingCycle: ModalBillingCycle =
+    subscription?.billing_cycle === 'yearly' ? 'annual' : 'monthly';
 
-  const handleManageBilling = async () => {
-    if (!organizationId) return;
-    try {
-      await createPortalSession.mutateAsync({
-        org_id: organizationId,
-        return_url: window.location.href,
-      });
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to open billing portal');
-    }
-  };
-
-  // Format next billing date from subscription
+  // Format next billing date
   const nextBillingDate = subscription?.current_period_end
     ? new Date(subscription.current_period_end).toLocaleDateString('en-GB', {
         day: 'numeric',
@@ -103,12 +115,72 @@ export default function BillingSettingsPage() {
       })
     : null;
 
+  // Billing cycle label
+  const billingCycleLabel =
+    subscription?.billing_cycle === 'yearly' ? 'Annual' : 'Monthly';
+
+  // Monthly cost display
+  const monthlyCostDisplay = currentPlan?.price_monthly != null
+    ? `£${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
+    : '£29/mo';
+
+  // Trial progress
+  const daysRemaining = trial?.daysRemaining ?? 0;
+  const meetingsUsed = trial?.meetingsUsed ?? 0;
+  const meetingsLimit = trial?.meetingsLimit ?? 100;
+  const daysPercent = ((14 - daysRemaining) / 14) * 100;
+  const meetingsPercent = meetingsLimit > 0 ? (meetingsUsed / meetingsLimit) * 100 : 0;
+  const percentUsed = Math.max(daysPercent, meetingsPercent);
+
+  const trialEndsFormatted = trial?.endsAt
+    ? new Date(trial.endsAt).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : null;
+
+  /**
+   * Handle plan card CTA clicks.
+   *
+   * Decision tree:
+   *   - No Stripe subscription → checkout (new/reactivating subscriber)
+   *   - Has Stripe subscription → open PlanChangeModal for all cases
+   *     (upgrades, downgrades, cycle switches are all confirmed before applying)
+   */
+  const handlePlanAction = async (targetSlug: PlanSlug, targetCycle?: ModalBillingCycle) => {
+    if (!organizationId) {
+      toast.error('No active organization');
+      return;
+    }
+
+    const cycle = targetCycle ?? billingCycle;
+
+    if (!hasStripeSubscription) {
+      // New subscriber path: create Stripe Checkout session
+      try {
+        await createCheckoutSession.mutateAsync({
+          org_id: organizationId,
+          plan_slug: targetSlug,
+          billing_cycle: cycle === 'annual' ? 'yearly' : 'monthly',
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to start checkout';
+        toast.error(message);
+      }
+      return;
+    }
+
+    // Existing subscriber: show PlanChangeModal for confirmation
+    setPlanChangeTarget({ slug: targetSlug, cycle });
+  };
+
   return (
-    <SettingsPageWrapper title="Billing & Subscription" description="Manage your plan, subscription, and credit packs">
+    <SettingsPageWrapper title="Billing & Subscription" description="Manage your plan and subscription">
       <div className="space-y-6">
 
         {/* ================================================================
-            Current Plan Section
+            Section 1: Current Plan Card
         ================================================================ */}
         <section>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
@@ -116,7 +188,7 @@ export default function BillingSettingsPage() {
             Current Plan
           </h3>
 
-          <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-900">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
@@ -131,158 +203,336 @@ export default function BillingSettingsPage() {
             ) : (
               <div className="space-y-4">
                 {/* Plan name + status */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-xl font-bold text-gray-900 dark:text-white">
-                    {currentPlan?.name ?? 'Professional Plan'}
-                  </span>
-                  {subscription?.status && (
-                    <StatusBadge status={subscription.status} />
-                  )}
-                  {!subscription && (
-                    <StatusBadge status="active" />
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-xl font-bold text-gray-900 dark:text-white">
+                      {currentPlan?.name ?? 'Basic Plan'}
+                    </span>
+                    {subscription?.status ? (
+                      <StatusBadge status={subscription.status} />
+                    ) : (
+                      <StatusBadge status="active" />
+                    )}
+                  </div>
+
+                  {/* Upgrade CTA for Basic users */}
+                  {isBasicUser && (
+                    <Button
+                      size="sm"
+                      onClick={() => handlePlanAction('pro')}
+                      disabled={createCheckoutSession.isPending}
+                      className="bg-[#37bd7e] hover:bg-[#2da76c] text-white flex-shrink-0"
+                    >
+                      {createCheckoutSession.isPending ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      Upgrade to Pro
+                      <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                    </Button>
                   )}
                 </div>
 
-                {/* Plan details grid */}
+                {/* Stats grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1">
                   {/* Monthly cost */}
                   <div className="space-y-0.5">
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      <CreditCard className="w-3 h-3" />
                       Monthly Cost
                     </p>
                     <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {currentPlan?.price_monthly != null
-                        ? `£${currentPlan.price_monthly}/mo`
-                        : '£29/mo'}
+                      {monthlyCostDisplay}
                     </p>
                   </div>
 
-                  {/* Next billing */}
+                  {/* Billing cycle */}
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Billing Cycle
+                    </p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {billingCycleLabel}
+                    </p>
+                  </div>
+
+                  {/* Next billing date */}
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       Next Billing
                     </p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    <p className={cn(
+                      'text-lg font-semibold',
+                      nextBillingDate
+                        ? 'text-gray-900 dark:text-white'
+                        : 'text-gray-400 dark:text-gray-500'
+                    )}>
                       {nextBillingDate ?? '—'}
                     </p>
-                    {!nextBillingDate && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500">
-                        Available once Stripe is connected
+                  </div>
+                </div>
+
+                {/* Trial progress */}
+                {trial?.isTrialing && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="text-gray-600 dark:text-gray-400">Trial Progress</span>
+                      <span className="text-gray-900 dark:text-white font-medium">
+                        {daysRemaining}d remaining
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          'h-full rounded-full transition-all',
+                          percentUsed < 50 ? 'bg-emerald-500' :
+                          percentUsed < 75 ? 'bg-amber-500' : 'bg-red-500'
+                        )}
+                        style={{ width: `${Math.min(percentUsed, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {meetingsUsed} of {meetingsLimit} meetings used
+                      </p>
+                      {trialEndsFormatted && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Trial ends {trialEndsFormatted}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ================================================================
+            Section 2: Plan Comparison
+        ================================================================ */}
+        <section>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Zap className="w-4 h-4 text-[#37bd7e]" />
+              Plan Comparison
+            </h3>
+
+            {/* Monthly / Annual toggle */}
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-full p-1">
+              <button
+                onClick={() => setBillingCycle('monthly')}
+                className={cn(
+                  'px-3 py-1 text-xs font-medium rounded-full transition-all',
+                  billingCycle === 'monthly'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                )}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingCycle('annual')}
+                className={cn(
+                  'px-3 py-1 text-xs font-medium rounded-full transition-all',
+                  billingCycle === 'annual'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                )}
+              >
+                Annual
+                <span className="ml-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Save
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(['basic', 'pro'] as const).map((slug) => {
+              const plan = PLAN_DETAILS[slug];
+              const savings = ANNUAL_SAVINGS[slug];
+              const isCurrentPlan = currentPlanSlug === slug;
+              const isUpgrade = slug === 'pro' && isBasicUser;
+              const isDowngrade = slug === 'basic' && !isBasicUser;
+              // Cycle switch: on the current plan card but selected a different cycle
+              const isCycleSwitch = isCurrentPlan && billingCycle !== currentBillingCycle;
+
+              const displayPrice = billingCycle === 'annual'
+                ? plan.yearlyPrice
+                : plan.monthlyPrice;
+              const priceSuffix = billingCycle === 'annual' ? '/yr' : '/mo';
+
+              return (
+                <div
+                  key={slug}
+                  className={cn(
+                    'relative rounded-xl border p-5 flex flex-col bg-white dark:bg-gray-900 transition-all',
+                    isCurrentPlan
+                      ? 'border-[#37bd7e] ring-1 ring-[#37bd7e]/30'
+                      : 'border-gray-200 dark:border-gray-800'
+                  )}
+                >
+                  {/* Badges */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                    {plan.badge && (
+                      <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 rounded-full flex items-center gap-1">
+                        <Crown className="w-3 h-3" />
+                        {plan.badge}
+                      </span>
+                    )}
+                    {isCurrentPlan && (
+                      <span className="px-2 py-0.5 text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        Current Plan
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Plan header */}
+                  <div className="mb-4 pr-16">
+                    <h4 className="text-base font-bold text-gray-900 dark:text-white">
+                      {plan.name}
+                    </h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {plan.tagline}
+                    </p>
+                  </div>
+
+                  {/* Price */}
+                  <div className="mb-4">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-bold text-gray-900 dark:text-white">
+                        {plan.currency}{displayPrice}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {priceSuffix}
+                      </span>
+                    </div>
+                    {billingCycle === 'annual' && (
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                        Save {plan.currency}{savings.saved}/yr vs monthly
                       </p>
                     )}
                   </div>
 
-                  {/* Trial info if trialing */}
-                  {trial?.isTrialing && trial.daysRemaining != null && (
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Trial
-                      </p>
-                      <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                        {trial.daysRemaining}d left
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+                  {/* Feature list */}
+                  <ul className="space-y-2 mb-5 flex-1">
+                    {plan.features.map((feature) => (
+                      <li
+                        key={feature.name}
+                        className={cn(
+                          'flex items-start gap-2 rounded-md px-2 py-1 -mx-2',
+                          feature.highlight
+                            ? 'bg-indigo-50 dark:bg-indigo-950/30'
+                            : ''
+                        )}
+                      >
+                        {feature.included ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <X className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 flex-shrink-0 mt-0.5" />
+                        )}
+                        <div className="min-w-0">
+                          <span className={cn(
+                            'text-xs font-medium',
+                            feature.included
+                              ? 'text-gray-900 dark:text-white'
+                              : 'text-gray-400 dark:text-gray-500'
+                          )}>
+                            {feature.name}
+                          </span>
+                          {feature.included && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">
+                              {feature.value}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
 
-        {/* ================================================================
-            Stripe Integration Section
-        ================================================================ */}
-        <section>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-[#37bd7e]" />
-            Subscription Management
-          </h3>
-
-          <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-            {hasStripeCustomer ? (
-              /* Stripe is connected — show manage button */
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                    Manage your subscription
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Update payment method, view invoices, change or cancel your plan via the Stripe customer portal.
-                  </p>
-                </div>
-                <Button
-                  onClick={handleManageBilling}
-                  disabled={createPortalSession.isPending}
-                  className="bg-[#37bd7e] hover:bg-[#2da76c] text-white flex-shrink-0"
-                >
-                  {createPortalSession.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  {/* CTA button */}
+                  {isCurrentPlan && !isCycleSwitch ? (
+                    <Button
+                      variant="outline"
+                      disabled
+                      className="w-full border-[#37bd7e] text-[#37bd7e] opacity-80 cursor-default"
+                    >
+                      Current Plan
+                    </Button>
+                  ) : isCycleSwitch ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => handlePlanAction(slug, billingCycle)}
+                      disabled={createCheckoutSession.isPending}
+                      className="w-full hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Switch to {billingCycle === 'annual' ? 'Annual' : 'Monthly'}
+                    </Button>
+                  ) : isUpgrade ? (
+                    <Button
+                      onClick={() => handlePlanAction(slug)}
+                      disabled={createCheckoutSession.isPending}
+                      className="w-full bg-[#37bd7e] hover:bg-[#2da76c] text-white"
+                    >
+                      {createCheckoutSession.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Sparkles className="w-4 h-4 mr-2" />
+                      )}
+                      {plan.ctaText}
+                    </Button>
+                  ) : isDowngrade ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => handlePlanAction(slug)}
+                      disabled={createCheckoutSession.isPending}
+                      className="w-full hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400"
+                    >
+                      <ArrowDown className="w-4 h-4 mr-2" />
+                      Downgrade to {plan.name}
+                    </Button>
                   ) : (
-                    <ExternalLink className="w-4 h-4 mr-2" />
+                    <Button
+                      variant="outline"
+                      onClick={() => handlePlanAction(slug)}
+                      disabled={createCheckoutSession.isPending}
+                      className="w-full hover:border-[#37bd7e] hover:text-[#37bd7e]"
+                    >
+                      {plan.ctaText}
+                    </Button>
                   )}
-                  Manage Subscription
-                </Button>
-              </div>
-            ) : (
-              /* Stripe not yet connected — coming soon placeholder */
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
-                  <CreditCard className="w-5 h-5 text-gray-400" />
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                    Coming Soon — Stripe Billing Integration
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Full subscription management via Stripe is on its way. Once connected, you'll be able to update your payment method, download invoices, and manage your plan directly from here.
-                  </p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-[#37bd7e]" />
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      Your current plan is active and will be managed here once Stripe is live
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
+              );
+            })}
           </div>
         </section>
 
-        {/* ================================================================
-            Credit Packs Section
-        ================================================================ */}
-        <section>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-            <Wallet className="w-4 h-4 text-[#37bd7e]" />
-            AI Credits
-          </h3>
+        {/* Credit Balance Section */}
+        <CreditBalanceSection />
 
-          <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                  Top up with credit packs
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Purchase additional AI credit packs to power copilot, meeting intelligence, and autonomous research features.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => navigate('/settings/credits')}
-                className="flex-shrink-0 hover:border-[#37bd7e] hover:text-[#37bd7e]"
-              >
-                <CreditCard className="w-4 h-4 mr-2" />
-                Manage Credits
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </div>
-          </div>
-        </section>
+        {/* Transaction History Section */}
+        <TransactionHistorySection />
 
       </div>
+
+      {/* Plan change modal (upgrade / downgrade / cycle switch) */}
+      {planChangeTarget && organizationId && (
+        <PlanChangeModal
+          isOpen={!!planChangeTarget}
+          onClose={() => setPlanChangeTarget(null)}
+          orgId={organizationId}
+          currentPlanSlug={currentPlanSlug}
+          currentBillingCycle={currentBillingCycle}
+          currentPeriodEnd={subscription?.current_period_end ?? null}
+          targetPlanSlug={planChangeTarget.slug}
+          targetBillingCycle={planChangeTarget.cycle}
+          onSuccess={() => setPlanChangeTarget(null)}
+        />
+      )}
     </SettingsPageWrapper>
   );
 }

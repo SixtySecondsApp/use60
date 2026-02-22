@@ -75,9 +75,9 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
   growth: {
     packType: 'growth',
     credits: 250,
-    priceGBP: 89,
+    priceGBP: 99,
     label: 'Insight',
-    description: 'Most popular for growing sales teams',
+    description: 'Best value for growing sales teams',
     popular: true,
   },
   scale: {
@@ -176,4 +176,42 @@ export function getActionCost(featureKey: string, tier: IntelligenceTier = 'medi
   const costs = ACTION_CREDIT_COSTS[featureKey as keyof ActionCreditCosts];
   if (!costs) return ACTION_CREDIT_COSTS.copilot_chat[tier];
   return costs[tier];
+}
+
+// ============================================================================
+// Credit Deduction (Ordered/Subscription-aware)
+// ============================================================================
+
+// Minimal SupabaseClient interface for edge function compatibility
+interface SupabaseClient {
+  rpc(fn: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+/**
+ * Deduct credits using the ordered deduction RPC (subscription-first, then onboarding, then packs).
+ * Returns the new balance after deduction, or -1 on failure.
+ */
+export async function deductCreditsOrdered(
+  supabase: SupabaseClient,
+  orgId: string,
+  amount: number,
+  actionId?: string,
+  tier?: string,
+  refs?: Record<string, unknown>
+): Promise<{ success: boolean; newBalance: number }> {
+  const { data, error } = await supabase.rpc('deduct_credits_ordered', {
+    p_org_id: orgId,
+    p_amount: amount,
+    p_action_id: actionId ?? null,
+    p_tier: tier ?? 'medium',
+    p_refs: refs ?? {},
+  });
+
+  if (error) {
+    console.error('deduct_credits_ordered failed:', error);
+    return { success: false, newBalance: -1 };
+  }
+
+  const newBalance = typeof data === 'number' ? data : -1;
+  return { success: newBalance >= 0, newBalance };
 }

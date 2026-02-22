@@ -16,6 +16,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Coins,
+  Sparkles,
+  Gift,
+  Package,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CreditBalance, CreditTransaction } from '@/lib/services/creditService';
@@ -66,10 +69,20 @@ function timeAgo(dateStr: string) {
   return `${days}d ago`;
 }
 
+function formatExpiry(dateStr: string | null): string {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
   const navigate = useNavigate();
   const closeDropdown = useDropdownMenuClose();
-  const { balance, dailyBurnRate, projectedDaysRemaining, usageByFeature, recentTransactions } = data;
+  const { balance, subscriptionCredits, onboardingCredits, packCredits, dailyBurnRate, projectedDaysRemaining, usageByFeature, recentTransactions } = data;
+
+  const hasSubscriptionCredits = subscriptionCredits.balance > 0;
+  const hasOnboardingCredits = onboardingCredits.balance > 0;
+  const hasPackCredits = packCredits > 0;
+  const showBreakdown = hasSubscriptionCredits || hasOnboardingCredits || hasPackCredits;
 
   const dotClass = getBalanceDotClass(balance, projectedDaysRemaining);
 
@@ -119,6 +132,55 @@ export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
           )}
         </div>
       </div>
+
+      {/* Credit Breakdown */}
+      {showBreakdown && (
+        <>
+          <div className="h-px bg-gray-200 dark:bg-gray-700/50 mx-3" />
+          <div className="px-3 py-2">
+            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+              Credit Breakdown
+            </div>
+            <div className="space-y-1.5">
+              {hasSubscriptionCredits && (
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                  <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 truncate">
+                    Sub: {Math.round(subscriptionCredits.balance)}/250
+                    {subscriptionCredits.expiry && (
+                      <span className="text-gray-400 dark:text-gray-500"> — resets {formatExpiry(subscriptionCredits.expiry)}</span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {hasOnboardingCredits && (
+                <div className="flex items-center gap-2">
+                  <Gift className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 truncate">
+                    Onboarding: {Math.round(onboardingCredits.balance)}
+                    <span className="text-gray-400 dark:text-gray-500"> — Never expires</span>
+                  </span>
+                </div>
+              )}
+              {hasPackCredits && (
+                <div className="flex items-center gap-2">
+                  <Package className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                  <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 truncate">
+                    Pack: {Math.round(packCredits)}
+                    <span className="text-gray-400 dark:text-gray-500"> — Never expires</span>
+                  </span>
+                </div>
+              )}
+              <div className="h-px bg-gray-100 dark:bg-gray-700/30 mt-1" />
+              <div className="flex items-center gap-2 pt-0.5">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-200 flex-1">
+                  Total: {balance % 1 === 0 ? Math.round(balance) : balance.toFixed(1)} cr
+                </span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Usage by Feature */}
       {topFeatures.length > 0 && (

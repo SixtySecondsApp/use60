@@ -3,10 +3,11 @@
  *
  * Use this in edge functions to log AI costs automatically.
  * Costs are now stored in credit units (1 credit ≈ $0.10 USD).
- * Uses FIFO pack deduction via deduct_credits_fifo().
+ * Uses ordered credit deduction via deduct_credits_ordered() (subscription → onboarding → packs).
  */
 
-import { getActionCost, type IntelligenceTier } from './creditPacks.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { getActionCost, deductCreditsOrdered, type IntelligenceTier } from './creditPacks.ts';
 
 // ---------------------------------------------------------------------------
 // CreditLogContext — optional audit context for credit_logs writes
@@ -319,27 +320,25 @@ async function deductAndMaybeTopUp(
       balanceBefore = bal?.balance_credits ?? 0;
     } catch { /* non-fatal */ }
 
-    const { data: newBalance, error: deductError } = await supabaseClient.rpc('deduct_credits_fifo', {
-      p_org_id: orgId,
-      p_amount: creditAmount,
-      p_description: description,
-      p_feature_key: featureKey,
-      p_cost_event_id: costEventId,
-    });
+    const { success: deductSuccess, newBalance } = await deductCreditsOrdered(
+      supabaseClient,
+      orgId,
+      creditAmount,
+      actionId,
+      tier ?? 'medium',
+      {
+        description,
+        feature_key: featureKey,
+        cost_event_id: costEventId,
+      },
+    );
 
-    if (deductError) {
-      if (
-        !deductError.message.includes('relation') &&
-        !deductError.message.includes('does not exist') &&
-        !deductError.message.includes('function')
-      ) {
-        console.warn('[CostTracking] FIFO credit deduction error:', deductError);
-      }
+    if (!deductSuccess) {
       return {};
     }
 
     // newBalance is the remaining balance after deduction (or -1 for insufficient)
-    if (typeof newBalance === 'number' && newBalance >= 0) {
+    if (newBalance >= 0) {
       await maybeEnqueueAutoTopUp(supabaseClient, orgId, newBalance);
 
       // Write credit_logs audit entry if we have enough context
@@ -380,13 +379,49 @@ async function deductAndMaybeTopUp(
 }
 
 // ---------------------------------------------------------------------------
+// Provider cost rate lookup (service-role, bypasses RLS)
+// ---------------------------------------------------------------------------
+
+/**
+ * Look up the per-million-token rates for a given provider+model from cost_rates.
+ * Uses service-role client to bypass RLS. Returns null if no row found or on error.
+ */
+async function getProviderCostRates(
+  provider: string,
+  model: string,
+): Promise<{ inputCostPerMillion: number; outputCostPerMillion: number } | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !serviceKey) return null;
+
+    const adminClient = createClient(supabaseUrl, serviceKey);
+    const { data, error } = await adminClient
+      .from('cost_rates')
+      .select('input_cost_per_million, output_cost_per_million')
+      .eq('provider', provider)
+      .eq('model', model)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    return {
+      inputCostPerMillion: Number(data.input_cost_per_million) || 0,
+      outputCostPerMillion: Number(data.output_cost_per_million) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // logAICostEvent — token-based AI calls (Anthropic, Gemini, etc.)
 // ---------------------------------------------------------------------------
 
 /**
  * Log AI cost event from an edge function.
  * Determines credit cost by feature_key + org intelligence tier from ACTION_CREDIT_COSTS.
- * Calls deduct_credits_fifo() for FIFO pack consumption.
+ * Calls deduct_credits_ordered() for subscription-first ordered credit consumption.
  */
 export async function logAICostEvent(
   supabaseClient: any,
@@ -423,6 +458,15 @@ export async function logAICostEvent(
     const tier = await getOrgIntelligenceTier(supabaseClient, orgId, feature ?? 'copilot_chat');
     const creditCost = await getActionCostFromDB(supabaseClient, feature ?? 'copilot_chat', tier);
 
+    // Look up actual provider cost rates to compute provider_cost_usd
+    const rates = await getProviderCostRates(provider, model);
+    let providerCostUsd: number | null = null;
+    if (rates) {
+      providerCostUsd =
+        (inputTokens / 1_000_000) * rates.inputCostPerMillion +
+        (outputTokens / 1_000_000) * rates.outputCostPerMillion;
+    }
+
     // Log to ai_cost_events table (estimated_cost now stores credit units)
     const { data: insertedCostEvent, error: insertError } = await supabaseClient
       .from('ai_cost_events')
@@ -435,6 +479,8 @@ export async function logAICostEvent(
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         estimated_cost: creditCost,
+        provider_cost_usd: providerCostUsd,
+        credits_charged: creditCost,
         metadata: metadata || null,
       })
       .select('id')
@@ -490,7 +536,7 @@ export function extractGeminiUsage(response: any): { inputTokens: number; output
 
 /**
  * Log a flat-rate cost event (non-token-based providers like Exa, Apollo, AI Ark).
- * Inserts into ai_cost_events for analytics and calls deduct_credits_fifo for balance.
+ * Inserts into ai_cost_events for analytics and calls deduct_credits_ordered for balance.
  *
  * @param creditAmount - Credit units to deduct (e.g. 0.3 for an Apollo search)
  */
@@ -518,6 +564,8 @@ export async function logFlatRateCostEvent(
         input_tokens: 0,
         output_tokens: 0,
         estimated_cost: creditAmount,
+        provider_cost_usd: null,
+        credits_charged: creditAmount,
         metadata: metadata || null,
       })
       .select('id')

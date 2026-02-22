@@ -128,6 +128,13 @@ export function CompletionStep() {
           console.error('[CompletionStep] Failed to grant welcome credits:', err);
           // Non-fatal — do not block navigation
         }
+
+        // Start 14-day free trial (non-blocking, idempotent)
+        supabase.functions.invoke('start-free-trial', {
+          body: { org_id: organizationId },
+        }).catch((err) => {
+          console.error('[CompletionStep] Failed to start free trial:', err);
+        });
       }
 
       // Create org fact profile — await so the request isn't killed by navigation
@@ -257,6 +264,13 @@ export function CompletionStep() {
                   } catch (err) {
                     console.error('[CompletionStep] Failed to grant welcome credits:', err);
                   }
+
+                  // Start 14-day free trial (non-blocking, idempotent)
+                  supabase.functions.invoke('start-free-trial', {
+                    body: { org_id: organizationId },
+                  }).catch((err) => {
+                    console.error('[CompletionStep] Failed to start free trial:', err);
+                  });
                 }
                 // Create org fact profile — await before navigating
                 await ensureOrgProfile();

@@ -97,7 +97,9 @@ export async function getAICostEvents(
 ): Promise<AICostEvent[]> {
   let query = supabase
     .from('ai_cost_events')
-    .select('*')
+    .select(
+      'id, org_id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, provider_cost_usd, credits_charged, metadata, created_at'
+    )
     .eq('org_id', orgId)
     .order('created_at', { ascending: false });
 
@@ -115,7 +117,7 @@ export async function getAICostEvents(
     return [];
   }
 
-  return data || [];
+  return (data || []) as AICostEvent[];
 }
 
 /**
@@ -135,12 +137,21 @@ export async function getModelUsageBreakdown(
   for (const event of events) {
     const key = `${event.provider}:${event.model}`;
     const existing = modelMap.get(key);
+    const hasProviderCost = event.provider_cost_usd != null;
 
     if (existing) {
       existing.input_tokens += event.input_tokens;
       existing.output_tokens += event.output_tokens;
       existing.estimated_cost += event.estimated_cost;
       existing.call_count += 1;
+      if (hasProviderCost) {
+        existing.total_provider_cost_usd = (existing.total_provider_cost_usd ?? 0) + event.provider_cost_usd!;
+      } else {
+        existing.has_estimated_rows = true;
+      }
+      if (event.credits_charged != null) {
+        existing.total_credits_charged = (existing.total_credits_charged ?? 0) + event.credits_charged;
+      }
     } else {
       modelMap.set(key, {
         model: event.model,
@@ -149,6 +160,9 @@ export async function getModelUsageBreakdown(
         output_tokens: event.output_tokens,
         estimated_cost: event.estimated_cost,
         call_count: 1,
+        total_provider_cost_usd: hasProviderCost ? event.provider_cost_usd! : null,
+        total_credits_charged: event.credits_charged ?? null,
+        has_estimated_rows: !hasProviderCost,
       });
     }
   }
@@ -332,6 +346,12 @@ export async function getCostAnalysisSummary(
       average_margin_percent: 0,
       average_cost_per_meeting: 0,
       average_cost_per_user: 0,
+      total_provider_cost_usd: 0,
+      total_credits_charged: 0,
+      credits_revenue_gbp: 0,
+      provider_cost_gbp: 0,
+      credits_margin_pct: null,
+      has_estimated_rows: false,
       model_breakdown: [],
       tier_breakdown: [],
     };
@@ -416,6 +436,15 @@ export async function getCostAnalysisSummary(
         existing.output_tokens += model.output_tokens;
         existing.estimated_cost += model.estimated_cost;
         existing.call_count += model.call_count;
+        if (model.total_provider_cost_usd != null) {
+          existing.total_provider_cost_usd = (existing.total_provider_cost_usd ?? 0) + model.total_provider_cost_usd;
+        }
+        if (model.total_credits_charged != null) {
+          existing.total_credits_charged = (existing.total_credits_charged ?? 0) + model.total_credits_charged;
+        }
+        if (model.has_estimated_rows) {
+          existing.has_estimated_rows = true;
+        }
       } else {
         modelMap.set(key, { ...model });
       }
@@ -534,6 +563,28 @@ export async function getCostAnalysisSummary(
   const avgCostPerMeeting = totalMeetings > 0 ? totalCost / totalMeetings : 0;
   const avgCostPerUser = totalUsers > 0 ? totalCost / totalUsers : 0;
 
+  // Aggregate credit-based margin data from model breakdown
+  const allModels = Array.from(modelMap.values());
+  const totalProviderCostUsd = allModels.reduce(
+    (sum, m) => sum + (m.total_provider_cost_usd ?? 0),
+    0
+  );
+  const totalCreditsCharged = allModels.reduce(
+    (sum, m) => sum + (m.total_credits_charged ?? 0),
+    0
+  );
+  const hasEstimatedRows = allModels.some((m) => m.has_estimated_rows);
+
+  // £0.396 per credit is the Insight pack rate; USD→GBP at ~0.79
+  const INSIGHT_PACK_RATE_GBP = 0.396;
+  const USD_TO_GBP = 0.79;
+  const creditsRevenueGbp = totalCreditsCharged * INSIGHT_PACK_RATE_GBP;
+  const providerCostGbp = totalProviderCostUsd * USD_TO_GBP;
+  const creditsMarginPct =
+    creditsRevenueGbp > 0
+      ? ((creditsRevenueGbp - providerCostGbp) / creditsRevenueGbp) * 100
+      : null;
+
   return {
     total_organizations: allUsage.length,
     total_meetings: totalMeetings,
@@ -545,7 +596,13 @@ export async function getCostAnalysisSummary(
     average_margin_percent: averageMargin,
     average_cost_per_meeting: avgCostPerMeeting,
     average_cost_per_user: avgCostPerUser,
-    model_breakdown: Array.from(modelMap.values()),
+    total_provider_cost_usd: totalProviderCostUsd,
+    total_credits_charged: totalCreditsCharged,
+    credits_revenue_gbp: creditsRevenueGbp,
+    provider_cost_gbp: providerCostGbp,
+    credits_margin_pct: creditsMarginPct,
+    has_estimated_rows: hasEstimatedRows,
+    model_breakdown: allModels,
     tier_breakdown: Array.from(tierMap.values()),
   };
 }

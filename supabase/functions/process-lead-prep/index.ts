@@ -1,17 +1,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/corsHelper.ts";
 import { getAuthContext } from "../_shared/edgeAuth.ts";
+import { logAICostEvent, checkCreditBalance } from "../_shared/costTracking.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
-const JSON_HEADERS = {
-  ...corsHeaders,
-  "Content-Type": "application/json",
-};
+// JSON_HEADERS is computed per-request using getCorsHeaders(req) in the serve handler
 
 const OPENAI_MODEL =
   Deno.env.get("LEAD_PREP_MODEL") ??
@@ -190,9 +188,11 @@ interface IntakeResponse {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
+
+  const cors = getCorsHeaders(req);
+  const JSON_HEADERS = { ...cors, "Content-Type": "application/json" };
 
   if (req.method !== "POST") {
     return new Response(
@@ -339,6 +339,28 @@ serve(async (req) => {
       }
 
       try {
+        // Resolve org for credit tracking
+        const leadOrgId = (lead.metadata as any)?.org_id ?? null;
+        let resolvedOrgId: string | null = leadOrgId;
+        if (!resolvedOrgId && lead.owner_id) {
+          const { data: membership } = await supabase
+            .from("organization_memberships")
+            .select("org_id")
+            .eq("user_id", lead.owner_id)
+            .limit(1)
+            .maybeSingle();
+          resolvedOrgId = membership?.org_id ?? null;
+        }
+
+        // Check credit balance before AI calls for this lead
+        if (resolvedOrgId) {
+          const creditCheck = await checkCreditBalance(supabase, resolvedOrgId);
+          if (!creditCheck.allowed) {
+            console.warn(`[process-lead-prep] Insufficient credits for org ${resolvedOrgId}, skipping lead ${lead.id}`);
+            continue;
+          }
+        }
+
         const companyResearch = await fetchCompanyResearch(lead);
         const plan = await generateLeadPrepPlan(lead, companyResearch);
         const prospectTimezone = lead.contact_timezone || lead.meeting_timezone;
@@ -355,6 +377,11 @@ serve(async (req) => {
         updateFactProfileResearch(supabase, lead, companyResearch, plan).catch((err) => {
           console.error(`[process-lead-prep] Fact profile update failed (non-fatal):`, err);
         });
+
+        // Log AI cost for Gemini research and lead prep calls
+        if (lead.owner_id && resolvedOrgId) {
+          logAICostEvent(supabase, lead.owner_id, resolvedOrgId, 'gemini', GEMINI_MODEL, 800, 600, 'research_enrichment').catch(() => {});
+        }
 
         processed += 1;
       } catch (leadError) {

@@ -39,6 +39,7 @@ import {
   buildSequenceTiming,
   FRAMEWORK_SELECTION_GUIDE,
 } from '../_shared/emailPromptRules.ts'
+import { logAICostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
 
 // ============================================================================
 // Types
@@ -168,7 +169,7 @@ async function generateExampleEmails(
   config: SequenceConfig,
   contextPrompt: string,
   signOff: string,
-): Promise<EmailStep[]> {
+): Promise<{ steps: EmailStep[]; inputTokens: number; outputTokens: number }> {
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured')
 
   const numSteps = Math.min(Math.max(config.num_steps, 1), MAX_STEPS)
@@ -224,7 +225,11 @@ Respond with ONLY a JSON array of objects, each with "subject" and "body" fields
   const steps = JSON.parse(jsonStr) as EmailStep[]
   if (!Array.isArray(steps) || steps.length === 0) throw new Error('Invalid email format from Claude')
 
-  return steps.slice(0, numSteps)
+  return {
+    steps: steps.slice(0, numSteps),
+    inputTokens: response.usage?.input_tokens || 0,
+    outputTokens: response.usage?.output_tokens || 0,
+  }
 }
 
 // ============================================================================
@@ -579,6 +584,12 @@ serve(async (req) => {
       return errorResponse('No organization found', req)
     }
 
+    // Credit balance check before AI call
+    const balanceCheck = await checkCreditBalance(serviceClient, orgId)
+    if (!balanceCheck.allowed) {
+      return errorResponse('Insufficient credits', req, 402)
+    }
+
     // --- Parse request ---
     const body = (await req.json()) as RequestBody
     if (!body.table_id || !body.sequence_config?.num_steps) {
@@ -748,11 +759,23 @@ serve(async (req) => {
     if (!useGeminiOnly && ANTHROPIC_API_KEY) {
       try {
         console.log(`${LOG} Tier 1: Claude writing emails for first prospect (${firstProspect.name})`)
-        exampleEmails = await generateExampleEmails(
+        const tier1Result = await generateExampleEmails(
           firstProspect,
           { num_steps: numSteps, angle: body.sequence_config.angle, email_type: body.sequence_config.email_type, event_details: body.sequence_config.event_details },
           contextPrompt,
           signOff,
+        )
+        exampleEmails = tier1Result.steps
+        // Log AI cost event for Tier 1 Claude call
+        await logAICostEvent(
+          serviceClient,
+          user.id,
+          orgId,
+          'anthropic',
+          'claude-sonnet-4-5-20250929',
+          tier1Result.inputTokens,
+          tier1Result.outputTokens,
+          'content_generation',
         )
         // Write first prospect's cells immediately
         await writeStepCells(firstProspect.row_id, exampleEmails)

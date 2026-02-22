@@ -23,6 +23,8 @@ import {
   PieChart,
   Calculator,
   AlertCircle,
+  Percent,
+  Coins,
 } from 'lucide-react';
 import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { cn } from '@/lib/utils';
@@ -236,6 +238,50 @@ export default function CostAnalysis() {
               />
             </div>
 
+            {/* Credit-Based Margin Cards */}
+            {(() => {
+              const s = (viewMode === 'lifetime' ? lifetimeSummary : summary)!;
+              const marginPct = s.credits_margin_pct;
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <SummaryCard
+                    title={`Provider Cost (USD)${s.has_estimated_rows ? ' *' : ''}`}
+                    value={`$${s.total_provider_cost_usd.toFixed(4)}`}
+                    icon={DollarSign}
+                    trend="neutral"
+                    color="text-orange-600"
+                  />
+                  <SummaryCard
+                    title={`Credits Charged${s.has_estimated_rows ? ' *' : ''}`}
+                    value={s.total_credits_charged.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    icon={Coins}
+                    trend="neutral"
+                    color="text-indigo-600"
+                  />
+                  <SummaryCard
+                    title={`Credits Margin${s.has_estimated_rows ? ' (est.)' : ''}`}
+                    value={marginPct != null ? `${marginPct.toFixed(1)}%` : 'N/A'}
+                    icon={Percent}
+                    trend={marginPct != null ? (marginPct > 70 ? 'up' : marginPct > 50 ? 'neutral' : 'down') : 'neutral'}
+                    color={
+                      marginPct == null
+                        ? 'text-muted-foreground'
+                        : marginPct > 70
+                        ? 'text-emerald-600'
+                        : marginPct > 50
+                        ? 'text-amber-600'
+                        : 'text-red-600'
+                    }
+                  />
+                </div>
+              );
+            })()}
+            {(viewMode === 'lifetime' ? lifetimeSummary : summary)!.has_estimated_rows && (
+              <p className="text-xs text-muted-foreground">
+                * Some events predate the <code>provider_cost_usd</code> column. Values marked with * include only rows where the column is populated; older rows are excluded from this calculation.
+              </p>
+            )}
+
             {/* Breakdown Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>
@@ -333,9 +379,32 @@ export default function CostAnalysis() {
                               style={{ width: `${percentage}%` }}
                             />
                           </div>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            {model.call_count.toLocaleString()} API calls
-                          </p>
+                          <div className="grid grid-cols-3 gap-4 mt-3 pt-3 border-t text-xs">
+                            <div>
+                              <p className="text-muted-foreground">API calls</p>
+                              <p className="font-medium">{model.call_count.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">
+                                Provider Cost (USD){model.has_estimated_rows ? ' *' : ''}
+                              </p>
+                              <p className="font-medium">
+                                {model.total_provider_cost_usd != null
+                                  ? `$${model.total_provider_cost_usd.toFixed(4)}`
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">
+                                Credits Charged{model.has_estimated_rows ? ' *' : ''}
+                              </p>
+                              <p className="font-medium">
+                                {model.total_credits_charged != null
+                                  ? model.total_credits_charged.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       );
                     })
@@ -459,7 +528,10 @@ function AuditLogsView() {
       let query = supabase
         .from('ai_cost_events')
         .select(`
-          *,
+          id, org_id, user_id, provider, model, feature,
+          input_tokens, output_tokens, estimated_cost,
+          provider_cost_usd, credits_charged,
+          metadata, created_at,
           organization:organizations (
             id,
             name
@@ -568,7 +640,7 @@ function AuditLogsView() {
           </div>
 
           {/* Summary Stats */}
-          <div className="grid grid-cols-4 gap-4 pt-4 border-t">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-4 pt-4 border-t">
             <div>
               <p className="text-sm text-muted-foreground">Total Events</p>
               <p className="text-2xl font-bold">{events.length}</p>
@@ -583,15 +655,31 @@ function AuditLogsView() {
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Input Tokens</p>
+              <p className="text-sm text-muted-foreground">Input Tokens</p>
               <p className="text-2xl font-bold">
                 {formatTokens(events.reduce((sum, e) => sum + (e.input_tokens || 0), 0))}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Output Tokens</p>
+              <p className="text-sm text-muted-foreground">Output Tokens</p>
               <p className="text-2xl font-bold">
                 {formatTokens(events.reduce((sum, e) => sum + (e.output_tokens || 0), 0))}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Provider Cost (USD)</p>
+              <p className="text-2xl font-bold">
+                ${events
+                  .reduce((sum, e) => sum + ((e as any).provider_cost_usd || 0), 0)
+                  .toFixed(4)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Credits Charged</p>
+              <p className="text-2xl font-bold">
+                {events
+                  .reduce((sum, e) => sum + ((e as any).credits_charged || 0), 0)
+                  .toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </p>
             </div>
           </div>
@@ -622,6 +710,8 @@ function AuditLogsView() {
                     <th className="text-right p-2">Input Tokens</th>
                     <th className="text-right p-2">Output Tokens</th>
                     <th className="text-right p-2">Cost</th>
+                    <th className="text-right p-2">Provider Cost (USD)</th>
+                    <th className="text-right p-2">Credits</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -651,6 +741,20 @@ function AuditLogsView() {
                       <td className="p-2 text-right">{formatTokens(event.output_tokens)}</td>
                       <td className="p-2 text-right font-semibold">
                         {formatCost(event.estimated_cost || 0, CURRENCY)}
+                      </td>
+                      <td className="p-2 text-right text-xs">
+                        {event.provider_cost_usd != null ? (
+                          `$${(event.provider_cost_usd as number).toFixed(6)}`
+                        ) : (
+                          <span className="text-muted-foreground">est.</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-right text-xs">
+                        {event.credits_charged != null ? (
+                          (event.credits_charged as number).toLocaleString(undefined, { maximumFractionDigits: 4 })
+                        ) : (
+                          <span className="text-muted-foreground">N/A</span>
+                        )}
                       </td>
                     </tr>
                   ))}

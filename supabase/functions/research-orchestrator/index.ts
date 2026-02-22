@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts'
+import { deductCreditsOrdered } from '../_shared/creditPacks.ts'
 
 // =============================================================================
 // Research Orchestrator — Queue Management + Credit Reservation
@@ -202,20 +203,17 @@ async function checkAndReserveCredits(
     }
 
     // 3. Reserve credits upfront (deduct immediately)
-    const { data: newBalance, error: deductError } = await supabaseClient.rpc('deduct_credits', {
-      p_org_id: organizationId,
-      p_amount: estimatedCredits,
-      p_description: `AI Research Agent: reserved ${estimatedCredits} credits`,
-      p_feature_key: 'research_agent',
-      p_cost_event_id: null,
-    })
+    const { success: deductSuccess, newBalance } = await deductCreditsOrdered(
+      supabaseClient,
+      organizationId,
+      estimatedCredits,
+      'research_agent',
+      'medium',
+      { description: `AI Research Agent: reserved ${estimatedCredits} credits` },
+    )
 
-    if (deductError) {
-      // If deduct_credits function doesn't exist, allow (backward compat)
-      if (deductError.message.includes('function') || deductError.message.includes('does not exist')) {
-        console.warn('[research-orchestrator] deduct_credits function not found, allowing request')
-        return { hasBalance: true, currentBalance }
-      }
+    if (!deductSuccess) {
+      const deductError = { message: 'deduct_credits_ordered failed' }
       console.error('[research-orchestrator] Credit deduction error:', deductError)
       return { hasBalance: false, currentBalance, message: 'Failed to reserve credits. Please try again.' }
     }

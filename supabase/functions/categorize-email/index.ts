@@ -16,6 +16,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 import { authenticateRequest } from '../_shared/edgeAuth.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -146,12 +147,36 @@ serve(async (req) => {
       body.userId
     );
 
+    // Get org for credit check
+    const { data: membership } = await supabase
+      .from('organization_memberships')
+      .select('org_id')
+      .eq('user_id', userId)
+      .limit(1)
+      .maybeSingle()
+    const orgId = membership?.org_id ?? null
+
+    // Credit balance check (pre-flight, only when AI would be used)
+    if (ANTHROPIC_API_KEY && orgId) {
+      const balanceCheck = await checkCreditBalance(supabase, orgId)
+      if (!balanceCheck.allowed) {
+        return errorResponse('Insufficient credits. Please top up to continue.', req, 402)
+      }
+    }
+
     // Try AI categorization first, fall back to rules
     let result: CategorizationResult;
     
     if (ANTHROPIC_API_KEY) {
       try {
         result = await categorizeWithAI(body);
+        // Log AI cost event after successful AI categorization
+        if (orgId) {
+          await logAICostEvent(
+            supabase, userId, orgId, 'anthropic', 'claude-3-5-haiku-20241022',
+            0, 0, 'task_execution'
+          )
+        }
       } catch (aiError: any) {
         console.error('[categorize-email] AI error, falling back to rules:', aiError.message);
         result = categorizeWithRules(body);

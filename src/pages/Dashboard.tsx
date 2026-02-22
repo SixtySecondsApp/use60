@@ -31,6 +31,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { TeamKPIGrid } from '@/components/insights/TeamKPIGrid';
 import { TeamComparisonMatrix } from '@/components/insights/TeamComparisonMatrix';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ActivationChecklist } from '@/components/dashboard/ActivationChecklist';
 
 const LazyActivityLog = lazy(() => import('@/pages/ActivityLog'));
 const LazySalesFunnel = lazy(() => import('@/pages/SalesFunnel'));
@@ -719,6 +720,9 @@ export default function Dashboard() {
         </TabsList>
 
         <TabsContent value="overview">
+
+      {/* Activation Checklist for new users */}
+      <ActivationChecklist />
 
       {/* Pending Join Request Banner */}
       <div className="mb-6">

@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { logAICostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -2168,6 +2169,33 @@ serve(async (req) => {
 
     console.log(`Authenticated user: ${user.id}`)
 
+    // Look up org and check credit balance for AI-generating actions
+    let _costOrgId: string | null = null
+    let _adminClient: ReturnType<typeof createClient> | null = null
+    const aiActions = new Set(['analyze_focus_areas', 'generate_goals', 'generate_sow', 'generate_proposal', 'stream_proposal', 'process_job'])
+    if (aiActions.has(action)) {
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      if (supabaseServiceKey) {
+        _adminClient = createClient(supabaseUrl, supabaseServiceKey)
+        const { data: membership } = await _adminClient
+          .from('organization_memberships')
+          .select('org_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle()
+        if (membership?.org_id) {
+          _costOrgId = membership.org_id
+          const balanceCheck = await checkCreditBalance(_adminClient, _costOrgId)
+          if (!balanceCheck.allowed) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'Insufficient credits' }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 402 }
+            )
+          }
+        }
+      }
+    }
+
     // Temporary action to fix database migration
     if (action === 'update_design_system') {
       try {
@@ -2643,6 +2671,11 @@ Return ONLY valid JSON with the focus_areas array. Start with { and end with }.`
           throw new Error('No focus areas could be extracted from the transcript. Please try again.')
         }
 
+        // Log AI cost event (fire-and-forget)
+        if (_adminClient && _costOrgId) {
+          logAICostEvent(_adminClient, user.id, _costOrgId, 'openrouter', haikuModelId, 0, 0, 'content_generation').catch(() => {})
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -2765,6 +2798,11 @@ Return ONLY valid JSON with the focus_areas array. Start with { and end with }.`
               })
           })
         }, 100) // Small delay to ensure response is sent
+
+        // Log AI cost event (fire-and-forget — actual cost is logged by processJob as content is generated)
+        if (_adminClient && _costOrgId) {
+          logAICostEvent(_adminClient, user.id, _costOrgId, 'openrouter', 'anthropic/claude-3-5-sonnet-20241022', 0, 0, 'content_generation').catch(() => {})
+        }
 
         return new Response(
           JSON.stringify({

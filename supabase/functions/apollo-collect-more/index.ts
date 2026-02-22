@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { normalizeCompanyName, calculateStringSimilarity } from '../_shared/companyMatching.ts'
 import { getCorsHeaders } from '../_shared/corsHelper.ts'
+import { logFlatRateCostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
 
 interface CollectMoreRequest {
   table_id: string
@@ -195,6 +196,15 @@ serve(async (req) => {
 
     // 4. Validate table exists and belongs to org
     const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
+
+    // Credit balance pre-flight check
+    const balanceCheck = await checkCreditBalance(serviceClient, orgId)
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS' }),
+        { status: 402, headers: { ...cors, 'Content-Type': 'application/json' } }
+      )
+    }
 
     const { data: table, error: tableError } = await serviceClient
       .from('dynamic_tables')
@@ -538,6 +548,17 @@ serve(async (req) => {
       .eq('id', table_id)
 
     console.log(`[apollo-collect-more] Added ${contactsToAdd.length} rows to table ${table_id}. New count: ${newRowCount}`)
+
+    // Deduct credits for the rows added
+    await logFlatRateCostEvent(
+      serviceClient,
+      user.id,
+      orgId,
+      'apollo',
+      'apollo-collect-more',
+      contactsToAdd.length * 0.3,
+      'apollo_search',
+    )
 
     // 12. Optional auto-enrichment
     if (auto_enrich?.email && columnKeyToId['email']) {

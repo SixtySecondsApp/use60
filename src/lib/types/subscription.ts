@@ -2,7 +2,8 @@
 // TypeScript types for subscription management
 
 // Plan tier identifiers
-export type PlanTier = 'starter' | 'growth' | 'team' | 'free';
+export type PlanTier = 'basic' | 'pro' | 'trial' | 'cancelled';
+// Legacy tiers (deprecated): 'starter' | 'growth' | 'team' | 'free'
 
 // Subscription status
 export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'paused';
@@ -17,7 +18,11 @@ export interface PlanFeatures {
   api_access: boolean;
   custom_branding: boolean;
   priority_support: boolean;
-  [key: string]: boolean;
+  bundled_credits: number;
+  webhooks: boolean;
+  advanced_analytics: boolean;
+  coaching_digests: boolean;
+  [key: string]: boolean | number;
 }
 
 // Subscription plan from database
@@ -100,6 +105,18 @@ export interface TrialStatus {
   startedAt: Date | null;
   hasExpired: boolean;
   hasPaymentMethod: boolean;
+  meetingsUsed: number;
+  meetingsLimit: number;
+  meetingsRemaining: number;
+}
+
+export interface SubscriptionCreditState {
+  subscriptionCreditsBalance: number;
+  subscriptionCreditsExpiry: string | null;
+  onboardingCreditsBalance: number;
+  onboardingComplete: boolean;
+  packCreditsBalance: number;
+  totalBalance: number;
 }
 
 // Usage limits
@@ -188,7 +205,8 @@ export interface SubscriptionState {
 // API request/response types
 export interface CreateCheckoutSessionRequest {
   org_id: string;
-  plan_id: string;
+  plan_id?: string;
+  plan_slug?: 'basic' | 'pro';
   billing_cycle?: BillingCycle;
   success_url?: string;
   cancel_url?: string;
@@ -283,19 +301,20 @@ export function getPricingDisplayInfo(plan: SubscriptionPlan): PricingDisplayInf
 // Helper function to get tier from plan slug
 export function getTierFromSlug(slug: string): PlanTier {
   const tierMap: Record<string, PlanTier> = {
-    free: 'free',
-    starter: 'starter',
-    growth: 'growth',
-    team: 'team',
-    enterprise: 'team', // Map enterprise to team
-    pro: 'growth', // Map pro to growth
+    basic: 'basic',
+    pro: 'pro',
+    free: 'basic', // Legacy mapping
+    starter: 'basic',
+    growth: 'pro',
+    team: 'pro',
+    enterprise: 'pro',
   };
-  return tierMap[slug.toLowerCase()] || 'free';
+  return tierMap[slug.toLowerCase()] || 'basic';
 }
 
 // Helper function to check if plan tier is higher
 export function isTierHigher(current: PlanTier, required: PlanTier): boolean {
-  const tierOrder: PlanTier[] = ['free', 'starter', 'growth', 'team'];
+  const tierOrder: PlanTier[] = ['trial', 'cancelled', 'basic', 'pro'];
   return tierOrder.indexOf(current) >= tierOrder.indexOf(required);
 }
 

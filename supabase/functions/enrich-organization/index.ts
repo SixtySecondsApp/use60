@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/corsHelper.ts";
 import { getAuthContext, requireOrgRole } from "../_shared/edgeAuth.ts";
+import { logAICostEvent, checkCreditBalance } from "../_shared/costTracking.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -16,10 +17,7 @@ const GEMINI_API_KEY =
   Deno.env.get("GOOGLE_GEMINI_API_KEY") ??
   "";
 
-const JSON_HEADERS = {
-  ...corsHeaders,
-  "Content-Type": "application/json",
-};
+// JSON_HEADERS is computed per-request in the serve handler using getCorsHeaders(req)
 
 type EnrichOrganizationRequest = {
   orgId: string;
@@ -266,9 +264,11 @@ function pickIfMissingOrForce(
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
+
+  const cors = getCorsHeaders(req);
+  const JSON_HEADERS = { ...cors, "Content-Type": "application/json" };
 
   try {
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -359,6 +359,15 @@ serve(async (req) => {
           error: "Unable to infer a company domain from input/user email",
         }),
         { status: 400, headers: JSON_HEADERS },
+      );
+    }
+
+    // Check credit balance before Gemini enrichment
+    const creditCheck = await checkCreditBalance(supabase as any, orgId);
+    if (!creditCheck.allowed) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Insufficient credits", message: creditCheck.message }),
+        { status: 402, headers: JSON_HEADERS },
       );
     }
 
@@ -478,6 +487,9 @@ serve(async (req) => {
         { status: 500, headers: JSON_HEADERS },
       );
     }
+
+    // Log AI cost event for Gemini enrichment call (estimated tokens)
+    logAICostEvent(supabase as any, auth.userId!, orgId, 'gemini', GEMINI_MODEL, 500, 400, 'research_enrichment').catch(() => {});
 
     // Optionally update user bio
     let userBioUpdated = false;

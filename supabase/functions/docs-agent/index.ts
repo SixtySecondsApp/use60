@@ -28,6 +28,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.32.1';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts';
 
 // =============================================================================
 // Configuration
@@ -310,7 +311,7 @@ async function runDocsAgent(
   writer: WritableStreamDefaultWriter,
   encoder: TextEncoder,
   serviceClient: ReturnType<typeof createClient>
-): Promise<number> {
+): Promise<{ iterations: number; inputTokens: number; outputTokens: number }> {
   const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
   // Build messages array from conversation history + new message
@@ -324,6 +325,8 @@ async function runDocsAgent(
 
   let iteration = 0;
   let lastStopReason = '';
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   // Agentic loop — max 8 iterations for docs Q&A
   while (iteration < MAX_ITERATIONS) {
@@ -338,6 +341,8 @@ async function runDocsAgent(
     });
 
     lastStopReason = response.stop_reason || '';
+    totalInputTokens += response.usage?.input_tokens || 0;
+    totalOutputTokens += response.usage?.output_tokens || 0;
 
     // Stream text blocks token by token (in chunks for speed)
     for (const block of response.content) {
@@ -423,6 +428,9 @@ async function runDocsAgent(
       ],
     });
 
+    totalInputTokens += finalResponse.usage?.input_tokens || 0;
+    totalOutputTokens += finalResponse.usage?.output_tokens || 0;
+
     for (const block of finalResponse.content) {
       if (block.type === 'text') {
         for (let i = 0; i < block.text.length; i += 10) {
@@ -433,7 +441,7 @@ async function runDocsAgent(
     }
   }
 
-  return iteration;
+  return { iterations: iteration, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
 }
 
 // =============================================================================
@@ -502,19 +510,56 @@ serve(async (req: Request) => {
     // Create service-role Supabase client for vector search (bypasses RLS for the RPC)
     const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Validate JWT and get userId/orgId for credit tracking
+    const userClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user: authedUser } } = await userClient.auth.getUser();
+    const authedUserId = authedUser?.id ?? null;
+
+    let authedOrgId: string | null = null;
+    if (authedUserId) {
+      const { data: membership } = await serviceClient
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', authedUserId)
+        .limit(1)
+        .maybeSingle();
+      authedOrgId = membership?.org_id ?? null;
+    }
+
+    // Credit balance check (pre-flight)
+    if (authedOrgId) {
+      const balanceCheck = await checkCreditBalance(serviceClient, authedOrgId);
+      if (!balanceCheck.allowed) {
+        return new Response(
+          JSON.stringify({ error: 'Insufficient credits. Please top up to continue.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Create SSE stream
     const { readable, writer, encoder } = createSSEStream();
 
     // Start async processing — fire and forget so we can return the stream immediately
     (async () => {
       try {
-        const iterations = await runDocsAgent(
+        const { iterations, inputTokens, outputTokens } = await runDocsAgent(
           message.trim(),
           conversationHistory || [],
           writer,
           encoder,
           serviceClient
         );
+
+        // Log AI cost event after agent completes
+        if (authedUserId && authedOrgId) {
+          await logAICostEvent(
+            serviceClient, authedUserId, authedOrgId, 'anthropic', MODEL,
+            inputTokens, outputTokens, 'copilot_chat'
+          );
+        }
 
         await sendSSE(writer, encoder, 'done', { iterations });
       } catch (err) {

@@ -5,7 +5,7 @@
  * Allows configuration of notification features, channel selection, and user mappings.
  */
 
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,6 +53,9 @@ import {
   Swords,
   Pin,
   Send,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 import { SlackChannelSelector } from '@/components/settings/SlackChannelSelector';
@@ -149,6 +152,127 @@ export const AGENT_ALERT_CATEGORIES = [
   { key: 'agent_alert_default' as SlackFeature, label: 'Default (fallback)', icon: Pin, keywords: 'All other detected intents' },
 ];
 
+function SlackStatusGrid({
+  notificationSettings,
+  features,
+}: {
+  notificationSettings: SlackNotificationSettings[] | undefined;
+  features: typeof FEATURES;
+}) {
+  const settingsByFeature = new Map<string, SlackNotificationSettings>();
+  (notificationSettings || []).forEach((s) => settingsByFeature.set(s.feature, s));
+
+  const getDestinationText = (s: SlackNotificationSettings | undefined) => {
+    if (!s?.is_enabled) return 'Off';
+    const method = s.delivery_method || 'channel';
+    if (method === 'dm') return 'DM';
+    if (method === 'both') return s.channel_name ? `#${s.channel_name} + DM` : 'Channel + DM';
+    return s.channel_name ? `#${s.channel_name}` : 'Channel';
+  };
+
+  const getAlertChannelText = (s: SlackNotificationSettings | undefined) => {
+    if (!s?.channel_id) return 'Not set';
+    return s.channel_name ? `#${s.channel_name}` : s.channel_id;
+  };
+
+  // Count configured items
+  const featuresConfigured = features.filter((f) => settingsByFeature.get(f.key)?.is_enabled).length;
+  const alertsConfigured = AGENT_ALERT_CATEGORIES.filter((cat) => !!settingsByFeature.get(cat.key)?.channel_id).length;
+  const totalConfigured = featuresConfigured + alertsConfigured;
+  const totalItems = features.length + AGENT_ALERT_CATEGORIES.length;
+
+  const [expanded, setExpanded] = useState(true);
+
+  // Auto-collapse when everything is configured
+  const prevTotalRef = useRef(totalConfigured);
+  useEffect(() => {
+    if (totalConfigured > prevTotalRef.current && totalConfigured === totalItems) {
+      setExpanded(false);
+    }
+    prevTotalRef.current = totalConfigured;
+  }, [totalConfigured, totalItems]);
+
+  return (
+    <Card className="mb-4">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-accent/30 transition-colors rounded-t-lg"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">Configuration Status</span>
+          <Badge variant={totalConfigured === totalItems ? 'default' : 'secondary'} className="text-xs">
+            {totalConfigured}/{totalItems} configured
+          </Badge>
+        </div>
+        {expanded ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
+
+      {expanded && (
+        <CardContent className="px-4 pb-4 pt-0">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Features section */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Features
+                <span className="ml-1.5 normal-case tracking-normal font-normal">
+                  ({featuresConfigured}/{features.length})
+                </span>
+              </p>
+              <div className="space-y-1.5">
+                {features.map((f) => {
+                  const s = settingsByFeature.get(f.key);
+                  const enabled = s?.is_enabled ?? false;
+                  const Icon = f.icon;
+                  return (
+                    <div key={f.key} className="flex items-center gap-2 text-xs">
+                      <span className={cn('h-2 w-2 rounded-full shrink-0', enabled ? 'bg-green-500' : 'bg-muted-foreground/30')} />
+                      <Icon className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className="font-medium">{f.title}</span>
+                      <ChevronRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                      <span className="text-muted-foreground truncate">{getDestinationText(s)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Agent Alerts section — spans 2 columns on lg */}
+            <div className="lg:col-span-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Agent Alerts
+                <span className="ml-1.5 normal-case tracking-normal font-normal">
+                  ({alertsConfigured}/{AGENT_ALERT_CATEGORIES.length})
+                </span>
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                {AGENT_ALERT_CATEGORIES.map((cat) => {
+                  const s = settingsByFeature.get(cat.key);
+                  const hasChannel = !!s?.channel_id;
+                  const Icon = cat.icon;
+                  return (
+                    <div key={cat.key} className="flex items-center gap-2 text-xs">
+                      <span className={cn('h-2 w-2 rounded-full shrink-0', hasChannel ? 'bg-green-500' : 'bg-muted-foreground/30')} />
+                      <Icon className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className="font-medium truncate">{cat.label}</span>
+                      <ChevronRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                      <span className="text-muted-foreground truncate">{getAlertChannelText(s)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 function FeatureSettingsCard({
   feature,
   settings,
@@ -169,6 +293,7 @@ function FeatureSettingsCard({
   const Icon = feature.icon;
   const { symbol } = useOrgMoney();
   const isEnabled = settings?.is_enabled ?? false;
+  const [expanded, setExpanded] = useState(false);
   const deliveryMethod = settings?.delivery_method || (feature.defaultDM ? 'dm' : 'channel');
   const sendToChannel = deliveryMethod === 'channel' || deliveryMethod === 'both';
   const sendToDm = deliveryMethod === 'dm' || deliveryMethod === 'both';
@@ -192,17 +317,36 @@ function FeatureSettingsCard({
 
   return (
     <Card>
-      <CardHeader className="pb-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Icon className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-base">{feature.title}</CardTitle>
-              <CardDescription className="text-sm">{feature.description}</CardDescription>
-            </div>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-primary/10 rounded-lg shrink-0">
+            <Icon className="h-4 w-4 text-primary" />
           </div>
+          <CardTitle className="text-sm flex-1">{feature.title}</CardTitle>
+          {isEnabled && sendToChannel && (
+            <div className="w-[234px] shrink-0">
+              <SlackChannelSelector
+                value={settings?.channel_id || null}
+                onChange={(channelId, channelName) =>
+                  onUpdate({ channel_id: channelId, channel_name: channelName })
+                }
+              />
+            </div>
+          )}
+          {isEnabled && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs shrink-0"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? (
+                <>Configure <ChevronUp className="ml-1 h-3 w-3" /></>
+              ) : (
+                <>Configure <ChevronDown className="ml-1 h-3 w-3" /></>
+              )}
+            </Button>
+          )}
           <Switch
             checked={isEnabled}
             onCheckedChange={(checked) => onUpdate({ is_enabled: checked })}
@@ -211,21 +355,21 @@ function FeatureSettingsCard({
         </div>
       </CardHeader>
 
-      {isEnabled && (
-        <CardContent className="space-y-4">
+      {isEnabled && expanded && (
+        <CardContent className="space-y-3">
           {feature.supportsDM && (
             <div className="space-y-3">
               <Label>{feature.key === 'daily_digest' ? 'Audience' : 'Delivery Method'}</Label>
               <RadioGroup
                 value={deliveryMethod}
                 onValueChange={(value) => onUpdate({ delivery_method: value as 'channel' | 'dm' | 'both' })}
-                className={`grid gap-4 ${feature.supportsBothDelivery ? 'grid-cols-3' : 'grid-cols-2'}`}
+                className={`grid gap-3 ${feature.supportsBothDelivery ? 'grid-cols-3' : 'grid-cols-2'}`}
               >
                 <div>
                   <RadioGroupItem value="channel" id={`${feature.key}-channel`} className="peer sr-only" />
                   <Label
                     htmlFor={`${feature.key}-channel`}
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
                   >
                     <Users className="mb-2 h-5 w-5" />
                     <span className="text-sm font-medium">Team Channel</span>
@@ -238,7 +382,7 @@ function FeatureSettingsCard({
                   <RadioGroupItem value="dm" id={`${feature.key}-dm`} className="peer sr-only" />
                   <Label
                     htmlFor={`${feature.key}-dm`}
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
                   >
                     <MessageSquare className="mb-2 h-5 w-5" />
                     <span className="text-sm font-medium">Direct Message</span>
@@ -252,7 +396,7 @@ function FeatureSettingsCard({
                     <RadioGroupItem value="both" id={`${feature.key}-both`} className="peer sr-only" />
                     <Label
                       htmlFor={`${feature.key}-both`}
-                      className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                      className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
                     >
                       <Users className="mb-2 h-5 w-5" />
                       <span className="text-sm font-medium">Both</span>
@@ -282,13 +426,13 @@ function FeatureSettingsCard({
               <RadioGroup
                 value={dmAudience}
                 onValueChange={(value) => onUpdate({ dm_audience: value as any })}
-                className="grid grid-cols-3 gap-4"
+                className="grid grid-cols-3 gap-3"
               >
                 <div>
                   <RadioGroupItem value="owner" id={`${feature.key}-dm-owner`} className="peer sr-only" />
                   <Label
                     htmlFor={`${feature.key}-dm-owner`}
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
                   >
                     <MessageSquare className="mb-2 h-5 w-5" />
                     <span className="text-sm font-medium">Individual</span>
@@ -299,7 +443,7 @@ function FeatureSettingsCard({
                   <RadioGroupItem value="stakeholders" id={`${feature.key}-dm-stakeholders`} className="peer sr-only" />
                   <Label
                     htmlFor={`${feature.key}-dm-stakeholders`}
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
                   >
                     <Users className="mb-2 h-5 w-5" />
                     <span className="text-sm font-medium">Stakeholder</span>
@@ -310,7 +454,7 @@ function FeatureSettingsCard({
                   <RadioGroupItem value="both" id={`${feature.key}-dm-both`} className="peer sr-only" />
                   <Label
                     htmlFor={`${feature.key}-dm-both`}
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
                   >
                     <Users className="mb-2 h-5 w-5" />
                     <span className="text-sm font-medium">Both</span>
@@ -393,18 +537,6 @@ function FeatureSettingsCard({
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {sendToChannel && (
-            <div className="space-y-2">
-              <Label>Channel</Label>
-              <SlackChannelSelector
-                value={settings?.channel_id || null}
-                onChange={(channelId, channelName) =>
-                  onUpdate({ channel_id: channelId, channel_name: channelName })
-                }
-              />
             </div>
           )}
 
@@ -1117,7 +1249,7 @@ function ProactiveAgentPreferences() {
         Control which AI agent sequences send you notifications.
       </p>
 
-      <div className="space-y-3">
+      <div>
         {SEQUENCE_TYPES.map((seq) => {
           const pref = prefsBySequence.get(seq.key);
           const isEnabled = pref?.is_enabled ?? false;
@@ -1130,73 +1262,57 @@ function ProactiveAgentPreferences() {
           return (
             <div
               key={seq.key}
-              className="flex items-start gap-3 p-3 border rounded-md bg-muted/20"
+              className="flex items-center gap-2 py-2 border-b last:border-b-0"
             >
-              <div className="p-2 bg-primary/10 rounded-lg mt-0.5">
-                <Icon className="h-4 w-4 text-primary" />
-              </div>
+              <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
 
-              <div className="flex-1 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{seq.label}</span>
-                      {source === 'org' && !isOrgDisabled && (
-                        <Badge variant="outline" className="text-xs">
-                          Using org default
-                        </Badge>
-                      )}
-                      {isOrgDisabled && (
-                        <Badge variant="secondary" className="text-xs">
-                          Disabled by admin
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {seq.description}
-                    </p>
-                  </div>
-
-                  <Switch
-                    checked={isEnabled}
-                    onCheckedChange={(checked) => {
-                      updatePref.mutate({
-                        sequenceType: seq.key,
-                        isEnabled: checked,
-                        deliveryChannel,
-                      });
-                    }}
-                    disabled={isOrgDisabled || updatePref.isPending}
-                  />
-                </div>
-
-                {/* Delivery channel selector - only show if enabled */}
-                {isEnabled && !isOrgDisabled && (
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground">Deliver via:</Label>
-                    <Select
-                      value={deliveryChannel}
-                      onValueChange={(value) => {
-                        updatePref.mutate({
-                          sequenceType: seq.key,
-                          isEnabled,
-                          deliveryChannel: value,
-                        });
-                      }}
-                      disabled={updatePref.isPending}
-                    >
-                      <SelectTrigger className="w-[140px] h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="slack">Slack DM</SelectItem>
-                        <SelectItem value="in_app">In-App</SelectItem>
-                        <SelectItem value="both">Both</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+              <span
+                className="text-sm font-medium flex-1 min-w-0"
+                title={seq.description}
+              >
+                {seq.label}
+                {source === 'org' && !isOrgDisabled && (
+                  <Badge variant="outline" className="text-xs ml-1.5">org default</Badge>
                 )}
-              </div>
+                {isOrgDisabled && (
+                  <Badge variant="secondary" className="text-xs ml-1.5">disabled by admin</Badge>
+                )}
+              </span>
+
+              {isEnabled && !isOrgDisabled && (
+                <Select
+                  value={deliveryChannel}
+                  onValueChange={(value) => {
+                    updatePref.mutate({
+                      sequenceType: seq.key,
+                      isEnabled,
+                      deliveryChannel: value,
+                    });
+                  }}
+                  disabled={updatePref.isPending}
+                >
+                  <SelectTrigger className="w-[120px] h-7 text-xs shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="slack">Slack DM</SelectItem>
+                    <SelectItem value="in_app">In-App</SelectItem>
+                    <SelectItem value="both">Both</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+
+              <Switch
+                checked={isEnabled}
+                onCheckedChange={(checked) => {
+                  updatePref.mutate({
+                    sequenceType: seq.key,
+                    isEnabled: checked,
+                    deliveryChannel,
+                  });
+                }}
+                disabled={isOrgDisabled || updatePref.isPending}
+              />
             </div>
           );
         })}
@@ -1394,27 +1510,10 @@ export default function SlackSettings() {
           {/* Features tab — 2-col grid of feature cards (admin only) */}
           {isAdmin && (
             <TabsContent value="features">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
-                {FEATURES.map((feature) => (
-                  <FeatureSettingsCard
-                    key={feature.key}
-                    feature={feature}
-                    settings={getSettingsForFeature(feature.key)}
-                    onUpdate={(updates) => handleUpdateSettings(feature.key, updates)}
-                    onTest={() => handleTestNotification(feature.key)}
-                    isUpdating={updateSettings.isPending}
-                    isTesting={testingFeature === feature.key}
-                    stakeholderOptions={
-                      feature.key === 'deal_rooms' || feature.key === 'meeting_debrief'
-                        ? slackUserOptions
-                        : []
-                    }
-                  />
-                ))}
-              </div>
+              <SlackStatusGrid notificationSettings={notificationSettings} features={FEATURES} />
 
               {/* AI Agent Alerts Section */}
-              <div className="mt-8 space-y-4">
+              <div className="mt-4 space-y-4">
                 <div>
                   <h3 className="text-lg font-semibold text-foreground">AI Agent Alerts</h3>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -1453,7 +1552,7 @@ export default function SlackSettings() {
                           </div>
                         </div>
 
-                        <div className="w-[220px] shrink-0 ml-4">
+                        <div className="w-[286px] shrink-0 ml-4">
                           <SlackChannelSelector
                             value={settings?.channel_id || null}
                             onChange={(channelId, channelName) => {
@@ -1518,17 +1617,98 @@ export default function SlackSettings() {
                   </Button>
                 </div>
               </div>
+
+              {/* Notification Features Section */}
+              <div className="mt-8 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Notification Features</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Configure how meeting debriefs, digests, prep cards, and deal rooms are delivered.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {FEATURES.map((feature) => (
+                    <FeatureSettingsCard
+                      key={feature.key}
+                      feature={feature}
+                      settings={getSettingsForFeature(feature.key)}
+                      onUpdate={(updates) => handleUpdateSettings(feature.key, updates)}
+                      onTest={() => handleTestNotification(feature.key)}
+                      isUpdating={updateSettings.isPending}
+                      isTesting={testingFeature === feature.key}
+                      stakeholderOptions={
+                        feature.key === 'deal_rooms' || feature.key === 'meeting_debrief'
+                          ? slackUserOptions
+                          : []
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
             </TabsContent>
           )}
 
           {/* Personal tab — your Slack link, preferences, proactive agent */}
           <TabsContent value="personal">
+            {/* Non-admin read-only org overview card */}
+            {!isAdmin && (
+              <Card className="mb-4">
+                <CardContent className="p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Org Notification Settings</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Info className="h-3 w-3" />
+                      These settings are managed by your org admin.
+                    </p>
+                  </div>
+                  {/* Feature rows */}
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Features</p>
+                    <div className="space-y-1">
+                      {FEATURES.map((f) => {
+                        const s = notificationSettingsByFeature.get(f.key);
+                        const enabled = s?.is_enabled ?? false;
+                        const method = s?.delivery_method || 'channel';
+                        let destination = 'Off';
+                        if (enabled) {
+                          if (method === 'dm') destination = 'DM';
+                          else if (method === 'both') destination = s?.channel_name ? `#${s.channel_name} + DM` : 'Channel + DM';
+                          else destination = s?.channel_name ? `#${s.channel_name}` : 'Channel';
+                        }
+                        const Icon = f.icon;
+                        return (
+                          <div key={f.key} className="flex items-center gap-2 text-xs">
+                            <span className={cn('h-2 w-2 rounded-full shrink-0', enabled ? 'bg-green-500' : 'bg-muted-foreground/30')} />
+                            <Icon className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span className="font-medium flex-1">{f.title}</span>
+                            <Badge variant={enabled ? 'default' : 'secondary'} className="text-xs px-1.5 py-0 h-4">
+                              {enabled ? 'On' : 'Off'}
+                            </Badge>
+                            <span className="text-muted-foreground">{destination}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {/* Agent Alerts summary */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <Bell className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <span className="font-medium">Agent Alerts</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                    <span className="text-muted-foreground">
+                      {AGENT_ALERT_CATEGORIES.filter(cat => notificationSettingsByFeature.get(cat.key)?.channel_id).length} of {AGENT_ALERT_CATEGORIES.length} alert channels configured
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
               {/* Left column: Slack link + morning brief */}
               <div className="space-y-4">
                 <SlackSelfMapping />
                 <Card>
-                  <CardContent className="pt-5">
+                  <CardContent className="pt-4">
                     <MorningBriefPreferences />
                   </CardContent>
                 </Card>
@@ -1537,55 +1717,17 @@ export default function SlackSettings() {
               {/* Right column: notification + proactive agent prefs */}
               <div className="space-y-4">
                 <Card>
-                  <CardContent className="pt-5">
+                  <CardContent className="pt-4">
                     <NotificationPreferences />
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardContent className="pt-5">
+                  <CardContent className="pt-4">
                     <ProactiveAgentPreferences />
                   </CardContent>
                 </Card>
               </div>
             </div>
-
-            {/* Read-only org summary for regular users */}
-            {!isAdmin && (
-              <div className="mt-4 space-y-3">
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    Org Slack settings are managed by your org owner/admin.
-                    {userRole ? ` Your role: ${userRole}.` : ''}
-                  </AlertDescription>
-                </Alert>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="text-sm">
-                    <span className="font-medium">Org Daily Digest:</span>{' '}
-                    <span className="text-muted-foreground">
-                      {dailyDigestSettings?.is_enabled ? 'Enabled' : 'Disabled'}
-                      {dailyDigestSettings?.delivery_method === 'both'
-                        ? ` | #${dailyDigestSettings?.channel_name || 'channel'} + DM`
-                        : dailyDigestSettings?.delivery_method === 'channel' && dailyDigestSettings?.channel_name
-                          ? ` | #${dailyDigestSettings.channel_name}`
-                          : dailyDigestSettings?.delivery_method === 'dm'
-                            ? ' | DM'
-                            : ''}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Deal Rooms:</span>{' '}
-                    <span className="text-muted-foreground">
-                      {dealRoomSettings?.is_enabled ? 'Enabled' : 'Disabled'}
-                      {dealRoomSettings?.deal_value_threshold
-                        ? ` | ${formatOrgMoney(dealRoomSettings.deal_value_threshold, { maximumFractionDigits: 0 })}+`
-                        : ''}
-                      {dealRoomSettings?.deal_stage_threshold ? ` | ${dealRoomSettings.deal_stage_threshold}` : ''}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
           </TabsContent>
 
           {/* Team Mapping tab (admin only) */}

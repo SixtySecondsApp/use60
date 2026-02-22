@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { executeGeminiSearch } from '../_shared/geminiSearch.ts'
 import { executeExaSearch } from '../_shared/exaSearch.ts'
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -580,6 +581,7 @@ serve(async (req) => {
     )
 
     let orgId: string | null = null
+    let authedUserId: string | null = null
     if (anonClient) {
       const { data: { user }, error: authError } = await anonClient.auth.getUser()
       if (authError || !user) {
@@ -589,6 +591,7 @@ serve(async (req) => {
         // In staging/dev, continue without auth and infer org from profile.
         console.warn('[research-fact-profile] Auth invalid in non-prod, falling back to unauth mode:', authError?.message)
       } else {
+        authedUserId = user.id
         // ------------------------------------------------------------------
         // 2. Org: look up user's organization
         // ------------------------------------------------------------------
@@ -674,6 +677,14 @@ serve(async (req) => {
 
     // === RESEARCH / RETRY ===
     if (action === 'research' || action === 'retry') {
+      // Credit balance check before AI research
+      if (orgId) {
+        const balanceCheck = await checkCreditBalance(serviceClient, orgId)
+        if (!balanceCheck.allowed) {
+          return json({ error: 'Insufficient credits. Please top up to continue.', code: 'INSUFFICIENT_CREDITS' }, 402)
+        }
+      }
+
       let researchDomain = domain
       let companyName: string | null = null
 
@@ -759,6 +770,14 @@ serve(async (req) => {
           // Fallback: analyze with direct Gemini prompt (+ scraped content if available).
           researchData = await analyzeCompany(researchIdentifier, scrapedContent)
           researchMode = 'gemini_direct'
+        }
+
+        // Log AI cost event for research
+        if (orgId && authedUserId) {
+          await logAICostEvent(
+            serviceClient, authedUserId, orgId, 'gemini', GEMINI_MODEL,
+            0, 0, 'research_enrichment'
+          )
         }
 
         // Build research sources

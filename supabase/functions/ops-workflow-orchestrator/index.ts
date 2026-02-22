@@ -31,6 +31,7 @@ import { loadBusinessContext, buildContextPrompt } from '../_shared/businessCont
 import { getUserOrgId } from '../_shared/edgeAuth.ts'
 import { loadAgentTeamConfig } from '../_shared/agentConfig.ts'
 import type { AgentName } from '../_shared/agentConfig.ts'
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts'
 
 // ============================================================================
 // Types
@@ -1045,11 +1046,31 @@ serve(async (req) => {
           const emailSignOff = ctx.emailSignOff || ''
           sseEvent(controller, 'step_complete', { step: 'context', summary: 'Business context loaded' })
 
+          // Credit balance check before AI planning step
+          const balanceCheck = await checkCreditBalance(serviceClient, orgId)
+          if (!balanceCheck.allowed) {
+            sseEvent(controller, 'workflow_complete', {
+              status: 'error',
+              error: 'Insufficient credits. Please top up to continue.',
+              steps: [],
+              duration_ms: 0,
+            })
+            controller.close()
+            return
+          }
+
           // STEP 1: Decompose prompt into skill plan (multi-agent with fallback)
           sseEvent(controller, 'step_start', { step: 'planning', label: 'Analyzing your request', agent: 'orchestrator' })
           const plan = await decomposePromptMultiAgent(
             body.prompt, contextPrompt, body.config, body.clarification_answers, orgId, serviceClient
           )
+
+          // Log AI cost event for planning step
+          await logAICostEvent(
+            serviceClient, user.id, orgId, 'anthropic', 'claude-haiku-4-5-20251001',
+            0, 0, 'task_execution'
+          )
+
           sseEvent(controller, 'plan_created', { plan })
 
           // Check for clarifying questions

@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { createConcurrencyLimiter, fetchWithRetry } from '../_shared/rateLimiter.ts'
+import { logFlatRateCostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
 
 /**
  * apollo-org-enrich — Enrich Ops table rows with Apollo Organization data.
@@ -197,6 +198,15 @@ serve(async (req: Request) => {
       )
     }
 
+    // Credit balance pre-flight check
+    const balanceCheck = await checkCreditBalance(serviceClient, orgId)
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
     // 3. Get all columns for key mapping
     const { data: allColumns } = await serviceClient
       .from('dynamic_table_columns')
@@ -380,6 +390,19 @@ serve(async (req: Request) => {
         }),
       ),
     )
+
+    // Deduct credits for enrichment API calls made
+    if (stats.enriched > 0) {
+      await logFlatRateCostEvent(
+        serviceClient,
+        user.id,
+        orgId,
+        'apollo',
+        'apollo-org-enrich',
+        stats.enriched * 0.3,
+        'apollo_enrichment',
+      )
+    }
 
     return new Response(
       JSON.stringify({ processed: rows.length, ...stats }),
