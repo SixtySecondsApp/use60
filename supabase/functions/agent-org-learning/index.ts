@@ -1,18 +1,3 @@
-/**
- * agent-org-learning (CTI-006)
- *
- * Cross-rep pattern analysis for org-wide learning. Aggregates coaching data,
- * competitive intelligence, and deal outcomes into anonymised insights that
- * improve individual coaching without exposing individual rep data.
- *
- * Two modes:
- *   1. analyse — weekly batch: aggregate all org data into org_learning_insights
- *   2. query   — on-demand: return active insights for a specific rep's coaching context
- *
- * Auth: accepts CRON_SECRET or service-role Bearer token.
- * Deploy: npx supabase functions deploy agent-org-learning --project-ref <ref> --no-verify-jwt
- */
-
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
@@ -22,30 +7,23 @@ import {
   jsonResponse,
 } from '../_shared/corsHelper.ts';
 
-// =============================================================================
-// Config
-// =============================================================================
-
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') || '';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const MIN_TEAM_SIZE = 5;
 const MIN_SCORED_MEETINGS = 10;
 const MIN_CLOSED_DEALS = 20;
-
-// =============================================================================
-// Main Handler
-// =============================================================================
 
 serve(async (req: Request) => {
   const preflightResponse = handleCorsPreflightRequest(req);
   if (preflightResponse) return preflightResponse;
 
   // Auth check
-  const isCron = verifyCronSecret(req);
-  const isService = isServiceRoleAuth(req);
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  const isCron = verifyCronSecret(req, cronSecret);
+  const authHeader = req.headers.get('Authorization');
+  const isService = isServiceRoleAuth(authHeader, SUPABASE_SERVICE_ROLE_KEY);
   if (!isCron && !isService) {
-    return errorResponse(req, 401, 'Unauthorized');
+    return errorResponse('Unauthorized', req, 401);
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -59,23 +37,22 @@ serve(async (req: Request) => {
     if (mode === 'analyse' || mode === 'analyze') {
       if (org_id) {
         const result = await analyseOrg(supabase, org_id);
-        return jsonResponse(req, result);
+        return jsonResponse(result, req);
       }
-      // Batch: all orgs
       const result = await analyseBatch(supabase);
-      return jsonResponse(req, result);
+      return jsonResponse(result, req);
     }
 
     if (mode === 'query') {
       const { user_id } = body;
       const result = await queryInsights(supabase, org_id, user_id);
-      return jsonResponse(req, result);
+      return jsonResponse(result, req);
     }
 
-    return errorResponse(req, 400, 'Invalid mode. Use "analyse" or "query".');
+    return errorResponse('Invalid mode. Use "analyse" or "query".', req, 400);
   } catch (err) {
     console.error('[agent-org-learning] Error:', err);
-    return errorResponse(req, 500, String(err));
+    return errorResponse(String(err), req, 500);
   }
 });
 
@@ -84,23 +61,21 @@ serve(async (req: Request) => {
 // =============================================================================
 
 async function analyseBatch(supabase: any) {
-  // Find orgs with enough team members
   const { data: orgMembers } = await supabase
-    .from('organization_members')
-    .select('organization_id')
-    .neq('role', 'viewer');
+    .from('organization_memberships')
+    .select('org_id')
+    .neq('role', 'readonly');
 
   if (!orgMembers || orgMembers.length === 0) {
     return { orgs_processed: 0, message: 'No orgs found' };
   }
 
-  // Count members per org
-  const orgCounts = new Map<string, number>();
+  const orgCounts: Record<string, number> = {};
   for (const m of orgMembers) {
-    orgCounts.set(m.organization_id, (orgCounts.get(m.organization_id) || 0) + 1);
+    orgCounts[m.org_id] = (orgCounts[m.org_id] || 0) + 1;
   }
 
-  const eligibleOrgs = [...orgCounts.entries()]
+  const eligibleOrgs = Object.entries(orgCounts)
     .filter(([, count]) => count >= MIN_TEAM_SIZE)
     .map(([orgId]) => orgId);
 
@@ -127,17 +102,15 @@ async function analyseBatch(supabase: any) {
 async function analyseOrg(supabase: any, orgId: string) {
   console.log(`[agent-org-learning] Analysing org ${orgId}`);
 
-  // Check minimum team size
   const { count: memberCount } = await supabase
-    .from('organization_members')
+    .from('organization_memberships')
     .select('user_id', { count: 'exact', head: true })
-    .eq('organization_id', orgId);
+    .eq('org_id', orgId);
 
   if ((memberCount || 0) < MIN_TEAM_SIZE) {
     return { skipped: true, reason: `Team size ${memberCount} < minimum ${MIN_TEAM_SIZE}` };
   }
 
-  // Fetch coaching progression for all users in org (last 8 weeks)
   const eightWeeksAgo = new Date(Date.now() - 56 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const { data: progressionData } = await supabase
     .from('coaching_skill_progression')
@@ -146,7 +119,6 @@ async function analyseOrg(supabase: any, orgId: string) {
     .gte('week_start', eightWeeksAgo)
     .order('week_start', { ascending: false });
 
-  // Fetch closed deals for correlation
   const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const { data: closedDeals } = await supabase
     .from('deals')
@@ -155,15 +127,18 @@ async function analyseOrg(supabase: any, orgId: string) {
     .gte('updated_at', threeMonthsAgo)
     .in('status', ['closed_won', 'closed_lost']);
 
-  // Fetch competitive data
   const { data: competitiveData } = await supabase
     .from('competitive_mentions')
     .select('deal_id, competitor_name, category, strengths_mentioned, weaknesses_mentioned, deal_outcome')
     .eq('org_id', orgId)
     .gte('mention_date', threeMonthsAgo);
 
-  const totalScoredMeetings = (progressionData || []).reduce((s: number, p: any) => s + (p.meetings_analysed || 0), 0);
-  const totalClosedDeals = (closedDeals || []).length;
+  const progression = progressionData || [];
+  const deals = closedDeals || [];
+  const mentions = competitiveData || [];
+
+  const totalScoredMeetings = progression.reduce((s: number, p: any) => s + (p.meetings_analysed || 0), 0);
+  const totalClosedDeals = deals.length;
 
   if (totalScoredMeetings < MIN_SCORED_MEETINGS && totalClosedDeals < MIN_CLOSED_DEALS) {
     return {
@@ -172,26 +147,20 @@ async function analyseOrg(supabase: any, orgId: string) {
     };
   }
 
-  // Generate insights
-  const insights = [];
+  const insights: any[] = [];
 
-  // 1. Winning talk patterns — compare top performers vs others
-  const winnerInsight = analyseWinningPatterns(progressionData || [], closedDeals || []);
+  const winnerInsight = analyseWinningPatterns(progression, deals);
   if (winnerInsight) insights.push(winnerInsight);
 
-  // 2. Optimal cadence — meeting frequency vs close rate
-  const cadenceInsight = analyseCadence(closedDeals || []);
+  const cadenceInsight = analyseCadence(deals);
   if (cadenceInsight) insights.push(cadenceInsight);
 
-  // 3. Competitive positioning — what works against competitors
-  const competitiveInsight = analyseCompetitivePositioning(competitiveData || []);
+  const competitiveInsight = analyseCompetitivePositioning(mentions);
   if (competitiveInsight) insights.push(competitiveInsight);
 
-  // 4. Discovery depth correlation with wins
-  const discoveryInsight = analyseDiscoveryCorrelation(progressionData || [], closedDeals || []);
+  const discoveryInsight = analyseDiscoveryCorrelation(progression);
   if (discoveryInsight) insights.push(discoveryInsight);
 
-  // Supersede previous insights of same types
   for (const insight of insights) {
     await supabase
       .from('org_learning_insights')
@@ -207,7 +176,7 @@ async function analyseOrg(supabase: any, orgId: string) {
   }
 
   console.log(`[agent-org-learning] Generated ${insights.length} insights for org ${orgId}`);
-  return { insights_generated: insights.length, insights: insights.map(i => i.title) };
+  return { insights_generated: insights.length, insights: insights.map((i: any) => i.title) };
 }
 
 // =============================================================================
@@ -217,50 +186,48 @@ async function analyseOrg(supabase: any, orgId: string) {
 function analyseWinningPatterns(progression: any[], deals: any[]) {
   if (progression.length === 0 || deals.length === 0) return null;
 
-  // Group deals by owner
-  const winsByUser = new Map<string, number>();
-  const dealsByUser = new Map<string, number>();
+  const winsByUser: Record<string, number> = {};
+  const dealsByUser: Record<string, number> = {};
   for (const deal of deals) {
-    dealsByUser.set(deal.owner_id, (dealsByUser.get(deal.owner_id) || 0) + 1);
+    dealsByUser[deal.owner_id] = (dealsByUser[deal.owner_id] || 0) + 1;
     if (deal.status === 'closed_won') {
-      winsByUser.set(deal.owner_id, (winsByUser.get(deal.owner_id) || 0) + 1);
+      winsByUser[deal.owner_id] = (winsByUser[deal.owner_id] || 0) + 1;
     }
   }
 
-  // Calculate win rates
-  const userWinRates = [...dealsByUser.entries()]
+  const userWinRates = Object.entries(dealsByUser)
     .filter(([, count]) => count >= 3)
     .map(([userId, total]) => ({
       userId,
-      winRate: (winsByUser.get(userId) || 0) / total,
+      winRate: (winsByUser[userId] || 0) / total,
       total,
     }))
     .sort((a, b) => b.winRate - a.winRate);
 
   if (userWinRates.length < 2) return null;
 
-  // Compare top performers' coaching metrics to others
   const topPerformers = userWinRates.slice(0, Math.ceil(userWinRates.length / 3));
   const topUserIds = new Set(topPerformers.map(p => p.userId));
 
-  const topMetrics = progression.filter(p => topUserIds.has(p.user_id));
-  const otherMetrics = progression.filter(p => !topUserIds.has(p.user_id));
+  const topMetrics = progression.filter((p: any) => topUserIds.has(p.user_id));
+  const otherMetrics = progression.filter((p: any) => !topUserIds.has(p.user_id));
 
   if (topMetrics.length === 0 || otherMetrics.length === 0) return null;
 
+  const avg = (arr: any[], key: string) => arr.reduce((s: number, m: any) => s + (m[key] || 0), 0) / arr.length;
+
   const avgTop = {
-    talk_ratio: topMetrics.reduce((s, m) => s + (m.talk_ratio || 0), 0) / topMetrics.length,
-    question_quality: topMetrics.reduce((s, m) => s + (m.question_quality_score || 0), 0) / topMetrics.length,
-    discovery_depth: topMetrics.reduce((s, m) => s + (m.discovery_depth_score || 0), 0) / topMetrics.length,
+    talk_ratio: avg(topMetrics, 'talk_ratio'),
+    question_quality: avg(topMetrics, 'question_quality_score'),
+    discovery_depth: avg(topMetrics, 'discovery_depth_score'),
   };
 
   const avgOther = {
-    talk_ratio: otherMetrics.reduce((s, m) => s + (m.talk_ratio || 0), 0) / otherMetrics.length,
-    question_quality: otherMetrics.reduce((s, m) => s + (m.question_quality_score || 0), 0) / otherMetrics.length,
-    discovery_depth: otherMetrics.reduce((s, m) => s + (m.discovery_depth_score || 0), 0) / otherMetrics.length,
+    talk_ratio: avg(otherMetrics, 'talk_ratio'),
+    question_quality: avg(otherMetrics, 'question_quality_score'),
+    discovery_depth: avg(otherMetrics, 'discovery_depth_score'),
   };
 
-  // Find the biggest differentiator
   const diffs = [
     { metric: 'talk ratio', diff: Math.abs(avgTop.talk_ratio - avgOther.talk_ratio), topVal: avgTop.talk_ratio, otherVal: avgOther.talk_ratio },
     { metric: 'question quality', diff: Math.abs(avgTop.question_quality - avgOther.question_quality), topVal: avgTop.question_quality, otherVal: avgOther.question_quality },
@@ -270,10 +237,13 @@ function analyseWinningPatterns(progression: any[], deals: any[]) {
   const topDiff = diffs[0];
   if (topDiff.diff < 0.05) return null;
 
+  const fmtTop = topDiff.metric === 'talk ratio' ? Math.round(topDiff.topVal) + '%' : Math.round(topDiff.topVal * 100) + '%';
+  const fmtOther = topDiff.metric === 'talk ratio' ? Math.round(topDiff.otherVal) + '%' : Math.round(topDiff.otherVal * 100) + '%';
+
   return {
     insight_type: 'stage_best_practice',
     title: `Top performers differentiate on ${topDiff.metric}`,
-    description: `Your top-performing reps average ${topDiff.metric === 'talk ratio' ? Math.round(topDiff.topVal) + '%' : Math.round(topDiff.topVal * 100) + '%'} on ${topDiff.metric}, compared to ${topDiff.metric === 'talk ratio' ? Math.round(topDiff.otherVal) + '%' : Math.round(topDiff.otherVal * 100) + '%'} for others. This is the biggest coaching differentiator on your team.`,
+    description: `Your top-performing reps average ${fmtTop} on ${topDiff.metric}, compared to ${fmtOther} for others. This is the biggest coaching differentiator on your team.`,
     supporting_data: { avgTop, avgOther, biggest_differentiator: topDiff.metric, sample_top: topMetrics.length, sample_other: otherMetrics.length },
     confidence: Math.min(0.95, 0.5 + (progression.length / 100)),
     sample_size: progression.length,
@@ -295,7 +265,7 @@ function analyseCadence(deals: any[]) {
   return {
     insight_type: 'optimal_cadence',
     title: `Team win rate: ${Math.round(winRate * 100)}% (last 90 days)`,
-    description: `Your team closed ${wins.length} deals (avg value: $${Math.round(avgWinValue).toLocaleString()}) and lost ${losses.length} (avg value: $${Math.round(avgLossValue).toLocaleString()}) in the last 90 days. Win rate is ${Math.round(winRate * 100)}%.`,
+    description: `Your team closed ${wins.length} deals (avg value: $${Math.round(avgWinValue)}) and lost ${losses.length} (avg value: $${Math.round(avgLossValue)}) in the last 90 days. Win rate is ${Math.round(winRate * 100)}%.`,
     supporting_data: { wins: wins.length, losses: losses.length, win_rate: winRate, avg_win_value: avgWinValue, avg_loss_value: avgLossValue },
     confidence: Math.min(0.9, 0.4 + (deals.length / 50)),
     sample_size: deals.length,
@@ -305,22 +275,20 @@ function analyseCadence(deals: any[]) {
 function analyseCompetitivePositioning(mentions: any[]) {
   if (mentions.length < 5) return null;
 
-  // Group by competitor
-  const competitorStats = new Map<string, { wins: number; losses: number; total: number; strengths: string[]; weaknesses: string[] }>();
+  const competitorStats: Record<string, { wins: number; losses: number; total: number; strengths: string[]; weaknesses: string[] }> = {};
   for (const m of mentions) {
     const name = m.competitor_name?.toLowerCase();
     if (!name) continue;
-    const stats = competitorStats.get(name) || { wins: 0, losses: 0, total: 0, strengths: [], weaknesses: [] };
+    if (!competitorStats[name]) competitorStats[name] = { wins: 0, losses: 0, total: 0, strengths: [], weaknesses: [] };
+    const stats = competitorStats[name];
     stats.total++;
     if (m.deal_outcome === 'won') stats.wins++;
     if (m.deal_outcome === 'lost') stats.losses++;
-    stats.strengths.push(...(m.strengths_mentioned || []));
-    stats.weaknesses.push(...(m.weaknesses_mentioned || []));
-    competitorStats.set(name, stats);
+    if (Array.isArray(m.strengths_mentioned)) stats.strengths.push(...m.strengths_mentioned);
+    if (Array.isArray(m.weaknesses_mentioned)) stats.weaknesses.push(...m.weaknesses_mentioned);
   }
 
-  // Find most-mentioned competitor with enough data
-  const sorted = [...competitorStats.entries()]
+  const sorted = Object.entries(competitorStats)
     .filter(([, s]) => s.total >= 3)
     .sort((a, b) => b[1].total - a[1].total);
 
@@ -329,28 +297,29 @@ function analyseCompetitivePositioning(mentions: any[]) {
   const [topCompetitor, stats] = sorted[0];
   const winRate = stats.wins + stats.losses > 0 ? stats.wins / (stats.wins + stats.losses) : null;
 
-  // Count common strengths/weaknesses
-  const strengthCounts = new Map<string, number>();
+  const strengthCounts: Record<string, number> = {};
   for (const s of stats.strengths) {
-    strengthCounts.set(s, (strengthCounts.get(s) || 0) + 1);
+    strengthCounts[s] = (strengthCounts[s] || 0) + 1;
   }
-  const topStrengths = [...strengthCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s]) => s);
+  const topStrengths = Object.entries(strengthCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s]) => s);
+
+  const winRateStr = winRate != null ? `, ${Math.round(winRate * 100)}% win rate` : '';
+  const winRateDesc = winRate != null ? `You win ${Math.round(winRate * 100)}% of competitive deals against them.` : '';
 
   return {
     insight_type: 'competitive_positioning',
-    title: `${topCompetitor}: ${stats.total} encounters${winRate != null ? `, ${Math.round(winRate * 100)}% win rate` : ''}`,
-    description: `${topCompetitor} is your most frequent competitor (${stats.total} mentions). ${winRate != null ? `You win ${Math.round(winRate * 100)}% of competitive deals against them.` : ''} Their most cited strengths: ${topStrengths.join(', ') || 'none identified'}.`,
+    title: `${topCompetitor}: ${stats.total} encounters${winRateStr}`,
+    description: `${topCompetitor} is your most frequent competitor (${stats.total} mentions). ${winRateDesc} Their most cited strengths: ${topStrengths.join(', ') || 'none identified'}.`,
     supporting_data: { competitor: topCompetitor, ...stats, win_rate: winRate, top_strengths: topStrengths },
     confidence: Math.min(0.85, 0.4 + (stats.total / 20)),
     sample_size: stats.total,
   };
 }
 
-function analyseDiscoveryCorrelation(progression: any[], deals: any[]) {
+function analyseDiscoveryCorrelation(progression: any[]) {
   if (progression.length < 10) return null;
 
-  // Compute average discovery depth across all reps
-  const avgDiscovery = progression.reduce((s, p) => s + (p.discovery_depth_score || 0), 0) / progression.length;
+  const avgDiscovery = progression.reduce((s: number, p: any) => s + (p.discovery_depth_score || 0), 0) / progression.length;
 
   if (avgDiscovery < 0.1) return null;
 
@@ -369,13 +338,11 @@ function analyseDiscoveryCorrelation(progression: any[], deals: any[]) {
 // =============================================================================
 
 async function queryInsights(supabase: any, orgId: string, userId: string) {
-  // Get active org insights
   const { data: insights } = await supabase.rpc('get_active_org_insights', {
     p_org_id: orgId,
     p_limit: 10,
   });
 
-  // Get this rep's weak areas from latest progression
   const { data: latestProgression } = await supabase
     .from('coaching_skill_progression')
     .select('question_quality_score, objection_handling_score, discovery_depth_score, talk_ratio')
@@ -385,12 +352,10 @@ async function queryInsights(supabase: any, orgId: string, userId: string) {
     .limit(1)
     .maybeSingle();
 
-  // Prioritise insights relevant to rep's weak areas
   const relevantInsights = (insights || []).map((insight: any) => {
     let relevanceScore = insight.confidence || 0.5;
 
     if (latestProgression) {
-      // Boost insights matching rep's weak areas
       if (insight.insight_type === 'discovery_pattern' && (latestProgression.discovery_depth_score || 0) < 0.5) {
         relevanceScore += 0.2;
       }
