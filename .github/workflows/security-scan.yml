@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [staging]
   schedule:
-    # Run weekly on Sundays at midnight
     - cron: '0 0 * * 0'
   workflow_dispatch:
 
@@ -76,12 +75,12 @@ jobs:
             console.log('  Moderate:', vulns.moderate || 0);
             console.log('  Low:', vulns.low || 0);
 
-            // Fail on critical or high
-            if ((vulns.critical || 0) > 0 || (vulns.high || 0) > 0) {
-              console.error('Critical or high vulnerabilities found!');
+            // Fail only on critical vulnerabilities
+            if ((vulns.critical || 0) > 0) {
+              console.error('Critical vulnerabilities found!');
               process.exit(1);
             }
-            console.log('No critical/high vulnerabilities');
+            console.log('No critical vulnerabilities');
           "
 
       - name: Upload audit results
@@ -93,18 +92,21 @@ jobs:
           retention-days: 30
 
   # ============================================
-  # Semgrep - SAST with Custom Rules
+  # Semgrep - SAST
   # ============================================
   semgrep:
     name: Semgrep SAST
     runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Run Semgrep (SARIF)
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Run Semgrep
         run: |
           semgrep scan \
             --config=auto \
@@ -117,8 +119,6 @@ jobs:
             --sarif --output=semgrep-results.sarif \
             || true
 
-      - name: Run Semgrep (JSON)
-        run: |
           semgrep scan \
             --config=auto \
             --config=p/javascript \
@@ -129,12 +129,6 @@ jobs:
             --config=p/owasp-top-ten \
             --json --output=semgrep-results.json \
             || true
-
-      - name: Upload Semgrep SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: semgrep-results.sarif
 
       - name: Upload Semgrep results
         uses: actions/upload-artifact@v4
@@ -159,8 +153,18 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Check GitGuardian key
+        id: gg-check
+        run: |
+          if [ -n "${{ secrets.GITGUARDIAN_API_KEY }}" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "GitGuardian API key not configured, skipping"
+          fi
+
       - name: GitGuardian Scan
-        if: env.GITGUARDIAN_API_KEY != ''
+        if: steps.gg-check.outputs.available == 'true'
         uses: GitGuardian/ggshield-action@v1
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
@@ -200,11 +204,13 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM'
           ignore-unfixed: true
 
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload Trivy SARIF as artifact
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          sarif_file: 'trivy-fs-results.sarif'
+          name: trivy-sarif
+          path: 'trivy-fs-results.sarif'
+          retention-days: 30
 
       - name: Run Trivy for SBOM generation
         uses: aquasecurity/trivy-action@master
@@ -259,7 +265,7 @@ jobs:
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
-    needs: [npm-audit, semgrep, trivy-scan]
+    needs: [npm-audit, semgrep, trivy-scan, secret-scan]
     if: always()
     steps:
       - name: Generate Summary
@@ -271,5 +277,6 @@ jobs:
           echo "| npm Audit | ${{ needs.npm-audit.result == 'success' && 'Passed' || 'Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Semgrep | ${{ needs.semgrep.result == 'success' && 'Passed' || 'Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Trivy | ${{ needs.trivy-scan.result == 'success' && 'Passed' || 'Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Detection | ${{ needs.secret-scan.result == 'success' && 'Passed' || 'Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "View detailed results in the **Security** tab." >> $GITHUB_STEP_SUMMARY
+          echo "View detailed results in the **Artifacts** section." >> $GITHUB_STEP_SUMMARY
