@@ -174,7 +174,7 @@ async function routeToHandler(
     case 'general_chat':
       return handleGeneralChat(intent, anthropicApiKey);
     default:
-      return { text: "I'm not sure how to help with that. Try asking about your deals, pipeline, contacts, or say \"help\" to see what I can do." };
+      return { text: "Unknown command. Type 'help' for available actions." };
   }
 }
 
@@ -192,7 +192,7 @@ async function handleGeneralChat(
 
   // Greetings
   if (/^(?:hi|hello|hey|morning|afternoon|evening|yo|sup)/i.test(lower)) {
-    return { text: "Hey! How can I help? Ask me about your deals, pipeline, or anything sales-related. Type \"help\" to see everything I can do." };
+    return { text: "Hey! What do you need? Ask about deals, pipeline, or type 'help'." };
   }
 
   // Thanks
@@ -200,7 +200,7 @@ async function handleGeneralChat(
     return { text: "Happy to help! Let me know if you need anything else." };
   }
 
-  return { text: "I'm your sales copilot — I can help with deals, pipeline, contacts, drafting emails, and more. Type \"help\" to see the full list." };
+  return { text: "Sales copilot active. Ask about deals, pipeline, contacts, or type 'help'." };
 }
 
 async function getAnthropicKey(supabase: ReturnType<typeof createClient>, orgId: string, userId: string): Promise<string | null> {

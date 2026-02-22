@@ -496,8 +496,13 @@ export const buildActionConfirmation = (data: ActionConfirmationData): SlackMess
 export const buildMeetingDebriefMessage = (data: MeetingDebriefData): SlackMessage => {
   const blocks: SlackBlock[] = [];
 
-  // Header with meeting title
-  blocks.push(header(`🎯 Meeting Debrief: ${truncate(data.meetingTitle, 100)}`));
+  // Header — assertive past-tense
+  blocks.push(header(`✅ Meeting Complete | ${truncate(data.meetingTitle, 100)}`));
+
+  // Evidence line
+  blocks.push(context([
+    `Trigger: ${data.actionItems.length} action item${data.actionItems.length !== 1 ? 's' : ''} detected, ${data.sentiment} sentiment`,
+  ]));
 
   // Key metrics as fields
   blocks.push(sectionWithFields([
@@ -696,6 +701,14 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   blocks.push(header(`📅 Meeting ${timeLabel}`));
   blocks.push(section(`*${truncate(data.meetingTitle, 100)}*\n${userMention}`));
 
+  // Evidence line
+  const evidenceParts: string[] = [`Trigger: Meeting starts ${timeLabel}`];
+  const critRisks = data.riskSignals?.filter(r => r.severity === 'critical' || r.severity === 'high') || [];
+  if (critRisks.length > 0) {
+    evidenceParts.push(`${critRisks.length} deal risk${critRisks.length !== 1 ? 's' : ''} flagged`);
+  }
+  blocks.push(context(evidenceParts));
+
   // Risk Alerts (if critical/high)
   const criticalRisks = data.riskSignals?.filter(r => r.severity === 'critical' || r.severity === 'high') || [];
   if (criticalRisks.length > 0) {
@@ -822,6 +835,11 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   buttonRow.push({ text: '📋 Full Prep', actionId: 'view_meeting', value: data.meetingId, url: `${data.appUrl}/meetings/${data.meetingId}` });
 
   blocks.push(actions(buttonRow.slice(0, 3)));
+
+  // Escape hatch — dismiss
+  blocks.push(actions([
+    { text: 'Dismiss', actionId: 'dismiss_meeting_prep', value: data.meetingId },
+  ]));
 
   // Context
   if (data.attendees.length > 1) {
@@ -4421,8 +4439,8 @@ export interface ReengagementApprovalData {
 export const buildReengagementApprovalMessage = (data: ReengagementApprovalData): SlackMessage => {
   const blocks: SlackBlock[] = [];
 
-  // --- Header ---
-  const headerText = safeHeaderText(`Re-engagement opportunity: ${data.dealName}`);
+  // --- Header — assertive low-tier ---
+  const headerText = safeHeaderText(`💡 Opportunity Spotted | ${data.dealName}`);
   blocks.push(header(headerText));
 
   // --- Deal + contact context ---
@@ -4440,6 +4458,9 @@ export const buildReengagementApprovalMessage = (data: ReengagementApprovalData)
   }
 
   blocks.push(section(safeMrkdwn(contextParts.join(' • '))));
+
+  // --- Evidence ---
+  blocks.push(context([`Trigger: ${truncate(data.signalSummary, 200)}`]));
 
   // --- Signal summary ---
   blocks.push(divider());

@@ -2218,9 +2218,9 @@ The body MUST include proper greeting and sign off with "${userName}" (not "[You
         subject = `Following up on ${meetingTitle}`
         body = `Hi ${recipientName || '[Name]'},
 
-Thank you for taking the time to meet with me on ${meetingDate}. I wanted to follow up on our conversation about ${meetingTitle.replace(/^Meeting with /i, '').replace(/^Call with /i, '')}.${discussionPoints}${actionItemsSection}
+Following up on our ${meetingDate} conversation about ${meetingTitle.replace(/^Meeting with /i, '').replace(/^Call with /i, '')}.${discussionPoints}${actionItemsSection}
 
-Please let me know if you have any questions or if there's anything else I can help with.
+What questions do you have?
 
 Best regards`
       }
@@ -2246,24 +2246,26 @@ Best regards`
 
       // Fallback if no meeting found but user mentioned meeting
       subject = `Following up on our recent conversation`
-      keyPoints = ['Thank them for their time', 'Recap key discussion points', 'Outline next steps']
+      keyPoints = ['Recap key discussion points', 'Outline next steps', 'Clear call to action']
       body = `Hi ${recipientName || '[Name]'},
 
-Thank you for taking the time to speak with me recently. I wanted to follow up on our conversation and ensure we're aligned on the next steps.
+Following up on our recent conversation. Here are the key points and next steps:
 
-I'd love to hear your thoughts on what we discussed. Please let me know if you have any questions or if there's anything else I can help with.
+[Add discussion points]
+
+What questions do you have?
 
 Best regards`
     } else if (isFollowUp && isProposalRelated) {
       subject = `Following up on our proposal`
-      keyPoints = ['Reference the proposal', 'Ask if they have questions', 'Offer to discuss further']
+      keyPoints = ['Reference the proposal', 'Highlight key benefits', 'Clear call to action']
       body = `Hi ${recipientName || '[Name]'},
 
-I wanted to follow up on the proposal I sent over. I hope you've had a chance to review it.
+Following up on the proposal. Key highlights:
 
-Please let me know if you have any questions or would like to discuss any aspect of the proposal in more detail.
+[Add proposal highlights]
 
-Looking forward to hearing from you.
+Happy to walk through any section in detail. When works for a quick call?
 
 Best regards`
     } else if (isFollowUp) {
@@ -2271,11 +2273,11 @@ Best regards`
       keyPoints = ['Reference last interaction', 'State purpose clearly', 'Include call to action']
       body = `Hi ${recipientName || '[Name]'},
 
-I hope this message finds you well. I wanted to follow up on our previous conversation.
+Following up on our last conversation.
 
 [Add context from your last interaction]
 
-Would you have time for a quick call this week to discuss further?
+When works for a quick call this week?
 
 Best regards`
     } else {
@@ -2283,11 +2285,11 @@ Best regards`
       keyPoints = ['Introduce yourself/purpose', 'Provide value proposition', 'Clear call to action']
       body = `Hi ${recipientName || '[Name]'},
 
-I hope this email finds you well.
-
 [State your purpose for reaching out]
 
-I'd love to schedule a brief call to discuss how we might be able to help.
+[Value proposition]
+
+Open to a 15-minute call this week?
 
 Best regards`
     }
@@ -2387,7 +2389,7 @@ Best regards`
           subject: 'Following up',
           body: `Hi [Name],
 
-I hope this message finds you well. I wanted to follow up on our previous conversation.
+Following up on our last conversation.
 
 [Add your message here]
 

@@ -19,7 +19,7 @@ export async function handleActionRequest(
     case 'send_email':
       return handleSendConfirmation(intent);
     default:
-      return { text: "I can help you draft an email, create a task, or schedule a meeting. What would you like to do?" };
+      return { text: "Choose: draft email, create task, or schedule meeting." };
   }
 }
 
@@ -150,8 +150,8 @@ function handleScheduleMeeting(_intent: ClassifiedIntent, queryContext: QueryCon
   return {
     blocks: [
       section(contactName
-        ? `I'd suggest scheduling a meeting with *${contactName}*. Use the calendar in the app to find mutual availability.`
-        : "I can help you think about scheduling, but meeting creation is handled in the app."),
+        ? `Schedule a meeting with *${contactName}* in the app. Use /sixty calendar to check availability.`
+        : "Meeting creation is in the app. Use /sixty calendar to check availability."),
       context(['Use `/sixty calendar` to see your schedule, or ask me "show my meetings this week".']),
     ],
   };

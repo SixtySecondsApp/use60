@@ -144,8 +144,17 @@ export const deliverPatternSlackAdapter: SkillAdapter = {
       const appUrl = Deno.env.get('APP_URL') || APP_URL_FALLBACK;
       const isCritical = patterns.some(p => p.severity === 'critical');
 
+      const topSeverity = patterns.some(p => p.severity === 'critical')
+        ? 'critical'
+        : patterns.some(p => p.severity === 'warning')
+          ? 'warning'
+          : 'info';
+      const headerIcon = severityIcon(topSeverity);
+      const headerLabel = isCritical ? `${headerIcon} Pipeline Alert` : `${headerIcon} Weekly Pipeline Insights`;
+
       const blocks: SlackBlock[] = [
-        header(isCritical ? 'Pipeline Alert' : 'Weekly Pipeline Insights'),
+        header(headerLabel),
+        ctx(`Trigger: ${isCritical ? 'Critical pipeline pattern detected' : 'Scheduled pipeline pattern analysis'}`),
         section(`*${patterns.length} pattern${patterns.length > 1 ? 's' : ''}* detected across your pipeline:`),
         divider(),
       ];

@@ -730,7 +730,7 @@ async function handleDraftFollowupAction(
   // Generate email draft via Claude
   let emailDraft = {
     subject: `Following up — ${dealContext || recipientName}`,
-    body: `Hi ${recipientName || 'there'},\n\nI wanted to follow up on our recent conversation. Looking forward to hearing your thoughts.\n\nBest regards`,
+    body: `Hi ${recipientName || 'there'},\n\nFollowing up on our recent conversation. Here are the key points:\n\n[Add key points]\n\nBest regards`,
   };
 
   try {

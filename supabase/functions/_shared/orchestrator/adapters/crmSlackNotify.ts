@@ -130,11 +130,22 @@ export async function notifySlackApproval(
     appUrl,
   });
 
+  // Inject evidence context block immediately after the header (index 1)
+  const evidenceBlock = {
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: 'Trigger: CRM fields extracted from meeting transcript' }],
+  };
+  const blocksWithEvidence = [
+    message.blocks[0],
+    evidenceBlock,
+    ...message.blocks.slice(1),
+  ];
+
   // --- Send DM ---
   const dmResult = await sendSlackDM({
     botToken,
     slackUserId,
-    blocks: message.blocks,
+    blocks: blocksWithEvidence,
     text: message.text,
   });
 

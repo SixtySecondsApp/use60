@@ -273,7 +273,8 @@ function buildFastReplyMessage(ctx: SignalMessageContext): SlackMessage {
   return {
     text: `Fast reply from ${contactName} — they are engaged!`,
     blocks: [
-      header('Fast Reply Detected'),
+      header(`✅ Engagement Spike | ${contactName}`),
+      context(['Trigger: Reply within 5 minutes of your email']),
       section(
         `:rocket: *${contactName}* replied unusually quickly on ${dealLabel}.\n` +
         `This is a strong buying signal — reach out while engagement is high.`,
@@ -303,7 +304,8 @@ function buildSlowReplyMessage(ctx: SignalMessageContext): SlackMessage {
   return {
     text: `Slow reply from ${contactName} — they may be cooling off.`,
     blocks: [
-      header('Slow Reply Detected'),
+      header(`💡 Cooling Off | ${contactName}`),
+      context([`Trigger: Response time exceeded baseline${avgLabel}`]),
       section(
         `:warning: *${contactName}* took longer than usual to reply` +
         (dealName ? ` on *${dealName}*` : '') +
@@ -336,7 +338,8 @@ function buildForwardDetectedMessage(ctx: SignalMessageContext): SlackMessage {
   return {
     text: `${contactName} forwarded your email — new contacts may be involved.`,
     blocks: [
-      header('Email Forwarded'),
+      header(`✏️ Email Forwarded | ${contactName}`),
+      context(['Trigger: New recipients detected outside your original thread']),
       section(
         `:email: *${contactName}* forwarded an email` +
         (dealName ? ` related to *${dealName}*` : '') +
@@ -365,7 +368,8 @@ function buildMeetingRequestMessage(ctx: SignalMessageContext): SlackMessage {
   return {
     text: `${contactName} wants to schedule a meeting!`,
     blocks: [
-      header('Meeting Request'),
+      header(`✏️ Meeting Request Detected | ${contactName}`),
+      context(['Trigger: Contact explicitly requested a call or meeting']),
       section(
         `:calendar: *${contactName}* is requesting a meeting` +
         (dealName ? ` about *${dealName}*` : '') +
@@ -395,7 +399,8 @@ function buildPricingQuestionMessage(ctx: SignalMessageContext): SlackMessage {
   return {
     text: `${contactName} asked a pricing question — revenue signal!`,
     blocks: [
-      header('Pricing Question'),
+      header(`✏️ Pricing Question | ${contactName}`),
+      context(['Trigger: Contact asked about cost, pricing, or budget']),
       section(
         `:moneybag: *${contactName}* is asking about pricing` +
         (dealName ? ` on *${dealName}*` : '') +
@@ -426,10 +431,13 @@ function buildSilenceDetectedMessage(ctx: SignalMessageContext): SlackMessage {
   const silenceLabel = daysSilent != null ? `${daysSilent} day${daysSilent !== 1 ? 's' : ''}` : 'several days';
   const valueLabel = dealValue != null ? ` ($${dealValue.toLocaleString()})` : '';
 
+  const daysDisplay = daysSilent != null ? `${daysSilent}d` : 'several days';
+
   return {
     text: `No reply from ${contactName} in ${silenceLabel} — risk of going dark.`,
     blocks: [
-      header('Silence Detected — Follow-up Needed'),
+      header(`💡 Gone Quiet | ${contactName} (${daysDisplay})`),
+      context([`Trigger: No reply detected for ${silenceLabel}`]),
       section(
         `:red_circle: No reply from *${contactName}*` +
         (dealName ? ` on *${dealName}*${valueLabel}` : '') +
@@ -471,10 +479,27 @@ function buildGenericSignalMessage(ctx: SignalMessageContext): SlackMessage {
     signal.signal_type === 'competitor_mention' ? ':crossed_swords:' :
     ':bell:';
 
+  const assertiveHeaderMap: Partial<Record<EmailSignalType, string>> = {
+    positive_buying_signal: `✅ Buying Signal | ${contactName}`,
+    competitor_mention: `💡 Competitor Mentioned | ${contactName}`,
+  };
+  const assertiveHeader = assertiveHeaderMap[signal.signal_type] ?? label;
+
+  const triggerMap: Partial<Record<EmailSignalType, string>> = {
+    positive_buying_signal: 'Contact expressed strong interest or intent to move forward',
+    competitor_mention: 'Contact named a competing product or vendor in their reply',
+    objection: 'Contact raised a concern or blocker in their reply',
+    introduction_offer: 'Contact offered to introduce you to another stakeholder',
+    out_of_office: 'Auto-reply indicating contact is unavailable',
+    new_cc_contact: 'A new email address was added to the CC field',
+  };
+  const triggerReason = triggerMap[signal.signal_type] ?? `${label} detected`;
+
   return {
     text: `${label}: ${contactName}${dealName ? ` — ${dealName}` : ''}`,
     blocks: [
-      header(label),
+      header(assertiveHeader),
+      context([`Trigger: ${triggerReason}`]),
       section(
         `${emoji} Signal detected from *${contactName}*` +
         (dealName ? ` on *${dealName}*` : '') + '.',

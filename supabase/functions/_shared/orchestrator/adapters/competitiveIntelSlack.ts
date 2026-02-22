@@ -180,8 +180,16 @@ export const deliverCompetitiveIntelSlackAdapter: SkillAdapter = {
       const appUrl = Deno.env.get('APP_URL') || APP_URL_FALLBACK;
       const competitorNames = [...new Set(mentions.map(m => m.competitor_name))];
 
+      const meetingTitle: string =
+        (state.event.payload?.title as string | undefined) ||
+        (state.event.payload?.meeting_title as string | undefined) ||
+        'Recent call';
+
+      const intelTitle = meetingTitle.length > 80 ? `${meetingTitle.slice(0, 79)}\u2026` : meetingTitle;
+
       const blocks: SlackBlock[] = [
-        header(`Competitor Intel Detected`),
+        header(`💡 Competitor Intel | ${intelTitle}`),
+        ctx('Trigger: Competitor mentioned in meeting transcript'),
         section(`*${competitorNames.length} competitor${competitorNames.length > 1 ? 's' : ''}* mentioned in your recent call:`),
         divider(),
       ];

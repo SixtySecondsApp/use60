@@ -223,7 +223,8 @@ function buildHeatingUpMessage(
   return {
     text: `Deal heating up: ${dealName} — temperature crossed 60%`,
     blocks: [
-      header('Deal Heating Up'),
+      header(`✅ Momentum Rising | ${truncate(dealName, 100)}`),
+      ctx('Trigger: Temperature crossed 60% threshold'),
       section(
         `:fire: *${dealName}*${valueLabel} is gaining momentum.\n` +
         `Temperature crossed *60%* — this deal needs attention now.`
@@ -268,7 +269,8 @@ function buildCoolingDownMessage(
   return {
     text: `Deal cooling down: ${dealName} — temperature dropped below 30%`,
     blocks: [
-      header('Deal Cooling Down'),
+      header(`💡 Deal Cooling | ${truncate(dealName, 100)}`),
+      ctx('Trigger: Temperature dropped below 30% threshold'),
       section(
         `:snowflake: *${dealName}*${valueLabel} is losing heat.\n` +
         `Temperature dropped below *30%* — this deal is at risk of going cold.`

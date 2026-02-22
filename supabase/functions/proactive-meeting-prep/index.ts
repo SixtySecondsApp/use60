@@ -589,7 +589,7 @@ async function sendRelevanceQuestion(
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `You have *${meeting.title}* coming up at ${timeStr}. Would you like me to prepare a brief for this meeting?`,
+          text: `Research brief ready for *${meeting.title}* at ${timeStr}. 3 talking points prepared.`,
         },
       },
       {

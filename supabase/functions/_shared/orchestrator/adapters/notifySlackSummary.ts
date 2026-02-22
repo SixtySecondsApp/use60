@@ -236,7 +236,7 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
           blocks.push(section(changeLines.join('\n')));
         }
 
-        // Add "View CRM Changes" button
+        // Add "View CRM Changes" and "Undo" buttons
         if (deal?.id) {
           blocks.push(actions([
             {
@@ -244,6 +244,11 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
               actionId: 'view_crm_changes',
               value: deal.id,
               url: `${appUrl}/deals/${deal.id}`,
+            },
+            {
+              text: 'Undo',
+              actionId: `undo_crm_update::${deal.id}`,
+              value: deal.id,
             },
           ]));
         }

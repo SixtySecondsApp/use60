@@ -192,10 +192,18 @@ export const pingSlackChannelAdapter: SkillAdapter = {
         });
       }
 
+      const truncatedPhrase = commitmentPhrase.length > 60
+        ? `${commitmentPhrase.slice(0, 59)}\u2026`
+        : commitmentPhrase;
+
       const blocks: unknown[] = [
         {
           type: 'header',
-          text: { type: 'plain_text', text: 'Team Input Needed', emoji: true },
+          text: { type: 'plain_text', text: `✏️ Input Requested | ${truncatedPhrase}`, emoji: true },
+        },
+        {
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: 'Trigger: Commitment detected in meeting transcript' }],
         },
         { type: 'divider' },
         {
