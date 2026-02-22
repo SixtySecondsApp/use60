@@ -30,6 +30,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ActionPolicyGrid, type PolicyValue, type ActionType } from '@/components/agent/ActionPolicyGrid';
 import { UserOverridePermissions } from '@/components/agent/UserOverridePermissions';
+import { ManagerAutonomyControls } from '@/components/settings/ManagerAutonomyControls';
+import { AutonomyProgressionDashboard } from '@/components/settings/AutonomyProgressionDashboard';
 
 // ============================================================================
 // Types
@@ -363,6 +365,28 @@ export default function AutonomySettingsPage() {
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white">User Override Permissions</h2>
               </div>
               <UserOverridePermissions orgId={orgId!} />
+            </section>
+
+            {/* Graduated Autonomy Progression */}
+            <section>
+              <div className="mb-4">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Autonomy Progression</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Track approval patterns and manage graduated autonomy promotions.
+                </p>
+              </div>
+              <AutonomyProgressionDashboard />
+            </section>
+
+            {/* Manager Controls */}
+            <section>
+              <div className="mb-4">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Manager Controls</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Set autonomy ceilings, control auto-promotion eligibility, and view team analytics.
+                </p>
+              </div>
+              <ManagerAutonomyControls />
             </section>
 
             {/* Save Button */}
